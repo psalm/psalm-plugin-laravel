@@ -4,6 +4,7 @@
     "type": "psalm-plugin",
     "require": {
         "barryvdh/laravel-ide-helper": "^2.5",
+        "symfony/psr-http-message-bridge": "^1.0",
         "vimeo/psalm": "^3.0.17 || ^3.1",
         "orchestra/testbench": "^3.7"
     },
