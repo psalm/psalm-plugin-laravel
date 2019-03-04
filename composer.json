@@ -3,9 +3,9 @@
     "description": "A Laravel plugin for Psalm",
     "type": "psalm-plugin",
     "require": {
-        "barryvdh/laravel-ide-helper": "^2.5",
+        "barryvdh/laravel-ide-helper": "^2.6",
         "symfony/psr-http-message-bridge": "^1.0",
-        "vimeo/psalm": "^3.0.17 || ^3.1",
+        "vimeo/psalm": "^3.1",
         "league/flysystem-aws-s3-v3": "^1.0",
         "orchestra/testbench": "^3.5",
         "predis/predis": "^1.0"
