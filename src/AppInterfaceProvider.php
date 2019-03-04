@@ -16,7 +16,10 @@ class AppInterfaceProvider implements
 {
     public static function getClassLikeNames() : array
     {
-        return [\Illuminate\Contracts\Foundation\Application::class];
+        return [
+            \Illuminate\Contracts\Foundation\Application::class,
+            \Illuminate\Contracts\Container\Container::class
+        ];
     }
 
     /**
