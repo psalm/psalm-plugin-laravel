@@ -81,6 +81,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ReturnTypeProvider\TransReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/ViewReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
+        require_once 'AppInterfaceProvider.php';
+        $registration->registerHooksFromClass(AppInterfaceProvider::class);
     }
 
     private function getViewFactory(
