@@ -1,15 +1,14 @@
 <?php
 namespace Psalm\LaravelPlugin;
 
-use Psalm\Plugin\PluginEntryPointInterface;
-use Psalm\Plugin\RegistrationInterface;
-use SimpleXMLElement;
-use Illuminate\Support\ServiceProvider;
 use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use Orchestra\Testbench\Concerns\CreatesApplication;
+use Psalm\Plugin\PluginEntryPointInterface;
+use Psalm\Plugin\RegistrationInterface;
+use SimpleXMLElement;
 
 class Plugin implements PluginEntryPointInterface
 {
@@ -20,19 +19,29 @@ class Plugin implements PluginEntryPointInterface
      */
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null)
     {
+        $ide_helper_provider = \Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider::class;
+
         if (file_exists($applicationPath = __DIR__.'/../../../../bootstrap/app.php')) { // Applications
             $app = require $applicationPath;
         } elseif (file_exists($applicationPath = getcwd().'/bootstrap/app.php')) { // Local Dev
             $app = require $applicationPath;
         } else { // Packages
             $app = (new self)->createApplication();
-            $app->register(\Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider::class);
+            $app->register($ide_helper_provider);
         }
 
         if ($app instanceof \Illuminate\Contracts\Foundation\Application) {
             /** @var \Illuminate\Contracts\Http\Kernel $kernel */
             $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
             $kernel->bootstrap();
+
+            // If we're running a Laravel container, let's see if we need to register the IDE helper if it isn't
+            // already. If we don't do this, the plugin will crash out because the IDE helper doesn't have configs
+            // it bootstraps present in the app container.
+
+            if (!$app->getProvider($ide_helper_provider)) {
+                $app->register($ide_helper_provider);
+            }
         }
 
         $fake_filesystem = new FakeFilesystem();
