@@ -5,8 +5,20 @@ A Psalm plugin for Laravel
 
 ```
 composer require --dev psalm/plugin-laravel
+```
+
+Copy `psalm.xml` to the root of your project and then enable the plugin.
+
+```
 vendor/bin/psalm-plugin enable psalm/plugin-laravel
 ```
+
+## Running Psalm
+
+```
+vendor/bin/psalm
+```
+
 
 ## How it works
 
