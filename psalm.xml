@@ -6,7 +6,7 @@
     xsi:schemaLocation="https://getpsalm.org/schema/config"
 >
     <projectFiles>
-        <directory name="src" />
+        <directory name="app" />
         <ignoreFiles>
             <directory name="vendor" />
         </ignoreFiles>
