@@ -86,7 +86,8 @@ class AppInterfaceProvider implements
         string $method_name_lowercase,
         array $call_args,
         Context $context,
-        CodeLocation $code_location = null
+        CodeLocation $code_location = null,
+        array $template_type_parameters = null
     ) {
         if ($statements_source) {
             if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
