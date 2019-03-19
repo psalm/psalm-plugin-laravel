@@ -81,17 +81,19 @@ class AppInterfaceProvider implements
      * @return  ?Type\Union
      */
     public static function getMethodReturnType(
-        StatementsSource $statements_source,
+        StatementsSource $source,
         string $fq_classlike_name,
         string $method_name_lowercase,
         array $call_args,
         Context $context,
-        CodeLocation $code_location = null,
-        array $template_type_parameters = null
+        CodeLocation $code_location,
+        array $template_type_parameters = null,
+        string $called_fq_classlike_name = null,
+        string $called_method_name_lowercase = null
     ) {
-        if ($statements_source) {
+        if ($source) {
             if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
-                return $statements_source->getCodebase()->getMethodReturnType(
+                return $source->getCodebase()->getMethodReturnType(
                     \Illuminate\Foundation\Application::class . '::' . $method_name_lowercase,
                     $fq_classlike_name
                 );
