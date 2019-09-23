@@ -1,7 +1,7 @@
 <?php
 namespace Psalm\LaravelPlugin;
 
-class LumenPlugin extends AbstractPlugin 
+class LumenPlugin extends AbstractPlugin implements PluginEntryPointInterface
 {
     /**
      * Get and load ide provider for Lumen Application container
