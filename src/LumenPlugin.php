@@ -1,6 +1,8 @@
 <?php
 namespace Psalm\LaravelPlugin;
 
+use Psalm\Plugin\PluginEntryPointInterface;
+
 class LumenPlugin extends AbstractPlugin implements PluginEntryPointInterface
 {
     /**
