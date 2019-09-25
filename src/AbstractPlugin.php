@@ -36,11 +36,11 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         } elseif (file_exists($applicationPath = getcwd().'/bootstrap/app.php')) { // Local Dev
             $app = require $applicationPath;
         } else { // Packages
-            $app = (new static)->loadIdeProvider();
+            $app = (new static)->createApplication();
             $app->register($ide_helper_provider);
         }
 
-        $app = $this->getApplicationInstance($app, $ide_helper_provider);
+        $app = $this->loadIdeProvider($app, $ide_helper_provider);
 
         $fake_filesystem = new FakeFilesystem();
 
