@@ -5,15 +5,12 @@ use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
-use Orchestra\Testbench\Concerns\CreatesApplication;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
 
 class Plugin extends AbstractPlugin implements PluginEntryPointInterface
 {
-    use CreatesApplication;
-    
     /**
      * Get and load ide provider for  Laravel Application container
      *
