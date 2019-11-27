@@ -4,7 +4,7 @@
     "type": "psalm-plugin",
     "require": {
         "barryvdh/laravel-ide-helper": "^2.6",
-        "vimeo/psalm": "3.2|3.3|3.4|3.5|3.6",
+        "vimeo/psalm": "3.2.*|3.3.*|3.4.*|3.5.*|3.6.*",
         "orchestra/testbench": "^3.5 || ^4.0"
     },
     "license": "MIT",
