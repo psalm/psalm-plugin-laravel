@@ -25,10 +25,10 @@ class TransReturnTypeProvider implements \Psalm\Plugin\Hook\FunctionReturnTypePr
         Context $context,
         CodeLocation $code_location
     ) : Type\Union {
-        if ($call_args
-            && isset($call_args[0]->value->inferredType)
-        ) {
-            if ($call_args[0]->value->inferredType->isString()) {
+        if ($call_args) {
+            $first_arg_type = $statements_source->getNodeTypeProvider()->getType($call_args[0]->value);
+
+            if ($first_arg_type && $first_arg_type->isString()) {
                 return \Psalm\Type::getString();
             }
         }
