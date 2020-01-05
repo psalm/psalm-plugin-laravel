@@ -91,13 +91,11 @@ class AppInterfaceProvider implements
         string $called_fq_classlike_name = null,
         string $called_method_name_lowercase = null
     ) {
-        if ($source) {
-            if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
-                return $source->getCodebase()->getMethodReturnType(
-                    \Illuminate\Foundation\Application::class . '::' . $method_name_lowercase,
-                    $fq_classlike_name
-                );
-            }
+        if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
+            return $source->getCodebase()->getMethodReturnType(
+                \Illuminate\Foundation\Application::class . '::' . $method_name_lowercase,
+                $fq_classlike_name
+            );
         }
     }
 }

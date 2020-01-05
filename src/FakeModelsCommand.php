@@ -103,7 +103,7 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
     /**
      * @param \Illuminate\Database\Eloquent\Model $model
      */
-    protected function getPropertiesFromMethods($model)
+    protected function getPropertiesFromMethods($model) : void
     {
     	// do nothing here
     }

@@ -6,12 +6,12 @@ use PhpParser;
 class SchemaAggregator
 {
     /** @var array<string, SchemaTable> */
-	public $tables = [];
+    public $tables = [];
 
     /**
-     * @param array<int, PhpParser\Node\Stmt> $statements
+     * @param array<int, PhpParser\Node\Stmt> $stmts
      */
-	public function addStatements(array $stmts) : void
+    public function addStatements(array $stmts) : void
     {
         foreach ($stmts as $stmt) {
             if ($stmt instanceof PhpParser\Node\Stmt\Class_) {
@@ -21,7 +21,7 @@ class SchemaAggregator
     }
 
     /**
-     * @param array<int, PhpParser\Node\Stmt> $statements
+     * @param array<int, PhpParser\Node\Stmt> $stmts
      */
     private function addClassStatements(array $stmts) : void
     {
@@ -35,7 +35,7 @@ class SchemaAggregator
     }
 
     /**
-     * @param array<int, PhpParser\Node\Stmt> $statements
+     * @param array<int, PhpParser\Node\Stmt> $stmts
      */
     private function addUpMethodStatements(array $stmts) : void
     {
@@ -99,7 +99,7 @@ class SchemaAggregator
         $this->processColumnUpdates($table_name, $call_arg_name, $update_closure->stmts);
     }
 
-    private function dropTable(PhpParser\Node\Expr\StaticCall $call)
+    private function dropTable(PhpParser\Node\Expr\StaticCall $call) : void
     {
         if (!isset($call->args[0])
             || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
@@ -112,7 +112,7 @@ class SchemaAggregator
         unset($this->tables[$table_name]);
     }
 
-    private function renameTable(PhpParser\Node\Expr\StaticCall $call)
+    private function renameTable(PhpParser\Node\Expr\StaticCall $call) : void
     {
         if (!isset($call->args[0])
             || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
@@ -183,7 +183,38 @@ class SchemaAggregator
                             || $first_method_call->name->name === 'nullableTimestampsTz'
                             || $first_method_call->name->name === 'rememberToken'
                         ) {
-                            $column_name = null;
+                            switch (strtolower($first_method_call->name->name)) {
+                                case 'droptimestamps':
+                                case 'droptimestampstz':
+                                    $table->dropColumn('created_at');
+                                    $table->dropColumn('updated_at');
+                                    break;
+
+                                case 'remembertoken':
+                                    $table->setColumn(new SchemaColumn('remember_token', 'string', $nullable));
+                                    break;
+
+                                case 'dropremembertoken':
+                                    $table->dropColumn('remember_token');
+                                    break;
+
+                                case 'nullabletimestamps':
+                                    $table->setColumn(new SchemaColumn('created_at', 'string', true));
+                                    $table->setColumn(new SchemaColumn('updated_at', 'string', true));
+                                    break;
+
+                                case 'timestamps':
+                                    $table->setColumn(new SchemaColumn('created_at', 'string', true));
+                                    $table->setColumn(new SchemaColumn('updated_at', 'string', true));
+                                    break;
+
+                                case 'timestampstz':
+                                    $table->setColumn(new SchemaColumn('created_at', 'string', true));
+                                    $table->setColumn(new SchemaColumn('updated_at', 'string', true));
+                                    break;
+                            }
+
+                            continue;
                         } elseif ($first_method_call->name->name === 'softDeletes'
                             || $first_method_call->name->name === 'softDeletesTz'
                             || $first_method_call->name->name === 'dropSoftDeletes'
@@ -209,12 +240,12 @@ class SchemaAggregator
                         }
                     }
 
-                    switch ($first_method_call->name->name) {
-                        case 'bigIncrements':
+                    switch (strtolower($first_method_call->name->name)) {
+                        case 'bigincrements':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'bigInteger':
+                        case 'biginteger':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
@@ -238,11 +269,11 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
-                        case 'dateTime':
+                        case 'datetime':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
-                        case 'dateTimeTz':
+                        case 'datetimetz':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
@@ -258,43 +289,35 @@ class SchemaAggregator
                             $table->dropColumn($column_name);
                             break;
 
-                        case 'dropColumn':
+                        case 'dropcolumn':
                             $table->dropColumn($column_name);
                             break;
 
-                        case 'dropForeign':
-                        case 'dropIndex':
-                        case 'dropPrimary':
-                        case 'dropUnique':
-                        case 'dropSpatialIndex':
+                        case 'dropforeign':
+                        case 'dropindex':
+                        case 'dropprimary':
+                        case 'dropunique':
+                        case 'dropspatialindex':
                             break;
 
-                        case 'dropIfExists':
+                        case 'dropifexists':
                             $table->dropColumn($column_name);
                             break;
 
-                        case 'dropMorphs':
+                        case 'dropmorphs':
                             $table->dropColumn($column_name . '_type');
                             $table->dropColumn($column_name . '_id');
                             break;
 
-                        case 'dropRememberToken':
-                            $table->dropColumn('remember_token');
-                            break;
-
-                        case 'dropSoftDeletes':
+                        case 'dropsoftdeletes':
                             $table->dropColumn($column_name);
                             break;
 
-                        case 'dropSoftDeletesTz':
+                        case 'dropsoftdeletestz':
                             $table->dropColumn($column_name);
                             break;
 
-                        case 'dropTimestamps':
-                        case 'dropTimestampsTz':
-                            $table->dropColumn('created_at');
-                            $table->dropColumn('updated_at');
-                            break;
+                        
 
                         case 'enum':
                             $table->setColumn(new SchemaColumn($column_name, 'enum', $nullable, $second_arg_array));
@@ -311,11 +334,12 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
                             break;
 
-                        case 'geometryCollection':
+                        case 'geometrycollection':
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
                             break;
 
                         case 'increments':
+                            $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
                         case 'index':
@@ -325,11 +349,11 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'integerIncrements':
+                        case 'integerincrements':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'ipAddress':
+                        case 'ipaddress':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
@@ -341,27 +365,27 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
-                        case 'lineString':
+                        case 'linestring':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
-                        case 'longText':
+                        case 'longtext':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
-                        case 'macAddress':
+                        case 'macaddress':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
-                        case 'mediumIncrements':
+                        case 'mediumincrements':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'mediumInteger':
+                        case 'mediuminteger':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'mediumText':
+                        case 'mediumtext':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
@@ -370,33 +394,28 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name . '_id', 'int', $nullable));
                             break;
 
-                        case 'multiLineString':
+                        case 'multilinestring':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
-                        case 'multiPoint':
+                        case 'multipoint':
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
                             break;
 
-                        case 'multiPolygon':
+                        case 'multipolygon':
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
                             break;
 
-                        case 'multiPolygonZ':
+                        case 'multipolygonz':
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
                             break;
 
-                        case 'nullableMorphs':
+                        case 'nullablemorphs':
                             $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
                             $table->setColumn(new SchemaColumn($column_name . '_id', 'int', true));
                             break;
 
-                        case 'nullableTimestamps':
-                            $table->setColumn(new SchemaColumn('created_at', 'string', true));
-                            $table->setColumn(new SchemaColumn('updated_at', 'string', true));
-                            break;
-
-                        case 'nullableUuidMorphs':
+                        case 'nullableuuidmorphs':
                             $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
                             $table->setColumn(new SchemaColumn($column_name . '_id', 'string', true));
                             break;
@@ -412,43 +431,37 @@ class SchemaAggregator
                         case 'primary':
                             break;
 
-                        case 'rememberToken':
-                            $table->setColumn(new SchemaColumn('remember_token', 'string', $nullable));
-                            break;
-
-                        case 'removeColumn':
+                        case 'removecolumn':
                             $table->dropColumn($column_name);
                             break;
 
                         case 'rename':
+                        case 'renamecolumn':
                             if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
                                 $table->renameColumn($column_name, $second_arg->value);
                             }
                             break;
 
-                        case 'renameColumn':
-                            break;
-
-                        case 'renameIndex':
+                        case 'renameindex':
                             break;
 
                         case 'set':
                             $table->setColumn(new SchemaColumn($column_name, 'set', $nullable, $second_arg_array));
                             break;
 
-                        case 'smallIncrements':
+                        case 'smallincrements':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'smallInteger':
+                        case 'smallinteger':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'softDeletes':
+                        case 'softdeletes':
                             $table->setColumn(new SchemaColumn($column_name, 'string', true));
                             break;
 
-                        case 'softDeletesTz':
+                        case 'softdeletestz':
                             $table->setColumn(new SchemaColumn($column_name, 'string', true));
                             break;
 
@@ -471,56 +484,46 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
-                        case 'timestamps':
-                            $table->setColumn(new SchemaColumn('created_at', 'string', true));
-                            $table->setColumn(new SchemaColumn('updated_at', 'string', true));
-                            break;
-
-                        case 'timestampsTz':
-                            $table->setColumn(new SchemaColumn('created_at', 'string', true));
-                            $table->setColumn(new SchemaColumn('updated_at', 'string', true));
-                            break;
-
-                        case 'timestampTz':
+                        case 'timestamptz':
                             $table->setColumn(new SchemaColumn($column_name, 'string', true));
                             break;
 
-                        case 'timeTz':
+                        case 'timetz':
                             $table->setColumn(new SchemaColumn($column_name, 'string', true));
                             break;
 
-                        case 'tinyIncrements':
+                        case 'tinyincrements':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'tinyInteger':
+                        case 'tinyinteger':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
                         case 'unique':
                             break;
 
-                        case 'unsignedBigInteger':
+                        case 'unsignedbiginteger':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'unsignedDecimal':
+                        case 'unsigneddecimal':
                             $table->setColumn(new SchemaColumn($column_name, 'float', $nullable));
                             break;
 
-                        case 'unsignedInteger':
+                        case 'unsignedinteger':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'unsignedMediumInteger':
+                        case 'unsignedmediuminteger':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'unsignedSmallInteger':
+                        case 'unsignedsmallinteger':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
-                        case 'unsignedTinyInteger':
+                        case 'unsignedtinyinteger':
                             $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                             break;
 
@@ -528,7 +531,7 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
-                        case 'uuidMorphs':
+                        case 'uuidmorphs':
                             $table->setColumn(new SchemaColumn($column_name . '_type', 'string', $nullable));
                             $table->setColumn(new SchemaColumn($column_name . '_id', 'string', $nullable));
                             break;

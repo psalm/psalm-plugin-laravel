@@ -14,6 +14,8 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
 {
     use CreatesApplication;
 
+    /** @var array<class-string> */
+    public static $model_classes = [];
 
     /**
      * Get and load ide provider for Laravel or Lumen Application container
@@ -40,7 +42,7 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
             $app->register($ide_helper_provider);
         }
 
-        $app = $this->loadIdeProvider($app, $ide_helper_provider);
+        $app = $this->loadIdeProvider($app, $ide_helper_provider); 
 
         $fake_filesystem = new FakeFilesystem();
 
@@ -60,6 +62,8 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
         require_once 'AppInterfaceProvider.php';
         $registration->registerHooksFromClass(AppInterfaceProvider::class);
+        require_once 'PropertyProvider/ModelPropertyProvider.php';
+        $registration->registerHooksFromClass(PropertyProvider\ModelPropertyProvider::class);
     }
 
     /**
@@ -91,8 +95,6 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         );
 
         $registration->addStubFile($cache_dir . 'stubs.php');
-
-        unlink($cache_dir . 'stubs.php');
     }
 
     /**
@@ -105,7 +107,7 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         \Illuminate\Filesystem\Filesystem $fake_filesystem,
         $view_factory,
         string $cache_dir
-    ) {
+    ) : void {
         /** @psalm-suppress InvalidArgument */
         $meta_generator_command = new FakeMetaCommand(
             $fake_filesystem,
@@ -123,10 +125,8 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
             new \Symfony\Component\Console\Input\ArrayInput([]),
             new \Symfony\Component\Console\Output\NullOutput()
         );
-
+        
         $registration->addStubFile($cache_dir . 'meta.php');
-
-        unlink($cache_dir . 'meta.php');
     }
 
     /**
@@ -137,7 +137,7 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         $app,
         \Illuminate\Filesystem\Filesystem $fake_filesystem,
         string $cache_dir
-    ) {
+    ) : void {
         $migrations_folder = dirname(__DIR__, 4) . '/database/migrations/';
 
         $project_analyzer = \Psalm\Internal\Analyzer\ProjectAnalyzer::getInstance();
@@ -170,7 +170,7 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
 
         $registration->addStubFile($cache_dir . 'models.php');
 
-        unlink($cache_dir . 'models.php');
+        self::$model_classes = $models_generator_command->getModels();
     }
 
     /**
