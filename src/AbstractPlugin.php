@@ -46,41 +46,11 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
 
         $view_factory = $this->getViewFactory($app, $fake_filesystem);
 
-        $stubs_generator_command = new \Barryvdh\LaravelIdeHelper\Console\GeneratorCommand(
-            $app['config'],
-            $fake_filesystem,
-            $view_factory
-        );
-
-        $stubs_generator_command->setLaravel($app);
-
         $cache_dir = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR;
 
-        $fake_filesystem->setDestination($cache_dir . 'stubs.php');
-
-        $stubs_generator_command->run(
-            new \Symfony\Component\Console\Input\ArrayInput([]),
-            new \Symfony\Component\Console\Output\NullOutput()
-        );
-
-        /** @psalm-suppress InvalidArgument */
-        $meta_generator_command = new FakeMetaCommand(
-            $fake_filesystem,
-            $view_factory,
-            $app['config']
-        );
-
-        $meta_generator_command->setLaravel($app);
-
-        $fake_filesystem->setDestination($cache_dir . 'meta.php');
-
-        $meta_generator_command->run(
-            new \Symfony\Component\Console\Input\ArrayInput([]),
-            new \Symfony\Component\Console\Output\NullOutput()
-        );
-
-        $registration->addStubFile($cache_dir . 'stubs.php');
-        $registration->addStubFile($cache_dir . 'meta.php');
+        $this->ingestFacadeStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
+        $this->ingestMetaStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
+        $this->ingestModelStubs($registration, $app, $fake_filesystem, $cache_dir);
 
         require_once 'ReturnTypeProvider/AuthReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\AuthReturnTypeProvider::class);
@@ -90,6 +60,117 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
         require_once 'AppInterfaceProvider.php';
         $registration->registerHooksFromClass(AppInterfaceProvider::class);
+    }
+
+    /**
+     * @param \Illuminate\Contracts\Container\Container  $app
+     * @param \Illuminate\View\Factory $view_factory
+     */
+    private function ingestFacadeStubs(
+        RegistrationInterface $registration,
+        $app,
+        \Illuminate\Filesystem\Filesystem $fake_filesystem,
+        $view_factory,
+        string $cache_dir
+    ) {
+        $stubs_generator_command = new \Barryvdh\LaravelIdeHelper\Console\GeneratorCommand(
+            $app['config'],
+            $fake_filesystem,
+            $view_factory
+        );
+
+        $stubs_generator_command->setLaravel($app);
+
+        @unlink($cache_dir . 'stubs.php');
+
+        $fake_filesystem->setDestination($cache_dir . 'stubs.php');
+
+        $stubs_generator_command->run(
+            new \Symfony\Component\Console\Input\ArrayInput([]),
+            new \Symfony\Component\Console\Output\NullOutput()
+        );
+
+        $registration->addStubFile($cache_dir . 'stubs.php');
+
+        unlink($cache_dir . 'stubs.php');
+    }
+
+    /**
+     * @param \Illuminate\Contracts\Container\Container  $app
+     * @param \Illuminate\View\Factory $view_factory
+     */
+    private function ingestMetaStubs(
+        RegistrationInterface $registration,
+        $app,
+        \Illuminate\Filesystem\Filesystem $fake_filesystem,
+        $view_factory,
+        string $cache_dir
+    ) {
+        /** @psalm-suppress InvalidArgument */
+        $meta_generator_command = new FakeMetaCommand(
+            $fake_filesystem,
+            $view_factory,
+            $app['config']
+        );
+
+        $meta_generator_command->setLaravel($app);
+
+        @unlink($cache_dir . 'meta.php');
+
+        $fake_filesystem->setDestination($cache_dir . 'meta.php');
+
+        $meta_generator_command->run(
+            new \Symfony\Component\Console\Input\ArrayInput([]),
+            new \Symfony\Component\Console\Output\NullOutput()
+        );
+
+        $registration->addStubFile($cache_dir . 'meta.php');
+
+        unlink($cache_dir . 'meta.php');
+    }
+
+    /**
+     * @param \Illuminate\Contracts\Container\Container  $app
+     */
+    private function ingestModelStubs(
+        RegistrationInterface $registration,
+        $app,
+        \Illuminate\Filesystem\Filesystem $fake_filesystem,
+        string $cache_dir
+    ) {
+        $migrations_folder = dirname(__DIR__, 4) . '/database/migrations/';
+
+        $project_analyzer = \Psalm\Internal\Analyzer\ProjectAnalyzer::getInstance();
+        $codebase = $project_analyzer->getCodebase();
+
+        $schema_aggregator = new SchemaAggregator();
+
+        foreach (glob($migrations_folder . '*.php') as $file) {
+            //echo $file . "\n";
+            $schema_aggregator->addStatements($codebase->getStatementsForFile($file));
+        }
+
+        $models_generator_command = new FakeModelsCommand(
+            $fake_filesystem,
+            $schema_aggregator
+        );
+
+        $models_generator_command->setLaravel($app);
+
+        @unlink($cache_dir . 'models.php');
+
+        $fake_filesystem->setDestination($cache_dir . 'models.php');
+
+        $models_generator_command->run(
+            new \Symfony\Component\Console\Input\ArrayInput([
+                '--nowrite' => true
+            ]),
+            new \Symfony\Component\Console\Output\NullOutput()
+        );
+
+        $registration->addStubFile($cache_dir . 'models.php');
+
+        unlink($cache_dir . 'models.php');
     }
 
     /**
