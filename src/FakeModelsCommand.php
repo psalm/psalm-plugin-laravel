@@ -17,8 +17,11 @@ use Barryvdh\Reflection\DocBlock\Serializer as DocBlockSerializer;
 
 class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
 {
-	/** @var SchemaAggregator */
-	private $schema;
+    /** @var SchemaAggregator */
+    private $schema;
+
+    /** @var array<class-string> */
+    private $model_classes = [];
 
     /**
      * @param Filesystem $files
@@ -27,6 +30,12 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
     {
         parent::__construct($files);
         $this->schema = $schema;
+    }
+
+    /** @return array<class-string> */
+    public function getModels()
+    {
+        return $this->model_classes;
     }
 
     /**
@@ -39,8 +48,10 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
         $table_name = $model->getTable();
 
         if (!isset($this->schema->tables[$table_name])) {
-        	return;
+            return;
         }
+
+        $this->model_classes[] = get_class($model);
 
         $columns = $this->schema->tables[$table_name]->columns;
 
@@ -71,11 +82,11 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
                         break;
 
                     case 'enum':
-                    	if (!$column->options) {
-                    		$type = 'string';
-                    	} else {
-                    		$type = '\'' . implode('\'|\'', $column->options) . '\'';
-                    	}
+                        if (!$column->options) {
+                            $type = 'string';
+                        } else {
+                            $type = '\'' . implode('\'|\'', $column->options) . '\'';
+                        }
 
                         break;
 
@@ -91,7 +102,7 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
 
             $this->setProperty($name, $type, true, true, '', $column->nullable);
             if ($this->write_model_magic_where) {
-            	$this->setMethod(
+                $this->setMethod(
                     Str::camel("where_" . $name),
                     '\Illuminate\Database\Eloquent\Builder|\\' . get_class($model),
                     array('$value')
@@ -105,6 +116,6 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
      */
     protected function getPropertiesFromMethods($model) : void
     {
-    	// do nothing here
+        // do nothing
     }
 }
