@@ -57,25 +57,26 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
 
         foreach ($columns as $column) {
             $name = $column->name;
-            
+
             if (in_array($name, $model->getDates())) {
-                $type = '\Illuminate\Support\Carbon';
+                $get_type = $set_type = '\Illuminate\Support\Carbon';
             } else {
                 switch ($column->type) {
                     case 'string':
                     case 'int':
                     case 'float':
-                        $type = $column->type;
+                        $get_type = $set_type = $column->type;
                         break;
 
                     case 'bool':
                         switch (config('database.default')) {
                             case 'sqlite':
                             case 'mysql':
-                                $type = '0|1|bool';
+                                $set_type = '0|1|bool';
+                                $get_type = '0|1';
                                 break;
                             default:
-                                $type = 'bool';
+                                $get_type = $set_type = 'bool';
                                 break;
                         }
 
@@ -83,15 +84,15 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
 
                     case 'enum':
                         if (!$column->options) {
-                            $type = 'string';
+                            $get_type = $set_type = 'string';
                         } else {
-                            $type = '\'' . implode('\'|\'', $column->options) . '\'';
+                            $get_type = $set_type = '\'' . implode('\'|\'', $column->options) . '\'';
                         }
 
                         break;
 
                     default:
-                        $type = 'mixed';
+                        $get_type = $set_type = 'mixed';
                         break;
                 }
             }
@@ -100,7 +101,13 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
                 $this->nullableColumns[$name] = true;
             }
 
-            $this->setProperty($name, $type, true, true, '', $column->nullable);
+            if ($get_type === $set_type) {
+                $this->setProperty($name, $get_type, true, true, '', $column->nullable);
+            } else {
+                $this->setProperty($name, $get_type, true, false, '', $column->nullable);
+                $this->setProperty($name, $set_type, false, true, '', $column->nullable);
+            }
+
             if ($this->write_model_magic_where) {
                 $this->setMethod(
                     Str::camel("where_" . $name),
