@@ -104,8 +104,8 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
             if ($get_type === $set_type) {
                 $this->setProperty($name, $get_type, true, true, '', $column->nullable);
             } else {
-                $this->setProperty($name, $get_type, true, false, '', $column->nullable);
-                $this->setProperty($name, $set_type, false, true, '', $column->nullable);
+                $this->setProperty($name, $get_type, true, null, '', $column->nullable);
+                $this->setProperty($name, $set_type, null, true, '', $column->nullable);
             }
 
             if ($this->write_model_magic_where) {
