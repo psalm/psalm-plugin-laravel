@@ -72,7 +72,7 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
                         switch (config('database.default')) {
                             case 'sqlite':
                             case 'mysql':
-                                $type = 'int';
+                                $type = '0|1|bool';
                                 break;
                             default:
                                 $type = 'bool';
