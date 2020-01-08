@@ -14,7 +14,7 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
 {
     use CreatesApplication;
 
-    /** @var array<class-string> */
+    /** @var array<string> */
     public static $model_classes = [];
 
     /**
@@ -76,7 +76,7 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         \Illuminate\Filesystem\Filesystem $fake_filesystem,
         $view_factory,
         string $cache_dir
-    ) {
+    ) : void {
         $stubs_generator_command = new \Barryvdh\LaravelIdeHelper\Console\GeneratorCommand(
             $app['config'],
             $fake_filesystem,

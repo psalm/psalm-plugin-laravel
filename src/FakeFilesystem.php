@@ -13,7 +13,7 @@ class FakeFilesystem extends \Illuminate\Filesystem\Filesystem
      * @param  string  $path
      * @param  string  $contents
      * @param  bool  $lock
-     * @return int
+     * @return bool|int
      */
     public function put($path, $contents, $lock = false)
     {

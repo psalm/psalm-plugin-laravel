@@ -14,6 +14,7 @@ class AppInterfaceProvider implements
     \Psalm\Plugin\Hook\MethodVisibilityProviderInterface,
     \Psalm\Plugin\Hook\MethodParamsProviderInterface
 {
+    /** @return array<string> */
     public static function getClassLikeNames() : array
     {
         return [
