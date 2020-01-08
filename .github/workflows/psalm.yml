@@ -13,4 +13,4 @@ jobs:
       run: export COMPOSER_ROOT_VERSION=dev-master && composer install --prefer-dist --no-progress --no-suggest
       
     - name: Run Psalm
-      run: ./psalm --threads=2 --shepherd
+      run: vendor/bin/psalm --threads=2 --shepherd
