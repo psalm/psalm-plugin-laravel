@@ -1,5 +1,4 @@
-# laravel-psalm-plugin
-A Psalm plugin for Laravel
+# Psalm plugin for Laravel
 
 ![Type coverage](https://shepherd.dev/github/psalm/laravel-psalm-plugin/coverage.svg)
 
