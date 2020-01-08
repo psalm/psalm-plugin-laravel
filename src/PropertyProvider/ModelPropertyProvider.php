@@ -13,6 +13,7 @@ class ModelPropertyProvider
         \Psalm\Plugin\Hook\PropertyVisibilityProviderInterface,
         \Psalm\Plugin\Hook\PropertyTypeProviderInterface
 {
+    /** @return array<string, string> */
     public static function getClassLikeNames() : array
     {
         return \Psalm\LaravelPlugin\AbstractPlugin::$model_classes;

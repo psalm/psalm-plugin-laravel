@@ -28,6 +28,7 @@ class SchemaAggregator
         foreach ($stmts as $stmt) {
             if ($stmt instanceof PhpParser\Node\Stmt\ClassMethod
                 && $stmt->name->name === 'up'
+                && $stmt->stmts
             ) {
                 $this->addUpMethodStatements($stmt->stmts);
             }
@@ -94,9 +95,13 @@ class SchemaAggregator
 
         $update_closure = $call->args[1]->value;
 
-        $call_arg_name = $call->args[1]->value->params[0]->var->name;
+        if ($call->args[1]->value->params[0]->var instanceof PhpParser\Node\Expr\Variable
+            && is_string($call->args[1]->value->params[0]->var->name)
+        ) {
+            $call_arg_name = $call->args[1]->value->params[0]->var->name;
 
-        $this->processColumnUpdates($table_name, $call_arg_name, $update_closure->stmts);
+            $this->processColumnUpdates($table_name, $call_arg_name, $update_closure->stmts);
+        }   
     }
 
     private function dropTable(PhpParser\Node\Expr\StaticCall $call) : void
@@ -172,6 +177,7 @@ class SchemaAggregator
 
                 if ($root_var instanceof PhpParser\Node\Expr\Variable
                     && $root_var->name === $call_arg_name
+                    && $first_method_call->name instanceof PhpParser\Node\Identifier
                 ) {
                     $first_arg = $first_method_call->args[0]->value ?? null;
                     $second_arg = $first_method_call->args[1]->value ?? null;
@@ -234,7 +240,7 @@ class SchemaAggregator
                         $second_arg_array = [];
 
                         foreach ($second_arg->items as $array_item) {
-                            if ($array_item->value instanceof PhpParser\Node\Scalar\String_) {
+                            if ($array_item && $array_item->value instanceof PhpParser\Node\Scalar\String_) {
                                 $second_arg_array[] = $array_item->value->value;
                             }
                         }
