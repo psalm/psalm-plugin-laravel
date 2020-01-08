@@ -1,6 +1,8 @@
 # laravel-psalm-plugin
 A Psalm plugin for Laravel
 
+![Type coverage](https://shepherd.dev/github/psalm/laravel-psalm-plugin/coverage.svg)
+
 ## Installation
 
 First [install Psalm](https://psalm.dev/quickstart) in your project, making sure to run `--init`, then run the following commands:
