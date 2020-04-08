@@ -209,6 +209,6 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
      */
     protected function getEnvironmentSetUp($app): void
     {
-        // ..
+        $app['config']->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
     }
 }

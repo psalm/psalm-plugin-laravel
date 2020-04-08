@@ -4,8 +4,10 @@
     "type": "psalm-plugin",
     "require": {
         "barryvdh/laravel-ide-helper": "^2.6",
+        "laravel/framework": "^5.5 || ^6.0",
         "vimeo/psalm": "^3.8.2",
-        "orchestra/testbench": "^3.5 || ^4.0 || ^5.0"
+        "orchestra/testbench": "^3.5 || ^4.0 || ^5.0",
+        "psr/event-dispatcher": "^1.0"
     },
     "license": "MIT",
     "authors": [
@@ -24,10 +26,16 @@
             "Psalm\\LaravelPlugin\\": "src"
         }
     },
-    "scripts" : {
+    "scripts": {
         "check": [
             "@analyze"
         ],
         "analyze": "psalm"
+    },
+    "require-dev": {
+        "codeception/codeception": "^4.1",
+        "codeception/module-phpbrowser": "^1.0.0",
+        "codeception/module-asserts": "^1.0.0",
+        "weirdan/codeception-psalm-module": "^0.4.0"
     }
 }
