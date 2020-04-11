@@ -66,6 +66,8 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(AppInterfaceProvider::class);
         require_once 'PropertyProvider/ModelPropertyProvider.php';
         $registration->registerHooksFromClass(PropertyProvider\ModelPropertyProvider::class);
+
+        $this->addOurStubs($registration);
     }
 
     /**
@@ -210,5 +212,12 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
     protected function getEnvironmentSetUp($app): void
     {
         $app['config']->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
+    }
+
+    private function addOurStubs(RegistrationInterface $registration): void
+    {
+        foreach (glob(__DIR__ . '/Stubs/*.stubphp') as $stubFilePath) {
+            $registration->addStubFile($stubFilePath);
+        }
     }
 }
