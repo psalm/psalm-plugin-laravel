@@ -17,7 +17,7 @@ class ModelPropertyProvider implements
     /** @return array<string, string> */
     public static function getClassLikeNames() : array
     {
-        return \Psalm\LaravelPlugin\AbstractPlugin::$model_classes;
+        return \Psalm\LaravelPlugin\Plugin::$model_classes;
     }
 
     /**

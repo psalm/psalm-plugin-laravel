@@ -24,54 +24,11 @@ class Plugin implements PluginEntryPointInterface
     public static $model_classes = [];
 
     /**
-     * Get and load ide provider for Laravel or Lumen Application container
-     *
-     * @param \Illuminate\Container\Container $app
-     * @param string $ide_helper_provider
-     * @return \Illuminate\Contracts\Foundation\Application|\Laravel\Lumen\Application|\Illuminate\Container\Container
-     */
-    protected function loadIdeProvider($app, $ide_helper_provider)
-    {
-        if ($app instanceof \Illuminate\Contracts\Foundation\Application) {
-            /** @var \Illuminate\Contracts\Http\Kernel $kernel */
-            $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
-            $kernel->bootstrap();
-
-            // If we're running a Laravel container, let's see if we need to register the IDE helper if it isn't
-            // already. If we don't do this, the plugin will crash out because the IDE helper doesn't have configs
-            // it bootstraps present in the app container.
-
-            if (!$app->getProvider($ide_helper_provider)) {
-                $app->register($ide_helper_provider);
-            }
-        }
-
-        if ($app instanceof \Laravel\Lumen\Application) {
-            /** @var \Illuminate\Contracts\Http\Kernel $kernel */
-            $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
-            $app->register($ide_helper_provider);
-        }
-
-        return $app;
-    }
-
-    /**
      * @return void
      */
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null)
     {
-        $ide_helper_provider = \Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider::class;
-
-        if (file_exists($applicationPath = __DIR__.'/../../../../bootstrap/app.php')) { // Applications
-            $app = require $applicationPath;
-        } elseif (file_exists($applicationPath = getcwd().'/bootstrap/app.php')) { // Local Dev
-            $app = require $applicationPath;
-        } else { // Packages
-            $app = (new static)->createApplication();
-            $app->register($ide_helper_provider);
-        }
-
-        $app = $this->loadIdeProvider($app, $ide_helper_provider);
+        $app = $this->bootApp();
 
         $fake_filesystem = new FakeFilesystem();
 
@@ -100,7 +57,7 @@ class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * @param \Illuminate\Contracts\Container\Container  $app
+     * @param \Illuminate\Foundation\Application|\Laravel\Lumen\Application $app
      * @param \Illuminate\View\Factory $view_factory
      */
     private function ingestFacadeStubs(
@@ -131,7 +88,7 @@ class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * @param \Illuminate\Contracts\Container\Container  $app
+     * @param \Illuminate\Foundation\Application|\Laravel\Lumen\Application $app
      * @param \Illuminate\View\Factory $view_factory
      */
     private function ingestMetaStubs(
@@ -163,7 +120,7 @@ class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * @param \Illuminate\Contracts\Container\Container  $app
+     * @param \Illuminate\Foundation\Application|\Laravel\Lumen\Application $app
      */
     private function ingestModelStubs(
         RegistrationInterface $registration,
@@ -207,9 +164,7 @@ class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * Undocumented function
-     *
-     * @param \Illuminate\Contracts\Foundation\Application|\Laravel\Lumen\Application|\Illuminate\Container\Container $app
+     * @param \Illuminate\Foundation\Application|\Laravel\Lumen\Application $app
      * @param FakeFilesystem $fake_filesystem
      * @return Factory
      */
@@ -248,5 +203,29 @@ class Plugin implements PluginEntryPointInterface
         foreach (glob(__DIR__ . '/Stubs/*.stubphp') as $stubFilePath) {
             $registration->addStubFile($stubFilePath);
         }
+    }
+
+    /**
+     * @return \Illuminate\Foundation\Application|\Laravel\Lumen\Application
+     */
+    private function bootApp()
+    {
+        if (file_exists($applicationPath = __DIR__.'/../../../../bootstrap/app.php')) { // Applications
+            $app = require $applicationPath;
+        } elseif (file_exists($applicationPath = getcwd().'/bootstrap/app.php')) { // Local Dev
+            $app = require $applicationPath;
+        } else { // Packages
+            $app = (new static)->createApplication();
+        }
+
+        if ($app instanceof \Illuminate\Contracts\Foundation\Application) {
+            $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+        } elseif ($app instanceof \Laravel\Lumen\Application) {
+            $app->boot();
+        }
+
+        $app->register(\Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider::class);
+
+        return $app;
     }
 }
