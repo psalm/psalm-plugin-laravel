@@ -29,10 +29,12 @@
     "scripts": {
         "check": [
             "@analyze",
-            "@phpcs"
+            "@lint",
+            "@test"
         ],
         "analyze": "psalm",
-        "lint": "phpcs"
+        "lint": "phpcs",
+        "test": "codecept run"
     },
     "require-dev": {
         "codeception/codeception": "^4.1",
