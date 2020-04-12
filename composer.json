@@ -26,8 +26,14 @@
     },
     "scripts" : {
         "check": [
-            "@analyze"
+            "@analyze",
+            "@phpcs"
         ],
-        "analyze": "psalm"
+        "analyze": "psalm",
+        "lint": "phpcs"
+    },
+    "require-dev": {
+        "squizlabs/php_codesniffer": "*",
+        "slevomat/coding-standard": "^6.2"
     }
 }
