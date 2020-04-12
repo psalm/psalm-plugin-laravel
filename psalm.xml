@@ -11,6 +11,7 @@
         <ignoreFiles>
             <directory name="vendor" />
             <directory name="src/Stubs" />
+            <directory name="src/cache" />
             <directory name="tests" />
         </ignoreFiles>
     </projectFiles>
@@ -18,4 +19,8 @@
     <issueHandlers>
         <LessSpecificReturnType errorLevel="info" />
     </issueHandlers>
+    
+    <stubs>
+        <file name="src/Stubs/LumenApplication.stubphp"/>
+    </stubs>
 </psalm>
