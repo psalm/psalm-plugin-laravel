@@ -7,11 +7,12 @@ use Psalm\Context;
 use Psalm\CodeLocation;
 use Psalm\Type;
 use Psalm\StatementsSource;
+use function str_replace;
 
-class ModelPropertyProvider
-    implements \Psalm\Plugin\Hook\PropertyExistenceProviderInterface,
-        \Psalm\Plugin\Hook\PropertyVisibilityProviderInterface,
-        \Psalm\Plugin\Hook\PropertyTypeProviderInterface
+class ModelPropertyProvider implements
+    \Psalm\Plugin\Hook\PropertyExistenceProviderInterface,
+    \Psalm\Plugin\Hook\PropertyVisibilityProviderInterface,
+    \Psalm\Plugin\Hook\PropertyTypeProviderInterface
 {
     /** @return array<string, string> */
     public static function getClassLikeNames() : array
