@@ -18,7 +18,8 @@ class Plugin extends AbstractPlugin implements PluginEntryPointInterface
      * @param string $ide_helper_provider
      * @return \Illuminate\Contracts\Foundation\Application|\Laravel\Lumen\Application|\Illuminate\Container\Container
      */
-    public  function loadIdeProvider($app, $ide_helper_provider){
+    protected function loadIdeProvider($app, $ide_helper_provider)
+    {
         if ($app instanceof \Illuminate\Contracts\Foundation\Application) {
             /** @var \Illuminate\Contracts\Http\Kernel $kernel */
             $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);

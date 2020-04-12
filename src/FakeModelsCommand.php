@@ -14,6 +14,10 @@ use Barryvdh\Reflection\DocBlock;
 use Barryvdh\Reflection\DocBlock\Context;
 use Barryvdh\Reflection\DocBlock\Tag;
 use Barryvdh\Reflection\DocBlock\Serializer as DocBlockSerializer;
+use function get_class;
+use function in_array;
+use function config;
+use function implode;
 
 class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
 {
