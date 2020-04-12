@@ -473,7 +473,7 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name, 'string', true));
                             break;
 
-                        case 'spatialIndex':
+                        case 'spatialindex':
                             break;
 
                         case 'string':
