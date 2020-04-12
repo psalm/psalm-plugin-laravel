@@ -4,6 +4,7 @@ namespace Psalm\LaravelPlugin\ReturnTypeProvider;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
+use PhpParser;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
@@ -35,7 +36,7 @@ class RedirectReturnTypeProvider implements FunctionReturnTypeProviderInterface
         }
 
         return new Type\Union([
-            RedirectResponse::class,
+            new Type\Atomic\TNamedObject(RedirectResponse::class),
         ]);
     }
 }
