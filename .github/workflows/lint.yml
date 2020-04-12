@@ -10,3 +10,5 @@ jobs:
       - uses: actions/checkout@v2
       - name: PHPCS check
         uses: chekalsky/phpcs-action@v1
+        with:
+          installed_paths: '${{ github.workspace }}/vendor/slevomat/coding-standard'
