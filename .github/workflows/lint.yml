@@ -15,4 +15,4 @@ jobs:
       - name: PHPCS check
         uses: chekalsky/phpcs-action@v1
         with:
-          installed_paths: '${{ github.workspace }}/vendor/slevomat/coding-standard'
+          phpcs_bin_path: './vendor/bin/phpcs'
