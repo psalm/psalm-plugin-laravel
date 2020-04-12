@@ -25,7 +25,7 @@ class AuthReturnTypeProvider implements \Psalm\Plugin\Hook\FunctionReturnTypePro
         Context $context,
         CodeLocation $code_location
     ) : Type\Union {
-    	if (!$call_args) {
+        if (!$call_args) {
             $return_type_candidate = new Type\Union([
                 new \Psalm\Type\Atomic\TNamedObject(\Illuminate\Support\Facades\Auth::class)
             ]);

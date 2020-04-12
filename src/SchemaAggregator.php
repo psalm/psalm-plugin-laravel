@@ -2,6 +2,9 @@
 namespace Psalm\LaravelPlugin;
 
 use PhpParser;
+use function count;
+use function is_string;
+use function strtolower;
 
 class SchemaAggregator
 {
@@ -64,7 +67,6 @@ class SchemaAggregator
                     case 'rename':
                         $this->renameTable($stmt->expr);
                 }
-                
             }
         }
     }
@@ -101,7 +103,7 @@ class SchemaAggregator
             $call_arg_name = $call->args[1]->value->params[0]->var->name;
 
             $this->processColumnUpdates($table_name, $call_arg_name, $update_closure->stmts);
-        }   
+        }
     }
 
     private function dropTable(PhpParser\Node\Expr\StaticCall $call) : void
@@ -547,8 +549,6 @@ class SchemaAggregator
                             break;
                     }
                 }
-                
-                
             }
         }
     }

@@ -4,10 +4,10 @@ namespace Psalm\LaravelPlugin;
 
 class FakeFilesystem extends \Illuminate\Filesystem\Filesystem
 {
-	/** @var ?string */
-	private $destination = '';
+    /** @var ?string */
+    private $destination = '';
 
-	/**
+    /**
      * Write the contents of a file.
      *
      * @param  string  $path
@@ -17,9 +17,9 @@ class FakeFilesystem extends \Illuminate\Filesystem\Filesystem
      */
     public function put($path, $contents, $lock = false)
     {
-    	$destination = $this->destination ?: $path;
+        $destination = $this->destination ?: $path;
 
-    	$this->destination = null;
+        $this->destination = null;
 
         return parent::put($destination, $contents, $lock);
     }
@@ -29,6 +29,6 @@ class FakeFilesystem extends \Illuminate\Filesystem\Filesystem
      */
     public function setDestination(string $destination)
     {
-    	$this->destination = $destination;
+        $this->destination = $destination;
     }
 }
