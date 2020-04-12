@@ -64,12 +64,16 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ReturnTypeProvider\AuthReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/TransReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\TransReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/RedirectReturnTypeProvider.php';
+        $registration->registerHooksFromClass(ReturnTypeProvider\RedirectReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/ViewReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
         require_once 'AppInterfaceProvider.php';
         $registration->registerHooksFromClass(AppInterfaceProvider::class);
         require_once 'PropertyProvider/ModelPropertyProvider.php';
         $registration->registerHooksFromClass(PropertyProvider\ModelPropertyProvider::class);
+
+        $this->addOurStubs($registration);
     }
 
     /**
@@ -213,6 +217,13 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
      */
     protected function getEnvironmentSetUp($app): void
     {
-        // ..
+        $app['config']->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
+    }
+
+    private function addOurStubs(RegistrationInterface $registration): void
+    {
+        foreach (glob(__DIR__ . '/Stubs/*.stubphp') as $stubFilePath) {
+            $registration->addStubFile($stubFilePath);
+        }
     }
 }
