@@ -7,9 +7,9 @@ class SchemaTable
     public $name;
 
     /** @var array<string, SchemaColumn> */
-	public $columns = [];
+    public $columns = [];
 
-	public function __construct(string $name)
+    public function __construct(string $name)
     {
         $this->name = $name;
     }

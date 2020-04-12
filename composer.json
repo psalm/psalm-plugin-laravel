@@ -28,14 +28,18 @@
     },
     "scripts": {
         "check": [
-            "@analyze"
+            "@analyze",
+            "@phpcs"
         ],
-        "analyze": "psalm"
+        "analyze": "psalm",
+        "lint": "phpcs"
     },
     "require-dev": {
         "codeception/codeception": "^4.1",
         "codeception/module-phpbrowser": "^1.0.0",
         "codeception/module-asserts": "^1.0.0",
         "weirdan/codeception-psalm-module": "^0.4.0"
+        "squizlabs/php_codesniffer": "*",
+        "slevomat/coding-standard": "^6.2"
     }
 }

@@ -9,6 +9,12 @@ use Orchestra\Testbench\Concerns\CreatesApplication;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
+use function file_exists;
+use function getcwd;
+use const DIRECTORY_SEPARATOR;
+use function unlink;
+use function dirname;
+use function glob;
 
 abstract class AbstractPlugin implements PluginEntryPointInterface
 {
@@ -24,7 +30,7 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
      * @param string $ide_helper_provider
      * @return \Illuminate\Contracts\Foundation\Application|\Laravel\Lumen\Application|\Illuminate\Container\Container
      */
-    abstract function loadIdeProvider($app, $ide_helper_provider);
+    abstract protected function loadIdeProvider($app, $ide_helper_provider);
 
     /**
      * @return void
@@ -42,7 +48,7 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
             $app->register($ide_helper_provider);
         }
 
-        $app = $this->loadIdeProvider($app, $ide_helper_provider); 
+        $app = $this->loadIdeProvider($app, $ide_helper_provider);
 
         $fake_filesystem = new FakeFilesystem();
 
