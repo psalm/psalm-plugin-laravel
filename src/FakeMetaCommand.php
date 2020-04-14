@@ -10,8 +10,8 @@ class FakeMetaCommand extends \Barryvdh\LaravelIdeHelper\Console\MetaCommand
      */
     protected function registerClassAutoloadExceptions()
     {
-        spl_autoload_register(function (string $class) {
-            throw new \ReflectionException("Class '$class' not found.");
-        });
+        // by default, the ide-helper throws exceptions when it cannot find a class. However it does not unregister that
+        // autoloader when it is done, and we certainly do not want to throw exceptions when we are simply checking if 
+        // a certain class exists. We are instead changing this to be a noop.
     }
 }
