@@ -1,23 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="3.x-dev@e70a282bce68adaafe00980bba017c7278d511d8">
-  <file src="src/AbstractPlugin.php">
-    <MismatchingDocblockParamType occurrences="1">
-      <code>\Illuminate\Contracts\Foundation\Application|\Laravel\Lumen\Application|\Illuminate\Container\Container</code>
-    </MismatchingDocblockParamType>
-    <PossiblyInvalidArgument occurrences="3">
-      <code>$app</code>
-      <code>$app</code>
-      <code>$app</code>
-    </PossiblyInvalidArgument>
-    <UndefinedDocblockClass occurrences="2">
-      <code>\Illuminate\Contracts\Foundation\Application|\Laravel\Lumen\Application|\Illuminate\Container\Container</code>
-      <code>\Illuminate\Contracts\Foundation\Application|\Laravel\Lumen\Application|\Illuminate\Container\Container</code>
-    </UndefinedDocblockClass>
-    <UndefinedInterfaceMethod occurrences="2">
-      <code>$app</code>
-      <code>$app</code>
-    </UndefinedInterfaceMethod>
-  </file>
+<files psalm-version="3.11.0@5bc9b095d1a6f1a2e0890353fc2c6cd7de62371d">
   <file src="src/FakeMetaCommand.php">
     <PropertyNotSetInConstructor occurrences="1">
       <code>FakeMetaCommand</code>
@@ -27,21 +9,5 @@
     <PropertyNotSetInConstructor occurrences="1">
       <code>FakeModelsCommand</code>
     </PropertyNotSetInConstructor>
-  </file>
-  <file src="src/LumenPlugin.php">
-    <UndefinedClass occurrences="1">
-      <code>\Laravel\Lumen\Application</code>
-    </UndefinedClass>
-    <UndefinedDocblockClass occurrences="1">
-      <code>\Illuminate\Contracts\Foundation\Application|\Laravel\Lumen\Application|\Illuminate\Container\Container</code>
-    </UndefinedDocblockClass>
-  </file>
-  <file src="src/Plugin.php">
-    <UndefinedDocblockClass occurrences="1">
-      <code>\Illuminate\Contracts\Foundation\Application|\Laravel\Lumen\Application|\Illuminate\Container\Container</code>
-    </UndefinedDocblockClass>
-    <UndefinedMethod occurrences="1">
-      <code>getProvider</code>
-    </UndefinedMethod>
   </file>
 </files>
