@@ -68,6 +68,8 @@ abstract class AbstractPlugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ReturnTypeProvider\RedirectReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/ViewReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/AppReturnTypeProvider.php';
+        $registration->registerHooksFromClass(ReturnTypeProvider\AppReturnTypeProvider::class);
         require_once 'AppInterfaceProvider.php';
         $registration->registerHooksFromClass(AppInterfaceProvider::class);
         require_once 'PropertyProvider/ModelPropertyProvider.php';
