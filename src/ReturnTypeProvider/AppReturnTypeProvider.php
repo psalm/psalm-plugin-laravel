@@ -32,6 +32,8 @@ final class AppReturnTypeProvider implements FunctionReturnTypeProviderInterface
         }
 
         // @todo: this should really proxy to \Illuminate\Foundation\Application::make, but i was struggling with that
-        return $statements_source->getNodeTypeProvider()->getType($call_args[0]->value);
+        return new Union([
+            new TNamedObject($call_args[0]->value),
+        ]);
     }
 }
