@@ -54,9 +54,6 @@ Feature: Container
     """
     <?php
       class Foo {
-        public function resolveHelperGetContainer(): \Illuminate\Contracts\Foundation\Application {
-          return resolve();
-        }
 
         public function resolveHelperResolvesTypes(): \Illuminate\Routing\Redirector
         {
