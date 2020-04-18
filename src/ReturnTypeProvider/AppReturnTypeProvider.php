@@ -6,6 +6,7 @@ use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
 use Psalm\StatementsSource;
+use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -32,8 +33,15 @@ final class AppReturnTypeProvider implements FunctionReturnTypeProviderInterface
         }
 
         // @todo: this should really proxy to \Illuminate\Foundation\Application::make, but i was struggling with that
-        return new Union([
-            new TNamedObject($call_args[0]->value),
-        ]);
+
+        $firstArgType = $statements_source->getNodeTypeProvider()->getType($call_args[0]->value);
+
+        if ($firstArgType && $firstArgType->isSingleStringLiteral()) {
+            return new Union([
+                new TNamedObject($firstArgType->getSingleStringLiteral()->value),
+            ]);
+        }
+
+        return Type::getMixed();
     }
 }
