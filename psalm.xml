@@ -10,6 +10,7 @@
         <directory name="src" />
         <ignoreFiles>
             <directory name="vendor" />
+            <directory name="src/cache" />
             <directory name="src/Stubs" />
             <directory name="src/cache" />
             <directory name="tests" />
