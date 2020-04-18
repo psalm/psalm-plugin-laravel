@@ -75,16 +75,16 @@ class Plugin implements PluginEntryPointInterface
 
         $stubs_generator_command->setLaravel($app);
 
-        @unlink($cache_dir . 'stubs.php');
+        @unlink($cache_dir . 'stubs.stubphp');
 
-        $fake_filesystem->setDestination($cache_dir . 'stubs.php');
+        $fake_filesystem->setDestination($cache_dir . 'stubs.stubphp');
 
         $stubs_generator_command->run(
             new \Symfony\Component\Console\Input\ArrayInput([]),
             new \Symfony\Component\Console\Output\NullOutput()
         );
 
-        $registration->addStubFile($cache_dir . 'stubs.php');
+        $registration->addStubFile($cache_dir . 'stubs.stubphp');
     }
 
     /**
@@ -107,16 +107,16 @@ class Plugin implements PluginEntryPointInterface
 
         $meta_generator_command->setLaravel($app);
 
-        @unlink($cache_dir . 'meta.php');
+        @unlink($cache_dir . 'meta.stubphp');
 
-        $fake_filesystem->setDestination($cache_dir . 'meta.php');
+        $fake_filesystem->setDestination($cache_dir . 'meta.stubphp');
 
         $meta_generator_command->run(
             new \Symfony\Component\Console\Input\ArrayInput([]),
             new \Symfony\Component\Console\Output\NullOutput()
         );
         
-        $registration->addStubFile($cache_dir . 'meta.php');
+        $registration->addStubFile($cache_dir . 'meta.stubphp');
     }
 
     /**
@@ -147,9 +147,9 @@ class Plugin implements PluginEntryPointInterface
 
         $models_generator_command->setLaravel($app);
 
-        @unlink($cache_dir . 'models.php');
+        @unlink($cache_dir . 'models.stubphp');
 
-        $fake_filesystem->setDestination($cache_dir . 'models.php');
+        $fake_filesystem->setDestination($cache_dir . 'models.stubphp');
 
         $models_generator_command->run(
             new \Symfony\Component\Console\Input\ArrayInput([
@@ -158,7 +158,7 @@ class Plugin implements PluginEntryPointInterface
             new \Symfony\Component\Console\Output\NullOutput()
         );
 
-        $registration->addStubFile($cache_dir . 'models.php');
+        $registration->addStubFile($cache_dir . 'models.stubphp');
 
         self::$model_classes = $models_generator_command->getModels();
     }
