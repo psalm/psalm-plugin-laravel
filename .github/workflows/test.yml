@@ -11,12 +11,20 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: [7.1, 8.0]
+        illuminate_version: [5.5, 6.*, 7.*]
+
+    name: PHP ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }}
 
     steps:
     - uses: actions/checkout@v2
 
     - name: Install dependencies
-      run: export COMPOSER_ROOT_VERSION=dev-master && composer install --prefer-dist --no-progress --no-suggest
+      run: |
+        export COMPOSER_ROOT_VERSION=dev-master
+        composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress  --no-suggest
 
     - name: Run Tests
       run: vendor/bin/codecept run
