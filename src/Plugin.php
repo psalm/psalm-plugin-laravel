@@ -6,6 +6,7 @@ use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use Orchestra\Testbench\Concerns\CreatesApplication;
+use Psalm\LaravelPlugin\ReturnTypeProvider\UrlReturnTypeProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
@@ -54,6 +55,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(AppInterfaceProvider::class);
         require_once 'PropertyProvider/ModelPropertyProvider.php';
         $registration->registerHooksFromClass(PropertyProvider\ModelPropertyProvider::class);
+        require_once 'ReturnTypeProvider/UrlReturnTypeProvider.php';
+        $registration->registerHooksFromClass(UrlReturnTypeProvider::class);
 
         $this->addOurStubs($registration);
     }
