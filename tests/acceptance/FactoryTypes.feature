@@ -26,6 +26,27 @@ Feature: Factory Types
     };
 
     class FactoryTest {
+      /**
+      * @return \Illuminate\Database\Eloquent\FactoryBuilder<User, 1>
+      */
+      public function getFactory(): \Illuminate\Database\Eloquent\FactoryBuilder
+      {
+        return factory(User::class);
+      }
+
+      /**
+      * @return \Illuminate\Database\Eloquent\FactoryBuilder<User, 2>
+      */
+      public function getFactoryForTwo(): \Illuminate\Database\Eloquent\FactoryBuilder
+      {
+        return factory(User::class, 2);
+      }
+
+      public function makeUser(): User
+      {
+        return factory(User::class)->make();
+      }
+
       public function createUser(): User
       {
         return factory(User::class)->create();
@@ -37,6 +58,14 @@ Feature: Factory Types
       public function createUsers(): \Illuminate\Database\Eloquent\Collection
       {
         return factory(User::class, 2)->create();
+      }
+
+      /**
+      * @return \Illuminate\Database\Eloquent\Collection<User>
+      */
+      public function createUsersWithNameAttribute(): \Illuminate\Database\Eloquent\Collection
+      {
+        return factory(User::class, 'new name', 2)->create();
       }
     }
     """

@@ -1,0 +1,56 @@
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+use Faker\Generator as Faker;
+use InvalidArgumentException;
+use Illuminate\Support\Traits\Macroable;
+
+/**
+* @template TModel of \Illuminate\Database\Eloquent\Model
+* @template TCount of int
+*/
+class FactoryBuilder
+{
+    use Macroable;
+
+    /**
+     * Create an new builder instance.
+     *
+     * @param class-string<TModel> $class
+     * @param  string  $name
+     * @param  array  $definitions
+     * @param  array  $states
+     * @param  array  $afterMaking
+     * @param  array  $afterCreating
+     * @param  \Faker\Generator  $faker
+     * @return void
+     */
+    public function __construct($class, $name, array $definitions, array $states,
+                                array $afterMaking, array $afterCreating, Faker $faker)
+    {
+
+    }
+
+    /**
+     * Create a collection of models and persist them to the database.
+     *
+     * @param  array  $attributes
+     * @return (TCount is 1 ? TModel : \Illuminate\Database\Eloquent\Collection<TModel>)
+     */
+    public function create(array $attributes = [])
+    {
+
+    }
+
+    /**
+     * Create a collection of models.
+     *
+     * @param  array  $attributes
+     * @return (TCount is 1 ? TModel : \Illuminate\Database\Eloquent\Collection<TModel>)
+     */
+    public function make(array $attributes = [])
+    {
+
+    }
+}
