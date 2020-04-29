@@ -9,6 +9,8 @@
 This package brings static analysis and type support to projects using Laravel. Our goal is to find as many type-related
  bugs as possible, therefore increasing developer productivity and application health. Find bugs without the overhead
  of writing tests!
+ 
+ ![Screenshot](/assets/screenshot.png)
 
 ## Quickstart
 Please refer to the [full Psalm documentation](https://psalm.dev/quickstart) for a more detailed guide on introducing Psalm
