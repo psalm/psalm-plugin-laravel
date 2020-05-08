@@ -45,7 +45,7 @@
         "codeception/codeception": "^4.1",
         "codeception/module-phpbrowser": "^1.0.0",
         "codeception/module-asserts": "^1.0.0",
-        "weirdan/codeception-psalm-module": "^0.5.0",
+        "weirdan/codeception-psalm-module": "^0.7.1",
         "squizlabs/php_codesniffer": "*",
         "slevomat/coding-standard": "^6.2"
     }

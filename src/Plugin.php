@@ -233,4 +233,40 @@ class Plugin implements PluginEntryPointInterface
 
         return $app;
     }
+
+    /**
+     * Resolve application bootstrapper.
+     *
+     * @param  \Illuminate\Foundation\Application  $app
+     *
+     * @return void
+     */
+    protected function resolveApplicationBootstrappers($app)
+    {
+        // we want to keep the default psalm exception handler, otherwise the Laravel one will always return exit codes
+        // of 0
+        //$app->make('Illuminate\Foundation\Bootstrap\HandleExceptions')->bootstrap($app);
+        $app->make('Illuminate\Foundation\Bootstrap\RegisterFacades')->bootstrap($app);
+        $app->make('Illuminate\Foundation\Bootstrap\SetRequestForConsole')->bootstrap($app);
+        $app->make('Illuminate\Foundation\Bootstrap\RegisterProviders')->bootstrap($app);
+
+        $this->getEnvironmentSetUp($app);
+
+        $app->make('Illuminate\Foundation\Bootstrap\BootProviders')->bootstrap($app);
+
+        foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
+            $app->make($bootstrap)->bootstrap($app);
+        }
+
+        $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
+
+        $app['router']->getRoutes()->refreshNameLookups();
+
+        /**
+         * @psalm-suppress MissingClosureParamType
+         */
+        $app->resolving('url', static function ($url, $app) {
+            $app['router']->getRoutes()->refreshNameLookups();
+        });
+    }
 }
