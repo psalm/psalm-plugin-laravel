@@ -63,3 +63,18 @@ Feature: Container
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: app helper can be chained with make / makeWith
+    Given I have the following code
+    """
+    <?php
+      function testMake(): \Illuminate\Routing\Redirector {
+        return app()->make(\Illuminate\Routing\Redirector::class);
+      }
+
+      function testMakeWith(): \Illuminate\Routing\Redirector {
+        return app()->makeWith(\Illuminate\Routing\Redirector::class);
+      }
+    """
+    When I run Psalm
+    Then I see no errors
