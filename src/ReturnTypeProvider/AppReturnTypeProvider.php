@@ -4,11 +4,13 @@ namespace Psalm\LaravelPlugin\ReturnTypeProvider;
 
 use Psalm\CodeLocation;
 use Psalm\Context;
+use Psalm\LaravelPlugin\ApplicationHelper;
 use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+use function get_class;
 
 final class AppReturnTypeProvider implements FunctionReturnTypeProviderInterface
 {
@@ -28,7 +30,7 @@ final class AppReturnTypeProvider implements FunctionReturnTypeProviderInterface
     {
         if (!$call_args) {
             return new Union([
-                new TNamedObject(\Illuminate\Contracts\Foundation\Application::class),
+                new TNamedObject(get_class(ApplicationHelper::getApp())),
             ]);
         }
 
