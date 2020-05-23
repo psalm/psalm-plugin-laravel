@@ -107,9 +107,10 @@ class Builder
     public function fromQuery($query, $bindings = []) { }
 
     /**
-     * @param  mixed  $id
+     * @template T
+     * @param  T $id
      * @param  array  $columns
-     * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<TModel>
+     * @return (T is array ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel)
      */
     public function find($id, $columns = ['*']) { }
 
@@ -125,8 +126,6 @@ class Builder
      * @param  T $id
      * @param  array  $columns
      * @return (T is array ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel)
-     *
-     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
     public function findOrFail($id, $columns = ['*']) { }
 
