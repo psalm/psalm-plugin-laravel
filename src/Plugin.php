@@ -5,6 +5,7 @@ use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
+use Psalm\LaravelPlugin\ReturnTypeProvider\ModelReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\UrlReturnTypeProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
@@ -53,6 +54,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(PropertyProvider\ModelPropertyProvider::class);
         require_once 'ReturnTypeProvider/UrlReturnTypeProvider.php';
         $registration->registerHooksFromClass(UrlReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/ModelReturnTypeProvider.php';
+        $registration->registerHooksFromClass(ModelReturnTypeProvider::class);
 
         $this->addOurStubs($registration);
     }
@@ -68,8 +71,20 @@ class Plugin implements PluginEntryPointInterface
         $view_factory,
         string $cache_dir
     ) : void {
+        /** @var \Illuminate\Config\Repository $config */
+        $config = $app['config'];
+
+        // The \Eloquent mixin has less specific return types than our custom plugin can determine, so we unset it here
+        // to not taint our analysis
+        if ($ideHelperExtra = $config->get('ide-helper.extra')) {
+            if (isset($ideHelperExtra['Eloquent'])) {
+                unset($ideHelperExtra['Eloquent']);
+                $config->set('ide-helper.extra', $ideHelperExtra);
+            }
+        }
+
         $stubs_generator_command = new \Barryvdh\LaravelIdeHelper\Console\GeneratorCommand(
-            $app['config'],
+            $config,
             $fake_filesystem,
             $view_factory
         );
