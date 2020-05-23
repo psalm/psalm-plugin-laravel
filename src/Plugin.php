@@ -1,6 +1,7 @@
 <?php
 namespace Psalm\LaravelPlugin;
 
+use Barryvdh\LaravelIdeHelper\Console\MetaCommand;
 use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
@@ -115,7 +116,7 @@ class Plugin implements PluginEntryPointInterface
         string $cache_dir
     ) : void {
         /** @psalm-suppress InvalidArgument */
-        $meta_generator_command = new FakeMetaCommand(
+        $meta_generator_command = new MetaCommand(
             $fake_filesystem,
             $view_factory,
             $app['config']
