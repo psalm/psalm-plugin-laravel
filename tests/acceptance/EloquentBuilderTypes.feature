@@ -67,6 +67,20 @@ Feature: Eloquent Builder Types
         }
 
         /**
+        * @param \Illuminate\Database\Eloquent\Builder<User> $builder
+        */
+        public function findOne(\Illuminate\Database\Eloquent\Builder $builder): ?User {
+          return $builder->find(1);
+        }
+
+        /**
+        * @param \Illuminate\Database\Eloquent\Builder<User> $builder
+        */
+        public function findViaArray(\Illuminate\Database\Eloquent\Builder $builder): \Illuminate\Database\Eloquent\Collection {
+          return $builder->find([1]);
+        }
+
+        /**
         * @return \Illuminate\Database\Eloquent\Builder<User>
         */
         public function getWhereBuilderViaInstance(array $attributes): \Illuminate\Database\Eloquent\Builder {
