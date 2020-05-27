@@ -15,8 +15,9 @@ jobs:
       matrix:
         php: [7.1, 8.0]
         illuminate_version: [5.8.*, 6.*, 7.*]
+        composer_flags:  ['', '--prefer-lowest']
 
-    name: PHP ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }}
+    name: PHP ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | Composer Flags ${{ matrix.composer_flags }}
 
     steps:
     - uses: actions/checkout@v2
@@ -24,7 +25,7 @@ jobs:
     - name: Install dependencies
       run: |
         export COMPOSER_ROOT_VERSION=dev-master
-        composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress  --no-suggest
+        composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress  --no-suggest  --prefer-stable --prefer-dist ${{ matrix.composer_flags }}
 
     - name: Run Tests
       run: vendor/bin/codecept run
