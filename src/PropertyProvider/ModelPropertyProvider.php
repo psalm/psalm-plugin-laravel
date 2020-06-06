@@ -39,11 +39,11 @@ class ModelPropertyProvider implements
 
         $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
 
-        if ($codebase->methodExists($fq_classlike_name . '::' . $property_name)) {
+        if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
 
-        if ($codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute')) {
+        if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
 
@@ -70,14 +70,13 @@ class ModelPropertyProvider implements
         }
 
         $codebase = $source->getCodebase();
-
         $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
 
-        if ($codebase->methodExists($fq_classlike_name . '::' . $property_name)) {
+        if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
 
-        if ($codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute')) {
+        if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
 
@@ -106,16 +105,39 @@ class ModelPropertyProvider implements
 
         $codebase = $source->getCodebase();
 
-        $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
-
-        if ($codebase->methodExists($fq_classlike_name . '::' . $property_name)) {
+        if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             return $codebase->getMethodReturnType($fq_classlike_name . '::' . $property_name, $fq_classlike_name)
                 ?: Type::getMixed();
         }
 
-        if ($codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute')) {
+        if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
             return $codebase->getMethodReturnType($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute', $fq_classlike_name)
                 ?: Type::getMixed();
         }
+    }
+
+    /**
+     * @param \Psalm\Codebase $codebase
+     * @param string $fq_classlike_name
+     * @param string $property_name
+     *
+     * @return bool
+     */
+    private static function relationExists(\Psalm\Codebase $codebase, string $fq_classlike_name, string $property_name): bool
+    {
+        // @todo: ensure this is a relation method
+        return $codebase->methodExists($fq_classlike_name . '::' . $property_name);
+    }
+
+    /**
+     * @param \Psalm\Codebase $codebase
+     * @param string $fq_classlike_name
+     * @param string $property_name
+     *
+     * @return bool
+     */
+    private static function accessorExists(\Psalm\Codebase $codebase, string $fq_classlike_name, string $property_name): bool
+    {
+        return $codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute');
     }
 }
