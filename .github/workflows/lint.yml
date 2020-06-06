@@ -1,6 +1,10 @@
 name: PHPCS check
 
-on: pull_request
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 0 * * *'
 
 jobs:
   phpcs:
