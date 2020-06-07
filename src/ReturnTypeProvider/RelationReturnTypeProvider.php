@@ -52,6 +52,10 @@ final class RelationReturnTypeProvider implements MethodReturnTypeProviderInterf
 
         // If this method name is on the builder object, proxy it over there
         if ($source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase))) {
+            if (!$template_type_parameters) {
+                return null;
+            }
+
             $fake_method_call = new MethodCall(
                 new \PhpParser\Node\Expr\Variable('builder'),
                 $method_name_lowercase,
@@ -65,8 +69,12 @@ final class RelationReturnTypeProvider implements MethodReturnTypeProviderInterf
 
             $type = self::executeFakeCall($source, $fake_method_call, $context, $templateType->getKey());
 
+            if (!$type) {
+                return null;
+            }
+
             foreach ($type->getAtomicTypes() as $type) {
-                if ($type->value === Builder::class) {
+                if ($type instanceof Type\Atomic\TNamedObject && $type->value === Builder::class) {
                     // ta-da. now we return "this" relation instance
                     return new Union([
                         new Type\Atomic\TGenericObject($fq_classlike_name, $template_type_parameters),
