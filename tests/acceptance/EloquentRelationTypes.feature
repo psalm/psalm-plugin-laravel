@@ -204,6 +204,13 @@ Feature: Eloquent Relation Types
     function testRelationshipsReturnThemselvesInsteadOfBuilders(HasOne $relationship): HasOne {
       return $relationship->where('active', 1);
     }
+
+    /**
+    * @psalm-return BelongsTo<User>
+    */
+    function testAnother(Phone $phone): BelongsTo {
+      return $phone->user()->where('active', 1);
+    }
     """
     When I run Psalm
     Then I see no errors
