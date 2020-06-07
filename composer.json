@@ -47,7 +47,7 @@
         "test": "codecept run"
     },
     "require-dev": {
-        "codeception/codeception": "4.1.x-dev#93a699972a8578bb463d8687b6c87ed7ebadf38a as 4.1.6",
+        "codeception/codeception": "^4.1.6",
         "codeception/module-phpbrowser": "^1.0.0",
         "codeception/module-asserts": "^1.0.0",
         "weirdan/codeception-psalm-module": "^0.7.2",
