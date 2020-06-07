@@ -21,9 +21,7 @@ Feature: Eloquent Builder Types
     """
     <?php declare(strict_types=1);
 
-    final class User extends \Illuminate\Database\Eloquent\Model {
-      protected $table = 'users';
-    };
+    use Tests\Psalm\LaravelPlugin\Models\User;
 
     final class UserRepository
     {
