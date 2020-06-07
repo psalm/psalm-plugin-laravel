@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\CodeLocation;
 use Psalm\Context;
@@ -51,7 +52,10 @@ final class RelationReturnTypeProvider implements MethodReturnTypeProviderInterf
         // returns an instance of ITSELF, rather than the instance of the builder. That explains this nonsense
 
         // If this method name is on the builder object, proxy it over there
-        if ($source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase))) {
+
+        if ($source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase)) ||
+            $source->getCodebase()->methods->methodExists(new MethodIdentifier(QueryBuilder::class, $method_name_lowercase))
+        ) {
             if (!$template_type_parameters) {
                 return null;
             }
