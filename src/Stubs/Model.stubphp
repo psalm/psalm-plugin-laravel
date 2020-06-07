@@ -8,6 +8,7 @@ use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Routing\UrlRoutable;
 use Illuminate\Contracts\Queue\QueueableEntity;
+use Illuminate\Support\Traits\ForwardsCalls;
 
 /**
  * @implements \ArrayAccess<string, mixed>
@@ -15,6 +16,15 @@ use Illuminate\Contracts\Queue\QueueableEntity;
  */
 abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializable, QueueableEntity, UrlRoutable
 {
+    use Concerns\HasAttributes,
+            Concerns\HasEvents,
+            Concerns\HasGlobalScopes,
+            Concerns\HasRelationships,
+            Concerns\HasTimestamps,
+            Concerns\HidesAttributes,
+            Concerns\GuardsAttributes,
+            ForwardsCalls;
+
     /**
      * @param  array|mixed  $columns
      * @return \Illuminate\Database\Eloquent\Collection<static>

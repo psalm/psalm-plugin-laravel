@@ -8,7 +8,10 @@ use PhpParser\Node\Expr\MethodCall;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Plugin;
 use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
+use Psalm\Plugin\Hook\PropertyExistenceProviderInterface;
+use Psalm\Plugin\Hook\PropertyTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Union;
@@ -16,6 +19,9 @@ use function in_array;
 
 final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface
 {
+    /**
+     * @return array<string>
+     */
     public static function getClassLikeNames(): array
     {
         return [Model::class];
