@@ -1,0 +1,21 @@
+<?php
+
+namespace Illuminate\Http\Concerns;
+
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
+use SplFileInfo;
+use stdClass;
+
+trait InteractsWithInput
+{
+    /**
+     * Retrieve an input item from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     */
+    public function input($key = null, $default = null) { }
+}
