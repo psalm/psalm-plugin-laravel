@@ -214,3 +214,17 @@ Feature: Eloquent Relation Types
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: Relationships return themselves when the proxied method is a query builder method
+    Given I have the following code
+    """
+    /**
+    * @param HasOne<Phone> $relationship
+    * @psalm-return HasOne<Phone>
+    */
+    function test(HasOne $relationship): HasOne {
+      return $relationship->orderBy('id', 'ASC');
+    }
+    """
+    When I run Psalm
+    Then I see no errors

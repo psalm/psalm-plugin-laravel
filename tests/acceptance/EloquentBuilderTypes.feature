@@ -145,3 +145,22 @@ Feature: Eloquent Builder Types
     Then I see these errors
       | MixedInferredReturnType | Could not verify return type 'Illuminate\Database\Eloquent\Builder<User>' for UserRepository::test_failure |
       | MixedReturnStatement    | Could not infer a return type                                                                              |
+
+  Scenario: can call methods on underlying query builder
+    Given I have the following code
+    """
+    <?php declare(strict_types=1);
+
+    use Tests\Psalm\LaravelPlugin\Models\User;
+    use \Illuminate\Database\Eloquent\Builder;
+
+    /**
+    * @psalm-param Builder<User> $builder
+    * @psalm-return Builder<User>
+    */
+    function test(Builder $builder): Builder {
+      return $builder->orderBy('id', 'ASC');
+    }
+    """
+    When I run Psalm
+    Then I see no errors
