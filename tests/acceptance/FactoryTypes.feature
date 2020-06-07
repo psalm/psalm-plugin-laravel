@@ -21,9 +21,7 @@ Feature: Factory Types
     """
     <?php declare(strict_types=1);
 
-    class User extends \Illuminate\Database\Eloquent\Model {
-      protected $table = 'users';
-    };
+    use Tests\Psalm\LaravelPlugin\Models\User;
 
     class FactoryTest {
       /**

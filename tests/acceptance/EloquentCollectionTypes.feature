@@ -23,9 +23,7 @@ Feature: Eloquent Collection Types
 
     namespace Tests\Psalm\LaravelPlugin\Models;
 
-    class User extends \Illuminate\Database\Eloquent\Model {
-      protected $table = 'users';
-    };
+    use Tests\Psalm\LaravelPlugin\Models\User;
 
     final class UserRepository
     {

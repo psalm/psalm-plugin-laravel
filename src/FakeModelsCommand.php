@@ -39,7 +39,7 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
     /** @return array<class-string> */
     public function getModels()
     {
-        return $this->model_classes;
+        return $this->model_classes + $this->loadModels();
     }
 
     /**

@@ -98,5 +98,12 @@ final class ApplicationHelper
     protected function getEnvironmentSetUp($app): void
     {
         $app['config']->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
+
+        // in testing, we want ide-helper to load our test models. Unfortunately this has to be a relative path, with
+        // the base path being inside of orchestra/testbench-core/laravel
+
+        $app['config']->set('ide-helper.model_locations', [
+            '../../../../tests/Models',
+        ]);
     }
 }
