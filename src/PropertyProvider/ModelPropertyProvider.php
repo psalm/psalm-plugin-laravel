@@ -106,8 +106,30 @@ class ModelPropertyProvider implements
         $codebase = $source->getCodebase();
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
-            return $codebase->getMethodReturnType($fq_classlike_name . '::' . $property_name, $fq_classlike_name)
-                ?: Type::getMixed();
+            $methodReturnType = $codebase->getMethodReturnType($fq_classlike_name . '::' . $property_name, $fq_classlike_name);
+            if (!$methodReturnType) {
+                return Type::getMixed();
+            }
+            // In order to get the property value, we need to decipher the generic relation object
+            foreach ($methodReturnType->getAtomicTypes() as $atomicType) {
+                if (!$atomicType instanceof Type\Atomic\TGenericObject) {
+                    continue;
+                }
+
+                foreach ($atomicType->getChildNodes() as $childNode) {
+                    if (!$childNode instanceof Type\Union) {
+                        continue;
+                    }
+                    foreach ($childNode->getAtomicTypes() as $atomicType) {
+                        if (!$atomicType instanceof Type\Atomic\TNamedObject) {
+                            continue;
+                        }
+                        return $childNode;
+                    }
+                }
+            }
+
+            return Type::getMixed();
         }
 
         if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
