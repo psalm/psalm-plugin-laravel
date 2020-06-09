@@ -2,11 +2,17 @@
 
 namespace Psalm\LaravelPlugin\PropertyProvider;
 
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use PhpParser;
 use Psalm\Context;
 use Psalm\CodeLocation;
 use Psalm\Type;
 use Psalm\StatementsSource;
+use function in_array;
 use function str_replace;
 
 class ModelPropertyProvider implements
@@ -110,11 +116,19 @@ class ModelPropertyProvider implements
             if (!$methodReturnType) {
                 return Type::getMixed();
             }
+
+            /** @var \Psalm\Type\Union|null $modelType */
+            $modelType = null;
+            /** @var \Psalm\Type\Atomic\TGenericObject|null $relationType */
+            $relationType = null;
+
             // In order to get the property value, we need to decipher the generic relation object
             foreach ($methodReturnType->getAtomicTypes() as $atomicType) {
                 if (!$atomicType instanceof Type\Atomic\TGenericObject) {
                     continue;
                 }
+
+                $relationType = $atomicType;
 
                 foreach ($atomicType->getChildNodes() as $childNode) {
                     if (!$childNode instanceof Type\Union) {
@@ -124,12 +138,25 @@ class ModelPropertyProvider implements
                         if (!$atomicType instanceof Type\Atomic\TNamedObject) {
                             continue;
                         }
-                        return $childNode;
+
+                        $modelType = $childNode;
+                        break 3;
                     }
                 }
             }
 
-            return Type::getMixed();
+            $returnType = $modelType;
+
+            // these methods return collection instances
+            if ($modelType && $relationType && in_array($relationType->value, [BelongsToMany::class, HasMany::class, HasManyThrough::class, MorphMany::class])) {
+                $returnType = new Type\Union([
+                    new Type\Atomic\TGenericObject(Collection::class, [
+                        $modelType
+                    ]),
+                ]);
+            }
+
+            return $returnType ?: Type::getMixed();
         }
 
         if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {

@@ -22,12 +22,14 @@ Feature: Eloquent Relation Types
 
       use \Illuminate\Database\Eloquent\Builder;
       use \Illuminate\Database\Eloquent\Model;
+      use \Illuminate\Database\Eloquent\Collection;
       use \Illuminate\Database\Eloquent\Relations\HasOne;
       use \Illuminate\Database\Eloquent\Relations\BelongsTo;
       use \Illuminate\Database\Eloquent\Relations\BelongsToMany;
       use \Illuminate\Database\Eloquent\Relations\HasMany;
       use \Illuminate\Database\Eloquent\Relations\HasManyThrough;
       use \Illuminate\Database\Eloquent\Relations\HasOneThrough;
+      use \Illuminate\Database\Eloquent\Relations\MorphMany;
       use \Illuminate\Database\Eloquent\Relations\MorphTo;
 
       use Tests\Psalm\LaravelPlugin\Models\Comment;
@@ -37,6 +39,7 @@ Feature: Eloquent Relation Types
       use Tests\Psalm\LaravelPlugin\Models\Post;
       use Tests\Psalm\LaravelPlugin\Models\Role;
       use Tests\Psalm\LaravelPlugin\Models\User;
+      use Tests\Psalm\LaravelPlugin\Models\Video;
       """
 
   Scenario: Models can declare one to one relationships
@@ -154,6 +157,46 @@ Feature: Eloquent Relation Types
       */
       public function getImageableRelationship(Image $image): MorphTo {
         return $image->imageable();
+      }
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: Models can declare many to many polymorphic relationships
+    Given I have the following code
+    """
+    final class Repository
+    {
+      /**
+      * @psalm-return MorphMany<Comment>
+      */
+      public function getCommentsRelation(Video $video): MorphMany {
+        return $video->comments();
+      }
+
+      /**
+      * @psalm-return Collection<Comment>
+      */
+      public function getComments(Video $video): Collection {
+        return $video->comments;
+      }
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: Polymorphic models can retrieve their inverse relation
+    Given I have the following code
+    """
+    final class Repository
+    {
+      /**
+      * todo: this should be a union of possible types...
+      * @psalm-return mixed
+      */
+      public function getCommentable(Comment $comment) {
+        return $comment->commentable;
       }
     }
     """
