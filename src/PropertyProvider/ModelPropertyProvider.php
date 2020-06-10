@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser;
 use Psalm\Context;
 use Psalm\CodeLocation;
@@ -147,8 +148,15 @@ class ModelPropertyProvider implements
 
             $returnType = $modelType;
 
-            // these methods return collection instances
-            if ($modelType && $relationType && in_array($relationType->value, [BelongsToMany::class, HasMany::class, HasManyThrough::class, MorphMany::class])) {
+            $relationsThatReturnACollection = [
+                BelongsToMany::class,
+                HasMany::class,
+                HasManyThrough::class,
+                MorphMany::class,
+                MorphToMany::class,
+            ];
+
+            if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection)) {
                 $returnType = new Type\Union([
                     new Type\Atomic\TGenericObject(Collection::class, [
                         $modelType

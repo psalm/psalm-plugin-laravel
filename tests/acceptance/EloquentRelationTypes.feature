@@ -31,6 +31,7 @@ Feature: Eloquent Relation Types
       use \Illuminate\Database\Eloquent\Relations\HasOneThrough;
       use \Illuminate\Database\Eloquent\Relations\MorphMany;
       use \Illuminate\Database\Eloquent\Relations\MorphTo;
+      use \Illuminate\Database\Eloquent\Relations\MorphToMany;
 
       use Tests\Psalm\LaravelPlugin\Models\Comment;
       use Tests\Psalm\LaravelPlugin\Models\Image;
@@ -38,6 +39,7 @@ Feature: Eloquent Relation Types
       use Tests\Psalm\LaravelPlugin\Models\Phone;
       use Tests\Psalm\LaravelPlugin\Models\Post;
       use Tests\Psalm\LaravelPlugin\Models\Role;
+      use Tests\Psalm\LaravelPlugin\Models\Tag;
       use Tests\Psalm\LaravelPlugin\Models\User;
       use Tests\Psalm\LaravelPlugin\Models\Video;
       """
@@ -163,7 +165,7 @@ Feature: Eloquent Relation Types
     When I run Psalm
     Then I see no errors
 
-  Scenario: Models can declare many to many polymorphic relationships
+  Scenario: Models can declare one to many polymorphic relationships
     Given I have the following code
     """
     final class Repository
@@ -186,6 +188,29 @@ Feature: Eloquent Relation Types
     When I run Psalm
     Then I see no errors
 
+  Scenario: Models can declare many to many polymorphic relationships
+    Given I have the following code
+    """
+    final class Repository
+    {
+      /**
+      * @psalm-return MorphToMany<Tag>
+      */
+      public function getTagsRelation(Post $post): MorphToMany {
+        return $post->tags();
+      }
+
+      /**
+      * @psalm-return Collection<Tag>
+      */
+      public function getTags(Post $post): Collection {
+        return $post->tags;
+      }
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: Polymorphic models can retrieve their inverse relation
     Given I have the following code
     """
@@ -197,6 +222,43 @@ Feature: Eloquent Relation Types
       */
       public function getCommentable(Comment $comment) {
         return $comment->commentable;
+      }
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: Models can declare inverse of many to many polymorphic relationships
+    Given I have the following code
+    """
+    final class Repository
+    {
+      /**
+      * @psalm-return MorphToMany<Post>
+      */
+      public function getPostsRelation(Tag $tag): MorphToMany {
+        return $tag->posts();
+      }
+
+      /**
+      * @psalm-return MorphToMany<Video>
+      */
+      public function getVideosRelation(Tag $tag): MorphToMany {
+        return $tag->videos();
+      }
+
+      /**
+      * @psalm-return Collection<Post>
+      */
+      public function getPosts(Tag $tag): Collection {
+        return $tag->posts;
+      }
+
+      /**
+      * @psalm-return Collection<Video>
+      */
+      public function getVideos(Tag $tag): Collection {
+        return $tag->videos;
       }
     }
     """
