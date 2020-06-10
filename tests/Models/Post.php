@@ -4,6 +4,8 @@ namespace Tests\Psalm\LaravelPlugin\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 final class Post extends Model {
     protected $table = 'posts';
@@ -22,5 +24,13 @@ final class Post extends Model {
     public function image(): MorphOne
     {
         return $this->morphOne(Image::class, 'imageable');
+    }
+
+    /**
+     * @psalm-return \Illuminate\Database\Eloquent\Relations\MorphToMany<Tag>
+     */
+    public function tags(): MorphToMany
+    {
+        return $this->morphToMany(Tag::class, 'taggable');
     }
 }
