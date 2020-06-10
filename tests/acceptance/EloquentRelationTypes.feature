@@ -228,6 +228,43 @@ Feature: Eloquent Relation Types
     When I run Psalm
     Then I see no errors
 
+  Scenario: Models can declare inverse of many to many polymorphic relationships
+    Given I have the following code
+    """
+    final class Repository
+    {
+      /**
+      * @psalm-return MorphToMany<Post>
+      */
+      public function getPostsRelation(Tag $tag): MorphToMany {
+        return $tag->posts();
+      }
+
+      /**
+      * @psalm-return MorphToMany<Video>
+      */
+      public function getVideosRelation(Tag $tag): MorphToMany {
+        return $tag->videos();
+      }
+
+      /**
+      * @psalm-return Collection<Post>
+      */
+      public function getPosts(Tag $tag): Collection {
+        return $tag->posts;
+      }
+
+      /**
+      * @psalm-return Collection<Video>
+      */
+      public function getVideos(Tag $tag): Collection {
+        return $tag->videos;
+      }
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: Relationships can be accessed via a property
     Given I have the following code
     """
