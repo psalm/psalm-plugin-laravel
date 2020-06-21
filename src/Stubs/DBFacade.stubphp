@@ -1,0 +1,16 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+class DB extends Facade
+{
+	/**
+     * Create a raw database expression.
+     *
+     * @param  mixed  $value
+     * @return void
+     *
+     * @psalm-taint-sink sql $value
+     */
+    public function raw($value) {}
+}
