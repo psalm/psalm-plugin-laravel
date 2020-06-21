@@ -43,9 +43,9 @@ Feature: Eloquent Collection Types
         /**
         * @return \Illuminate\Database\Eloquent\Builder<User>
         */
-        public function getBuilder(): \Illuminate\Database\Eloquent\Builder
+        public function getBuilder(array $attributes): \Illuminate\Database\Eloquent\Builder
         {
-          return User::where();
+          return User::where($attributes);
         }
 
         /**
