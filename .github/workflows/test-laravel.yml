@@ -1,0 +1,21 @@
+name: Run Tests
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    name: Test Laravel
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Test
+      run: |
+        ./tests/laravel-test.sh
