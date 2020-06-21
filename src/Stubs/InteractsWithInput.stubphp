@@ -16,6 +16,8 @@ trait InteractsWithInput
      * @param  string|null  $key
      * @param  mixed  $default
      * @return mixed
+     *
+     * @psalm-taint-source input
      */
     public function input($key = null, $default = null) { }
 }
