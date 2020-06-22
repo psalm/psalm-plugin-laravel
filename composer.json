@@ -11,7 +11,7 @@
         "illuminate/database": "5.8.* || ^6.0 || ^7.0",
         "illuminate/http": "5.8.* || ^6.0 || ^7.0",
         "illuminate/support": "5.8.* || ^6.0 || ^7.0",
-        "vimeo/psalm": "dev-master#02e8313c398b9c6cb6ded9210e5ef53ecd7a2dab as 3.11.7",
+        "vimeo/psalm": "^3.11.7",
         "orchestra/testbench": "^3.8 || ^4.0 || ^5.0"
     },
     "license": "MIT",
