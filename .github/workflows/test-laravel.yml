@@ -1,4 +1,4 @@
-name: Run Tests
+name: Test laravel projects
 
 on:
   push:
@@ -16,6 +16,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Test
+    - name: Test Laravel
       run: |
         ./tests/laravel-test.sh
+
+    - name: Test Lumen
+      run: |
+        ./tests/lumen-test.sh
