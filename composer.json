@@ -56,5 +56,6 @@
         "weirdan/codeception-psalm-module": "^0.8",
         "squizlabs/php_codesniffer": "*",
         "slevomat/coding-standard": "^6.2"
-    }
+    },
+    "minimum-stability": "dev"
 }
