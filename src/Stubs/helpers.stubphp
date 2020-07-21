@@ -38,3 +38,22 @@ function response($content = '', $status = 200, array $headers = [])
 {
 
 }
+
+/**
+ * Throw an HttpException with the given data if the given condition is true.
+ *
+ * @param  bool  $boolean
+ * @psalm-assert falsy $boolean
+ * @psalm-return never-return
+ * @param  int  $code
+ * @param  string  $message
+ * @param  array  $headers
+ * @return void
+ *
+ * @throws \Symfony\Component\HttpKernel\Exception\HttpException
+ * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
+ */
+function abort_if($boolean, $code, $message = '', array $headers = [])
+{
+
+}
