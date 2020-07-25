@@ -7,6 +7,7 @@ use Psalm\Context;
 use Psalm\CodeLocation;
 use Psalm\Type;
 use Psalm\StatementsSource;
+use function get_class;
 
 class AppInterfaceProvider implements
     \Psalm\Plugin\Hook\MethodReturnTypeProviderInterface,
@@ -71,7 +72,7 @@ class AppInterfaceProvider implements
         if ($statements_source) {
             if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
                 return $statements_source->getCodebase()->getMethodParams(
-                    \Illuminate\Foundation\Application::class . '::' . $method_name_lowercase
+                    get_class(ApplicationHelper::getApp()) . '::' . $method_name_lowercase
                 );
             }
         }
@@ -94,7 +95,7 @@ class AppInterfaceProvider implements
     ) {
         if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
             return $source->getCodebase()->getMethodReturnType(
-                \Illuminate\Foundation\Application::class . '::' . $method_name_lowercase,
+                get_class(ApplicationHelper::getApp()) . '::' . $method_name_lowercase,
                 $fq_classlike_name
             );
         }
