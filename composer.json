@@ -47,6 +47,7 @@
         ],
         "analyze": "psalm",
         "lint": "phpcs -n",
+        "lint-fix": "phpcbf -n",
         "test": "codecept run"
     },
     "require-dev": {
