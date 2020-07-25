@@ -78,3 +78,33 @@ Feature: Container
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: container can resolve aliases
+    Given I have the following code
+    """
+    <?php
+      function testMake(): \Illuminate\Log\LogManager {
+        return app()->make('log');
+      }
+
+      function testMakeWith(): \Illuminate\Log\LogManager {
+        return app()->makeWith('log');
+      }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: container cannot resolve unknown aliases
+    Given I have the following code
+    """
+    <?php
+
+      function testMakeWith(): \Illuminate\Log\LogManager {
+        return app()->makeWith('logg');
+      }
+    """
+    When I run Psalm
+    Then I see these errors
+      | Type  | Message |
+      | InvalidReturnType | The declared return type 'Illuminate\Log\LogManager' for testMakeWith is incorrect, got 'logg' |
+      | InvalidReturnStatement | The inferred type 'logg' does not match the declared return type 'Illuminate\Log\LogManager' for testMakeWith |
