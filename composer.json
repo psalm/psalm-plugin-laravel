@@ -46,7 +46,7 @@
             "@test"
         ],
         "analyze": "psalm",
-        "lint": "phpcs",
+        "lint": "phpcs -n",
         "test": "codecept run"
     },
     "require-dev": {
