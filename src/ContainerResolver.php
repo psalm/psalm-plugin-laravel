@@ -4,9 +4,9 @@ namespace Psalm\LaravelPlugin;
 
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Psalm\NodeTypeProvider;
-use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+use ReflectionException;
 use function array_key_exists;
 use function get_class;
 use function count;
@@ -32,7 +32,7 @@ final class ContainerResolver
         // dynamic analysis to resolve the actual type from the container
         try {
             $concrete = ApplicationHelper::getApp()->make($abstract);
-        } catch (BindingResolutionException $e) {
+        } catch (BindingResolutionException | ReflectionException $e) {
             return null;
         }
 
