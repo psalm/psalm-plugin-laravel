@@ -21,10 +21,6 @@ final class ContainerResolver
     private static $cache = [];
 
     /**
-     * @psalm-suppress MoreSpecificReturnType
-     * @psalm-suppress PropertyTypeCoercion
-     * @psalm-suppress LessSpecificReturnStatement
-     * @see https://github.com/vimeo/psalm/issues/3894
      * @psalm-return class-string|null
      */
     public static function resolveFromApplicationContainer(string $abstract): ?string
@@ -41,10 +37,6 @@ final class ContainerResolver
         }
 
         $concreteClass = get_class($concrete);
-
-        if (!$concreteClass) {
-            return null;
-        }
 
         static::$cache[$abstract] = $concreteClass;
 
