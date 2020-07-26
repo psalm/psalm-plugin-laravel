@@ -15,7 +15,6 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use function get_class;
 use function array_filter;
-use function array_map;
 use function in_array;
 
 final class AppReturnTypeProvider implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
