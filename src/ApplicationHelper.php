@@ -48,7 +48,7 @@ final class ApplicationHelper
         } elseif (file_exists($applicationPath = getcwd().'/bootstrap/app.php')) { // Local Dev
             $app = require $applicationPath;
         } else { // Packages
-            $app = (new static)->createApplication();
+            $app = (new self)->createApplication();
         }
 
         self::$app = $app;
