@@ -4,26 +4,31 @@ namespace Psalm\LaravelPlugin;
 
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Psalm\NodeTypeProvider;
+use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use ReflectionException;
 use function array_key_exists;
 use function get_class;
 use function count;
+use function is_string;
+use function is_object;
+use function class_exists;
+use function is_null;
 
 final class ContainerResolver
 {
     /**
      * map of abstract to concrete class fqn
      * @var array
-     * @psalm-var array<string, class-string>
+     * @psalm-var array<string, class-string|string>
      */
     private static $cache = [];
 
     /**
-     * @psalm-return class-string|null
+     * @psalm-return class-string|string|null
      */
-    public static function resolveFromApplicationContainer(string $abstract): ?string
+    private static function resolveFromApplicationContainer(string $abstract): ?string
     {
         if (array_key_exists($abstract, static::$cache)) {
             return static::$cache[$abstract];
@@ -36,7 +41,16 @@ final class ContainerResolver
             return null;
         }
 
-        $concreteClass = get_class($concrete);
+        if (is_string($concrete)) {
+            // some of the path helpers actually return a string when being resolved
+            $concreteClass = $concrete;
+        } else if (is_object($concrete)) {
+            // normally we have an object resolved
+            $concreteClass = get_class($concrete);
+        } else {
+            // not sure how to handle this yet
+            return null;
+        }
 
         static::$cache[$abstract] = $concreteClass;
 
@@ -54,14 +68,25 @@ final class ContainerResolver
 
         $firstArgType = $nodeTypeProvider->getType($call_args[0]->value);
 
-        if ($firstArgType && $firstArgType->isSingleStringLiteral()) {
+        if ($firstArgType && $firstArgType->isString()) {
             $abstract = $firstArgType->getSingleStringLiteral()->value;
-            $concreteClass = static::resolveFromApplicationContainer($abstract);
-            if ($concreteClass) {
+            $concrete = static::resolveFromApplicationContainer($abstract);
+
+            if (is_null($concrete)) {
+                return null;
+            }
+
+            // todo: is there a better way to check if this is a literal class string?
+            if (class_exists($concrete)) {
                 return new Union([
-                    new TNamedObject($concreteClass),
+                    new TNamedObject($concrete),
                 ]);
             }
+
+            // the likes of publicPath, which returns a literal string
+            return new Union([
+                new TLiteralString($concrete),
+            ]);
         }
 
         return null;
