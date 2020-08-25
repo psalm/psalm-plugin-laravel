@@ -35,7 +35,7 @@ Finally, run Psalm to analyze your codebase
 
 ## How it works
 
-Under the hood it just runs https://github.com/barryvdh/laravel-ide-helper and feeds the resultant stubs into Psalm, which can read PHPStorm meta stubs.
+Under the hood it just runs https://github.com/barryvdh/laravel-ide-helper and feeds the resultant stubs into Psalm, which can read PhpStorm meta stubs.
 
 It also parses any database migrations it can find to try to understand property types in your database models.
 
