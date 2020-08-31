@@ -12,12 +12,13 @@ use Psalm\LaravelPlugin\Plugin;
 use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
 use Psalm\Plugin\Hook\PropertyExistenceProviderInterface;
 use Psalm\Plugin\Hook\PropertyTypeProviderInterface;
+use Psalm\Plugin\Hook\AfterClassLikeVisitInterface;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Union;
 use function in_array;
 
-final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface
+final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
     /**
      * @return array<string>
@@ -27,8 +28,17 @@ final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface
         return [Model::class];
     }
 
-    public static function getMethodReturnType(StatementsSource $source, string $fq_classlike_name, string $method_name_lowercase, array $call_args, Context $context, CodeLocation $code_location, array $template_type_parameters = null, string $called_fq_classlike_name = null, string $called_method_name_lowercase = null)
-    {
+    public static function getMethodReturnType(
+        StatementsSource $source,
+        string $fq_classlike_name,
+        string $method_name_lowercase,
+        array $call_args,
+        Context $context,
+        CodeLocation $code_location,
+        array $template_type_parameters = null,
+        string $called_fq_classlike_name = null,
+        string $called_method_name_lowercase = null
+    ) {
         if (!$source instanceof \Psalm\Internal\Analyzer\StatementsAnalyzer) {
             return null;
         }
@@ -98,4 +108,29 @@ final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface
 
         return $returnType;
     }
+
+    /**
+     * @param  \Psalm\FileManipulation\FileManipulation[] $file_replacements
+     *
+     * @return void
+     */
+    public static function afterClassLikeVisit(
+        \PhpParser\Node\Stmt\ClassLike $stmt,
+        \Psalm\Storage\ClassLikeStorage $storage,
+        \Psalm\FileSource $statements_source,
+        \Psalm\Codebase $codebase,
+        array &$file_replacements = []
+    ) {
+        if ($stmt instanceof \PhpParser\Node\Stmt\Class_
+            && !$storage->abstract
+            && isset($storage->parent_classes[strtolower(Model::class)])
+        ) {
+            unset(
+                $storage->pseudo_static_methods['newmodelquery'],
+                $storage->pseudo_static_methods['newquery'],
+                $storage->pseudo_static_methods['query']
+            );
+        }
+    }
 }
+
