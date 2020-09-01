@@ -17,6 +17,7 @@ use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Union;
 use function in_array;
+use function strtolower;
 
 final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
