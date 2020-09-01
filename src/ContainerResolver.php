@@ -68,7 +68,7 @@ final class ContainerResolver
 
         $firstArgType = $nodeTypeProvider->getType($call_args[0]->value);
 
-        if ($firstArgType && $firstArgType->isString()) {
+        if ($firstArgType && $firstArgType->isSingleStringLiteral()) {
             $abstract = $firstArgType->getSingleStringLiteral()->value;
             $concrete = static::resolveFromApplicationContainer($abstract);
 
