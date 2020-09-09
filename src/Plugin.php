@@ -203,8 +203,8 @@ class Plugin implements PluginEntryPointInterface
         }
 
         $resolver = new EngineResolver();
-        $resolver->register('php', function () : PhpEngine {
-            return new PhpEngine();
+        $resolver->register('php', function () use ($fake_filesystem) : PhpEngine {
+            return new PhpEngine($fake_filesystem);
         });
         $finder = new FileViewFinder($fake_filesystem, [dirname($file_path) . '/../resources/views']);
         $factory = new Factory($resolver, $finder, new \Illuminate\Events\Dispatcher());
