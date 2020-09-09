@@ -111,7 +111,7 @@ final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * @param  \Psalm\FileManipulation\FileManipulation[] $file_replacements
+     * @param  \Psalm\FileManipulation[] $file_replacements
      *
      * @return void
      */
@@ -134,4 +134,3 @@ final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface
         }
     }
 }
-
