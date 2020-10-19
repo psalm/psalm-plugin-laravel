@@ -47,8 +47,17 @@ final class AppReturnTypeProvider implements FunctionReturnTypeProviderInterface
         return [get_class(ApplicationHelper::getApp())];
     }
 
-    public static function getMethodReturnType(StatementsSource $source, string $fq_classlike_name, string $method_name_lowercase, array $call_args, Context $context, CodeLocation $code_location, array $template_type_parameters = null, string $called_fq_classlike_name = null, string $called_method_name_lowercase = null)
-    {
+    public static function getMethodReturnType(
+        StatementsSource $source,
+        string $fq_classlike_name,
+        string $method_name_lowercase,
+        array $call_args, 
+        Context $context,
+        CodeLocation $code_location,
+        ?array $template_type_parameters = null,
+        ?string $called_fq_classlike_name = null,
+        ?string $called_method_name_lowercase = null
+    ) : ?Type\Union {
         // lumen doesn't have the likes of makeWith, so we will ensure these methods actually exist on the underlying
         // app contract
         $methods = array_filter(['make', 'makewith'], function (string $methodName) use ($source, $fq_classlike_name) {

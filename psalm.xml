@@ -19,6 +19,13 @@
 
     <issueHandlers>
         <LessSpecificReturnType errorLevel="info" />
+
+        <PropertyNotSetInConstructor>
+            <errorLevel type="suppress">
+                <file name="src/FakeMetaCommand.php" />
+                <file name="src/FakeModelsCommand.php" />
+            </errorLevel>
+        </PropertyNotSetInConstructor>
     </issueHandlers>
     
     <stubs>

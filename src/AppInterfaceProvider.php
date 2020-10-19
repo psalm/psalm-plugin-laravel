@@ -32,12 +32,14 @@ class AppInterfaceProvider implements
         string $method_name_lowercase,
         StatementsSource $source = null,
         CodeLocation $code_location = null
-    ) {
+    ) : ?bool {
         if ($method_name_lowercase === 'offsetget'
             || $method_name_lowercase === 'offsetset'
         ) {
             return true;
         }
+
+        return null;
     }
 
     /**
@@ -49,12 +51,14 @@ class AppInterfaceProvider implements
         string $method_name_lowercase,
         Context $context,
         CodeLocation $code_location = null
-    ) {
+    ) : ?bool {
         if ($method_name_lowercase === 'offsetget'
             || $method_name_lowercase === 'offsetset'
         ) {
             return true;
         }
+
+        return null;
     }
 
     /**
@@ -68,7 +72,7 @@ class AppInterfaceProvider implements
         StatementsSource $statements_source = null,
         Context $context = null,
         CodeLocation $code_location = null
-    ) {
+    ) : ?array {
         if ($statements_source) {
             if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
                 return $statements_source->getCodebase()->getMethodParams(
@@ -76,11 +80,12 @@ class AppInterfaceProvider implements
                 );
             }
         }
+
+        return null;
     }
 
     /**
      * @param  array<PhpParser\Node\Arg>    $call_args
-     * @return  ?Type\Union
      */
     public static function getMethodReturnType(
         StatementsSource $source,
@@ -92,12 +97,14 @@ class AppInterfaceProvider implements
         array $template_type_parameters = null,
         string $called_fq_classlike_name = null,
         string $called_method_name_lowercase = null
-    ) {
+    ) : ?Type\Union {
         if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
             return $source->getCodebase()->getMethodReturnType(
                 get_class(ApplicationHelper::getApp()) . '::' . $method_name_lowercase,
                 $fq_classlike_name
             );
         }
+
+        return null;
     }
 }

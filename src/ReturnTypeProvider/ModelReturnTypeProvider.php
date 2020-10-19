@@ -39,7 +39,7 @@ final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface
         array $template_type_parameters = null,
         string $called_fq_classlike_name = null,
         string $called_method_name_lowercase = null
-    ) {
+    ) : ?Type\Union {
         if (!$source instanceof \Psalm\Internal\Analyzer\StatementsAnalyzer) {
             return null;
         }

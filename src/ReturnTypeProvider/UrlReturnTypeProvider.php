@@ -18,8 +18,13 @@ final class UrlReturnTypeProvider implements FunctionReturnTypeProviderInterface
         return ['url'];
     }
 
-    public static function getFunctionReturnType(StatementsSource $statements_source, string $function_id, array $call_args, Context $context, CodeLocation $code_location)
-    {
+    public static function getFunctionReturnType(
+        StatementsSource $statements_source,
+        string $function_id,
+        array $call_args,
+        Context $context,
+        CodeLocation $code_location
+    ) : ?Union {
         if (!$call_args) {
             return new Union([
                 new TNamedObject(UrlGenerator::class),
