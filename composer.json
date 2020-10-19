@@ -3,7 +3,7 @@
     "description": "A Laravel plugin for Psalm",
     "type": "psalm-plugin",
     "require": {
-        "php": "^7.2|^8",
+        "php": "^7.3|^8",
         "ext-simplexml": "*",
         "barryvdh/laravel-ide-helper": "^2.8.0",
         "illuminate/container": "5.8.* || ^6.0 || ^7.0 || ^8.0",
@@ -11,7 +11,7 @@
         "illuminate/database": "5.8.* || ^6.0 || ^7.0 || ^8.0",
         "illuminate/http": "5.8.* || ^6.0 || ^7.0 || ^8.0",
         "illuminate/support": "5.8.* || ^6.0 || ^7.0 || ^8.0",
-        "vimeo/psalm": "^3.13.1",
+        "vimeo/psalm": "4.0",
         "orchestra/testbench": "^3.8 || ^4.0 || ^5.0 || ^6.0"
     },
     "license": "MIT",
