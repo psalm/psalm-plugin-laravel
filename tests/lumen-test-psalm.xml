@@ -15,4 +15,8 @@
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin"/>
     </plugins>
+
+    <issueHandlers>
+        <ParamNameMismatch errorLevel="suppress" />
+    </issueHandlers>
 </psalm>
