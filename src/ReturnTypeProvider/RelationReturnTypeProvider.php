@@ -41,8 +41,17 @@ final class RelationReturnTypeProvider implements MethodReturnTypeProviderInterf
         ];
     }
 
-    public static function getMethodReturnType(StatementsSource $source, string $fq_classlike_name, string $method_name_lowercase, array $call_args, Context $context, CodeLocation $code_location, array $template_type_parameters = null, string $called_fq_classlike_name = null, string $called_method_name_lowercase = null)
-    {
+    public static function getMethodReturnType(
+        StatementsSource $source,
+        string $fq_classlike_name,
+        string $method_name_lowercase,
+        array $call_args,
+        Context $context,
+        CodeLocation $code_location,
+        array $template_type_parameters = null,
+        string $called_fq_classlike_name = null,
+        string $called_method_name_lowercase = null
+    ) : ?Union {
         if (!$source instanceof \Psalm\Internal\Analyzer\StatementsAnalyzer) {
             return null;
         }

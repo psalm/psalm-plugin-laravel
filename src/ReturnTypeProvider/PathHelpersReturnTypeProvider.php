@@ -21,8 +21,13 @@ final class PathHelpersReturnTypeProvider implements FunctionReturnTypeProviderI
         return ['app_path', 'base_path', 'config_path', 'database_path',  'resource_path', 'public_path', 'storage_path'];
     }
 
-    public static function getFunctionReturnType(StatementsSource $statements_source, string $function_id, array $call_args, Context $context, CodeLocation $code_location)
-    {
+    public static function getFunctionReturnType(
+        StatementsSource $statements_source,
+        string $function_id,
+        array $call_args,
+        Context $context,
+        CodeLocation $code_location
+    ) : ?Union {
         /**
          * @psalm-suppress MissingClosureReturnType
          */
@@ -38,8 +43,17 @@ final class PathHelpersReturnTypeProvider implements FunctionReturnTypeProviderI
         ];
     }
 
-    public static function getMethodReturnType(StatementsSource $source, string $fq_classlike_name, string $method_name_lowercase, array $call_args, Context $context, CodeLocation $code_location, array $template_type_parameters = null, string $called_fq_classlike_name = null, string $called_method_name_lowercase = null)
-    {
+    public static function getMethodReturnType(
+        StatementsSource $source,
+        string $fq_classlike_name,
+        string $method_name_lowercase,
+        array $call_args,
+        Context $context,
+        CodeLocation $code_location,
+        array $template_type_parameters = null,
+        string $called_fq_classlike_name = null,
+        string $called_method_name_lowercase = null
+    ) : ?Union {
         $methods = ['path', 'basepath', 'configpath', 'databasepath', 'resourcepath'];
 
         if (!in_array($method_name_lowercase, $methods)) {

@@ -27,8 +27,13 @@ class RedirectReturnTypeProvider implements FunctionReturnTypeProviderInterface
      *
      * @return ?Type\Union
      */
-    public static function getFunctionReturnType(StatementsSource $statements_source, string $function_id, array $call_args, Context $context, CodeLocation $code_location)
-    {
+    public static function getFunctionReturnType(
+        StatementsSource $statements_source,
+        string $function_id,
+        array $call_args,
+        Context $context,
+        CodeLocation $code_location
+    ) : ?Type\Union {
         if (!$call_args) {
             return new Type\Union([
                 new Type\Atomic\TNamedObject(Redirector::class)

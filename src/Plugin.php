@@ -23,10 +23,7 @@ class Plugin implements PluginEntryPointInterface
     /** @var array<string> */
     public static $model_classes = [];
 
-    /**
-     * @return void
-     */
-    public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null)
+    public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null) : void
     {
         $app = ApplicationHelper::bootApp();
 

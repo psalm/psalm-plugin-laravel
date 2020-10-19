@@ -37,7 +37,7 @@ class ModelPropertyProvider implements
         StatementsSource $source = null,
         Context $context = null,
         CodeLocation $code_location = null
-    ) {
+    ) : ?bool {
         if (!$source || !$read_mode) {
             return null;
         }
@@ -71,7 +71,7 @@ class ModelPropertyProvider implements
         bool $read_mode,
         Context $context,
         CodeLocation $code_location = null
-    ) {
+    ) : ?bool {
         if (!$read_mode) {
             return null;
         }
@@ -105,7 +105,7 @@ class ModelPropertyProvider implements
         bool $read_mode,
         StatementsSource $source = null,
         Context $context = null
-    ) {
+    ) : ?Type\Union {
         if (!$source || !$read_mode) {
             return null;
         }
@@ -171,6 +171,8 @@ class ModelPropertyProvider implements
             return $codebase->getMethodReturnType($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute', $fq_classlike_name)
                 ?: Type::getMixed();
         }
+
+        return null;
     }
 
     /**
