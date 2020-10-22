@@ -113,6 +113,16 @@ Feature: Eloquent Relation Types
     When I run Psalm
     Then I see no errors
 
+  Scenario: BelongsToMany relationship can return null when the first method is used
+    Given I have the following code
+    """
+    function testFirstBelongsToManyCanNull(User $user): bool {
+      return $user->roles()->first() === null;
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: Models can declare has through relationships
     Given I have the following code
     """

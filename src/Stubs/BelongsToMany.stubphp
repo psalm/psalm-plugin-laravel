@@ -111,14 +111,9 @@ class BelongsToMany extends Relation
     /**
      * @param  array   $columns
      * @return mixed
-     * @psalm-return TRelatedModel
+     * @psalm-return TRelatedModel|null
      */
-    public function first($columns = ['*'])
-    {
-        $results = $this->take(1)->get($columns);
-
-        return count($results) > 0 ? $results->first() : null;
-    }
+    public function first($columns = ['*']) { }
 
     /**
      * Execute the query and get the first result or throw an exception.
