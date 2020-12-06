@@ -102,7 +102,7 @@ class AppInterfaceProvider implements
     ) : ?Type\Union {
         if ($method_name_lowercase === 'offsetget') {
             // offsetget is an alias for make
-            return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($source->getNodeTypeProvider(),  $call_args);
+            return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($source->getNodeTypeProvider(), $call_args);
         }
 
         if ($method_name_lowercase === 'offsetset') {
