@@ -100,7 +100,12 @@ class AppInterfaceProvider implements
         string $called_fq_classlike_name = null,
         string $called_method_name_lowercase = null
     ) : ?Type\Union {
-        if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
+        if ($method_name_lowercase === 'offsetget') {
+            // offsetget is an alias for make
+            return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($source->getNodeTypeProvider(),  $call_args);
+        }
+
+        if ($method_name_lowercase === 'offsetset') {
             return $source->getCodebase()->getMethodReturnType(
                 get_class(ApplicationHelper::getApp()) . '::' . $method_name_lowercase,
                 $fq_classlike_name
