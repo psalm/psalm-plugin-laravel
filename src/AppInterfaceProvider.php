@@ -35,6 +35,7 @@ class AppInterfaceProvider implements
     ) : ?bool {
         if ($method_name_lowercase === 'offsetget'
             || $method_name_lowercase === 'offsetset'
+            || $method_name_lowercase === '__call'
         ) {
             return true;
         }
@@ -54,6 +55,7 @@ class AppInterfaceProvider implements
     ) : ?bool {
         if ($method_name_lowercase === 'offsetget'
             || $method_name_lowercase === 'offsetset'
+            || $method_name_lowercase === '__call'
         ) {
             return true;
         }

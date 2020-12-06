@@ -31,6 +31,20 @@ Feature: Container
     When I run Psalm
     Then I see no errors
 
+  Scenario: the application interface supports array access for container
+    Given I have the following code
+    """
+    <?php
+      class Foo {
+        public function applicationResolvesTypes(Illuminate\Contracts\Foundation\Application $app): \Illuminate\Routing\Redirector
+        {
+          return $app[\Illuminate\Routing\Redirector::class];
+        }
+      }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: the app function helper resolves correct types
     Given I have the following code
     """
