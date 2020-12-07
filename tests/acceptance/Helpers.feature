@@ -16,6 +16,9 @@ Feature: helpers
     And I have the following code preamble
       """
       <?php declare(strict_types=1);
+
+      use Tests\Psalm\LaravelPlugin\Models\User;
+      use Illuminate\Support\Optional;
       """
 
   Scenario: env can be pulled off the app
@@ -24,6 +27,18 @@ Feature: helpers
       if (app()->environment('production')) {
         // do something
       }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: optional support
+    Given I have the following code
+    """
+        function getOptionalKeyName(?User $user): ?string
+        {
+            return optional($user)->getKeyName();
+        }
+
     """
     When I run Psalm
     Then I see no errors

@@ -6,6 +6,7 @@ use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use Psalm\LaravelPlugin\ReturnTypeProvider\ModelReturnTypeProvider;
+use Psalm\LaravelPlugin\ReturnTypeProvider\OptionalReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\PathHelpersReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\RelationReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\UrlReturnTypeProvider;
@@ -34,7 +35,6 @@ class Plugin implements PluginEntryPointInterface
         $cache_dir = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR;
 
         $this->ingestFacadeStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
-        $this->ingestMetaStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
         $this->ingestModelStubs($registration, $app, $fake_filesystem, $cache_dir);
 
         require_once 'ReturnTypeProvider/AuthReturnTypeProvider.php';
@@ -59,6 +59,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(RelationReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/PathHelpersReturnTypeProvider.php';
         $registration->registerHooksFromClass(PathHelpersReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/OptionalReturnTypeProvider.php';
+        $registration->registerHooksFromClass(OptionalReturnTypeProvider::class);
 
         $this->addOurStubs($registration);
     }
@@ -104,38 +106,6 @@ class Plugin implements PluginEntryPointInterface
         );
 
         $registration->addStubFile($cache_dir . 'stubs.stubphp');
-    }
-
-    /**
-     * @param \Illuminate\Foundation\Application|\Laravel\Lumen\Application $app
-     * @param \Illuminate\View\Factory $view_factory
-     */
-    private function ingestMetaStubs(
-        RegistrationInterface $registration,
-        $app,
-        \Illuminate\Filesystem\Filesystem $fake_filesystem,
-        $view_factory,
-        string $cache_dir
-    ) : void {
-        /** @psalm-suppress InvalidArgument */
-        $meta_generator_command = new FakeMetaCommand(
-            $fake_filesystem,
-            $view_factory,
-            $app['config']
-        );
-
-        $meta_generator_command->setLaravel($app);
-
-        @unlink($cache_dir . 'meta.stubphp');
-
-        $fake_filesystem->setDestination($cache_dir . 'meta.stubphp');
-
-        $meta_generator_command->run(
-            new \Symfony\Component\Console\Input\ArrayInput([]),
-            new \Symfony\Component\Console\Output\NullOutput()
-        );
-        
-        $registration->addStubFile($cache_dir . 'meta.stubphp');
     }
 
     /**
