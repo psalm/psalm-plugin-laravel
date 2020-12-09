@@ -62,8 +62,11 @@ function abort_if($boolean, $code, $message = '', array $headers = [])
  * Provide access to optional objects.
  *
  * @template TValue
+ * @template TResult
+ * @template TCallback of null|callable(TValue): TResult
  * @psalm-param TValue $value
- * @psalm-return \Illuminate\Support\Optional<TValue>
+ * @psalm-param TCallback $callback
+ * @psalm-return (TCallback is null ? \Illuminate\Support\Optional<TValue> : (TValue is null ? null : TResult))
  */
 function optional($value = null, callable $callback = null)
 {
