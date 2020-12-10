@@ -59,8 +59,6 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(RelationReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/PathHelpersReturnTypeProvider.php';
         $registration->registerHooksFromClass(PathHelpersReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/OptionalReturnTypeProvider.php';
-        $registration->registerHooksFromClass(OptionalReturnTypeProvider::class);
 
         $this->addOurStubs($registration);
     }

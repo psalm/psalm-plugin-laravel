@@ -5,9 +5,6 @@ namespace Illuminate\Support;
 use ArrayAccess;
 use ArrayObject;
 
-/**
-* @template TValue
-*/
 class Optional implements ArrayAccess
 {
     use Traits\Macroable {
@@ -16,15 +13,13 @@ class Optional implements ArrayAccess
 
     /**
      * The underlying object.
-     *
-     * @var TValue
      */
     protected $value;
 
     /**
      * Create a new optional instance.
      *
-     * @param  TValue  $value
+     * @param  $value
      */
     public function __construct($value)
     {
@@ -35,7 +30,7 @@ class Optional implements ArrayAccess
      * Dynamically access a property on the underlying object.
      *
      * @param  string  $key
-     * @return mixed
+     * @return null
      */
     public function __get($key)
     {
@@ -68,7 +63,7 @@ class Optional implements ArrayAccess
      * Get an item at a given offset.
      *
      * @param  mixed  $key
-     * @return mixed
+     * @return null
      */
     public function offsetGet($key)
     {
@@ -103,7 +98,7 @@ class Optional implements ArrayAccess
      *
      * @param  string  $method
      * @param  array  $parameters
-     * @return mixed
+     * @return null
      */
     public function __call($method, $parameters)
     {

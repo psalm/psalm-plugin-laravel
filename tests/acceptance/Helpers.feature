@@ -36,6 +36,8 @@ Feature: helpers
     """
         function getOptionalKeyName(?User $user): ?string
         {
+            /** @psalm-trace $optional **/
+            $optional = optional($user);
             return optional($user)->getKeyName();
         }
 
