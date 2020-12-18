@@ -31,19 +31,19 @@ class Builder
     /**
      * @param  string  $identifier
      * @param  \Illuminate\Database\Eloquent\Scope|\Closure  $scope
-     * @return self<TModel>
+     * @return static
      */
     public function withGlobalScope($identifier, $scope) { }
 
     /**
      * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
-     * @return self<TModel>
+     * @return static
      */
     public function withoutGlobalScope($scope) { }
 
     /**
      * @param  array|null  $scopes
-     * @return self<TModel>
+     * @return static
      */
     public function withoutGlobalScopes(array $scopes = null) { }
 
@@ -54,13 +54,13 @@ class Builder
 
     /**
      * @param  mixed  $id
-     * @return self<TModel>
+     * @return static
      */
     public function whereKey($id) { }
 
     /**
      * @param  mixed  $id
-     * @return self<TModel>
+     * @return static
      */
     public function whereKeyNot($id) { }
 
@@ -69,7 +69,7 @@ class Builder
      * @param  mixed   $operator
      * @param  mixed   $value
      * @param  string  $boolean
-     * @return self<TModel>
+     * @return static
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') { }
 
@@ -77,19 +77,19 @@ class Builder
      * @param  \Closure|array|string  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return self<TModel>
+     * @return static
      */
     public function orWhere($column, $operator = null, $value = null) { }
 
     /**
      * @param  string  $column
-     * @return self<TModel>
+     * @return static
      */
     public function latest($column = null) { }
 
     /**
      * @param  string  $column
-     * @return self<TModel>
+     * @return static
      */
     public function oldest($column = null) { }
 
@@ -302,24 +302,24 @@ class Builder
      * Call the given local model scopes.
      *
      * @param  array  $scopes
-     * @return self<TModel>
+     * @return static
      */
     public function scopes(array $scopes) { }
 
     /**
-     * @return self<TModel>
+     * @return static
      */
     public function applyScopes() { }
 
     /**
      * @param  mixed  $relations
-     * @return self<TModel>
+     * @return static
      */
     public function with($relations) { }
 
     /**
      * @param  mixed  $relations
-     * @return self<TModel>
+     * @return static
      */
     public function without($relations) { }
 
@@ -336,13 +336,13 @@ class Builder
 
     /**
      * @param  \Illuminate\Database\Query\Builder  $query
-     * @return self<TModel>
+     * @return static
      */
     public function setQuery($query) { }
 
     /**
      * @param array $eagerLoad
-     * @return self<TModel>
+     * @return static
      */
     public function setEagerLoads(array $eagerLoad) { }
 
@@ -353,7 +353,7 @@ class Builder
 
     /**
      * @param TModel $model
-     * @return self<TModel>
+     * @return static
      */
     public function setModel(Model $model) { }
 
