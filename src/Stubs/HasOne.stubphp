@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Relations\Concerns\SupportsDefaultModels;
 /**
 * @template TRelatedModel of Model
 * @template-extends HasOneOrMany<TRelatedModel>
-* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
 */
 class HasOne extends HasOneOrMany
 {
