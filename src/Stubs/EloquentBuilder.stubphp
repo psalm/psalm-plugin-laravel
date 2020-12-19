@@ -74,6 +74,15 @@ class Builder
     public function where($column, $operator = null, $value = null, $boolean = 'and') { }
 
     /**
+     * @param  \Closure|string|array|\Illuminate\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return TModel|null
+     */
+    public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') { }
+
+    /**
      * @param  \Closure|array|string  $column
      * @param  mixed  $operator
      * @param  mixed  $value
@@ -170,7 +179,7 @@ class Builder
      * @param  \Closure|null  $callback
      * @return TModel|mixed
      */
-    public function firstOr($columns = ['*'], Closure $callback = null) { }
+    public function firstOr($columns = ['*'], \Closure $callback = null) { }
 
     /**
      * @param  string  $column
@@ -296,7 +305,7 @@ class Builder
      * @param  \Closure  $callback
      * @return void
      */
-    public function onDelete(Closure $callback) { }
+    public function onDelete(\Closure $callback) { }
 
     /**
      * Call the given local model scopes.
@@ -341,6 +350,16 @@ class Builder
     public function setQuery($query) { }
 
     /**
+     * @return \Illuminate\Database\Query\Builder
+     */
+    public function toBase() { }
+
+    /**
+     * @return array
+     */
+    public function getEagerLoads() { }
+
+    /**
      * @param array $eagerLoad
      * @return static
      */
@@ -356,9 +375,659 @@ class Builder
      * @return static
      */
     public function setModel(Model $model) { }
-
+    
     /**
-     * @return TModel|null
+     * @psalm-return TModel|null
      */
     public function first($columns = ['*']) { }
+
+    /**
+     * @param  array|mixed  $columns
+     * @return static
+     */
+    public function select($columns = ['*']) { }
+
+    /**
+     * @param  \Closure|$this|string  $query
+     * @param  string  $as
+     * @return static
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function selectSub($query, $as) { }
+
+    /**
+     * @param  string  $expression
+     * @param  array  $bindings
+     * @return static
+     */
+    public function selectRaw($expression, array $bindings = []) { }
+
+    /**
+     * @param  \Closure|\Illuminate\Database\Query\Builder|string  $query
+     * @param  string  $as
+     * @return static
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function fromSub($query, $as) { }
+
+
+    /**
+     * @param  string  $expression
+     * @param  mixed  $bindings
+     * @return static
+     */
+    public function fromRaw($expression, $bindings = []) { }
+
+    /**
+     * @param  array|mixed  $column
+     * @return static
+     */
+    public function addSelect($column) { }
+
+    /**
+     * @return static
+     */
+    public function distinct() { }
+
+    /**
+     * @param  \Closure|\Illuminate\Database\Query\Builder|string  $table
+     * @param  string|null  $as
+     * @return static
+     */
+    public function from($table, $as = null) { }
+
+    /**
+     * @param  string  $table
+     * @param  \Closure|string  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @param  string  $type
+     * @param  bool  $where
+     * @return static
+     */
+    public function join($table, $first, $operator = null, $second = null, $type = 'inner', $where = false) { }
+
+    /**
+     * @param  string  $table
+     * @param  \Closure|string  $first
+     * @param  string  $operator
+     * @param  string  $second
+     * @param  string  $type
+     * @return static
+     */
+    public function joinWhere($table, $first, $operator, $second, $type = 'inner') { }
+
+    /**
+     * @param  \Closure|\Illuminate\Database\Query\Builder|string  $query
+     * @param  string  $as
+     * @param  \Closure|string  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @param  string  $type
+     * @param  bool  $where
+     * @return static
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false) { }
+
+    /**
+     * @param  string  $table
+     * @param  \Closure|string  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @return static
+     */
+    public function leftJoin($table, $first, $operator = null, $second = null) { }
+
+    /**
+     * @param  string  $table
+     * @param  \Closure|string  $first
+     * @param  string  $operator
+     * @param  string  $second
+     * @return static
+     */
+    public function leftJoinWhere($table, $first, $operator, $second) { }
+
+    /**
+     * @param  \Closure|\Illuminate\Database\Query\Builder|string  $query
+     * @param  string  $as
+     * @param  \Closure|string  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @return static
+     */
+    public function leftJoinSub($query, $as, $first, $operator = null, $second = null) { }
+
+    /**
+     * @param  string  $table
+     * @param  \Closure|string  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @return static
+     */
+    public function rightJoin($table, $first, $operator = null, $second = null) { }
+
+    /**
+     * @param  string  $table
+     * @param  \Closure|string  $first
+     * @param  string  $operator
+     * @param  string  $second
+     * @return static
+     */
+    public function rightJoinWhere($table, $first, $operator, $second) { }
+
+    /**
+     * @param  \Closure|\Illuminate\Database\Query\Builder|string  $query
+     * @param  string  $as
+     * @param  \Closure|string  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @return static
+     */
+    public function rightJoinSub($query, $as, $first, $operator = null, $second = null) { }
+
+    /**
+     * Add a "cross join" clause to the query.
+     *
+     * @param  string  $table
+     * @param  \Closure|string|null  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @return static
+     */
+    public function crossJoin($table, $first = null, $operator = null, $second = null) { }
+
+    /**
+     * @param  array  $wheres
+     * @param  array  $bindings
+     * @return void
+     */
+    public function mergeWheres($wheres, $bindings) { }
+
+    /**
+     * @param  string|array  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @param  string|null  $boolean
+     * @return static
+     */
+    public function whereColumn($first, $operator = null, $second = null, $boolean = 'and') { }
+
+    /**
+     * @param  string|array  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @return static
+     */
+    public function orWhereColumn($first, $operator = null, $second = null) { }
+
+
+
+
+    /**
+     * @param  string  $sql
+     * @param  mixed  $bindings
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereRaw($sql, $bindings = [], $boolean = 'and') { }
+
+    /**
+     * @param  string  $sql
+     * @param  mixed  $bindings
+     * @return static
+     */
+    public function orWhereRaw($sql, $bindings = []) { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return static
+     */
+    public function whereIn($column, $values, $boolean = 'and', $not = false) { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $values
+     * @return static
+     */
+    public function orWhereIn($column, $values) { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $values
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereNotIn($column, $values, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $values
+     * @return static
+     */
+    public function orWhereNotIn($column, $values) { }
+
+    /**
+     * @param  string  $column
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return static
+     */
+    public function whereIntegerInRaw($column, $values, $boolean = 'and', $not = false) { }
+
+    /**
+     * @param  string  $column
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $values
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereIntegerNotInRaw($column, $values, $boolean = 'and') { }
+
+    /**
+     * @param  string|array  $columns
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return static
+     */
+    public function whereNull($columns, $boolean = 'and', $not = false) { }
+
+    /**
+     * @param  string  $column
+     * @return static
+     */
+    public function orWhereNull($column) { }
+
+    /**
+     * @param  string|array  $columns
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereNotNull($columns, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  array  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return static
+     */
+    public function whereBetween($column, array $values, $boolean = 'and', $not = false) { }
+
+    /**
+     * @param  string  $column
+     * @param  array  $values
+     * @return static
+     */
+    public function orWhereBetween($column, array $values) { }
+
+    /**
+     * @param  string  $column
+     * @param  array  $values
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereNotBetween($column, array $values, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  array  $values
+     * @return static
+     */
+    public function orWhereNotBetween($column, array $values) { }
+
+    /**
+     * @param  string  $column
+     * @return static
+     */
+    public function orWhereNotNull($column) { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereDate($column, $operator, $value = null, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @return static
+     */
+    public function orWhereDate($column, $operator, $value = null) { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereTime($column, $operator, $value = null, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @return static
+     */
+    public function orWhereTime($column, $operator, $value = null) { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereDay($column, $operator, $value = null, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @return static
+     */
+    public function orWhereDay($column, $operator, $value = null) { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereMonth($column, $operator, $value = null, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @return static
+     */
+    public function orWhereMonth($column, $operator, $value = null) { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|int|null  $value
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereYear($column, $operator, $value = null, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|int|null  $value
+     * @return static
+     */
+    public function orWhereYear($column, $operator, $value = null) { }
+
+    /**
+     * @param  \Closure  $callback
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereNested(\Closure $callback, $boolean = 'and') { }
+
+    /**
+     * @return \Illuminate\Database\Query\Builder
+     */
+    public function forNestedWhere() { }
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder|static  $query
+     * @param  string  $boolean
+     * @return static
+     */
+    public function addNestedWhereQuery($query, $boolean = 'and') { }
+
+    /**
+     * @param  \Closure  $callback
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return static
+     */
+    public function whereExists(\Closure $callback, $boolean = 'and', $not = false) { }
+
+    /**
+     * @param  \Closure  $callback
+     * @param  bool  $not
+     * @return static
+     */
+    public function orWhereExists(\Closure $callback, $not = false) { }
+
+    /**
+     * @param  \Closure  $callback
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereNotExists(\Closure $callback, $boolean = 'and') { }
+
+    /**
+     * @param  \Closure  $callback
+     * @return static
+     */
+    public function orWhereNotExists(\Closure $callback) { }
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return static
+     */
+    public function addWhereExistsQuery(self $query, $boolean = 'and', $not = false) { }
+
+    /**
+     * @param  array  $columns
+     * @param  string  $operator
+     * @param  array  $values
+     * @param  string  $boolean
+     * @return static
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function whereRowValues($columns, $operator, $values, $boolean = 'and') { }
+
+    /**
+     * @param  array  $columns
+     * @param  string  $operator
+     * @param  array  $values
+     * @return static
+     */
+    public function orWhereRowValues($columns, $operator, $values) { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return static
+     */
+    public function whereJsonContains($column, $value, $boolean = 'and', $not = false) { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $value
+     * @return static
+     */
+    public function orWhereJsonContains($column, $value) { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereJsonDoesntContain($column, $value, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $value
+     * @return static
+     */
+    public function orWhereJsonDoesntContain($column, $value) { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereJsonLength($column, $operator, $value = null, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return static
+     */
+    public function orWhereJsonLength($column, $operator, $value = null) { }
+
+    /**
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return static
+     */
+    public function dynamicWhere($method, $parameters) { }
+
+    /**
+     * @param  array|string  ...$groups
+     * @return static
+     */
+    public function groupBy(...$groups) { }
+
+    /**
+     * @param  string  $sql
+     * @param  array  $bindings
+     * @return static
+     */
+    public function groupByRaw($sql, array $bindings = []) { }
+
+    /**
+     * @param  string  $column
+     * @param  string|null  $operator
+     * @param  string|null  $value
+     * @param  string  $boolean
+     * @return static
+     */
+    public function having($column, $operator = null, $value = null, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  string|null  $operator
+     * @param  string|null  $value
+     * @return static
+     */
+    public function orHaving($column, $operator = null, $value = null) { }
+
+    /**
+     * @param  string  $column
+     * @param  array  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return static
+     */
+    public function havingBetween($column, array $values, $boolean = 'and', $not = false) { }
+
+    /**
+     * @param  string  $sql
+     * @param  array  $bindings
+     * @param  string  $boolean
+     * @return static
+     */
+    public function havingRaw($sql, array $bindings = [], $boolean = 'and') { }
+
+    /**
+     * @param  string  $sql
+     * @param  array  $bindings
+     * @return static
+     */
+    public function orHavingRaw($sql, array $bindings = []) { }
+
+    /**
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Query\Expression|string  $column
+     * @param  string  $direction
+     * @return static
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function orderBy($column, $direction = 'asc') { }
+
+    /**
+     * @param  string  $column
+     * @return static
+     */
+    public function orderByDesc($column) { }
+
+    /**
+     * @param  string  $seed
+     * @return static
+     */
+    public function inRandomOrder($seed = '') { }
+
+    /**
+     * @param  string  $sql
+     * @param  array  $bindings
+     * @return static
+     */
+    public function orderByRaw($sql, $bindings = []) { }
+
+    /**
+     * @param  int  $value
+     * @return static
+     */
+    public function skip($value) { }
+
+    /**
+     * @param  int  $value
+     * @return static
+     */
+    public function offset($value) { }
+
+    /**
+     * @param  int  $value
+     * @return static
+     */
+    public function take($value) { }
+
+    /**
+     * @param  int  $value
+     * @return static
+     */
+    public function limit($value) { }
+
+    /**
+     * @param  int  $page
+     * @param  int  $perPage
+     * @return static
+     */
+    public function forPage($page, $perPage = 15) { }
+
+    /**
+     * @param  int  $perPage
+     * @param  int|null  $lastId
+     * @param  string  $column
+     * @return static
+     */
+    public function forPageBeforeId($perPage = 15, $lastId = 0, $column = 'id') { }
+
+    /**
+     * @param  int  $perPage
+     * @param  int|null  $lastId
+     * @param  string  $column
+     * @return static
+     */
+    public function forPageAfterId($perPage = 15, $lastId = 0, $column = 'id') { }
 }
