@@ -377,7 +377,7 @@ class Builder
     public function setModel(Model $model) { }
     
     /**
-     * @psalm-return TModel|null
+     * @return TModel|null
      */
     public function first($columns = ['*']) { }
 
