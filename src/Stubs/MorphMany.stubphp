@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 /**
 * @template TRelatedModel of Model
 * @template-extends MorphOneOrMany<TRelatedModel>
-* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
 */
 class MorphMany extends MorphOneOrMany
 {
