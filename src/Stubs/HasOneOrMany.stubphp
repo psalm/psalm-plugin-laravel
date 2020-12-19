@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Collection;
 /**
 * @template TRelatedModel of Model
 * @template-extends Relation<TRelatedModel>
-* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
 */
 abstract class HasOneOrMany extends Relation
 {
