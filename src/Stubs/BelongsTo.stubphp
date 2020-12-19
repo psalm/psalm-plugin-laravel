@@ -10,7 +10,6 @@ use Illuminate\Database\Eloquent\Relations\Concerns\SupportsDefaultModels;
 /**
 * @template TRelatedModel of Model
 * @template-extends Relation<TRelatedModel>
-* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
 */
 class BelongsTo extends Relation
 {
