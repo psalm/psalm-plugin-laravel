@@ -212,7 +212,7 @@ class Builder
     public function getRelation($name) { }
 
     /**
-     * @return \Generator
+     * @return \Illuminate\Support\LazyCollection<TModel>
      */
     public function cursor() { }
 
