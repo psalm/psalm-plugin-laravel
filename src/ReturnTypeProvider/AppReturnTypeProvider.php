@@ -21,7 +21,7 @@ final class AppReturnTypeProvider implements FunctionReturnTypeProviderInterface
 {
 
     /**
-     * @return array<string>
+     * @return array<array-key, lowercase-string>
      */
     public static function getFunctionIds(): array
     {
