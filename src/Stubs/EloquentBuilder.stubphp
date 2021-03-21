@@ -7,7 +7,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Traits\ForwardsCalls;
 
 /**
- * @template TModel of \Illuminate\Database\Eloquent\Model
+ * @template-covariant TModel of \Illuminate\Database\Eloquent\Model
  * @property-read HigherOrderBuilderProxy $orWhere
  *
  * @mixin \Illuminate\Database\Query\Builder
