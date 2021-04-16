@@ -25,17 +25,18 @@ class Plugin implements PluginEntryPointInterface
 
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null) : void
     {
-        $app = ApplicationHelper::bootApp();
+        try {
+            $app = ApplicationHelper::bootApp();
+            $fake_filesystem = new FakeFilesystem();
+            $view_factory = $this->getViewFactory($app, $fake_filesystem);
+            $cache_dir = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR;
 
-        $fake_filesystem = new FakeFilesystem();
-
-        $view_factory = $this->getViewFactory($app, $fake_filesystem);
-
-        $cache_dir = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR;
-
-        $this->ingestFacadeStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
-        $this->ingestMetaStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
-        $this->ingestModelStubs($registration, $app, $fake_filesystem, $cache_dir);
+            $this->ingestFacadeStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
+            $this->ingestMetaStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
+            $this->ingestModelStubs($registration, $app, $fake_filesystem, $cache_dir);
+        } catch (\Error $e) {
+            return;
+        }
 
         require_once 'ReturnTypeProvider/AuthReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\AuthReturnTypeProvider::class);
