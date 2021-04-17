@@ -34,7 +34,7 @@ class Plugin implements PluginEntryPointInterface
             $this->ingestFacadeStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
             $this->ingestMetaStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
             $this->ingestModelStubs($registration, $app, $fake_filesystem, $cache_dir);
-        } catch (\Error $e) {
+        } catch (\Throwable $t) {
             return;
         }
 
