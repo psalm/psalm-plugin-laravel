@@ -146,6 +146,6 @@ Feature: collection types
       | InvalidReturnType    | The declared return type 'bool' for CollectionTypes::failingTest is incorrect, got 'null\|string' |
       | NullableReturnStatement | The declared return type 'bool' for CollectionTypes::failingTest is not nullable, but the function returns 'null\|string' |
       | InvalidReturnStatement | The inferred type 'null\|string' does not match the declared return type 'bool' for CollectionTypes::failingTest |
-      | InvalidScalarArgument | Argument 2 of Illuminate\Support\Collection::put expects string, int(2) provided |
+      | InvalidScalarArgument | Argument 2 of Illuminate\Support\Collection::put expects string, 2 provided |
     And I see no other errors
 
