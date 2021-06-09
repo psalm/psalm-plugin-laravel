@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         php: [7.3, 7.4]
-        illuminate_version: [7.*, 8.*]
+        illuminate_version: [^7, ^8]
         composer_flags:  ['', '--prefer-lowest']
 
     name: PHP ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | Composer Flags ${{ matrix.composer_flags }}
@@ -31,7 +31,7 @@ jobs:
     - name: Install dependencies
       run: |
         composer install
-        composer update "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist ${{ matrix.composer_flags }}
+        composer require "laravel/framework:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --update-with-all-dependencies ${{ matrix.composer_flags }}
 
     - name: Run Tests
       run: vendor/bin/codecept run
