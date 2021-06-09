@@ -16,6 +16,24 @@ Feature: Container
       </psalm>
       """
 
+  Scenario: Application interface does not error
+    Given I have the following code
+    """
+    <?php
+      use App\Jobs\PullContact;
+      use Illuminate\Support\ServiceProvider;
+
+      class AppServiceProvider extends ServiceProvider {
+        public function register() {
+          $this->app->foo("a", "b");
+        }
+      }
+    """
+    When I run Psalm
+    Then I see these errors
+      | Type  | Message |
+      | UndefinedInterfaceMethod | Method Illuminate\Contracts\Foundation\Application::foo does not exist |
+
   Scenario: the container resolves correct types
     Given I have the following code
     """
