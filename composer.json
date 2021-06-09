@@ -5,7 +5,7 @@
     "require": {
         "php": "^7.3|^8",
         "ext-simplexml": "*",
-        "barryvdh/laravel-ide-helper": ">=2.8.0 <2.9.2",
+        "barryvdh/laravel-ide-helper": "^2.9.2",
         "illuminate/container": "^6.0 || ^7.0 || ^8.0",
         "illuminate/contracts": "^6.0 || ^7.0 || ^8.0",
         "illuminate/database": "^6.0 || ^7.0 || ^8.0",

@@ -47,7 +47,7 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
      *
      * @param \Illuminate\Database\Eloquent\Model $model
      */
-    protected function getPropertiesFromTable($model) : void
+    public function getPropertiesFromTable($model) : void
     {
         $table_name = $model->getTable();
 
