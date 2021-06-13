@@ -73,8 +73,8 @@ class SchemaAggregator
 
     private function alterTable(PhpParser\Node\Expr\StaticCall $call, bool $creating) : void
     {
-        if (!isset($call->args[0])
-            || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
+        if (! isset($call->args[0])
+            || ! $call->args[0]->value instanceof PhpParser\Node\Scalar\String_
         ) {
             return;
         }
@@ -85,8 +85,8 @@ class SchemaAggregator
             $this->tables[$table_name] = new SchemaTable($table_name);
         }
 
-        if (!isset($call->args[1])
-            || !$call->args[1]->value instanceof PhpParser\Node\Expr\Closure
+        if (! isset($call->args[1])
+            || ! $call->args[1]->value instanceof PhpParser\Node\Expr\Closure
             || count($call->args[1]->value->params) < 1
             || ($call->args[1]->value->params[0]->type instanceof PhpParser\Node\Name
                 && $call->args[1]->value->params[0]->type->getAttribute('resolvedName')
@@ -108,8 +108,8 @@ class SchemaAggregator
 
     private function dropTable(PhpParser\Node\Expr\StaticCall $call) : void
     {
-        if (!isset($call->args[0])
-            || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
+        if (! isset($call->args[0])
+            || ! $call->args[0]->value instanceof PhpParser\Node\Scalar\String_
         ) {
             return;
         }
@@ -121,10 +121,10 @@ class SchemaAggregator
 
     private function renameTable(PhpParser\Node\Expr\StaticCall $call) : void
     {
-        if (!isset($call->args[0])
-            || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
-            || !isset($call->args[1])
-            || !$call->args[1]->value instanceof PhpParser\Node\Scalar\String_
+        if (! isset($call->args[0])
+            || ! $call->args[0]->value instanceof PhpParser\Node\Scalar\String_
+            || ! isset($call->args[1])
+            || ! $call->args[1]->value instanceof PhpParser\Node\Scalar\String_
         ) {
             return;
         }
@@ -132,7 +132,7 @@ class SchemaAggregator
         $old_table_name = $call->args[0]->value->value;
         $new_table_name = $call->args[1]->value->value;
 
-        if (!isset($this->tables[$old_table_name])) {
+        if (! isset($this->tables[$old_table_name])) {
             return;
         }
 
@@ -147,7 +147,7 @@ class SchemaAggregator
 
     private function processColumnUpdates(string $table_name, string $call_arg_name, array $stmts) : void
     {
-        if (!isset($this->tables[$table_name])) {
+        if (! isset($this->tables[$table_name])) {
             return;
         }
 
@@ -165,7 +165,7 @@ class SchemaAggregator
                 $additional_method_calls = [];
 
                 $nullable = false;
-                
+
                 while ($root_var instanceof PhpParser\Node\Expr\MethodCall) {
                     if ($root_var->name instanceof PhpParser\Node\Identifier
                         && $root_var->name->name === 'nullable'
@@ -184,7 +184,7 @@ class SchemaAggregator
                     $first_arg = $first_method_call->args[0]->value ?? null;
                     $second_arg = $first_method_call->args[1]->value ?? null;
 
-                    if (!$first_arg instanceof PhpParser\Node\Scalar\String_) {
+                    if (! $first_arg instanceof PhpParser\Node\Scalar\String_) {
                         if ($first_method_call->name->name === 'timestamps'
                             || $first_method_call->name->name === 'timestampsTz'
                             || $first_method_call->name->name === 'nullableTimestamps'
@@ -325,7 +325,7 @@ class SchemaAggregator
                             $table->dropColumn($column_name);
                             break;
 
-                        
+
 
                         case 'enum':
                             $table->setColumn(new SchemaColumn($column_name, 'enum', $nullable, $second_arg_array));
@@ -338,12 +338,24 @@ class SchemaAggregator
                         case 'foreign':
                             break;
 
+                        case 'foreignid':
+                            $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
+                            break;
+
+                        case 'foreignuuid':
+                            $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
+                            break;
+
                         case 'geometry':
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
                             break;
 
                         case 'geometrycollection':
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
+                            break;
+
+                        case 'id':
+                            $table->setColumn(new SchemaColumn('id', 'int', $nullable));
                             break;
 
                         case 'increments':
@@ -418,7 +430,17 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
                             break;
 
+                        case 'numericmorphs':
+                            $table->setColumn(new SchemaColumn($column_name . '_type', 'string', $nullable));
+                            $table->setColumn(new SchemaColumn($column_name . '_id', 'int', $nullable));
+                            break;
+
                         case 'nullablemorphs':
+                            $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
+                            $table->setColumn(new SchemaColumn($column_name . '_id', 'int', true));
+                            break;
+
+                        case 'nullablenumericmorphs':
                             $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
                             $table->setColumn(new SchemaColumn($column_name . '_id', 'int', true));
                             break;
@@ -481,6 +503,10 @@ class SchemaAggregator
                             break;
 
                         case 'text':
+                            $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
+                            break;
+
+                        case 'tinytext':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 
