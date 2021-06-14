@@ -48,7 +48,7 @@
         "analyze": "psalm",
         "lint": "phpcs -n",
         "lint-fix": "phpcbf -n",
-        "test": "codecept run"
+        "test": "codecept run --skip-group skip"
     },
     "require-dev": {
         "codeception/codeception": "^4.1.6",
