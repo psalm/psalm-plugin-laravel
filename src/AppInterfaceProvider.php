@@ -2,18 +2,27 @@
 
 namespace Psalm\LaravelPlugin;
 
+use Illuminate\Foundation\AliasLoader;
+use Illuminate\Foundation\Application;
 use PhpParser;
 use Psalm\Context;
 use Psalm\CodeLocation;
+use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
+use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Type;
 use Psalm\StatementsSource;
 use function get_class;
+use function in_array;
+use function array_merge;
+use function array_values;
+use function strtolower;
 
 class AppInterfaceProvider implements
     \Psalm\Plugin\Hook\MethodReturnTypeProviderInterface,
     \Psalm\Plugin\Hook\MethodExistenceProviderInterface,
     \Psalm\Plugin\Hook\MethodVisibilityProviderInterface,
-    \Psalm\Plugin\Hook\MethodParamsProviderInterface
+    \Psalm\Plugin\Hook\MethodParamsProviderInterface,
+    AfterClassLikeVisitInterface
 {
     /** @return array<string> */
     public static function getClassLikeNames() : array
@@ -76,7 +85,7 @@ class AppInterfaceProvider implements
         if ($statements_source) {
             if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
                 return $statements_source->getCodebase()->getMethodParams(
-                    get_class(ApplicationHelper::getApp()) . '::' . $method_name_lowercase
+                    ApplicationHelper::getAppFullyQualifiedClassName() . '::' . $method_name_lowercase
                 );
             }
         }
@@ -105,11 +114,32 @@ class AppInterfaceProvider implements
 
         if ($method_name_lowercase === 'offsetset') {
             return $source->getCodebase()->getMethodReturnType(
-                get_class(ApplicationHelper::getApp()) . '::' . $method_name_lowercase,
+                ApplicationHelper::getAppFullyQualifiedClassName() . '::' . $method_name_lowercase,
                 $fq_classlike_name
             );
         }
 
         return null;
+    }
+
+    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event)
+    {
+        // @see https://github.com/psalm/psalm-plugin-symfony/issues/25
+        // psalm needs to know about any classes that could be returned before analysis begins. This is a naive first approach
+        if (in_array($event->getStorage()->name, self::getClassLikeNames())) {
+            $appClassName = ApplicationHelper::getAppFullyQualifiedClassName();
+
+            $classesThatCouldBeReturnedThatArentReferencedAlready = array_merge(
+                [$appClassName],
+                array_values(AliasLoader::getInstance()->getAliases()),
+            );
+
+            foreach ($classesThatCouldBeReturnedThatArentReferencedAlready as $className) {
+                $filePath = $event->getStatementsSource()->getFilePath();
+                $fileStorage = $event->getCodebase()->file_storage_provider->get($filePath);
+                $fileStorage->referenced_classlikes[strtolower($className)] = $className;
+                $event->getCodebase()->queueClassLikeForScanning($className);
+            }
+        }
     }
 }
