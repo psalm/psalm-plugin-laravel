@@ -12,6 +12,10 @@ use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Type;
 use Psalm\StatementsSource;
 use function get_class;
+use function in_array;
+use function array_merge;
+use function array_values;
+use function strtolower;
 
 class AppInterfaceProvider implements
     \Psalm\Plugin\Hook\MethodReturnTypeProviderInterface,
