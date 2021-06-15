@@ -135,7 +135,7 @@ class Plugin implements PluginEntryPointInterface
             new \Symfony\Component\Console\Input\ArrayInput([]),
             new \Symfony\Component\Console\Output\NullOutput()
         );
-        
+
         $registration->addStubFile($cache_dir . 'meta.stubphp');
     }
 

@@ -57,6 +57,14 @@ final class ApplicationHelper
     }
 
     /**
+     * @psalm-return class-string
+     */
+    public static function getAppFullyQualifiedClassName(): string
+    {
+        return get_class(self::getApp());
+    }
+
+    /**
      * Resolve application bootstrapper.
      *
      * @param LaravelApplication $app
