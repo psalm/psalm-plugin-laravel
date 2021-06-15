@@ -6,6 +6,7 @@ use Illuminate\Foundation\Application as LaravelApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
 use function file_exists;
 use function getcwd;
+use function get_class;
 
 final class ApplicationHelper
 {
