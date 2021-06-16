@@ -3,7 +3,7 @@
 namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\AliasLoader;
-use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\RateLimiter;
 use PhpParser;
 use Psalm\Context;
 use Psalm\CodeLocation;
@@ -11,7 +11,6 @@ use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Type;
 use Psalm\StatementsSource;
-use function get_class;
 use function in_array;
 use function array_merge;
 use function array_values;
@@ -129,9 +128,13 @@ class AppInterfaceProvider implements
         if (in_array($event->getStorage()->name, self::getClassLikeNames())) {
             $appClassName = ApplicationHelper::getAppFullyQualifiedClassName();
 
+            $facades =  ApplicationHelper::getApp()->make('config')->get('app.aliases', []);
+            // I'm not sure why this isn't included by default, but this is a hack that fixes the bug
+            $facades['rl'] = RateLimiter::class;
+
             $classesThatCouldBeReturnedThatArentReferencedAlready = array_merge(
                 [$appClassName],
-                array_values(AliasLoader::getInstance()->getAliases()),
+                array_values(AliasLoader::getInstance($facades)->getAliases()),
             );
 
             foreach ($classesThatCouldBeReturnedThatArentReferencedAlready as $className) {
