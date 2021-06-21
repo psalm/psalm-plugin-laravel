@@ -1,5 +1,6 @@
 <?php
-namespace Psalm\LaravelPlugin;
+
+namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use PhpParser;
 use function count;

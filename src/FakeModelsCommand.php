@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Str;
 use Illuminate\Filesystem\Filesystem;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use ReflectionClass;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputArgument;
