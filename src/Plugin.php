@@ -5,6 +5,7 @@ use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\ReturnTypeProvider\ModelReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\PathHelpersReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\RelationReturnTypeProvider;
