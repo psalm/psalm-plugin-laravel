@@ -10,9 +10,8 @@
         <directory name="src" />
         <ignoreFiles>
             <directory name="vendor" />
-            <directory name="src/cache" />
+            <directory name="cache" />
             <directory name="src/Stubs" />
-            <directory name="src/cache" />
             <directory name="tests" />
         </ignoreFiles>
     </projectFiles>
@@ -27,7 +26,7 @@
             </errorLevel>
         </PropertyNotSetInConstructor>
     </issueHandlers>
-    
+
     <stubs>
         <file name="src/Stubs/LumenApplication.stubphp"/>
     </stubs>

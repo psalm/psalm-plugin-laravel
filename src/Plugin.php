@@ -30,7 +30,7 @@ class Plugin implements PluginEntryPointInterface
             $app = ApplicationProvider::bootApp();
             $fake_filesystem = new FakeFilesystem();
             $view_factory = $this->getViewFactory($app, $fake_filesystem);
-            $cache_dir = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR;
+            $cache_dir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR;
 
             $this->ingestFacadeStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
             $this->ingestMetaStubs($registration, $app, $fake_filesystem, $view_factory, $cache_dir);
