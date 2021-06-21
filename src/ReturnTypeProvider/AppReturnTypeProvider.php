@@ -5,8 +5,8 @@ namespace Psalm\LaravelPlugin\ReturnTypeProvider;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\LaravelPlugin\ApplicationHelper;
-use Psalm\LaravelPlugin\ContainerResolver;
+use Psalm\LaravelPlugin\Util\ApplicationProvider;
+use Psalm\LaravelPlugin\Util\ContainerResolver;
 use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
 use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
@@ -35,7 +35,7 @@ final class AppReturnTypeProvider implements FunctionReturnTypeProviderInterface
     {
         if (!$call_args) {
             return new Union([
-                new TNamedObject(get_class(ApplicationHelper::getApp())),
+                new TNamedObject(get_class(ApplicationProvider::getApp())),
             ]);
         }
 
@@ -44,7 +44,7 @@ final class AppReturnTypeProvider implements FunctionReturnTypeProviderInterface
 
     public static function getClassLikeNames(): array
     {
-        return [get_class(ApplicationHelper::getApp())];
+        return [get_class(ApplicationProvider::getApp())];
     }
 
     public static function getMethodReturnType(

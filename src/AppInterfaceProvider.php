@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\RateLimiter;
 use PhpParser;
 use Psalm\Context;
 use Psalm\CodeLocation;
+use Psalm\LaravelPlugin\Util\ApplicationProvider;
+use Psalm\LaravelPlugin\Util\ContainerResolver;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Type;
@@ -84,7 +86,7 @@ class AppInterfaceProvider implements
         if ($statements_source) {
             if ($method_name_lowercase === 'offsetget' || $method_name_lowercase === 'offsetset') {
                 return $statements_source->getCodebase()->getMethodParams(
-                    ApplicationHelper::getAppFullyQualifiedClassName() . '::' . $method_name_lowercase
+                    ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $method_name_lowercase
                 );
             }
         }
@@ -113,7 +115,7 @@ class AppInterfaceProvider implements
 
         if ($method_name_lowercase === 'offsetset') {
             return $source->getCodebase()->getMethodReturnType(
-                ApplicationHelper::getAppFullyQualifiedClassName() . '::' . $method_name_lowercase,
+                ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $method_name_lowercase,
                 $fq_classlike_name
             );
         }
@@ -126,9 +128,9 @@ class AppInterfaceProvider implements
         // @see https://github.com/psalm/psalm-plugin-symfony/issues/25
         // psalm needs to know about any classes that could be returned before analysis begins. This is a naive first approach
         if (in_array($event->getStorage()->name, self::getClassLikeNames())) {
-            $appClassName = ApplicationHelper::getAppFullyQualifiedClassName();
+            $appClassName = ApplicationProvider::getAppFullyQualifiedClassName();
 
-            $facades =  ApplicationHelper::getApp()->make('config')->get('app.aliases', []);
+            $facades =  ApplicationProvider::getApp()->make('config')->get('app.aliases', []);
             // I'm not sure why this isn't included by default, but this is a hack that fixes the bug
             $facades['rl'] = RateLimiter::class;
 

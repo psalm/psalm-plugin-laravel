@@ -4,7 +4,7 @@ namespace Psalm\LaravelPlugin\ReturnTypeProvider;
 
 use Psalm\CodeLocation;
 use Psalm\Context;
-use Psalm\LaravelPlugin\ApplicationHelper;
+use Psalm\LaravelPlugin\Util\ApplicationProvider;
 use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
 use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
@@ -39,7 +39,7 @@ final class PathHelpersReturnTypeProvider implements FunctionReturnTypeProviderI
     public static function getClassLikeNames(): array
     {
         return [
-            get_class(ApplicationHelper::getApp()),
+            get_class(ApplicationProvider::getApp()),
         ];
     }
 
@@ -64,7 +64,7 @@ final class PathHelpersReturnTypeProvider implements FunctionReturnTypeProviderI
          * @psalm-suppress MissingClosureReturnType
          */
         return self::resolveReturnType($call_args, function (array $args = []) use ($method_name_lowercase) {
-            return ApplicationHelper::getApp()->{$method_name_lowercase}(...$args);
+            return ApplicationProvider::getApp()->{$method_name_lowercase}(...$args);
         });
     }
 

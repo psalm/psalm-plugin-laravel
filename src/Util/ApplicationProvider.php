@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin;
+namespace Psalm\LaravelPlugin\Util;
 
 use Illuminate\Foundation\Application as LaravelApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
@@ -8,7 +8,7 @@ use function file_exists;
 use function getcwd;
 use function get_class;
 
-final class ApplicationHelper
+final class ApplicationProvider
 {
     use CreatesApplication;
 

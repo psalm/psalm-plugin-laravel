@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin;
+namespace Psalm\LaravelPlugin\Util;
 
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Psalm\NodeTypeProvider;
@@ -36,7 +36,7 @@ final class ContainerResolver
 
         // dynamic analysis to resolve the actual type from the container
         try {
-            $concrete = ApplicationHelper::getApp()->make($abstract);
+            $concrete = ApplicationProvider::getApp()->make($abstract);
         } catch (BindingResolutionException | ReflectionException $e) {
             return null;
         }
