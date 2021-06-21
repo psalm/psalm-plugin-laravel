@@ -9,6 +9,7 @@ use Psalm\LaravelPlugin\ReturnTypeProvider\ModelReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\PathHelpersReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\RelationReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\UrlReturnTypeProvider;
+use Psalm\LaravelPlugin\Util\ApplicationProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
@@ -26,7 +27,7 @@ class Plugin implements PluginEntryPointInterface
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null) : void
     {
         try {
-            $app = ApplicationHelper::bootApp();
+            $app = ApplicationProvider::bootApp();
             $fake_filesystem = new FakeFilesystem();
             $view_factory = $this->getViewFactory($app, $fake_filesystem);
             $cache_dir = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR;
