@@ -3,7 +3,7 @@
 namespace Psalm\LaravelPlugin\Handlers\Application;
 
 use Psalm\LaravelPlugin\Providers\ApplicationInterfaceProvider;
-use Psalm\LaravelPlugin\Util\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Util\ContainerResolver;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;

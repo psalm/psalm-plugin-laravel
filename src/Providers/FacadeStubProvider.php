@@ -3,7 +3,7 @@
 namespace Psalm\LaravelPlugin\Providers;
 
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
-use Psalm\LaravelPlugin\Util\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use function unlink;
 
 final class FacadeStubProvider implements GeneratesStubs

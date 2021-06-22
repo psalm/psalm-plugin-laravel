@@ -5,7 +5,7 @@ namespace Psalm\LaravelPlugin\Providers;
 use Barryvdh\LaravelIdeHelper\Console\MetaCommand;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
 use Psalm\LaravelPlugin\Fakes\FakeMetaCommand;
-use Psalm\LaravelPlugin\Util\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 
 final class MetaStubProvider implements GeneratesStubs
 {
