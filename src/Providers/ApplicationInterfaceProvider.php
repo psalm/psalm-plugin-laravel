@@ -8,7 +8,8 @@ final class ApplicationInterfaceProvider
     {
         return [
             \Illuminate\Contracts\Foundation\Application::class,
-            \Illuminate\Contracts\Container\Container::class
+            \Illuminate\Contracts\Container\Container::class,
+            \Illuminate\Foundation\Application::class,
         ];
     }
 }
