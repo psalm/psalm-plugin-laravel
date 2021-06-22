@@ -194,7 +194,7 @@ class Plugin implements PluginEntryPointInterface
 
     private function addOurStubs(RegistrationInterface $registration): void
     {
-        foreach (glob(__DIR__ . '/Stubs/*.stubphp') as $stubFilePath) {
+        foreach (glob(dirname(__DIR__) . '/stubs/*.stubphp') as $stubFilePath) {
             $registration->addStubFile($stubFilePath);
         }
     }
