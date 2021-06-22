@@ -53,6 +53,14 @@ class Plugin implements PluginEntryPointInterface
      */
     private function registerHandlers(RegistrationInterface $registration): void
     {
+        require_once 'Handlers/Application/ContainerHandler.php';
+        $registration->registerHooksFromClass(ContainerHandler::class);
+        require_once 'Handlers/Application/OffsetHandler.php';
+        $registration->registerHooksFromClass(OffsetHandler::class);
+        require_once 'Handlers/Eloquent/ModelPropertyHandler.php';
+        $registration->registerHooksFromClass(ModelPropertyHandler::class);
+
+        // @todo: migrate these to `Handlers` namespace
         require_once 'ReturnTypeProvider/AuthReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\AuthReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/TransReturnTypeProvider.php';
@@ -61,12 +69,6 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ReturnTypeProvider\RedirectReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/ViewReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
-        require_once 'Handlers/Application/ContainerHandler.php';
-        $registration->registerHooksFromClass(ContainerHandler::class);
-        require_once 'Handlers/Application/OffsetHandler.php';
-        $registration->registerHooksFromClass(OffsetHandler::class);
-        require_once 'Handlers/Eloquent/ModelPropertyHandler.php';
-        $registration->registerHooksFromClass(ModelPropertyHandler::class);
         require_once 'ReturnTypeProvider/UrlReturnTypeProvider.php';
         $registration->registerHooksFromClass(UrlReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/ModelReturnTypeProvider.php';
