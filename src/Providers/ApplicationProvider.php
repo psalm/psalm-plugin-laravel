@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\Util;
+namespace Psalm\LaravelPlugin\Providers;
 
 use Illuminate\Foundation\Application as LaravelApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;

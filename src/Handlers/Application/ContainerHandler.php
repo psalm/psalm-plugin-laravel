@@ -5,7 +5,7 @@ namespace Psalm\LaravelPlugin\Handlers\Application;
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\Facades\RateLimiter;
 use Psalm\LaravelPlugin\Providers\ApplicationInterfaceProvider;
-use Psalm\LaravelPlugin\Util\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use function in_array;

@@ -4,7 +4,7 @@ namespace Psalm\LaravelPlugin\ReturnTypeProvider;
 
 use Psalm\CodeLocation;
 use Psalm\Context;
-use Psalm\LaravelPlugin\Util\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
 use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;

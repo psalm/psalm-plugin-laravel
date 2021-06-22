@@ -10,7 +10,7 @@ use Psalm\LaravelPlugin\ReturnTypeProvider\ModelReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\PathHelpersReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\RelationReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\UrlReturnTypeProvider;
-use Psalm\LaravelPlugin\Util\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
