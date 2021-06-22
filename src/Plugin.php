@@ -21,9 +21,6 @@ use function glob;
 class Plugin implements PluginEntryPointInterface
 {
 
-    /** @var array<string> */
-    public static $model_classes = [];
-
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null) : void
     {
         try {
