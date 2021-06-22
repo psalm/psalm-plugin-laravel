@@ -1,6 +1,6 @@
 <?php
 
-namespace Psalm\LaravelPlugin\PropertyProvider;
+namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -16,7 +16,7 @@ use Psalm\StatementsSource;
 use function in_array;
 use function str_replace;
 
-class ModelPropertyProvider implements
+class ModelPropertyHandler implements
     \Psalm\Plugin\Hook\PropertyExistenceProviderInterface,
     \Psalm\Plugin\Hook\PropertyVisibilityProviderInterface,
     \Psalm\Plugin\Hook\PropertyTypeProviderInterface

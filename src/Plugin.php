@@ -3,6 +3,7 @@ namespace Psalm\LaravelPlugin;
 
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
 use Psalm\LaravelPlugin\Providers\MetaStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
@@ -66,8 +67,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ContainerHandler::class);
         require_once 'Handlers/Application/OffsetHandler.php';
         $registration->registerHooksFromClass(OffsetHandler::class);
-        require_once 'PropertyProvider/ModelPropertyProvider.php';
-        $registration->registerHooksFromClass(PropertyProvider\ModelPropertyProvider::class);
+        require_once 'Handlers/Eloquent/ModelPropertyHandler.php';
+        $registration->registerHooksFromClass(ModelPropertyHandler::class);
         require_once 'ReturnTypeProvider/UrlReturnTypeProvider.php';
         $registration->registerHooksFromClass(UrlReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/ModelReturnTypeProvider.php';
