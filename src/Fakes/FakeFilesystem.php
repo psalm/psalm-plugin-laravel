@@ -1,6 +1,6 @@
 <?php
 
-namespace Psalm\LaravelPlugin;
+namespace Psalm\LaravelPlugin\Fakes;
 
 class FakeFilesystem extends \Illuminate\Filesystem\Filesystem
 {

@@ -1,5 +1,6 @@
 <?php
-namespace Psalm\LaravelPlugin;
+
+namespace Psalm\LaravelPlugin\Fakes;
 
 use function spl_autoload_register;
 
