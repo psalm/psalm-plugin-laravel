@@ -1,5 +1,6 @@
 <?php
-namespace Psalm\LaravelPlugin;
+
+namespace Psalm\LaravelPlugin\Fakes;
 
 use Composer\Autoload\ClassMapGenerator;
 use Illuminate\Console\Command;
