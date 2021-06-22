@@ -61,8 +61,6 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ReturnTypeProvider\RedirectReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/ViewReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/AppReturnTypeProvider.php';
-        $registration->registerHooksFromClass(ReturnTypeProvider\AppReturnTypeProvider::class);
         require_once 'Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(ContainerHandler::class);
         require_once 'Handlers/Application/OffsetHandler.php';
