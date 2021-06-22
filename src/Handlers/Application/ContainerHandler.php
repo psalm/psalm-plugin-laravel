@@ -22,6 +22,8 @@ use function in_array;
 use function array_merge;
 use function array_values;
 use function strtolower;
+use function get_class;
+use function array_filter;
 
 /**
  * @psalm-suppress DeprecatedInterface

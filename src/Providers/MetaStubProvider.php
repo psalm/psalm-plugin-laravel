@@ -6,6 +6,7 @@ use Barryvdh\LaravelIdeHelper\Console\MetaCommand;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
 use Psalm\LaravelPlugin\Fakes\FakeMetaCommand;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use function unlink;
 
 final class MetaStubProvider implements GeneratesStubs
 {
