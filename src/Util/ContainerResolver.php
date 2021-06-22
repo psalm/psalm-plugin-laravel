@@ -3,6 +3,7 @@
 namespace Psalm\LaravelPlugin\Util;
 
 use Illuminate\Contracts\Container\BindingResolutionException;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\NodeTypeProvider;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
