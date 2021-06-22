@@ -43,7 +43,7 @@ class Plugin implements PluginEntryPointInterface
         }
 
         $this->registerHandlers($registration);
-        $this->addOurStubs($registration);
+        $this->registerStubs($registration);
     }
 
     /**
@@ -192,7 +192,7 @@ class Plugin implements PluginEntryPointInterface
         return $factory;
     }
 
-    private function addOurStubs(RegistrationInterface $registration): void
+    private function registerStubs(RegistrationInterface $registration): void
     {
         foreach (glob(dirname(__DIR__) . '/stubs/*.stubphp') as $stubFilePath) {
             $registration->addStubFile($stubFilePath);
