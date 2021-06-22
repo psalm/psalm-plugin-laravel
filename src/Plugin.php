@@ -42,31 +42,7 @@ class Plugin implements PluginEntryPointInterface
             return;
         }
 
-        require_once 'ReturnTypeProvider/AuthReturnTypeProvider.php';
-        $registration->registerHooksFromClass(ReturnTypeProvider\AuthReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/TransReturnTypeProvider.php';
-        $registration->registerHooksFromClass(ReturnTypeProvider\TransReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/RedirectReturnTypeProvider.php';
-        $registration->registerHooksFromClass(ReturnTypeProvider\RedirectReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/ViewReturnTypeProvider.php';
-        $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/AppReturnTypeProvider.php';
-        $registration->registerHooksFromClass(ReturnTypeProvider\AppReturnTypeProvider::class);
-        require_once 'Handlers/Application/ContainerHandler.php';
-        $registration->registerHooksFromClass(ContainerHandler::class);
-        require_once 'Handlers/Application/OffsetHandler.php';
-        $registration->registerHooksFromClass(OffsetHandler::class);
-        require_once 'PropertyProvider/ModelPropertyProvider.php';
-        $registration->registerHooksFromClass(PropertyProvider\ModelPropertyProvider::class);
-        require_once 'ReturnTypeProvider/UrlReturnTypeProvider.php';
-        $registration->registerHooksFromClass(UrlReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/ModelReturnTypeProvider.php';
-        $registration->registerHooksFromClass(ModelReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/RelationReturnTypeProvider.php';
-        $registration->registerHooksFromClass(RelationReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/PathHelpersReturnTypeProvider.php';
-        $registration->registerHooksFromClass(PathHelpersReturnTypeProvider::class);
-
+        $this->registerHandlers($registration);
         $this->addOurStubs($registration);
     }
 
@@ -221,5 +197,36 @@ class Plugin implements PluginEntryPointInterface
         foreach (glob(__DIR__ . '/Stubs/*.stubphp') as $stubFilePath) {
             $registration->addStubFile($stubFilePath);
         }
+    }
+
+    /**
+     * @param \Psalm\Plugin\RegistrationInterface $registration
+     */
+    private function registerHandlers(RegistrationInterface $registration): void
+    {
+        require_once 'ReturnTypeProvider/AuthReturnTypeProvider.php';
+        $registration->registerHooksFromClass(ReturnTypeProvider\AuthReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/TransReturnTypeProvider.php';
+        $registration->registerHooksFromClass(ReturnTypeProvider\TransReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/RedirectReturnTypeProvider.php';
+        $registration->registerHooksFromClass(ReturnTypeProvider\RedirectReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/ViewReturnTypeProvider.php';
+        $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/AppReturnTypeProvider.php';
+        $registration->registerHooksFromClass(ReturnTypeProvider\AppReturnTypeProvider::class);
+        require_once 'Handlers/Application/ContainerHandler.php';
+        $registration->registerHooksFromClass(ContainerHandler::class);
+        require_once 'Handlers/Application/OffsetHandler.php';
+        $registration->registerHooksFromClass(OffsetHandler::class);
+        require_once 'PropertyProvider/ModelPropertyProvider.php';
+        $registration->registerHooksFromClass(PropertyProvider\ModelPropertyProvider::class);
+        require_once 'ReturnTypeProvider/UrlReturnTypeProvider.php';
+        $registration->registerHooksFromClass(UrlReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/ModelReturnTypeProvider.php';
+        $registration->registerHooksFromClass(ModelReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/RelationReturnTypeProvider.php';
+        $registration->registerHooksFromClass(RelationReturnTypeProvider::class);
+        require_once 'ReturnTypeProvider/PathHelpersReturnTypeProvider.php';
+        $registration->registerHooksFromClass(PathHelpersReturnTypeProvider::class);
     }
 }
