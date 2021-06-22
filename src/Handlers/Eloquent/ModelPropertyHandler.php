@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser;
 use Psalm\Context;
 use Psalm\CodeLocation;
+use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Type;
 use Psalm\StatementsSource;
 use function in_array;
@@ -27,7 +28,7 @@ class ModelPropertyHandler implements
     /** @return array<string, string> */
     public static function getClassLikeNames() : array
     {
-        return \Psalm\LaravelPlugin\Plugin::$model_classes;
+        return ModelStubProvider::getModelClasses();
     }
 
     /**
