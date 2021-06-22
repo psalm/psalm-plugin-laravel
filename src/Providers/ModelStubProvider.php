@@ -5,7 +5,6 @@ namespace Psalm\LaravelPlugin\Providers;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
 use Psalm\LaravelPlugin\Fakes\FakeModelsCommand;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use function glob;
 use function dirname;
 
@@ -13,7 +12,7 @@ final class ModelStubProvider implements GeneratesStubs
 {
 
     /**
-     * @var string[]
+     * @var array<class-string>
      */
     private static $model_classes;
 
