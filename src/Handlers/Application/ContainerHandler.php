@@ -23,6 +23,9 @@ use function array_merge;
 use function array_values;
 use function strtolower;
 
+/**
+ * @psalm-suppress DeprecatedInterface
+ */
 final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
     /**

@@ -16,6 +16,9 @@ use Psalm\StatementsSource;
 use function in_array;
 use function str_replace;
 
+/**
+ * @psalm-suppress DeprecatedInterface
+ */
 class ModelPropertyHandler implements
     \Psalm\Plugin\Hook\PropertyExistenceProviderInterface,
     \Psalm\Plugin\Hook\PropertyVisibilityProviderInterface,
