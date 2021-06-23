@@ -4,6 +4,7 @@ namespace Psalm\LaravelPlugin;
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Helpers\ViewHandler;
 use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
 use Psalm\LaravelPlugin\Providers\MetaStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
@@ -56,6 +57,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(OffsetHandler::class);
         require_once 'Handlers/Eloquent/ModelPropertyHandler.php';
         $registration->registerHooksFromClass(ModelPropertyHandler::class);
+        require_once 'Handlers/Helpers/ViewHandler.php.php';
+        $registration->registerHooksFromClass(ViewHandler::class);
 
         // @todo: migrate these to `Handlers` namespace
         require_once 'ReturnTypeProvider/AuthReturnTypeProvider.php';
@@ -64,8 +67,6 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ReturnTypeProvider\TransReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/RedirectReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\RedirectReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/ViewReturnTypeProvider.php';
-        $registration->registerHooksFromClass(ReturnTypeProvider\ViewReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/UrlReturnTypeProvider.php';
         $registration->registerHooksFromClass(UrlReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/ModelReturnTypeProvider.php';
