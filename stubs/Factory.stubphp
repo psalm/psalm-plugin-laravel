@@ -1,0 +1,53 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Factories;
+
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\FactoryBuilder;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * @template TModel of Model
+ * @template TCount of int
+ */
+abstract class Factory
+{
+    /**
+      * @var class-string<TModel>
+      */
+    protected $model;
+
+    /**
+     * Create a single model and persist it to the database.
+     *
+     * @param  array  $attributes
+     * @return TModel
+     */
+    public function createOne($attributes = [])
+    {
+
+    }
+
+    /**
+     * Create a collection of models and persist them to the database.
+     *
+     * @param  iterable  $records
+     * @return Collection<TModel>
+     */
+    public function createMany(iterable $records)
+    {
+
+    }
+
+    /**
+     * Create a collection of models and persist them to the database.
+     *
+     * @param  array  $attributes
+     * @param  Model|null  $parent
+     * @return (TCount is 1 ? TModel : Collection<TModel>)
+     */
+    public function create($attributes = [], ?Model $parent = null)
+    {
+
+    }
+}
