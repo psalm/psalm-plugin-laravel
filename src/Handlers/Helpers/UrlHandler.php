@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\ReturnTypeProvider;
+namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Illuminate\Contracts\Routing\UrlGenerator;
 use Psalm\CodeLocation;
@@ -11,7 +11,7 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
-final class UrlReturnTypeProvider implements FunctionReturnTypeProviderInterface
+final class UrlHandler implements FunctionReturnTypeProviderInterface
 {
     public static function getFunctionIds(): array
     {
