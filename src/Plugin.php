@@ -3,6 +3,7 @@ namespace Psalm\LaravelPlugin;
 
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
@@ -13,8 +14,6 @@ use Psalm\LaravelPlugin\Handlers\Helpers\ViewHandler;
 use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
 use Psalm\LaravelPlugin\Providers\MetaStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
-use Psalm\LaravelPlugin\ReturnTypeProvider\ModelReturnTypeProvider;
-use Psalm\LaravelPlugin\ReturnTypeProvider\RelationReturnTypeProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
@@ -62,6 +61,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ModelPropertyHandler::class);
         require_once 'Handlers/Eloquent/RelationsMethodHandler.php';
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
+        require_once 'Handlers/Eloquent/ModelMethodHandler.php';
+        $registration->registerHooksFromClass(ModelMethodHandler::class);
         require_once 'Handlers/Helpers/ViewHandler.php';
         $registration->registerHooksFromClass(ViewHandler::class);
         require_once 'Handlers/Helpers/PathHandler.php';
@@ -72,10 +73,6 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(TransHandler::class);
         require_once 'Handlers/Helpers/RedirectHandler.php';
         $registration->registerHooksFromClass(RedirectHandler::class);
-
-        // @todo: migrate these to `Handlers` namespace
-        require_once 'ReturnTypeProvider/ModelReturnTypeProvider.php';
-        $registration->registerHooksFromClass(ModelReturnTypeProvider::class);
     }
 
     private function generateStubFiles(): void

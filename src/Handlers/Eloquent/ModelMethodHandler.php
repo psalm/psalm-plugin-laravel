@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\ReturnTypeProvider;
+namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -19,7 +19,7 @@ use Psalm\Type\Union;
 use function in_array;
 use function strtolower;
 
-final class ModelReturnTypeProvider implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
+final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
     /**
      * @return array<string>
