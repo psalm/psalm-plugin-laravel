@@ -4,6 +4,7 @@ namespace Psalm\LaravelPlugin;
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\RedirectHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
@@ -59,6 +60,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(OffsetHandler::class);
         require_once 'Handlers/Eloquent/ModelPropertyHandler.php';
         $registration->registerHooksFromClass(ModelPropertyHandler::class);
+        require_once 'Handlers/Eloquent/RelationsMethodHandler.php';
+        $registration->registerHooksFromClass(RelationsMethodHandler::class);
         require_once 'Handlers/Helpers/ViewHandler.php';
         $registration->registerHooksFromClass(ViewHandler::class);
         require_once 'Handlers/Helpers/PathHandler.php';
@@ -73,8 +76,6 @@ class Plugin implements PluginEntryPointInterface
         // @todo: migrate these to `Handlers` namespace
         require_once 'ReturnTypeProvider/ModelReturnTypeProvider.php';
         $registration->registerHooksFromClass(ModelReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/RelationReturnTypeProvider.php';
-        $registration->registerHooksFromClass(RelationReturnTypeProvider::class);
     }
 
     private function generateStubFiles(): void

@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\ReturnTypeProvider;
+namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,7 +22,7 @@ use Psalm\Type;
 use Psalm\Type\Union;
 use function in_array;
 
-final class RelationReturnTypeProvider implements MethodReturnTypeProviderInterface
+final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 {
     /**
      * @return array<string>
