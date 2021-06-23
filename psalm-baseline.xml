@@ -1,58 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="dev-master@73f7ad9dd36bc2cb1d1f8296085f9695c1f2daca">
-  <file src="src/AppInterfaceProvider.php">
+<files psalm-version="dev-master@b07de1fefde4714f29bca0b56c632bd82855fc64">
+  <file src="src/Handlers/Eloquent/ModelMethodHandler.php">
     <DeprecatedInterface occurrences="1">
-      <code>AppInterfaceProvider</code>
+      <code>ModelMethodHandler</code>
     </DeprecatedInterface>
   </file>
-  <file src="src/PropertyProvider/ModelPropertyProvider.php">
+  <file src="src/Handlers/Eloquent/RelationsMethodHandler.php">
     <DeprecatedInterface occurrences="1">
-      <code>ModelPropertyProvider</code>
+      <code>RelationsMethodHandler</code>
     </DeprecatedInterface>
   </file>
-  <file src="src/ReturnTypeProvider/AppReturnTypeProvider.php">
+  <file src="src/Handlers/Helpers/PathHandler.php">
     <DeprecatedInterface occurrences="1">
-      <code>AppReturnTypeProvider</code>
+      <code>PathHandler</code>
     </DeprecatedInterface>
   </file>
-  <file src="src/ReturnTypeProvider/AuthReturnTypeProvider.php">
+  <file src="src/Handlers/Helpers/RedirectHandler.php">
     <DeprecatedInterface occurrences="1">
-      <code>AuthReturnTypeProvider</code>
+      <code>RedirectHandler</code>
     </DeprecatedInterface>
   </file>
-  <file src="src/ReturnTypeProvider/ModelReturnTypeProvider.php">
+  <file src="src/Handlers/Helpers/TransHandler.php">
     <DeprecatedInterface occurrences="1">
-      <code>ModelReturnTypeProvider</code>
+      <code>TransHandler</code>
     </DeprecatedInterface>
   </file>
-  <file src="src/ReturnTypeProvider/PathHelpersReturnTypeProvider.php">
+  <file src="src/Handlers/Helpers/UrlHandler.php">
     <DeprecatedInterface occurrences="1">
-      <code>PathHelpersReturnTypeProvider</code>
+      <code>UrlHandler</code>
     </DeprecatedInterface>
   </file>
-  <file src="src/ReturnTypeProvider/RedirectReturnTypeProvider.php">
+  <file src="src/Handlers/Helpers/ViewHandler.php">
     <DeprecatedInterface occurrences="1">
-      <code>RedirectReturnTypeProvider</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/ReturnTypeProvider/RelationReturnTypeProvider.php">
-    <DeprecatedInterface occurrences="1">
-      <code>RelationReturnTypeProvider</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/ReturnTypeProvider/TransReturnTypeProvider.php">
-    <DeprecatedInterface occurrences="1">
-      <code>TransReturnTypeProvider</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/ReturnTypeProvider/UrlReturnTypeProvider.php">
-    <DeprecatedInterface occurrences="1">
-      <code>UrlReturnTypeProvider</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/ReturnTypeProvider/ViewReturnTypeProvider.php">
-    <DeprecatedInterface occurrences="1">
-      <code>ViewReturnTypeProvider</code>
+      <code>ViewHandler</code>
     </DeprecatedInterface>
   </file>
 </files>
