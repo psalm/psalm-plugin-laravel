@@ -57,7 +57,7 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(OffsetHandler::class);
         require_once 'Handlers/Eloquent/ModelPropertyHandler.php';
         $registration->registerHooksFromClass(ModelPropertyHandler::class);
-        require_once 'Handlers/Helpers/ViewHandler.php.php';
+        require_once 'Handlers/Helpers/ViewHandler.php';
         $registration->registerHooksFromClass(ViewHandler::class);
         require_once 'Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(PathHandler::class);
