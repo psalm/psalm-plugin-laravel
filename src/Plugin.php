@@ -5,13 +5,13 @@ use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
+use Psalm\LaravelPlugin\Handlers\Helpers\UrlHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\ViewHandler;
 use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
 use Psalm\LaravelPlugin\Providers\MetaStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\ModelReturnTypeProvider;
 use Psalm\LaravelPlugin\ReturnTypeProvider\RelationReturnTypeProvider;
-use Psalm\LaravelPlugin\ReturnTypeProvider\UrlReturnTypeProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
@@ -61,6 +61,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ViewHandler::class);
         require_once 'Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(PathHandler::class);
+        require_once 'Handlers/Helpers/UrlHandler.php';
+        $registration->registerHooksFromClass(UrlHandler::class);
 
         // @todo: migrate these to `Handlers` namespace
         require_once 'ReturnTypeProvider/AuthReturnTypeProvider.php';
@@ -69,8 +71,6 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ReturnTypeProvider\TransReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/RedirectReturnTypeProvider.php';
         $registration->registerHooksFromClass(ReturnTypeProvider\RedirectReturnTypeProvider::class);
-        require_once 'ReturnTypeProvider/UrlReturnTypeProvider.php';
-        $registration->registerHooksFromClass(UrlReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/ModelReturnTypeProvider.php';
         $registration->registerHooksFromClass(ModelReturnTypeProvider::class);
         require_once 'ReturnTypeProvider/RelationReturnTypeProvider.php';
