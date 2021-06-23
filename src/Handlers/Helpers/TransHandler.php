@@ -1,6 +1,6 @@
 <?php
 
-namespace Psalm\LaravelPlugin\ReturnTypeProvider;
+namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use PhpParser;
 use Psalm\Context;
@@ -8,7 +8,7 @@ use Psalm\CodeLocation;
 use Psalm\Type;
 use Psalm\StatementsSource;
 
-class TransReturnTypeProvider implements \Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface
+class TransHandler implements \Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface
 {
     public static function getFunctionIds() : array
     {
