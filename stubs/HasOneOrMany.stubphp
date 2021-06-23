@@ -52,7 +52,7 @@ abstract class HasOneOrMany extends Relation
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function firstOrNew(array $attributes, array $values = []) { }
+    public function firstOrNew(array $attributes = [], array $values = []) { }
 
     /**
      * @param  array  $attributes
@@ -60,7 +60,7 @@ abstract class HasOneOrMany extends Relation
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function firstOrCreate(array $attributes, array $values = []) { }
+    public function firstOrCreate(array $attributes = [], array $values = []) { }
 
     /**
      * @param  array  $attributes
