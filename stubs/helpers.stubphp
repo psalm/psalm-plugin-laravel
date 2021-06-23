@@ -44,7 +44,7 @@ function response($content = '', $status = 200, array $headers = [])
  *
  * @param  bool  $boolean
  * @psalm-assert falsy $boolean
- * @psalm-return never-return
+ * @psalm-return ($boolean is false ? never-return : void )
  * @param  int  $code
  * @param  string  $message
  * @param  array  $headers
