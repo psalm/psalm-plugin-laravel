@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\ReturnTypeProvider;
+namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Psalm\CodeLocation;
 use Psalm\Context;
@@ -14,7 +14,7 @@ use function get_class;
 use function in_array;
 use function is_string;
 
-final class PathHelpersReturnTypeProvider implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
+final class PathHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
     public static function getFunctionIds(): array
     {
