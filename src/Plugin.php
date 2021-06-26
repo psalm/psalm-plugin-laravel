@@ -12,7 +12,6 @@ use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\UrlHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\ViewHandler;
 use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
-use Psalm\LaravelPlugin\ReturnTypeProvider\OptionalReturnTypeProvider;
 use Psalm\LaravelPlugin\Providers\MetaStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
