@@ -1,5 +1,6 @@
 <?php
-namespace Psalm\LaravelPlugin;
+
+namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use PhpParser;
 use function count;
@@ -165,7 +166,7 @@ class SchemaAggregator
                 $additional_method_calls = [];
 
                 $nullable = false;
-                
+
                 while ($root_var instanceof PhpParser\Node\Expr\MethodCall) {
                     if ($root_var->name instanceof PhpParser\Node\Identifier
                         && $root_var->name->name === 'nullable'
@@ -325,7 +326,7 @@ class SchemaAggregator
                             $table->dropColumn($column_name);
                             break;
 
-                        
+
 
                         case 'enum':
                             $table->setColumn(new SchemaColumn($column_name, 'enum', $nullable, $second_arg_array));
@@ -338,12 +339,24 @@ class SchemaAggregator
                         case 'foreign':
                             break;
 
+                        case 'foreignid':
+                            $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
+                            break;
+
+                        case 'foreignuuid':
+                            $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
+                            break;
+
                         case 'geometry':
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
                             break;
 
                         case 'geometrycollection':
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
+                            break;
+
+                        case 'id':
+                            $table->setColumn(new SchemaColumn('id', 'int', $nullable));
                             break;
 
                         case 'increments':
@@ -418,7 +431,17 @@ class SchemaAggregator
                             $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable));
                             break;
 
+                        case 'numericmorphs':
+                            $table->setColumn(new SchemaColumn($column_name . '_type', 'string', $nullable));
+                            $table->setColumn(new SchemaColumn($column_name . '_id', 'int', $nullable));
+                            break;
+
                         case 'nullablemorphs':
+                            $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
+                            $table->setColumn(new SchemaColumn($column_name . '_id', 'int', true));
+                            break;
+
+                        case 'nullablenumericmorphs':
                             $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
                             $table->setColumn(new SchemaColumn($column_name . '_id', 'int', true));
                             break;
@@ -481,6 +504,10 @@ class SchemaAggregator
                             break;
 
                         case 'text':
+                            $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
+                            break;
+
+                        case 'tinytext':
                             $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
                             break;
 

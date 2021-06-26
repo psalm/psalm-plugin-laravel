@@ -1,3 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="dev-master@02e8313c398b9c6cb6ded9210e5ef53ecd7a2dab">
+<files psalm-version="4.7.3@38c452ae584467e939d55377aaf83b5a26f19dd1">
+  <file src="app/Exceptions/Handler.php">
+    <NonInvariantDocblockPropertyType occurrences="2">
+      <code>$dontFlash</code>
+      <code>$dontReport</code>
+    </NonInvariantDocblockPropertyType>
+    <UnusedClosureParam occurrences="1">
+      <code>$e</code>
+    </UnusedClosureParam>
+  </file>
+  <file src="app/Http/Middleware/TrustProxies.php">
+    <NonInvariantDocblockPropertyType occurrences="1">
+      <code>$headers</code>
+    </NonInvariantDocblockPropertyType>
+  </file>
+  <file src="app/Models/User.php">
+    <NonInvariantDocblockPropertyType occurrences="1">
+      <code>$fillable</code>
+    </NonInvariantDocblockPropertyType>
+  </file>
+  <file src="app/Providers/RouteServiceProvider.php">
+    <MixedArgument occurrences="1">
+      <code>optional($request-&gt;user())-&gt;id ?: $request-&gt;ip()</code>
+    </MixedArgument>
+    <MixedPropertyFetch occurrences="1">
+      <code>optional($request-&gt;user())-&gt;id</code>
+    </MixedPropertyFetch>
+    <PossiblyNullArgument occurrences="1">
+      <code>optional($request-&gt;user())-&gt;id ?: $request-&gt;ip()</code>
+    </PossiblyNullArgument>
+  </file>
 </files>

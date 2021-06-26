@@ -1,6 +1,6 @@
 <?php
 
-namespace Psalm\LaravelPlugin\PropertyProvider;
+namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -11,12 +11,16 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser;
 use Psalm\Context;
 use Psalm\CodeLocation;
+use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Type;
 use Psalm\StatementsSource;
 use function in_array;
 use function str_replace;
 
-class ModelPropertyProvider implements
+/**
+ * @psalm-suppress DeprecatedInterface
+ */
+class ModelPropertyHandler implements
     \Psalm\Plugin\Hook\PropertyExistenceProviderInterface,
     \Psalm\Plugin\Hook\PropertyVisibilityProviderInterface,
     \Psalm\Plugin\Hook\PropertyTypeProviderInterface
@@ -24,7 +28,7 @@ class ModelPropertyProvider implements
     /** @return array<string, string> */
     public static function getClassLikeNames() : array
     {
-        return \Psalm\LaravelPlugin\Plugin::$model_classes;
+        return ModelStubProvider::getModelClasses();
     }
 
     /**

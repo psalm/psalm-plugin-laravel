@@ -299,6 +299,7 @@ Feature: Eloquent Relation Types
     When I run Psalm
     Then I see no errors
 
+  @skip
   Scenario: Relationships can be further constrained via method
     Given I have the following code
     """
@@ -309,6 +310,7 @@ Feature: Eloquent Relation Types
     When I run Psalm
     Then I see no errors
 
+  @skip
   Scenario: Relationships return themselves when the underlying method returns a builder
     Given I have the following code
     """
@@ -330,6 +332,7 @@ Feature: Eloquent Relation Types
     When I run Psalm
     Then I see no errors
 
+  @skip
   Scenario: Relationships return themselves when the proxied method is a query builder method
     Given I have the following code
     """
