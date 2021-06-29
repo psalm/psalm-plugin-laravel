@@ -5,6 +5,7 @@ namespace Psalm\LaravelPlugin\Util;
 use Psalm\Context;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+use function in_array;
 
 final class ProxyMethodReturnTypeProvider
 {
@@ -37,11 +38,11 @@ final class ProxyMethodReturnTypeProvider
         }
 
         if (\Psalm\Internal\Analyzer\Statements\Expression\Call\MethodCallAnalyzer::analyze(
-                $statements_analyzer,
-                $fake_method_call,
-                $context,
-                false
-            ) === false) {
+            $statements_analyzer,
+            $fake_method_call,
+            $context,
+            false
+        ) === false) {
             return null;
         }
 

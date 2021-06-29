@@ -24,6 +24,8 @@ use function array_values;
 use function strtolower;
 use function get_class;
 use function array_filter;
+use function array_keys;
+use function is_object;
 
 /**
  * @psalm-suppress DeprecatedInterface
