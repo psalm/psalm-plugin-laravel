@@ -117,7 +117,7 @@ Feature: path helpers
       require_once app()->make('path.public');
       """
       When I run Psalm
-      Then I see these no errors
+      Then I see no errors
 
     Scenario: resource path can be resolved
       Given I have the following code
