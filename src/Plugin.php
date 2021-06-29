@@ -12,7 +12,6 @@ use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\UrlHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\ViewHandler;
 use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
-use Psalm\LaravelPlugin\Providers\MetaStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -44,7 +43,6 @@ class Plugin implements PluginEntryPointInterface
         }
 
         $registration->addStubFile(FacadeStubProvider::getStubFileLocation());
-        $registration->addStubFile(MetaStubProvider::getStubFileLocation());
         $registration->addStubFile(ModelStubProvider::getStubFileLocation());
     }
 
@@ -78,7 +76,6 @@ class Plugin implements PluginEntryPointInterface
     private function generateStubFiles(): void
     {
         FacadeStubProvider::generateStubFile();
-        MetaStubProvider::generateStubFile();
         ModelStubProvider::generateStubFile();
     }
 }
