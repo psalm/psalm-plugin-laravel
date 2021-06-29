@@ -14,7 +14,9 @@ use function str_replace;
 
 final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInterface, PropertyVisibilityProviderInterface, PropertyTypeProviderInterface
 {
-
+    /**
+     * @return array<string>
+     */
     public static function getClassLikeNames(): array
     {
         return ModelStubProvider::getModelClasses();
@@ -47,6 +49,8 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
+
+        return null;
     }
 
     public static function getPropertyType(string $fq_classlike_name, string $property_name, bool $read_mode, ?StatementsSource $source = null, ?Context $context = null): ?Type\Union

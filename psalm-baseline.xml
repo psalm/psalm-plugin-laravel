@@ -5,6 +5,11 @@
       <code>ModelMethodHandler</code>
     </DeprecatedInterface>
   </file>
+  <file src="src/Handlers/Eloquent/ModelPropertyAccessorHandler.php">
+    <DeprecatedInterface occurrences="1">
+      <code>ModelPropertyAccessorHandler</code>
+    </DeprecatedInterface>
+  </file>
   <file src="src/Handlers/Eloquent/RelationsMethodHandler.php">
     <DeprecatedInterface occurrences="1">
       <code>RelationsMethodHandler</code>
