@@ -4,6 +4,7 @@ namespace Psalm\LaravelPlugin;
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
@@ -57,6 +58,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(OffsetHandler::class);
         require_once 'Handlers/Eloquent/ModelPropertyHandler.php';
         $registration->registerHooksFromClass(ModelPropertyHandler::class);
+        require_once 'Handlers/Eloquent/ModelPropertyAccessorHandler.php';
+        $registration->registerHooksFromClass(ModelPropertyAccessorHandler::class);
         require_once 'Handlers/Eloquent/RelationsMethodHandler.php';
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
         require_once 'Handlers/Eloquent/ModelMethodHandler.php';
