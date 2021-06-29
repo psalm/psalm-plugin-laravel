@@ -54,10 +54,6 @@ class ModelPropertyHandler implements
             return true;
         }
 
-        if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
-            return true;
-        }
-
         if (isset($class_like_storage->pseudo_property_get_types['$' . $property_name])) {
             return null;
         }
@@ -84,10 +80,6 @@ class ModelPropertyHandler implements
         $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
-            return true;
-        }
-
-        if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
 
@@ -169,11 +161,6 @@ class ModelPropertyHandler implements
             }
 
             return $returnType ?: Type::getMixed();
-        }
-
-        if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
-            return $codebase->getMethodReturnType($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute', $fq_classlike_name)
-                ?: Type::getMixed();
         }
 
         return null;
