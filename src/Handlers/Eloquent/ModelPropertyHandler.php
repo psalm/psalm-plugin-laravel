@@ -178,16 +178,4 @@ class ModelPropertyHandler implements
         // @todo: ensure this is a relation method
         return $codebase->methodExists($fq_classlike_name . '::' . $property_name);
     }
-
-    /**
-     * @param \Psalm\Codebase $codebase
-     * @param string $fq_classlike_name
-     * @param string $property_name
-     *
-     * @return bool
-     */
-    private static function accessorExists(\Psalm\Codebase $codebase, string $fq_classlike_name, string $property_name): bool
-    {
-        return $codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute');
-    }
 }
