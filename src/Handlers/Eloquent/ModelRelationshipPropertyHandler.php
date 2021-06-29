@@ -20,7 +20,7 @@ use function str_replace;
 /**
  * @psalm-suppress DeprecatedInterface
  */
-class ModelPropertyHandler implements
+class ModelRelationshipPropertyHandler implements
     \Psalm\Plugin\Hook\PropertyExistenceProviderInterface,
     \Psalm\Plugin\Hook\PropertyVisibilityProviderInterface,
     \Psalm\Plugin\Hook\PropertyTypeProviderInterface
