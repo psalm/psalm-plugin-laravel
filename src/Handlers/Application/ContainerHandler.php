@@ -92,18 +92,28 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
             return;
         }
 
-        $appClassName = ApplicationProvider::getAppFullyQualifiedClassName();
+        $bindings = array_keys(ApplicationProvider::getApp()->getBindings());
 
-        $facades =  ApplicationProvider::getApp()->make('config')->get('app.aliases', []);
-        // I'm not sure why this isn't included by default, but this is a hack that fixes the bug
-        $facades['rl'] = RateLimiter::class;
+        foreach ($bindings as $abstract) {
+            try {
+                $concrete = ApplicationProvider::getApp()->make($abstract);
 
-        $classesThatCouldBeReturnedThatArentReferencedAlready = array_merge(
-            [$appClassName],
-            array_values(AliasLoader::getInstance($facades)->getAliases()),
-        );
+                if (!is_object($concrete)) {
+                    continue;
+                }
 
-        foreach ($classesThatCouldBeReturnedThatArentReferencedAlready as $className) {
+                $reflectionClass = new \ReflectionClass($concrete);
+
+                if ($reflectionClass->isAnonymous()) {
+                    continue;
+                }
+            } catch (\Throwable $e) {
+                // cannot just catch binding exception as the following error is emitted within laravel:
+                // Class 'Symfony\Component\Cache\Adapter\Psr16Adapter' not found
+                continue;
+            }
+
+            $className = get_class($concrete);
             $filePath = $event->getStatementsSource()->getFilePath();
             $fileStorage = $event->getCodebase()->file_storage_provider->get($filePath);
             $fileStorage->referenced_classlikes[strtolower($className)] = $className;
