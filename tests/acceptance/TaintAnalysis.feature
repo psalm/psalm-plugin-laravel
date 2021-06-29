@@ -15,7 +15,7 @@ Feature: taint
         </plugins>
       </psalm>
       """
-
+  @skip
   Scenario: input returns various types
     Given I have the following code
     """
