@@ -59,6 +59,29 @@ function abort_if($boolean, $code, $message = '', array $headers = [])
 }
 
 /**
+* @see https://github.com/vimeo/psalm/issues/4816 for why this hack exists
+*/
+
+class NullObject {
+    /**
+     * @return null
+     */
+ 	public function __call(string $_name, array $args) {
+        return null;
+    }
+
+    /**
+     * @return null
+     */
+    public function __get(string $s) {
+        return null;
+    }
+
+    public function __set(string $_name, string $_value) : void {
+    }
+}
+
+/**
  * Provide access to optional objects.
  *
  * @template TValue
@@ -67,7 +90,7 @@ function abort_if($boolean, $code, $message = '', array $headers = [])
  * @psalm-param TValue $value
  * @psalm-return (
             TValue is null
-            ? \Illuminate\Support\Optional
+            ? NullObject
             : ( TCallback is null ? TValue : TResult )
     )
  */

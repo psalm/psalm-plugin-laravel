@@ -34,11 +34,9 @@ Feature: helpers
   Scenario: optional support
     Given I have the following code
     """
-        function getOptionalKeyName(?User $user): ?string
+        function test(?Throwable $user): ?string
         {
-            /** @psalm-trace $optional **/
-            $optional = optional($user);
-            return optional($user)->getKeyName();
+            return optional($user)->getMessage();
         }
 
     """
