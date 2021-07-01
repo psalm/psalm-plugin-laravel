@@ -1,6 +1,7 @@
 composer.phar
 /laravel/
 /vendor/
+/vendor-bin/**/vendor/
 composer.lock
 cache/*.stubphp
 .DS_Store
