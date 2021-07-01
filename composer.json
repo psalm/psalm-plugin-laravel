@@ -40,6 +40,9 @@
         }
     },
     "scripts": {
+        "bin": "echo 'bin not installed'",
+        "post-install-cmd": ["@composer bin all install --ansi"],
+        "post-update-cmd": ["@composer bin all update --ansi"],
         "check": [
             "@analyze",
             "@lint",
@@ -56,7 +59,8 @@
         "codeception/module-asserts": "^1.0.0",
         "weirdan/codeception-psalm-module": "^0.13.1",
         "squizlabs/php_codesniffer": "*",
-        "slevomat/coding-standard": "^6.2"
+        "slevomat/coding-standard": "^6.2",
+        "bamarni/composer-bin-plugin": "^1.4.1"
     },
     "minimum-stability": "dev"
 }
