@@ -143,6 +143,7 @@ Feature: Eloquent Builder Types
     """
     When I run Psalm
     Then I see these errors
+      | Type  | Message |
       | MixedInferredReturnType | Could not verify return type 'Illuminate\Database\Eloquent\Builder<User>' for UserRepository::test_failure |
       | MixedReturnStatement    | Could not infer a return type                                                                              |
 

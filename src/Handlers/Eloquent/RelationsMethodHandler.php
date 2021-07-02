@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\ReturnTypeProvider;
+namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,13 +16,14 @@ use PhpParser\Node\Expr\MethodCall;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Union;
 use function in_array;
 
-final class RelationReturnTypeProvider implements MethodReturnTypeProviderInterface
+final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 {
     /**
      * @return array<string>
@@ -80,7 +81,13 @@ final class RelationReturnTypeProvider implements MethodReturnTypeProviderInterf
              */
             $templateType = $template_type_parameters[0];
 
-            $type = self::executeFakeCall($source, $fake_method_call, $context, $templateType->getKey());
+            $proxyType = new Type\Atomic\TGenericObject(Builder::class, [
+                new Union([
+                    new Type\Atomic\TNamedObject($templateType->getKey()),
+                ]),
+            ]);
+
+            $type = ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $context, $proxyType);
 
             if (!$type) {
                 return null;
@@ -97,52 +104,5 @@ final class RelationReturnTypeProvider implements MethodReturnTypeProviderInterf
         }
 
         return null;
-    }
-
-    // @todo: extract executeFakeCall's around the codebase into a helper
-    private static function executeFakeCall(
-        \Psalm\Internal\Analyzer\StatementsAnalyzer $statements_analyzer,
-        \PhpParser\Node\Expr\MethodCall $fake_method_call,
-        Context $context,
-        string $modelClass
-    ) : ?Union {
-        $old_data_provider = $statements_analyzer->node_data;
-        $statements_analyzer->node_data = clone $statements_analyzer->node_data;
-
-        $context = clone $context;
-        $context->inside_call = true;
-
-        $context->vars_in_scope['$builder'] = new Union([
-            new Type\Atomic\TGenericObject(Builder::class, [
-                new Union([
-                    new Type\Atomic\TNamedObject($modelClass),
-                ]),
-            ]),
-        ]);
-
-        $suppressed_issues = $statements_analyzer->getSuppressedIssues();
-
-        if (!in_array('PossiblyInvalidMethodCall', $suppressed_issues, true)) {
-            $statements_analyzer->addSuppressedIssues(['PossiblyInvalidMethodCall']);
-        }
-
-        if (\Psalm\Internal\Analyzer\Statements\Expression\Call\MethodCallAnalyzer::analyze(
-            $statements_analyzer,
-            $fake_method_call,
-            $context,
-            false
-        ) === false) {
-            return null;
-        }
-
-        if (!in_array('PossiblyInvalidMethodCall', $suppressed_issues, true)) {
-            $statements_analyzer->removeSuppressedIssues(['PossiblyInvalidMethodCall']);
-        }
-
-        $returnType = $statements_analyzer->node_data->getType($fake_method_call);
-
-        $statements_analyzer->node_data = $old_data_provider;
-
-        return $returnType;
     }
 }

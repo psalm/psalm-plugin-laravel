@@ -16,6 +16,24 @@ Feature: Container
       </psalm>
       """
 
+  Scenario: Application interface does not error
+    Given I have the following code
+    """
+    <?php
+      use App\Jobs\PullContact;
+      use Illuminate\Support\ServiceProvider;
+
+      class AppServiceProvider extends ServiceProvider {
+        public function register() {
+          $this->app->foo("a", "b");
+        }
+      }
+    """
+    When I run Psalm
+    Then I see these errors
+      | Type  | Message |
+      | UndefinedInterfaceMethod | Method Illuminate\Contracts\Foundation\Application::foo does not exist |
+
   Scenario: the container resolves correct types
     Given I have the following code
     """
@@ -118,7 +136,4 @@ Feature: Container
       }
     """
     When I run Psalm
-    Then I see these errors
-      | Type  | Message |
-      | InvalidReturnType | The declared return type 'Illuminate\Log\LogManager' for testMakeWith is incorrect, got 'logg' |
-      | InvalidReturnStatement | The inferred type 'logg' does not match the declared return type 'Illuminate\Log\LogManager' for testMakeWith |
+    Then I see exit code 2

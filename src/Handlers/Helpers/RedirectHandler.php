@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\ReturnTypeProvider;
+namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
@@ -11,11 +11,11 @@ use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Type;
 
-class RedirectReturnTypeProvider implements FunctionReturnTypeProviderInterface
+class RedirectHandler implements FunctionReturnTypeProviderInterface
 {
 
     /**
-     * @return array<string>
+     * @return array<lowercase-string>
      */
     public static function getFunctionIds(): array
     {

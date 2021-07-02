@@ -1,6 +1,6 @@
 <?php
 
-namespace Psalm\LaravelPlugin\PropertyProvider;
+namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -11,12 +11,16 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser;
 use Psalm\Context;
 use Psalm\CodeLocation;
+use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Type;
 use Psalm\StatementsSource;
 use function in_array;
 use function str_replace;
 
-class ModelPropertyProvider implements
+/**
+ * @psalm-suppress DeprecatedInterface
+ */
+class ModelRelationshipPropertyHandler implements
     \Psalm\Plugin\Hook\PropertyExistenceProviderInterface,
     \Psalm\Plugin\Hook\PropertyVisibilityProviderInterface,
     \Psalm\Plugin\Hook\PropertyTypeProviderInterface
@@ -24,7 +28,7 @@ class ModelPropertyProvider implements
     /** @return array<string, string> */
     public static function getClassLikeNames() : array
     {
-        return \Psalm\LaravelPlugin\Plugin::$model_classes;
+        return ModelStubProvider::getModelClasses();
     }
 
     /**
@@ -47,10 +51,6 @@ class ModelPropertyProvider implements
         $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
-            return true;
-        }
-
-        if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
 
@@ -80,10 +80,6 @@ class ModelPropertyProvider implements
         $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
-            return true;
-        }
-
-        if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
 
@@ -167,11 +163,6 @@ class ModelPropertyProvider implements
             return $returnType ?: Type::getMixed();
         }
 
-        if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
-            return $codebase->getMethodReturnType($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute', $fq_classlike_name)
-                ?: Type::getMixed();
-        }
-
         return null;
     }
 
@@ -186,17 +177,5 @@ class ModelPropertyProvider implements
     {
         // @todo: ensure this is a relation method
         return $codebase->methodExists($fq_classlike_name . '::' . $property_name);
-    }
-
-    /**
-     * @param \Psalm\Codebase $codebase
-     * @param string $fq_classlike_name
-     * @param string $property_name
-     *
-     * @return bool
-     */
-    private static function accessorExists(\Psalm\Codebase $codebase, string $fq_classlike_name, string $property_name): bool
-    {
-        return $codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute');
     }
 }

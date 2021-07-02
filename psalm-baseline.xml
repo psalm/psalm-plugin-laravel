@@ -1,13 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="3.11.0@5bc9b095d1a6f1a2e0890353fc2c6cd7de62371d">
-  <file src="src/FakeMetaCommand.php">
-    <PropertyNotSetInConstructor occurrences="1">
-      <code>FakeMetaCommand</code>
-    </PropertyNotSetInConstructor>
+<files psalm-version="dev-master@b07de1fefde4714f29bca0b56c632bd82855fc64">
+  <file src="src/Handlers/Eloquent/ModelMethodHandler.php">
+    <DeprecatedInterface occurrences="1">
+      <code>ModelMethodHandler</code>
+    </DeprecatedInterface>
   </file>
-  <file src="src/FakeModelsCommand.php">
-    <PropertyNotSetInConstructor occurrences="1">
-      <code>FakeModelsCommand</code>
-    </PropertyNotSetInConstructor>
+  <file src="src/Handlers/Eloquent/ModelPropertyAccessorHandler.php">
+    <DeprecatedInterface occurrences="1">
+      <code>ModelPropertyAccessorHandler</code>
+    </DeprecatedInterface>
+  </file>
+  <file src="src/Handlers/Eloquent/RelationsMethodHandler.php">
+    <DeprecatedInterface occurrences="1">
+      <code>RelationsMethodHandler</code>
+    </DeprecatedInterface>
+  </file>
+  <file src="src/Handlers/Helpers/PathHandler.php">
+    <DeprecatedInterface occurrences="1">
+      <code>PathHandler</code>
+    </DeprecatedInterface>
+  </file>
+  <file src="src/Handlers/Helpers/RedirectHandler.php">
+    <DeprecatedInterface occurrences="1">
+      <code>RedirectHandler</code>
+    </DeprecatedInterface>
+  </file>
+  <file src="src/Handlers/Helpers/TransHandler.php">
+    <DeprecatedInterface occurrences="1">
+      <code>TransHandler</code>
+    </DeprecatedInterface>
+  </file>
+  <file src="src/Handlers/Helpers/UrlHandler.php">
+    <DeprecatedInterface occurrences="1">
+      <code>UrlHandler</code>
+    </DeprecatedInterface>
+  </file>
+  <file src="src/Handlers/Helpers/ViewHandler.php">
+    <DeprecatedInterface occurrences="1">
+      <code>ViewHandler</code>
+    </DeprecatedInterface>
   </file>
 </files>

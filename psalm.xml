@@ -9,11 +9,7 @@
     <projectFiles>
         <directory name="src" />
         <ignoreFiles>
-            <directory name="vendor" />
-            <directory name="src/cache" />
-            <directory name="src/Stubs" />
-            <directory name="src/cache" />
-            <directory name="tests" />
+            <directory name="vendor"/>
         </ignoreFiles>
     </projectFiles>
 
@@ -22,13 +18,13 @@
 
         <PropertyNotSetInConstructor>
             <errorLevel type="suppress">
-                <file name="src/FakeMetaCommand.php" />
-                <file name="src/FakeModelsCommand.php" />
+                <file name="src/Fakes/FakeMetaCommand.php" />
+                <file name="src/Fakes/FakeModelsCommand.php" />
             </errorLevel>
         </PropertyNotSetInConstructor>
     </issueHandlers>
-    
+
     <stubs>
-        <file name="src/Stubs/LumenApplication.stubphp"/>
+        <file name="stubs/LumenApplication.stubphp"/>
     </stubs>
 </psalm>

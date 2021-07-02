@@ -1,13 +1,14 @@
 <?php declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin;
+namespace Psalm\LaravelPlugin\Providers;
 
 use Illuminate\Foundation\Application as LaravelApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
 use function file_exists;
 use function getcwd;
+use function get_class;
 
-final class ApplicationHelper
+final class ApplicationProvider
 {
     use CreatesApplication;
 
@@ -54,6 +55,14 @@ final class ApplicationHelper
         self::$app = $app;
 
         return $app;
+    }
+
+    /**
+     * @psalm-return class-string
+     */
+    public static function getAppFullyQualifiedClassName(): string
+    {
+        return get_class(self::getApp());
     }
 
     /**
