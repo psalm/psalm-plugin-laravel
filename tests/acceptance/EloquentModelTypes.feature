@@ -36,3 +36,16 @@ Feature: Eloquent Relation Types
     When I run Psalm
     Then I see no errors
 
+  Scenario: find or fail support
+    Given I have the following code
+    """
+
+      function test(): User
+      {
+        return User::findOrFail(1);
+      }
+
+    """
+    When I run Psalm
+    Then I see no errors
+
