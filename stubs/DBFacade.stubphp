@@ -12,5 +12,5 @@ class DB extends Facade
      *
      * @psalm-taint-sink sql $value
      */
-    public function raw($value) {}
+    public static function raw($value) {}
 }
