@@ -98,3 +98,20 @@ function optional($value = null, callable $callback = null)
 {
 
 }
+
+/**
+ * Log a debug message to the logs.
+ *
+ * @param  string|null  $message
+ * @param  array  $context
+ * @return \Illuminate\Log\LogManager|null
+ * @psalm-return (func_num_args() is 0 ? \Illuminate\Log\LogManager : void)
+ */
+function logger($message = null, array $context = [])
+{
+    if (is_null($message)) {
+        return app('log');
+    }
+
+    return app('log')->debug($message, $context);
+}

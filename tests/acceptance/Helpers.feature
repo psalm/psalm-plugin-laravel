@@ -42,3 +42,23 @@ Feature: helpers
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: logger support
+    Given I have the following code
+    """
+        /**
+        * @return null
+        */
+        function args()
+        {
+            return logger('this should return void');
+        }
+
+        function no_args(): \Illuminate\Log\LogManager
+        {
+          return logger();
+        }
+
+    """
+    When I run Psalm
+    Then I see no errors
