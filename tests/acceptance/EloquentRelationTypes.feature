@@ -346,3 +346,13 @@ Feature: Eloquent Relation Types
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: test 115
+    Given I have the following code
+    """
+    function test(User $user): ?Role {
+      return $user->roles()->first();
+    }
+    """
+    When I run Psalm
+    Then I see no errors
