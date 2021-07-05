@@ -1,4 +1,5 @@
 composer.phar
+/laravel/
 /vendor/
 composer.lock
 cache/*.stubphp
