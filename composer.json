@@ -45,10 +45,10 @@
             "@lint",
             "@test"
         ],
-        "analyze": "psalm",
-        "lint": "phpcs -n",
-        "lint-fix": "phpcbf -n",
-        "test": "codecept run --skip-group skip"
+        "analyze": "@php vendor/bin/psalm",
+        "lint": "@php vendor/bin/phpcs -n",
+        "lint-fix": "@php vendor/bin/phpcbf -n",
+        "test": "@php vendor/bin/codecept run --skip-group skip"
     },
     "require-dev": {
         "codeception/codeception": "^4.1.6",
