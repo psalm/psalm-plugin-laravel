@@ -31,6 +31,38 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: head and last support
+    Given I have the following code
+    """
+        /**
+         * @return false
+         */
+        function empty_head()
+        {
+            return head([]);
+        }
+
+        /**
+         * @return false
+         */
+        function empty_last()
+        {
+            return last([]);
+        }
+
+        function non_empty_head(): int
+        {
+            return last([1, 2, 3]);
+        }
+
+        function non_empty_last(): int
+        {
+            return last([1, 2, 3]);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: optional support
     Given I have the following code
     """
@@ -38,7 +70,6 @@ Feature: helpers
         {
             return optional($user)->getMessage();
         }
-
     """
     When I run Psalm
     Then I see no errors
@@ -58,7 +89,6 @@ Feature: helpers
         {
           return logger();
         }
-
     """
     When I run Psalm
     Then I see no errors
