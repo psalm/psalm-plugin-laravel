@@ -50,7 +50,8 @@ final class ModelStubProvider implements GeneratesStubs
 
         $models_generator_command->run(
             new ArrayInput([
-                '--nowrite' => true
+                '--nowrite' => true,
+                '--reset' => true,
             ]),
             new NullOutput()
         );
