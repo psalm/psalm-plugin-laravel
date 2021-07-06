@@ -12,6 +12,7 @@ use Psalm\LaravelPlugin\Handlers\Helpers\RedirectHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\UrlHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\ViewHandler;
+use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
@@ -75,6 +76,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(TransHandler::class);
         require_once 'Handlers/Helpers/RedirectHandler.php';
         $registration->registerHooksFromClass(RedirectHandler::class);
+        require_once 'Handlers/SuppressHandler.php';
+        $registration->registerHooksFromClass(SuppressHandler::class);
     }
 
     private function generateStubFiles(): void
