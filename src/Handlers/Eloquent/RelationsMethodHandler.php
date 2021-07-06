@@ -21,7 +21,6 @@ use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Union;
-use function in_array;
 
 final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 {

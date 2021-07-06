@@ -2,8 +2,6 @@
 
 namespace Psalm\LaravelPlugin\Fakes;
 
-use function spl_autoload_register;
-
 class FakeMetaCommand extends \Barryvdh\LaravelIdeHelper\Console\MetaCommand
 {
     /**

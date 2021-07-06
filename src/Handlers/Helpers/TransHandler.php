@@ -3,10 +3,10 @@
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use PhpParser;
-use Psalm\Context;
 use Psalm\CodeLocation;
-use Psalm\Type;
+use Psalm\Context;
 use Psalm\StatementsSource;
+use Psalm\Type;
 
 class TransHandler implements \Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface
 {
