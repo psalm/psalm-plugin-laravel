@@ -3,7 +3,6 @@
 namespace Tests\Psalm\LaravelPlugin\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 final class Image extends Model

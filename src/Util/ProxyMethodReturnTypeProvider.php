@@ -2,7 +2,9 @@
 
 namespace Psalm\LaravelPlugin\Util;
 
+use PhpParser\Node\Expr\MethodCall;
 use Psalm\Context;
+use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use function in_array;
@@ -16,8 +18,8 @@ final class ProxyMethodReturnTypeProvider
      * @psalm-param TNamedObject $typeToCall the fake object to execute a fake method call on
      */
     public static function executeFakeCall(
-        \Psalm\Internal\Analyzer\StatementsAnalyzer $statements_analyzer,
-        \PhpParser\Node\Expr\MethodCall $fake_method_call,
+        StatementsAnalyzer $statements_analyzer,
+        MethodCall $fake_method_call,
         Context $context,
         TNamedObject $typeToCall
     ) : ?Union {

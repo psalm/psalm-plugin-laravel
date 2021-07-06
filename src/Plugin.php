@@ -12,12 +12,13 @@ use Psalm\LaravelPlugin\Handlers\Helpers\RedirectHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\UrlHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\ViewHandler;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
+use Throwable;
 use function dirname;
 use function glob;
 
@@ -29,7 +30,7 @@ class Plugin implements PluginEntryPointInterface
         try {
             ApplicationProvider::bootApp();
             $this->generateStubFiles();
-        } catch (\Throwable $t) {
+        } catch (Throwable $t) {
             return;
         }
 

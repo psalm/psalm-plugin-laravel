@@ -2,7 +2,9 @@
 
 namespace Psalm\LaravelPlugin\Fakes;
 
-class FakeFilesystem extends \Illuminate\Filesystem\Filesystem
+use Illuminate\Filesystem\Filesystem;
+
+class FakeFilesystem extends Filesystem
 {
     /** @var ?string */
     private $destination = '';

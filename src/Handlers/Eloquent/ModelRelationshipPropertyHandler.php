@@ -9,21 +9,26 @@ use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser;
-use Psalm\Context;
+use Psalm\Codebase;
 use Psalm\CodeLocation;
+use Psalm\Context;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
-use Psalm\Type;
+use Psalm\Plugin\Hook\PropertyExistenceProviderInterface;
+use Psalm\Plugin\Hook\PropertyTypeProviderInterface;
+use Psalm\Plugin\Hook\PropertyVisibilityProviderInterface;
 use Psalm\StatementsSource;
+use Psalm\Type;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Union;
 use function in_array;
-use function str_replace;
 
 /**
  * @psalm-suppress DeprecatedInterface
  */
 class ModelRelationshipPropertyHandler implements
-    \Psalm\Plugin\Hook\PropertyExistenceProviderInterface,
-    \Psalm\Plugin\Hook\PropertyVisibilityProviderInterface,
-    \Psalm\Plugin\Hook\PropertyTypeProviderInterface
+    PropertyExistenceProviderInterface,
+    PropertyVisibilityProviderInterface,
+    PropertyTypeProviderInterface
 {
     /** @return array<string, string> */
     public static function getClassLikeNames() : array
@@ -93,7 +98,7 @@ class ModelRelationshipPropertyHandler implements
     /**
      * @param  array<PhpParser\Node\Arg>    $call_args
      *
-     * @return ?Type\Union
+     * @return ?Union
      */
     public static function getPropertyType(
         string $fq_classlike_name,
@@ -101,7 +106,7 @@ class ModelRelationshipPropertyHandler implements
         bool $read_mode,
         StatementsSource $source = null,
         Context $context = null
-    ) : ?Type\Union {
+    ) : ?Union {
         if (!$source || !$read_mode) {
             return null;
         }
@@ -114,21 +119,21 @@ class ModelRelationshipPropertyHandler implements
                 return Type::getMixed();
             }
 
-            /** @var \Psalm\Type\Union|null $modelType */
+            /** @var Union|null $modelType */
             $modelType = null;
-            /** @var \Psalm\Type\Atomic\TGenericObject|null $relationType */
+            /** @var TGenericObject|null $relationType */
             $relationType = null;
 
             // In order to get the property value, we need to decipher the generic relation object
             foreach ($methodReturnType->getAtomicTypes() as $atomicType) {
-                if (!$atomicType instanceof Type\Atomic\TGenericObject) {
+                if (!$atomicType instanceof TGenericObject) {
                     continue;
                 }
 
                 $relationType = $atomicType;
 
                 foreach ($atomicType->getChildNodes() as $childNode) {
-                    if (!$childNode instanceof Type\Union) {
+                    if (!$childNode instanceof Union) {
                         continue;
                     }
                     foreach ($childNode->getAtomicTypes() as $atomicType) {
@@ -153,8 +158,8 @@ class ModelRelationshipPropertyHandler implements
             ];
 
             if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection)) {
-                $returnType = new Type\Union([
-                    new Type\Atomic\TGenericObject(Collection::class, [
+                $returnType = new Union([
+                    new TGenericObject(Collection::class, [
                         $modelType
                     ]),
                 ]);
@@ -167,13 +172,13 @@ class ModelRelationshipPropertyHandler implements
     }
 
     /**
-     * @param \Psalm\Codebase $codebase
+     * @param Codebase $codebase
      * @param string $fq_classlike_name
      * @param string $property_name
      *
      * @return bool
      */
-    private static function relationExists(\Psalm\Codebase $codebase, string $fq_classlike_name, string $property_name): bool
+    private static function relationExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
         // @todo: ensure this is a relation method
         return $codebase->methodExists($fq_classlike_name . '::' . $property_name);

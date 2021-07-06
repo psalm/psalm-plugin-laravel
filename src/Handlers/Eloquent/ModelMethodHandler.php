@@ -5,19 +5,23 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Stmt\Class_;
+use PhpParser\Node\Stmt\ClassLike;
+use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Context;
+use Psalm\FileManipulation;
+use Psalm\FileSource;
+use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\LaravelPlugin\Plugin;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
-use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
-use Psalm\Plugin\Hook\PropertyExistenceProviderInterface;
-use Psalm\Plugin\Hook\PropertyTypeProviderInterface;
 use Psalm\Plugin\Hook\AfterClassLikeVisitInterface;
+use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Union;
-use function in_array;
 use function strtolower;
 
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
@@ -41,7 +45,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         string $called_fq_classlike_name = null,
         string $called_method_name_lowercase = null
     ) : ?Type\Union {
-        if (!$source instanceof \Psalm\Internal\Analyzer\StatementsAnalyzer) {
+        if (!$source instanceof StatementsAnalyzer) {
             return null;
         }
 
@@ -53,7 +57,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             $methodId = new MethodIdentifier($called_fq_classlike_name, $called_method_name_lowercase);
 
             $fake_method_call = new MethodCall(
-                new \PhpParser\Node\Expr\Variable('builder'),
+                new Variable('builder'),
                 $methodId->method_name,
                 $call_args
             );
@@ -71,18 +75,18 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
     }
 
     /**
-     * @param  \Psalm\FileManipulation[] $file_replacements
+     * @param  FileManipulation[] $file_replacements
      *
      * @return void
      */
     public static function afterClassLikeVisit(
-        \PhpParser\Node\Stmt\ClassLike $stmt,
-        \Psalm\Storage\ClassLikeStorage $storage,
-        \Psalm\FileSource $statements_source,
-        \Psalm\Codebase $codebase,
+        ClassLike $stmt,
+        ClassLikeStorage $storage,
+        FileSource $statements_source,
+        Codebase $codebase,
         array &$file_replacements = []
     ) {
-        if ($stmt instanceof \PhpParser\Node\Stmt\Class_
+        if ($stmt instanceof Class_
             && !$storage->abstract
             && isset($storage->parent_classes[strtolower(Model::class)])
         ) {
