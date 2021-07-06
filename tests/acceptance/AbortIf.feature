@@ -20,6 +20,21 @@ Feature: abort_if()
       <?php declare(strict_types=1);
       """
 
+  Scenario: abort asserts not null
+    Given I have the following code
+    """
+      /**
+      * @param string|null $nullable
+      */
+      function test($nullable): string {
+        if (!$nullable) {
+            abort(422);
+        }
+
+        return $nullable;
+      }
+    """
+
   Scenario: abort_if asserts not null
     Given I have the following code
     """
