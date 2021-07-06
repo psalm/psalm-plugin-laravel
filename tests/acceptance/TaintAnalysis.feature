@@ -1,4 +1,4 @@
-Feature: taint
+Feature: Taint Analysis
   Want to check that taint analysis works properly
 
   Background:

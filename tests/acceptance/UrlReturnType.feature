@@ -1,4 +1,4 @@
-Feature: url
+Feature: url()
   The global url helper will return the correct type depending on args
 
   Background:

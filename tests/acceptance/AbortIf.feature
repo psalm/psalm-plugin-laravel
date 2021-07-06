@@ -1,5 +1,5 @@
-Feature: abort_if
-  abort_if asserts not null
+Feature: abort_if()
+  The global abort_if helper is supported
 
   Background:
     Given I have the following config

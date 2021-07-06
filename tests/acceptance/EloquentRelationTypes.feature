@@ -1,4 +1,4 @@
-Feature: Eloquent Relation Types
+Feature: Eloquent Relation types
   Illuminate\Database\Eloquent\Relations have type support
 
   Background:
