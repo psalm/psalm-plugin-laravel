@@ -2,8 +2,11 @@
 
 namespace Psalm\LaravelPlugin\Providers;
 
+use Barryvdh\LaravelIdeHelper\Console\GeneratorCommand;
+use Illuminate\Config\Repository;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
 use function unlink;
 
 final class FacadeStubProvider implements GeneratesStubs
@@ -12,7 +15,7 @@ final class FacadeStubProvider implements GeneratesStubs
     {
         $app = ApplicationProvider::getApp();
 
-        /** @var \Illuminate\Config\Repository $config */
+        /** @var Repository $config */
         $config = $app['config'];
 
         // The \Eloquent mixin has less specific return types than our custom plugin can determine, so we unset it here
@@ -26,7 +29,7 @@ final class FacadeStubProvider implements GeneratesStubs
 
         $fake_filesystem = new FakeFilesystem();
 
-        $stubs_generator_command = new \Barryvdh\LaravelIdeHelper\Console\GeneratorCommand(
+        $stubs_generator_command = new GeneratorCommand(
             $config,
             $fake_filesystem,
             ViewFactoryProvider::get(),
@@ -39,8 +42,8 @@ final class FacadeStubProvider implements GeneratesStubs
         $fake_filesystem->setDestination(self::getStubFileLocation());
 
         $stubs_generator_command->run(
-            new \Symfony\Component\Console\Input\ArrayInput([]),
-            new \Symfony\Component\Console\Output\NullOutput()
+            new ArrayInput([]),
+            new NullOutput()
         );
     }
 

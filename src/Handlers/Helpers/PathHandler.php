@@ -2,6 +2,7 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
+use Closure;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
@@ -68,7 +69,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         });
     }
 
-    private static function resolveReturnType(array $call_args, \Closure $closure): ?Union
+    private static function resolveReturnType(array $call_args, Closure $closure): ?Union
     {
         // we're going to do some dynamic analysis here. Were going to invoke the closure that is wrapping the
         // app method or the global function in order to determine the literal string path that is returned

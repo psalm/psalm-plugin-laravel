@@ -2,6 +2,7 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
@@ -69,7 +70,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         return null;
     }
 
-    private static function accessorExists(\Psalm\Codebase $codebase, string $fq_classlike_name, string $property_name): bool
+    private static function accessorExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
         return $codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute');
     }
