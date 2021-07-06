@@ -9,13 +9,12 @@ use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser;
-use Psalm\Context;
 use Psalm\CodeLocation;
+use Psalm\Context;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
-use Psalm\Type;
 use Psalm\StatementsSource;
+use Psalm\Type;
 use function in_array;
-use function str_replace;
 
 /**
  * @psalm-suppress DeprecatedInterface

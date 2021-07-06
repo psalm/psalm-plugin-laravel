@@ -2,8 +2,6 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Application;
 
-use Illuminate\Foundation\AliasLoader;
-use Illuminate\Support\Facades\RateLimiter;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Internal\MethodIdentifier;
@@ -18,14 +16,12 @@ use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
-use function in_array;
-use function array_merge;
-use function array_values;
-use function strtolower;
-use function get_class;
 use function array_filter;
 use function array_keys;
+use function get_class;
+use function in_array;
 use function is_object;
+use function strtolower;
 
 /**
  * @psalm-suppress DeprecatedInterface

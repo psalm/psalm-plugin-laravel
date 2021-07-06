@@ -8,16 +8,12 @@ use PhpParser\Node\Expr\MethodCall;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\LaravelPlugin\Plugin;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
-use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
-use Psalm\Plugin\Hook\PropertyExistenceProviderInterface;
-use Psalm\Plugin\Hook\PropertyTypeProviderInterface;
 use Psalm\Plugin\Hook\AfterClassLikeVisitInterface;
+use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Union;
-use function in_array;
 use function strtolower;
 
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface

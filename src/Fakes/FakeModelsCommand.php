@@ -2,24 +2,13 @@
 
 namespace Psalm\LaravelPlugin\Fakes;
 
-use Composer\Autoload\ClassMapGenerator;
-use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Str;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
-use ReflectionClass;
-use Symfony\Component\Console\Input\InputOption;
-use Symfony\Component\Console\Input\InputArgument;
-use Symfony\Component\Console\Output\OutputInterface;
-use Barryvdh\Reflection\DocBlock;
-use Barryvdh\Reflection\DocBlock\Context;
-use Barryvdh\Reflection\DocBlock\Tag;
-use Barryvdh\Reflection\DocBlock\Serializer as DocBlockSerializer;
-use function get_class;
-use function in_array;
 use function config;
+use function get_class;
 use function implode;
+use function in_array;
 
 class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
 {
