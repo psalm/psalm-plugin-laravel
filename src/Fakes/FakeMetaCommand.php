@@ -2,7 +2,9 @@
 
 namespace Psalm\LaravelPlugin\Fakes;
 
-class FakeMetaCommand extends \Barryvdh\LaravelIdeHelper\Console\MetaCommand
+use Barryvdh\LaravelIdeHelper\Console\MetaCommand;
+
+class FakeMetaCommand extends MetaCommand
 {
     /**
      * @return void

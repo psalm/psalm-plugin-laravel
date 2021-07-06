@@ -2,6 +2,7 @@
 
 namespace Psalm\LaravelPlugin\Providers;
 
+use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
 use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
@@ -13,7 +14,7 @@ final class ViewFactoryProvider
 {
     public static function get(): Factory
     {
-        $service_helper_reflection = new \ReflectionClass(\Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider::class);
+        $service_helper_reflection = new \ReflectionClass(IdeHelperServiceProvider::class);
 
         $file_path = $service_helper_reflection->getFileName();
 

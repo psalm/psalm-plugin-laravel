@@ -2,7 +2,11 @@
 
 namespace Psalm\LaravelPlugin\Providers;
 
+use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Application as LaravelApplication;
+use Laravel\Lumen\Application as LumenApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
 use function file_exists;
 use function get_class;
@@ -13,30 +17,30 @@ final class ApplicationProvider
     use CreatesApplication;
 
     /**
-     * @var LaravelApplication|\Laravel\Lumen\Application|null
+     * @var LaravelApplication|LumenApplication|null
      */
     private static $app;
 
     /**
-     * @return LaravelApplication|\Laravel\Lumen\Application
+     * @return LaravelApplication|LumenApplication
      */
     public static function bootApp()
     {
         $app = self::getApp();
 
-        if ($app instanceof \Illuminate\Contracts\Foundation\Application) {
-            $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+        if ($app instanceof Application) {
+            $app->make(Kernel::class)->bootstrap();
         } else {
             $app->boot();
         }
 
-        $app->register(\Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider::class);
+        $app->register(IdeHelperServiceProvider::class);
 
         return $app;
     }
 
     /**
-     * @return LaravelApplication|\Laravel\Lumen\Application
+     * @return LaravelApplication|LumenApplication
      */
     public static function getApp()
     {

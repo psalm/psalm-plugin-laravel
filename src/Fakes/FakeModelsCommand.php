@@ -2,6 +2,8 @@
 
 namespace Psalm\LaravelPlugin\Fakes;
 
+use Barryvdh\LaravelIdeHelper\Console\ModelsCommand;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
@@ -10,7 +12,7 @@ use function get_class;
 use function implode;
 use function in_array;
 
-class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
+class FakeModelsCommand extends ModelsCommand
 {
     /** @var SchemaAggregator */
     private $schema;
@@ -36,7 +38,7 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
     /**
      * Load the properties from the database table.
      *
-     * @param \Illuminate\Database\Eloquent\Model $model
+     * @param Model $model
      */
     protected function getPropertiesFromTable($model) : void
     {

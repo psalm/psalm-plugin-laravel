@@ -2,6 +2,8 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use PhpParser;
 use function count;
 use function is_string;
@@ -49,7 +51,7 @@ class SchemaAggregator
                 && $stmt->expr instanceof PhpParser\Node\Expr\StaticCall
                 && $stmt->expr->class instanceof PhpParser\Node\Name
                 && $stmt->expr->name instanceof PhpParser\Node\Identifier
-                && $stmt->expr->class->getAttribute('resolvedName') === \Illuminate\Support\Facades\Schema::class
+                && $stmt->expr->class->getAttribute('resolvedName') === Schema::class
             ) {
                 switch ($stmt->expr->name->name) {
                     case 'create':
@@ -91,7 +93,7 @@ class SchemaAggregator
             || count($call->args[1]->value->params) < 1
             || ($call->args[1]->value->params[0]->type instanceof PhpParser\Node\Name
                 && $call->args[1]->value->params[0]->type->getAttribute('resolvedName')
-                    !== \Illuminate\Database\Schema\Blueprint::class)
+                    !== Blueprint::class)
         ) {
             return;
         }

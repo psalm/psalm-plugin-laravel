@@ -2,9 +2,12 @@
 
 namespace Psalm\LaravelPlugin\Providers;
 
+use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
 use Psalm\LaravelPlugin\Fakes\FakeModelsCommand;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
 use function dirname;
 use function glob;
 use function unlink;
@@ -22,7 +25,7 @@ final class ModelStubProvider implements GeneratesStubs
         $app = ApplicationProvider::getApp();
         $migrations_folder = dirname(__DIR__, 4) . '/database/migrations/';
 
-        $project_analyzer = \Psalm\Internal\Analyzer\ProjectAnalyzer::getInstance();
+        $project_analyzer = ProjectAnalyzer::getInstance();
         $codebase = $project_analyzer->getCodebase();
 
         $schema_aggregator = new SchemaAggregator();
@@ -46,10 +49,10 @@ final class ModelStubProvider implements GeneratesStubs
         $fake_filesystem->setDestination(self::getStubFileLocation());
 
         $models_generator_command->run(
-            new \Symfony\Component\Console\Input\ArrayInput([
+            new ArrayInput([
                 '--nowrite' => true
             ]),
-            new \Symfony\Component\Console\Output\NullOutput()
+            new NullOutput()
         );
 
         self::$model_classes = $models_generator_command->getModels();

@@ -3,6 +3,7 @@
 namespace Psalm\LaravelPlugin\Util;
 
 use Illuminate\Contracts\Container\BindingResolutionException;
+use PhpParser\Node\Arg;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\NodeTypeProvider;
 use Psalm\Type\Atomic\TLiteralString;
@@ -59,7 +60,7 @@ final class ContainerResolver
     }
 
     /**
-     * @param array<\PhpParser\Node\Arg> $call_args
+     * @param array<Arg> $call_args
      */
     public static function resolvePsalmTypeFromApplicationContainerViaArgs(NodeTypeProvider $nodeTypeProvider, array $call_args): ?Union
     {

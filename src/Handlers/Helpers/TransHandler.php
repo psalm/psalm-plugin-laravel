@@ -5,10 +5,11 @@ namespace Psalm\LaravelPlugin\Handlers\Helpers;
 use PhpParser;
 use Psalm\CodeLocation;
 use Psalm\Context;
+use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Type;
 
-class TransHandler implements \Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface
+class TransHandler implements FunctionReturnTypeProviderInterface
 {
     public static function getFunctionIds() : array
     {

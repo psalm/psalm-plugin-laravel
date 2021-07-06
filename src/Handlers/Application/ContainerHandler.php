@@ -2,6 +2,7 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Application;
 
+use PhpParser\Node\Arg;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Internal\MethodIdentifier;
@@ -16,6 +17,8 @@ use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+use ReflectionClass;
+use Throwable;
 use function array_filter;
 use function array_keys;
 use function get_class;
@@ -37,7 +40,7 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
     }
 
     /**
-     * @param  array<\PhpParser\Node\Arg> $call_args
+     * @param  array<Arg> $call_args
      */
     public static function getFunctionReturnType(StatementsSource $statements_source, string $function_id, array $call_args, Context $context, CodeLocation $code_location): ?Union
     {
@@ -100,12 +103,12 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
                     continue;
                 }
 
-                $reflectionClass = new \ReflectionClass($concrete);
+                $reflectionClass = new ReflectionClass($concrete);
 
                 if ($reflectionClass->isAnonymous()) {
                     continue;
                 }
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 // cannot just catch binding exception as the following error is emitted within laravel:
                 // Class 'Symfony\Component\Cache\Adapter\Psr16Adapter' not found
                 continue;
