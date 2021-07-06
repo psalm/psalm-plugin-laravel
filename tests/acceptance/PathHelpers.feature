@@ -1,4 +1,4 @@
-Feature: path helpers
+Feature: Path helpers
   The global path helpers will return the correct path
 
   Background:

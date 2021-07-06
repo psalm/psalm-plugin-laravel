@@ -1,4 +1,4 @@
-Feature: collection types
+Feature: Collection types
   Illuminate\Support\Collection has type support
 
   Background:

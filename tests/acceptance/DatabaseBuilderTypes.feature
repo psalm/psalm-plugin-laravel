@@ -1,4 +1,4 @@
-Feature: Database Builder Types
+Feature: Database Builder types
   Illuminate\Database\Builder has type support
 
   Background:

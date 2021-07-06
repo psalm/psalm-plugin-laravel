@@ -1,4 +1,4 @@
-Feature: redirect
+Feature: redirect()
   The global redirect helper will return the correct type depending on args
 
   Background:
