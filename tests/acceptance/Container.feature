@@ -1,5 +1,5 @@
 Feature: Container
-  The laravel container can be resolved, and it has types
+  The Laravel container can be resolved, and it has types
 
   Background:
     Given I have the following config

@@ -1,5 +1,5 @@
-Feature: redirect
-  The global redirect helper will return the correct type depending on args
+Feature: response()
+  The global response helper will return the correct type depending on args
 
   Background:
     Given I have the following config
