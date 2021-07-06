@@ -1,4 +1,4 @@
-Feature: Http Resource Types
+Feature: Http Resource types
   Illuminate\Http\Resources have type support
 
   Background:

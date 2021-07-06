@@ -1,5 +1,5 @@
-Feature: redirect
-  The global redirect helper will return the correct type depending on args
+Feature: Request types
+  \Illuminate\Http\Request has type support
 
   Background:
     Given I have the following config

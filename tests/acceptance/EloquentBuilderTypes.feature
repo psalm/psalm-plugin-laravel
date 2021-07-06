@@ -1,4 +1,4 @@
-Feature: Eloquent Builder Types
+Feature: Eloquent Builder types
   Illuminate\Database\Eloquent\Builder has type support
 
   Background:

@@ -1,5 +1,5 @@
-Feature: Eloquent Relation Types
-  Illuminate\Database\Eloquent\Relations have type support
+Feature: Eloquent Model types
+  Illuminate\Database\Eloquent\Model has type support
 
   Background:
     Given I have the following config

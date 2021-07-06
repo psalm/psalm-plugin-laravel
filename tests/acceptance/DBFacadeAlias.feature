@@ -1,5 +1,5 @@
 Feature: DB facade alias
-  Want to check that the alias of the DB facade works properly
+  The DB facade is supported
 
   Background:
     Given I have the following config

@@ -1,5 +1,5 @@
-Feature: Factory Types
-  Model factories have type support
+Feature: factory()
+  The global factory function has type support
 
   Background:
     Given I have the following config

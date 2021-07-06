@@ -1,4 +1,4 @@
-Feature: Eloquent Collection Types
+Feature: Eloquent Collection types
   Illuminate\Database\Eloquent\Collection has type support
 
   Background:
