@@ -14,9 +14,16 @@ class SuppressHandler implements AfterClassLikeVisitInterface
     {
         $storage = $event->getStorage();
 
-        // Commands: suppress PropertyNotSetInConstructor.
-        if (in_array(Command::class, $storage->parent_classes) && !in_array('PropertyNotSetInConstructor', $storage->suppressed_issues)) {
-            $storage->suppressed_issues[] = 'PropertyNotSetInConstructor';
+        if (in_array(Command::class, $storage->parent_classes)) {
+            if (!in_array('PropertyNotSetInConstructor', $storage->suppressed_issues)) {
+                $storage->suppressed_issues[] = 'PropertyNotSetInConstructor';
+            }
+            if (isset($storage->properties['description'])) {
+                $property = $storage->properties['description'];
+                if (!in_array('NonInvariantDocblockPropertyType', $property->suppressed_issues)) {
+                    $property->suppressed_issues[] = 'NonInvariantDocblockPropertyType';
+                }
+            }
         }
 
         // FormRequest: suppress PropertyNotSetInConstructor.
