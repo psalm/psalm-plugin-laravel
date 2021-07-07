@@ -2,12 +2,12 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
-use PhpParser;
-use Psalm\CodeLocation;
-use Psalm\Context;
-use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
-use Psalm\StatementsSource;
+use Illuminate\Contracts\View\Factory;
+use Illuminate\View\View;
+use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
+use Psalm\Type\Atomic\TNamedObject;
 
 class ViewHandler implements FunctionReturnTypeProviderInterface
 {
@@ -16,24 +16,16 @@ class ViewHandler implements FunctionReturnTypeProviderInterface
         return ['view'];
     }
 
-    /**
-     * @param  array<PhpParser\Node\Arg>    $call_args
-     */
-    public static function getFunctionReturnType(
-        StatementsSource $statements_source,
-        string $function_id,
-        array $call_args,
-        Context $context,
-        CodeLocation $code_location
-    ) : Type\Union {
-        if ($call_args) {
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event) : Type\Union
+    {
+        if ($event->getCallArgs()) {
             return new Type\Union([
-                new \Psalm\Type\Atomic\TNamedObject(\Illuminate\View\View::class)
+                new TNamedObject(View::class)
             ]);
         }
 
         return new Type\Union([
-            new \Psalm\Type\Atomic\TNamedObject(\Illuminate\Contracts\View\Factory::class)
+            new TNamedObject(Factory::class)
         ]);
     }
 }

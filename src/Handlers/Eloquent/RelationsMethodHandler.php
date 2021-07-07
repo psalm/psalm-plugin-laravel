@@ -13,12 +13,12 @@ use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
-use Psalm\CodeLocation;
-use Psalm\Context;
+use PhpParser\Node\Expr\Variable;
+use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
-use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
-use Psalm\StatementsSource;
+use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Union;
 
@@ -41,20 +41,15 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
         ];
     }
 
-    public static function getMethodReturnType(
-        StatementsSource $source,
-        string $fq_classlike_name,
-        string $method_name_lowercase,
-        array $call_args,
-        Context $context,
-        CodeLocation $code_location,
-        array $template_type_parameters = null,
-        string $called_fq_classlike_name = null,
-        string $called_method_name_lowercase = null
-    ) : ?Union {
-        if (!$source instanceof \Psalm\Internal\Analyzer\StatementsAnalyzer) {
+    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event) : ?Union
+    {
+        $source = $event->getSource();
+
+        if (!$source instanceof StatementsAnalyzer) {
             return null;
         }
+
+        $method_name_lowercase = $event->getMethodNameLowercase();
 
         // Relations are weird.
         // If a relation is proxying to the underlying builder, and the builder returns itself, the relation instead
@@ -65,19 +60,17 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
         if ($source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase)) ||
             $source->getCodebase()->methods->methodExists(new MethodIdentifier(QueryBuilder::class, $method_name_lowercase))
         ) {
+            $template_type_parameters = $event->getTemplateTypeParameters();
             if (!$template_type_parameters) {
                 return null;
             }
 
             $fake_method_call = new MethodCall(
-                new \PhpParser\Node\Expr\Variable('builder'),
+                new Variable('builder'),
                 $method_name_lowercase,
-                $call_args
+                $event->getCallArgs()
             );
 
-            /**
-             * @var \Psalm\Type\Union $templateType
-             */
             $templateType = $template_type_parameters[0];
 
             $proxyType = new Type\Atomic\TGenericObject(Builder::class, [
@@ -86,7 +79,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
                 ]),
             ]);
 
-            $type = ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $context, $proxyType);
+            $type = ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $proxyType);
 
             if (!$type) {
                 return null;
@@ -96,7 +89,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
                 if ($type instanceof Type\Atomic\TNamedObject && $type->value === Builder::class) {
                     // ta-da. now we return "this" relation instance
                     return new Union([
-                        new Type\Atomic\TGenericObject($fq_classlike_name, $template_type_parameters),
+                        new Type\Atomic\TGenericObject($event->getFqClasslikeName(), $template_type_parameters),
                     ]);
                 }
             }

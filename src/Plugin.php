@@ -49,7 +49,7 @@ class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * @param \Psalm\Plugin\RegistrationInterface $registration
+     * @param RegistrationInterface $registration
      */
     private function registerHandlers(RegistrationInterface $registration): void
     {

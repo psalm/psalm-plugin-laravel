@@ -7,19 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Stmt\Class_;
-use PhpParser\Node\Stmt\ClassLike;
-use Psalm\Codebase;
-use Psalm\CodeLocation;
-use Psalm\Context;
 use Psalm\FileManipulation;
-use Psalm\FileSource;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
-use Psalm\Plugin\Hook\AfterClassLikeVisitInterface;
-use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
-use Psalm\StatementsSource;
-use Psalm\Storage\ClassLikeStorage;
+use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
+use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
+use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Union;
 use function strtolower;
@@ -34,23 +29,19 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         return [Model::class];
     }
 
-    public static function getMethodReturnType(
-        StatementsSource $source,
-        string $fq_classlike_name,
-        string $method_name_lowercase,
-        array $call_args,
-        Context $context,
-        CodeLocation $code_location,
-        array $template_type_parameters = null,
-        string $called_fq_classlike_name = null,
-        string $called_method_name_lowercase = null
-    ) : ?Type\Union {
+    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event) : ?Type\Union
+    {
+        $source = $event->getSource();
+
         if (!$source instanceof StatementsAnalyzer) {
             return null;
         }
 
         // proxy to builder object
-        if ($method_name_lowercase === '__callstatic') {
+        if ($event->getMethodNameLowercase() === '__callstatic') {
+            $called_fq_classlike_name = $event->getCalledFqClasslikeName();
+            $called_method_name_lowercase = $event->getCalledMethodNameLowercase();
+
             if (!$called_fq_classlike_name || !$called_method_name_lowercase) {
                 return null;
             }
@@ -59,7 +50,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             $fake_method_call = new MethodCall(
                 new Variable('builder'),
                 $methodId->method_name,
-                $call_args
+                $event->getCallArgs()
             );
 
             $fakeProxy = new Type\Atomic\TGenericObject(Builder::class, [
@@ -68,7 +59,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
                 ]),
             ]);
 
-            return ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $context, $fakeProxy);
+            return ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $fakeProxy);
         }
 
         return null;
@@ -79,14 +70,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
      *
      * @return void
      */
-    public static function afterClassLikeVisit(
-        ClassLike $stmt,
-        ClassLikeStorage $storage,
-        FileSource $statements_source,
-        Codebase $codebase,
-        array &$file_replacements = []
-    ) {
-        if ($stmt instanceof Class_
+    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event)
+    {
+        $storage = $event->getStorage();
+        if ($event->getStmt() instanceof Class_
             && !$storage->abstract
             && isset($storage->parent_classes[strtolower(Model::class)])
         ) {

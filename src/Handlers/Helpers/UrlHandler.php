@@ -3,10 +3,8 @@
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Illuminate\Contracts\Routing\UrlGenerator;
-use Psalm\CodeLocation;
-use Psalm\Context;
-use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
-use Psalm\StatementsSource;
+use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -18,14 +16,9 @@ final class UrlHandler implements FunctionReturnTypeProviderInterface
         return ['url'];
     }
 
-    public static function getFunctionReturnType(
-        StatementsSource $statements_source,
-        string $function_id,
-        array $call_args,
-        Context $context,
-        CodeLocation $code_location
-    ) : ?Union {
-        if (!$call_args) {
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event) : ?Union
+    {
+        if (!$event->getCallArgs()) {
             return new Union([
                 new TNamedObject(UrlGenerator::class),
             ]);
