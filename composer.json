@@ -54,12 +54,6 @@
         "test": "codecept run --skip-group skip"
     },
     "require-dev": {
-        "codeception/codeception": "^4.1.6",
-        "codeception/module-phpbrowser": "^1.0.0",
-        "codeception/module-asserts": "^1.0.0",
-        "weirdan/codeception-psalm-module": "^0.13.1",
-        "squizlabs/php_codesniffer": "*",
-        "slevomat/coding-standard": "^6.2",
         "bamarni/composer-bin-plugin": "^1.4.1"
     },
     "minimum-stability": "dev"

@@ -1,0 +1,9 @@
+{
+    "require-dev": {
+        "codeception/codeception": "^4.1.6",
+        "codeception/module-phpbrowser": "^1.0.0",
+        "codeception/module-asserts": "^1.0.0",
+        "orchestra/testbench": "^3.8 || ^4.0 || ^5.0 || ^6.0",
+        "weirdan/codeception-psalm-module": "^0.13.1"
+    }
+}
