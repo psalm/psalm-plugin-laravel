@@ -15,7 +15,6 @@
         "illuminate/support": "^6.0 || ^7.0 || ^8.0",
         "illuminate/view": "^6.0 || ^7.0 || ^8.0",
         "vimeo/psalm": "^4.8.1",
-        "orchestra/testbench": "^3.8 || ^4.0 || ^5.0 || ^6.0",
         "barryvdh/laravel-ide-helper": ">=2.8.0 <2.9.2"
     },
     "license": "MIT",
@@ -58,9 +57,13 @@
         "codeception/codeception": "^4.1.6",
         "codeception/module-phpbrowser": "^1.0.0",
         "codeception/module-asserts": "^1.0.0",
+        "orchestra/testbench": "^3.8 || ^4.0 || ^5.0 || ^6.0",
         "weirdan/codeception-psalm-module": "^0.13.1",
         "squizlabs/php_codesniffer": "*",
         "slevomat/coding-standard": "^6.2"
+    },
+    "suggest": {
+        "orchestra/testbench": "Running Psalm on a Laravel package requires Testbench"
     },
     "minimum-stability": "dev"
 }
