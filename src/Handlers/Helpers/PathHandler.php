@@ -3,12 +3,11 @@
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Closure;
-use Psalm\CodeLocation;
-use Psalm\Context;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
-use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
-use Psalm\StatementsSource;
+use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
+use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Union;
 use function get_class;
@@ -22,17 +21,14 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         return ['app_path', 'base_path', 'config_path', 'database_path',  'resource_path', 'public_path', 'storage_path'];
     }
 
-    public static function getFunctionReturnType(
-        StatementsSource $statements_source,
-        string $function_id,
-        array $call_args,
-        Context $context,
-        CodeLocation $code_location
-    ) : ?Union {
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event) : ?Union
+    {
+        $function_id = $event->getFunctionId();
+
         /**
          * @psalm-suppress MissingClosureReturnType
          */
-        return self::resolveReturnType($call_args, function (array $args = []) use ($function_id) {
+        return self::resolveReturnType($event->getCallArgs(), function (array $args = []) use ($function_id) {
             return $function_id(...$args);
         });
     }
@@ -44,18 +40,11 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         ];
     }
 
-    public static function getMethodReturnType(
-        StatementsSource $source,
-        string $fq_classlike_name,
-        string $method_name_lowercase,
-        array $call_args,
-        Context $context,
-        CodeLocation $code_location,
-        array $template_type_parameters = null,
-        string $called_fq_classlike_name = null,
-        string $called_method_name_lowercase = null
-    ) : ?Union {
+    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event) : ?Union
+    {
         $methods = ['path', 'basepath', 'configpath', 'databasepath', 'resourcepath'];
+
+        $method_name_lowercase = $event->getMethodNameLowercase();
 
         if (!in_array($method_name_lowercase, $methods)) {
             return null;
@@ -64,7 +53,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         /**
          * @psalm-suppress MissingClosureReturnType
          */
-        return self::resolveReturnType($call_args, function (array $args = []) use ($method_name_lowercase) {
+        return self::resolveReturnType($event->getCallArgs(), function (array $args = []) use ($method_name_lowercase) {
             return ApplicationProvider::getApp()->{$method_name_lowercase}(...$args);
         });
     }

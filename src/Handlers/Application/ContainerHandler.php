@@ -2,18 +2,16 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Application;
 
-use PhpParser\Node\Arg;
-use Psalm\CodeLocation;
-use Psalm\Context;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Providers\ApplicationInterfaceProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Util\ContainerResolver;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
-use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
-use Psalm\Plugin\Hook\MethodReturnTypeProviderInterface;
-use Psalm\StatementsSource;
+use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
+use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -26,9 +24,6 @@ use function in_array;
 use function is_object;
 use function strtolower;
 
-/**
- * @psalm-suppress DeprecatedInterface
- */
 final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
     /**
@@ -39,16 +34,17 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
         return ['app', 'resolve'];
     }
 
-    /**
-     * @param  array<Arg> $call_args
-     */
-    public static function getFunctionReturnType(StatementsSource $statements_source, string $function_id, array $call_args, Context $context, CodeLocation $code_location): ?Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
+        $call_args = $event->getCallArgs();
+
         if (!$call_args) {
             return new Union([
                 new TNamedObject(get_class(ApplicationProvider::getApp())),
             ]);
         }
+
+        $statements_source = $event->getStatementsSource();
 
         return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($statements_source->getNodeTypeProvider(), $call_args) ?? Type::getMixed();
     }
@@ -58,29 +54,21 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
         return [get_class(ApplicationProvider::getApp())];
     }
 
-    public static function getMethodReturnType(
-        StatementsSource $source,
-        string $fq_classlike_name,
-        string $method_name_lowercase,
-        array $call_args,
-        Context $context,
-        CodeLocation $code_location,
-        ?array $template_type_parameters = null,
-        ?string $called_fq_classlike_name = null,
-        ?string $called_method_name_lowercase = null
-    ) : ?Type\Union {
+    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event) : ?Type\Union
+    {
         // lumen doesn't have the likes of makeWith, so we will ensure these methods actually exist on the underlying
         // app contract
-        $methods = array_filter(['make', 'makewith'], function (string $methodName) use ($source, $fq_classlike_name) {
-            $methodId = new MethodIdentifier($fq_classlike_name, $methodName);
-            return $source->getCodebase()->methodExists($methodId);
+        $methods = array_filter(['make', 'makewith'], function (string $methodName) use ($event) {
+
+            $methodId = new MethodIdentifier($event->getFqClasslikeName(), $methodName);
+            return $event->getSource()->getCodebase()->methodExists($methodId);
         });
 
-        if (!in_array($method_name_lowercase, $methods)) {
+        if (!in_array($event->getMethodNameLowercase(), $methods)) {
             return null;
         }
 
-        return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($source->getNodeTypeProvider(), $call_args);
+        return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($event->getSource()->getNodeTypeProvider(), $event->getCallArgs());
     }
 
     /**
