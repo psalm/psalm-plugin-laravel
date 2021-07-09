@@ -4,6 +4,7 @@
     "type": "psalm-plugin",
     "require": {
         "php": "^7.3|^8",
+        "ext-json": "*",
         "ext-simplexml": "*",
         "illuminate/container": "^6.0 || ^7.0 || ^8.0",
         "illuminate/contracts": "^6.0 || ^7.0 || ^8.0",
