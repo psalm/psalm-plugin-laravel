@@ -24,8 +24,9 @@ Feature: factory()
     use Tests\Psalm\LaravelPlugin\Models\User;
     """
 
-  Scenario:
-    Given I have the following code
+  Scenario: can use factory helper in Laravel 6.x and 7.x
+    Given I have the "laravel/framework" package satisfying the "6.* || 7.*"
+    And I have the following code
     """
     class FactoryTest {
       /**
@@ -73,3 +74,22 @@ Feature: factory()
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: cannot use factory helper in Laravel 8.x and later
+    Given I have the "laravel/framework" package satisfying the ">= 8.0"
+    And I have the following code
+    """
+    class FactoryTest {
+      /**
+       * @return FactoryBuilder<User, 1>
+       */
+      public function getFactory(): FactoryBuilder
+      {
+        return factory(User::class);
+      }
+    }
+    """
+    When I run Psalm
+    Then I see these errors
+      | Type  | Message |
+      | UndefinedFunction | Function factory does not exist |
