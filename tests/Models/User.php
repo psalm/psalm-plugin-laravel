@@ -2,6 +2,7 @@
 
 namespace Tests\Psalm\LaravelPlugin\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property string $id
+ * @property CarbonInterface|null $email_verified_at
  */
 final class User extends Model {
     protected $table = 'users';
