@@ -15,27 +15,31 @@ Feature: factory()
         </plugins>
       </psalm>
       """
+    And I have the following code preamble
+    """
+    <?php declare(strict_types=1);
+
+    use Illuminate\Database\Eloquent\Collection;
+    use Illuminate\Database\Eloquent\FactoryBuilder;
+    use Tests\Psalm\LaravelPlugin\Models\User;
+    """
 
   Scenario:
     Given I have the following code
     """
-    <?php declare(strict_types=1);
-
-    use Tests\Psalm\LaravelPlugin\Models\User;
-
     class FactoryTest {
       /**
-      * @return \Illuminate\Database\Eloquent\FactoryBuilder<User, 1>
-      */
-      public function getFactory(): \Illuminate\Database\Eloquent\FactoryBuilder
+       * @return FactoryBuilder<User, 1>
+       */
+      public function getFactory(): FactoryBuilder
       {
         return factory(User::class);
       }
 
       /**
-      * @return \Illuminate\Database\Eloquent\FactoryBuilder<User, 2>
-      */
-      public function getFactoryForTwo(): \Illuminate\Database\Eloquent\FactoryBuilder
+       * @return FactoryBuilder<User, 2>
+       */
+      public function getFactoryForTwo(): FactoryBuilder
       {
         return factory(User::class, 2);
       }
@@ -51,17 +55,17 @@ Feature: factory()
       }
 
       /**
-      * @return \Illuminate\Database\Eloquent\Collection<User>
-      */
-      public function createUsers(): \Illuminate\Database\Eloquent\Collection
+       * @return Collection<User>
+       */
+      public function createUsers(): Collection
       {
         return factory(User::class, 2)->create();
       }
 
       /**
-      * @return \Illuminate\Database\Eloquent\Collection<User>
-      */
-      public function createUsersWithNameAttribute(): \Illuminate\Database\Eloquent\Collection
+       * @return Collection<User>
+       */
+      public function createUsersWithNameAttribute(): Collection
       {
         return factory(User::class, 'new name', 2)->create();
       }
