@@ -4,6 +4,7 @@ namespace Psalm\LaravelPlugin\Util;
 
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Context;
+use Psalm\Internal\Analyzer\Statements\Expression\Call\MethodCallAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -39,7 +40,7 @@ final class ProxyMethodReturnTypeProvider
             $statements_analyzer->addSuppressedIssues(['PossiblyInvalidMethodCall']);
         }
 
-        if (\Psalm\Internal\Analyzer\Statements\Expression\Call\MethodCallAnalyzer::analyze(
+        if (MethodCallAnalyzer::analyze(
             $statements_analyzer,
             $fake_method_call,
             $context,

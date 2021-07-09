@@ -10,21 +10,18 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser;
 use Psalm\Codebase;
-use Psalm\CodeLocation;
-use Psalm\Context;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
-use Psalm\Plugin\Hook\PropertyExistenceProviderInterface;
-use Psalm\Plugin\Hook\PropertyTypeProviderInterface;
-use Psalm\Plugin\Hook\PropertyVisibilityProviderInterface;
-use Psalm\StatementsSource;
+use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
+use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
+use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
+use Psalm\Plugin\EventHandler\PropertyExistenceProviderInterface;
+use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
+use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Union;
 use function in_array;
 
-/**
- * @psalm-suppress DeprecatedInterface
- */
 class ModelRelationshipPropertyHandler implements
     PropertyExistenceProviderInterface,
     PropertyVisibilityProviderInterface,
@@ -36,28 +33,23 @@ class ModelRelationshipPropertyHandler implements
         return ModelStubProvider::getModelClasses();
     }
 
-    /**
-     * @return ?bool
-     */
-    public static function doesPropertyExist(
-        string $fq_classlike_name,
-        string $property_name,
-        bool $read_mode,
-        StatementsSource $source = null,
-        Context $context = null,
-        CodeLocation $code_location = null
-    ) : ?bool {
-        if (!$source || !$read_mode) {
+    public static function doesPropertyExist(PropertyExistenceProviderEvent $event) : ?bool
+    {
+        $source = $event->getSource();
+
+        if (!$source || !$event->isReadMode()) {
             return null;
         }
 
         $codebase = $source->getCodebase();
-
-        $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        $fq_classlike_name = $event->getFqClasslikeName();
+        $property_name = $event->getPropertyName();
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
+
+        $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
 
         if (isset($class_like_storage->pseudo_property_get_types['$' . $property_name])) {
             return null;
@@ -66,27 +58,21 @@ class ModelRelationshipPropertyHandler implements
         return null;
     }
 
-    /**
-     * @return ?bool
-     */
-    public static function isPropertyVisible(
-        StatementsSource $source,
-        string $fq_classlike_name,
-        string $property_name,
-        bool $read_mode,
-        Context $context,
-        CodeLocation $code_location = null
-    ) : ?bool {
-        if (!$read_mode) {
+    public static function isPropertyVisible(PropertyVisibilityProviderEvent $event) : ?bool
+    {
+        if (!$event->isReadMode()) {
             return null;
         }
 
-        $codebase = $source->getCodebase();
-        $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        $codebase = $event->getSource()->getCodebase();
+        $fq_classlike_name = $event->getFqClasslikeName();
+        $property_name = $event->getPropertyName();
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
+
+        $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
 
         if (isset($class_like_storage->pseudo_property_get_types['$' . $property_name])) {
             return null;
@@ -100,18 +86,17 @@ class ModelRelationshipPropertyHandler implements
      *
      * @return ?Union
      */
-    public static function getPropertyType(
-        string $fq_classlike_name,
-        string $property_name,
-        bool $read_mode,
-        StatementsSource $source = null,
-        Context $context = null
-    ) : ?Union {
-        if (!$source || !$read_mode) {
+    public static function getPropertyType(PropertyTypeProviderEvent $event) : ?Union
+    {
+        $source = $event->getSource();
+
+        if (!$source || !$event->isReadMode()) {
             return null;
         }
 
         $codebase = $source->getCodebase();
+        $fq_classlike_name = $event->getFqClasslikeName();
+        $property_name = $event->getPropertyName();
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             $methodReturnType = $codebase->getMethodReturnType($fq_classlike_name . '::' . $property_name, $fq_classlike_name);

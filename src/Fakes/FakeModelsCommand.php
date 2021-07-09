@@ -20,9 +20,6 @@ class FakeModelsCommand extends ModelsCommand
     /** @var array<class-string> */
     private $model_classes = [];
 
-    /**
-     * @param Filesystem $files
-     */
     public function __construct(Filesystem $files, SchemaAggregator $schema)
     {
         parent::__construct($files);
