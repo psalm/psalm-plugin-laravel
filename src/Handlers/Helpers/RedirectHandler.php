@@ -5,10 +5,8 @@ namespace Psalm\LaravelPlugin\Handlers\Helpers;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
 use PhpParser;
-use Psalm\CodeLocation;
-use Psalm\Context;
-use Psalm\Plugin\Hook\FunctionReturnTypeProviderInterface;
-use Psalm\StatementsSource;
+use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
 
 class RedirectHandler implements FunctionReturnTypeProviderInterface
@@ -27,14 +25,9 @@ class RedirectHandler implements FunctionReturnTypeProviderInterface
      *
      * @return ?Type\Union
      */
-    public static function getFunctionReturnType(
-        StatementsSource $statements_source,
-        string $function_id,
-        array $call_args,
-        Context $context,
-        CodeLocation $code_location
-    ) : ?Type\Union {
-        if (!$call_args) {
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event) : ?Type\Union
+    {
+        if (!$event->getCallArgs()) {
             return new Type\Union([
                 new Type\Atomic\TNamedObject(Redirector::class)
             ]);
