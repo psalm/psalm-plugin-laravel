@@ -12,9 +12,9 @@ use Illuminate\Support\Traits\ForwardsCalls;
 
 /**
  * @implements \ArrayAccess<string, mixed>
- * @mixin \Illuminate\Database\Eloquent\Builder<static>
+ * @mixin Builder
  */
-abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializable, QueueableEntity, UrlRoutable
+class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializable, QueueableEntity, UrlRoutable
 {
     use Concerns\HasAttributes,
             Concerns\HasEvents,
@@ -27,58 +27,168 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
 
     /**
      * @param  array|mixed  $columns
-     * @return \Illuminate\Database\Eloquent\Collection<static>
+     * @return Collection
      */
     public static function all($columns = ['*']) { }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Builder<static>
+     * @return Builder
      */
     public static function query() { }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     * @return Builder
      */
     public function newQuery() { }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     * @return Builder
      */
     public function newModelQuery() { }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     * @return Builder
      */
     public function newQueryWithoutRelationships() { }
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Builder  $builder
-     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     * @param Builder $builder
+     * @return Builder
      */
     public function registerGlobalScopes($builder) { }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     * @return Builder
      */
     public function newQueryWithoutScopes() { }
 
     /**
      * Get a new query instance without a given scope.
      *
-     * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
-     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     * @param Scope|string  $scope
+     * @return Builder
      */
     public function newQueryWithoutScope($scope) { }
 
     /**
      * @param  array|int  $ids
-     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     * @return Builder
      */
     public function newQueryForRestoration($ids) { }
 
     /**
      * @param  \Illuminate\Database\Query\Builder  $query
-     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     * @return Builder
      */
     public function newEloquentBuilder($query) { }
+
+    // Arrayable.
+
+    /**
+     * @inheritDoc
+     */
+    public function toArray()
+    {
+    }
+
+    // ArrayAccess.
+
+    /**
+     * @inheritDoc
+     */
+    public function offsetExists($offset)
+    {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function offsetGet($offset)
+    {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function offsetSet($offset, $value)
+    {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function offsetUnset($offset)
+    {
+    }
+
+    // Jsonable.
+
+    /**
+     * @inheritDoc
+     */
+    public function toJson($options = 0)
+    {
+    }
+
+    // JsonSerializable.
+
+    /**
+     * @inheritDoc
+     */
+    public function jsonSerialize()
+    {
+    }
+
+    // QueueableEntity.
+
+    /**
+     * @inheritDoc
+     */
+    public function getQueueableId()
+    {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getQueueableRelations()
+    {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getQueueableConnection()
+    {
+    }
+
+    // UrlRoutable.
+
+    /**
+     * @inheritDoc
+     */
+    public function getRouteKey()
+    {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getRouteKeyName()
+    {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function resolveChildRouteBinding($childType, $value, $field)
+    {
+    }
 }
