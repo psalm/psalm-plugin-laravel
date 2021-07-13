@@ -1,6 +1,7 @@
 <?php
 namespace Psalm\LaravelPlugin;
 
+use Illuminate\Foundation\Application;
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
@@ -20,7 +21,9 @@ use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
 use Throwable;
+use function array_merge;
 use function dirname;
+use function explode;
 use function glob;
 
 class Plugin implements PluginEntryPointInterface
@@ -39,9 +42,26 @@ class Plugin implements PluginEntryPointInterface
         $this->registerStubs($registration);
     }
 
+    protected function getCommonStubs(): array
+    {
+        return glob(dirname(__DIR__) . '/stubs/*.stubphp');
+    }
+
+    protected function getStubsForVersion(string $version): array
+    {
+        [$majorVersion] = explode('.', $version);
+
+        return glob(dirname(__DIR__) . '/stubs/'.$majorVersion.'/*.stubphp');
+    }
+
     private function registerStubs(RegistrationInterface $registration): void
     {
-        foreach (glob(dirname(__DIR__) . '/stubs/*.stubphp') as $stubFilePath) {
+        $stubs = array_merge(
+            $this->getCommonStubs(),
+            $this->getStubsForVersion(Application::VERSION),
+        );
+
+        foreach ($stubs as $stubFilePath) {
             $registration->addStubFile($stubFilePath);
         }
 
