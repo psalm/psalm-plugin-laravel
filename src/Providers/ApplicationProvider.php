@@ -8,9 +8,18 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Laravel\Lumen\Application as LumenApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
+use Psalm\LaravelPlugin\Fakes\FakeCreatesApplication;
+use function class_alias;
 use function file_exists;
 use function get_class;
 use function getcwd;
+use function trait_exists;
+
+if (!trait_exists(CreatesApplication::class)) {
+    class_alias(CreatesApplication::class, __NAMESPACE__ . '\CreatesApplication');
+} else {
+    class_alias(FakeCreatesApplication::class, __NAMESPACE__ . '\CreatesApplication');
+}
 
 final class ApplicationProvider
 {
