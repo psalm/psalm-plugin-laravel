@@ -1,0 +1,30 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
+
+/**
+* @template TRelatedModel of Model
+* @template-extends Relation<TRelatedModel>
+* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+*/
+abstract class HasOneOrMany extends Relation
+{
+    /**
+     * @param  array  $attributes
+     * @param  array  $values
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function firstOrNew(array $attributes = [], array $values = []) { }
+
+    /**
+     * @param  array  $attributes
+     * @param  array  $values
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function firstOrCreate(array $attributes = [], array $values = []) { }
+}

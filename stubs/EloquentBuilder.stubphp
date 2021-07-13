@@ -141,20 +141,6 @@ class Builder
      * @param  array  $values
      * @return TModel
      */
-    public function firstOrNew(array $attributes, array $values = []) { }
-
-    /**
-     * @param  array  $attributes
-     * @param  array  $values
-     * @return TModel
-     */
-    public function firstOrCreate(array $attributes, array $values = []) { }
-
-    /**
-     * @param  array  $attributes
-     * @param  array  $values
-     * @return TModel
-     */
     public function updateOrCreate(array $attributes, array $values = []) { }
 
     /**
