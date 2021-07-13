@@ -25,7 +25,7 @@ Feature: factory()
     """
 
   Scenario: can use factory helper in Laravel 6.x and 7.x
-    Given I have the "laravel/framework" package satisfying the "6.* || 7.*"
+    Given I have the "laravel/framework" package satisfying the "6.*"
     And I have the following code
     """
     class FactoryTest {
