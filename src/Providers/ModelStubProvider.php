@@ -23,7 +23,7 @@ final class ModelStubProvider implements GeneratesStubs
     public static function generateStubFile(): void
     {
         $app = ApplicationProvider::getApp();
-        $migrations_folder = dirname(__DIR__, 4) . '/database/migrations/';
+        $migrations_folder = $app->databasePath('migrations/');
 
         $project_analyzer = ProjectAnalyzer::getInstance();
         $codebase = $project_analyzer->getCodebase();
