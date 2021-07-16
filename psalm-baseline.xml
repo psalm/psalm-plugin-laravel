@@ -1,43 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <files psalm-version="dev-master@b07de1fefde4714f29bca0b56c632bd82855fc64">
-  <file src="src/Handlers/Eloquent/ModelMethodHandler.php">
-    <DeprecatedInterface occurrences="1">
-      <code>ModelMethodHandler</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/Handlers/Eloquent/ModelPropertyAccessorHandler.php">
-    <DeprecatedInterface occurrences="1">
-      <code>ModelPropertyAccessorHandler</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/Handlers/Eloquent/RelationsMethodHandler.php">
-    <DeprecatedInterface occurrences="1">
-      <code>RelationsMethodHandler</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/Handlers/Helpers/PathHandler.php">
-    <DeprecatedInterface occurrences="1">
-      <code>PathHandler</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/Handlers/Helpers/RedirectHandler.php">
-    <DeprecatedInterface occurrences="1">
-      <code>RedirectHandler</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/Handlers/Helpers/TransHandler.php">
-    <DeprecatedInterface occurrences="1">
-      <code>TransHandler</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/Handlers/Helpers/UrlHandler.php">
-    <DeprecatedInterface occurrences="1">
-      <code>UrlHandler</code>
-    </DeprecatedInterface>
-  </file>
-  <file src="src/Handlers/Helpers/ViewHandler.php">
-    <DeprecatedInterface occurrences="1">
-      <code>ViewHandler</code>
-    </DeprecatedInterface>
+  <file src="src/Providers/ModelStubProvider.php">
+    <PossiblyUndefinedMethod occurrences="1">
+      <code>databasePath</code>
+    </PossiblyUndefinedMethod>
   </file>
 </files>
