@@ -1,5 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <files psalm-version="4.8.1@f73f2299dbc59a3e6c4d66cff4605176e728ee69">
+  <file src="app/Broadcasting/ExampleChannel.php">
+    <InvalidReturnType occurrences="1">
+      <code>array|bool</code>
+    </InvalidReturnType>
+    <UnusedClass occurrences="1">
+      <code>ExampleChannel</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Casts/ExampleCast.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleCast</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Console/Commands/ExampleCommand.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleCommand</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Exceptions/ExampleException.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleException</code>
+    </UnusedClass>
+  </file>
   <file src="app/Exceptions/Handler.php">
     <NonInvariantDocblockPropertyType occurrences="2">
       <code>$dontFlash</code>
@@ -9,15 +32,55 @@
       <code>$e</code>
     </UnusedClosureParam>
   </file>
+  <file src="app/Http/Controllers/ExampleController.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleController</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Http/Middleware/ExampleMiddleware.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleMiddleware</code>
+    </UnusedClass>
+  </file>
   <file src="app/Http/Middleware/TrustProxies.php">
     <NonInvariantDocblockPropertyType occurrences="1">
       <code>$headers</code>
     </NonInvariantDocblockPropertyType>
   </file>
+  <file src="app/Http/Requests/ExampleRequest.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleRequest</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Http/Resources/ExampleResource.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleResource</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Listeners/ExampleListener.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleListener</code>
+    </UnusedClass>
+  </file>
   <file src="app/Models/User.php">
     <NonInvariantDocblockPropertyType occurrences="1">
       <code>$fillable</code>
     </NonInvariantDocblockPropertyType>
+  </file>
+  <file src="app/Observers/ExampleObserver.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleObserver</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Policies/ExamplePolicy.php">
+    <UnusedClass occurrences="1">
+      <code>ExamplePolicy</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Providers/ExampleProvider.php">
+    <UnusedClass occurrences="1">
+      <code>ExampleProvider</code>
+    </UnusedClass>
   </file>
   <file src="app/Providers/RouteServiceProvider.php">
     <MixedArgument occurrences="1">
@@ -29,5 +92,13 @@
     <PossiblyNullArgument occurrences="1">
       <code>optional($request-&gt;user())-&gt;id ?: $request-&gt;ip()</code>
     </PossiblyNullArgument>
+  </file>
+  <file src="app/Rules/ExampleRule.php">
+    <InvalidReturnType occurrences="1">
+      <code>bool</code>
+    </InvalidReturnType>
+    <UnusedClass occurrences="1">
+      <code>ExampleRule</code>
+    </UnusedClass>
   </file>
 </files>
