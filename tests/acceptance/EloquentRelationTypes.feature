@@ -310,7 +310,6 @@ Feature: Eloquent Relation types
     When I run Psalm
     Then I see no errors
 
-  @skip
   Scenario: Relationships return themselves when the underlying method returns a builder
     Given I have the following code
     """
@@ -332,7 +331,6 @@ Feature: Eloquent Relation types
     When I run Psalm
     Then I see no errors
 
-  @skip
   Scenario: Relationships return themselves when the proxied method is a query builder method
     Given I have the following code
     """
@@ -340,8 +338,16 @@ Feature: Eloquent Relation types
     * @param HasOne<Phone> $relationship
     * @psalm-return HasOne<Phone>
     */
-    function test(HasOne $relationship): HasOne {
+    function test_hasOne(HasOne $relationship): HasOne {
       return $relationship->orderBy('id', 'ASC');
+    }
+
+    /**
+    * @param HasMany<Phone> $relationship
+    * @psalm-return HasMany<Phone>
+    */
+    function test_hasMany(HasMany $relationship): HasMany {
+      return $relationship->orderBy('id', 'DESC');
     }
     """
     When I run Psalm

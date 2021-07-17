@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Identifier;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
@@ -21,6 +22,7 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Union;
+use function strtolower;
 
 final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 {
@@ -57,12 +59,53 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 
         // If this method name is on the builder object, proxy it over there
 
-        if ($source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase)) ||
-            $source->getCodebase()->methods->methodExists(new MethodIdentifier(QueryBuilder::class, $method_name_lowercase))
-        ) {
+        if ($method_name_lowercase === '__call') {
+            $stmt = $event->getStmt();
+
+            if (!($stmt instanceof MethodCall)) {
+                return null;
+            }
+
+            $name = $stmt->name;
+
+            if (!($name instanceof Identifier)) {
+                return null;
+            }
+
+            $codebase = $source->getCodebase();
+            /** @psalm-var lowercase-string $called_method_name_lowercase */
+            $called_method_name_lowercase = $name->toLowerString();
+            $type = null;
+
+            foreach ([Builder::class, QueryBuilder::class] as $class) {
+                $method_id = new MethodIdentifier($class, $called_method_name_lowercase);
+                if ($codebase->methods->methodExists($method_id)) {
+                    $self_class = null;
+                    $type = $codebase->methods->getMethodReturnType(
+                        $method_id,
+                        $self_class,
+                        null,
+                        $event->getCallArgs()
+                    );
+                }
+            }
+
             $template_type_parameters = $event->getTemplateTypeParameters();
             if (!$template_type_parameters) {
                 return null;
+            }
+
+            if ($type instanceof Union) {
+                if ($type->hasType('static')) {
+                    return new Union([
+                        new Type\Atomic\TGenericObject(
+                            $event->getFqClasslikeName(),
+                            $template_type_parameters
+                        ),
+                    ]);
+                }
+
+                return $type;
             }
 
             $fake_method_call = new MethodCall(
