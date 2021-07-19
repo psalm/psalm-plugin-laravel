@@ -9,6 +9,8 @@ use Psalm\Storage\MethodStorage;
 use Psalm\Storage\PropertyStorage;
 use function array_intersect;
 use function in_array;
+use function strpos;
+use function strtolower;
 
 class SuppressHandler implements AfterClassLikeVisitInterface
 {
@@ -42,10 +44,36 @@ class SuppressHandler implements AfterClassLikeVisitInterface
     /**
      * @var array<string, list<class-string>>
      */
+    private const BY_NAMESPACE = [
+        'PropertyNotSetInConstructor' => [
+            'App\Jobs',
+        ],
+        'PossiblyUnusedMethod' => [
+            'App\Events',
+            'App\Jobs',
+        ],
+    ];
+
+    /**
+     * @var array<string, array<class-string, list<string>>>
+     */
+    private const BY_NAMESPACE_METHOD = [
+        'PossiblyUnusedMethod' => [
+            'App\Events' => ['broadcastOn'],
+            'App\Jobs' => ['handle'],
+            'App\Mail' => ['__construct', 'build'],
+            'App\Notifications' => ['__construct', 'via', 'toMail', 'toArray'],
+        ]
+    ];
+
+    /**
+     * @var array<string, list<class-string>>
+     */
     private const BY_PARENT_CLASS = [
         'PropertyNotSetInConstructor' => [
             'Illuminate\Console\Command',
             'Illuminate\Foundation\Http\FormRequest',
+            'Illuminate\Mail\Mailable',
             'Illuminate\Notifications\Notification',
         ],
     ];
@@ -57,6 +85,15 @@ class SuppressHandler implements AfterClassLikeVisitInterface
         'NonInvariantDocblockPropertyType' => [
             'Illuminate\Console\Command' => ['description'],
         ],
+    ];
+
+    /**
+     * @var array<string, array<class-string, list<string>>>
+     */
+    private const BY_USED_TRAITS = [
+        'PropertyNotSetInConstructor' => [
+            'Illuminate\Queue\InteractsWithQueue',
+        ]
     ];
 
     public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event)
@@ -71,7 +108,31 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_CLASS_METHOD as $issue => $method_by_class) {
             foreach ($method_by_class[$class->name] ?? [] as $method_name) {
-                self::suppress($issue, $class->methods[$method_name] ?? null);
+                /** @psalm-suppress RedundantCast */
+                self::suppress($issue, $class->methods[strtolower($method_name)] ?? null);
+            }
+        }
+
+        foreach (self::BY_NAMESPACE as $issue => $namespaces) {
+            foreach ($namespaces as $namespace) {
+                if (0 !== strpos($class->name, "$namespace\\")) {
+                    continue;
+                }
+
+                self::suppress($issue, $class);
+                break;
+            }
+        }
+
+        foreach (self::BY_NAMESPACE_METHOD as $issue => $methods_by_namespaces) {
+            foreach ($methods_by_namespaces as $namespace => $method_names) {
+                if (0 !== strpos($class->name, "$namespace\\")) {
+                    continue;
+                }
+
+                foreach ($method_names as $method_name) {
+                    self::suppress($issue, $class->methods[strtolower($method_name)] ?? null);
+                }
             }
         }
 
@@ -83,8 +144,8 @@ class SuppressHandler implements AfterClassLikeVisitInterface
             self::suppress($issue, $class);
         }
 
-        foreach (self::BY_PARENT_CLASS_PROPERTY as $issue => $methods_by_parent_class) {
-            foreach ($methods_by_parent_class as $parent_class => $property_names) {
+        foreach (self::BY_PARENT_CLASS_PROPERTY as $issue => $properties_by_parent_class) {
+            foreach ($properties_by_parent_class as $parent_class => $property_names) {
                 if (!in_array($parent_class, $class->parent_classes)) {
                     continue;
                 }
@@ -93,6 +154,14 @@ class SuppressHandler implements AfterClassLikeVisitInterface
                     self::suppress($issue, $class->properties[$property_name] ?? null);
                 }
             }
+        }
+
+        foreach (self::BY_USED_TRAITS as $issue => $used_traits) {
+            if (!array_intersect($class->used_traits, $used_traits)) {
+                continue;
+            }
+
+            self::suppress($issue, $class);
         }
     }
 
