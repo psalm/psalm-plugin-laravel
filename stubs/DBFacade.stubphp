@@ -8,7 +8,7 @@ class DB extends Facade
      * Create a raw database expression.
      *
      * @param  mixed  $value
-     * @return void
+     * @return \Illuminate\Database\Query\Expression
      *
      * @psalm-taint-sink sql $value
      */
