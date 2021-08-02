@@ -23,8 +23,8 @@ Feature: DB facade alias
 
     namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
-    function test(): void {
-      \DB::raw(1);
+    function test(): \Illuminate\Database\Query\Expression {
+      return \DB::raw(1);
     }
     """
     When I run Psalm

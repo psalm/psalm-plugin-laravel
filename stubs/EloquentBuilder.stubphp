@@ -74,6 +74,15 @@ class Builder
     public function where($column, $operator = null, $value = null, $boolean = 'and') { }
 
     /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @param  string  $boolean
+     * @return self<TModel>
+     */
+    public function whereDate($column, $operator, $value = null, $boolean = 'and') { }
+
+    /**
      * @param  \Closure|array|string  $column
      * @param  mixed  $operator
      * @param  mixed  $value
@@ -347,4 +356,10 @@ class Builder
      * @return TModel|null
      */
     public function first($columns = ['*']) { }
+
+    /**
+     * @param  string  $columns
+     * @return int
+     */
+    public function count($columns = '*') { }
 }
