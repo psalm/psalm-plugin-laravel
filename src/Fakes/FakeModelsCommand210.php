@@ -12,15 +12,12 @@ use function get_class;
 use function implode;
 use function in_array;
 
-class FakeModelsCommand291 extends ModelsCommand
+class FakeModelsCommand210 extends ModelsCommand
 {
+    use FakeModelsCommandLogic;
+
     /** @var SchemaAggregator */
     private $schema;
-
-    /** @var array<class-string> */
-    private $model_classes = [];
-
-    use FakeModelsCommandLogic;
 
     public function __construct(Filesystem $files, SchemaAggregator $schema)
     {
@@ -33,7 +30,7 @@ class FakeModelsCommand291 extends ModelsCommand
      *
      * @param Model $model
      */
-    protected function getPropertiesFromTable($model) : void
+    public function getPropertiesFromTable($model) : void
     {
         $this->getProperties($model);
     }
