@@ -21,7 +21,7 @@ class TransHandler implements FunctionReturnTypeProviderInterface
             $first_arg_type = $event->getStatementsSource()->getNodeTypeProvider()->getType($call_args[0]->value);
 
             if ($first_arg_type && $first_arg_type->isString()) {
-                return Type::getString();
+                return Type::combineUnionTypes(Type::getString(), Type::getArray());
             }
         }
 
