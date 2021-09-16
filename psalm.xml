@@ -19,7 +19,7 @@
         <PropertyNotSetInConstructor>
             <errorLevel type="suppress">
                 <file name="src/Fakes/FakeMetaCommand.php" />
-                <file name="src/Fakes/FakeModelsCommand.php" />
+                <file name="src/Fakes/FakeModelsCommand291.php" />
             </errorLevel>
         </PropertyNotSetInConstructor>
     </issueHandlers>

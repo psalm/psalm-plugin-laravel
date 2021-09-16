@@ -37,7 +37,7 @@ final class ModelStubProvider implements GeneratesStubs
 
         $fake_filesystem = new FakeFilesystem();
 
-        $models_generator_command = new FakeModelsCommand(
+        $models_generator_command = FakeModelsCommandProvider::getCommand(
             $fake_filesystem,
             $schema_aggregator
         );
