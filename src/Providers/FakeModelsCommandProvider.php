@@ -5,6 +5,7 @@ namespace Psalm\LaravelPlugin\Providers;
 use Barryvdh\LaravelIdeHelper\Console\ModelsCommand;
 use Composer\InstalledVersions;
 use Illuminate\Filesystem\Filesystem;
+use Psalm\LaravelPlugin\Fakes\FakeModelsCommand210;
 use Psalm\LaravelPlugin\Fakes\FakeModelsCommand291;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use function \version_compare;
@@ -26,5 +27,10 @@ class FakeModelsCommandProvider
                 $schemaAggregator
             );
         }
+
+        return new FakeModelsCommand210(
+            $filesystem,
+            $schemaAggregator
+        );
     }
 }
