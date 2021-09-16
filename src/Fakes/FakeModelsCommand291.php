@@ -12,7 +12,7 @@ use function get_class;
 use function implode;
 use function in_array;
 
-class FakeModelsCommand extends ModelsCommand
+class FakeModelsCommand291 extends ModelsCommand
 {
     /** @var SchemaAggregator */
     private $schema;
