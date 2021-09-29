@@ -119,7 +119,7 @@ class Builder
      * @template T
      * @param  T $id
      * @param  array  $columns
-     * @return (T is array ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel)
+     * @return (T is array ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel|null)
      */
     public function find($id, $columns = ['*']) { }
 
