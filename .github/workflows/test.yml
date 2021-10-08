@@ -1,4 +1,4 @@
-name: Run Tests
+name: Tests
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
         illuminate_version: [6.*, 8.*]
         composer_flags:  ['', '--prefer-lowest']
 
-    name: PHP ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | Composer Flags ${{ matrix.composer_flags }}
+    name: ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | ${{ matrix.composer_flags }}
 
     steps:
     - name: Checkout code
