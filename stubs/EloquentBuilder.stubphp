@@ -165,7 +165,7 @@ class Builder
     public function value($column) { }
 
     /**
-     * @param  array  $columns
+     * @param  array|string  $columns
      * @return \Illuminate\Database\Eloquent\Collection<TModel>
      */
     public function get($columns = ['*']) { }
