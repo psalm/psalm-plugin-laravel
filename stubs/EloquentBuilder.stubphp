@@ -310,12 +310,6 @@ class Builder
      * @param  mixed  $relations
      * @return self<TModel>
      */
-    public function with($relations) { }
-
-    /**
-     * @param  mixed  $relations
-     * @return self<TModel>
-     */
     public function without($relations) { }
 
     /**

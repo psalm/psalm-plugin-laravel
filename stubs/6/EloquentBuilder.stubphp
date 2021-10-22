@@ -10,6 +10,12 @@ namespace Illuminate\Database\Eloquent;
 class Builder
 {
     /**
+     * @param  mixed  $relations
+     * @return self<TModel>
+     */
+    public function with($relations) { }
+
+    /**
      * @param  array  $attributes
      * @param  array  $values
      * @return TModel

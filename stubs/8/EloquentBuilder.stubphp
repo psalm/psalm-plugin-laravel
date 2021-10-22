@@ -11,6 +11,13 @@ namespace Illuminate\Database\Eloquent;
 class Builder
 {
     /**
+     * @param  string|array  $relations
+     * @param  string|\Closure|null  $callback
+     * @return self<TModel>
+     */
+    public function with($relations, $callback = null) { }
+
+    /**
      * @param  array  $attributes
      * @param  array  $values
      * @return TModel
