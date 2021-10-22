@@ -1,0 +1,46 @@
+<?php
+
+namespace Illuminate\Database\Query;
+
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Support\Traits\ForwardsCalls;
+use Illuminate\Support\Traits\Macroable;
+
+class Builder
+{
+    use BuildsQueries, ForwardsCalls, Macroable {
+        __call as macroCall;
+    }
+
+    /**
+     * @param  string  $column
+     * @param  array  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return static
+     */
+    public function whereBetweenColumns($column, array $values, $boolean = 'and', $not = false) { }
+
+    /**
+     * @param  string  $column
+     * @param  array  $values
+     * @return static
+     */
+    public function orWhereBetweenColumns($column, array $values) { }
+
+    /**
+     * @param  string  $column
+     * @param  array  $values
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereNotBetweenColumns($column, array $values, $boolean = 'and') { }
+
+    /**
+     * @param  string  $column
+     * @param  array  $values
+     * @return static
+     */
+    public function orWhereNotBetweenColumns($column, array $values) { }
+
+}
