@@ -285,3 +285,23 @@ Feature: Eloquent Builder types
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: can chain Query builder methods
+    Given I have the following code
+    """
+    /**
+    * @psalm-param Builder<User> $builder
+    * @psalm-return Builder<User>
+    */
+    function test(Builder $builder): Builder {
+      return $builder
+          ->inRandomOrder()
+          ->orderByDesc('name')
+          ->orderBy('id', 'ASC')
+          ->with('relation')
+          ->offset(1)
+          ->limit(10);
+    }
+    """
+    When I run Psalm
+    Then I see no errors
