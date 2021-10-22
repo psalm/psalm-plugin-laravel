@@ -13,6 +13,15 @@ class Builder
     }
 
     /**
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  \DateTimeInterface|string|null  $value
+     * @param  string  $boolean
+     * @return static
+     */
+    public function whereDate($column, $operator, $value = null, $boolean = 'and') { }
+
+    /**
      * Create a raw database expression.
      *
      * @param  mixed  $value
