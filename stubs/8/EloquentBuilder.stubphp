@@ -18,6 +18,18 @@ class Builder
     public function with($relations, $callback = null) { }
 
     /**
+     * @param  mixed  $relations
+     * @return self<TModel>
+     */
+    public function withOnly($relations) { }
+
+    /**
+     * @param  array  $casts
+     * @return self<TModel>
+     */
+    public function withCasts($casts) { }
+
+    /**
      * @param  array  $attributes
      * @param  array  $values
      * @return TModel
