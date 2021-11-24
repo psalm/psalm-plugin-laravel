@@ -169,8 +169,6 @@ class SchemaAggregator
 
                 $first_method_call = $root_var;
 
-                $additional_method_calls = [];
-
                 $nullable = false;
 
                 while ($root_var instanceof PhpParser\Node\Expr\MethodCall) {
