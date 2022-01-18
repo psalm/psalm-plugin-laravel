@@ -86,4 +86,11 @@ class Collection implements \ArrayAccess, Enumerable
     * @return $this
     */
     public function put($key, $value) {}
+
+    /**
+     * Get an iterator for the items.
+     *
+     * @return \ArrayIterator<TKey, TValue>
+     */
+    public function getIterator() {}
 }
