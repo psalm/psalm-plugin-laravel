@@ -77,6 +77,7 @@ class SchemaAggregator
     private function alterTable(PhpParser\Node\Expr\StaticCall $call, bool $creating) : void
     {
         if (!isset($call->args[0])
+            || !$call->args[0] instanceof PhpParser\Node\Arg
             || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
         ) {
             return;
@@ -89,6 +90,7 @@ class SchemaAggregator
         }
 
         if (!isset($call->args[1])
+            || !$call->args[1] instanceof PhpParser\Node\Arg
             || !$call->args[1]->value instanceof PhpParser\Node\Expr\Closure
             || count($call->args[1]->value->params) < 1
             || ($call->args[1]->value->params[0]->type instanceof PhpParser\Node\Name
@@ -112,6 +114,7 @@ class SchemaAggregator
     private function dropTable(PhpParser\Node\Expr\StaticCall $call) : void
     {
         if (!isset($call->args[0])
+            || !$call->args[0] instanceof PhpParser\Node\Arg
             || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
         ) {
             return;
@@ -124,9 +127,10 @@ class SchemaAggregator
 
     private function renameTable(PhpParser\Node\Expr\StaticCall $call) : void
     {
-        if (!isset($call->args[0])
+        if (!isset($call->args[0], $call->args[1])
+            || !$call->args[0] instanceof PhpParser\Node\Arg
             || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
-            || !isset($call->args[1])
+            || !$call->args[1] instanceof PhpParser\Node\Arg
             || !$call->args[1]->value instanceof PhpParser\Node\Scalar\String_
         ) {
             return;
@@ -164,8 +168,6 @@ class SchemaAggregator
                 $root_var = $stmt->expr;
 
                 $first_method_call = $root_var;
-
-                $additional_method_calls = [];
 
                 $nullable = false;
 
