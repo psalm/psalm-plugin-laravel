@@ -4,12 +4,13 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         php: [7.3, 7.4, 8.0, 8.1]
-        illuminate_version: [6.*, 8.*]
+        illuminate_version: [6.*, 8.*, 9.*]
         stability: [prefer-lowest, prefer-stable]
         exclude:
           - illuminate_version: 6.*
@@ -39,9 +40,9 @@ jobs:
           # "Added PHP 8.1 Support from v8.67.0"
           - illuminate_version: ^8.67.0
             php: 8.1
-            stability: 'prefer-stable'
+            stability: prefer-stable
 
-    name: ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | ${{ matrix.stability }}
+    name: P${{ matrix.php }} | I ${{ matrix.illuminate_version }} | ${{ matrix.stability }}
 
     steps:
       - name: Checkout code
