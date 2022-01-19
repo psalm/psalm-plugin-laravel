@@ -11,12 +11,12 @@ use Psalm\Type\Atomic\TNamedObject;
 
 class ViewHandler implements FunctionReturnTypeProviderInterface
 {
-    public static function getFunctionIds() : array
+    public static function getFunctionIds(): array
     {
         return ['view'];
     }
 
-    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event) : Type\Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
     {
         if ($event->getCallArgs()) {
             return new Type\Union([

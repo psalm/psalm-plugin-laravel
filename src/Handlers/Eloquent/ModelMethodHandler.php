@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
@@ -17,6 +19,7 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Union;
+
 use function strtolower;
 
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
@@ -29,7 +32,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         return [Model::class];
     }
 
-    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event) : ?Type\Union
+    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         $source = $event->getSource();
 
@@ -73,7 +76,8 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
     public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event)
     {
         $storage = $event->getStorage();
-        if ($event->getStmt() instanceof Class_
+        if (
+            $event->getStmt() instanceof Class_
             && !$storage->abstract
             && isset($storage->parent_classes[strtolower(Model::class)])
         ) {

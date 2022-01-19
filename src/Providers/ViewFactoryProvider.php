@@ -11,6 +11,7 @@ use Illuminate\View\FileViewFinder;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
 use ReflectionClass;
 use UnexpectedValueException;
+
 use function dirname;
 
 final class ViewFactoryProvider
@@ -27,7 +28,7 @@ final class ViewFactoryProvider
 
         $resolver = new EngineResolver();
         $fake_filesystem = new FakeFilesystem();
-        $resolver->register('php', function () use ($fake_filesystem) : PhpEngine {
+        $resolver->register('php', function () use ($fake_filesystem): PhpEngine {
             return new PhpEngine($fake_filesystem);
         });
         $finder = new FileViewFinder($fake_filesystem, [dirname($file_path) . '/../resources/views']);

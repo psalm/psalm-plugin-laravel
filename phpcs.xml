@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <ruleset name="PHP_CodeSniffer">
     <config name="installed_paths" value="../../slevomat/coding-standard"/>
-    <rule ref="PSR2" />
+    <rule ref="PSR12" />
     <!-- Forbid usage of a function or a class constant via fallback global name -->
     <rule ref="SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly">
         <properties>
