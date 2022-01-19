@@ -1,19 +1,18 @@
 name: Tests
 
-on:
-  push:
-  pull_request:
-  schedule:
-    - cron: '0 0 * * *'
+on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         php: [7.3, 7.4, 8.0, 8.1]
         illuminate_version: [6.*, 8.*]
-        composer_flags:  ['', '--prefer-lowest']
+        stability: [prefer-lowest, prefer-stable]
+
         exclude:
           # Exclude unsupported combination
           # https://laravel.com/docs/8.x/releases#support-policy
@@ -30,12 +29,13 @@ jobs:
           # "Added PHP 8.1 Support from v8.67.0"
           - illuminate_version: ^8.67.0
             php: 8.1
-            composer_flags: ''
+            stability: ''
+
           - illuminate_version: ^8.67.0
             php: 8.1
-            composer_flags: '--prefer-lowest'
+            stability: --prefer-lowest
 
-    name: ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | ${{ matrix.composer_flags }}
+    name: P${{ matrix.php }} - ${{ matrix.stability }} - ${{ matrix.os }}
 
     steps:
     - name: Checkout code
@@ -49,8 +49,7 @@ jobs:
         tools: composer:v2
 
     - name: Install dependencies
-      run: |
-        composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist ${{ matrix.composer_flags }}
+      run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction
 
     - name: Run Tests
       run: composer test
