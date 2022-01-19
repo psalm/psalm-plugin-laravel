@@ -14,6 +14,26 @@ jobs:
         php: [7.3, 7.4, 8.0, 8.1]
         illuminate_version: [6.*, 8.*]
         composer_flags:  ['', '--prefer-lowest']
+        exclude:
+          # Exclude unsupported combination
+          # https://laravel.com/docs/8.x/releases#support-policy
+          - illuminate_version: 6.*
+            php: 8.1
+
+          # "Added PHP 8.1 Support from v8.67.0"
+          # https://github.com/laravel/framework/blob/8.x/CHANGELOG-8.x.md#v8670-2021-10-22
+          # see also `matrix.include` section
+          - illuminate_version: 8.*
+            php: 8.1
+
+        include:
+          # "Added PHP 8.1 Support from v8.67.0"
+          - illuminate_version: ^8.67.0
+            php: 8.1
+            composer_flags: ''
+          - illuminate_version: ^8.67.0
+            php: 8.1
+            composer_flags: '--prefer-lowest'
 
     name: ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | ${{ matrix.composer_flags }}
 
