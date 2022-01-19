@@ -1,20 +1,28 @@
-name: Run Psalm
+name: Psalm
 
 on:
   push:
-  pull_request:
-  schedule:
-    - cron: '0 0 * * *'
+    paths:
+      - '**.php'
+      - 'psalm.xml'
+      - 'psalm-baseline.xml'
+      - '.github/workflows/psalm.yml'
 
 jobs:
-  build:
+  psalm:
+    name: Psalm
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: export COMPOSER_ROOT_VERSION=dev-master && composer install --prefer-dist --no-progress --no-suggest
-      
-    - name: Run Psalm
-      run: vendor/bin/psalm --threads=2 --shepherd
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0'
+          coverage: none
+
+      - name: Install composer dependencies
+        uses: composer install -n --prefer-dist
+
+      - name: Run Psalm
+        run: ./vendor/bin/psalm  --threads=2 --shepherd
