@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Models;
 
@@ -12,7 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string $id
  * @property CarbonInterface|null $email_verified_at
  */
-final class User extends Model {
+final class User extends Model
+{
     protected $table = 'users';
 
     /**
