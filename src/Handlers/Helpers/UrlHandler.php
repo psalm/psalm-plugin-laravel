@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
@@ -16,7 +18,7 @@ final class UrlHandler implements FunctionReturnTypeProviderInterface
         return ['url'];
     }
 
-    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event) : ?Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
         if (!$event->getCallArgs()) {
             return new Union([

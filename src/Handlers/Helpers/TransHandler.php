@@ -8,12 +8,12 @@ use Psalm\Type;
 
 class TransHandler implements FunctionReturnTypeProviderInterface
 {
-    public static function getFunctionIds() : array
+    public static function getFunctionIds(): array
     {
         return ['trans'];
     }
 
-    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event) : Type\Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
     {
         $call_args = $event->getCallArgs();
 

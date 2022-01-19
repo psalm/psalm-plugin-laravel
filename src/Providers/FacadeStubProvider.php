@@ -7,6 +7,7 @@ use Illuminate\Config\Repository;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
+
 use function unlink;
 
 final class FacadeStubProvider implements GeneratesStubs

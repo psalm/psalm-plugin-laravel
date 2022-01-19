@@ -1,4 +1,5 @@
 <?php
+
 namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\Application;
@@ -21,6 +22,7 @@ use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
 use Throwable;
+
 use function array_merge;
 use function dirname;
 use function explode;
@@ -28,8 +30,7 @@ use function glob;
 
 class Plugin implements PluginEntryPointInterface
 {
-
-    public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null) : void
+    public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
     {
         try {
             ApplicationProvider::bootApp();
@@ -51,7 +52,7 @@ class Plugin implements PluginEntryPointInterface
     {
         [$majorVersion] = explode('.', $version);
 
-        return glob(dirname(__DIR__) . '/stubs/'.$majorVersion.'/*.stubphp');
+        return glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp');
     }
 
     private function registerStubs(RegistrationInterface $registration): void
