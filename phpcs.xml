@@ -19,5 +19,6 @@
     </rule>
 
     <file>src/</file>
+    <file>tests</file>
     <exclude-pattern>src/cache/</exclude-pattern>
 </ruleset>
