@@ -9,4 +9,4 @@ use Illuminate\Database\Eloquent\Model;
 final class Car extends Model
 {
     protected $table = 'cars';
-};
+}

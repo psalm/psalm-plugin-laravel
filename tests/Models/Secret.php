@@ -6,4 +6,4 @@ namespace Tests\Psalm\LaravelPlugin\Models;
 
 final class Secret extends AbstractUuidModel
 {
-};
+}

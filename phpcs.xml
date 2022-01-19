@@ -21,4 +21,5 @@
     <file>src/</file>
     <file>tests</file>
     <exclude-pattern>src/cache/</exclude-pattern>
+    <exclude-pattern>tests/_support/</exclude-pattern>
 </ruleset>
