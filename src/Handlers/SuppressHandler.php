@@ -109,7 +109,10 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_CLASS_METHOD as $issue => $method_by_class) {
             foreach ($method_by_class[$class->name] ?? [] as $method_name) {
-                /** @psalm-suppress RedundantCast */
+                /**
+                 * @psalm-suppress RedundantCast
+                 * @psalm-suppress RedundantFunctionCall
+                 */
                 self::suppress($issue, $class->methods[strtolower($method_name)] ?? null);
             }
         }
