@@ -5,6 +5,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use PhpParser;
+
 use function count;
 use function is_string;
 use function strtolower;
@@ -17,7 +18,7 @@ class SchemaAggregator
     /**
      * @param array<int, PhpParser\Node\Stmt> $stmts
      */
-    public function addStatements(array $stmts) : void
+    public function addStatements(array $stmts): void
     {
         foreach ($stmts as $stmt) {
             if ($stmt instanceof PhpParser\Node\Stmt\Class_) {
@@ -29,10 +30,11 @@ class SchemaAggregator
     /**
      * @param array<int, PhpParser\Node\Stmt> $stmts
      */
-    private function addClassStatements(array $stmts) : void
+    private function addClassStatements(array $stmts): void
     {
         foreach ($stmts as $stmt) {
-            if ($stmt instanceof PhpParser\Node\Stmt\ClassMethod
+            if (
+                $stmt instanceof PhpParser\Node\Stmt\ClassMethod
                 && $stmt->name->name === 'up'
                 && $stmt->stmts
             ) {
@@ -44,10 +46,11 @@ class SchemaAggregator
     /**
      * @param array<int, PhpParser\Node\Stmt> $stmts
      */
-    private function addUpMethodStatements(array $stmts) : void
+    private function addUpMethodStatements(array $stmts): void
     {
         foreach ($stmts as $stmt) {
-            if ($stmt instanceof PhpParser\Node\Stmt\Expression
+            if (
+                $stmt instanceof PhpParser\Node\Stmt\Expression
                 && $stmt->expr instanceof PhpParser\Node\Expr\StaticCall
                 && $stmt->expr->class instanceof PhpParser\Node\Name
                 && $stmt->expr->name instanceof PhpParser\Node\Identifier
@@ -74,9 +77,10 @@ class SchemaAggregator
         }
     }
 
-    private function alterTable(PhpParser\Node\Expr\StaticCall $call, bool $creating) : void
+    private function alterTable(PhpParser\Node\Expr\StaticCall $call, bool $creating): void
     {
-        if (!isset($call->args[0])
+        if (
+            !isset($call->args[0])
             || !$call->args[0] instanceof PhpParser\Node\Arg
             || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
         ) {
@@ -89,7 +93,8 @@ class SchemaAggregator
             $this->tables[$table_name] = new SchemaTable($table_name);
         }
 
-        if (!isset($call->args[1])
+        if (
+            !isset($call->args[1])
             || !$call->args[1] instanceof PhpParser\Node\Arg
             || !$call->args[1]->value instanceof PhpParser\Node\Expr\Closure
             || count($call->args[1]->value->params) < 1
@@ -102,7 +107,8 @@ class SchemaAggregator
 
         $update_closure = $call->args[1]->value;
 
-        if ($call->args[1]->value->params[0]->var instanceof PhpParser\Node\Expr\Variable
+        if (
+            $call->args[1]->value->params[0]->var instanceof PhpParser\Node\Expr\Variable
             && is_string($call->args[1]->value->params[0]->var->name)
         ) {
             $call_arg_name = $call->args[1]->value->params[0]->var->name;
@@ -111,9 +117,10 @@ class SchemaAggregator
         }
     }
 
-    private function dropTable(PhpParser\Node\Expr\StaticCall $call) : void
+    private function dropTable(PhpParser\Node\Expr\StaticCall $call): void
     {
-        if (!isset($call->args[0])
+        if (
+            !isset($call->args[0])
             || !$call->args[0] instanceof PhpParser\Node\Arg
             || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
         ) {
@@ -125,9 +132,10 @@ class SchemaAggregator
         unset($this->tables[$table_name]);
     }
 
-    private function renameTable(PhpParser\Node\Expr\StaticCall $call) : void
+    private function renameTable(PhpParser\Node\Expr\StaticCall $call): void
     {
-        if (!isset($call->args[0], $call->args[1])
+        if (
+            !isset($call->args[0], $call->args[1])
             || !$call->args[0] instanceof PhpParser\Node\Arg
             || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
             || !$call->args[1] instanceof PhpParser\Node\Arg
@@ -152,7 +160,7 @@ class SchemaAggregator
         $this->tables[$new_table_name] = $table;
     }
 
-    private function processColumnUpdates(string $table_name, string $call_arg_name, array $stmts) : void
+    private function processColumnUpdates(string $table_name, string $call_arg_name, array $stmts): void
     {
         if (!isset($this->tables[$table_name])) {
             return;
@@ -161,7 +169,8 @@ class SchemaAggregator
         $table = $this->tables[$table_name];
 
         foreach ($stmts as $stmt) {
-            if ($stmt instanceof PhpParser\Node\Stmt\Expression
+            if (
+                $stmt instanceof PhpParser\Node\Stmt\Expression
                 && $stmt->expr instanceof PhpParser\Node\Expr\MethodCall
                 && $stmt->expr->name instanceof PhpParser\Node\Identifier
             ) {
@@ -172,7 +181,8 @@ class SchemaAggregator
                 $nullable = false;
 
                 while ($root_var instanceof PhpParser\Node\Expr\MethodCall) {
-                    if ($root_var->name instanceof PhpParser\Node\Identifier
+                    if (
+                        $root_var->name instanceof PhpParser\Node\Identifier
                         && $root_var->name->name === 'nullable'
                     ) {
                         $nullable = true;
@@ -182,7 +192,8 @@ class SchemaAggregator
                     $root_var = $root_var->var;
                 }
 
-                if ($root_var instanceof PhpParser\Node\Expr\Variable
+                if (
+                    $root_var instanceof PhpParser\Node\Expr\Variable
                     && $root_var->name === $call_arg_name
                     && $first_method_call->name instanceof PhpParser\Node\Identifier
                 ) {
@@ -190,7 +201,8 @@ class SchemaAggregator
                     $second_arg = $first_method_call->args[1]->value ?? null;
 
                     if (!$first_arg instanceof PhpParser\Node\Scalar\String_) {
-                        if ($first_method_call->name->name === 'timestamps'
+                        if (
+                            $first_method_call->name->name === 'timestamps'
                             || $first_method_call->name->name === 'timestampsTz'
                             || $first_method_call->name->name === 'nullableTimestamps'
                             || $first_method_call->name->name === 'nullableTimestampsTz'
@@ -228,7 +240,8 @@ class SchemaAggregator
                             }
 
                             continue;
-                        } elseif ($first_method_call->name->name === 'softDeletes'
+                        } elseif (
+                            $first_method_call->name->name === 'softDeletes'
                             || $first_method_call->name->name === 'softDeletesTz'
                             || $first_method_call->name->name === 'dropSoftDeletes'
                             || $first_method_call->name->name === 'dropSoftDeletesTz'

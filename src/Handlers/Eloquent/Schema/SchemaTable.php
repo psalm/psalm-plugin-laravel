@@ -15,12 +15,12 @@ class SchemaTable
         $this->name = $name;
     }
 
-    public function setColumn(SchemaColumn $column) : void
+    public function setColumn(SchemaColumn $column): void
     {
         $this->columns[$column->name] = $column;
     }
 
-    public function renameColumn(string $old_name, string $new_name) : void
+    public function renameColumn(string $old_name, string $new_name): void
     {
         if (!isset($this->columns[$old_name])) {
             return;
@@ -35,7 +35,7 @@ class SchemaTable
         $this->columns[$new_name] = $old_column;
     }
 
-    public function dropColumn(string $column_name) : void
+    public function dropColumn(string $column_name): void
     {
         unset($this->columns[$column_name]);
     }

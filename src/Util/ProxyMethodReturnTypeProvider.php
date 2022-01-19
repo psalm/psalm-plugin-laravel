@@ -8,6 +8,7 @@ use Psalm\Internal\Analyzer\Statements\Expression\Call\MethodCallAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+
 use function in_array;
 
 final class ProxyMethodReturnTypeProvider
@@ -23,7 +24,7 @@ final class ProxyMethodReturnTypeProvider
         MethodCall $fake_method_call,
         Context $context,
         TNamedObject $typeToCall
-    ) : ?Union {
+    ): ?Union {
         $old_data_provider = $statements_analyzer->node_data;
         $statements_analyzer->node_data = clone $statements_analyzer->node_data;
 
@@ -40,12 +41,14 @@ final class ProxyMethodReturnTypeProvider
             $statements_analyzer->addSuppressedIssues(['PossiblyInvalidMethodCall']);
         }
 
-        if (MethodCallAnalyzer::analyze(
-            $statements_analyzer,
-            $fake_method_call,
-            $context,
-            false
-        ) === false) {
+        if (
+            MethodCallAnalyzer::analyze(
+                $statements_analyzer,
+                $fake_method_call,
+                $context,
+                false
+            ) === false
+        ) {
             return null;
         }
 

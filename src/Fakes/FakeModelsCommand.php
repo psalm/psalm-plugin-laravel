@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
+
 use function config;
 use function get_class;
 use function implode;
@@ -37,7 +38,7 @@ class FakeModelsCommand extends ModelsCommand
      *
      * @param Model $model
      */
-    protected function getPropertiesFromTable($model) : void
+    protected function getPropertiesFromTable($model): void
     {
         $table_name = $model->getTable();
 
