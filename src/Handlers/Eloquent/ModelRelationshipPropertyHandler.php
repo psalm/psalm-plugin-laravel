@@ -20,6 +20,7 @@ use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Union;
+
 use function in_array;
 
 class ModelRelationshipPropertyHandler implements
@@ -28,12 +29,12 @@ class ModelRelationshipPropertyHandler implements
     PropertyTypeProviderInterface
 {
     /** @return array<string, string> */
-    public static function getClassLikeNames() : array
+    public static function getClassLikeNames(): array
     {
         return ModelStubProvider::getModelClasses();
     }
 
-    public static function doesPropertyExist(PropertyExistenceProviderEvent $event) : ?bool
+    public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();
 
@@ -58,7 +59,7 @@ class ModelRelationshipPropertyHandler implements
         return null;
     }
 
-    public static function isPropertyVisible(PropertyVisibilityProviderEvent $event) : ?bool
+    public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
             return null;
@@ -86,7 +87,7 @@ class ModelRelationshipPropertyHandler implements
      *
      * @return ?Union
      */
-    public static function getPropertyType(PropertyTypeProviderEvent $event) : ?Union
+    public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();
 

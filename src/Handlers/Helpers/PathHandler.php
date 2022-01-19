@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
@@ -10,6 +12,7 @@ use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Union;
+
 use function get_class;
 use function in_array;
 use function is_string;
@@ -21,7 +24,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         return ['app_path', 'base_path', 'config_path', 'database_path',  'resource_path', 'public_path', 'storage_path'];
     }
 
-    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event) : ?Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
         $function_id = $event->getFunctionId();
 
@@ -40,7 +43,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         ];
     }
 
-    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event) : ?Union
+    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
         $methods = ['path', 'basepath', 'configpath', 'databasepath', 'resourcepath'];
 
