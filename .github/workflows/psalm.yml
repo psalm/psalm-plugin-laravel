@@ -1,12 +1,6 @@
 name: Psalm
 
-on:
-  push:
-    paths:
-      - '**.php'
-      - 'psalm.xml'
-      - 'psalm-baseline.xml'
-      - '.github/workflows/psalm.yml'
+on: [push]
 
 jobs:
   psalm:
@@ -22,7 +16,7 @@ jobs:
           coverage: none
 
       - name: Install composer dependencies
-        uses: composer install -n --prefer-dist
+        run: composer install -n --prefer-dist
 
       - name: Run Psalm
         run: ./vendor/bin/psalm  --threads=2 --shepherd
