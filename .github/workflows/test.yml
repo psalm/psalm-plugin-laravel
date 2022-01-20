@@ -57,8 +57,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --prefer-dist --no-interaction
         composer update --${{ matrix.stability }} --prefer-dist --no-interaction
+        composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --prefer-dist --no-interaction
 
     - name: Run Tests
       run: composer test
