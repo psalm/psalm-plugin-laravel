@@ -3,12 +3,11 @@ name: Tests
 on: [push, pull_request]
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
+  build:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
         php: [7.3, 7.4, 8.0, 8.1]
         illuminate_version: [6.*, 8.*]
         stability: [prefer-lowest, prefer-stable]
@@ -28,28 +27,27 @@ jobs:
           # "Added PHP 8.1 Support from v8.67.0"
           - illuminate_version: ^8.67.0
             php: 8.1
-            stability: prefer-stable
+            stability: 'prefer-stable'
           - illuminate_version: ^8.67.0
             php: 8.1
-            stability: prefer-lowest
+            stability: 'prefer-lowest'
 
-    name: P${{ matrix.php }} - ${{ matrix.illuminate_version }} - ${{ matrix.stability }}
+    name: ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | ${{ matrix.stability }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: ${{ matrix.php }}
-        coverage: none
-        tools: composer:v2
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
 
-    - name: Install dependencies
-      run: |
-        composer update --${{ matrix.stability }} --prefer-dist --no-interaction
-        composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --prefer-dist --no-interaction
+      - name: Install dependencies
+        run: |
+          composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --${{ matrix.stability }}
 
-    - name: Run Tests
-      run: composer test
+      - name: Run Tests
+        run: composer test
