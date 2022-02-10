@@ -34,7 +34,7 @@ echo "Preparing Laravel"
 
 echo "Adding package from source"
 sed -e 's|"type": "project",|&"repositories": [ { "type": "path", "url": "../psalm-plugin-laravel" } ],|' composer.json
-COMPOSER_MEMORY_LIMIT=-1 composer update --with "psalm/plugin-laravel:*" -W
+COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" -W
 
 echo "Analyzing Laravel"
 ./vendor/bin/psalm -c ../psalm-plugin-laravel/tests/laravel-test-psalm.xml
