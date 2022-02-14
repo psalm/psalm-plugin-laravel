@@ -61,8 +61,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          composer install
-          composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --${{ matrix.stability }}
+          composer require "laravel/framework:${{ matrix.illuminate_version }}" "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --${{ matrix.stability }}
 
       - name: Run Tests
         run: composer test
