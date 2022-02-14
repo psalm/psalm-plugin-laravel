@@ -33,7 +33,7 @@ echo "Preparing Laravel"
 ./artisan make:test ExampleTest
 
 echo "Adding package from source"
-sed -e 's|"type": "project",|&"repositories": [ { "type": "path", "url": "../psalm-plugin-laravel" } ],|' composer.json
+sed -e 's|"type": "project",|&"repositories": [ { "type": "path", "url": "../psalm-plugin-laravel" } ],|' -i composer.json
 COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" -W
 
 echo "Analyzing Laravel"
