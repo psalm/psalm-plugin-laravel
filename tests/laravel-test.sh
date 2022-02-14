@@ -6,7 +6,7 @@ echo "Cleaning Up"
 rm -rf ../laravel/
 
 echo "Installing Laravel"
-composer create-project laravel/laravel ../laravel --quiet --prefer-dist
+composer create-project laravel/laravel ../laravel 8.6.* --quiet --prefer-dist
 cd ../laravel/
 
 echo "Preparing Laravel"
@@ -30,7 +30,6 @@ echo "Preparing Laravel"
 ./artisan make:resource ExampleResource
 ./artisan make:rule ExampleRule
 ./artisan make:seeder ExampleSeeder
-./artisan make:test ExampleTest
 
 echo "Adding package from source"
 sed -e 's|"type": "project",|&"repositories": [ { "type": "path", "url": "../psalm-plugin-laravel" } ],|' -i composer.json
