@@ -1,20 +1,29 @@
 name: Tests
 
-on:
-  push:
-  pull_request:
-  schedule:
-    - cron: '0 0 * * *'
+on: [push, pull_request]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         php: [7.3, 7.4, 8.0, 8.1]
         illuminate_version: [6.*, 8.*]
-        composer_flags:  ['', '--prefer-lowest']
+        stability: [prefer-lowest, prefer-stable]
         exclude:
+          - illuminate_version: 6.*
+            php: 7.3
+            stability: prefer-stable
+
+          - illuminate_version: 6.*
+            php: 7.4
+            stability: prefer-stable
+
+          - illuminate_version: 6.*
+            php: 8.0
+            stability: prefer-stable
+
           # Exclude unsupported combination
           # https://laravel.com/docs/8.x/releases#support-policy
           - illuminate_version: 6.*
@@ -30,27 +39,24 @@ jobs:
           # "Added PHP 8.1 Support from v8.67.0"
           - illuminate_version: ^8.67.0
             php: 8.1
-            composer_flags: ''
-          - illuminate_version: ^8.67.0
-            php: 8.1
-            composer_flags: '--prefer-lowest'
+            stability: 'prefer-stable'
 
-    name: ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | ${{ matrix.composer_flags }}
+    name: ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | ${{ matrix.stability }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: ${{ matrix.php }}
-        coverage: none
-        tools: composer:v2
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
 
-    - name: Install dependencies
-      run: |
-        composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist ${{ matrix.composer_flags }}
+      - name: Install dependencies
+        run: |
+          composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --${{ matrix.stability }}
 
-    - name: Run Tests
-      run: composer test
+      - name: Run Tests
+        run: composer test
