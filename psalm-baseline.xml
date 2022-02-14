@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="dev-master@b07de1fefde4714f29bca0b56c632bd82855fc64">
+<files>
   <file src="src/Providers/ModelStubProvider.php">
     <PossiblyUndefinedMethod occurrences="1">
       <code>databasePath</code>
