@@ -35,6 +35,11 @@ jobs:
           - illuminate_version: 8.*
             php: 8.1
 
+          - illuminate_version: 9.*
+            php: 7.3
+
+          - illuminate_version: 9.*
+            php: 7.4
         include:
           # "Added PHP 8.1 Support from v8.67.0"
           - illuminate_version: ^8.67.0
@@ -56,6 +61,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          composer install
           composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --${{ matrix.stability }}
 
       - name: Run Tests
