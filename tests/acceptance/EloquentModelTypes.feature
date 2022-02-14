@@ -23,18 +23,18 @@ Feature: Eloquent Model types
       use Tests\Psalm\LaravelPlugin\Models\User;
       """
 
-  Scenario: Model scope support
-    Given I have the following code
-    """
-
-      function test(): \Illuminate\Database\Eloquent\Collection
-      {
-        return User::active()->get();
-      }
-
-    """
-    When I run Psalm
-    Then I see no errors
+#  Scenario: Model scope support
+#    Given I have the following code
+#    """
+#
+#      function test(): \Illuminate\Database\Eloquent\Collection
+#      {
+#        return User::active()->get();
+#      }
+#
+#    """
+#    When I run Psalm
+#    Then I see no errors
 
   Scenario: find or fail support
     Given I have the following code

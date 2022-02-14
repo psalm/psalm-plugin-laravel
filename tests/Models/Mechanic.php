@@ -1,11 +1,14 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
-final class Mechanic extends Model {
+final class Mechanic extends Model
+{
     protected $table = 'mechanics';
 
     /**
