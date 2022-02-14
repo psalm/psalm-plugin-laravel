@@ -27,9 +27,9 @@
         "barryvdh/laravel-ide-helper": "^2.10"
     },
     "require-dev": {
-        "codeception/codeception": "^4.1.6",
-        "codeception/module-phpbrowser": "^1.0.0",
-        "codeception/module-asserts": "^1.0.0",
+        "codeception/codeception": "^5.0",
+        "codeception/module-phpbrowser": "^2.0",
+        "codeception/module-asserts": "^2.0",
         "weirdan/codeception-psalm-module": "^0.13.1",
         "squizlabs/php_codesniffer": "*",
         "slevomat/coding-standard": "^6.2"
