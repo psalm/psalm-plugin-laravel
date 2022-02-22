@@ -5,7 +5,7 @@ Feature: Eloquent Model property types
     Given I have the following config
       """
       <?xml version="1.0"?>
-      <psalm totallyTyped="true" usePhpDocPropertiesWithoutMagicCall="true">
+      <psalm errorLevel="1" usePhpDocPropertiesWithoutMagicCall="true">
         <projectFiles>
           <directory name="."/>
           <ignoreFiles> <directory name="../../vendor"/> </ignoreFiles>
