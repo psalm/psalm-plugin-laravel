@@ -23,6 +23,12 @@ class SchemaAggregator
         foreach ($stmts as $stmt) {
             if ($stmt instanceof PhpParser\Node\Stmt\Class_) {
                 $this->addClassStatements($stmt->stmts);
+            } elseif (
+                $stmt instanceof PhpParser\Node\Stmt\Return_ &&
+                $stmt->expr instanceof PhpParser\Node\Expr\New_ &&
+                $stmt->expr->class instanceof PhpParser\Node\Stmt\Class_
+            ) {
+                $this->addClassStatements($stmt->expr->class->stmts);
             }
         }
     }
