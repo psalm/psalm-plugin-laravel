@@ -7,7 +7,7 @@ use Barryvdh\LaravelIdeHelper\Console\MetaCommand;
 class FakeMetaCommand extends MetaCommand
 {
     /**
-     * @return void
+     * @return callable
      */
     protected function registerClassAutoloadExceptions(): callable
     {
