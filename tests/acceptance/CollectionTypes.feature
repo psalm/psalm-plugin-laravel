@@ -5,7 +5,7 @@ Feature: Collection types
     Given I have the following config
       """
       <?xml version="1.0"?>
-      <psalm totallyTyped="true">
+      <psalm errorLevel="1">
         <projectFiles>
           <directory name="."/>
           <ignoreFiles> <directory name="../../vendor"/> </ignoreFiles>
@@ -15,14 +15,16 @@ Feature: Collection types
         </plugins>
       </psalm>
       """
+    And I have the following code preamble
+      """
+      <?php declare(strict_types=1);
 
-  Scenario:
+      use Illuminate\Support\Collection;
+      """
+
+  Scenario: Collection has TKey, TValue
     Given I have the following code
     """
-    <?php declare(strict_types=1);
-
-    use Illuminate\Support\Collection;
-
     final class CollectionTypes
     {
         /**
@@ -109,3 +111,33 @@ Feature: Collection types
     When I run Psalm
     Then I see no errors
 
+  Scenario: Dict like Collection can iterate with TKey, TValue
+    Given I have the following code
+    """
+    /** @var Collection<string, string> */
+    $collection = new Collection(["key" => "value"]);
+
+    foreach ($collection as $key => $value) {
+        /** @psalm-suppress UnusedFunctionCall we need type-check only */
+        substr($key, 0);
+
+        /** @psalm-suppress UnusedFunctionCall we need type-check only */
+        substr($value, 0);
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: Array like Collection can iterate with TKey, TValue
+    Given I have the following code
+    """
+    /** @var Collection<int, string> */
+    $collection = new Collection(["data"]);
+
+    foreach ($collection as $key => $value) {
+        /** @psalm-suppress UnusedFunctionCall we need type-check only */
+        substr($value, $key);
+    }
+    """
+    When I run Psalm
+    Then I see no errors

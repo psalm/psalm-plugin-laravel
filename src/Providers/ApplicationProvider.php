@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Providers;
 
@@ -8,6 +10,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Laravel\Lumen\Application as LumenApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
+
 use function file_exists;
 use function get_class;
 use function getcwd;
@@ -48,12 +51,13 @@ final class ApplicationProvider
             return self::$app;
         }
 
-        if (file_exists($applicationPath = __DIR__.'/../../../../bootstrap/app.php')) { // Applications
+        if (file_exists($applicationPath = __DIR__ . '/../../../../bootstrap/app.php')) { // Applications
+            /** @psalm-suppress MissingFile file is checked for existence */
             $app = require $applicationPath;
-        } elseif (file_exists($applicationPath = getcwd().'/bootstrap/app.php')) { // Local Dev
+        } elseif (file_exists($applicationPath = getcwd() . '/bootstrap/app.php')) { // Local Dev
             $app = require $applicationPath;
         } else { // Packages
-            $app = (new self)->createApplication();
+            $app = (new self())->createApplication();
         }
 
         self::$app = $app;

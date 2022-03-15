@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="4.8.1@f73f2299dbc59a3e6c4d66cff4605176e728ee69">
+<files psalm-version="4.20.0@f82a70e7edfc6cf2705e9374c8a0b6a974a779ed">
   <file src="app/Console/Kernel.php">
     <PropertyNotSetInConstructor occurrences="1">
       <code>Kernel</code>
@@ -29,9 +29,6 @@
     </UnusedClass>
   </file>
   <file src="app/Jobs/ExampleJob.php">
-    <PropertyNotSetInConstructor occurrences="1">
-      <code>ExampleJob</code>
-    </PropertyNotSetInConstructor>
     <UnusedClass occurrences="1">
       <code>ExampleJob</code>
     </UnusedClass>

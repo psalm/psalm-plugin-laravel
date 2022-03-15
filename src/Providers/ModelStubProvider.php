@@ -8,13 +8,13 @@ use Psalm\LaravelPlugin\Fakes\FakeModelsCommand;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
+
 use function dirname;
 use function glob;
 use function unlink;
 
 final class ModelStubProvider implements GeneratesStubs
 {
-
     /**
      * @var array<class-string>
      */

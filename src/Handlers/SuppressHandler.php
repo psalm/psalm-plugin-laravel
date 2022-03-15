@@ -7,6 +7,7 @@ use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
 use Psalm\Storage\PropertyStorage;
+
 use function array_intersect;
 use function in_array;
 use function strpos;
@@ -108,7 +109,10 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_CLASS_METHOD as $issue => $method_by_class) {
             foreach ($method_by_class[$class->name] ?? [] as $method_name) {
-                /** @psalm-suppress RedundantCast */
+                /**
+                 * @psalm-suppress RedundantCast
+                 * @psalm-suppress RedundantFunctionCall
+                 */
                 self::suppress($issue, $class->methods[strtolower($method_name)] ?? null);
             }
         }
