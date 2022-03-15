@@ -9,7 +9,6 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use function config;
 use function get_class;
 use function in_array;
-use function config;
 use function implode;
 
 trait FakeModelsCommandLogic
