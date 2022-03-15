@@ -4,7 +4,6 @@ namespace Psalm\LaravelPlugin\Fakes;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 
 use function config;
 use function get_class;
