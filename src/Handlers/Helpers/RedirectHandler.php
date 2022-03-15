@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
@@ -11,7 +13,6 @@ use Psalm\Type;
 
 class RedirectHandler implements FunctionReturnTypeProviderInterface
 {
-
     /**
      * @return array<lowercase-string>
      */
@@ -25,7 +26,7 @@ class RedirectHandler implements FunctionReturnTypeProviderInterface
      *
      * @return ?Type\Union
      */
-    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event) : ?Type\Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Type\Union
     {
         if (!$event->getCallArgs()) {
             return new Type\Union([

@@ -17,6 +17,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use ReflectionClass;
 use Throwable;
+
 use function array_filter;
 use function array_keys;
 use function get_class;
@@ -54,7 +55,7 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
         return [get_class(ApplicationProvider::getApp())];
     }
 
-    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event) : ?Type\Union
+    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         // lumen doesn't have the likes of makeWith, so we will ensure these methods actually exist on the underlying
         // app contract

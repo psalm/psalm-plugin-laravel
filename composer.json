@@ -2,8 +2,16 @@
     "name": "psalm/plugin-laravel",
     "description": "A Laravel plugin for Psalm",
     "type": "psalm-plugin",
+    "homepage": "https://github.com/psalm/psalm-plugin-laravel",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Matthew Brown",
+            "email": "github@muglug.com"
+        }
+    ],
     "require": {
-        "php": "^7.3|^8",
+        "php": "^7.3|^8.0",
         "ext-simplexml": "*",
         "illuminate/config": "^6.0 || ^8.0",
         "illuminate/container": "^6.0 || ^8.0",
@@ -15,23 +23,16 @@
         "illuminate/support": "^6.0 || ^8.0",
         "illuminate/view": "^6.0 || ^8.0",
         "vimeo/psalm": "^4.8.1",
-        "orchestra/testbench": "^3.8 || ^4.0 || ^5.0 || ^6.0",
+        "orchestra/testbench": "^3.8 || ^4.0 || ^5.0 || ^6.22 || ^7.0",
         "barryvdh/laravel-ide-helper": ">=2.8.0"
     },
-    "license": "MIT",
-    "authors": [
-        {
-            "name": "Matthew Brown",
-            "email": "github@muglug.com"
-        }
-    ],
-    "extra": {
-        "branch-alias": {
-            "dev-master": "1.x-dev"
-        },
-        "psalm": {
-            "pluginClass": "Psalm\\LaravelPlugin\\Plugin"
-        }
+    "require-dev": {
+        "codeception/codeception": "^4.1.6",
+        "codeception/module-phpbrowser": "^1.0.0",
+        "codeception/module-asserts": "^1.0.0",
+        "weirdan/codeception-psalm-module": "^0.13.1",
+        "squizlabs/php_codesniffer": "*",
+        "slevomat/coding-standard": "^6.2"
     },
     "autoload": {
         "psr-4": {
@@ -44,23 +45,30 @@
         }
     },
     "scripts": {
+        "analyze": "psalm",
+        "lint": "phpcs -n",
+        "lint-fix": "phpcbf -n",
+        "test": "codecept run --skip-group skip",
         "check": [
             "@analyze",
             "@lint",
             "@test"
-        ],
-        "analyze": "psalm",
-        "lint": "phpcs -n",
-        "lint-fix": "phpcbf -n",
-        "test": "codecept run --skip-group skip"
+        ]
     },
-    "require-dev": {
-        "codeception/codeception": "^4.1.6",
-        "codeception/module-phpbrowser": "^1.0.0",
-        "codeception/module-asserts": "^1.0.0",
-        "weirdan/codeception-psalm-module": "^0.13.1",
-        "squizlabs/php_codesniffer": "*",
-        "slevomat/coding-standard": "^6.2"
+    "extra": {
+        "branch-alias": {
+            "dev-master": "1.x-dev"
+        },
+        "psalm": {
+            "pluginClass": "Psalm\\LaravelPlugin\\Plugin"
+        }
     },
-    "minimum-stability": "dev"
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }

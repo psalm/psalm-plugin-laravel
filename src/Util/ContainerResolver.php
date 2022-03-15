@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Util;
 
@@ -10,6 +12,7 @@ use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use ReflectionException;
+
 use function array_key_exists;
 use function class_exists;
 use function count;

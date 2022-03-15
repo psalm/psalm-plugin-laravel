@@ -1,10 +1,12 @@
 <?xml version="1.0"?>
 <psalm
-    totallyTyped="false"
+    errorLevel="2"
+    reportMixedIssues="false"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
     xsi:schemaLocation="https://getpsalm.org/schema/config"
     errorBaseline="psalm-baseline.xml"
+    phpVersion="8.0"
 >
     <projectFiles>
         <directory name="src" />

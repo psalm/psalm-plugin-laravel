@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
@@ -41,7 +43,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
         ];
     }
 
-    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event) : ?Union
+    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();
 
@@ -57,7 +59,8 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 
         // If this method name is on the builder object, proxy it over there
 
-        if ($source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase)) ||
+        if (
+            $source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase)) ||
             $source->getCodebase()->methods->methodExists(new MethodIdentifier(QueryBuilder::class, $method_name_lowercase))
         ) {
             $template_type_parameters = $event->getTemplateTypeParameters();

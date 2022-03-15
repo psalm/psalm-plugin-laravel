@@ -14,6 +14,7 @@ use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Plugin\EventHandler\MethodVisibilityProviderInterface;
 use Psalm\Type;
+
 use function in_array;
 
 final class OffsetHandler implements
