@@ -3,4 +3,4 @@ modules:
     enabled:
         - Cli
         - Filesystem
-        - \Weirdan\Codeception\Psalm\Module
+        - \Tests\Psalm\LaravelPlugin\Support\Module

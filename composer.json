@@ -30,7 +30,6 @@
         "codeception/codeception": "^5.0",
         "codeception/module-phpbrowser": "^2.0",
         "codeception/module-asserts": "^2.0",
-        "weirdan/codeception-psalm-module": "^0.13.1",
         "squizlabs/php_codesniffer": "*",
         "slevomat/coding-standard": "^6.2"
     },
@@ -64,7 +63,10 @@
         }
     },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
     },
     "minimum-stability": "dev",
     "prefer-stable": true
