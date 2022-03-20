@@ -28,10 +28,11 @@
     },
     "require-dev": {
         "codeception/codeception": "^5.0",
-        "codeception/module-phpbrowser": "*@dev",
         "codeception/module-asserts": "*@dev",
-        "squizlabs/php_codesniffer": "*",
-        "slevomat/coding-standard": "^6.2"
+        "codeception/module-cli": "^2.0",
+        "codeception/module-phpbrowser": "*@dev",
+        "slevomat/coding-standard": "^6.2",
+        "squizlabs/php_codesniffer": "*"
     },
     "autoload": {
         "psr-4": {
