@@ -50,7 +50,7 @@ class Module extends BaseModule
      * @var array<string,string>
      * @psalm-suppress NonInvariantDocblockPropertyType
      */
-    protected $config = [
+    protected array $config = [
         'psalm_path' => 'vendor/bin/psalm',
         'default_dir' => 'tests/_run/',
     ];
