@@ -30,6 +30,7 @@
         "codeception/codeception": "^5.0",
         "codeception/module-asserts": "*@dev",
         "codeception/module-cli": "^2.0",
+        "codeception/module-filesystem": "^3.0",
         "codeception/module-phpbrowser": "*@dev",
         "slevomat/coding-standard": "^6.2",
         "squizlabs/php_codesniffer": "*"
