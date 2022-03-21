@@ -8,9 +8,10 @@ use Illuminate\Filesystem\Filesystem;
 use Psalm\LaravelPlugin\Fakes\FakeModelsCommand210;
 use Psalm\LaravelPlugin\Fakes\FakeModelsCommand291;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
-use function \version_compare;
-use function \assert;
-use function \is_string;
+
+use function version_compare;
+use function assert;
+use function is_string;
 
 class FakeModelsCommandProvider
 {
