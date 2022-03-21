@@ -5,7 +5,7 @@ Feature: Request types
     Given I have the following config
       """
       <?xml version="1.0"?>
-      <psalm totallyTyped="false">
+      <psalm errorLevel="2" reportMixedIssues="false">
         <projectFiles>
           <directory name="."/>
           <ignoreFiles> <directory name="../../vendor"/> </ignoreFiles>
