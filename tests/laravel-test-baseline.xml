@@ -89,6 +89,11 @@
       <code>ExampleListener</code>
     </UnusedClass>
   </file>
+  <file src="app/Models/Example.php">
+    <UnusedClass occurrences="1">
+      <code>Example</code>
+    </UnusedClass>
+  </file>
   <file src="app/Models/User.php">
     <NonInvariantDocblockPropertyType occurrences="3">
       <code>$casts</code>
