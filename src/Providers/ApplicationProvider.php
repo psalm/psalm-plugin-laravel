@@ -52,6 +52,7 @@ final class ApplicationProvider
         }
 
         if (file_exists($applicationPath = __DIR__ . '/../../../../bootstrap/app.php')) { // Applications
+            /** @psalm-suppress MissingFile file is checked for existence */
             $app = require $applicationPath;
         } elseif (file_exists($applicationPath = getcwd() . '/bootstrap/app.php')) { // Local Dev
             $app = require $applicationPath;
