@@ -15,6 +15,7 @@ class FakeMetaCommand extends MetaCommand
         // autoloader when it is done, and we certainly do not want to throw exceptions when we are simply checking if
         // a certain class exists. We are instead changing this to be a noop.
 
-        return function () {};
+        return function () {
+        };
     }
 }

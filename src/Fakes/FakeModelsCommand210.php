@@ -5,12 +5,7 @@ namespace Psalm\LaravelPlugin\Fakes;
 use Barryvdh\LaravelIdeHelper\Console\ModelsCommand;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
-use Illuminate\Support\Str;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
-use function config;
-use function get_class;
-use function implode;
-use function in_array;
 
 class FakeModelsCommand210 extends ModelsCommand
 {
@@ -30,7 +25,7 @@ class FakeModelsCommand210 extends ModelsCommand
      *
      * @param Model $model
      */
-    public function getPropertiesFromTable($model) : void
+    public function getPropertiesFromTable($model): void
     {
         $this->getProperties($model);
     }
