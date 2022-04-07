@@ -177,32 +177,6 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: cannot call firstOrNew and firstOrCreate without parameters in Laravel 6.x
-    Given I have the "laravel/framework" package satisfying the "6.*"
-    And I have the following code
-    """
-    /**
-    * @psalm-param Builder<User> $builder
-    * @psalm-return User
-    */
-    function test_firstOrCreate(Builder $builder): User {
-      return $builder->firstOrCreate();
-    }
-
-    /**
-    * @psalm-param Builder<User> $builder
-    * @psalm-return User
-    */
-    function test_firstOrNew(Builder $builder): User {
-      return $builder->firstOrNew();
-    }
-    """
-    When I run Psalm
-    Then I see these errors
-      | Type  | Message |
-      | TooFewArguments | Too few arguments for method Illuminate\Database\Eloquent\Builder::firstorcreate saw 0 |
-      | TooFewArguments | Too few arguments for method Illuminate\Database\Eloquent\Builder::firstornew saw 0    |
-
   Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 8.x
     Given I have the "laravel/framework" package satisfying the ">= 8.0"
     And I have the following code
