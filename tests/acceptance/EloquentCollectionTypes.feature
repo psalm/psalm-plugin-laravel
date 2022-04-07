@@ -16,7 +16,7 @@ Feature: Eloquent Collection types
       </psalm>
       """
 
-  Scenario:
+  Scenario: Unknown Scenario
     Given I have the following code
     """
     <?php declare(strict_types=1);
