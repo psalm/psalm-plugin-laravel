@@ -16,7 +16,7 @@ Feature: redirect()
       </psalm>
       """
 
-  Scenario:
+  Scenario: Unknown Scenario
     Given I have the following code
     """
     <?php
@@ -29,7 +29,7 @@ Feature: redirect()
     When I run Psalm
     Then I see no errors
 
-  Scenario:
+  Scenario: Unknown Scenario
     Given I have the following code
     """
     <?php
