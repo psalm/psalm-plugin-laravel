@@ -6,6 +6,9 @@ use Barryvdh\LaravelIdeHelper\Console\MetaCommand;
 
 class FakeMetaCommand extends MetaCommand
 {
+    /**
+     * @return callable
+     */
     protected function registerClassAutoloadExceptions(): callable
     {
         // by default, the ide-helper throws exceptions when it cannot find a class. However it does not unregister that
