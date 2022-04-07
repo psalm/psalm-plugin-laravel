@@ -132,7 +132,7 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario:
+  Scenario: Unknown Scenario
     Given I have the following code preamble
     """
     <?php declare(strict_types=1);

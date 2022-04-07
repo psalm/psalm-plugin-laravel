@@ -17,7 +17,7 @@ Feature: ExceptionHandler
       </psalm>
       """
 
-  Scenario:
+  Scenario: Unknown Scenario
     Given I have the following code
     """
     <?php
