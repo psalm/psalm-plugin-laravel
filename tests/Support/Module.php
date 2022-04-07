@@ -147,9 +147,9 @@ class Module extends BaseModule
     /**
      * @Then I see exit code :code
      */
-    public function seeExitCode(int $exitCode): void
+    public function seeExitCode(string $exitCode): void
     {
-        if ($this->exitCode === $exitCode) {
+        if ($this->exitCode === (int) $exitCode) {
             return;
         }
 
