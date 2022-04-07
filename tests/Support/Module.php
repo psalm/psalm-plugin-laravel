@@ -13,6 +13,7 @@ use Composer\Semver\Semver;
 use Composer\Semver\VersionParser;
 use PackageVersions\Versions;
 use PHPUnit\Framework\Assert;
+use Behat\Gherkin\Node\PyStringNode;
 use Behat\Gherkin\Node\TableNode;
 use OutOfBoundsException;
 use PHPUnit\Framework\SkippedTestError;
@@ -238,9 +239,9 @@ class Module extends BaseModule
     /**
      * @Given I have the following code preamble :code
      */
-    public function haveTheFollowingCodePreamble(string $code): void
+    public function haveTheFollowingCodePreamble(PyStringNode $code): void
     {
-        $this->preamble = $code;
+        $this->preamble = $code->getRaw();
     }
 
     /**
@@ -313,20 +314,20 @@ class Module extends BaseModule
     /**
      * @Given I have the following config :config
      */
-    public function haveTheFollowingConfig(string $config): void
+    public function haveTheFollowingConfig(PyStringNode $config): void
     {
-        $this->psalmConfig = $config;
+        $this->psalmConfig = $config->getRaw();
     }
 
     /**
      * @Given I have the following code :code
      */
-    public function haveTheFollowingCode(string $code): void
+    public function haveTheFollowingCode(PyStringNode $code): void
     {
         $file = sprintf(
             '%s/%s.php',
             rtrim($this->config['default_dir'], '/'),
-            sha1($this->preamble . $code)
+            sha1($this->preamble . $code->getRaw())
         );
 
         $this->fs()->writeToFile(
