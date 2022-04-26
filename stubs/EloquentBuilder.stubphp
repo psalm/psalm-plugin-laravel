@@ -168,6 +168,20 @@ class Builder
     public function firstOr($columns = ['*'], Closure $callback = null) { }
 
     /**
+     * @param  array  $attributes
+     * @param  array  $values
+     * @return TModel|self<TModel>
+     */
+    public function firstOrNew(array $attributes = [], array $values = []) { }
+
+    /**
+     * @param  array  $attributes
+     * @param  array  $values
+     * @return TModel|self<TModel>
+     */
+    public function firstOrCreate(array $attributes = [], array $values = []) { }
+
+    /**
      * @param  string  $column
      * @return mixed
      */
