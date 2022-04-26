@@ -33,7 +33,8 @@
         "codeception/module-filesystem": "^3.0",
         "codeception/module-phpbrowser": "*@dev",
         "slevomat/coding-standard": "^6.2",
-        "squizlabs/php_codesniffer": "*"
+        "squizlabs/php_codesniffer": "*",
+        "phpoption/phpoption": "^1.8.0"
     },
     "autoload": {
         "psr-4": {
