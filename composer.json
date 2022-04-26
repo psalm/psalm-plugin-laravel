@@ -34,7 +34,8 @@
         "codeception/module-phpbrowser": "*@dev",
         "slevomat/coding-standard": "^6.2",
         "squizlabs/php_codesniffer": "*",
-        "phpoption/phpoption": "^1.8.0"
+        "phpoption/phpoption": "^1.8.0",
+        "symfony/http-foundation": "^5.3.7 || ^6.0"
     },
     "autoload": {
         "psr-4": {
