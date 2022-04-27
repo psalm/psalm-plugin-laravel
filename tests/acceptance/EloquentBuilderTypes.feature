@@ -178,7 +178,7 @@ Feature: Eloquent Builder types
     Then I see no errors
 
   Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 8.x
-    Given I have the "laravel/framework" package satisfying the ">= 8.0"
+    Given I have the "laravel/framework" package satisfying the "^8.0"
     And I have the following code
     """
     /**
@@ -194,6 +194,29 @@ Feature: Eloquent Builder types
     * @psalm-return User
     */
     function test_firstOrNew(Builder $builder): User {
+      return $builder->firstOrNew();
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 9.x
+    Given I have the "laravel/framework" package satisfying the "^9.0"
+    And I have the following code
+    """
+    /**
+    * @psalm-param Builder<User> $builder
+    * @psalm-return Builder<User>|User
+    */
+    function test_firstOrCreate(Builder $builder): Builder|User {
+      return $builder->firstOrCreate();
+    }
+
+    /**
+    * @psalm-param Builder<User> $builder
+    * @psalm-return Builder<User>|User
+    */
+    function test_firstOrNew(Builder $builder): Builder|User {
       return $builder->firstOrNew();
     }
     """
