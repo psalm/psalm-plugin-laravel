@@ -50,7 +50,6 @@
     },
     "scripts": {
         "analyze": "psalm",
-        "analyse": "psalm",
         "lint": "phpcs -n",
         "lint-fix": "phpcbf -n",
         "test": "codecept run --skip-group skip",
