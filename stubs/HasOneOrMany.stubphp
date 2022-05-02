@@ -66,4 +66,20 @@ abstract class HasOneOrMany extends Relation
      * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
      */
     public function createMany(array $records) { }
+
+    /**
+     * @param  array  $attributes
+     * @param  array  $values
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function firstOrNew(array $attributes = [], array $values = []) { }
+
+    /**
+     * @param  array  $attributes
+     * @param  array  $values
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function firstOrCreate(array $attributes = [], array $values = []) { }
 }

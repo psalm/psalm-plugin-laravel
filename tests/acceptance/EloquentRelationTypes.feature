@@ -357,35 +357,6 @@ Feature: Eloquent Relation types
     When I run Psalm
     Then I see no errors
 
-  Scenario: cannot call firstOrNew and firstOrCreate without parameters in Laravel 6.x
-    Given I have the "laravel/framework" package satisfying the "6.*"
-    And I have the following code
-    """
-    function test_hasOne_firstOrCreate(User $user): Phone {
-      return $user->phone()->firstOrCreate();
-    }
-
-    function test_hasOne_firstOrNew(User $user): Phone {
-      return $user->phone()->firstOrNew();
-    }
-
-    function test_hasMany_firstOrCreate(Post $post): Comment {
-      return $post->comments()->firstOrCreate();
-    }
-
-    function test_hasMany_firstOrNew(Post $post): Comment {
-      return $post->comments()->firstOrNew();
-    }
-    """
-    When I run Psalm
-    Then I see these errors
-      | Type  | Message |
-      | TooFewArguments | Too few arguments for method Illuminate\Database\Eloquent\Relations\HasOneOrMany::firstorcreate saw 0 |
-      | TooFewArguments | Too few arguments for method Illuminate\Database\Eloquent\Relations\HasOneOrMany::firstornew saw 0    |
-      | TooFewArguments | Too few arguments for method Illuminate\Database\Eloquent\Relations\HasOneOrMany::firstorcreate saw 0 |
-      | TooFewArguments | Too few arguments for method Illuminate\Database\Eloquent\Relations\HasOneOrMany::firstornew saw 0    |
-
-
   Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 8.x
     Given I have the "laravel/framework" package satisfying the ">= 8.0"
     And I have the following code

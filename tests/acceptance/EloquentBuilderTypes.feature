@@ -132,7 +132,7 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario:
+  Scenario: Unknown Scenario
     Given I have the following code preamble
     """
     <?php declare(strict_types=1);
@@ -177,8 +177,8 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: cannot call firstOrNew and firstOrCreate without parameters in Laravel 6.x
-    Given I have the "laravel/framework" package satisfying the "6.*"
+  Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 8.x
+    Given I have the "laravel/framework" package satisfying the "^8.0"
     And I have the following code
     """
     /**
@@ -198,28 +198,25 @@ Feature: Eloquent Builder types
     }
     """
     When I run Psalm
-    Then I see these errors
-      | Type  | Message |
-      | TooFewArguments | Too few arguments for method Illuminate\Database\Eloquent\Builder::firstorcreate saw 0 |
-      | TooFewArguments | Too few arguments for method Illuminate\Database\Eloquent\Builder::firstornew saw 0    |
+    Then I see no errors
 
-  Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 8.x
-    Given I have the "laravel/framework" package satisfying the ">= 8.0"
+  Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 9.x
+    Given I have the "laravel/framework" package satisfying the "^9.0"
     And I have the following code
     """
     /**
     * @psalm-param Builder<User> $builder
-    * @psalm-return User
+    * @psalm-return Builder<User>|User
     */
-    function test_firstOrCreate(Builder $builder): User {
+    function test_firstOrCreate(Builder $builder): Builder|User {
       return $builder->firstOrCreate();
     }
 
     /**
     * @psalm-param Builder<User> $builder
-    * @psalm-return User
+    * @psalm-return Builder<User>|User
     */
-    function test_firstOrNew(Builder $builder): User {
+    function test_firstOrNew(Builder $builder): Builder|User {
       return $builder->firstOrNew();
     }
     """
