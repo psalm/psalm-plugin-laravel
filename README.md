@@ -11,7 +11,11 @@ This package brings static analysis and type support to projects using Laravel. 
  of writing tests!
  
  ![Screenshot](/assets/screenshot.png)
-
+ 
+ ## Versions
+Laravel 6 | Laravel 7 | Laravel 8 | Laravel 9
+--------- | --------- | --------- | -----------
+v1.*      | v1.*      | v1.*      | v2.*
 ## Quickstart
 Please refer to the [full Psalm documentation](https://psalm.dev/quickstart) for a more detailed guide on introducing Psalm
 into your project.
