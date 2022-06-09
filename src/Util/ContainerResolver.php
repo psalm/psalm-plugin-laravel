@@ -42,7 +42,7 @@ final class ContainerResolver
         // dynamic analysis to resolve the actual type from the container
         try {
             $concrete = ApplicationProvider::getApp()->make($abstract);
-        } catch (BindingResolutionException | ReflectionException $e) {
+        } catch (\Throwable $e) {
             return null;
         }
 
