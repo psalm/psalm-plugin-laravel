@@ -127,3 +127,12 @@ function logger($message = null, array $context = [])
  * @return ($key is null ? \Illuminate\Config\Repository : ($key is array ? null : mixed))
  */
 function config($key = null, $default = null) {}
+
+/**
+ * Get an instance of the current request or an input item from the request.
+ *
+ * @param  string[]|string|null  $key
+ * @param  mixed  $default
+ * @return ($key is null ? \Illuminate\Http\Request : ($key is array ? string[] : mixed))
+ */
+function request($key = null, $default = null) {}
