@@ -264,7 +264,7 @@ Feature: Eloquent Builder types
       return $builder->whereDate('created_at', '>', 1);
     }
     """
-    And I have Psalm older than "4.99.0" (because of "changed issue message")
+    And I have Psalm older than "4.99.0" (because of "changed issue type")
     When I run Psalm
     Then I see these errors
       | Type  | Message |
@@ -281,11 +281,11 @@ Feature: Eloquent Builder types
       return $builder->whereDate('created_at', '>', 1);
     }
     """
-    And I have Psalm newer than "4.99.0" (because of "changed issue message")
+    And I have Psalm newer than "4.99.0" (because of "changed issue type")
     When I run Psalm
     Then I see these errors
       | Type  | Message |
-      | InvalidScalarArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, but 1 provided |
+      | InvalidArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, but 1 provided |
 
   Scenario: can call count on the builder instance
     Given I have the following code
