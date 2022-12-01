@@ -118,10 +118,7 @@ class ModelRelationshipPropertyHandler implements
 
                 $relationType = $atomicType;
 
-                foreach ($atomicType->getChildNodes() as $childNode) {
-                    if (!$childNode instanceof Union) {
-                        continue;
-                    }
+                foreach ($atomicType->type_params as $childNode) {
                     foreach ($childNode->getAtomicTypes() as $atomicType) {
                         if (!$atomicType instanceof Type\Atomic\TNamedObject) {
                             continue;

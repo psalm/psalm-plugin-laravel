@@ -15,9 +15,6 @@ use function strtolower;
 
 class SuppressHandler implements AfterClassLikeVisitInterface
 {
-    /**
-     * @var array<string, list<class-string>>
-     */
     private const BY_CLASS = [
         'UnusedClass' => [
             'App\Console\Kernel',
@@ -33,18 +30,12 @@ class SuppressHandler implements AfterClassLikeVisitInterface
         ],
     ];
 
-    /**
-     * @var array<string, array<class-string, list<string>>>
-     */
     private const BY_CLASS_METHOD = [
         'PossiblyUnusedMethod' => [
             'App\Http\Middleware\RedirectIfAuthenticated' => ['handle'],
         ],
     ];
 
-    /**
-     * @var array<string, list<class-string>>
-     */
     private const BY_NAMESPACE = [
         'PropertyNotSetInConstructor' => [
             'App\Jobs',
@@ -55,9 +46,6 @@ class SuppressHandler implements AfterClassLikeVisitInterface
         ],
     ];
 
-    /**
-     * @var array<string, array<class-string, list<string>>>
-     */
     private const BY_NAMESPACE_METHOD = [
         'PossiblyUnusedMethod' => [
             'App\Events' => ['broadcastOn'],
@@ -67,9 +55,6 @@ class SuppressHandler implements AfterClassLikeVisitInterface
         ]
     ];
 
-    /**
-     * @var array<string, list<class-string>>
-     */
     private const BY_PARENT_CLASS = [
         'PropertyNotSetInConstructor' => [
             'Illuminate\Console\Command',
@@ -79,18 +64,12 @@ class SuppressHandler implements AfterClassLikeVisitInterface
         ],
     ];
 
-    /**
-     * @var array<string, array<class-string, list<string>>>
-     */
     private const BY_PARENT_CLASS_PROPERTY = [
         'NonInvariantDocblockPropertyType' => [
             'Illuminate\Console\Command' => ['description'],
         ],
     ];
 
-    /**
-     * @var array<string, array<class-string, list<string>>>
-     */
     private const BY_USED_TRAITS = [
         'PropertyNotSetInConstructor' => [
             'Illuminate\Queue\InteractsWithQueue',
