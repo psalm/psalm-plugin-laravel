@@ -22,7 +22,7 @@
         "illuminate/routing": "^8.0 || ^9.0",
         "illuminate/support": "^8.0 || ^9.0",
         "illuminate/view": "^8.0 || ^9.0",
-        "vimeo/psalm": "^4.8.1",
+        "vimeo/psalm": "^4.8.1|^5",
         "orchestra/testbench": "^6.22 || ^7.0",
         "barryvdh/laravel-ide-helper": "^2.10"
     },
