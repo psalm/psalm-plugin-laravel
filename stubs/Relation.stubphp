@@ -64,7 +64,7 @@ abstract class Relation
      * Get the relationship for eager loading.
      *
      * @return \Illuminate\Database\Eloquent\Collection
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
+     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function getEager()
     {
@@ -76,7 +76,7 @@ abstract class Relation
      *
      * @param  array  $columns
      * @return \Illuminate\Database\Eloquent\Collection
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
+     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function get($columns = ['*'])
     {
