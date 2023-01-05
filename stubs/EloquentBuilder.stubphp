@@ -226,7 +226,7 @@ class Builder
     public function orWhereDoesntHaveMorph($relation, $types, \Closure $callback = null) {}
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Builder<TModelClass>  $from
+     * @param  \Illuminate\Database\Eloquent\Builder<TModel>  $from
      * @return static<TModel>
      */
     public function mergeConstraintsFrom(\Illuminate\Database\Eloquent\Builder $from) {}
@@ -342,8 +342,8 @@ class Builder
     public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
 
     /**
-     * @param  array<int, (model-property<TModelClass>|'*')>|model-property<TModelClass>|'*'  $columns
-     * @psalm-return TModelClass
+     * @param  array<int, (model-property<TModel>|'*')>|model-property<TModel>|'*'  $columns
+     * @psalm-return TModel
      */
     public function sole($columns = ['*']) {}
 
@@ -472,13 +472,13 @@ class Builder
      * @param  array<array-key, mixed>  $columns
      * @param  string  $cursorName
      * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
-     * @return \Illuminate\Pagination\CursorPaginator<TModelClass>
+     * @return \Illuminate\Pagination\CursorPaginator<TModel>
      */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 
     /**
      * @param  int  $chunkSize
-     * @return \Illuminate\Support\LazyCollection<int, TModelClass>
+     * @return \Illuminate\Support\LazyCollection<int, TModel>
      *
      * @throws \InvalidArgumentException
      */
@@ -488,7 +488,7 @@ class Builder
      * @param  int  $chunkSize
      * @param  string|null  $column
      * @param  string|null  $alias
-     * @return \Illuminate\Support\LazyCollection<int, TModelClass>
+     * @return \Illuminate\Support\LazyCollection<int, TModel>
      *
      * @throws \InvalidArgumentException
      */
@@ -498,7 +498,7 @@ class Builder
      * @param  int  $chunkSize
      * @param  string|null  $column
      * @param  string|null  $alias
-     * @return \Illuminate\Support\LazyCollection<int, TModelClass>
+     * @return \Illuminate\Support\LazyCollection<int, TModel>
      *
      * @throws \InvalidArgumentException
      */
