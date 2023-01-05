@@ -2,11 +2,25 @@
 
 namespace Illuminate\Database\Eloquent;
 
-/**
- * @template TModel of Model
- * @extends \Illuminate\Support\Collection<int, TModel>
- */
-class Collection extends \Illuminate\Support\Collection
-{
+use Illuminate\Contracts\Queue\QueueableCollection;
+use Illuminate\Support\Collection as BaseCollection;
 
+/**
+ * @template TKey of array-key
+ * @template TModel of \Illuminate\Database\Eloquent\Model
+ * @extends \Illuminate\Support\Collection<TKey, TModel>
+ */
+class Collection extends BaseCollection implements QueueableCollection
+{
+    /**
+     * Find a model in the collection by key.
+     *
+     * @template TKey
+     * @template TFindDefault
+     *
+     * @param  TKey  $key
+     * @param  TFindDefault  $default
+     * @psalm-return (TKey is \Illuminate\Database\Eloquent\Model ? TModel|TFindDefault : (TKey is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? static<TKey, TModel> : TModel|TFindDefault))
+     */
+    public function find($key, $default = null) {}
 }
