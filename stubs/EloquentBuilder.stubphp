@@ -163,7 +163,7 @@ class Builder
      * @param  \Closure|null  $callback
      * @return TModel|mixed
      */
-    public function firstOr($columns = ['*'], Closure $callback = null) {}
+    public function firstOr($columns = ['*'], \Closure $callback = null) {}
 
     /**
      * @param  array<string, mixed>  $attributes
@@ -178,6 +178,13 @@ class Builder
      * @return TModel|static<TModel>
      */
     public function firstOrCreate(array $attributes = [], array $values = []) {}
+
+    /**
+     * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|int, mixed>|\Illuminate\Database\Query\Expression  $column
+     * @param  string  $boolean
+     * @phpstan-return TModel|null
+     */
+    public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
 
     /**
      * @param  array<string, mixed>  $attributes
