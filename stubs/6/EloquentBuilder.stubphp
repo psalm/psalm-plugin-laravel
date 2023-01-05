@@ -10,16 +10,16 @@ namespace Illuminate\Database\Eloquent;
 class Builder
 {
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $values
      * @return TModel
      */
-    public function firstOrNew(array $attributes, array $values = []) { }
+    public function firstOrNew(array $attributes, array $values = []) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $values
      * @return TModel
      */
-    public function firstOrCreate(array $attributes, array $values = []) { }
+    public function firstOrCreate(array $attributes, array $values = []) {}
 }

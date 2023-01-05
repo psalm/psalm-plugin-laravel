@@ -20,137 +20,135 @@ class Builder
      * @param  \Illuminate\Database\Query\Builder  $query
      * @return void
      */
-    public function __construct(QueryBuilder $query) { }
+    public function __construct(QueryBuilder $query) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @return TModel
      */
-    public function make(array $attributes = []) { }
+    public function make(array $attributes = []) {}
 
     /**
      * @param  string  $identifier
      * @param  \Illuminate\Database\Eloquent\Scope|\Closure  $scope
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function withGlobalScope($identifier, $scope) { }
+    public function withGlobalScope($identifier, $scope) {}
 
     /**
      * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function withoutGlobalScope($scope) { }
+    public function withoutGlobalScope($scope) {}
 
     /**
      * @param  array|null  $scopes
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function withoutGlobalScopes(array $scopes = null) { }
+    public function withoutGlobalScopes(array $scopes = null) {}
 
     /**
      * @return array
      */
-    public function removedScopes() { }
+    public function removedScopes() {}
 
     /**
      * @param  mixed  $id
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function whereKey($id) { }
+    public function whereKey($id) {}
 
     /**
      * @param  mixed  $id
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function whereKeyNot($id) { }
+    public function whereKeyNot($id) {}
 
     /**
      * @param  string|array|\Closure  $column
      * @param  mixed   $operator
      * @param  mixed   $value
      * @param  string  $boolean
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function where($column, $operator = null, $value = null, $boolean = 'and') { }
+    public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
     /**
      * @param  string  $column
      * @param  string  $operator
      * @param  \DateTimeInterface|string|null  $value
      * @param  string  $boolean
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function whereDate($column, $operator, $value = null, $boolean = 'and') { }
+    public function whereDate($column, $operator, $value = null, $boolean = 'and') {}
 
     /**
      * @param  \Closure|array|string  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function orWhere($column, $operator = null, $value = null) { }
+    public function orWhere($column, $operator = null, $value = null) {}
 
     /**
      * @param  string  $column
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function latest($column = null) { }
+    public function latest($column = null) {}
 
     /**
      * @param  string  $column
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function oldest($column = null) { }
+    public function oldest($column = null) {}
 
     /**
      * @param  array  $items
      * @return \Illuminate\Database\Eloquent\Collection<TModel>
      */
-    public function hydrate(array $items) { }
+    public function hydrate(array $items) {}
 
     /**
      * @param  string  $query
      * @param  array  $bindings
      * @return \Illuminate\Database\Eloquent\Collection<TModel>
      */
-    public function fromQuery($query, $bindings = []) { }
+    public function fromQuery($query, $bindings = []) {}
 
     /**
      * @template T
      * @param  T $id
-     * @param  array  $columns
-     * @return (T is array ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel|null)
+     * @param  list<non-empty-string>  $columns
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel|null)
      */
-    public function find($id, $columns = ['*']) { }
+    public function find($id, $columns = ['*']) {}
 
     /**
      * @param  \Illuminate\Contracts\Support\Arrayable|array  $ids
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Collection<TModel>
      */
-    public function findMany($ids, $columns = ['*']) { }
+    public function findMany($ids, $columns = ['*']) {}
 
     /**
      * @template T
      * @param  T $id
-     * @param  array  $columns
-     * @return (T is array ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel)
+     * @param  list<non-empty-string>  $columns
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel)
      */
-    public function findOrFail($id, $columns = ['*']) { }
+    public function findOrFail($id, $columns = ['*']) {}
 
     /**
      * @param  mixed  $id
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return TModel
      */
-    public function findOrNew($id, $columns = ['*']) { }
+    public function findOrNew($id, $columns = ['*']) {}
 
     /**
-     * @param  array  $attributes
-     * @param  array  $values
-     * @return TModel
+     * @return TModel|null
      */
-    public function updateOrCreate(array $attributes, array $values = []) { }
+    public function first($columns = ['*']) {}
 
     /**
      * @param  array<array-key, string>  $columns
@@ -158,63 +156,70 @@ class Builder
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
-    public function firstOrFail($columns = ['*']) { }
+    public function firstOrFail($columns = ['*']) {}
 
     /**
      * @param  \Closure|array  $columns
      * @param  \Closure|null  $callback
      * @return TModel|mixed
      */
-    public function firstOr($columns = ['*'], Closure $callback = null) { }
+    public function firstOr($columns = ['*'], Closure $callback = null) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $values
-     * @return TModel|self<TModel>
+     * @return TModel|static<TModel>
      */
-    public function firstOrNew(array $attributes = [], array $values = []) { }
+    public function firstOrNew(array $attributes = [], array $values = []) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $values
-     * @return TModel|self<TModel>
+     * @return TModel|static<TModel>
      */
-    public function firstOrCreate(array $attributes = [], array $values = []) { }
+    public function firstOrCreate(array $attributes = [], array $values = []) {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array  $values
+     * @return TModel
+     */
+    public function updateOrCreate(array $attributes, array $values = []) {}
 
     /**
      * @param  string  $column
      * @return mixed
      */
-    public function value($column) { }
+    public function value($column) {}
 
     /**
-     * @param  array  $columns
+     * @param  array|non-empty-string  $columns
      * @return \Illuminate\Database\Eloquent\Collection<TModel>
      */
-    public function get($columns = ['*']) { }
+    public function get($columns = ['*']) {}
 
     /**
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return array<array-key, TModel>
      */
-    public function getModels($columns = ['*']) { }
+    public function getModels($columns = ['*']) {}
 
     /**
      * @param  array  $models
      * @return array
      */
-    public function eagerLoadRelations(array $models) { }
+    public function eagerLoadRelations(array $models) {}
 
     /**
      * @param  string  $name
      * @return \Illuminate\Database\Eloquent\Relations\Relation
      */
-    public function getRelation($name) { }
+    public function getRelation($name) {}
 
     /**
      * @return \Generator
      */
-    public function cursor() { }
+    public function cursor() {}
 
     /**
      * @param  int  $count
@@ -223,57 +228,57 @@ class Builder
      * @param  string|null  $alias
      * @return bool
      */
-    public function chunkById($count, callable $callback, $column = null, $alias = null) { }
+    public function chunkById($count, callable $callback, $column = null, $alias = null) {}
 
     /**
      * @return void
      */
-    protected function enforceOrderBy() { }
+    protected function enforceOrderBy() {}
 
     /**
      * @param  string  $column
      * @param  string|null  $key
      * @return \Illuminate\Support\Collection
      */
-    public function pluck($column, $key = null) { }
+    public function pluck($column, $key = null) {}
 
     /**
      * @param  int  $perPage
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
      *
      * @throws \InvalidArgumentException
      */
-    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) { }
+    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
     /**
      * @param  int  $perPage
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @return \Illuminate\Contracts\Pagination\Paginator
      */
-    public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) { }
+    public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @return TModel
      */
-    public function create(array $attributes = []) { }
+    public function create(array $attributes = []) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @return TModel
      */
-    public function forceCreate(array $attributes) { }
+    public function forceCreate(array $attributes) {}
 
     /**
      * @param  array  $values
      * @return int
      */
-    public function update(array $values) { }
+    public function update(array $values) {}
 
     /**
      * @param  string  $column
@@ -281,7 +286,7 @@ class Builder
      * @param  array  $extra
      * @return int
      */
-    public function increment($column, $amount = 1, array $extra = []) { }
+    public function increment($column, $amount = 1, array $extra = []) {}
 
     /**
      * @param  string  $column
@@ -289,91 +294,86 @@ class Builder
      * @param  array  $extra
      * @return int
      */
-    public function decrement($column, $amount = 1, array $extra = []) { }
+    public function decrement($column, $amount = 1, array $extra = []) {}
 
     /**
      * @return mixed
      */
-    public function delete() { }
+    public function delete() {}
 
     /**
      * @return mixed
      */
-    public function forceDelete() { }
+    public function forceDelete() {}
 
     /**
      * @param  \Closure  $callback
      * @return void
      */
-    public function onDelete(Closure $callback) { }
+    public function onDelete(Closure $callback) {}
 
     /**
      * Call the given local model scopes.
      *
-     * @param  array  $scopes
-     * @return self<TModel>
+     * @param  array|non-empty-string  $scopes
+     * @return static<TModel>
      */
-    public function scopes(array $scopes) { }
+    public function scopes($scopes) {}
 
     /**
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function applyScopes() { }
-
-    /**
-     * @param  mixed  $relations
-     * @return self<TModel>
-     */
-    public function with($relations) { }
+    public function applyScopes() {}
 
     /**
      * @param  mixed  $relations
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function without($relations) { }
+    public function with($relations) {}
 
     /**
-     * @param  array  $attributes
+     * @param  mixed  $relations
+     * @return static<TModel>
+     */
+    public function without($relations) {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
      * @return TModel
      */
-    public function newModelInstance($attributes = []) { }
+    public function newModelInstance($attributes = []) {}
 
     /**
      * @return \Illuminate\Database\Query\Builder
      */
-    public function getQuery() { }
+    public function getQuery() {}
 
     /**
      * @param  \Illuminate\Database\Query\Builder  $query
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function setQuery($query) { }
+    public function setQuery($query) {}
 
     /**
      * @param array $eagerLoad
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function setEagerLoads(array $eagerLoad) { }
+    public function setEagerLoads(array $eagerLoad) {}
 
     /**
      * @return TModel
      */
-    public function getModel() { }
+    public function getModel() {}
 
     /**
      * @param TModel $model
-     * @return self<TModel>
+     * @return static<TModel>
      */
-    public function setModel(Model $model) { }
-
-    /**
-     * @return TModel|null
-     */
-    public function first($columns = ['*']) { }
+    public function setModel(Model $model) {}
 
     /**
      * @param  string  $columns
      * @return int
      */
-    public function count($columns = '*') { }
+    public function count($columns = '*') {}
 }

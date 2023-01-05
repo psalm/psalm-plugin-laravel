@@ -3,25 +3,25 @@
 namespace Illuminate\Database\Eloquent\Relations;
 
 /**
-* @template TRelatedModel of Model
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
 * @template-extends Relation<TRelatedModel>
 * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
 */
 abstract class HasOneOrMany extends Relation
 {
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $values
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function firstOrNew(array $attributes, array $values = []) { }
+    public function firstOrNew(array $attributes, array $values = []) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $values
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function firstOrCreate(array $attributes, array $values = []) { }
+    public function firstOrCreate(array $attributes, array $values = []) {}
 }

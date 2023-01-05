@@ -2,15 +2,11 @@
 
 namespace Illuminate\Database\Eloquent\Relations;
 
-use Illuminate\Support\Str;
-use InvalidArgumentException;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\Model;
 
 /**
-* @template TRelatedModel of Model
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
 * @template-extends Relation<TRelatedModel>
 * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
 */
@@ -47,106 +43,107 @@ class BelongsToMany extends Relation
     /**
      * @template T
      * @psalm-param T $id
-     * @param  mixed  $id
-     * @param  array  $columns
+     * @param  int|non-empty-string|array<int|non-empty-string>|\Illuminate\Contracts\Support\Arrayable<int|non-empty-string>  $id
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Model
-     * @psalm-return (T is array ? \Illuminate\Support\Collection<TRelatedModel>|TRelatedModel
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Support\Collection<TRelatedModel>|TRelatedModel
      */
-    public function findOrNew($id, $columns = ['*']) { }
+    public function findOrNew($id, $columns = ['*']) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function firstOrNew(array $attributes) { }
+    public function firstOrNew(array $attributes) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $joining
      * @param  bool   $touch
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function firstOrCreate(array $attributes, array $joining = [], $touch = true) { }
+    public function firstOrCreate(array $attributes, array $joining = [], $touch = true) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $values
      * @param  array  $joining
      * @param  bool   $touch
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function updateOrCreate(array $attributes, array $values = [], array $joining = [], $touch = true) { }
+    public function updateOrCreate(array $attributes, array $values = [], array $joining = [], $touch = true) {}
 
     /**
      * @template T
      * @psalm-param T $id
      * @param  mixed  $id
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection|null
-     * @psalm-return (T is array ? \Illuminate\Database\Eloquent\Collection<TRelatedModel>|null : TRelatedModel|null)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<TRelatedModel>|null : TRelatedModel|null)
      */
-    public function find($id, $columns = ['*']) { }
+    public function find($id, $columns = ['*']) {}
 
     /**
      * @param  mixed  $ids
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Collection
      * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
      */
-    public function findMany($ids, $columns = ['*']) { }
+    public function findMany($ids, $columns = ['*']) {}
 
     /**
-     * @param  mixed  $id
-     * @param  array  $columns
+     * @template T
+     * @psalm-param T $id
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
-     * @psalm-return TRelatedModel
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<TRelatedModel>|null : TRelatedModel|null)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
-    public function findOrFail($id, $columns = ['*']) { }
+    public function findOrFail($id, $columns = ['*']) {}
 
     /**
-     * @param  array   $columns
-     * @return mixed
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Database\Eloquent\Model|null
      * @psalm-return TRelatedModel|null
      */
-    public function first($columns = ['*']) { }
+    public function first($columns = ['*']) {}
 
     /**
      * Execute the query and get the first result or throw an exception.
      *
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Model|static
      * @psalm-return TRelatedModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
-    public function firstOrFail($columns = ['*']) { }
+    public function firstOrFail($columns = ['*']) {}
 
     /**
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Collection
      * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
      */
-    public function get($columns = ['*']) { }
+    public function get($columns = ['*']) {}
 
     /**
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $joining
      * @param  bool   $touch
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function create(array $attributes = [], array $joining = [], $touch = true) { }
+    public function create(array $attributes = [], array $joining = [], $touch = true) {}
 
     /**
      * @param  array  $records
      * @param  array  $joinings
      * @return array
-     * @psalm-return array<TRelatedModel>
+     * @psalm-return list<TRelatedModel>
      */
-    public function createMany(array $records, array $joinings = []) { }
+    public function createMany(array $records, array $joinings = []) {}
 }
