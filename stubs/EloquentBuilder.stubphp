@@ -42,6 +42,17 @@ class Builder
     public function withoutGlobalScope($scope) {}
 
     /**
+     * @return TModel
+     */
+    public function getModel() {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return TModel
+     */
+    public function create(array $attributes = []) {}
+
+    /**
      * @param  array|null  $scopes
      * @return static<TModel>
      */
@@ -261,7 +272,7 @@ class Builder
     public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
     /**
-     * @param  int  $perPage
+     * @param  int|null  $perPage
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
@@ -270,10 +281,15 @@ class Builder
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
     /**
-     * @param  array<string, mixed>  $attributes
-     * @return TModel
+     * Paginate the given query into a cursor paginator.
+     *
+     * @param  int|null  $perPage
+     * @param  array<array-key, mixed>  $columns
+     * @param  string  $cursorName
+     * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
+     * @return \Illuminate\Pagination\CursorPaginator<TModelClass>
      */
-    public function create(array $attributes = []) {}
+    public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 
     /**
      * @param  array<string, mixed>  $attributes
@@ -366,11 +382,6 @@ class Builder
      * @return static<TModel>
      */
     public function setEagerLoads(array $eagerLoad) {}
-
-    /**
-     * @return TModel
-     */
-    public function getModel() {}
 
     /**
      * @param TModel $model
