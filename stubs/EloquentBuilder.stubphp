@@ -104,14 +104,14 @@ class Builder
 
     /**
      * @param  array  $items
-     * @return \Illuminate\Database\Eloquent\Collection<TModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      */
     public function hydrate(array $items) { }
 
     /**
      * @param  string  $query
      * @param  array  $bindings
-     * @return \Illuminate\Database\Eloquent\Collection<TModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      */
     public function fromQuery($query, $bindings = []) { }
 
@@ -119,14 +119,14 @@ class Builder
      * @template T
      * @param  T $id
      * @param  array  $columns
-     * @return (T is array ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel|null)
+     * @return (T is array ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel|null)
      */
     public function find($id, $columns = ['*']) { }
 
     /**
      * @param  \Illuminate\Contracts\Support\Arrayable|array  $ids
      * @param  array  $columns
-     * @return \Illuminate\Database\Eloquent\Collection<TModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      */
     public function findMany($ids, $columns = ['*']) { }
 
@@ -134,7 +134,7 @@ class Builder
      * @template T
      * @param  T $id
      * @param  array  $columns
-     * @return (T is array ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel)
+     * @return (T is array ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel)
      */
     public function findOrFail($id, $columns = ['*']) { }
 
@@ -189,7 +189,7 @@ class Builder
 
     /**
      * @param  array  $columns
-     * @return \Illuminate\Database\Eloquent\Collection<TModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      */
     public function get($columns = ['*']) { }
 
