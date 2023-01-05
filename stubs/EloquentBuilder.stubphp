@@ -102,6 +102,150 @@ class Builder
     public function orWhere($column, $operator = null, $value = null) {}
 
     /**
+     * @param  string  $relation
+     * @param  \Closure|null  $callback
+     * @param  string  $operator
+     * @param  int  $count
+     * @return static<TModel>
+     */
+    public function whereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
+
+    /**
+     * @param  string  $relation
+     * @param  \Closure|string|array<mixed>|\Illuminate\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return static<TModel>
+     */
+    public function whereRelation($relation, $column, $operator = null, $value = null) {}
+
+    /**
+     * @param  string  $relation
+     * @param  \Closure|string|array<int, string>|\Illuminate\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return static<TModel>
+     */
+    public function orWhereRelation($relation, $column, $operator = null, $value = null) {}
+
+    /**
+     * @param  string  $relation
+     * @param  \Closure|null  $callback
+     * @param  string  $operator
+     * @param  int  $count
+     * @return static<TModel>
+     */
+    public function orWhereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
+
+    /**
+     * @template TRelatedModel of Model
+     * @template TChildModel of Model
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
+     * @param  string|array<string>  $types
+     * @param  string  $operator
+     * @param  int  $count
+     * @param  string  $boolean
+     * @param  \Closure|null  $callback
+     * @return static<TModel>
+     */
+    public function hasMorph($relation, $types, $operator = '>=', $count = 1, $boolean = 'and', \Closure $callback = null) {}
+
+    /**
+     * @template TRelatedModel of Model
+     * @template TChildModel of Model
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
+     * @param  string|array<string>  $types
+     * @param  string  $operator
+     * @param  int  $count
+     * @return static<TModel>
+     */
+    public function orHasMorph($relation, $types, $operator = '>=', $count = 1) {}
+
+    /**
+     * @template TRelatedModel of Model
+     * @template TChildModel of Model
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
+     * @param  string|array<string>  $types
+     * @param  string  $boolean
+     * @param  \Closure|null  $callback
+     * @return static<TModel>
+     */
+    public function doesntHaveMorph($relation, $types, $boolean = 'and', \Closure $callback = null) {}
+
+    /**
+     * @template TRelatedModel of Model
+     * @template TChildModel of Model
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
+     * @param  string|array<string>  $types
+     * @return static<TModel>
+     */
+    public function orDoesntHaveMorph($relation, $types) {}
+
+    /**
+     * @template TRelatedModel of Model
+     * @template TChildModel of Model
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
+     * @param  string|array<string>  $types
+     * @param  \Closure|null  $callback
+     * @param  string  $operator
+     * @param  int  $count
+     * @return static<TModel>
+     */
+    public function whereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
+
+    /**
+     * @template TRelatedModel of Model
+     * @template TChildModel of Model
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
+     * @param  string|array<string>  $types
+     * @param  \Closure|null  $callback
+     * @param  string  $operator
+     * @param  int  $count
+     * @return static<TModel>
+     */
+    public function orWhereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
+
+    /**
+     * @template TRelatedModel of Model
+     * @template TChildModel of Model
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
+     * @param  string|array<string>  $types
+     * @param  \Closure|null  $callback
+     * @return static<TModel>
+     */
+    public function whereDoesntHaveMorph($relation, $types, \Closure $callback = null) {}
+
+    /**
+     * @template TRelatedModel of Model
+     * @template TChildModel of Model
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
+     * @param  string|array<string>  $types
+     * @param  \Closure|null  $callback
+     * @return static<TModel>
+     */
+    public function orWhereDoesntHaveMorph($relation, $types, \Closure $callback = null) {}
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<TModelClass>  $from
+     * @return static<TModel>
+     */
+    public function mergeConstraintsFrom(\Illuminate\Database\Eloquent\Builder $from) {}
+
+    /**
+     * @param  string  $relation
+     * @param  \Closure|null  $callback
+     * @return static<TModel>
+     */
+    public function orWhereDoesntHave($relation, \Closure $callback = null) {}
+
+    /**
+     * @param  string  $relation
+     * @param  \Closure|null  $callback
+     * @return static<TModel>
+     */
+    public function whereDoesntHave($relation, \Closure $callback = null) {}
+
+    /**
      * @param  string  $column
      * @return static<TModel>
      */
@@ -193,9 +337,15 @@ class Builder
     /**
      * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|int, mixed>|\Illuminate\Database\Query\Expression  $column
      * @param  string  $boolean
-     * @phpstan-return TModel|null
+     * @psalm-return TModel|null
      */
     public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * @param  array<int, (model-property<TModelClass>|'*')>|model-property<TModelClass>|'*'  $columns
+     * @psalm-return TModelClass
+     */
+    public function sole($columns = ['*']) {}
 
     /**
      * @param  array<string, mixed>  $attributes
@@ -221,6 +371,41 @@ class Builder
      * @return array<array-key, TModel>
      */
     public function getModels($columns = ['*']) {}
+
+    /**
+     * @template TRelatedModel of Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
+     * @param  string  $operator
+     * @param  int  $count
+     * @param  string  $boolean
+     * @param  \Closure|null  $callback
+     * @return static
+     *
+     * @throws \RuntimeException
+     */
+    public function has($relation, $operator = '>=', $count = 1, $boolean = 'and', \Closure $callback = null) {}
+
+    /**
+     * @param  string  $relation
+     * @param  string  $operator
+     * @param  int  $count
+     * @return static
+     */
+    public function orHas($relation, $operator = '>=', $count = 1) {}
+
+    /**
+     * @param  string  $relation
+     * @param  string  $boolean
+     * @param  \Closure|null  $callback
+     * @return static
+     */
+    public function doesntHave($relation, $boolean = 'and', \Closure $callback = null) {}
+
+    /**
+     * @param  string  $relation
+     * @return static
+     */
+    public function orDoesntHave($relation) {}
 
     /**
      * @param  array  $models
@@ -290,6 +475,34 @@ class Builder
      * @return \Illuminate\Pagination\CursorPaginator<TModelClass>
      */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
+
+    /**
+     * @param  int  $chunkSize
+     * @return \Illuminate\Support\LazyCollection<int, TModelClass>
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function lazy($chunkSize = 1000) {}
+
+    /**
+     * @param  int  $chunkSize
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return \Illuminate\Support\LazyCollection<int, TModelClass>
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function lazyById($chunkSize = 1000, $column = null, $alias = null) {}
+
+    /**
+     * @param  int  $chunkSize
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return \Illuminate\Support\LazyCollection<int, TModelClass>
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function lazyByIdDesc($chunkSize = 1000, $column = null, $alias = null) {}
 
     /**
      * @param  array<string, mixed>  $attributes
