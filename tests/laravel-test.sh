@@ -6,7 +6,7 @@ echo "Cleaning Up"
 rm -rf ../laravel/
 
 echo "Installing Laravel"
-composer create-project laravel/laravel ../laravel 9.* --quiet --prefer-dist
+composer create-project laravel/laravel ../laravel 9.5 --quiet --prefer-dist
 cd ../laravel/
 
 echo "Preparing Laravel"
