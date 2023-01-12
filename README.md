@@ -3,7 +3,8 @@
 [![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
 [![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
 [![Type coverage](https://shepherd.dev/github/psalm/laravel-psalm-plugin/coverage.svg)](https://shepherd.dev/github/psalm/laravel-psalm-plugin)
-![dev-master Tests](https://img.shields.io/github/actions/workflow/status/psalm/psalm-plugin-laravel/test.yml?branch=master)
+[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test.yml)
+[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel.yml)
 
 ## Overview
 This package brings static analysis and type support to projects using Laravel. Our goal is to find as many type-related
