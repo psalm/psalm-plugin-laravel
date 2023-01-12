@@ -6,7 +6,7 @@ echo "Cleaning Up"
 rm -rf ../lumen/
 
 echo "Installing Lumen"
-composer create-project laravel/lumen ../lumen 8.* --quiet --prefer-dist
+composer create-project laravel/lumen ../lumen 9.* --quiet --prefer-dist
 cd ../lumen/
 
 echo "Adding package from source"
