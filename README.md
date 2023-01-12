@@ -1,8 +1,8 @@
 # Psalm plugin for Laravel
 
-[![Packagist](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-[![Packagist](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-![Type coverage](https://shepherd.dev/github/psalm/laravel-psalm-plugin/coverage.svg)
+[![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
+[![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
+[![Type coverage](https://shepherd.dev/github/psalm/laravel-psalm-plugin/coverage.svg)](https://shepherd.dev/github/psalm/laravel-psalm-plugin)
 ![dev-master Tests](https://img.shields.io/github/actions/workflow/status/psalm/psalm-plugin-laravel/test.yml?branch=master)
 
 ## Overview
