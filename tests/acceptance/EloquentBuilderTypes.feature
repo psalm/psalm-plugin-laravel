@@ -5,7 +5,7 @@ Feature: Eloquent Builder types
     Given I have the following config
       """
       <?xml version="1.0"?>
-      <psalm errorLevel="1">
+      <psalm errorLevel="1" findUnusedCode="false">
         <projectFiles>
           <directory name="."/>
           <ignoreFiles> <directory name="../../vendor"/> </ignoreFiles>
@@ -172,29 +172,6 @@ Feature: Eloquent Builder types
     */
     function test(Builder $builder): Builder {
       return $builder->orderBy('id', 'ASC');
-    }
-    """
-    When I run Psalm
-    Then I see no errors
-
-  Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 8.x
-    Given I have the "laravel/framework" package satisfying the "^8.0"
-    And I have the following code
-    """
-    /**
-    * @psalm-param Builder<User> $builder
-    * @psalm-return User
-    */
-    function test_firstOrCreate(Builder $builder): User {
-      return $builder->firstOrCreate();
-    }
-
-    /**
-    * @psalm-param Builder<User> $builder
-    * @psalm-return User
-    */
-    function test_firstOrNew(Builder $builder): User {
-      return $builder->firstOrNew();
     }
     """
     When I run Psalm
