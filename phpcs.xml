@@ -23,6 +23,6 @@
     <exclude-pattern>src/cache/</exclude-pattern>
     <exclude-pattern>tests/_output</exclude-pattern>
     <exclude-pattern>tests/_run</exclude-pattern>
-    <exclude-pattern>tests/_support/_generated</exclude-pattern>
+    <exclude-pattern>tests/_support</exclude-pattern>
     <exclude-pattern>tests/Support/</exclude-pattern>
 </ruleset>
