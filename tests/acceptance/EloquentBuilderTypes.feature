@@ -268,7 +268,7 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see these errors
       | Type  | Message |
-      | InvalidScalarArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, 1 provided |
+      | InvalidScalarArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, but 1 provided |
 
   Scenario: can not call whereDate with incompatible type [ Psalm 5 ]
     Given I have the following code
