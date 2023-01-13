@@ -28,15 +28,13 @@
     },
     "require-dev": {
         "codeception/codeception": "^5.0",
-        "codeception/module-asserts": "*@dev",
+        "codeception/module-asserts": "^3.0",
         "codeception/module-cli": "^2.0",
         "codeception/module-filesystem": "^3.0",
-        "codeception/module-phpbrowser": "*@dev",
-        "phpoption/phpoption": "^1.8.0",
-        "ramsey/collection": "^1.2.0",
-        "slevomat/coding-standard": "^6.2",
+        "codeception/module-phpbrowser": "^3.0",
+        "slevomat/coding-standard": "^8.8",
         "squizlabs/php_codesniffer": "*",
-        "symfony/http-foundation": "^5.3.7 || ^6.0"
+        "symfony/http-foundation": "^6.0"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
