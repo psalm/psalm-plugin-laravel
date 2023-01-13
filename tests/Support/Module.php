@@ -54,6 +54,7 @@ class Module extends BaseModule
     protected array $config = [
         'psalm_path' => 'vendor/bin/psalm',
         'default_dir' => 'tests/_run/',
+        'model_stubs_path' => 'cache/models.stubphp',
     ];
 
     /** @var string */
@@ -197,6 +198,19 @@ class Module extends BaseModule
         $this->parseErrors();
         if (!empty($this->errors)) {
             Assert::fail("There were errors: \n" . $this->remainingErrors());
+        }
+    }
+
+    /**
+     * @Then Stubs were generated for these Eloquent Models
+     */
+    public function stubsGeneratedForModels(TableNode $list): void
+    {
+        $this->fs()->openFile($this->config['model_stubs_path']);
+
+        foreach ($list->getRows() as $line) {
+            assert(is_array($line));
+            $this->fs()->seeInThisFile($line[0]);
         }
     }
 
