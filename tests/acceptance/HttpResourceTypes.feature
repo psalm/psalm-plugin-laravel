@@ -5,7 +5,7 @@ Feature: Http Resource types
     Given I have the following config
       """
       <?xml version="1.0"?>
-      <psalm errorLevel="1">
+      <psalm errorLevel="1" findUnusedCode="false">
         <projectFiles>
           <directory name="."/>
           <ignoreFiles> <directory name="../../vendor"/> </ignoreFiles>
