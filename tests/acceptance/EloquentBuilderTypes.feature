@@ -241,7 +241,7 @@ Feature: Eloquent Builder types
       return $builder->whereDate('created_at', '>', 1);
     }
     """
-    And I have Psalm older than "5.0.0" (because of "changed issue message")
+    And I have Psalm older than "5.0.0" (because of "changed issue type")
     When I run Psalm
     Then I see these errors
       | Type  | Message |
