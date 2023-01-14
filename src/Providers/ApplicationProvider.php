@@ -22,7 +22,7 @@ final class ApplicationProvider
     /**
      * @var LaravelApplication|LumenApplication|null
      */
-    private static $app;
+    private static    $app;
 
     /**
      * @return LaravelApplication|LumenApplication
