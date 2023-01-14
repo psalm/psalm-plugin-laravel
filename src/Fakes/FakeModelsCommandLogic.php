@@ -26,7 +26,7 @@ trait FakeModelsCommandLogic
      *
      * @param Model $model
      */
-    public function getPropertiesFromTable($model): void
+    public function getProperties($model): void
     {
         $table_name = $model->getTable();
 
