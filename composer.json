@@ -52,7 +52,10 @@
         "analyze": "psalm",
         "lint": "phpcs -n",
         "lint-fix": "phpcbf -n",
-        "test": "codecept run --skip-group skip",
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "codecept run --skip-group skip"
+        ],
         "check": [
             "@analyze",
             "@lint",
