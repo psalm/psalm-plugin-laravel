@@ -31,13 +31,13 @@ class Builder
     /**
      * @param  string  $identifier
      * @param  \Illuminate\Database\Eloquent\Scope|\Closure  $scope
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function withGlobalScope($identifier, $scope) {}
 
     /**
      * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function withoutGlobalScope($scope) {}
 
@@ -54,7 +54,7 @@ class Builder
 
     /**
      * @param  array|null  $scopes
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function withoutGlobalScopes(array $scopes = null) {}
 
@@ -65,13 +65,13 @@ class Builder
 
     /**
      * @param  mixed  $id
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function whereKey($id) {}
 
     /**
      * @param  mixed  $id
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function whereKeyNot($id) {}
 
@@ -80,7 +80,7 @@ class Builder
      * @param  mixed   $operator
      * @param  mixed   $value
      * @param  string  $boolean
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -89,7 +89,7 @@ class Builder
      * @param  string  $operator
      * @param  \DateTimeInterface|string|null  $value
      * @param  string  $boolean
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function whereDate($column, $operator, $value = null, $boolean = 'and') {}
 
@@ -97,7 +97,7 @@ class Builder
      * @param  \Closure|array|string  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function orWhere($column, $operator = null, $value = null) {}
 
@@ -106,7 +106,7 @@ class Builder
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function whereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -115,7 +115,7 @@ class Builder
      * @param  \Closure|string|array<mixed>|\Illuminate\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function whereRelation($relation, $column, $operator = null, $value = null) {}
 
@@ -124,7 +124,7 @@ class Builder
      * @param  \Closure|string|array<int, string>|\Illuminate\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function orWhereRelation($relation, $column, $operator = null, $value = null) {}
 
@@ -133,7 +133,7 @@ class Builder
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function orWhereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -146,7 +146,7 @@ class Builder
      * @param  int  $count
      * @param  string  $boolean
      * @param  \Closure|null  $callback
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function hasMorph($relation, $types, $operator = '>=', $count = 1, $boolean = 'and', \Closure $callback = null) {}
 
@@ -157,7 +157,7 @@ class Builder
      * @param  string|array<string>  $types
      * @param  string  $operator
      * @param  int  $count
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function orHasMorph($relation, $types, $operator = '>=', $count = 1) {}
 
@@ -168,7 +168,7 @@ class Builder
      * @param  string|array<string>  $types
      * @param  string  $boolean
      * @param  \Closure|null  $callback
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function doesntHaveMorph($relation, $types, $boolean = 'and', \Closure $callback = null) {}
 
@@ -177,7 +177,7 @@ class Builder
      * @template TChildModel of Model
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function orDoesntHaveMorph($relation, $types) {}
 
@@ -189,7 +189,7 @@ class Builder
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function whereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -201,7 +201,7 @@ class Builder
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function orWhereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -211,7 +211,7 @@ class Builder
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
      * @param  \Closure|null  $callback
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function whereDoesntHaveMorph($relation, $types, \Closure $callback = null) {}
 
@@ -221,39 +221,39 @@ class Builder
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
      * @param  \Closure|null  $callback
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function orWhereDoesntHaveMorph($relation, $types, \Closure $callback = null) {}
 
     /**
      * @param  \Illuminate\Database\Eloquent\Builder<TModel>  $from
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function mergeConstraintsFrom(\Illuminate\Database\Eloquent\Builder $from) {}
 
     /**
      * @param  string  $relation
      * @param  \Closure|null  $callback
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function orWhereDoesntHave($relation, \Closure $callback = null) {}
 
     /**
      * @param  string  $relation
      * @param  \Closure|null  $callback
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function whereDoesntHave($relation, \Closure $callback = null) {}
 
     /**
      * @param  string  $column
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function latest($column = null) {}
 
     /**
      * @param  string  $column
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function oldest($column = null) {}
 
@@ -323,14 +323,14 @@ class Builder
     /**
      * @param  array<string, mixed>  $attributes
      * @param  array  $values
-     * @return TModel|static<TModel>
+     * @return TModel|self<TModel>
      */
     public function firstOrNew(array $attributes = [], array $values = []) {}
 
     /**
      * @param  array<string, mixed>  $attributes
      * @param  array  $values
-     * @return TModel|static<TModel>
+     * @return TModel|self<TModel>
      */
     public function firstOrCreate(array $attributes = [], array $values = []) {}
 
@@ -552,24 +552,24 @@ class Builder
      * Call the given local model scopes.
      *
      * @param  array|non-empty-string  $scopes
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function scopes($scopes) {}
 
     /**
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function applyScopes() {}
 
     /**
      * @param  mixed  $relations
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function with($relations) {}
 
     /**
      * @param  mixed  $relations
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function without($relations) {}
 
@@ -586,19 +586,19 @@ class Builder
 
     /**
      * @param  \Illuminate\Database\Query\Builder  $query
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function setQuery($query) {}
 
     /**
      * @param array $eagerLoad
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function setEagerLoads(array $eagerLoad) {}
 
     /**
      * @param TModel $model
-     * @return static<TModel>
+     * @return self<TModel>
      */
     public function setModel(Model $model) {}
 
