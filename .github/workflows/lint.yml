@@ -54,7 +54,7 @@ jobs:
       # lint one more time (after applying auto-fixes) and generate report about remaning issues
       - name: Lint PHP coding style issues (if previously detected)
         if: ${{ steps.lint_php.outcome == 'failure' }}
-        run: composer phpcs -- --report-full --report-checkstyle=./phpcs-report.xml
+        run: ./vendor/bin/phpcs -n --report-full --report-checkstyle=./phpcs-report.xml
 
       # @see https://tgrall.github.io/blog/2021/11/07/how-to-write-a-github-action-annotation-api
       - name: Show PHPCS issues as GitHub annotations
