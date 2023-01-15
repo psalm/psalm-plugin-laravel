@@ -12,10 +12,10 @@ use function implode;
 
 trait FakeModelsCommandLogic
 {
-    /** @var array<class-string> */
+    /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
     private $model_classes = [];
 
-    /** @return array<class-string> */
+    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
     public function getModels(): array
     {
         return $this->model_classes + $this->loadModels();
