@@ -13,6 +13,7 @@ categories:
     labels:
       - 'release:internal'
       - 'release:typo'
+      - 'chore'
 category-template: '### $TITLE'
 change-template: '- $TITLE (#$NUMBER)  @$AUTHOR '
 version-resolver:
