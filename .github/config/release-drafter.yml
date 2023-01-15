@@ -32,4 +32,4 @@ template: |
 
   $CHANGES
 
-  **Full Changelog**: https://github.com/InteractionDesignFoundation/IxDF-web/compare/$PREVIOUS_TAG...$RESOLVED_VERSION
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...$RESOLVED_VERSION
