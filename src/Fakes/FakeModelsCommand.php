@@ -13,6 +13,7 @@ use function get_class;
 use function in_array;
 use function implode;
 
+/** @psalm-suppress PropertyNotSetInConstructor */
 class FakeModelsCommand extends ModelsCommand
 {
     /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
