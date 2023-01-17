@@ -17,12 +17,6 @@
 
     <issueHandlers>
         <LessSpecificReturnType errorLevel="info" />
-
-        <PropertyNotSetInConstructor>
-            <errorLevel type="suppress">
-                <file name="src/Fakes/FakeMetaCommand.php" />
-            </errorLevel>
-        </PropertyNotSetInConstructor>
     </issueHandlers>
 
     <stubs>
