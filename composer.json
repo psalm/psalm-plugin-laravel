@@ -49,7 +49,7 @@
         }
     },
     "scripts": {
-        "analyze": "psalm",
+        "analyze": "psalm --find-unused-psalm-suppress --long-progress",
         "lint": "phpcs -n",
         "lint-fix": "phpcbf -n",
         "test": "codecept run --skip-group skip",
