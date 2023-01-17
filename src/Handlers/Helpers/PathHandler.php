@@ -39,7 +39,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
     public static function getClassLikeNames(): array
     {
         return [
-            get_class(ApplicationProvider::getApp()),
+            ApplicationProvider::getAppFullyQualifiedClassName(),
         ];
     }
 
