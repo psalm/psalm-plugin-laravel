@@ -3,7 +3,7 @@
 set -e
 
 CURRENT_SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
-APP_INSTALLATION_PATH="$(dirname "$CURRENT_SCRIPT_PATH")/../laravel";
+APP_INSTALLATION_PATH="$(realpath $(dirname "$CURRENT_SCRIPT_PATH")/../laravel)"
 
 echo "Cleaning up previous installation"
 rm -rf $APP_INSTALLATION_PATH
@@ -36,10 +36,10 @@ echo "Preparing Laravel"
 ./artisan make:seeder ExampleSeeder
 
 echo "Adding package from source"
-sed -e 's|"type": "project",|&"repositories": [ { "type": "path", "url": "../psalm-plugin-laravel" } ],|' composer.json
+composer config repositories.psalm-plugin-laravel '{"type": "path", "url": "../psalm-plugin-laravel"}'
 COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" -W
 
 echo "Analyzing Laravel"
 ./vendor/bin/psalm -c ../psalm-plugin-laravel/tests/laravel-test-psalm.xml
 
-echo "A sample Laravel application installed at the $APP_INSTALLATION_PATH directory, feel free to remove it."
+echo -e "\nA sample Laravel application installed at the $APP_INSTALLATION_PATH directory, feel free to remove it."
