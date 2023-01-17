@@ -14,7 +14,7 @@ use function unlink;
 final class ModelStubProvider implements GeneratesStubs
 {
     /**
-     * @var array<class-string>
+     * @var list<class-string<\Illuminate\Database\Eloquent\Model>>
      */
     private static $model_classes;
 
@@ -63,7 +63,7 @@ final class ModelStubProvider implements GeneratesStubs
     }
 
     /**
-     * @return array<class-string>
+     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
      */
     public static function getModelClasses(): array
     {

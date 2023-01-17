@@ -51,7 +51,7 @@ final class ApplicationProvider
             return self::$app;
         }
 
-        if (file_exists($applicationPath = __DIR__ . '/../../../../bootstrap/app.php')) { // Applications
+        if (file_exists($applicationPath = __DIR__ . '/../../../../bootstrap/app.php')) { // plugin installed to vendor
             /** @psalm-suppress MissingFile file is checked for existence */
             $app = require $applicationPath;
         } elseif (file_exists($applicationPath = getcwd() . '/bootstrap/app.php')) { // Local Dev
@@ -66,7 +66,7 @@ final class ApplicationProvider
     }
 
     /**
-     * @psalm-return class-string
+     * @psalm-return class-string<\Illuminate\Foundation\Application|\Laravel\Lumen\Application>
      */
     public static function getAppFullyQualifiedClassName(): string
     {
@@ -74,6 +74,7 @@ final class ApplicationProvider
     }
 
     /**
+     * Overrides {@see \Orchestra\Testbench\Concerns\CreatesApplication::resolveApplicationBootstrappers}
      * Resolve application bootstrapper.
      *
      * @param LaravelApplication $app
@@ -103,6 +104,7 @@ final class ApplicationProvider
 
         /**
          * @psalm-suppress MissingClosureParamType
+         * @psalm-suppress UnusedClosureParam
          */
         $app->resolving('url', static function ($url, $app) {
             $app['router']->getRoutes()->refreshNameLookups();
