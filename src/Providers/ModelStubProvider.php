@@ -4,6 +4,7 @@ namespace Psalm\LaravelPlugin\Providers;
 
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
+use Psalm\LaravelPlugin\Fakes\FakeModelsCommand;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
@@ -35,7 +36,7 @@ final class ModelStubProvider implements GeneratesStubs
 
         $fake_filesystem = new FakeFilesystem();
 
-        $models_generator_command = FakeModelsCommandProvider::getCommand(
+        $models_generator_command = new FakeModelsCommand(
             $fake_filesystem,
             $schema_aggregator
         );
