@@ -17,7 +17,7 @@ use function str_replace;
 final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInterface, PropertyVisibilityProviderInterface, PropertyTypeProviderInterface
 {
     /**
-     * @return array<string>
+     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
      */
     public static function getClassLikeNames(): array
     {
