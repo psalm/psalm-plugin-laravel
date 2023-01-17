@@ -28,7 +28,7 @@ class ModelRelationshipPropertyHandler implements
     PropertyVisibilityProviderInterface,
     PropertyTypeProviderInterface
 {
-    /** @return array<string, string> */
+    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
     public static function getClassLikeNames(): array
     {
         return ModelStubProvider::getModelClasses();

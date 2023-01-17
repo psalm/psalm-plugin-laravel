@@ -2,8 +2,10 @@
 
 namespace Tests\Psalm\LaravelPlugin\Support;
 
+use Codeception\Exception\ConfigurationException;
 use Codeception\Exception\ModuleRequireException;
 use Codeception\Exception\TestRuntimeException;
+use Codeception\Lib\ModuleContainer;
 use Codeception\Module as BaseModule;
 use Codeception\Module\Cli;
 use Codeception\Module\Filesystem;
@@ -19,6 +21,11 @@ use OutOfBoundsException;
 use PHPUnit\Framework\SkippedTestError;
 use RuntimeException;
 
+use function is_array;
+use function is_int;
+use function is_numeric;
+use function is_string;
+
 /**
  * Duplicate of https://github.com/psalm/codeception-psalm-module
  */
@@ -32,52 +39,46 @@ class Module extends BaseModule
     ];
 
     private const DEFAULT_PSALM_CONFIG = "<?xml version=\"1.0\"?>\n"
-    . "<psalm totallyTyped=\"true\" %s>\n"
+    . "<psalm errorLevel=\"1\" %s>\n"
     . "  <projectFiles>\n"
     . "    <directory name=\".\"/>\n"
     . "  </projectFiles>\n"
     . "</psalm>\n";
 
-    /**
-     * @var ?Cli
-     */
-    private $cli;
-
-    /**
-     * @var ?Filesystem
-     */
-    private $fs;
-
-    /**
-     * @var array<string,string>
-     * @psalm-suppress NonInvariantDocblockPropertyType
-     */
-    protected array $config = [
+    private const DEFAULT_MODULE_CONFIGURATION = [
         'psalm_path' => 'vendor/bin/psalm',
         'default_dir' => 'tests/_run/',
+        'model_stubs_path' => 'cache/models.stubphp',
     ];
 
-    /** @var string */
-    private $psalmConfig = '';
+    private ?Cli $cli = null;
 
-    /** @var string */
-    private $preamble = '';
+    private ?Filesystem $fs = null;
+
+    private string $psalmConfig = '';
+
+    private string $preamble = '';
 
     /** @var ?array<int, array{type:string,message:string}> */
-    private $errors = null;
+    private ?array $errors = null;
 
-    /** @var bool */
-    private $hasAutoload = false;
+    private bool $hasAutoload = false;
 
-    /** @var ?int */
-    private $exitCode = null;
+    private ?int $exitCode = null;
 
-    /** @var ?string */
-    protected $output = null;
+    protected ?string $output = null;
 
+    public function __construct(ModuleContainer $moduleContainer, ?array $config = null)
+    {
+        assert(is_array($this->config));
+        $this->config = array_merge(self::DEFAULT_MODULE_CONFIGURATION, $this->config);
+        parent::__construct($moduleContainer, $config);
+    }
+
+    /** @param mixed $settings */
     public function _beforeSuite($settings = []): void
     {
-        $defaultDir = $this->config['default_dir'];
+        $defaultDir = $this->getDefaultDirectory();
         if (file_exists($defaultDir)) {
             if (is_dir($defaultDir)) {
                 return;
@@ -98,7 +99,7 @@ class Module extends BaseModule
         $this->exitCode = null;
         $this->config['psalm_path'] = realpath($this->config['psalm_path']);
         $this->psalmConfig = '';
-        $this->fs()->cleanDir($this->config['default_dir']);
+        $this->fs()->cleanDir($this->getDefaultDirectory());
         $this->preamble = '';
     }
 
@@ -110,7 +111,7 @@ class Module extends BaseModule
         $suppressProgress = $this->packageSatisfiesVersionConstraint('vimeo/psalm', '>=3.4.0');
 
         $options = array_map('escapeshellarg', $options);
-        $cmd = $this->config['psalm_path']
+        $cmd = $this->getPsalmPath()
             . ' --output-format=json '
             . ($suppressProgress ? ' --no-progress ' : ' ')
             . join(' ', $options) . ' '
@@ -119,10 +120,9 @@ class Module extends BaseModule
         $this->debug('Running: ' . $cmd);
         $this->cli()->runShellCommand($cmd, false);
 
-        /** @psalm-suppress MissingPropertyType shouldn't be required, but older Psalm needs it */
-        $this->output = (string)$this->cli()->output;
-        /** @psalm-suppress MissingPropertyType shouldn't be required, but older Psalm needs it */
-        $this->exitCode = (int)$this->cli()->result;
+        $this->output = $this->cli()->output;
+
+        $this->exitCode = $this->cli()->result;
 
         $this->debug(sprintf('Psalm exit code: %d', $this->exitCode));
         // $this->debug('Psalm output: ' . $this->output);
@@ -146,11 +146,18 @@ class Module extends BaseModule
     }
 
     /**
+     * @param int|string $exitCode
      * @Then I see exit code :code
      */
-    public function seeExitCode(string $exitCode): void
+    public function seeExitCode($exitCode): void
     {
-        if ($this->exitCode === (int) $exitCode) {
+        if (!is_int($exitCode) && !is_numeric($exitCode)) {
+            throw new ConfigurationException('Feature configuration contains invalid exit code expectation.');
+        }
+
+        $exitCode = (int) $exitCode;
+
+        if ($this->exitCode === $exitCode) {
             return;
         }
 
@@ -201,6 +208,19 @@ class Module extends BaseModule
         }
     }
 
+    /**
+     * @Then Stubs were generated for these Eloquent Models
+     */
+    public function stubsGeneratedForModels(TableNode $list): void
+    {
+        $this->fs()->openFile($this->config['model_stubs_path']);
+
+        foreach ($list->getRows() as $line) {
+            assert(is_array($line));
+            $this->fs()->seeInThisFile($line[0]);
+        }
+    }
+
     private function packageSatisfiesVersionConstraint(string $package, string $versionConstraint): bool
     {
         try {
@@ -238,11 +258,13 @@ class Module extends BaseModule
     }
 
     /**
+     * @param string|PyStringNode $code
+     *
      * @Given I have the following code preamble :code
      */
-    public function haveTheFollowingCodePreamble(PyStringNode $code): void
+    public function haveTheFollowingCodePreamble($code): void
     {
-        $this->preamble = $code->getRaw();
+        $this->preamble = (string) $code;
     }
 
     /**
@@ -251,7 +273,7 @@ class Module extends BaseModule
      */
     public function runPsalm(): void
     {
-        $this->runPsalmIn($this->config['default_dir']);
+        $this->runPsalmIn($this->getDefaultDirectory());
     }
 
     /**
@@ -260,7 +282,7 @@ class Module extends BaseModule
      */
     public function runPsalmWithDeadCodeDetection(): void
     {
-        $this->runPsalmIn($this->config['default_dir'], ['--find-dead-code']);
+        $this->runPsalmIn($this->getDefaultDirectory(), ['--find-dead-code']);
     }
 
     public function seePsalmHasTaintAnalysis(): bool
@@ -290,7 +312,7 @@ class Module extends BaseModule
         if (!$this->seePsalmHasTaintAnalysis()) {
             Assert::fail('Taint analysis is available since 3.10.0');
         }
-        $this->runPsalmIn($this->config['default_dir'], ['--track-tainted-input']);
+        $this->runPsalmIn($this->getDefaultDirectory(), ['--track-tainted-input']);
     }
 
     /**
@@ -300,7 +322,7 @@ class Module extends BaseModule
     public function runPsalmOnASingleFile(string $file): void
     {
         $pwd = getcwd();
-        $this->fs()->amInPath($this->config['default_dir']);
+        $this->fs()->amInPath($this->getDefaultDirectory());
 
         $config = $this->psalmConfig ?: self::DEFAULT_PSALM_CONFIG;
         $config = sprintf($config, $this->hasAutoload ? 'autoloader="autoload.php"' : '');
@@ -313,22 +335,24 @@ class Module extends BaseModule
 
 
     /**
+     * @param string|PyStringNode $config
      * @Given I have the following config :config
      */
-    public function haveTheFollowingConfig(PyStringNode $config): void
+    public function haveTheFollowingConfig($config): void
     {
-        $this->psalmConfig = $config->getRaw();
+        $this->psalmConfig = (string) $config;
     }
 
     /**
+     * @param string|PyStringNode $code
      * @Given I have the following code :code
      */
-    public function haveTheFollowingCode(PyStringNode $code): void
+    public function haveTheFollowingCode($code): void
     {
         $file = sprintf(
             '%s/%s.php',
-            rtrim($this->config['default_dir'], '/'),
-            sha1($this->preamble . $code->getRaw())
+            rtrim($this->getDefaultDirectory(), '/'),
+            sha1($this->preamble . $code)
         );
 
         $this->fs()->writeToFile(
@@ -383,12 +407,13 @@ class Module extends BaseModule
     }
 
     /**
+     * @param string|PyStringNode $code
      * @Given I have the following code in :arg1 :arg2
      */
-    public function haveTheFollowingCodeIn(string $filename, string $code): void
+    public function haveTheFollowingCodeIn(string $filename, $code): void
     {
-        $file = rtrim($this->config['default_dir'], '/') . '/' . $filename;
-        $this->fs()->writeToFile($file, $code);
+        $file = rtrim($this->getDefaultDirectory(), '/') . '/' . $filename;
+        $this->fs()->writeToFile($file, (string) $code);
     }
 
     /**
@@ -433,7 +458,7 @@ class Module extends BaseModule
                 )
             )
         );
-        $file = rtrim($this->config['default_dir'], '/') . '/' . 'autoload.php';
+        $file = rtrim($this->getDefaultDirectory(), '/') . '/' . 'autoload.php';
         $this->fs()->writeToFile($file, $code);
         $this->hasAutoload = true;
     }
@@ -552,5 +577,15 @@ class Module extends BaseModule
             array_values((array)$errors)
         );
         $this->debug($this->remainingErrors());
+    }
+
+    private function getDefaultDirectory(): string
+    {
+        return $this->config['default_dir'];
+    }
+
+    private function getPsalmPath(): string
+    {
+        return $this->config['psalm_path'];
     }
 }
