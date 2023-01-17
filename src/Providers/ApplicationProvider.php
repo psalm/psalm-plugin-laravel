@@ -24,10 +24,7 @@ final class ApplicationProvider
      */
     private static $app;
 
-    /**
-     * @return LaravelApplication|LumenApplication
-     */
-    public static function bootApp()
+    public static function bootApp(): void
     {
         $app = self::getApp();
 
@@ -38,8 +35,6 @@ final class ApplicationProvider
         }
 
         $app->register(IdeHelperServiceProvider::class);
-
-        return $app;
     }
 
     /**
