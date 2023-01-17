@@ -2,20 +2,33 @@
 
 namespace Psalm\LaravelPlugin\Fakes;
 
+use Barryvdh\LaravelIdeHelper\Console\ModelsCommand;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 
 use function config;
 use function get_class;
 use function in_array;
 use function implode;
 
-trait FakeModelsCommandLogic
+/** @psalm-suppress PropertyNotSetInConstructor */
+class FakeModelsCommand extends ModelsCommand
 {
-    /** @var array<class-string> */
+    /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
     private $model_classes = [];
 
-    /** @return array<class-string> */
+    /** @var SchemaAggregator */
+    private $schema;
+
+    public function __construct(Filesystem $files, SchemaAggregator $schema)
+    {
+        parent::__construct($files);
+        $this->schema = $schema;
+    }
+
+    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
     public function getModels(): array
     {
         return $this->model_classes + $this->loadModels();

@@ -61,7 +61,7 @@
         }
     },
     "scripts": {
-        "analyze": "psalm",
+        "analyze": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
         "check": [
             "@analyze",
             "@lint",
@@ -69,6 +69,9 @@
         ],
         "lint": "phpcs -n",
         "lint-fix": "phpcbf -n",
-        "test": "codecept run --skip-group skip"
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "codecept run --skip-group skip"
+        ]
     }
 }

@@ -96,7 +96,7 @@ class SchemaAggregator
         $table_name = $call->args[0]->value->value;
 
         if ($creating) {
-            $this->tables[$table_name] = new SchemaTable($table_name);
+            $this->tables[$table_name] = new SchemaTable();
         }
 
         if (
@@ -160,8 +160,6 @@ class SchemaAggregator
         $table = $this->tables[$old_table_name];
 
         unset($this->tables[$old_table_name]);
-
-        $table->name = $new_table_name;
 
         $this->tables[$new_table_name] = $table;
     }
