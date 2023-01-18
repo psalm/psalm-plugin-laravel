@@ -2,6 +2,8 @@
 
 namespace Illuminate\Support;
 
+use ArrayAccess;
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
 use Illuminate\Support\Traits\EnumeratesValues;
 
 /**
