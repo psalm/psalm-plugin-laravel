@@ -2,20 +2,16 @@
 
 namespace Illuminate\Database\Eloquent\Relations;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\Model;
 
 /**
-* @template TRelatedModel of Model
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
 * @template-extends Relation<TRelatedModel>
 * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
 */
 class HasManyThrough extends Relation
 {
-
     /**
      * Create a new has many through relationship instance.
      *
@@ -43,41 +39,41 @@ class HasManyThrough extends Relation
     /**
      * Get the first related model record matching the attributes or instantiate it.
      *
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function firstOrNew(array $attributes) { }
+    public function firstOrNew(array $attributes) {}
 
     /**
      * Create or update a related record matching the attributes, and fill it with values.
      *
-     * @param  array  $attributes
+     * @param  array<string, mixed>  $attributes
      * @param  array  $values
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function updateOrCreate(array $attributes, array $values = []) { }
+    public function updateOrCreate(array $attributes, array $values = []) {}
 
     /**
      * Execute the query and get the first related model.
      *
-     * @param  array   $columns
-     * @return mixed
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Database\Eloquent\Model|null
      * @psalm-return TRelatedModel|null
      */
-    public function first($columns = ['*']) { }
+    public function first($columns = ['*']) {}
 
     /**
      * Execute the query and get the first result or throw an exception.
      *
-     * @param  array  $columns
-     * @return \Illuminate\Database\Eloquent\Model|static
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
-    public function firstOrFail($columns = ['*']) { }
+    public function firstOrFail($columns = ['*']) {}
 
     /**
      * Find a related model by its primary key.
@@ -85,41 +81,41 @@ class HasManyThrough extends Relation
      * @template T
      * @psalm-param T $id
      * @param  mixed  $id
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
-     * @psalm-return (T is array ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
      */
-    public function find($id, $columns = ['*']) { }
+    public function find($id, $columns = ['*']) {}
 
     /**
      * Find multiple related models by their primary keys.
      *
      * @param  mixed  $ids
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Collection
      * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
-    public function findMany($ids, $columns = ['*']) { }
+    public function findMany($ids, $columns = ['*']) {}
 
     /**
      * Find a related model by its primary key or throw an exception.
      * @template T
      * @psalm-param T $id
      * @param  mixed  $id
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
-     * @psalm-return (T is array ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
-    public function findOrFail($id, $columns = ['*']) { }
+    public function findOrFail($id, $columns = ['*']) {}
 
     /**
      * Execute the query as a "select" statement.
      *
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Collection
      * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
-    public function get($columns = ['*']) { }
+    public function get($columns = ['*']) {}
 }

@@ -7,16 +7,16 @@ jobs:
     name: Psalm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.0'
+          php-version: '8.1'
           coverage: none
 
       - name: Install composer dependencies
         run: composer install -n --prefer-dist
 
       - name: Run Psalm
-        run: ./vendor/bin/psalm  --threads=2 --shepherd
+        run: ./vendor/bin/psalm --threads=2 --output-format=github --shepherd

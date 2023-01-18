@@ -27,21 +27,20 @@ use function strtolower;
 
 final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
-    /**
-     * @return array<array-key, lowercase-string>
-     */
+    /** @inheritDoc */
     public static function getFunctionIds(): array
     {
         return ['app', 'resolve'];
     }
 
+    /** @inheritDoc */
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
         $call_args = $event->getCallArgs();
 
-        if (!$call_args) {
+        if ($call_args === []) {
             return new Union([
-                new TNamedObject(get_class(ApplicationProvider::getApp())),
+                new TNamedObject(ApplicationProvider::getAppFullyQualifiedClassName()),
             ]);
         }
 
@@ -50,9 +49,10 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
         return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($statements_source->getNodeTypeProvider(), $call_args) ?? Type::getMixed();
     }
 
+    /** @inheritDoc */
     public static function getClassLikeNames(): array
     {
-        return [get_class(ApplicationProvider::getApp())];
+        return [ApplicationProvider::getAppFullyQualifiedClassName()];
     }
 
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union

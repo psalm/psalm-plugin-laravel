@@ -10,7 +10,7 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \Illuminate\Support\Enumerable<TKey, TValue>
  */
-class Collection implements \ArrayAccess, Enumerable
+class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerable
 {
     /**
      * @use \Illuminate\Support\Traits\EnumeratesValues<TKey, TValue>
