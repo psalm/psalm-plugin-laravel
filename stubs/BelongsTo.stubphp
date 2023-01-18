@@ -2,16 +2,15 @@
 
 namespace Illuminate\Database\Eloquent\Relations;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Concerns\SupportsDefaultModels;
 
 /**
-* @template TRelatedModel of Model
-* @template-extends Relation<TRelatedModel>
-* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
-*/
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * @template-extends Relation<TRelatedModel>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
 class BelongsTo extends Relation
 {
     use SupportsDefaultModels;
@@ -40,4 +39,7 @@ class BelongsTo extends Relation
 
         parent::__construct($query, $child);
     }
+
+    /** @psalm-return ?TRelatedModel */
+    public function getResults() {}
 }
