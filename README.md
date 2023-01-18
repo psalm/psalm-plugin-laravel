@@ -1,9 +1,10 @@
 # Psalm plugin for Laravel
 
-[![Packagist](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-[![Packagist](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-![Type coverage](https://shepherd.dev/github/psalm/laravel-psalm-plugin/coverage.svg)
-![dev-master Tests](https://img.shields.io/github/workflow/status/psalm/psalm-plugin-laravel/Run%20Tests?label=dev-master%20tests)
+[![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
+[![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
+[![Type coverage](https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg)](https://shepherd.dev/github/psalm/psalm-plugin-laravel)
+[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test.yml)
+[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel.yml)
 
 ## Overview
 This package brings static analysis and type support to projects using Laravel. Our goal is to find as many type-related
@@ -11,11 +12,16 @@ This package brings static analysis and type support to projects using Laravel. 
  of writing tests!
  
  ![Screenshot](/assets/screenshot.png)
- 
- ## Versions
-Laravel 6 | Laravel 7 | Laravel 8 | Laravel 9
---------- | --------- | --------- | -----------
-v1.*      | v1.*      | v1.*      | v2.*
+
+## Versions & Dependencies
+
+| Laravel Psalm Plugin | PHP   | Laravel    | Psalm |
+|----------------------|-------|------------|-------|
+| 3.x                  | ^8.0  | 9, 10      | 5     |
+| 2.x                  | ^8.0  | 8, 9       | 4, 5  |
+| 1.x                  | ^7.1  | 5, 6, 7, 8 | 3, 4  |
+
+
 ## Quickstart
 Please refer to the [full Psalm documentation](https://psalm.dev/quickstart) for a more detailed guide on introducing Psalm
 into your project.

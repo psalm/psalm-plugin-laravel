@@ -1,6 +1,16 @@
 name: PHP CS check
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'phpcs.xml'
+  pull_request:
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'phpcs.xml'
 
 jobs:
   phpcs:
@@ -8,15 +18,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.0'
+          php-version: 8.1
+          coverage: none
+          tools: cs2pr
 
-      - name: Install dependencies
+      - name: Install composer dependencies
         run: export COMPOSER_ROOT_VERSION=dev-master && composer install --prefer-dist --no-progress --no-suggest
 
       - name: PHP CS check
+        id: lint_php
         run: 'composer lint'
+        continue-on-error: true
+
+      - name: Fix detected PHP coding style issues (if any)
+        if: ${{ steps.lint_php.outcome == 'failure' }}
+        id: fix_php
+        run: 'composer lint-fix'
+        continue-on-error: true
+
+      - name: Commit PHP code-style fixes (if any)
+        if: ${{ steps.lint_php.outcome == 'failure' }}
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: "Fix PHP coding style issues 🪄"
+          author_name: GitHub Actions
+          author_email: actions@github.com
+          add: '*.php'
+          pull: '--rebase --autostash'
+
+      # lint one more time (after applying auto-fixes) and generate report about remaning issues
+      - name: Lint PHP coding style issues (if previously detected)
+        if: ${{ steps.lint_php.outcome == 'failure' }}
+        run: ./vendor/bin/phpcs -n --report-full --report-checkstyle=./phpcs-report.xml
+
+      # @see https://tgrall.github.io/blog/2021/11/07/how-to-write-a-github-action-annotation-api
+      - name: Show PHPCS issues as GitHub annotations
+        if: ${{ steps.lint_php.outcome == 'failure' }}
+        run: cs2pr ./phpcs-report.xml

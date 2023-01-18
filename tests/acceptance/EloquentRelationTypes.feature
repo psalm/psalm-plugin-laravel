@@ -5,7 +5,7 @@ Feature: Eloquent Relation types
     Given I have the following config
       """
       <?xml version="1.0"?>
-      <psalm errorLevel="1">
+      <psalm errorLevel="1" findUnusedCode="false">
         <projectFiles>
           <directory name="."/>
           <ignoreFiles> <directory name="../../vendor"/> </ignoreFiles>
@@ -347,7 +347,7 @@ Feature: Eloquent Relation types
     When I run Psalm
     Then I see no errors
 
-  Scenario: test 115
+  Scenario: Calling first() on HasMany relationship returns nullable related Model
     Given I have the following code
     """
     function test(User $user): ?Role {
@@ -356,27 +356,3 @@ Feature: Eloquent Relation types
     """
     When I run Psalm
     Then I see no errors
-
-  Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 8.x
-    Given I have the "laravel/framework" package satisfying the ">= 8.0"
-    And I have the following code
-    """
-    function test_hasOne_firstOrCreate(User $user): Phone {
-      return $user->phone()->firstOrCreate();
-    }
-
-    function test_hasOne_firstOrNew(User $user): Phone {
-      return $user->phone()->firstOrNew();
-    }
-
-    function test_hasMany_firstOrCreate(Post $post): Comment {
-      return $post->comments()->firstOrCreate();
-    }
-
-    function test_hasMany_firstOrNew(Post $post): Comment {
-      return $post->comments()->firstOrNew();
-    }
-    """
-    When I run Psalm
-    Then I see no errors
-

@@ -3,11 +3,10 @@
 namespace Illuminate\Database\Eloquent\Relations;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\Concerns\SupportsDefaultModels;
 
 /**
-* @template TRelatedModel of Model
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
 * @template-extends HasManyThrough<TRelatedModel>
 * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
 */
@@ -16,9 +15,16 @@ class HasOneThrough extends HasManyThrough
     use SupportsDefaultModels;
 
     /**
+     * @param array<string, mixed> $attributes
+     *
+     * @psalm-return TRelatedModel
+     */
+    public function create(array $attributes = []) {}
+
+    /**
      * Get the results of the relationship.
      *
-     * @return mixed
+     * @psalm-return \Traversable<int, TRelatedModel>
      */
     public function getResults()
     {
@@ -32,5 +38,5 @@ class HasOneThrough extends HasManyThrough
      * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      */
-    public function newRelatedInstanceFor(Model $parent) { }
+    public function newRelatedInstanceFor(Model $parent) {}
 }

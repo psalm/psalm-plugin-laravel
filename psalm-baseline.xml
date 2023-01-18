@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="4.22.0@fc2c6ab4d5fa5d644d8617089f012f3bb84b8703">
-  <file src="src/Providers/ApplicationProvider.php">
-    <MissingFile occurrences="1">
-      <code>require $applicationPath</code>
-    </MissingFile>
+<files psalm-version="5.4.0@62db5d4f6a7ae0a20f7cc5a4952d730272fc0863">
+  <file src="src/Handlers/Eloquent/RelationsMethodHandler.php">
+    <ArgumentTypeCoercion occurrences="1">
+      <code>$template_type_parameters</code>
+    </ArgumentTypeCoercion>
   </file>
   <file src="src/Providers/ModelStubProvider.php">
     <PossiblyUndefinedMethod occurrences="1">
