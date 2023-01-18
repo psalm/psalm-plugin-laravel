@@ -8,7 +8,7 @@ APP_INSTALLATION_PATH="$(realpath $(dirname "$CURRENT_SCRIPT_PATH")/../laravel)"
 echo "Cleaning up previous installation"
 rm -rf $APP_INSTALLATION_PATH
 
-echo "Installing Laravel"
+echo "Installing Laravel 9"
 # @see https://github.com/laravel/laravel/tags for Laravel versions
 composer create-project laravel/laravel $APP_INSTALLATION_PATH 9.5 --quiet --prefer-dist
 cd $APP_INSTALLATION_PATH

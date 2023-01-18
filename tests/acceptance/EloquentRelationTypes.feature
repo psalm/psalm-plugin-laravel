@@ -347,7 +347,7 @@ Feature: Eloquent Relation types
     When I run Psalm
     Then I see no errors
 
-  Scenario: test 115
+  Scenario: Calling first() on HasMany relationship returns nullable related Model
     Given I have the following code
     """
     function test(User $user): ?Role {
