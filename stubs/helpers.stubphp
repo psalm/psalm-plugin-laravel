@@ -36,7 +36,6 @@ function abort_if($boolean, $code, $message = '', array $headers = [])
 /**
 * @see https://github.com/vimeo/psalm/issues/4816 for why this hack exists
 */
-
 class NullObject {
     /**
      * @return null
@@ -126,7 +125,72 @@ function logger($message = null, array $context = [])
  * @param  mixed  $default
  * @return ($key is null ? \Illuminate\Config\Repository : ($key is array ? null : mixed))
  */
-function config($key = null, $default = null) {}
+function config($key = null, $default = null)
+{
+
+}
+
+/**
+ * Create a new cookie instance.
+ *
+ * @param  non-empty-string|null  $name
+ * @param  scalar|null  $value
+ * @param  int  $minutes
+ * @param  string|null  $path
+ * @param  string|null  $domain
+ * @param  bool|null  $secure
+ * @param  bool  $httpOnly
+ * @param  bool  $raw
+ * @param  string|null  $sameSite
+ * @return ($name is null ? \Illuminate\Cookie\CookieJar : \Symfony\Component\HttpFoundation\Cookie)
+ */
+function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain = null, $secure = null, $httpOnly = true, $raw = false, $sameSite = null)
+{
+
+}
+
+/**
+ * Get / set the specified session value.
+ *
+ * If an array is passed as the key, we will assume you want to set an array of values.
+ *
+ * @param  mixed[]|string|null  $key
+ * @param  mixed  $default
+ * @return ($key is null ? \Illuminate\Session\SessionManager : ($key is array ? null : mixed))
+ */
+function session($key = null, $default = null)
+{
+
+}
+
+/**
+ * @template TValue
+ * @template TDefault
+ *
+ * @param callable(): TValue $callback
+ * @param TDefault|(callable(\Throwable): TDefault) $rescue
+ * @param bool $report
+ * @return TValue|TDefault
+ */
+function rescue(callable $callback, $rescue = null, $report = true)
+{
+
+}
+
+/**
+ * @template TValue
+ * @param positive-int|list<int> $times
+ * @param callable(int): TValue $callback
+ * @param int<0, max> $sleep
+ * @param null|callable(\Exception): bool $when
+ * @phpstan-return TValue
+ *
+ * @throws \Exception
+ */
+function retry($times, callable $callback, $sleep = 0, $when = null)
+{
+
+}
 
 /**
  * Get an instance of the current request or an input item from the request.
@@ -135,4 +199,31 @@ function config($key = null, $default = null) {}
  * @param  mixed  $default
  * @return ($key is null ? \Illuminate\Http\Request : ($key is array ? string[] : mixed))
  */
-function request($key = null, $default = null) {}
+function request($key = null, $default = null)
+{
+
+}
+
+/**
+ * @template TValue
+ * @param TValue $value
+ * @param null|callable(TValue): void $callback
+ * @return TValue
+ */
+function tap($value, $callback = null)
+{
+
+}
+
+/**
+ * Translate the given message.
+ *
+ * @param  string|null  $key
+ * @param  array<string, scalar>  $replace
+ * @param  string|null  $locale
+ * @return ($key is null ? null : mixed)
+ */
+function __($key = null, $replace = [], $locale = null)
+{
+
+}
