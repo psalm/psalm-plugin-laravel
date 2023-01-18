@@ -36,7 +36,7 @@ final class ApplicationProvider
             $app->boot();
         }
 
-        self::bootAppRegister();
+        self::bootAppRegister($app);
         self::bootAppAlias();
     }
 
@@ -51,11 +51,9 @@ final class ApplicationProvider
     }
 
     /**
-     * @param LaravelApplication $app
-     *
      * @return void
      */
-    protected static function bootAppAlias($app): void
+    protected static function bootAppAlias(): void
     {
         AliasLoader::getInstance()->alias('Eloquent', Model::class);
     }
