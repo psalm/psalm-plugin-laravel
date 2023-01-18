@@ -1,43 +1,44 @@
 {
     "name": "psalm/plugin-laravel",
     "description": "A Laravel plugin for Psalm",
-    "type": "psalm-plugin",
-    "homepage": "https://github.com/psalm/psalm-plugin-laravel",
     "license": "MIT",
+    "type": "psalm-plugin",
     "authors": [
         {
             "name": "Matthew Brown",
             "email": "github@muglug.com"
         }
     ],
+    "homepage": "https://github.com/psalm/psalm-plugin-laravel",
     "require": {
-        "php": "^8.0",
+        "php": "^8.0.2",
         "ext-simplexml": "*",
-        "illuminate/config": "^9.0",
-        "illuminate/container": "^9.0",
-        "illuminate/contracts": "^9.0",
-        "illuminate/database": "^9.0",
-        "illuminate/events": "^9.0",
-        "illuminate/http": "^9.0",
-        "illuminate/routing": "^9.0",
-        "illuminate/support": "^9.0",
-        "illuminate/view": "^9.0",
-        "vimeo/psalm": "^4.8.1 || ^5",
-        "orchestra/testbench": "^7.0",
-        "barryvdh/laravel-ide-helper": "^2.10"
+        "barryvdh/laravel-ide-helper": "^2.12",
+        "illuminate/config": "^9.2",
+        "illuminate/container": "^9.2",
+        "illuminate/contracts": "^9.2",
+        "illuminate/database": "^9.2",
+        "illuminate/events": "^9.2",
+        "illuminate/http": "^9.2",
+        "illuminate/routing": "^9.2",
+        "illuminate/support": "^9.2",
+        "illuminate/view": "^9.2",
+        "orchestra/testbench": "^7.1",
+        "vimeo/psalm": "^4.30 || ^5.0.0-rc1"
     },
     "require-dev": {
         "codeception/codeception": "^5.0",
-        "codeception/module-asserts": "*@dev",
+        "codeception/module-asserts": "^3.0",
         "codeception/module-cli": "^2.0",
         "codeception/module-filesystem": "^3.0",
-        "codeception/module-phpbrowser": "*@dev",
-        "slevomat/coding-standard": "^6.2",
+        "codeception/module-phpbrowser": "^3.0",
+        "ramsey/collection": "^1.3",
+        "slevomat/coding-standard": "^8.8",
         "squizlabs/php_codesniffer": "*",
-        "phpoption/phpoption": "^1.8.0",
-        "symfony/http-foundation": "^5.3.7 || ^6.0",
-        "ramsey/collection": "^1.2.0"
+        "symfony/http-foundation": "^6.0"
     },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
     "autoload": {
         "psr-4": {
             "Psalm\\LaravelPlugin\\": "src"
@@ -48,31 +49,29 @@
             "Tests\\Psalm\\LaravelPlugin\\": "tests"
         }
     },
-    "scripts": {
-        "analyze": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
-        "lint": "phpcs -n",
-        "lint-fix": "phpcbf -n",
-        "test": [
-            "Composer\\Config::disableProcessTimeout",
-            "codecept run --skip-group skip"
-        ],
-        "check": [
-            "@analyze",
-            "@lint",
-            "@test"
-        ]
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "sort-packages": true
     },
     "extra": {
         "psalm": {
             "pluginClass": "Psalm\\LaravelPlugin\\Plugin"
         }
     },
-    "config": {
-        "sort-packages": true,
-        "allow-plugins": {
-            "dealerdirect/phpcodesniffer-composer-installer": true
-        }
-    },
-    "minimum-stability": "dev",
-    "prefer-stable": true
+    "scripts": {
+        "analyze": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
+        "check": [
+            "@analyze",
+            "@lint",
+            "@test"
+        ],
+        "lint": "phpcs -n",
+        "lint-fix": "phpcbf -n",
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "codecept run --skip-group skip"
+        ]
+    }
 }

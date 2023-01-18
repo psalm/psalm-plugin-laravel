@@ -22,6 +22,8 @@
     <file>tests</file>
     <exclude-pattern>cache/</exclude-pattern>
     <exclude-pattern>tests/_run/</exclude-pattern>
-    <exclude-pattern>tests/_support/</exclude-pattern>
+    <exclude-pattern>tests/_output</exclude-pattern>
+    <exclude-pattern>tests/_run</exclude-pattern>
+    <exclude-pattern>tests/_support</exclude-pattern>
     <exclude-pattern>tests/Support/</exclude-pattern><!-- This code mostly copy-paste from https://github.com/psalm/codeception-psalm-module and thus may have different coding-style rules -->
 </ruleset>

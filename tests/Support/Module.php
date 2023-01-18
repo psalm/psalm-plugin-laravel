@@ -35,6 +35,7 @@ class Module extends BaseModule
     private const VERSION_OPERATORS = [
         'newer than' => '>',
         'older than' => '<',
+        'not older than' => '>=',
     ];
 
     private const DEFAULT_PSALM_CONFIG = "<?xml version=\"1.0\"?>\n"
