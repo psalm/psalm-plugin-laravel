@@ -7,7 +7,9 @@ namespace Psalm\LaravelPlugin\Providers;
 use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Application as LaravelApplication;
+use Illuminate\Foundation\AliasLoader;
 use Laravel\Lumen\Application as LumenApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
 
@@ -34,7 +36,28 @@ final class ApplicationProvider
             $app->boot();
         }
 
+        self::bootAppRegister();
+        self::bootAppAlias();
+    }
+
+    /**
+     * @param LaravelApplication $app
+     *
+     * @return void
+     */
+    protected static function bootAppRegister($app): void
+    {
         $app->register(IdeHelperServiceProvider::class);
+    }
+
+    /**
+     * @param LaravelApplication $app
+     *
+     * @return void
+     */
+    protected static function bootAppAlias($app): void
+    {
+        AliasLoader::getInstance()->alias('Eloquent', Model::class);
     }
 
     /**
