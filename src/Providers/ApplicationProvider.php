@@ -41,7 +41,7 @@ final class ApplicationProvider
     }
 
     /**
-     * @param LaravelApplication $app
+     * @param LaravelApplication|LumenApplication $app
      *
      * @return void
      */
