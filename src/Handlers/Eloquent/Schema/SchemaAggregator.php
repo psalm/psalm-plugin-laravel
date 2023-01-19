@@ -189,7 +189,12 @@ class SchemaAggregator
                         $root_var->name instanceof PhpParser\Node\Identifier
                         && $root_var->name->name === 'nullable'
                     ) {
-                        $nullable = true;
+                        $noParameter = count($root_var->args) === 0;
+                        $trueParameter = array_key_exists(0, $root_var->args)
+                            && $root_var->args[0]->value instanceof PhpParser\Node\Expr\ConstFetch
+                            && $root_var->args[0]->value->name instanceof PhpParser\Node\Name
+                            && $root_var->args[0]->value->name->parts === ['true'];
+                        $nullable = $noParameter || $trueParameter;
                     }
 
                     $first_method_call = $root_var;
