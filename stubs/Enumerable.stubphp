@@ -3,7 +3,7 @@
 namespace Illuminate\Support;
 
 /**
- * @template TKey
+ * @template TKey of array-key
  * @template TValue
  *
  * @extends \IteratorAggregate<TKey, TValue>

@@ -28,6 +28,9 @@ use function dirname;
 use function explode;
 use function glob;
 
+/**
+ * @psalm-suppress UnusedClass
+ */
 class Plugin implements PluginEntryPointInterface
 {
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void

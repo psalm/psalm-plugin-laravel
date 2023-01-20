@@ -4,6 +4,7 @@ namespace Psalm\LaravelPlugin\Providers;
 
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
+use Psalm\LaravelPlugin\Fakes\FakeModelsCommand;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
@@ -14,7 +15,7 @@ use function unlink;
 final class ModelStubProvider implements GeneratesStubs
 {
     /**
-     * @var array<class-string>
+     * @var list<class-string<\Illuminate\Database\Eloquent\Model>>
      */
     private static $model_classes;
 
@@ -35,7 +36,7 @@ final class ModelStubProvider implements GeneratesStubs
 
         $fake_filesystem = new FakeFilesystem();
 
-        $models_generator_command = FakeModelsCommandProvider::getCommand(
+        $models_generator_command = new FakeModelsCommand(
             $fake_filesystem,
             $schema_aggregator
         );
@@ -63,7 +64,7 @@ final class ModelStubProvider implements GeneratesStubs
     }
 
     /**
-     * @return array<class-string>
+     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
      */
     public static function getModelClasses(): array
     {

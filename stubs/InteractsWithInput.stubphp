@@ -2,12 +2,6 @@
 
 namespace Illuminate\Http\Concerns;
 
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Str;
-use SplFileInfo;
-use stdClass;
-
 trait InteractsWithInput
 {
     /**
@@ -19,5 +13,5 @@ trait InteractsWithInput
      *
      * @psalm-taint-source input
      */
-    public function input($key = null, $default = null) { }
+    public function input($key = null, $default = null) {}
 }

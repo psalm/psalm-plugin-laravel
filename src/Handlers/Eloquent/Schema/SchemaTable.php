@@ -4,16 +4,8 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 class SchemaTable
 {
-    /** @var string */
-    public $name;
-
     /** @var array<string, SchemaColumn> */
     public $columns = [];
-
-    public function __construct(string $name)
-    {
-        $this->name = $name;
-    }
 
     public function setColumn(SchemaColumn $column): void
     {
