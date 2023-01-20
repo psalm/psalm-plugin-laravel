@@ -17,7 +17,7 @@ Feature: ExceptionHandler
       </psalm>
       """
 
-  Scenario: Unknown Scenario
+  Scenario: Laravel exception handler is not registered as plugin’s default exception handler
     Given I have the following code
     """
     <?php
