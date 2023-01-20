@@ -2,7 +2,8 @@ name: Update next major branch
 on:
   push:
     branches:
-      - dev
+      - master
+
 jobs:
   run_action:
     runs-on: ubuntu-latest
