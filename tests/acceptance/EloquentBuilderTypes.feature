@@ -277,3 +277,18 @@ Feature: Eloquent Builder types
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: call cursorPaginate returns templated CursorPaginator
+    Given I have the following code
+    """
+    class Post extends \Illuminate\Database\Eloquent\Model {};
+
+    /**
+    * @psalm-return \Illuminate\Pagination\CursorPaginator<Post>
+    */
+    function test_whereDateWithInt(Builder $builder): \Illuminate\Pagination\CursorPaginator {
+      return Post::query()->cursorPaginate();
+    }
+    """
+    When I run Psalm
+    Then I see no errors
