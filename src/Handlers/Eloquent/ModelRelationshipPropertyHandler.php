@@ -19,6 +19,7 @@ use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
 use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
 use function in_array;
@@ -143,6 +144,7 @@ class ModelRelationshipPropertyHandler implements
             if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection)) {
                 $returnType = new Union([
                     new TGenericObject(Collection::class, [
+                        new Union([new TInt()]),
                         $modelType
                     ]),
                 ]);
