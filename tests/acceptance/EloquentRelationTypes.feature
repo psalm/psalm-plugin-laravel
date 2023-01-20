@@ -188,7 +188,7 @@ Feature: Eloquent Relation types
       }
 
       /**
-      * @psalm-return Collection<Comment>
+      * @psalm-return Collection<int, Comment>
       */
       public function getComments(Video $video): Collection {
         return $video->comments;
@@ -211,7 +211,7 @@ Feature: Eloquent Relation types
       }
 
       /**
-      * @psalm-return Collection<Tag>
+      * @psalm-return Collection<int, Tag>
       */
       public function getTags(Post $post): Collection {
         return $post->tags;
@@ -258,14 +258,14 @@ Feature: Eloquent Relation types
       }
 
       /**
-      * @psalm-return Collection<Post>
+      * @psalm-return Collection<int, Post>
       */
       public function getPosts(Tag $tag): Collection {
         return $tag->posts;
       }
 
       /**
-      * @psalm-return Collection<Video>
+      * @psalm-return Collection<int, Video>
       */
       public function getVideos(Tag $tag): Collection {
         return $tag->videos;

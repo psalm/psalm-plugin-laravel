@@ -57,7 +57,7 @@ Feature: Eloquent Collection types
         }
 
         /**
-        * @psalm-return \Illuminate\Database\Eloquent\Collection<User>
+        * @psalm-return \Illuminate\Database\Eloquent\Collection<int, User>
         */
         public function getWhereUsingLessMagic(array $attributes): \Illuminate\Database\Eloquent\Collection
         {
