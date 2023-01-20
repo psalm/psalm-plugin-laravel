@@ -29,38 +29,38 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
      * @param  array|mixed  $columns
      * @return \Illuminate\Database\Eloquent\Collection<static>
      */
-    public static function all($columns = ['*']) { }
+    public static function all($columns = ['*']) {}
 
     /**
      * @return \Illuminate\Database\Eloquent\Builder<static>
      */
-    public static function query() { }
+    public static function query() {}
 
     /**
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
-    public function newQuery() { }
+    public function newQuery() {}
 
     /**
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
-    public function newModelQuery() { }
+    public function newModelQuery() {}
 
     /**
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
-    public function newQueryWithoutRelationships() { }
+    public function newQueryWithoutRelationships() {}
 
     /**
      * @param  \Illuminate\Database\Eloquent\Builder  $builder
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
-    public function registerGlobalScopes($builder) { }
+    public function registerGlobalScopes($builder) {}
 
     /**
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
-    public function newQueryWithoutScopes() { }
+    public function newQueryWithoutScopes() {}
 
     /**
      * Get a new query instance without a given scope.
@@ -68,17 +68,17 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
      * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
-    public function newQueryWithoutScope($scope) { }
+    public function newQueryWithoutScope($scope) {}
 
     /**
      * @param  array|int  $ids
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
-    public function newQueryForRestoration($ids) { }
+    public function newQueryForRestoration($ids) {}
 
     /**
      * @param  \Illuminate\Database\Query\Builder  $query
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
-    public function newEloquentBuilder($query) { }
+    public function newEloquentBuilder($query) {}
 }

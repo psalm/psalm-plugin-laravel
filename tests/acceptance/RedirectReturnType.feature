@@ -16,7 +16,7 @@ Feature: redirect()
       </psalm>
       """
 
-  Scenario: Unknown Scenario
+  Scenario: Calling of redirect helper without args returns Redirector instance
     Given I have the following code
     """
     <?php
@@ -29,7 +29,7 @@ Feature: redirect()
     When I run Psalm
     Then I see no errors
 
-  Scenario: Unknown Scenario
+  Scenario: Calling of redirect helper with an argument returns RedirectResponse
     Given I have the following code
     """
     <?php

@@ -132,7 +132,7 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: Unknown Scenario
+  Scenario: Errors on calling Model method that is not exist even through magic
     Given I have the following code preamble
     """
     <?php declare(strict_types=1);
@@ -241,11 +241,11 @@ Feature: Eloquent Builder types
       return $builder->whereDate('created_at', '>', 1);
     }
     """
-    And I have Psalm older than "4.99.0" (because of "changed issue type")
+    And I have Psalm older than "5.0.0" (because of "changed issue type")
     When I run Psalm
     Then I see these errors
       | Type  | Message |
-      | InvalidScalarArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, 1 provided |
+      | InvalidScalarArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, but 1 provided |
 
   Scenario: can not call whereDate with incompatible type [ Psalm 5 ]
     Given I have the following code
@@ -258,7 +258,7 @@ Feature: Eloquent Builder types
       return $builder->whereDate('created_at', '>', 1);
     }
     """
-    And I have Psalm newer than "4.99.0" (because of "changed issue type")
+    And I have Psalm not older than "5.0" (because of "changed issue type")
     When I run Psalm
     Then I see these errors
       | Type  | Message |

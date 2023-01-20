@@ -16,7 +16,7 @@ Feature: url()
       </psalm>
       """
 
-  Scenario: Unknown Scenario
+  Scenario: Calling of url helper without args returns UrlGenerator instance
     Given I have the following code
     """
     <?php
@@ -29,7 +29,7 @@ Feature: url()
     When I run Psalm
     Then I see no errors
 
-  Scenario: Unknown Scenario
+  Scenario: Calling of url helper with an argument returns URL
     Given I have the following code
     """
     <?php
