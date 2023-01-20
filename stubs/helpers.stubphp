@@ -1,14 +1,14 @@
 <?php
 
 /**
-* Return a new response from the application.
-*
-* @param  \Illuminate\View\View|string|array|null  $content
-* @param  int     $status
-* @param  array   $headers
-* @return \Illuminate\Http\Response|\Illuminate\Contracts\Routing\ResponseFactory
-* @psalm-return (func_num_args() is 0 ? \Illuminate\Contracts\Routing\ResponseFactory : \Illuminate\Http\Response)
-*/
+ * Return a new response from the application.
+ *
+ * @param  \Illuminate\View\View|string|array|null  $content
+ * @param  int     $status
+ * @param  array   $headers
+ * @return \Illuminate\Http\Response|\Illuminate\Contracts\Routing\ResponseFactory
+ * @psalm-return (func_num_args() is 0 ? \Illuminate\Contracts\Routing\ResponseFactory : \Illuminate\Http\Response)
+ */
 function response($content = '', $status = 200, array $headers = [])
 {
 
@@ -214,6 +214,25 @@ function tap($value, $callback = null)
 {
 
 }
+
+/**
+ * Create a new Validator instance.
+ *
+ * @param  array  $data
+ * @param  array  $rules
+ * @param  array  $messages
+ * @param  array  $customAttributes
+ * @return (func_num_args() is 0 ? \Illuminate\Contracts\Validation\Factory : \Illuminate\Contracts\Validation\Validator)
+ */
+function validator(array $data = [], array $rules = [], array $messages = [], array $customAttributes = []) {}
+
+/**
+ * @param  string|null  $view
+ * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<string, mixed>  $data
+ * @param  array<string, mixed>  $mergeData
+ * @return ($view is null ? \Illuminate\Contracts\View\Factory : \Illuminate\View\View)
+ */
+function view($view = null, $data = [], $mergeData = []) {}
 
 /**
  * Translate the given message.
