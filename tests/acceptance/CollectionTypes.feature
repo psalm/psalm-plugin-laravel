@@ -35,21 +35,42 @@ Feature: Collection types
             return new Collection(['hi']);
         }
 
-        public function popTest(): ?string
+        public function popTestNoArgs(): ?string
         {
             return $this->getCollection()->pop();
         }
 
-        public function firstTest(): ?string
+        public function popTestDefaultArg(): ?string
+        {
+            return $this->getCollection()->pop(1);
+        }
+
+        public function firstWithoutDefaultTest(): ?string
         {
             return $this->getCollection()->first(function (string $item) {
               return strlen($item) > 3;
             });
         }
 
+        public function firstWithScalarDefaultTest(): string|int|null
+        {
+            return $this->getCollection()->first(function (string $item) {
+              return strlen($item) > 3;
+            }, 42);
+        }
+
+        public function firstWithClosureDefaultTest(): string|int|null
+        {
+            return $this->getCollection()->first(function (string $item) {
+              return strlen($item) > 3;
+            }, function () {
+              return 42;
+            });
+        }
+
         /**
-        * @return Collection<string, int>
-        */
+         * @return Collection<string, int>
+         */
         public function testFlip(): Collection
         {
           return $this->getCollection()->flip();
@@ -62,46 +83,77 @@ Feature: Collection types
             });
         }
 
-        public function getTest(): ?string
+        public function getTestWithoutDefaultTest(): ?string
         {
-            return $this->getCollection()->get(function (string $item) {
-              return strlen($item) > 3;
+            return $this->getCollection()->get(1);
+        }
+
+        public function getTestWithScalarDefaultTest(): string|int|null
+        {
+            return $this->getCollection()->get(1, 42);
+        }
+
+        public function getTestWithClosureDefaultTest(): string|int|null
+        {
+            return $this->getCollection()->get(1, function () {
+              return 42;
             });
         }
 
-        public function pullTest(): ?string
+        public function pullWithoutDefaultTest(): ?string
         {
-            return $this->getCollection()->pull(function (string $item) {
-              return strlen($item) > 3;
+            return $this->getCollection()->pull(1);
+        }
+
+        public function pullWitScalarDefaultTest(): string|int|null
+        {
+            return $this->getCollection()->pull(1, 42);
+        }
+
+        public function pullWithDefaultClosureTest(): string|int|null
+        {
+            return $this->getCollection()->pull(1, function () {
+              return 42;
             });
         }
 
         /**
-        * @return int|false
-        */
-        public function searchTest()
+         * @return int|false
+         */
+        public function searchUsingClosureTest()
         {
             return $this->getCollection()->search(function (string $item) {
               return strlen($item) > 3;
             });
         }
 
-        public function shiftTest(): ?string
+        public function shiftWithoutArgsTest(): ?string
         {
             return $this->getCollection()->shift();
         }
 
+        public function shiftWithDefaultArgTest(): ?string
+        {
+            return $this->getCollection()->shift(1);
+        }
+
+        /** @return Collection<int, string> */
+        public function shiftWithNonDefaultArgTest(): Collection
+        {
+            return $this->getCollection()->shift(2);
+        }
+
         /**
-        * @return array<int, string>
-        */
+         * @return array<int, string>
+         */
         public function allTest(): array
         {
           return $this->getCollection()->all();
         }
 
         /**
-        * @return Collection<int, string>
-        */
+         * @return Collection<int, string>
+         */
         public function putTest(): Collection
         {
           return $this->getCollection()->put(5, 'five');

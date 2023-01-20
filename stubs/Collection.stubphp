@@ -20,8 +20,49 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     use EnumeratesValues;
 
     /**
-     * Get one or a specified number of items randomly from the collection.
+     * Get the first item from the collection passing the given truth test.
      *
+     * @template TFirstDefault
+     * @template TFirstDefaultFromClosure
+     *
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TFirstDefault|(\Closure(): TFirstDefaultFromClosure)  $default
+     * @return ($default is \Closure ? TFirstDefaultFromClosure : (TFirstDefault | TValue))
+     */
+    public function first(callable $callback = null, $default = null) {}
+
+    /**
+     * @template TGetDefault
+     * @template TGetClosureReturn
+     *
+     * @param  TKey  $key
+     * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
+     * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
+     */
+    public function get($key, $default = null) {}
+
+    /**
+     * @template TCount of int
+     * @param  TCount  $count
+     * @return (
+     *     TCount is 1
+     *     ? TValue|null
+     *     : static
+     * )
+     */
+    public function pop($count = 1) {}
+
+    /**
+     * @template TPullDefault
+     * @template TPullClosureReturn
+     *
+     * @param  TKey  $key
+     * @param  TPullDefault|(\Closure(): TPullClosureReturn)  $default
+     * @return ($default is \Closure ? TPullClosureReturn : (TPullDefault | TValue))
+     */
+    public function pull($key, $default = null) {}
+
+    /**
      * @param  TKey  $number
      * @param  (callable(TValue): int)|int|null  $number
      * @return (TKey is null ? TValue : static<int, TValue>)
@@ -29,4 +70,22 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @throws \InvalidArgumentException
      */
     public function random($number = null) {}
+
+    /**
+     * @param  TValue|(callable(TValue,TKey): bool)  $value
+     * @param  bool  $strict
+     * @return TKey|false
+     */
+    public function search($value, $strict = false) {}
+
+    /**
+     * @template TCount of int
+     * @param  TCount  $count
+     * @return (
+     *     TCount is 1
+     *     ? TValue|null
+     *     : static
+     * )
+     */
+    public function shift($count = 1) {}
 }
