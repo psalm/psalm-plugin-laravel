@@ -132,7 +132,7 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: Unknown Scenario
+  Scenario: Errors on calling Model method that is not exist even through magic
     Given I have the following code preamble
     """
     <?php declare(strict_types=1);
