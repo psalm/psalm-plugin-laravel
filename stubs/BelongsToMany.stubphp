@@ -2,9 +2,6 @@
 
 namespace Illuminate\Database\Eloquent\Relations;
 
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
-
 /**
 * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
 * @template-extends Relation<TRelatedModel>
@@ -13,32 +10,6 @@ use Illuminate\Database\Eloquent\Model;
 class BelongsToMany extends Relation
 {
     use Concerns\InteractsWithPivotTable;
-
-    /**
-     * Create a new belongs to many relationship instance.
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     * @param  \Illuminate\Database\Eloquent\Model  $parent
-     * @param  string  $table
-     * @param  string  $foreignPivotKey
-     * @param  string  $relatedPivotKey
-     * @param  string  $parentKey
-     * @param  string  $relatedKey
-     * @param  string  $relationName
-     * @return void
-     */
-    public function __construct(Builder $query, Model $parent, $table, $foreignPivotKey,
-                                $relatedPivotKey, $parentKey, $relatedKey, $relationName = null)
-    {
-        $this->parentKey = $parentKey;
-        $this->relatedKey = $relatedKey;
-        $this->relationName = $relationName;
-        $this->relatedPivotKey = $relatedPivotKey;
-        $this->foreignPivotKey = $foreignPivotKey;
-        $this->table = $this->resolveTableName($table);
-
-        parent::__construct($query, $parent);
-    }
 
     /**
      * @template T
@@ -71,8 +42,7 @@ class BelongsToMany extends Relation
      * @param  array  $values
      * @param  array  $joining
      * @param  bool   $touch
-     * @return \Illuminate\Database\Eloquent\Model
-     * @psalm-return TRelatedModel
+     * @return TRelatedModel
      */
     public function updateOrCreate(array $attributes, array $values = [], array $joining = [], $touch = true) {}
 
@@ -87,7 +57,7 @@ class BelongsToMany extends Relation
     public function find($id, $columns = ['*']) {}
 
     /**
-     * @param  mixed  $ids
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<array-key, int|string>  $ids
      * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Collection
      * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
@@ -124,26 +94,53 @@ class BelongsToMany extends Relation
     public function firstOrFail($columns = ['*']) {}
 
     /**
-     * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Collection
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
-     */
-    public function get($columns = ['*']) {}
-
-    /**
      * @param  array<string, mixed>  $attributes
      * @param  array  $joining
      * @param  bool   $touch
-     * @return \Illuminate\Database\Eloquent\Model
-     * @psalm-return TRelatedModel
+     * @return TRelatedModel
      */
     public function create(array $attributes = [], array $joining = [], $touch = true) {}
 
     /**
      * @param  array  $records
      * @param  array  $joinings
-     * @return array
-     * @psalm-return list<TRelatedModel>
+     * @return list<TRelatedModel>
      */
     public function createMany(array $records, array $joinings = []) {}
+
+    /**
+     * @return \Traversable<int, TRelatedModel>
+     */
+    public function getResults() {}
+
+    /**
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @return \Illuminate\Pagination\LengthAwarePaginator<TRelatedModel>
+     */
+    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+
+    /**
+     * Paginate the given query into a simple paginator.
+     *
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @return \Illuminate\Pagination\Paginator<TRelatedModel>
+     */
+    public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+
+    /**
+     * Paginate the given query into a cursor paginator.
+     *
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>  $columns
+     * @param  string  $cursorName
+     * @param  string|null  $cursor
+     * @return \Illuminate\Pagination\CursorPaginator<TRelatedModel>
+     */
+    public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 }

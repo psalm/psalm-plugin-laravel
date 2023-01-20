@@ -183,7 +183,7 @@ function rescue(callable $callback, $rescue = null, $report = true)
  * @param callable(int): TValue $callback
  * @param int<0, max> $sleep
  * @param null|callable(\Exception): bool $when
- * @phpstan-return TValue
+ * @psalm-return TValue
  *
  * @throws \Exception
  */
