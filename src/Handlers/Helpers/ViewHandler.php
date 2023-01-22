@@ -3,7 +3,7 @@
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Illuminate\Contracts\View\Factory;
-use Illuminate\View\View;
+use Illuminate\Contracts\View\View;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
