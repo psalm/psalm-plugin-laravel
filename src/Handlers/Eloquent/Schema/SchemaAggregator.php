@@ -6,6 +6,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use PhpParser;
 
+use function array_key_exists;
 use function count;
 use function is_string;
 use function strtolower;
@@ -191,8 +192,8 @@ class SchemaAggregator
                     ) {
                         $noParameter = count($root_var->args) === 0;
                         $trueParameter = array_key_exists(0, $root_var->args)
+                            && $root_var->args[0] instanceof PhpParser\Node\Arg
                             && $root_var->args[0]->value instanceof PhpParser\Node\Expr\ConstFetch
-                            && $root_var->args[0]->value->name instanceof PhpParser\Node\Name
                             && $root_var->args[0]->value->name->parts === ['true'];
                         $nullable = $noParameter || $trueParameter;
                     }
