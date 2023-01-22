@@ -151,6 +151,54 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: response support
+    Given I have the following code
+    """
+        function response_without_args(): \Illuminate\Contracts\Routing\ResponseFactory
+        {
+            return response();
+        }
+
+        function response_with_single_empty_string_arg(): \Illuminate\Http\Response
+        {
+            return response('');
+        }
+
+        function response_with_single_view_arg(): \Illuminate\Http\Response
+        {
+            return response(view('home'));
+        }
+
+        // empty content response
+        function response_with_single_null_arg(): \Illuminate\Http\Response
+        {
+            return response(null);
+        }
+
+        function response_with_single_array_arg(): \Illuminate\Http\Response
+        {
+            $jsonData = ['a' => 42];
+            return response($jsonData);
+        }
+
+        function response_with_first_view_arg(): \Illuminate\Http\Response
+        {
+            return response(view('home'));
+        }
+
+        function response_with_two_args(): \Illuminate\Http\Response
+        {
+            return response('content', 200);
+        }
+
+        function response_with_three_args(): \Illuminate\Http\Response
+        {
+            return response('content', 200, ['Accept' => 'text/html']);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: retry support
     Given I have the following code
     """
@@ -178,6 +226,42 @@ Feature: helpers
         function tap_accepts_callable(): \DateTime
         {
             return tap(new \DateTime, fn (\DateTime $now) => null);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: view support
+    Given I have the following code
+    """
+        function view_without_args(): \Illuminate\Contracts\View\Factory
+        {
+            return view();
+        }
+
+        function view_with_one_arg(): \Illuminate\Contracts\View\View
+        {
+            return view('home');
+        }
+
+        function view_with_two_args(): \Illuminate\Contracts\View\View
+        {
+            return view('home', []);
+        }
+
+        function view_with_three_args(): \Illuminate\Contracts\View\View
+        {
+            return view('home', [], []);
+        }
+
+        function view_make_with_two_args(): \Illuminate\Contracts\View\View
+        {
+            return view()->make('home', []);
+        }
+
+        function view_make_with_three_args(): \Illuminate\Contracts\View\View
+        {
+            return view()->make('home', [], []);
         }
     """
     When I run Psalm
