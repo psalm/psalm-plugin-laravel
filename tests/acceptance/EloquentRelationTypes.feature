@@ -123,6 +123,27 @@ Feature: Eloquent Relation types
     When I run Psalm
     Then I see no errors
 
+    Scenario: BelongsToMany relationship can return paginators
+    Given I have the following code
+    """
+    /** @return \Illuminate\Pagination\LengthAwarePaginator<Role> */
+    function testPaginate(User $user) {
+      return $user->roles()->paginate();
+    }
+
+    /** @return \Illuminate\Pagination\Paginator<Role> */
+    function testSimplePaginate(User $user) {
+      return $user->roles()->simplePaginate();
+    }
+
+    /** @return \Illuminate\Pagination\CursorPaginator<Role> */
+    function testCursorPaginate(User $user) {
+      return $user->roles()->cursorPaginate();
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: Models can declare has through relationships
     Given I have the following code
     """
@@ -141,6 +162,27 @@ Feature: Eloquent Relation types
       public function getCarsOwner(Mechanic $mechanic): HasOneThrough {
         return $mechanic->carOwner();
       }
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: HasManyThrough relationship can return paginators
+    Given I have the following code
+    """
+    /** @return \Illuminate\Pagination\LengthAwarePaginator<Mechanic> */
+    function testPaginate(User $user) {
+      return $user->carsAtMechanic()->paginate();
+    }
+
+    /** @return \Illuminate\Pagination\Paginator<Mechanic> */
+    function testSimplePaginate(User $user) {
+      return $user->carsAtMechanic()->simplePaginate();
+    }
+
+    /** @return \Illuminate\Pagination\CursorPaginator<Mechanic> */
+    function testCursorPaginate(User $user) {
+      return $user->carsAtMechanic()->cursorPaginate();
     }
     """
     When I run Psalm
