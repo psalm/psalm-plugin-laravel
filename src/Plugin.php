@@ -9,6 +9,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
+use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\RedirectHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
@@ -93,6 +94,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
         require_once 'Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(ModelMethodHandler::class);
+        require_once 'Handlers/Helpers/CacheHandler.php';
+        $registration->registerHooksFromClass(CacheHandler::class);
         require_once 'Handlers/Helpers/ViewHandler.php';
         $registration->registerHooksFromClass(ViewHandler::class);
         require_once 'Handlers/Helpers/PathHandler.php';

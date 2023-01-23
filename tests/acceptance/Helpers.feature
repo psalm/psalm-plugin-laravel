@@ -74,6 +74,64 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: auth support
+    Given I have the following code
+    """
+        function test_auth_call_without_args_should_return_Factory(): \Illuminate\Contracts\Auth\Factory
+        {
+            return auth();
+        }
+
+        function test_auth_call_with_null_as_arg_should_return_Factory(): \Illuminate\Contracts\Auth\Factory
+        {
+            return auth(null);
+        }
+
+        function test_auth_call_with_string_arg_should_return_Guard(): \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard
+        {
+          return auth('user');
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: cache support
+    Given I have the following code
+    """
+        function test_cache_call_without_args_should_return_CacheManager(): \Illuminate\Cache\CacheManager
+        {
+            return cache();
+        }
+
+        function test_cache_call_with_string_as_arg_should_return_string(): mixed
+        {
+            return cache('key'); // get value
+        }
+
+        function test_cache_call_with_array_as_arg_should_return_bool(): bool
+        {
+          return cache(['key' => 42]); // set value
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: logs support
+    Given I have the following code
+    """
+        function test_logs_call_without_args(): \Illuminate\Log\LogManager
+        {
+            return logs();
+        }
+
+        function test_logs_call_with_arg(): \Psr\Log\LoggerInterface
+        {
+            return logs('driver-name');
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: logger support
     Given I have the following code
     """
@@ -138,14 +196,19 @@ Feature: helpers
   Scenario: rescue support
     Given I have the following code
     """
-        function with_default_of_the_same_type(): int
+        function rescue_call_without_default(): ?int
+        {
+            return rescue(fn (): int => 0);
+        }
+
+        function rescue_call_with_default_scalar(): int
         {
             return rescue(fn (): int => 0, 42);
         }
 
-        function without_default(): ?int
+        function rescue_call_with_default_callable(): int
         {
-            return rescue(fn (): int => 0);
+            return rescue(fn () => throw new \Exception(), fn () => 42);
         }
     """
     When I run Psalm
