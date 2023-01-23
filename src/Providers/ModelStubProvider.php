@@ -10,6 +10,7 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
 
 use function glob;
+use function method_exists;
 use function unlink;
 
 final class ModelStubProvider implements GeneratesStubs
@@ -22,6 +23,11 @@ final class ModelStubProvider implements GeneratesStubs
     public static function generateStubFile(): void
     {
         $app = ApplicationProvider::getApp();
+
+        if (!method_exists($app, 'databasePath')) {
+            throw new \RuntimeException('Unsupported Application type.');
+        }
+
         $migrations_folder = $app->databasePath('migrations/');
 
         $project_analyzer = ProjectAnalyzer::getInstance();

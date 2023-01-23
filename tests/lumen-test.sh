@@ -3,7 +3,7 @@
 set -e
 
 CURRENT_SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
-APP_INSTALLATION_PATH="$(realpath $(dirname "$CURRENT_SCRIPT_PATH")/../lumen)"
+APP_INSTALLATION_PATH="$(dirname "$CURRENT_SCRIPT_PATH")/../lumen"
 
 echo "Cleaning up previous installation"
 rm -rf $APP_INSTALLATION_PATH
@@ -14,7 +14,7 @@ composer create-project laravel/lumen $APP_INSTALLATION_PATH 9.* --quiet --prefe
 cd $APP_INSTALLATION_PATH
 
 echo "Adding package from source"
-composer config repositories.psalm-plugin-laravel '{"type": "path", "url": "../psalm-plugin-laravel"}'
+composer config repositories.0 '{"type": "path", "url": "../psalm-plugin-laravel"}'
 COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" -W
 
 echo "Analyzing Lumen"

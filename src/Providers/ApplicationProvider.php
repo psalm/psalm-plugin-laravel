@@ -37,17 +37,13 @@ final class ApplicationProvider
         $app->register(IdeHelperServiceProvider::class);
     }
 
-    /**
-     * @return LaravelApplication|LumenApplication
-     */
-    public static function getApp()
+    public static function getApp(): LaravelApplication | LumenApplication
     {
         if (self::$app) {
             return self::$app;
         }
 
         if (file_exists($applicationPath = __DIR__ . '/../../../../bootstrap/app.php')) { // plugin installed to vendor
-            /** @psalm-suppress MissingFile file is checked for existence */
             $app = require $applicationPath;
         } elseif (file_exists($applicationPath = getcwd() . '/bootstrap/app.php')) { // Local Dev
             $app = require $applicationPath;
