@@ -193,6 +193,32 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
+    Scenario: redirect support
+        Given I have the following code
+    """
+        function test_redirect_call_without_args_should_return_Redirector(): \Illuminate\Routing\Redirector {
+          return redirect();
+        }
+
+        function test_redirect_call_with_single_arg_should_return_RedirectResponse(): Illuminate\Http\RedirectResponse {
+          return redirect('foo');
+        }
+
+        function test_redirect_call_with_two_args_should_return_RedirectResponse(): Illuminate\Http\RedirectResponse {
+          return redirect('foo', 301);
+        }
+
+        function test_redirect_call_with_three_args_should_return_RedirectResponse(): Illuminate\Http\RedirectResponse {
+          return redirect('foo', 301, ['Accept' => 'text/html']);
+        }
+
+        function test_redirect_call_with_four_args_should_return_RedirectResponse(): Illuminate\Http\RedirectResponse {
+          return redirect('foo', 301, ['Accept' => 'text/html'], true);
+        }
+    """
+        When I run Psalm
+        Then I see no errors
+
   Scenario: rescue support
     Given I have the following code
     """
@@ -289,6 +315,28 @@ Feature: helpers
         function tap_accepts_callable(): \DateTime
         {
             return tap(new \DateTime, fn (\DateTime $now) => null);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: url support
+    Given I have the following code
+    """
+        function test_url_without_args_should_return_UrlGenerator(): \Illuminate\Contracts\Routing\UrlGenerator {
+          return url();
+        }
+
+        function test_url_with_single_arg_should_return_string(): string {
+          return url('example.com');
+        }
+
+        function test_url_with_two_args_should_return_string(): string {
+          return url('example.com', ['a' => 42]);
+        }
+
+        function test_url_with_three_args_should_return_string(): string {
+          return url('example.com', ['a' => 42], true);
         }
     """
     When I run Psalm
