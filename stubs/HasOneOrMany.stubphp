@@ -63,7 +63,7 @@ abstract class HasOneOrMany extends Relation
     /**
      * @param  array  $records
      * @return \Illuminate\Database\Eloquent\Collection
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
+     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function createMany(array $records) {}
 

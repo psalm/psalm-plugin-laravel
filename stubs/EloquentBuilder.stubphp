@@ -259,14 +259,14 @@ class Builder
 
     /**
      * @param  array  $items
-     * @return \Illuminate\Database\Eloquent\Collection<TModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      */
     public function hydrate(array $items) {}
 
     /**
      * @param  string  $query
      * @param  array  $bindings
-     * @return \Illuminate\Database\Eloquent\Collection<TModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      */
     public function fromQuery($query, $bindings = []) {}
 
@@ -274,14 +274,14 @@ class Builder
      * @template T
      * @param  T $id
      * @param  list<non-empty-string>  $columns
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel|null)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel|null)
      */
     public function find($id, $columns = ['*']) {}
 
     /**
      * @param  \Illuminate\Contracts\Support\Arrayable|array  $ids
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Collection<TModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      */
     public function findMany($ids, $columns = ['*']) {}
 
@@ -289,7 +289,7 @@ class Builder
      * @template T
      * @param  T $id
      * @param  list<non-empty-string>  $columns
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<TModel> : TModel)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel)
      */
     public function findOrFail($id, $columns = ['*']) {}
 
@@ -362,7 +362,7 @@ class Builder
 
     /**
      * @param  array|non-empty-string  $columns
-     * @return \Illuminate\Database\Eloquent\Collection<TModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      */
     public function get($columns = ['*']) {}
 
