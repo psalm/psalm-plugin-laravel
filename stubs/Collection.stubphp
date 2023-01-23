@@ -20,86 +20,72 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     use EnumeratesValues;
 
     /**
-     * The items contained in the collection.
+     * Get the first item from the collection passing the given truth test.
      *
-     * @var array<TKey, TValue>
-     */
-    protected $items = [];
-
-    /**
-     * Create a new collection.
+     * @template TFirstDefault
+     * @template TFirstDefaultFromClosure
      *
-     * @param array<TKey, TValue> $items
-     * @return void
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TFirstDefault|(\Closure(): TFirstDefaultFromClosure)  $default
+     * @return ($default is \Closure ? TFirstDefaultFromClosure : (TFirstDefault | TValue))
      */
-    public function __construct($items = []) {}
+    public function first(callable $callback = null, $default = null) {}
 
     /**
-     * @param  callable|null  $callback
-     * @param  mixed  $default
-     * @return TValue|null
-     */
-    public function first(callable $callback = null, $default = null){}
-
-    /**
-     * @return static<TValue, TKey>
-     */
-    public function flip(){}
-
-    /**
-     * @param  callable|null  $callback
-     * @param  mixed  $default
-     * @return TValue|null
-     */
-    public function last(callable $callback = null, $default = null){}
-
-    /**
-     * @param  mixed  $key
-     * @param  mixed  $default
-     * @return TValue|null
+     * @template TGetDefault
+     * @template TGetClosureReturn
+     *
+     * @param  TKey  $key
+     * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
+     * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
      */
     public function get($key, $default = null) {}
 
     /**
-     * @return TValue|null
+     * @template TCount of int
+     * @param  TCount  $count
+     * @return (
+     *     TCount is 1
+     *     ? TValue|null
+     *     : static
+     * )
      */
-    public function pop() {}
+    public function pop($count = 1) {}
 
     /**
-     * @param  mixed  $key
-     * @param  mixed  $default
-     * @return TValue|null
+     * @template TPullDefault
+     * @template TPullClosureReturn
+     *
+     * @param  TKey  $key
+     * @param  TPullDefault|(\Closure(): TPullClosureReturn)  $default
+     * @return ($default is \Closure ? TPullClosureReturn : (TPullDefault | TValue))
      */
     public function pull($key, $default = null) {}
 
     /**
-     * @param mixed $value
-     * @param bool  $strict
+     * @param  TKey  $number
+     * @param  (callable(TValue): int)|int|null  $number
+     * @return (TKey is null ? TValue : static<int, TValue>)
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function random($number = null) {}
+
+    /**
+     * @param  TValue|(callable(TValue,TKey): bool)  $value
+     * @param  bool  $strict
      * @return TKey|false
      */
     public function search($value, $strict = false) {}
 
     /**
-     * @return TValue|null
+     * @template TCount of int
+     * @param  TCount  $count
+     * @return (
+     *     TCount is 1
+     *     ? TValue|null
+     *     : static
+     * )
      */
-    public function shift() {}
-
-    /**
-    * @return array<TKey, TValue>
-    */
-    public function all() {}
-
-    /**
-    * @param TKey $key
-    * @param TValue $value
-    * @return $this
-    */
-    public function put($key, $value) {}
-
-    /**
-     * Get an iterator for the items.
-     *
-     * @return \ArrayIterator<TKey, TValue>
-     */
-    public function getIterator() {}
+    public function shift($count = 1) {}
 }

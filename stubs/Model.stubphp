@@ -27,7 +27,7 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
 
     /**
      * @param  array|mixed  $columns
-     * @return \Illuminate\Database\Eloquent\Collection<static>
+     * @return \Illuminate\Database\Eloquent\Collection<int, static>
      */
     public static function all($columns = ['*']) {}
 
