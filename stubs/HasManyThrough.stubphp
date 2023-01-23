@@ -13,8 +13,6 @@ use Illuminate\Database\Eloquent\Model;
 class HasManyThrough extends Relation
 {
     /**
-     * Create a new has many through relationship instance.
-     *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
      * @param  \Illuminate\Database\Eloquent\Model  $farParent
      * @param  \Illuminate\Database\Eloquent\Model  $throughParent
@@ -35,6 +33,46 @@ class HasManyThrough extends Relation
 
         parent::__construct($query, $throughParent);
     }
+
+    /**
+     * Get the results of the relationship.
+     *
+     * @psalm-return \Traversable<int, TRelatedModel>
+     */
+    public function getResults() {}
+
+    /**
+     * Get a paginator for the "select" statement.
+     *
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @return \Illuminate\Pagination\LengthAwarePaginator<TRelatedModel>
+     */
+    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+
+    /**
+     * Paginate the given query into a simple paginator.
+     *
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @return \Illuminate\Pagination\Paginator<TRelatedModel>
+     */
+    public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+
+    /**
+     * Paginate the given query into a cursor paginator.
+     *
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>  $columns
+     * @param  string  $cursorName
+     * @param  string|null  $cursor
+     * @return \Illuminate\Pagination\CursorPaginator<TRelatedModel>
+     */
+    public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 
     /**
      * Get the first related model record matching the attributes or instantiate it.
@@ -88,16 +126,6 @@ class HasManyThrough extends Relation
     public function find($id, $columns = ['*']) {}
 
     /**
-     * Find multiple related models by their primary keys.
-     *
-     * @param  mixed  $ids
-     * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Collection
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
-     */
-    public function findMany($ids, $columns = ['*']) {}
-
-    /**
      * Find a related model by its primary key or throw an exception.
      * @template T
      * @psalm-param T $id
@@ -111,11 +139,12 @@ class HasManyThrough extends Relation
     public function findOrFail($id, $columns = ['*']) {}
 
     /**
-     * Execute the query as a "select" statement.
+     * Find multiple related models by their primary keys.
      *
+     * @param  mixed  $ids
      * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Collection
      * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
      */
-    public function get($columns = ['*']) {}
+    public function findMany($ids, $columns = ['*']) {}
 }
