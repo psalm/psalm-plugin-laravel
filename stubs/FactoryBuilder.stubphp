@@ -36,7 +36,7 @@ class FactoryBuilder
      * Create a collection of models and persist them to the database.
      *
      * @param  array<string, mixed>  $attributes
-     * @return (TCount is 1 ? TModel : \Illuminate\Database\Eloquent\Collection<TModel>)
+     * @return (TCount is 1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
      */
     public function create(array $attributes = [])
     {
@@ -47,7 +47,7 @@ class FactoryBuilder
      * Create a collection of models.
      *
      * @param  array<string, mixed>  $attributes
-     * @return (TCount is 1 ? TModel : \Illuminate\Database\Eloquent\Collection<TModel>)
+     * @return (TCount is 1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
      */
     public function make(array $attributes = [])
     {

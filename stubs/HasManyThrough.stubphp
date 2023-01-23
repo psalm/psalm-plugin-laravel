@@ -121,9 +121,19 @@ class HasManyThrough extends Relation
      * @param  mixed  $id
      * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<TRelatedModel>|null : TRelatedModel|null)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
      */
     public function find($id, $columns = ['*']) {}
+
+    /**
+     * Find multiple related models by their primary keys.
+     *
+     * @param  mixed  $ids
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Database\Eloquent\Collection
+     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     */
+    public function findMany($ids, $columns = ['*']) {}
 
     /**
      * Find a related model by its primary key or throw an exception.
@@ -132,19 +142,9 @@ class HasManyThrough extends Relation
      * @param  mixed  $id
      * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<TRelatedModel> : TRelatedModel)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
     public function findOrFail($id, $columns = ['*']) {}
-
-    /**
-     * Find multiple related models by their primary keys.
-     *
-     * @param  mixed  $ids
-     * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Collection
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<TRelatedModel>
-     */
-    public function findMany($ids, $columns = ['*']) {}
 }
