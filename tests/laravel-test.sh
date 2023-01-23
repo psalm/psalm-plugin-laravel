@@ -3,7 +3,7 @@
 set -e
 
 CURRENT_SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
-APP_INSTALLATION_PATH="$(realpath $(dirname "$CURRENT_SCRIPT_PATH")/../laravel)"
+APP_INSTALLATION_PATH="$(dirname "$CURRENT_SCRIPT_PATH")/../laravel"
 
 echo "Cleaning up previous installation"
 rm -rf $APP_INSTALLATION_PATH
@@ -36,7 +36,7 @@ echo "Preparing Laravel"
 ./artisan make:seeder ExampleSeeder
 
 echo "Adding package from source"
-composer config repositories.psalm-plugin-laravel '{"type": "path", "url": "../psalm-plugin-laravel"}'
+composer config repositories.0 '{"type": "path", "url": "../psalm-plugin-laravel"}'
 COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" -W
 
 echo "Analyzing Laravel"
