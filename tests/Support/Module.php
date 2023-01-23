@@ -35,7 +35,6 @@ class Module extends BaseModule
     private const VERSION_OPERATORS = [
         'newer than' => '>',
         'older than' => '<',
-        'not older than' => '>=',
     ];
 
     private const DEFAULT_PSALM_CONFIG = "<?xml version=\"1.0\"?>\n"
@@ -379,11 +378,7 @@ class Module extends BaseModule
             throw new TestRuntimeException("Unknown operator: $operator");
         }
 
-        /**
-         * @psalm-suppress RedundantCondition it's not redundant with older Psalm version
-         * @psalm-suppress RedundantCast
-         */
-        $op = (string) self::VERSION_OPERATORS[$operator];
+        $op = self::VERSION_OPERATORS[$operator];
 
         if (!$this->packageSatisfiesVersionConstraint('vimeo/psalm', $op . $version)) {
             /** @psalm-suppress InternalClass,InternalMethod */
