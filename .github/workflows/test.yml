@@ -1,6 +1,20 @@
 name: Tests
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - '**.php'
+      - '**.stubphp'
+      - '**.feature'
+      - '**.yml'
+      - 'composer.json'
+
+  pull_request:
+    paths:
+      - '**.php'
+      - '**.stubphp'
+      - '**.feature'
+      - 'composer.json'
 
 jobs:
   build:
@@ -28,9 +42,9 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      - name: Install dependencies
+      - name: Install composer dependencies
         run: |
-          composer require "laravel/framework:${{ matrix.illuminate_version }}" "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --${{ matrix.stability }} --prefer-stable
+          composer require "laravel/framework:${{ matrix.illuminate_version }}" "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --prefer-stable --${{ matrix.stability }} --prefer-stable
 
       - name: Run Tests
         run: composer test
