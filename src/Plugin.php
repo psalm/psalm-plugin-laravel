@@ -93,16 +93,10 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
         require_once 'Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(ModelMethodHandler::class);
-        require_once 'Handlers/Helpers/ViewHandler.php';
-        $registration->registerHooksFromClass(ViewHandler::class);
         require_once 'Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(PathHandler::class);
-        require_once 'Handlers/Helpers/UrlHandler.php';
-        $registration->registerHooksFromClass(UrlHandler::class);
         require_once 'Handlers/Helpers/TransHandler.php';
         $registration->registerHooksFromClass(TransHandler::class);
-        require_once 'Handlers/Helpers/RedirectHandler.php';
-        $registration->registerHooksFromClass(RedirectHandler::class);
         require_once 'Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(SuppressHandler::class);
     }
