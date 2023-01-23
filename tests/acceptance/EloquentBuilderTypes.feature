@@ -230,7 +230,7 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: can not call whereDate with incompatible type [ Psalm 5 ]
+  Scenario: can not call whereDate with incompatible type
     Given I have the following code
     """
     /**
@@ -241,7 +241,6 @@ Feature: Eloquent Builder types
       return $builder->whereDate('created_at', '>', 1);
     }
     """
-    And I have Psalm not older than "5.0" (because of "changed issue type")
     When I run Psalm
     Then I see these errors
       | Type  | Message |
