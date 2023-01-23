@@ -31,8 +31,8 @@ function abort_if($boolean, $code, $message = '', array $headers = []) {}
  * @param  string|null  $guard
  * @return (
  *  $guard is null
- *  ? \Illuminate\Contracts\Auth\Factory
- *  : \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard
+ *  ? \Illuminate\Auth\AuthManager
+ *  : (\Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard)
  * )
  */
 function auth($guard = null) {}

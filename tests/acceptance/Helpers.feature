@@ -91,6 +91,11 @@ Feature: helpers
         {
           return auth('user');
         }
+
+        function test_auth_check_call(): bool
+        {
+          return auth()->check();
+        }
     """
     When I run Psalm
     Then I see no errors
