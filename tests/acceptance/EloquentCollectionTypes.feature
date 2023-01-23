@@ -28,7 +28,7 @@ Feature: Eloquent Collection types
     final class UserRepository
     {
         /**
-        * @psalm-return \Illuminate\Database\Eloquent\Collection<User>
+        * @psalm-return \Illuminate\Database\Eloquent\Collection<int, User>
         */
         public function getAll(): \Illuminate\Database\Eloquent\Collection
         {
@@ -49,7 +49,7 @@ Feature: Eloquent Collection types
         }
 
         /**
-        * @psalm-return \Illuminate\Database\Eloquent\Collection<User>
+        * @psalm-return \Illuminate\Database\Eloquent\Collection<int, User>
         */
         public function getWhere(array $attributes): \Illuminate\Database\Eloquent\Collection
         {
@@ -57,7 +57,7 @@ Feature: Eloquent Collection types
         }
 
         /**
-        * @psalm-return \Illuminate\Database\Eloquent\Collection<User>
+        * @psalm-return \Illuminate\Database\Eloquent\Collection<int, User>
         */
         public function getWhereUsingLessMagic(array $attributes): \Illuminate\Database\Eloquent\Collection
         {
