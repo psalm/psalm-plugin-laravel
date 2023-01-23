@@ -23,6 +23,9 @@ jobs:
         php: [8.2, 8.1, 8.0]
         illuminate_version: [9.*]
         stability: [prefer-lowest, prefer-stable]
+      exclude:
+        - php: 8.2
+          stability: prefer-lowest
 
     name: P${{ matrix.php }} | I ${{ matrix.illuminate_version }} | ${{ matrix.stability }}
 
