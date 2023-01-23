@@ -5,12 +5,12 @@ on:
     paths:
       - '**.php'
       - 'composer.json'
-      - 'phpcs.xml'
+      - 'phpcs*'
   pull_request:
     paths:
       - '**.php'
       - 'composer.json'
-      - 'phpcs.xml'
+      - 'phpcs*'
 
 jobs:
   phpcs:

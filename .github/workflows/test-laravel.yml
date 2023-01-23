@@ -1,6 +1,17 @@
 name: Test laravel projects
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'tests/laravel*'
+      - 'tests/lumen*'
+  pull_request:
+    paths:
+      - '**.php'
+      - 'tests/laravel*'
+      - 'tests/lumen*'
 
 jobs:
   build:
