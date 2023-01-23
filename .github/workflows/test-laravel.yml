@@ -4,12 +4,14 @@ on:
   push:
     paths:
       - '**.php'
+      - '**.stubphp'
       - 'composer.json'
       - 'tests/laravel*'
       - 'tests/lumen*'
   pull_request:
     paths:
       - '**.php'
+      - '**.stubphp'
       - 'tests/laravel*'
       - 'tests/lumen*'
 
