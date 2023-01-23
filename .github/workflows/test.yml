@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '**.php'
+      - '**.stubphp'
       - '**.feature'
       - '**.yml'
       - 'composer.json'
@@ -11,6 +12,7 @@ on:
   pull_request:
     paths:
       - '**.php'
+      - '**.stubphp'
       - '**.feature'
       - 'composer.json'
 
