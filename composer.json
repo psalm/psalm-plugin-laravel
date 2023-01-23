@@ -13,7 +13,7 @@
     "require": {
         "php": "^8.0.2",
         "ext-simplexml": "*",
-        "barryvdh/laravel-ide-helper": "^2.12",
+        "barryvdh/laravel-ide-helper": "dev-master as 2.12.4",
         "illuminate/config": "^9.48 || ^10.0",
         "illuminate/container": "^9.48 || ^10.0",
         "illuminate/contracts": "^9.48 || ^10.0",
@@ -24,7 +24,7 @@
         "illuminate/support": "^9.48 || ^10.0",
         "illuminate/view": "^9.48 || ^10.0",
         "orchestra/testbench": "^7.19 || ^8.0.0",
-        "vimeo/psalm": "^5.0.0"
+        "vimeo/psalm": "^5.5"
     },
     "require-dev": {
         "codeception/codeception": "^5.0",
