@@ -4,7 +4,7 @@
  * Return a new response from the application.
  *
  * @param  \Illuminate\Contracts\View\View|string|array|null  $content
- * @param  int     $status
+ * @param  int<100, 599>  $status
  * @param  array   $headers
  * @return \Illuminate\Http\Response|\Illuminate\Contracts\Routing\ResponseFactory
  * @psalm-return (func_num_args() is 0 ? \Illuminate\Contracts\Routing\ResponseFactory : \Illuminate\Http\Response)
@@ -143,6 +143,15 @@ function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain
 function session($key = null, $default = null) {}
 
 /**
+ * @param  string|null  $to
+ * @param  int<300, 308>  $status
+ * @param  array<string, mixed>  $headers
+ * @param  bool|null  $secure
+ * @return ($to is null ? \Illuminate\Routing\Redirector : \Illuminate\Http\RedirectResponse)
+ */
+function redirect($to = null, $status = 302, $headers = [], $secure = null) {}
+
+/**
  * @template TValue
  * @template TDefault
  *
@@ -181,6 +190,14 @@ function request($key = null, $default = null) {}
  * @return TValue
  */
 function tap($value, $callback = null) {}
+
+/**
+ * @param  string|null  $path
+ * @param  mixed  $parameters
+ * @param  bool|null  $secure
+ * @return ($path is null ? \Illuminate\Contracts\Routing\UrlGenerator : string)
+ */
+function url($path = null, $parameters = [], $secure = null) {}
 
 /**
  * Create a new Validator instance.
