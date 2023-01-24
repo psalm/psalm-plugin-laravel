@@ -3,7 +3,7 @@ Feature: helpers
     Given I have the following config
       """
       <?xml version="1.0"?>
-      <psalm errorLevel="1" findUnusedCode="false">
+      <psalm errorLevel="1" findUnusedCode="false" memoizeMethodCallResults="true">
         <projectFiles>
           <directory name="."/>
           <ignoreFiles> <directory name="../../vendor"/> </ignoreFiles>
@@ -322,6 +322,35 @@ Feature: helpers
         {
             return tap(new \DateTime, fn (\DateTime $now) => null);
         }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: throw_if support
+    Given I have the following code
+    """
+        function throw_if_with_false_arg(): false
+        {
+            return throw_if(false);
+        }
+
+        /** @return empty-string **/
+#        function throw_if_with_empty_string_arg(): string
+#        {
+#            return throw_if('');
+#        }
+
+        /** @return empty-array **/
+#        function throw_if_with_empty_array_arg(): array
+#        {
+#            return throw_if([]);
+#        }
+
+        /** @return 0 **/
+#        function throw_if_with_zero_int_arg(): int
+#        {
+#            return throw_if(0);
+#        }
     """
     When I run Psalm
     Then I see no errors
