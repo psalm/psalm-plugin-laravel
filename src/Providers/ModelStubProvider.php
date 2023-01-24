@@ -28,15 +28,14 @@ final class ModelStubProvider implements GeneratesStubs
             throw new \RuntimeException('Unsupported Application type.');
         }
 
-        $migrations_folder = $app->databasePath('migrations/');
+        $migrations_directory = $app->databasePath('migrations/');
 
         $project_analyzer = ProjectAnalyzer::getInstance();
         $codebase = $project_analyzer->getCodebase();
 
         $schema_aggregator = new SchemaAggregator();
 
-        foreach (glob($migrations_folder . '*.php') as $file) {
-            //echo $file . "\n";
+        foreach (glob($migrations_directory . '*.php') as $file) {
             $schema_aggregator->addStatements($codebase->getStatementsForFile($file));
         }
 
