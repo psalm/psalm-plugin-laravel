@@ -32,6 +32,7 @@
         "codeception/module-cli": "^2.0",
         "codeception/module-filesystem": "^3.0",
         "codeception/module-phpbrowser": "^3.0",
+        "phpunit/phpunit": "^9.5",
         "ramsey/collection": "^1.3",
         "slevomat/coding-standard": "^8.8",
         "squizlabs/php_codesniffer": "*",
@@ -63,15 +64,17 @@
     "scripts": {
         "analyze": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
         "check": [
+            "@unit",
             "@analyze",
             "@lint",
             "@test"
         ],
-        "lint": "phpcs -n",
+        "lint": "phpcs --report-full --report-summary --colors -n -s",
         "lint-fix": "phpcbf -n",
         "test": [
             "Composer\\Config::disableProcessTimeout",
             "codecept run --skip-group skip"
-        ]
+        ],
+        "unit": "phpunit"
     }
 }
