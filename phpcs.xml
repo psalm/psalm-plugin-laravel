@@ -18,6 +18,10 @@
         <exclude-pattern>*</exclude-pattern>
     </rule>
 
+    <rule ref="PSR1.Methods.CamelCapsMethodName.NotCamelCaps">
+        <exclude-pattern>tests/Unit</exclude-pattern>
+    </rule>
+
     <file>src/</file>
     <file>tests</file>
     <exclude-pattern>cache/</exclude-pattern>

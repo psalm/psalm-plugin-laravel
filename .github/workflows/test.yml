@@ -17,7 +17,26 @@ on:
       - 'composer.json'
 
 jobs:
-  build:
+  unit_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.0
+          coverage: none
+          tools: composer:v2
+
+      - name: Install composer dependencies
+        run: composer install
+
+      - name: Run Unit tests
+        run: composer unit
+
+  acceptance_tests:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -46,5 +65,5 @@ jobs:
         run: |
           composer require "laravel/framework:${{ matrix.illuminate_version }}" "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --prefer-stable --${{ matrix.stability }}
 
-      - name: Run Tests
+      - name: Run Acceptance Tests
         run: composer test
