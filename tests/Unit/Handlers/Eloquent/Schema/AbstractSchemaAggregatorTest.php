@@ -36,7 +36,7 @@ abstract class AbstractSchemaAggregatorTest extends TestCase
                 $this->fail("Migrations not found in “{$migrationsDirectory}” directory.");
             }
         } else {
-            $this->fail("“{$filepath}” is not a correct file or directory.");
+            $this->fail("“{$filepath}” is not a file or directory.");
         }
 
         $schemaAggregator = new SchemaAggregator();
