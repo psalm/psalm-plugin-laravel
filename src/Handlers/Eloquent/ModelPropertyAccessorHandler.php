@@ -24,7 +24,6 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         return ModelStubProvider::getModelClasses();
     }
 
-
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();
