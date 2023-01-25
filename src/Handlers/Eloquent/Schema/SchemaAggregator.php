@@ -4,6 +4,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use PhpParser\NodeFinder;
 use PhpParser;
 
 use function array_key_exists;
@@ -53,16 +54,13 @@ class SchemaAggregator
      */
     public function addStatements(array $stmts): void
     {
-        foreach ($stmts as $stmt) {
-            if ($stmt instanceof PhpParser\Node\Stmt\Class_) {
-                $this->addClassStatements($stmt->stmts);
-            } elseif (
-                $stmt instanceof PhpParser\Node\Stmt\Return_ &&
-                $stmt->expr instanceof PhpParser\Node\Expr\New_ &&
-                $stmt->expr->class instanceof PhpParser\Node\Stmt\Class_
-            ) {
-                $this->addClassStatements($stmt->expr->class->stmts);
-            }
+        $nodeFinder = new NodeFinder();
+
+        /** @var PhpParser\Node\Stmt\Class_[] $classes */
+        $classes = $nodeFinder->findInstanceOf($stmts, PhpParser\Node\Stmt\Class_::class);
+
+        foreach ($classes as $stmt) {
+            $this->addClassStatements($stmt->stmts);
         }
     }
 
