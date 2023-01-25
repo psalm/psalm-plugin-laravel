@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 
 use function config;
 use function get_class;
@@ -85,13 +86,13 @@ class FakeModelsCommand extends ModelsCommand
                 $get_type = $set_type = '\Illuminate\Support\Carbon';
             } else {
                 switch ($column->type) {
-                    case 'string':
-                    case 'int':
-                    case 'float':
+                    case SchemaColumn::TYPE_STRING:
+                    case SchemaColumn::TYPE_INT:
+                    case SchemaColumn::TYPE_FLOAT:
                         $get_type = $set_type = $column->type;
                         break;
 
-                    case 'bool':
+                    case SchemaColumn::TYPE_BOOL:
                         switch (config('database.default')) {
                             case 'sqlite':
                             case 'mysql':
@@ -105,7 +106,7 @@ class FakeModelsCommand extends ModelsCommand
 
                         break;
 
-                    case 'enum':
+                    case SchemaColumn::TYPE_ENUM:
                         if (!$column->options) {
                             $get_type = $set_type = 'string';
                         } else {
@@ -115,7 +116,7 @@ class FakeModelsCommand extends ModelsCommand
                         break;
 
                     default:
-                        $get_type = $set_type = 'mixed';
+                        $get_type = $set_type = SchemaColumn::TYPE_MIXED;
                         break;
                 }
             }
