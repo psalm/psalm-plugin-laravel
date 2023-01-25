@@ -86,30 +86,32 @@ class SchemaAggregator
     private function addUpMethodStatements(array $stmts): void
     {
         foreach ($stmts as $stmt) {
-            if (
-                $stmt instanceof PhpParser\Node\Stmt\Expression
+            $is_schema_method_call = $stmt instanceof PhpParser\Node\Stmt\Expression
                 && $stmt->expr instanceof PhpParser\Node\Expr\StaticCall
                 && $stmt->expr->class instanceof PhpParser\Node\Name
                 && $stmt->expr->name instanceof PhpParser\Node\Identifier
-                && $stmt->expr->class->getAttribute('resolvedName') === Schema::class
-            ) {
-                switch ($stmt->expr->name->name) {
-                    case 'create':
-                        $this->alterTable($stmt->expr, true);
-                        break;
+                && in_array($stmt->expr->class->getAttribute('resolvedName'), [Schema::class, 'Schema'], true);
 
-                    case 'table':
-                        $this->alterTable($stmt->expr, false);
-                        break;
+            if (! $is_schema_method_call) {
+                continue;
+            }
 
-                    case 'drop':
-                    case 'dropIfExists':
-                        $this->dropTable($stmt->expr);
-                        break;
+            switch ($stmt->expr->name->name) {
+                case 'create':
+                    $this->alterTable($stmt->expr, true);
+                    break;
 
-                    case 'rename':
-                        $this->renameTable($stmt->expr);
-                }
+                case 'table':
+                    $this->alterTable($stmt->expr, false);
+                    break;
+
+                case 'drop':
+                case 'dropIfExists':
+                    $this->dropTable($stmt->expr);
+                    break;
+
+                case 'rename':
+                    $this->renameTable($stmt->expr);
             }
         }
     }
