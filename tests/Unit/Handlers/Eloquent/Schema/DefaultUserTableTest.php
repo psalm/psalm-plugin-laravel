@@ -10,7 +10,7 @@ final class DefaultUserTableTest extends AbstractSchemaAggregatorTest
     /** @test */
     public function it_detects_all_columns(): void
     {
-        $schemaAggregator = $this->instantiateSchemaAggregator(__DIR__.'/migrations/simple');
+        $schemaAggregator = $this->instantiateSchemaAggregator(__DIR__ . '/migrations/simple');
 
         $this->assertSchemaHasTableAndNotNullableColumnOfType('users.id', 'int', $schemaAggregator);
         $this->assertSchemaHasTableAndNotNullableColumnOfType('users.email', 'string', $schemaAggregator);
