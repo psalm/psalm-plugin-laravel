@@ -8,9 +8,24 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 final class DefaultUserTableTest extends AbstractSchemaAggregatorTest
 {
     /** @test */
-    public function it_detects_all_columns(): void
+    public function it_detects_all_columns_from_anonymous_class_migration(): void
     {
-        $schemaAggregator = $this->instantiateSchemaAggregator(__DIR__.'/migrations/simple');
+        $schemaAggregator = $this->instantiateSchemaAggregator(__DIR__ . '/migrations/default_users_table_anon');
+
+        $this->assertSchemaHasTableAndNotNullableColumnOfType('users.id', 'int', $schemaAggregator);
+        $this->assertSchemaHasTableAndNotNullableColumnOfType('users.email', 'string', $schemaAggregator);
+        $this->assertSchemaHasTableAndNotNullableColumnOfType('users.password', 'string', $schemaAggregator);
+        $this->assertSchemaHasTableAndNotNullableColumnOfType('users.password', 'string', $schemaAggregator);
+        $this->assertSchemaHasTableAndNotNullableColumnOfType('users.remember_token', 'string', $schemaAggregator);
+        $this->assertSchemaHasTableAndNullableColumnOfType('users.email_verified_at', 'string', $schemaAggregator);
+        $this->assertSchemaHasTableAndNullableColumnOfType('users.created_at', 'string', $schemaAggregator);
+        $this->assertSchemaHasTableAndNullableColumnOfType('users.updated_at', 'string', $schemaAggregator);
+    }
+
+    /** @test */
+    public function it_detects_all_columns_from_named_class_migration(): void
+    {
+        $schemaAggregator = $this->instantiateSchemaAggregator(__DIR__ . '/migrations/default_users_table_named');
 
         $this->assertSchemaHasTableAndNotNullableColumnOfType('users.id', 'int', $schemaAggregator);
         $this->assertSchemaHasTableAndNotNullableColumnOfType('users.email', 'string', $schemaAggregator);
