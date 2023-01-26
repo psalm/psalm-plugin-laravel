@@ -14,8 +14,6 @@ use function get_class;
 use function in_array;
 use function is_a;
 use function implode;
-use function method_exists;
-use function sprintf;
 
 /** @psalm-suppress PropertyNotSetInConstructor */
 class FakeModelsCommand extends ModelsCommand
@@ -60,15 +58,6 @@ class FakeModelsCommand extends ModelsCommand
      */
     public function getPropertiesFromTable($model): void
     {
-        $is_parent_method_still_exist = method_exists(ModelsCommand::class, __METHOD__);
-        if (! $is_parent_method_still_exist) {
-            throw new \BadMethodCallException(sprintf(
-                'Method %s::%s() does not exist anymore. Please rename overridden method accordingly.',
-                ModelsCommand::class,
-                __METHOD__
-            ));
-        }
-
         $table_name = $model->getTable();
 
         if (!isset($this->schema->tables[$table_name])) {
