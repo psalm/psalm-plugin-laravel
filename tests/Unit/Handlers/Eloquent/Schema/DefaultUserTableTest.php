@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
+
 /** @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator */
 final class DefaultUserTableTest extends AbstractSchemaAggregatorTest
 {
