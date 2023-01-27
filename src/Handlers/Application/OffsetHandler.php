@@ -23,9 +23,7 @@ final class OffsetHandler implements
     MethodVisibilityProviderInterface,
     MethodParamsProviderInterface
 {
-    /**
-     * @return array<class-string>
-     */
+    /** @return list<class-string<\Illuminate\Container\Container>> */
     public static function getClassLikeNames(): array
     {
         return ApplicationInterfaceProvider::getApplicationInterfaceClassLikes();

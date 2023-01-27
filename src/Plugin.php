@@ -46,6 +46,7 @@ class Plugin implements PluginEntryPointInterface
         $this->registerStubs($registration);
     }
 
+    /** @return array<array-key, string> */
     protected function getCommonStubs(): array
     {
         return array_merge(
@@ -54,6 +55,7 @@ class Plugin implements PluginEntryPointInterface
         );
     }
 
+    /** @return array<array-key, string> */
     protected function getStubsForVersion(string $version): array
     {
         [$majorVersion] = explode('.', $version);

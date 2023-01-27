@@ -86,6 +86,11 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
 
         foreach ($bindings as $abstract) {
             try {
+                if (!is_string($abstract) && !is_callable($abstract)) {
+                    continue;
+                }
+
+                /** @psalm-suppress MixedArgument */
                 $concrete = ApplicationProvider::getApp()->make($abstract);
 
                 if (!is_object($concrete)) {

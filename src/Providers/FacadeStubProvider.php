@@ -21,11 +21,11 @@ final class FacadeStubProvider implements GeneratesStubs
 
         // The \Eloquent mixin has less specific return types than our custom plugin can determine, so we unset it here
         // to not taint our analysis
-        if ($ideHelperExtra = $config->get('ide-helper.extra')) {
-            if (isset($ideHelperExtra['Eloquent'])) {
-                unset($ideHelperExtra['Eloquent']);
-                $config->set('ide-helper.extra', $ideHelperExtra);
-            }
+        /** @var mixed $ideHelperExtra */
+        $ideHelperExtra = $config->get('ide-helper.extra');
+        if (is_array($ideHelperExtra) && isset($ideHelperExtra['Eloquent'])) {
+            unset($ideHelperExtra['Eloquent']);
+            $config->set('ide-helper.extra', $ideHelperExtra);
         }
 
         $fake_filesystem = new FakeFilesystem();
