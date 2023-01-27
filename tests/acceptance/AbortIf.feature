@@ -34,6 +34,8 @@ Feature: abort_if()
         return $nullable;
       }
     """
+    When I run Psalm
+    Then I see no errors
 
   Scenario: abort_if asserts not null
     Given I have the following code
