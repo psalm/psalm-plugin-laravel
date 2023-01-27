@@ -24,6 +24,8 @@ use function get_class;
 use function in_array;
 use function is_object;
 use function strtolower;
+use function is_string;
+use function is_callable;
 
 final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {

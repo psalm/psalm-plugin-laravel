@@ -29,7 +29,9 @@ final class ApplicationProvider
         $app = self::getApp();
 
         if ($app instanceof Application) {
-            $app->make(Kernel::class)->bootstrap();
+            /** @var \Illuminate\Contracts\Console\Kernel $consoleApp */
+            $consoleApp = $app->make(Kernel::class);
+            $consoleApp->bootstrap();
         } else {
             $app->boot();
         }
@@ -44,15 +46,19 @@ final class ApplicationProvider
         }
 
         if (file_exists($applicationPath = __DIR__ . '/../../../../bootstrap/app.php')) { // plugin installed to vendor
+            /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
+            if (! $app instanceof LaravelApplication && ! $app instanceof LumenApplication) {
+                throw new \RuntimeException('Could not instantiate Application: unknown path.');
+            }
         } elseif (file_exists($applicationPath = getcwd() . '/bootstrap/app.php')) { // Local Dev
+            /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
+            if (! $app instanceof LaravelApplication && ! $app instanceof LumenApplication) {
+                throw new \RuntimeException('Could not instantiate Application: unknown path.');
+            }
         } else { // Packages
             $app = (new self())->createApplication();
-        }
-
-        if (! $app instanceof LaravelApplication || ! $app instanceof LumenApplication) {
-            fwrite(\STDERR, "Could not instanciate Application: unknown path.\n");
         }
 
         self::$app = $app;
