@@ -398,9 +398,20 @@ Feature: helpers
         }
 
         /** @return \Illuminate\Database\Eloquent\Collection<int, \Tests\Psalm\LaravelPlugin\Models\User> **/
-        function test_factory_returns_collection(): User
+        function test_factory_returns_collection()
         {
             return factory(\Tests\Psalm\LaravelPlugin\Models\User::class, 2)->create();
+        }
+
+        function test_factory_with_times_1_returns_model(): User
+        {
+            return factory(\Tests\Psalm\LaravelPlugin\Models\User::class)->times(1)->create();
+        }
+
+        /** @return \Illuminate\Database\Eloquent\Collection<int, \Tests\Psalm\LaravelPlugin\Models\User> **/
+        function test_factory_with_times_2_returns_collection()
+        {
+            return factory(\Tests\Psalm\LaravelPlugin\Models\User::class)->times(2)->create();
         }
     """
     When I run Psalm

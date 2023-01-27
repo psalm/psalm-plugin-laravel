@@ -271,7 +271,7 @@ function __($key = null, $replace = [], $locale = null) {}
  * Create a model factory builder for a given class and amount.
  *
  * @template TModel of \Illuminate\Database\Eloquent\Model
- * @template TCount of int
+ * @template TCount of positive-int
  *
  * @param  class-string<TModel>  $class
  * @param  TCount  $amount
