@@ -51,6 +51,10 @@ final class ApplicationProvider
             $app = (new self())->createApplication();
         }
 
+        if (! $app instanceof LaravelApplication || ! $app instanceof LumenApplication) {
+            fwrite(\STDERR, "Could not instanciate Application: unknown path.\n");
+        }
+
         self::$app = $app;
 
         return $app;
@@ -77,28 +81,36 @@ final class ApplicationProvider
         // we want to keep the default psalm exception handler, otherwise the Laravel one will always return exit codes
         // of 0
         //$app->make('Illuminate\Foundation\Bootstrap\HandleExceptions')->bootstrap($app);
+        /** @psalm-suppress MixedMethodCall */
         $app->make('Illuminate\Foundation\Bootstrap\RegisterFacades')->bootstrap($app);
+        /** @psalm-suppress MixedMethodCall */
         $app->make('Illuminate\Foundation\Bootstrap\SetRequestForConsole')->bootstrap($app);
+        /** @psalm-suppress MixedMethodCall */
         $app->make('Illuminate\Foundation\Bootstrap\RegisterProviders')->bootstrap($app);
 
         $this->getEnvironmentSetUp($app);
 
+        /** @psalm-suppress MixedMethodCall */
         $app->make('Illuminate\Foundation\Bootstrap\BootProviders')->bootstrap($app);
 
         foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
+            /** @psalm-suppress MixedMethodCall */
             $app->make($bootstrap)->bootstrap($app);
         }
 
+        /** @psalm-suppress MixedMethodCall */
         $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 
-        $app['router']->getRoutes()->refreshNameLookups();
+        /** @var \Illuminate\Routing\Router $router */
+        $router = $app['router'];
+        $router->getRoutes()->refreshNameLookups();
 
         /**
          * @psalm-suppress MissingClosureParamType
          * @psalm-suppress UnusedClosureParam
          */
-        $app->resolving('url', static function ($url, $app) {
-            $app['router']->getRoutes()->refreshNameLookups();
+        $app->resolving('url', static function ($url, $app) use ($router) {
+            $router->getRoutes()->refreshNameLookups();
         });
     }
 
@@ -107,12 +119,14 @@ final class ApplicationProvider
      */
     protected function getEnvironmentSetUp($app): void
     {
-        $app['config']->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
+        /** @var \Illuminate\Config\Repository $config */
+        $config = $app['config'];
+        $config->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
 
         // in testing, we want ide-helper to load our test models. Unfortunately this has to be a relative path, with
         // the base path being inside of orchestra/testbench-core/laravel
 
-        $app['config']->set('ide-helper.model_locations', [
+        $config->set('ide-helper.model_locations', [
             '../../../../tests/Models',
         ]);
     }

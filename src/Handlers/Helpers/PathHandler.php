@@ -30,6 +30,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
 
         /**
          * @psalm-suppress MissingClosureReturnType
+         * @psalm-suppress MixedArgumentTypeCoercion
          */
         return self::resolveReturnType($event->getCallArgs(), function (array $args = []) use ($function_id) {
             return $function_id(...$args);
@@ -61,6 +62,10 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         });
     }
 
+    /**
+     * @param list<\PhpParser\Node\Arg> $call_args
+     * @param \Closure(array<array-key, \PhpParser\Node\Arg>=): mixed $closure
+     */
     private static function resolveReturnType(array $call_args, Closure $closure): ?Union
     {
         // we're going to do some dynamic analysis here. Were going to invoke the closure that is wrapping the

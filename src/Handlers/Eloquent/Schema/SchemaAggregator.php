@@ -73,7 +73,7 @@ class SchemaAggregator
             if (
                 $stmt instanceof PhpParser\Node\Stmt\ClassMethod
                 && $stmt->name->name === 'up'
-                && $stmt->stmts
+                && is_array($stmt->stmts)
             ) {
                 $this->addUpMethodStatements($stmt->stmts);
             }
@@ -81,7 +81,7 @@ class SchemaAggregator
     }
 
     /**
-     * @param array<int, PhpParser\Node\Stmt> $stmts
+     * @param array<array-key, \PhpParser\Node\Stmt> $stmts
      */
     private function addUpMethodStatements(array $stmts): void
     {

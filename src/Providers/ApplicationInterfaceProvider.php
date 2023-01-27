@@ -4,6 +4,7 @@ namespace Psalm\LaravelPlugin\Providers;
 
 final class ApplicationInterfaceProvider
 {
+    /** @return list<class-string<\Illuminate\Container\Container>> */
     public static function getApplicationInterfaceClassLikes(): array
     {
         return [
