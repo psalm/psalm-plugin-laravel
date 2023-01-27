@@ -7,3 +7,4 @@ cache/*.stubphp
 
 # PHPUnit
 .phpunit.result.cache
+.phpunit.cache/

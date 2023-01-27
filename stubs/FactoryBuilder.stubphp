@@ -7,8 +7,10 @@ use InvalidArgumentException;
 use Illuminate\Support\Traits\Macroable;
 
 /**
+ * Legacy Factory builder, a part of laravel/legacy-factories package.
+ *
 * @template TModel of \Illuminate\Database\Eloquent\Model
-* @template TCount of int
+* @template TCount of positive-int
 */
 class FactoryBuilder
 {
@@ -38,10 +40,15 @@ class FactoryBuilder
      * @param  array<string, mixed>  $attributes
      * @return (TCount is 1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
      */
-    public function create(array $attributes = [])
-    {
+    public function create(array $attributes = []) {}
 
-    }
+    /**
+     * Create a collection of models and persist them to the database.
+     *
+     * @param  iterable<array-key, array|\Illuminate\Contracts\Support\Arrayable>  $records
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
+     */
+    public function createMany(iterable $records) {}
 
     /**
      * Create a collection of models.
@@ -49,8 +56,29 @@ class FactoryBuilder
      * @param  array<string, mixed>  $attributes
      * @return (TCount is 1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
      */
-    public function make(array $attributes = [])
-    {
+    public function make(array $attributes = []) {}
 
-    }
+    /**
+     * Set the amount of models you wish to create / make.
+     * @template TTimesCount of positive-int
+     * @param  TTimesCount  $amount
+     * @return static<TModel, TTimesCount>
+     */
+    public function times($amount) {}
+
+    /**
+     * Run after making callbacks on a collection of models.
+     *
+     * @param  \Illuminate\Support\Collection<int, TModel>  $models
+     * @return void
+     */
+    public function callAfterMaking($models) {}
+
+    /**
+     * Run after creating callbacks on a collection of models.
+     *
+     * @param  \Illuminate\Support\Collection<int, TModel>  $models
+     * @return void
+     */
+    public function callAfterCreating($models) {}
 }
