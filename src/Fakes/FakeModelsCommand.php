@@ -11,7 +11,9 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 
 use function config;
 use function get_class;
+use function is_a;
 use function in_array;
+use function is_string;
 use function implode;
 
 /** @psalm-suppress PropertyNotSetInConstructor */
@@ -32,7 +34,20 @@ class FakeModelsCommand extends ModelsCommand
     /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
     public function getModels(): array
     {
-        return $this->model_classes + $this->loadModels();
+        if ($this->dirs === []) {
+            throw new \LogicException('Directories to scan models are not set.');
+        }
+
+        $models = [];
+
+        // Bypass an issue https://github.com/barryvdh/laravel-ide-helper/issues/1414
+        foreach ($this->loadModels() as $probably_model_fqcn) {
+            if (is_string($probably_model_fqcn) && is_a($probably_model_fqcn, Model::class, true)) {
+                $models[] = $probably_model_fqcn;
+            }
+        }
+
+        return [...$this->model_classes, ...$models];
     }
 
     /**
