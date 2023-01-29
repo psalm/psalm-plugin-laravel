@@ -32,6 +32,10 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
             return null;
         }
 
+        if (self::hasNativeProperty($event->getFqClasslikeName(), $event->getPropertyName())) {
+            return true;
+        }
+
         $codebase = $source->getCodebase();
 
         if (self::accessorExists($codebase, $event->getFqClasslikeName(), $event->getPropertyName())) {
@@ -44,6 +48,10 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
+            return null;
+        }
+
+        if (self::hasNativeProperty($event->getFqClasslikeName(), $event->getPropertyName())) {
             return null;
         }
 
@@ -64,6 +72,11 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
             return null;
         }
 
+        // skip for real properties like $hidden, $casts
+        if (self::hasNativeProperty($event->getFqClasslikeName(), $event->getPropertyName())) {
+            return null;
+        }
+
         $codebase = $source->getCodebase();
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
@@ -74,6 +87,17 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         }
 
         return null;
+    }
+
+    private static function hasNativeProperty(string $fqcn, string $property_name): bool
+    {
+        try {
+            new \ReflectionProperty($fqcn, $property_name);
+        } catch (\ReflectionException $exception) {
+            return false;
+        }
+
+        return true;
     }
 
     private static function accessorExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool

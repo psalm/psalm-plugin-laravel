@@ -68,12 +68,8 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         return null;
     }
 
-    /**
-     * @param  FileManipulation[] $file_replacements
-     *
-     * @return void
-     */
-    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event)
+    /** @inheritDoc */
+    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
         $storage = $event->getStorage();
         if (
