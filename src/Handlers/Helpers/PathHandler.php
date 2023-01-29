@@ -19,9 +19,22 @@ use function is_string;
 
 final class PathHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
+    /**
+     * @inheritDoc
+     * @see https://laravel.com/docs/master/helpers#paths
+     */
     public static function getFunctionIds(): array
     {
-        return ['app_path', 'base_path', 'config_path', 'database_path',  'resource_path', 'public_path', 'storage_path'];
+        return [
+            'app_path',
+            'base_path',
+            'config_path',
+            'database_path',
+            'lang_path',
+            'resource_path',
+            'public_path',
+            'storage_path',
+        ];
     }
 
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
@@ -43,9 +56,19 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         ];
     }
 
+    /** @inheritDoc */
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        $methods = ['path', 'basepath', 'configpath', 'databasepath', 'resourcepath'];
+        $methods = [
+            'path',
+            'basepath',
+            'configpath',
+            'databasepath',
+            'langpath',
+            'resourcepath',
+            'publicpath',
+            'storagepath',
+        ];
 
         $method_name_lowercase = $event->getMethodNameLowercase();
 
@@ -56,11 +79,15 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         /**
          * @psalm-suppress MissingClosureReturnType
          */
-        return self::resolveReturnType($event->getCallArgs(), function (array $args = []) use ($method_name_lowercase) {
+        return self::resolveReturnType($event->getCallArgs(), static function (array $args = []) use ($method_name_lowercase) {
             return ApplicationProvider::getApp()->{$method_name_lowercase}(...$args);
         });
     }
 
+    /**
+     * @param list<\PhpParser\Node\Arg> $call_args
+     * @param \Closure(array<array-key, \PhpParser\Node\Arg>=): mixed $closure
+     */
     private static function resolveReturnType(array $call_args, Closure $closure): ?Union
     {
         // we're going to do some dynamic analysis here. Were going to invoke the closure that is wrapping the

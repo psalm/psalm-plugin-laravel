@@ -12,6 +12,7 @@ use function count;
 use function is_string;
 use function strtolower;
 use function in_array;
+use function is_array;
 
 class SchemaAggregator
 {
@@ -73,7 +74,7 @@ class SchemaAggregator
             if (
                 $stmt instanceof PhpParser\Node\Stmt\ClassMethod
                 && $stmt->name->name === 'up'
-                && $stmt->stmts
+                && is_array($stmt->stmts)
             ) {
                 $this->addUpMethodStatements($stmt->stmts);
             }
@@ -81,7 +82,7 @@ class SchemaAggregator
     }
 
     /**
-     * @param array<int, PhpParser\Node\Stmt> $stmts
+     * @param array<array-key, \PhpParser\Node\Stmt> $stmts
      */
     private function addUpMethodStatements(array $stmts): void
     {

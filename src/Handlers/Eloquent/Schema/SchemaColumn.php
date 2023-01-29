@@ -20,18 +20,21 @@ class SchemaColumn
     /** @var bool */
     public $nullable;
 
-    /** @var ?array<int, string> */
-    public $options;
+    /** @var array<int, string> */
+    public $options = [];
 
+    /**
+     * @param array<int, string>|null $options
+     */
     public function __construct(
         string $name,
         string $type,
         bool $nullable = false,
-        ?array $options = null
+        ?array $options = []
     ) {
         $this->name = $name;
         $this->type = $type;
         $this->nullable = $nullable;
-        $this->options = $options;
+        $this->options = $options ?: [];
     }
 }
