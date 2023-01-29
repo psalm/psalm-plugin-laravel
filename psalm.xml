@@ -1,10 +1,9 @@
 <?xml version="1.0"?>
 <psalm
-    errorLevel="2"
-    reportMixedIssues="false"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
-    xsi:schemaLocation="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config config.xsd"
+    errorLevel="1"
     errorBaseline="psalm-baseline.xml"
     phpVersion="8.0"
 >

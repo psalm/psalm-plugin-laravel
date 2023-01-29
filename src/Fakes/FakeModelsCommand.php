@@ -41,8 +41,10 @@ class FakeModelsCommand extends ModelsCommand
         $models = [];
 
         // Bypass an issue https://github.com/barryvdh/laravel-ide-helper/issues/1414
-        foreach ($this->loadModels() as $probably_model_fqcn) {
-            if (is_string($probably_model_fqcn) && is_a($probably_model_fqcn, Model::class, true)) {
+        /** @var list<class-string> $classlike_fq_names */
+        $classlike_fq_names = $this->loadModels();
+        foreach ($classlike_fq_names as $probably_model_fqcn) {
+            if (is_a($probably_model_fqcn, Model::class, true)) {
                 $models[] = $probably_model_fqcn;
             }
         }
@@ -112,6 +114,7 @@ class FakeModelsCommand extends ModelsCommand
             }
 
             if ($column->nullable) {
+                /** @psalm-suppress MixedArrayAssignment */
                 $this->nullableColumns[$name] = true;
             }
 
