@@ -274,3 +274,24 @@ Feature: Eloquent Builder types
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: call chunk returns templated Collection
+    Given I have the following code
+    """
+    use \Illuminate\Database\Eloquent\Collection;
+
+    class Post extends \Illuminate\Database\Eloquent\Model {};
+
+    /** @psalm-return \Illuminate\Database\Eloquent\Collection<int, Post> */
+    function test_chunk(Builder $builder): Collection {
+      /** @var \Illuminate\Database\Eloquent\Collection<int, Post> $firstChunk */
+      $firstChunk = collect();
+      Post::query()->chunk(10, function (Collection $collection) use ($firstChunk) {
+        $firstChunk->merge($collection);
+      });
+
+      return $firstChunk;
+    }
+    """
+    When I run Psalm
+    Then I see no errors
