@@ -60,4 +60,9 @@ final class User extends Model
     {
         return $query->where('active', 1);
     }
+
+    public function getFirstNameUsingLegacyAccessorAttribute(): string
+    {
+        return $this->name;
+    }
 }
