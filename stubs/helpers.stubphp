@@ -218,17 +218,17 @@ function request($key = null, $default = null) {}
  */
 function tap($value, $callback = null) {}
 
-/**
- * Throw the given exception if the given condition is true.
- *
+ /**
+  * Throw the given exception if the given condition is true.
+  *
  * @template TCondition
  * @template TException of \Throwable
  *
  * @param  TCondition  $condition
  * @param  TException|class-string<TException>|string  $exception
  * @param  mixed  ...$parameters
- * @psalm-return $condition
- * @psalm-assert false|empty-string|empty-array|0
+ * @return (TCondition is empty ? TCondition : never)
+ * @psalm-assert empty $condition
  * @psalm-mutation-free
  */
 function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {}
@@ -242,8 +242,9 @@ function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {
  * @param  TCondition  $condition
  * @param  TException|class-string<TException>|string  $exception
  * @param  mixed  ...$parameters
- * @psalm-return TCondition
- * @psalm-assert non-empty-mixed $condition
+ * @return (TCondition is empty ? never : TCondition)
+ * @psalm-assert !empty $condition
+ * @psalm-mutation-free
  */
 function throw_unless($condition, $exception = 'RuntimeException', ...$parameters) {}
 
