@@ -385,7 +385,6 @@ Feature: helpers
             return $var;
         }
 
-        /** @return !0 **/
         function throw_unless_with_int_arg(int $var): int
         {
             throw_unless($var);
