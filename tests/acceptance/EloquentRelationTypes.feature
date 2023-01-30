@@ -222,16 +222,22 @@ Feature: Eloquent Relation types
     """
     final class Repository
     {
-      /**
-      * @psalm-return MorphMany<Comment>
-      */
+      /** @psalm-return MorphMany<Comment> */
       public function getCommentsRelation(Video $video): MorphMany {
         return $video->comments();
       }
 
-      /**
-      * @psalm-return Collection<int, Comment>
-      */
+      /** @psalm-return MorphMany<Comment> */
+      public function getLatestCommentsRelation(Video $video): MorphMany {
+        return $video->comments()->latest();
+      }
+
+      /** @psalm-return MorphMany<Comment> */
+      public function getOldestCommentsRelation(Video $video): MorphMany {
+        return $video->comments()->oldest();
+      }
+
+      /** @psalm-return Collection<int, Comment> */
       public function getComments(Video $video): Collection {
         return $video->comments;
       }
