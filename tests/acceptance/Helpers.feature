@@ -326,6 +326,80 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: throw_if support
+    Given I have the following code
+    """
+        /** @return false */
+        function throw_if_with_bool_arg(bool $var): bool
+        {
+            throw_if($var);
+            return $var;
+        }
+
+        /** @return ''|'0' **/
+        function throw_if_with_string_arg(string $var): string
+        {
+            throw_if($var);
+            return $var;
+        }
+
+        /** @return list<never> **/
+        function throw_if_with_array_arg(array $var): array
+        {
+            throw_if($var);
+            return $var;
+        }
+
+        /** @return 0 **/
+        function throw_if_with_int_arg(int $var): int
+        {
+            throw_if($var);
+            return $var;
+        }
+
+        /** @return 0.0 **/
+        function throw_if_with_float_arg(float $var): float
+        {
+            throw_if($var);
+            return $var;
+        }
+
+        /** @return true */
+        function throw_unless_with_bool_arg(bool $var): bool
+        {
+            throw_unless($var);
+            return $var;
+        }
+
+        /** @return non-empty-string **/
+        function throw_unless_with_string_arg(string $var): string
+        {
+            throw_unless($var);
+            return $var;
+        }
+
+        /** @return non-empty-array **/
+        function throw_unless_with_array_arg(array $var): array
+        {
+            throw_unless($var);
+            return $var;
+        }
+
+        function throw_unless_with_int_arg(int $var): int
+        {
+            throw_unless($var);
+            return $var;
+        }
+
+        function throw_unless_with_float_arg(float $var): float
+        {
+            throw_unless($var);
+            return $var;
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: url support
     Given I have the following code
     """
