@@ -63,6 +63,8 @@
     },
     "scripts": {
         "analyze": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
+        "cs": "@lint",
+        "cs-fix": "@lint-fix",
         "check": [
             "@unit",
             "@analyze",
@@ -71,6 +73,8 @@
         ],
         "lint": "phpcs --report-full --report-summary --colors -n -s",
         "lint-fix": "phpcbf -n",
+        "psalm": "@analyze",
+        "psalm-set-baseline": "@php ./psalm --set-baseline=psalm-baseline.xml",
         "test": [
             "Composer\\Config::disableProcessTimeout",
             "codecept run --skip-group skip"
