@@ -227,8 +227,9 @@ function tap($value, $callback = null) {}
  * @param  TCondition  $condition
  * @param  TException|class-string<TException>|string  $exception
  * @param  mixed  ...$parameters
- * @psalm-return TCondition
- * @psalm-assert empty-mixed $condition
+ * @psalm-return $condition
+ * @psalm-assert false|empty-string|empty-array|0
+ * @psalm-mutation-free
  */
 function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {}
 
