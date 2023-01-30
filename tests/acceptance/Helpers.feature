@@ -329,9 +329,12 @@ Feature: helpers
   Scenario: throw_if support
     Given I have the following code
     """
-        function throw_if_with_false_arg(): false
+        /** @return false */
+        function throw_if_with_false_arg(bool $var): bool
         {
-            return throw_if(false);
+            throw_if($var);
+
+            return $var;
         }
 
         /** @return empty-string **/
