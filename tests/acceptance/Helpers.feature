@@ -3,7 +3,7 @@ Feature: helpers
     Given I have the following config
       """
       <?xml version="1.0"?>
-      <psalm errorLevel="1" findUnusedCode="false" memoizeMethodCallResults="true">
+      <psalm errorLevel="1" findUnusedCode="false">
         <projectFiles>
           <directory name="."/>
           <ignoreFiles> <directory name="../../vendor"/> </ignoreFiles>
@@ -388,7 +388,6 @@ Feature: helpers
         function throw_unless_with_int_arg(int $var): int
         {
             throw_unless($var);
-            /** @psalm-trace $var */
             return $var;
         }
 
