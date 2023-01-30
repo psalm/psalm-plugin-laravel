@@ -5,7 +5,7 @@ Feature: Collection types
     Given I have the following config
       """
       <?xml version="1.0"?>
-      <psalm errorLevel="1" findUnusedCode="false">
+      <psalm errorLevel="1" findUnusedCode="false" memoizeMethodCallResults="true">
         <projectFiles>
           <directory name="."/>
           <ignoreFiles> <directory name="../../vendor"/> </ignoreFiles>
@@ -151,12 +151,22 @@ Feature: Collection types
           return $this->getCollection()->all();
         }
 
-        /**
-         * @return Collection<int, string>
-         */
+        /** @return Collection<int, string> */
         public function putTest(): Collection
         {
           return $this->getCollection()->put(5, 'five');
+        }
+
+        public function isEmpty_assertions_works(): string
+        {
+          $collection = $this->getCollection();
+
+          if ($collection->isEmpty()) {
+            return '';
+          }
+          /** @psalm-trace $collection */
+
+          return $collection->first();
         }
     }
     """

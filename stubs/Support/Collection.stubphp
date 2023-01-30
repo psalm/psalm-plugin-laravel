@@ -22,6 +22,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Get the first item from the collection passing the given truth test.
      *
+     * @psalm-mutation-free
+     *
      * @template TFirstDefault
      * @template TFirstDefaultFromClosure
      *
@@ -32,6 +34,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function first(callable $callback = null, $default = null) {}
 
     /**
+     * @psalm-mutation-free
+     *
      * @template TGetDefault
      * @template TGetClosureReturn
      *
@@ -63,6 +67,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function pull($key, $default = null) {}
 
     /**
+     * @psalm-mutation-free
+     *
      * @param  TKey  $number
      * @param  (callable(TValue): int)|int|null  $number
      * @return (TKey is null ? TValue : static<int, TValue>)
@@ -72,6 +78,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function random($number = null) {}
 
     /**
+     * @psalm-mutation-free
+     *
      * @param  TValue|(callable(TValue,TKey): bool)  $value
      * @param  bool  $strict
      * @return TKey|false
@@ -88,4 +96,29 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * )
      */
     public function shift($count = 1) {}
+
+    /**
+     * Determine if the collection is empty or not.
+     *
+     * @psalm-mutation-free
+     * @psalm-assert-if-true false $this->isNotEmpty()
+     * @psalm-assert-if-true null $this->first()
+     * @psalm-assert-if-true 0 $this->count()
+     * @psalm-assert-if-false true $this->isNotEmpty()
+     * @psalm-assert-if-false TValue $this->first()
+     * @psalm-assert-if-false positive-int $this->count()
+     *
+     * @return bool
+     */
+    public function isEmpty() {}
+
+    /**
+     * Determine if the collection is not empty.
+     *
+     * @psalm-mutation-free
+     * @todo add assertions
+     *
+     * @return bool
+     */
+    public function isNotEmpty() {}
 }
