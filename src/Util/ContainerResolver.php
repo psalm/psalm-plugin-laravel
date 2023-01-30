@@ -46,7 +46,7 @@ final class ContainerResolver
         }
 
         if (is_string($concrete)) {
-            // some of the path helpers actually return a string when being resolved
+            // some path-helpers actually return a string when being resolved
             $concreteClass = $concrete;
         } elseif (is_object($concrete)) {
             // normally we have an object resolved
