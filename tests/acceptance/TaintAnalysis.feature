@@ -16,19 +16,32 @@ Feature: Taint Analysis
       </psalm>
       """
 
-  Scenario: input returns various types
+  Scenario: request input is taint for Builder::raw
     Given I have the following code
     """
-    <?php declare(strict_types=1);
-
-    namespace Tests\Psalm\LaravelPlugin\Sandbox;
-
-    function test(\Illuminate\Http\Request $request): void {
-      $input = $request->input('foo', false);
-      \Illuminate\Support\Facades\DB::raw($input);
-    }
+    <?php
+     function test_db_raw(\Illuminate\Http\Request $request) {
+        $query_builder = new \Illuminate\Database\Query\Builder();
+        $user_input = $request->input('foo');
+        $query_builder->raw($user_input);
+     }
     """
     When I run Psalm with taint analysis
     Then I see these errors
-      | Type  | Message |
-      | TaintedInput | Detected tainted sql in path: Illuminate\Http\Request::input (/Users/brownma/Desktop/git/laravel-psalm-plugin/src/Stubs/InteractsWithInput.stubphp:22:21) -> $input (somefile.php:9:3) -> Illuminate\Support\Facades\DB::raw#1 (/Users/brownma/Desktop/git/laravel-psalm-plugin/src/Stubs/DBFacade.stubphp:15:25) |
+      | Type        | Message |
+      | TaintedSql  | Detected tainted SQL |
+
+  Scenario: request input is taint for HTTP Response content
+    Given I have the following code
+    """
+    <?php
+     function test_db_raw(\Illuminate\Http\Request $request) {
+        $taint_input = $request->input('foo');
+
+        return new \Illuminate\Http\Response($taint_input);
+     }
+    """
+    When I run Psalm with taint analysis
+    Then I see these errors
+      | Type        | Message |
+      | TaintedHtml | Detected tainted HTML |
