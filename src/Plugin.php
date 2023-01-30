@@ -52,6 +52,10 @@ class Plugin implements PluginEntryPointInterface
         return array_merge(
             glob(dirname(__DIR__) . '/stubs/Contracts/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Database/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/Http/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/Lumen/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/Pagination/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/Support/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/*.stubphp')
         );
     }
