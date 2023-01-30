@@ -15,7 +15,7 @@ Feature: Taint Analysis
         </plugins>
       </psalm>
       """
-  @skip
+
   Scenario: input returns various types
     Given I have the following code
     """
@@ -23,12 +23,9 @@ Feature: Taint Analysis
 
     namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
-    use \Illuminate\Http\Request;
-    use Illuminate\Support\Facades\DB;
-
-    function test(Request $request): void {
+    function test(\Illuminate\Http\Request $request): void {
       $input = $request->input('foo', false);
-      DB::raw($input);
+      \Illuminate\Support\Facades\DB::raw($input);
     }
     """
     When I run Psalm with taint analysis
