@@ -285,22 +285,12 @@ class Module extends BaseModule
         $this->runPsalmIn($this->getDefaultDirectory(), ['--find-dead-code']);
     }
 
-    public function seePsalmHasTaintAnalysis(): bool
-    {
-        $taintAnalysisAvailable = $this->packageSatisfiesVersionConstraint('vimeo/psalm', '>=3.10.0');
-        return $taintAnalysisAvailable;
-    }
-
     /**
      * @Given I have Psalm with taint analysis
-     * @Given I have psalm with taint analysis
      */
     public function havePsalmWithTaintAnalysis(): void
     {
-        if (!$this->seePsalmHasTaintAnalysis()) {
-            /** @psalm-suppress InternalClass,InternalMethod */
-            throw new SkippedTestError("This scenario requires Psalm with taint analysis (3.10+)");
-        }
+        // nothing to do, Psalm 3.10+ has Taint Analysis
     }
 
     /**
@@ -309,10 +299,7 @@ class Module extends BaseModule
      */
     public function runPsalmWithTaintAnalysis(): void
     {
-        if (!$this->seePsalmHasTaintAnalysis()) {
-            Assert::fail('Taint analysis is available since 3.10.0');
-        }
-        $this->runPsalmIn($this->getDefaultDirectory(), ['--track-tainted-input']);
+        $this->runPsalmIn($this->getDefaultDirectory(), ['--taint-analysis', '--dump-taint-graph=../../taints.dot']);
     }
 
     /**
@@ -525,7 +512,9 @@ class Module extends BaseModule
         if (class_exists(InstalledVersions::class)) {
             /** @psalm-suppress UndefinedClass Composer\InstalledVersions is undefined when using Composer 1.x */
             return (string) InstalledVersions::getPrettyVersion($package);
-        } elseif (class_exists(Versions::class)) {
+        }
+
+        if (class_exists(Versions::class)) {
             /**
              * @psalm-suppress ArgumentTypeCoercion Versions::getVersion() has too narrow a signature
              * @psalm-suppress RedundantCondition not redundant with older Psalm
