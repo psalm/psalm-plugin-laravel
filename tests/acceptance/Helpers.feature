@@ -330,30 +330,74 @@ Feature: helpers
     Given I have the following code
     """
         /** @return false */
-        function throw_if_with_false_arg(bool $var): bool
+        function throw_if_with_bool_arg(bool $var): bool
         {
             throw_if($var);
-
             return $var;
         }
 
-        /** @return empty-string **/
-#        function throw_if_with_empty_string_arg(): string
-#        {
-#            return throw_if('');
-#        }
+        /** @return ''|'0' **/
+        function throw_if_with_string_arg(string $var): string
+        {
+            throw_if($var);
+            return $var;
+        }
 
-        /** @return empty-array **/
-#        function throw_if_with_empty_array_arg(): array
-#        {
-#            return throw_if([]);
-#        }
+        /** @return list<never> **/
+        function throw_if_with_array_arg(array $var): array
+        {
+            throw_if($var);
+            return $var;
+        }
 
         /** @return 0 **/
-#        function throw_if_with_zero_int_arg(): int
-#        {
-#            return throw_if(0);
-#        }
+        function throw_if_with_int_arg(int $var): int
+        {
+            throw_if($var);
+            return $var;
+        }
+
+        /** @return 0.0 **/
+        function throw_if_with_float_arg(float $var): float
+        {
+            throw_if($var);
+            return $var;
+        }
+
+        /** @return true */
+        function throw_unless_with_bool_arg(bool $var): bool
+        {
+            throw_unless($var);
+            return $var;
+        }
+
+        /** @return non-empty-string **/
+        function throw_unless_with_string_arg(string $var): string
+        {
+            throw_unless($var);
+            return $var;
+        }
+
+        /** @return non-empty-array **/
+        function throw_unless_with_array_arg(array $var): array
+        {
+            throw_unless($var);
+            return $var;
+        }
+
+        /** @return !0 **/
+        function throw_unless_with_int_arg(int $var): int
+        {
+            throw_unless($var);
+            /** @psalm-trace $var */
+            return $var;
+        }
+
+        function throw_unless_with_float_arg(float $var): float
+        {
+            throw_unless($var);
+            return $var;
+        }
     """
     When I run Psalm
     Then I see no errors
