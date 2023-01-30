@@ -57,3 +57,14 @@ Feature: Eloquent Model property types
     """
     When I run Psalm
     Then I see no errors
+
+  Scenario: Legacy Attribute accessor
+    Given I have the following code
+    """
+      function test(User $user): string
+      {
+        return $user->first_name_using_legacy_accessor;
+      }
+    """
+    When I run Psalm
+    Then I see no errors

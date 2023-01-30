@@ -120,6 +120,13 @@ class Builder
     public function whereRelation($relation, $column, $operator = null, $value = null) {}
 
     /**
+     * @param  positive-int  $count
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<int, TModel>, int): mixed $callback
+     * @return bool
+     */
+    public function chunk($count, $callback) {}
+
+    /**
      * @param  string  $relation
      * @param  \Closure|string|array<int, string>|\Illuminate\Database\Query\Expression  $column
      * @param  mixed  $operator
