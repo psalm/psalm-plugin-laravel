@@ -12,6 +12,7 @@ trait InteractsWithInput
      * @return mixed
      *
      * @psalm-taint-source input
+     * @psalm-mutation-free
      */
     public function input($key = null, $default = null) {}
 }
