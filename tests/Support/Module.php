@@ -291,7 +291,7 @@ class Module extends BaseModule
      */
     public function runPsalmWithTaintAnalysis(): void
     {
-        $this->runPsalmIn($this->getDefaultDirectory(), ['--track-tainted-input']);
+        $this->runPsalmIn($this->getDefaultDirectory(), ['--taint-analysis', '--dump-taint-graph=../../taints.dot']);
     }
 
     /**
@@ -504,7 +504,9 @@ class Module extends BaseModule
         if (class_exists(InstalledVersions::class)) {
             /** @psalm-suppress UndefinedClass Composer\InstalledVersions is undefined when using Composer 1.x */
             return (string) InstalledVersions::getPrettyVersion($package);
-        } elseif (class_exists(Versions::class)) {
+        }
+
+        if (class_exists(Versions::class)) {
             /**
              * @psalm-suppress ArgumentTypeCoercion Versions::getVersion() has too narrow a signature
              * @psalm-suppress RedundantCondition not redundant with older Psalm
