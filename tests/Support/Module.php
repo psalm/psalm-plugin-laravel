@@ -168,7 +168,7 @@ class Module extends BaseModule
     {
         $this->parseErrors();
         if (empty($this->errors)) {
-            Assert::fail("No errors");
+            Assert::fail("No errors! Didn't see [ $type $message ] in an empty output.\n");
         }
 
         foreach ($this->errors as $i => $error) {
@@ -285,33 +285,12 @@ class Module extends BaseModule
         $this->runPsalmIn($this->getDefaultDirectory(), ['--find-dead-code']);
     }
 
-    public function seePsalmHasTaintAnalysis(): bool
-    {
-        $taintAnalysisAvailable = $this->packageSatisfiesVersionConstraint('vimeo/psalm', '>=3.10.0');
-        return $taintAnalysisAvailable;
-    }
-
-    /**
-     * @Given I have Psalm with taint analysis
-     * @Given I have psalm with taint analysis
-     */
-    public function havePsalmWithTaintAnalysis(): void
-    {
-        if (!$this->seePsalmHasTaintAnalysis()) {
-            /** @psalm-suppress InternalClass,InternalMethod */
-            throw new SkippedTestError("This scenario requires Psalm with taint analysis (3.10+)");
-        }
-    }
-
     /**
      * @When I run Psalm with taint analysis
      * @When I run psalm with taint analysis
      */
     public function runPsalmWithTaintAnalysis(): void
     {
-        if (!$this->seePsalmHasTaintAnalysis()) {
-            Assert::fail('Taint analysis is available since 3.10.0');
-        }
         $this->runPsalmIn($this->getDefaultDirectory(), ['--track-tainted-input']);
     }
 
