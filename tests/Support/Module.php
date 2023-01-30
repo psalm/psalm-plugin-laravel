@@ -168,7 +168,7 @@ class Module extends BaseModule
     {
         $this->parseErrors();
         if (empty($this->errors)) {
-            Assert::fail("No errors");
+            Assert::fail("No errors! Didn't see [ $type $message ] in an empty output.\n");
         }
 
         foreach ($this->errors as $i => $error) {
@@ -283,14 +283,6 @@ class Module extends BaseModule
     public function runPsalmWithDeadCodeDetection(): void
     {
         $this->runPsalmIn($this->getDefaultDirectory(), ['--find-dead-code']);
-    }
-
-    /**
-     * @Given I have Psalm with taint analysis
-     */
-    public function havePsalmWithTaintAnalysis(): void
-    {
-        // nothing to do, Psalm 3.10+ has Taint Analysis
     }
 
     /**
