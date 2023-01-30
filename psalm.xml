@@ -20,6 +20,6 @@
     </issueHandlers>
 
     <stubs>
-        <file name="stubs/LumenApplication.stubphp"/>
+        <file name="stubs/Lumen/Application.stubphp"/>
     </stubs>
 </psalm>
