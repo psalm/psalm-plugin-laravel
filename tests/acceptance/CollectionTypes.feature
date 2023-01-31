@@ -151,12 +151,24 @@ Feature: Collection types
           return $this->getCollection()->all();
         }
 
-        /**
-         * @return Collection<int, string>
-         */
+        /** @return Collection<int, string> */
         public function putTest(): Collection
         {
           return $this->getCollection()->put(5, 'five');
+        }
+
+        public function isEmpty_assertions_works(): null
+        {
+          $collection = $this->getCollection();
+
+          return $collection->isEmpty() ? $collection->first() : null;
+        }
+
+        public function isNotEmpty_assertions_works(): null
+        {
+          $collection = $this->getCollection();
+
+          return $collection->isNotEmpty() ? null : $collection->first();
         }
     }
     """
