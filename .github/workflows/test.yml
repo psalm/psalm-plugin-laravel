@@ -8,13 +8,14 @@ on:
       - '**.feature'
       - '**.yml'
       - 'composer.json'
-
   pull_request:
     paths:
       - '**.php'
       - '**.stubphp'
       - '**.feature'
       - 'composer.json'
+  schedule:
+    - cron: "0 6 * * *"
 
 jobs:
 
@@ -31,6 +32,9 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      - name: Check Composer configuration
+        run: composer validate --strict
+
       - name: Install composer dependencies
         run: composer install
 
@@ -41,15 +45,15 @@ jobs:
   acceptance_tests:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         php: [8.2, 8.0]
-        illuminate_version: [dev-master, 9.*]
-        stability: [prefer-lowest, prefer-stable]
+        laravel: [^10.0, ^9.0]
+        dependencies: [lowest, highest]
         exclude:
           - php: 8.0
-            stability: dev-master
-    name: P${{ matrix.php }} | I ${{ matrix.illuminate_version }} | ${{ matrix.stability }}
+            dependencies: dev-master
+    name: P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -61,9 +65,13 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      - name: Install composer dependencies
-        run: |
-          composer require "laravel/framework:${{ matrix.illuminate_version }}" "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --prefer-stable --${{ matrix.stability }}
+      - name: Install lowest dependencies from composer.json
+        if: "matrix.dependencies == 'lowest'"
+        run: "composer update --with='laravel/framework:${{ matrix.laravel }}' --no-interaction --no-progress -prefer-dist --prefer-stable --prefer-lowest"
+
+      - name: Install highest dependencies from composer.json
+        if: "matrix.dependencies == 'highest'"
+        run: "composer update --with='laravel/framework:${{ matrix.laravel }}' --no-interaction --no-progress --prefer-dist --prefer-stable"
 
       - name: Run Acceptance Tests
         run: composer test
