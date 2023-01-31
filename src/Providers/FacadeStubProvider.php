@@ -9,6 +9,7 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
 
 use function unlink;
+use function is_array;
 
 final class FacadeStubProvider implements GeneratesStubs
 {
@@ -21,11 +22,11 @@ final class FacadeStubProvider implements GeneratesStubs
 
         // The \Eloquent mixin has less specific return types than our custom plugin can determine, so we unset it here
         // to not taint our analysis
-        if ($ideHelperExtra = $config->get('ide-helper.extra')) {
-            if (isset($ideHelperExtra['Eloquent'])) {
-                unset($ideHelperExtra['Eloquent']);
-                $config->set('ide-helper.extra', $ideHelperExtra);
-            }
+        /** @var mixed $ideHelperExtra */
+        $ideHelperExtra = $config->get('ide-helper.extra');
+        if (is_array($ideHelperExtra) && isset($ideHelperExtra['Eloquent'])) {
+            unset($ideHelperExtra['Eloquent']);
+            $config->set('ide-helper.extra', $ideHelperExtra);
         }
 
         $fake_filesystem = new FakeFilesystem();

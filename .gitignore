@@ -4,3 +4,7 @@ composer.phar
 composer.lock
 cache/*.stubphp
 .DS_Store
+
+# PHPUnit
+.phpunit.result.cache
+.phpunit.cache/

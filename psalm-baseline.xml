@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="5.4.0@62db5d4f6a7ae0a20f7cc5a4952d730272fc0863">
-  <file src="src/Handlers/Eloquent/RelationsMethodHandler.php">
-    <ArgumentTypeCoercion occurrences="1">
-      <code>$template_type_parameters</code>
-    </ArgumentTypeCoercion>
-  </file>
-  <file src="src/Providers/ModelStubProvider.php">
-    <PossiblyUndefinedMethod occurrences="1">
-      <code>databasePath</code>
-    </PossiblyUndefinedMethod>
+<files psalm-version="5.6.0@e784128902dfe01d489c4123d69918a9f3c1eac5">
+  <file src="src/Handlers/Helpers/PathHandler.php">
+    <InvalidArgument>
+      <code>[$argument]</code>
+    </InvalidArgument>
+    <MixedAssignment>
+      <code>$argument</code>
+    </MixedAssignment>
   </file>
 </files>

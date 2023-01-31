@@ -32,5 +32,5 @@ Feature: Request types
       return $request->input('foo', false);
     }
     """
-    When I run psalm
+    When I run Psalm
     Then I see no errors

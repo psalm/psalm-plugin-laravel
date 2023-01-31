@@ -7,10 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 
 use function config;
 use function get_class;
+use function is_a;
 use function in_array;
+use function is_string;
 use function implode;
 
 /** @psalm-suppress PropertyNotSetInConstructor */
@@ -31,11 +34,28 @@ class FakeModelsCommand extends ModelsCommand
     /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
     public function getModels(): array
     {
-        return $this->model_classes + $this->loadModels();
+        if ($this->dirs === []) {
+            throw new \LogicException('Directories to scan models are not set.');
+        }
+
+        $models = [];
+
+        // Bypass an issue https://github.com/barryvdh/laravel-ide-helper/issues/1414
+        /** @var list<class-string> $classlike_fq_names */
+        $classlike_fq_names = $this->loadModels();
+        foreach ($classlike_fq_names as $probably_model_fqcn) {
+            if (is_a($probably_model_fqcn, Model::class, true)) {
+                $models[] = $probably_model_fqcn;
+            }
+        }
+
+        return [...$this->model_classes, ...$models];
     }
 
     /**
-     * Load the properties from the database table.
+     * Load Model's properties.
+     * Overrides {@see \Barryvdh\LaravelIdeHelper\Console\ModelsCommand::getPropertiesFromTable}
+     * in order to avoid using DB connection and use SchemaAggregator instead.
      *
      * @param Model $model
      */
@@ -58,13 +78,13 @@ class FakeModelsCommand extends ModelsCommand
                 $get_type = $set_type = '\Illuminate\Support\Carbon';
             } else {
                 switch ($column->type) {
-                    case 'string':
-                    case 'int':
-                    case 'float':
+                    case SchemaColumn::TYPE_STRING:
+                    case SchemaColumn::TYPE_INT:
+                    case SchemaColumn::TYPE_FLOAT:
                         $get_type = $set_type = $column->type;
                         break;
 
-                    case 'bool':
+                    case SchemaColumn::TYPE_BOOL:
                         switch (config('database.default')) {
                             case 'sqlite':
                             case 'mysql':
@@ -78,7 +98,7 @@ class FakeModelsCommand extends ModelsCommand
 
                         break;
 
-                    case 'enum':
+                    case SchemaColumn::TYPE_ENUM:
                         if (!$column->options) {
                             $get_type = $set_type = 'string';
                         } else {
@@ -88,12 +108,13 @@ class FakeModelsCommand extends ModelsCommand
                         break;
 
                     default:
-                        $get_type = $set_type = 'mixed';
+                        $get_type = $set_type = SchemaColumn::TYPE_MIXED;
                         break;
                 }
             }
 
             if ($column->nullable) {
+                /** @psalm-suppress MixedArrayAssignment */
                 $this->nullableColumns[$name] = true;
             }
 
