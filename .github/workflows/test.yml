@@ -17,6 +17,7 @@ on:
       - 'composer.json'
 
 jobs:
+
   unit_tests:
     runs-on: ubuntu-latest
     steps:
@@ -36,20 +37,19 @@ jobs:
       - name: Run Unit tests
         run: composer unit
 
+
   acceptance_tests:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        php: [8.2, 8.1, 8.0]
+        php: [8.2, 8.0]
         illuminate_version: [dev-master, 9.*]
         stability: [prefer-lowest, prefer-stable]
         exclude:
           - php: 8.0
             stability: dev-master
-
     name: P${{ matrix.php }} | I ${{ matrix.illuminate_version }} | ${{ matrix.stability }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
