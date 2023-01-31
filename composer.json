@@ -23,6 +23,7 @@
         "illuminate/routing": "^9.48 || ^10.0.0",
         "illuminate/support": "^9.48 || ^10.0.0",
         "illuminate/view": "^9.48 || ^10.0.0",
+        "orchestra/testbench": "^7.19 || ^8.0.0",
         "vimeo/psalm": "^4.30 || ^5.1"
     },
     "require-dev": {
