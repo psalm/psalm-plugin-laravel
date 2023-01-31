@@ -52,7 +52,7 @@ jobs:
         dependencies: [lowest, highest]
         exclude:
           - php: 8.0
-            dependencies: dev-master
+            dependencies: ^10.0
     name: P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code
