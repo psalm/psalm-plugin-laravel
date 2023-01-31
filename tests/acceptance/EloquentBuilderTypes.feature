@@ -229,7 +229,7 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: can not call whereDate with incompatible type
+  Scenario: can not call whereDate with incompatible type [ Psalm 5 ]
     Given I have the following code
     """
     /**
@@ -240,10 +240,28 @@ Feature: Eloquent Builder types
       return $builder->whereDate('created_at', '>', 1);
     }
     """
+    And I have Psalm newer than "5.0" (because of "changed issue type")
     When I run Psalm
     Then I see these errors
       | Type  | Message |
       | InvalidArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, but 1 provided |
+
+  Scenario: can not call whereDate with incompatible type [ Psalm 4 ]
+    Given I have the following code
+    """
+    /**
+    * @psalm-param Builder $builder
+    * @psalm-return Builder
+    */
+    function test_whereDateWithInt(Builder $builder): Builder {
+      return $builder->whereDate('created_at', '>', 1);
+    }
+    """
+    And I have Psalm older than "5.0.0" (because of "changed issue type")
+    When I run Psalm
+    Then I see these errors
+        | Type  | Message |
+        | InvalidScalarArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, but 1 provided |
 
   Scenario: can call count on the builder instance
     Given I have the following code
