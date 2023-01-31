@@ -79,6 +79,26 @@ abstract class Relation
     }
 
     /**
+     * Add an "order by" clause for a timestamp to the query.
+     *
+     * Psalm note: ideally the type should be inferred from $this->query
+     *
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @return $this
+     */
+    public function latest($column = null) {}
+
+    /**
+     * Add an "order by" clause for a timestamp to the query.
+     *
+     * Psalm note: ideally the type should be inferred from $this->query
+     *
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @return $this
+     */
+    public function oldest($column = null) {}
+
+    /**
      * Get the underlying query for the relation.
      *
      * @return \Illuminate\Database\Eloquent\Builder<TRelatedModel>

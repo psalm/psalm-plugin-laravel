@@ -1,10 +1,9 @@
 <?xml version="1.0"?>
 <psalm
-    errorLevel="2"
-    reportMixedIssues="false"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
-    xsi:schemaLocation="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config config.xsd"
+    errorLevel="1"
     errorBaseline="psalm-baseline.xml"
     phpVersion="8.0"
 >
@@ -12,6 +11,7 @@
         <directory name="src" />
         <ignoreFiles>
             <directory name="vendor"/>
+            <directory name="tests/Unit/Handlers/Eloquent/Schema/migrations"/>
         </ignoreFiles>
     </projectFiles>
 
@@ -20,6 +20,6 @@
     </issueHandlers>
 
     <stubs>
-        <file name="stubs/LumenApplication.stubphp"/>
+        <file name="stubs/Lumen/Application.stubphp"/>
     </stubs>
 </psalm>
