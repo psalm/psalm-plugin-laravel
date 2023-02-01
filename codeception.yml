@@ -1,10 +1,14 @@
+# @see https://codeception.com/docs/reference/Configuration
+
 paths:
-    tests: tests
-    output: tests/_output
-    data: tests/_data
-    support: tests/_support
-    envs: tests/_envs
+    tests: tests/Acceptance
+    data: tests/Acceptance/_data
+    support: tests/Acceptance/_support
+    output: tests/Acceptance/_output
+    envs: tests/Acceptance/_envs
+
 actor_suffix: Tester
+
 extensions:
     enabled:
         - Codeception\Extension\RunFailed

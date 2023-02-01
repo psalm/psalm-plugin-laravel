@@ -17,7 +17,7 @@ Feature: Eloquent Model stub generating
       """
 
   Scenario: Generate stubs for Eloquent Models
-    When I run Psalm
+      When I run Psalm
     Then Stubs were generated for these Eloquent Models
       | final class Car extends \Eloquent |
       | final class Comment extends \Eloquent |
