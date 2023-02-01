@@ -12,6 +12,10 @@
     <MissingTemplateParam>
       <code>CastsAttributes</code>
     </MissingTemplateParam>
+    <MoreSpecificImplementedParamType>
+      <code>$attributes</code>
+      <code>$attributes</code>
+    </MoreSpecificImplementedParamType>
     <UnusedClass>
       <code>ExampleCast</code>
     </UnusedClass>
@@ -52,6 +56,10 @@
     </UnusedClass>
   </file>
   <file src="app/Http/Resources/ExampleResource.php">
+    <MixedReturnTypeCoercion>
+      <code>array&lt;string, mixed&gt;</code>
+      <code>parent::toArray($request)</code>
+    </MixedReturnTypeCoercion>
     <UnusedClass>
       <code>ExampleResource</code>
     </UnusedClass>
@@ -101,9 +109,6 @@
     </MixedPropertyFetch>
   </file>
   <file src="app/Rules/ExampleRule.php">
-    <InvalidReturnType>
-      <code>bool</code>
-    </InvalidReturnType>
     <UnusedClass>
       <code>ExampleRule</code>
     </UnusedClass>
