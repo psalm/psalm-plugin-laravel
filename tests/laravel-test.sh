@@ -8,9 +8,9 @@ APP_INSTALLATION_PATH="$(dirname "$CURRENT_SCRIPT_PATH")/../laravel"
 echo "Cleaning up previous installation"
 rm -rf $APP_INSTALLATION_PATH
 
-echo "Installing Laravel 9"
+echo "Installing Laravel 10"
 # @see https://github.com/laravel/laravel/tags for Laravel versions
-composer create-project laravel/laravel $APP_INSTALLATION_PATH 9.5 --quiet --prefer-dist
+composer create-project laravel/laravel $APP_INSTALLATION_PATH dev-master --quiet --prefer-dist
 cd $APP_INSTALLATION_PATH
 
 echo "Preparing Laravel"
@@ -37,7 +37,7 @@ echo "Preparing Laravel"
 
 echo "Adding package from source"
 composer config repositories.0 '{"type": "path", "url": "../psalm-plugin-laravel"}'
-COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" -W
+COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" --update-with-all-dependencies
 
 echo "Analyzing Laravel"
 ./vendor/bin/psalm -c ../psalm-plugin-laravel/tests/laravel-test-psalm.xml
