@@ -1,7 +1,9 @@
 <?php
 
-namespace Tests\Psalm\LaravelPlugin\Support;
+namespace Tests\Psalm\LaravelPlugin\Acceptance\Support;
 
+use Behat\Gherkin\Node\PyStringNode;
+use Behat\Gherkin\Node\TableNode;
 use Codeception\Exception\ConfigurationException;
 use Codeception\Exception\ModuleRequireException;
 use Codeception\Exception\TestRuntimeException;
@@ -13,11 +15,9 @@ use Codeception\TestInterface;
 use Composer\InstalledVersions;
 use Composer\Semver\Semver;
 use Composer\Semver\VersionParser;
+use OutOfBoundsException;
 use PackageVersions\Versions;
 use PHPUnit\Framework\Assert;
-use Behat\Gherkin\Node\PyStringNode;
-use Behat\Gherkin\Node\TableNode;
-use OutOfBoundsException;
 use PHPUnit\Framework\SkippedTestError;
 use RuntimeException;
 
@@ -25,6 +25,34 @@ use function is_array;
 use function is_int;
 use function is_numeric;
 use function is_string;
+use function array_merge;
+use function array_values;
+use function explode;
+use function join;
+use function json_decode;
+use function preg_match;
+use function realpath;
+use function rtrim;
+use function sprintf;
+use function str_replace;
+use function strlen;
+use function strpos;
+use function assert;
+use function file_exists;
+use function is_dir;
+use function unlink;
+use function mkdir;
+use function array_map;
+use function escapeshellarg;
+use function getcwd;
+use function sha1;
+use function preg_quote;
+use function class_exists;
+use function json_last_error;
+
+use const JSON_ERROR_NONE;
+
+use function json_last_error_msg;
 
 /**
  * Duplicate of https://github.com/psalm/codeception-psalm-module
@@ -290,7 +318,7 @@ class Module extends BaseModule
      */
     public function runPsalmWithTaintAnalysis(): void
     {
-        $this->runPsalmIn($this->getDefaultDirectory(), ['--taint-analysis', '--dump-taint-graph=../../taints.dot']);
+        $this->runPsalmIn($this->getDefaultDirectory(), ['--taint-analysis']);
     }
 
     /**
