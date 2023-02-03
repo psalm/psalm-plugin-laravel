@@ -17,13 +17,29 @@ Feature: DB facade alias
       """
 
   Scenario: call the DB facade alias
-    Given I have the following code
+    Given I have the "laravel/framework" package satisfying the "^9.0"
+    And I have the following code
     """
     <?php declare(strict_types=1);
 
     namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
-    function test(): \Illuminate\Database\Query\Expression {
+    function test_db_raw(): \Illuminate\Database\Query\Expression {
+      return \DB::raw(1);
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: call the DB facade alias
+    Given I have the "laravel/framework" package satisfying the "^10.0"
+    And I have the following code
+    """
+    <?php declare(strict_types=1);
+
+    namespace Tests\Psalm\LaravelPlugin\Sandbox;
+
+    function test_db_raw(): \Illuminate\Contracts\Database\Query\Expression {
       return \DB::raw(1);
     }
     """
