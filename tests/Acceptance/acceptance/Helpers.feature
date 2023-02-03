@@ -21,6 +21,26 @@ Feature: helpers
       use Illuminate\Support\Optional;
       """
 
+    Scenario: abort_if asserts not null
+      Given I have the following code
+    """
+      function abortIfNullable(?string $nullable): string {
+        abort_if(is_null($nullable), 422);
+
+        return $nullable;
+      }
+
+      function test_abort_asserts_not_null(?string $nullable): string {
+        if ($nullable === null) {
+            abort(422);
+        }
+
+        return $nullable;
+      }
+    """
+      When I run Psalm
+      Then I see no errors
+
   Scenario: env can be pulled off the app
     Given I have the following code
     """
@@ -75,8 +95,7 @@ Feature: helpers
     Then I see no errors
 
   Scenario: auth support
-    Given I have the "laravel/framework" package satisfying the "^9.44"
-    And I have the following code
+    Given I have the following code
     """
         function test_auth_call_without_args_should_return_Factory(): \Illuminate\Contracts\Auth\Factory
         {

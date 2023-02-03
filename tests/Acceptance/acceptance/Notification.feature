@@ -2,7 +2,6 @@ Feature: Notification types
   Illuminate\Notifications\Notification have type support
 
   Background:
-    Given I have the "laravel/framework" package satisfying the ">= 6.0.4"
     Given I have the following config
       """
       <?xml version="1.0"?>

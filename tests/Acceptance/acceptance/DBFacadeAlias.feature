@@ -16,7 +16,7 @@ Feature: DB facade alias
       </psalm>
       """
 
-  Scenario: call the DB facade alias
+  Scenario: call the DB facade alias [ Laravel 9 ]
     Given I have the "laravel/framework" package satisfying the "^9.0"
     And I have the following code
     """
@@ -31,7 +31,7 @@ Feature: DB facade alias
     When I run Psalm
     Then I see no errors
 
-  Scenario: call the DB facade alias
+  Scenario: call the DB facade alias [ Laravel 10 ]
     Given I have the "laravel/framework" package satisfying the "^10.0"
     And I have the following code
     """
