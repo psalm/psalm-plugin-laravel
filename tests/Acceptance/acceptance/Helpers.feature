@@ -95,8 +95,7 @@ Feature: helpers
     Then I see no errors
 
   Scenario: auth support
-    Given I have the "laravel/framework" package satisfying the "^9.44"
-    And I have the following code
+    Given I have the following code
     """
         function test_auth_call_without_args_should_return_Factory(): \Illuminate\Contracts\Auth\Factory
         {
