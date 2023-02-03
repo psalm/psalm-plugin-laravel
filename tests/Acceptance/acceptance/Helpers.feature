@@ -21,6 +21,26 @@ Feature: helpers
       use Illuminate\Support\Optional;
       """
 
+    Scenario: abort_if asserts not null
+      Given I have the following code
+    """
+      function abortIfNullable(?string $nullable): string {
+        abort_if(is_null($nullable), 422);
+
+        return $nullable;
+      }
+
+      function test_abort_asserts_not_null(?string $nullable): string {
+        if ($nullable === null) {
+            abort(422);
+        }
+
+        return $nullable;
+      }
+    """
+      When I run Psalm
+      Then I see no errors
+
   Scenario: env can be pulled off the app
     Given I have the following code
     """
