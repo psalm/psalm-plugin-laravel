@@ -20,7 +20,7 @@ Feature: Eloquent Model types
       <?php declare(strict_types=1);
       namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
-      use Tests\Psalm\LaravelPlugin\Models\User;
+      use App\Models\User;
       """
 
   Scenario: Model scope support

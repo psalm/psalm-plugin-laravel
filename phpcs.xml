@@ -25,8 +25,8 @@
     <file>src/</file>
     <file>tests</file>
     <exclude-pattern>cache/</exclude-pattern>
+    <exclude-pattern>tests/Application/</exclude-pattern>
     <exclude-pattern>tests/_run/</exclude-pattern>
-    <exclude-pattern>tests/Acceptance/_run/</exclude-pattern>
     <exclude-pattern>tests/Acceptance/_output</exclude-pattern>
     <exclude-pattern>tests/Acceptance/_run</exclude-pattern>
     <exclude-pattern>tests/Acceptance/_support</exclude-pattern>

@@ -17,7 +17,7 @@ Feature: helpers
       """
       <?php declare(strict_types=1);
 
-      use Tests\Psalm\LaravelPlugin\Models\User;
+      use App\Models\User;
       use Illuminate\Support\Optional;
       """
 
@@ -482,29 +482,29 @@ Feature: helpers
     """
         function test_factory_returns_model(): User
         {
-            return factory(\Tests\Psalm\LaravelPlugin\Models\User::class)->create();
+            return factory(\App\Models\User::class)->create();
         }
 
         function test_factory_returns_model_with_explicit_count(): User
         {
-            return factory(\Tests\Psalm\LaravelPlugin\Models\User::class, 1)->create();
+            return factory(\App\Models\User::class, 1)->create();
         }
 
-        /** @return \Illuminate\Database\Eloquent\Collection<int, \Tests\Psalm\LaravelPlugin\Models\User> **/
+        /** @return \Illuminate\Database\Eloquent\Collection<int, \App\Models\User> **/
         function test_factory_returns_collection()
         {
-            return factory(\Tests\Psalm\LaravelPlugin\Models\User::class, 2)->create();
+            return factory(\App\Models\User::class, 2)->create();
         }
 
         function test_factory_with_times_1_returns_model(): User
         {
-            return factory(\Tests\Psalm\LaravelPlugin\Models\User::class)->times(1)->create();
+            return factory(\App\Models\User::class)->times(1)->create();
         }
 
-        /** @return \Illuminate\Database\Eloquent\Collection<int, \Tests\Psalm\LaravelPlugin\Models\User> **/
+        /** @return \Illuminate\Database\Eloquent\Collection<int, \App\Models\User> **/
         function test_factory_with_times_2_returns_collection()
         {
-            return factory(\Tests\Psalm\LaravelPlugin\Models\User::class)->times(2)->create();
+            return factory(\App\Models\User::class)->times(2)->create();
         }
     """
     When I run Psalm

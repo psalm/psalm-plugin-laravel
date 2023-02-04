@@ -133,7 +133,7 @@ final class ApplicationProvider
         // the base path being inside of orchestra/testbench-core/laravel
 
         $config->set('ide-helper.model_locations', [
-            '../../../../tests/Models',
+            '../../../../tests/Application/app/Models',
         ]);
     }
 }

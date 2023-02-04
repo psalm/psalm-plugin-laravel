@@ -21,8 +21,7 @@ Feature: Http Resource types
       namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
       use Illuminate\Http\Resources\Json\JsonResource;
-      use Tests\Psalm\LaravelPlugin\Models\User;
-
+      use App\Models\User;
 
       /**
        * @property-read User $resource
