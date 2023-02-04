@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Psalm\LaravelPlugin\Models;
+namespace App\Models;
 
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;

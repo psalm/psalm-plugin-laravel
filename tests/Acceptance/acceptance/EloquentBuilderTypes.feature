@@ -22,7 +22,7 @@ Feature: Eloquent Builder types
 
       use Illuminate\Database\Eloquent\Builder;
       use Illuminate\Database\Eloquent\Collection;
-      use Tests\Psalm\LaravelPlugin\Models\User;
+      use App\Models\User;
       """
 
   Scenario: Models can call eloquent query builder instance methods

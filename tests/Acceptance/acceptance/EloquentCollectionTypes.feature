@@ -21,9 +21,9 @@ Feature: Eloquent Collection types
     """
     <?php declare(strict_types=1);
 
-    namespace Tests\Psalm\LaravelPlugin\Models;
+    namespace App\Models;
 
-    use Tests\Psalm\LaravelPlugin\Models\User;
+    use App\Models\User;
 
     final class UserRepository
     {
