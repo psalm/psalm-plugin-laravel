@@ -72,9 +72,9 @@ class FakeModelsCommand extends ModelsCommand
         $columns = $this->schema->tables[$table_name]->columns;
 
         foreach ($columns as $column) {
-            $name = $column->name;
+            $column_name = $column->name;
 
-            if (in_array($name, $model->getDates())) {
+            if (in_array($column_name, $model->getDates(), true)) {
                 $get_type = $set_type = '\Illuminate\Support\Carbon';
             } else {
                 switch ($column->type) {
@@ -115,19 +115,19 @@ class FakeModelsCommand extends ModelsCommand
 
             if ($column->nullable) {
                 /** @psalm-suppress MixedArrayAssignment */
-                $this->nullableColumns[$name] = true;
+                $this->nullableColumns[$column_name] = true;
             }
 
             if ($get_type === $set_type) {
-                $this->setProperty($name, $get_type, true, true, '', $column->nullable);
+                $this->setProperty($column_name, $get_type, true, true, '', $column->nullable);
             } else {
-                $this->setProperty($name, $get_type, true, null, '', $column->nullable);
-                $this->setProperty($name, $set_type, null, true, '', $column->nullable);
+                $this->setProperty($column_name, $get_type, true, null, '', $column->nullable);
+                $this->setProperty($column_name, $set_type, null, true, '', $column->nullable);
             }
 
             if ($this->write_model_magic_where) {
                 $this->setMethod(
-                    Str::camel("where_" . $name),
+                    Str::camel("where_" . $column_name),
                     '\Illuminate\Database\Eloquent\Builder|\\' . get_class($model),
                     array('$value')
                 );
