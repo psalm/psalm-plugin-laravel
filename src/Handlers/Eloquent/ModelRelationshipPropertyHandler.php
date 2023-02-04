@@ -141,7 +141,7 @@ class ModelRelationshipPropertyHandler implements
                 MorphToMany::class,
             ];
 
-            if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection)) {
+            if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection, true)) {
                 $returnType = new Union([
                     new TGenericObject(Collection::class, [
                         new Union([new TInt()]),
