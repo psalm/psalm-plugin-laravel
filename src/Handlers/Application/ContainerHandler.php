@@ -61,13 +61,12 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
     {
         // lumen doesn't have the likes of makeWith, so we will ensure these methods actually exist on the underlying
         // app contract
-        $methods = array_filter(['make', 'makewith'], function (string $methodName) use ($event) {
-
+        $methods = array_filter(['make', 'makewith'], static function (string $methodName) use ($event) {
             $methodId = new MethodIdentifier($event->getFqClasslikeName(), $methodName);
             return $event->getSource()->getCodebase()->methodExists($methodId);
         });
 
-        if (!in_array($event->getMethodNameLowercase(), $methods)) {
+        if (!in_array($event->getMethodNameLowercase(), $methods, true)) {
             return null;
         }
 

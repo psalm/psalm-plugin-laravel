@@ -74,7 +74,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
 
         $method_name_lowercase = $event->getMethodNameLowercase();
 
-        if (!in_array($method_name_lowercase, $methods)) {
+        if (!in_array($method_name_lowercase, $methods, true)) {
             return null;
         }
 

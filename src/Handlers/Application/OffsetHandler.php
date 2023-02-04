@@ -84,6 +84,6 @@ final class OffsetHandler implements
         return in_array($methodName, [
             'offsetget',
             'offsetset',
-        ]);
+        ], true);
     }
 }
