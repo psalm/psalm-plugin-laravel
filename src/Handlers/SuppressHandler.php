@@ -81,7 +81,7 @@ class SuppressHandler implements AfterClassLikeVisitInterface
         $class = $event->getStorage();
 
         foreach (self::BY_CLASS as $issue => $class_names) {
-            if (in_array($class->name, $class_names)) {
+            if (in_array($class->name, $class_names, true)) {
                 self::suppress($issue, $class);
             }
         }
@@ -126,7 +126,7 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_PARENT_CLASS_PROPERTY as $issue => $properties_by_parent_class) {
             foreach ($properties_by_parent_class as $parent_class => $property_names) {
-                if (!in_array($parent_class, $class->parent_classes)) {
+                if (!in_array($parent_class, $class->parent_classes, true)) {
                     continue;
                 }
 
@@ -151,7 +151,7 @@ class SuppressHandler implements AfterClassLikeVisitInterface
      */
     private static function suppress(string $issue, $storage): void
     {
-        if ($storage && !in_array($issue, $storage->suppressed_issues)) {
+        if ($storage && !in_array($issue, $storage->suppressed_issues, true)) {
             $storage->suppressed_issues[] = $issue;
         }
     }
