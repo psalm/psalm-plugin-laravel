@@ -7,6 +7,7 @@ use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
+use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler;
@@ -96,6 +97,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(AuthHandler::class);
         require_once 'Handlers/Auth/GuardHandler.php';
         $registration->registerHooksFromClass(GuardHandler::class);
+        require_once 'Handlers/Auth/RequestHandler.php';
+        $registration->registerHooksFromClass(RequestHandler::class);
 
         require_once 'Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         $registration->registerHooksFromClass(ModelRelationshipPropertyHandler::class);
