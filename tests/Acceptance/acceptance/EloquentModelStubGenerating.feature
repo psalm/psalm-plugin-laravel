@@ -19,14 +19,14 @@ Feature: Eloquent Model stub generating
   Scenario: Generate stubs for Eloquent Models
       When I run Psalm
     Then Stubs were generated for these Eloquent Models
-      | final class Car extends \Eloquent |
-      | final class Comment extends \Eloquent |
-      | final class Image extends \Eloquent |
-      | final class Mechanic extends \Eloquent |
-      | final class Phone extends \Eloquent |
-      | final class Post extends \Eloquent |
-      | final class Role extends \Eloquent |
-      | final class Secret extends \Eloquent |
-      | final class Tag extends \Eloquent |
-      | final class User extends \Eloquent |
-      | final class Video extends \Eloquent |
+      | class Car extends \Eloquent |
+      | class Comment extends \Eloquent |
+      | class Image extends \Eloquent |
+      | class Mechanic extends \Eloquent |
+      | class Phone extends \Eloquent |
+      | class Post extends \Eloquent |
+      | class Role extends \Eloquent |
+      | class Secret extends \Eloquent |
+      | class Tag extends \Eloquent |
+      | class User extends \Eloquent |
+      | class Video extends \Eloquent |
