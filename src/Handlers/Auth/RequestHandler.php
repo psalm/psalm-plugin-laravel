@@ -10,6 +10,7 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
+
 use function is_string;
 
 /**
