@@ -33,15 +33,15 @@ Feature: Eloquent Relation types
       use \Illuminate\Database\Eloquent\Relations\MorphTo;
       use \Illuminate\Database\Eloquent\Relations\MorphToMany;
 
-      use Tests\Psalm\LaravelPlugin\Models\Comment;
-      use Tests\Psalm\LaravelPlugin\Models\Image;
-      use Tests\Psalm\LaravelPlugin\Models\Mechanic;
-      use Tests\Psalm\LaravelPlugin\Models\Phone;
-      use Tests\Psalm\LaravelPlugin\Models\Post;
-      use Tests\Psalm\LaravelPlugin\Models\Role;
-      use Tests\Psalm\LaravelPlugin\Models\Tag;
-      use Tests\Psalm\LaravelPlugin\Models\User;
-      use Tests\Psalm\LaravelPlugin\Models\Video;
+      use App\Models\Comment;
+      use App\Models\Image;
+      use App\Models\Mechanic;
+      use App\Models\Phone;
+      use App\Models\Post;
+      use App\Models\Role;
+      use App\Models\Tag;
+      use App\Models\User;
+      use App\Models\Video;
       """
 
   Scenario: Models can declare one to one relationships
