@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Psalm\LaravelPlugin\Models;
+namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
