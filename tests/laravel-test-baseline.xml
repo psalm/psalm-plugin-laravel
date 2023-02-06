@@ -54,6 +54,9 @@
     <UnusedClass>
       <code>ExampleRequest</code>
     </UnusedClass>
+    <DeprecatedInterface>
+      <code>\Illuminate\Contracts\Validation\Rule</code>
+    </DeprecatedInterface>
   </file>
   <file src="app/Http/Resources/ExampleResource.php">
     <MixedReturnTypeCoercion>
