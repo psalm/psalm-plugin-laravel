@@ -5,7 +5,6 @@ There are 2 main ways how it does it:
  - **easy**: by providing stub files (you can find them in `/stubs` dir)
  - **medium+**: using custom Handlers (see `/src/Handlers` dir)
 
-
 ## How it works
 
 A single callstack looks like:
