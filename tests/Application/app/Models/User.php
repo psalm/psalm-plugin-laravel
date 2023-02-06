@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Carbon\CarbonInterface;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 
 /**
  * @property string $id
  * @property CarbonInterface|null $email_verified_at
  */
-final class User extends Model
+class User extends Authenticatable
 {
     protected $table = 'users';
 
