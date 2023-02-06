@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Auth;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
+
 use function in_array;
 
 /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
 use Psalm\LaravelPlugin\Providers\ConfigRepositoryProvider;
+
 use function is_string;
 
 final class AuthConfigHelper
