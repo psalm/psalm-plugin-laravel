@@ -138,7 +138,7 @@ class Module extends BaseModule
         $options = array_map('escapeshellarg', $options);
         $cmd = $this->getPsalmPath()
             . ' --output-format=json '
-            . ' --no-progress'
+            . ' --no-progress '
             . join(' ', $options) . ' '
             . ($filename ? escapeshellarg($filename) : '')
             . ' 2>&1';
