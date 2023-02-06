@@ -5,6 +5,7 @@ namespace Psalm\LaravelPlugin;
 use Illuminate\Foundation\Application;
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
+use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
@@ -91,6 +92,8 @@ class Plugin implements PluginEntryPointInterface
         require_once 'Handlers/Application/OffsetHandler.php';
         $registration->registerHooksFromClass(OffsetHandler::class);
 
+        require_once 'Handlers/Auth/AuthHandler.php';
+        $registration->registerHooksFromClass(AuthHandler::class);
         require_once 'Handlers/Auth/GuardHandler.php';
         $registration->registerHooksFromClass(GuardHandler::class);
 
