@@ -58,7 +58,7 @@ final class ApplicationProvider
                 throw new \RuntimeException('Could not instantiate Application: unknown path.');
             }
         } else { // Packages
-            $app = (new self())->createApplication();
+            $app = (new self())->createApplication(); // Orchestra\Testbench
         }
 
         self::$app = $app;
