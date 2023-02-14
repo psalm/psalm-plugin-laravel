@@ -22,7 +22,7 @@ use const DIRECTORY_SEPARATOR;
 use const PHP_VERSION_ID;
 
 /** @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator */
-abstract class AbstractSchemaAggregatorTest extends TestCase
+abstract class AbstractSchemaAggregatorTestCase extends TestCase
 {
     final protected function instantiateSchemaAggregator(string $filepath): SchemaAggregator
     {
@@ -54,7 +54,6 @@ abstract class AbstractSchemaAggregatorTest extends TestCase
 
         return $schemaAggregator;
     }
-
 
     protected function assertColumnHasType(string $type, SchemaColumn $column): void
     {
