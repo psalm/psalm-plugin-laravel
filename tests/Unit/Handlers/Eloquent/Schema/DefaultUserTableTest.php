@@ -7,7 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 
 /** @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator */
-final class DefaultUserTableTest extends AbstractSchemaAggregatorTest
+final class DefaultUserTableTest extends AbstractSchemaAggregatorTestCase
 {
     /** @test */
     public function it_detects_all_columns_from_anonymous_class_migration(): void
