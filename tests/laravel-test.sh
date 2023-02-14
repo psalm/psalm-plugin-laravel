@@ -10,7 +10,7 @@ rm -rf $APP_INSTALLATION_PATH
 
 echo "Installing Laravel 10"
 # @see https://github.com/laravel/laravel/tags for Laravel versions
-composer create-project laravel/laravel $APP_INSTALLATION_PATH dev-master --quiet --prefer-dist
+composer create-project laravel/laravel $APP_INSTALLATION_PATH 10.0 --quiet --prefer-dist
 cd $APP_INSTALLATION_PATH
 
 echo "Preparing Laravel"
@@ -37,6 +37,7 @@ echo "Preparing Laravel"
 
 echo "Adding package from source"
 composer config repositories.0 '{"type": "path", "url": "../psalm-plugin-laravel"}'
+composer config minimum-stability 'dev'
 COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" --update-with-all-dependencies
 
 echo "Analyzing Laravel"

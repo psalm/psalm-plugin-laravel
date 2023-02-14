@@ -18,7 +18,7 @@ use Composer\Semver\VersionParser;
 use OutOfBoundsException;
 use PackageVersions\Versions;
 use PHPUnit\Framework\Assert;
-use PHPUnit\Framework\SkippedTestError;
+use PHPUnit\Framework\SkippedTestSuiteError;
 use RuntimeException;
 
 use function is_array;
@@ -371,7 +371,7 @@ class Module extends BaseModule
     public function haveSomeFuturePsalmThatSupportsThisFeature(string $ref): void
     {
         /** @psalm-suppress InternalClass,InternalMethod */
-        throw new SkippedTestError("Future functionality that Psalm has yet to support: $ref");
+        throw new SkippedTestSuiteError("Future functionality that Psalm has yet to support: $ref");
     }
 
     /**
@@ -387,7 +387,7 @@ class Module extends BaseModule
 
         if (!$this->packageSatisfiesVersionConstraint('vimeo/psalm', $op . $version)) {
             /** @psalm-suppress InternalClass,InternalMethod */
-            throw new SkippedTestError("This scenario requires Psalm $op $version because of $reason");
+            throw new SkippedTestSuiteError("This scenario requires Psalm $op $version because of $reason");
         }
     }
 
@@ -473,7 +473,7 @@ class Module extends BaseModule
         }
 
         /** @psalm-suppress InternalClass,InternalMethod */
-        throw new SkippedTestError("This scenario requires $package to match $versionConstraint");
+        throw new SkippedTestSuiteError("This scenario requires $package to match $versionConstraint");
     }
 
     private function convertToRegexp(string $in): string
