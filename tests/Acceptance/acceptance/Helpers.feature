@@ -419,6 +419,32 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: class_uses_recursive support
+    Given I have the following code
+    """
+        /** @return array<trait-string|class-string, trait-string|class-string> **/
+        function test_class_uses_recursive(): array {
+          return class_uses_recursive(\App\Models\User::class);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: trait_uses_recursive support
+    Given I have the following code
+    """
+        trait CustomSoftDeletes {
+          use \Illuminate\Database\Eloquent\SoftDeletes;
+        }
+
+        /** @return array<trait-string, trait-string> **/
+        function test_trait_uses_recursive(): array {
+          return trait_uses_recursive(CustomSoftDeletes::class);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: url support
     Given I have the following code
     """
