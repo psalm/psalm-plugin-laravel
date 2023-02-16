@@ -265,13 +265,14 @@ function trait_uses_recursive($trait) {}
 /**
  * Transform the given value if it is present.
  * @template TValue of mixed
- * @template TReturn of mixed
+ * @template TCallbackReturn of mixed
  * @template TDefault of mixed
+ * @template TDefaultCallableReturn of mixed
  *
  * @param TValue $value
- * @param callable(TValue): TReturn $callback
- * @param null|TDefault|callable(TValue): TDefault $default
- * @return ($value is empty ? ($default is null ? null : TDefault) : TReturn)
+ * @param callable(TValue):TCallbackReturn $callback
+ * @param null|TDefault|(callable(TValue): TDefaultCallableReturn) $default
+ * @return (TValue is non-empty-mixed ? TCallbackReturn : ($default is callable ? TDefaultCallableReturn : TDefault))
  */
 function transform($value, callable $callback, $default = null): mixed {}
 

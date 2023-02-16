@@ -21,8 +21,8 @@ Feature: helpers
       use Illuminate\Support\Optional;
       """
 
-    Scenario: abort_if asserts not null
-      Given I have the following code
+  Scenario: abort_if asserts not null
+    Given I have the following code
     """
       function abortIfNullable(?string $nullable): string {
         abort_if(is_null($nullable), 422);
@@ -38,8 +38,8 @@ Feature: helpers
         return $nullable;
       }
     """
-      When I run Psalm
-      Then I see no errors
+    When I run Psalm
+    Then I see no errors
 
   Scenario: env can be pulled off the app
     Given I have the following code
@@ -218,8 +218,8 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
-    Scenario: redirect support
-        Given I have the following code
+  Scenario: redirect support
+    Given I have the following code
     """
         function test_redirect_call_without_args_should_return_Redirector(): \Illuminate\Routing\Redirector {
           return redirect();
@@ -241,8 +241,8 @@ Feature: helpers
           return redirect('foo', 301, ['Accept' => 'text/html'], true);
         }
     """
-        When I run Psalm
-        Then I see no errors
+    When I run Psalm
+    Then I see no errors
 
   Scenario: rescue support
     Given I have the following code
@@ -452,8 +452,8 @@ Feature: helpers
           return transform(null, fn () => false, fn () => 42);
         }
 
-        function test_transform_calls_second_arg_when_value_is_not_blank(): false {
-          return transform(true, fn () => false);
+        function test_transform_calls_second_arg_when_value_is_not_empty(): false {
+          return transform('non-empty', fn () => false, 1);
         }
     """
     When I run Psalm
