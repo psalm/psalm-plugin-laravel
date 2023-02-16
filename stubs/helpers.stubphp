@@ -263,6 +263,19 @@ function class_uses_recursive($class) {}
 function trait_uses_recursive($trait) {}
 
 /**
+ * Transform the given value if it is present.
+ * @template TValue of mixed
+ * @template TReturn of mixed
+ * @template TDefault of mixed
+ *
+ * @param TValue $value
+ * @param callable(TValue): TReturn $callback
+ * @param null|TDefault|callable(TValue): TDefault $default
+ * @return ($value is empty ? ($default is null ? null : TDefault) : TReturn)
+ */
+function transform($value, callable $callback, $default = null): mixed {}
+
+/**
  * Generate a url for the application.
  * @param  string|null  $path
  * @param  mixed  $parameters

@@ -445,6 +445,20 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: transform support
+    Given I have the following code
+    """
+        function test_transform_calls_default_when_first_arg_empty_and_default_callable(): int {
+          return transform(null, fn () => false, fn () => 42);
+        }
+
+        function test_calls_second_arg_when_value_is_not_blank(): false {
+          return transform(null, fn () => false);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: url support
     Given I have the following code
     """
