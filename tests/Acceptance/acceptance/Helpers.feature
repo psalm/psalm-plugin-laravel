@@ -452,8 +452,8 @@ Feature: helpers
           return transform(null, fn () => false, fn () => 42);
         }
 
-        function test_calls_second_arg_when_value_is_not_blank(): false {
-          return transform(null, fn () => false);
+        function test_transform_calls_second_arg_when_value_is_not_blank(): false {
+          return transform(true, fn () => false);
         }
     """
     When I run Psalm
