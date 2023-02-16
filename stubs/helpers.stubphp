@@ -249,6 +249,21 @@ function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {
 function throw_unless($condition, $exception = 'RuntimeException', ...$parameters) {}
 
 /**
+ * Returns all traits used by a class, its parent classes and trait of their traits.
+ * @param object|class-string $trait
+ * @return array<trait-string|class-string, trait-string|class-string>
+ */
+function class_uses_recursive($class) {}
+
+/**
+ * Returns all traits used by a trait and its traits.
+ * @param class-string $trait
+ * @return array<trait-string, trait-string>
+ */
+function trait_uses_recursive($trait) {}
+
+/**
+ * Generate a url for the application.
  * @param  string|null  $path
  * @param  mixed  $parameters
  * @param  bool|null  $secure

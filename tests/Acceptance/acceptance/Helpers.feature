@@ -21,8 +21,8 @@ Feature: helpers
       use Illuminate\Support\Optional;
       """
 
-    Scenario: abort_if asserts not null
-      Given I have the following code
+  Scenario: abort_if asserts not null
+    Given I have the following code
     """
       function abortIfNullable(?string $nullable): string {
         abort_if(is_null($nullable), 422);
@@ -38,8 +38,8 @@ Feature: helpers
         return $nullable;
       }
     """
-      When I run Psalm
-      Then I see no errors
+    When I run Psalm
+    Then I see no errors
 
   Scenario: env can be pulled off the app
     Given I have the following code
@@ -218,8 +218,8 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
-    Scenario: redirect support
-        Given I have the following code
+  Scenario: redirect support
+    Given I have the following code
     """
         function test_redirect_call_without_args_should_return_Redirector(): \Illuminate\Routing\Redirector {
           return redirect();
@@ -241,8 +241,8 @@ Feature: helpers
           return redirect('foo', 301, ['Accept' => 'text/html'], true);
         }
     """
-        When I run Psalm
-        Then I see no errors
+    When I run Psalm
+    Then I see no errors
 
   Scenario: rescue support
     Given I have the following code
@@ -414,6 +414,32 @@ Feature: helpers
         {
             throw_unless($var);
             return $var;
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: class_uses_recursive support
+    Given I have the following code
+    """
+        /** @return array<trait-string|class-string, trait-string|class-string> **/
+        function test_class_uses_recursive(): array {
+          return class_uses_recursive(\App\Models\User::class);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: trait_uses_recursive support
+    Given I have the following code
+    """
+        trait CustomSoftDeletes {
+          use \Illuminate\Database\Eloquent\SoftDeletes;
+        }
+
+        /** @return array<trait-string, trait-string> **/
+        function test_trait_uses_recursive(): array {
+          return trait_uses_recursive(CustomSoftDeletes::class);
         }
     """
     When I run Psalm
