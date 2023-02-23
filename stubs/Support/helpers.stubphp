@@ -37,6 +37,14 @@ class NullObject {
 function blank($value) {}
 
 /**
+ * Get the class "basename" of the given object / class.
+ *
+ * @param  class-string|object  $class
+ * @return non-empty-string
+ */
+function class_basename($class) {}
+
+/**
  * Provide access to optional objects.
  *
  * @template TValue

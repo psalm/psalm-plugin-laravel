@@ -80,6 +80,22 @@ Feature: Support helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: class_basename() support
+    Given I have the following code
+    """
+        function class_basename_allows_passing_fqcn(): string
+        {
+            return class_basename(\App\Models\User::class);
+        }
+
+        function class_basename_allows_passing_object(): string
+        {
+            return class_basename(new \stdClass());
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: cache() support
     Given I have the following code
     """
