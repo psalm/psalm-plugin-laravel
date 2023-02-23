@@ -104,7 +104,10 @@ function retry($times, callable $callback, $sleep = 0, $when = null) {}
  * Get a new stringable object from the given string.
  *
  * @param  string|null  $string
- * @return func_num_args() is 0 ? stringable-object&\Illuminate\Support\Str : \Illuminate\Support\Stringable
+ * @return (func_num_args() is 0
+ *  ? (stringable-object&\Illuminate\Support\Str)
+ *  : \Illuminate\Support\Stringable
+ * )
  */
 function str($string = null) {}
 
