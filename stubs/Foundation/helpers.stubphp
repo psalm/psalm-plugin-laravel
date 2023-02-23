@@ -127,15 +127,34 @@ function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain
 /**
  * Dispatch a job to its appropriate handler.
  *
- * @param  mixed  $job
+ * @param  object|callable  $job
  * @return ($job is \Closure ? \Illuminate\Foundation\Bus\PendingDispatch : \Illuminate\Foundation\Bus\PendingDispatch)
  */
 function dispatch($job) {}
 
-// dispatch_sync: @todo add it [removed in Laravel 10]
-// dispatch_now: @todo add it
+/**
+ * Dispatch a command to its appropriate handler in the current process.
+ *
+ * Queueable jobs will be dispatched to the "sync" queue.
+ *
+ * @param  object|callable  $job
+ * @param  mixed  $handler
+ * @return mixed
+ */
+function dispatch_sync($job, $handler = null) {}
+
 // encrypt: nothing to stub
-// event: @todo add it
+
+/**
+ * Dispatch an event and call the listeners.
+ *
+ * @param  string|object  $event
+ * @param  mixed  $payload
+ * @param  bool  $halt
+ * @return list<scalar|array|object>|scalar|array|object|null
+ */
+function event(...$args) {}
+
 // fake: nothing to stub
 // info: nothing to stub
 // lang_path: processed by Psalm handlers
