@@ -1,4 +1,4 @@
-Feature: Foundation Helpers
+Feature: Foundation helpers
   Background:
     Given I have the following config
       """
@@ -37,6 +37,16 @@ Feature: Foundation Helpers
 
       return $nullable;
     }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: app() support: env can be pulled off the app
+    Given I have the following code
+    """
+      if (app()->environment('production')) {
+        // do something
+      }
     """
     When I run Psalm
     Then I see no errors

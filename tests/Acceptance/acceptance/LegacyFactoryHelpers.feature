@@ -1,4 +1,4 @@
-Feature: Legacy Factory Helpers
+Feature: Legacy Factory helpers
   Background:
     Given I have the following config
       """

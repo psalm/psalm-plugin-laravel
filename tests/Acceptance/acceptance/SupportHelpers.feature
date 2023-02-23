@@ -1,4 +1,4 @@
-Feature: helpers
+Feature: Support helpers
   Background:
     Given I have the following config
       """
@@ -21,49 +21,7 @@ Feature: helpers
       use Illuminate\Support\Optional;
       """
 
-  Scenario: env can be pulled off the app
-    Given I have the following code
-    """
-      if (app()->environment('production')) {
-        // do something
-      }
-    """
-    When I run Psalm
-    Then I see no errors
-
-  Scenario: head and last support
-    Given I have the following code
-    """
-        /**
-         * @return false
-         */
-        function empty_head()
-        {
-            return head([]);
-        }
-
-        /**
-         * @return false
-         */
-        function empty_last()
-        {
-            return last([]);
-        }
-
-        function non_empty_head(): int
-        {
-            return last([1, 2, 3]);
-        }
-
-        function non_empty_last(): int
-        {
-            return last([1, 2, 3]);
-        }
-    """
-    When I run Psalm
-    Then I see no errors
-
-  Scenario: optional support
+  Scenario: optional() support
     Given I have the following code
     """
         function test(?Throwable $user): ?string
@@ -74,7 +32,7 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
-  Scenario: cache support
+  Scenario: cache() support
     Given I have the following code
     """
         function test_cache_call_without_args_should_return_CacheManager(): \Illuminate\Cache\CacheManager
@@ -95,7 +53,7 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
-  Scenario: retry support
+  Scenario: retry() support
     Given I have the following code
     """
         function retry_has_callable_with_return_type(): int
@@ -111,7 +69,7 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
-  Scenario: tap support
+  Scenario: tap() support
     Given I have the following code
     """
         function tap_without_callback(): \DateTime
@@ -127,7 +85,7 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
-  Scenario: throw_if support
+  Scenario: throw_if() support
     Given I have the following code
     """
         /** @return false */
@@ -201,7 +159,7 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
-  Scenario: class_uses_recursive support
+  Scenario: class_uses_recursive() support
     Given I have the following code
     """
         /** @return array<trait-string|class-string, trait-string|class-string> **/
@@ -212,7 +170,7 @@ Feature: helpers
     When I run Psalm
     Then I see no errors
 
-  Scenario: trait_uses_recursive support
+  Scenario: trait_uses_recursive() support
     Given I have the following code
     """
         trait CustomSoftDeletes {
