@@ -91,20 +91,6 @@ function bcrypt($value, $options = []) {}
 function broadcast($event = null) {}
 
 /**
- * Get / set the specified cache value.
- *
- * If an array is passed, we'll assume you want to put to the cache.
- *
- * @psalm-param mixed $arg1
- * @psalm-param mixed $arg2
- * @return mixed|\Illuminate\Cache\CacheManager
- * @psalm-return (func_num_args() is 0 ? \Illuminate\Cache\CacheManager : ($arg1 is array ? bool : mixed))
- *
- * @throws \InvalidArgumentException
- */
-function cache($arg1 = null, $arg2 = null) {}
-
-/**
  * Get / set the specified configuration value.
  *
  * If an array is passed as the key, we will assume you want to set an array of values.
