@@ -67,6 +67,15 @@ function auth($guard = null) {}
 function back($status = 302, $headers = [], $fallback = false) {}
 
 /**
+ * Hash the given value against the bcrypt algorithm.
+ *
+ * @param  string  $value
+ * @param  array{rounds?: string, ...}  $options
+ * @return non-empty-string
+ */
+function bcrypt($value, $options = []) {}
+
+/**
  * Get / set the specified configuration value.
  *
  * If an array is passed as the key, we will assume you want to set an array of values.
