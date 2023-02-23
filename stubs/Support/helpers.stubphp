@@ -1,0 +1,103 @@
+<?php
+
+
+/**
+* @see https://github.com/vimeo/psalm/issues/4816 for why this hack exists
+*/
+class NullObject {
+    /**
+     * @return null
+     */
+ 	public function __call(string $_name, array $args) {
+        return null;
+    }
+
+    /**
+     * @return null
+     */
+    public function __get(string $s) {
+        return null;
+    }
+
+    public function __set(string $_name, string $_value) : void {
+    }
+}
+
+/**
+ * Provide access to optional objects.
+ *
+ * @template TValue
+ * @template TResult
+ * @template TCallback of null|callable(TValue): TResult
+ * @psalm-param TValue $value
+ * @psalm-return (
+            TValue is null
+            ? NullObject
+            : ( TCallback is null ? TValue : TResult )
+    )
+ */
+function optional($value = null, callable $callback = null) {}
+
+/**
+ * @template TValue
+ * @param positive-int|list<int> $times
+ * @param callable(int): TValue $callback
+ * @param int<0, max> $sleep
+ * @param null|callable(\Exception): bool $when
+ * @psalm-return TValue
+ *
+ * @throws \Exception
+ */
+function retry($times, callable $callback, $sleep = 0, $when = null) {}
+
+/**
+ * @template TValue
+ * @param TValue $value
+ * @param null|callable(TValue): void $callback
+ * @return TValue
+ */
+function tap($value, $callback = null) {}
+
+ /**
+  * Throw the given exception if the given condition is true.
+  *
+ * @template TCondition
+ * @template TException of \Throwable
+ *
+ * @param  TCondition  $condition
+ * @param  TException|class-string<TException>|string  $exception
+ * @param  mixed  ...$parameters
+ * @return (TCondition is empty ? TCondition : never)
+ * @psalm-assert empty $condition
+ * @psalm-mutation-free
+ */
+function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {}
+
+/**
+ * Throw the given exception unless the given condition is true.
+ *
+ * @template TCondition
+ * @template TException of \Throwable
+ *
+ * @param  TCondition  $condition
+ * @param  TException|class-string<TException>|string  $exception
+ * @param  mixed  ...$parameters
+ * @return (TCondition is empty ? never : TCondition)
+ * @psalm-assert !empty $condition
+ * @psalm-mutation-free
+ */
+function throw_unless($condition, $exception = 'RuntimeException', ...$parameters) {}
+
+/**
+ * Returns all traits used by a class, its parent classes and trait of their traits.
+ * @param object|class-string $trait
+ * @return array<trait-string|class-string, trait-string|class-string>
+ */
+function class_uses_recursive($class) {}
+
+/**
+ * Returns all traits used by a trait and its traits.
+ * @param class-string $trait
+ * @return array<trait-string, trait-string>
+ */
+function trait_uses_recursive($trait) {}
