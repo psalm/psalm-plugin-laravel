@@ -45,6 +45,17 @@ function blank($value) {}
 function class_basename($class) {}
 
 /**
+ * Returns all traits used by a class, its parent classes and trait of their traits.
+ *
+ * @param class-string|object $trait
+ * @return array<trait-string, trait-string>
+ */
+function class_uses_recursive($class) {}
+
+// e: nothing to stub (taint analysis only)
+// env: nothing to stub
+
+/**
  * Provide access to optional objects.
  *
  * @template TValue
