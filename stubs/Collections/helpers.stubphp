@@ -1,0 +1,31 @@
+<?php
+
+/**
+ * Stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Collections/helpers.php}
+ */
+
+// collect: nothing to stub
+// data_fill: nothing to stub
+// data_get: nothing to stub
+// data_set: nothing to stub
+
+/**
+ * Get the first element of an array. Useful for method chaining.
+ *
+ * @template TValue
+ * @template TParam of TValue[]
+ * @param  TParam  $array
+ * @return (TParam is non-empty-array ? TValue : false)
+ */
+function head($array) {}
+
+/**
+ * Get the last element from an array.
+ *
+ * @template TValue
+ * @template TParam of TValue[]
+ *
+ * @param  TParam  $array
+ * @return (TParam is non-empty-array ? TValue : false)
+ */
+function last($array) {}
