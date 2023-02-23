@@ -18,10 +18,9 @@ Feature: Legacy Factory helpers
       <?php declare(strict_types=1);
 
       use App\Models\User;
-      use Illuminate\Support\Optional;
       """
 
-  Scenario: factory helper support
+  Scenario: factory() support
     Given I have the following code
     """
         function test_factory_returns_model(): User
