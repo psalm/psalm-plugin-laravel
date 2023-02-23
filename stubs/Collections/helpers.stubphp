@@ -29,3 +29,15 @@ function head($array) {}
  * @return (TParam is non-empty-array ? TValue : false)
  */
 function last($array) {}
+
+/**
+ * Return the default value of the given value.
+ *
+ * @template TValue
+ * @template TClosureReturn
+ *
+ * @param  mixed|(Closure(): TClosureReturn)  $value
+ * @param  mixed  ...$args
+ * @return (TValue is Closure ? TClosureReturn : TValue)
+ */
+function value($value, ...$args) {}
