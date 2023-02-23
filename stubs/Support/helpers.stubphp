@@ -157,3 +157,31 @@ function class_uses_recursive($class) {}
  * @return array<trait-string, trait-string>
  */
 function trait_uses_recursive($trait) {}
+
+/**
+ * Transform the given value if it is present.
+ *
+ * @psalm-type Blank = (''|array<never, never>|null)
+ * @psalm-type NotBlank = (bool|numeric|non-empty-array)
+ *
+ * @template TValue
+ * @template TCallbackReturn
+ * @template TDefault
+ * @template TDefaultReturn
+ *
+ * @param  TValue  $value
+ * @param  callable(TValue): TCallbackReturn  $callback
+ * @param  TDefault|callable(TValue): TDefaultReturn  $default
+ * @return mixed|null
+ * @psalm-return ($value is (bool|numeric|non-empty-array)
+ *  ? TCallbackReturn
+ *  : ($value is (''|array<never, never>|null)
+ *      ? (TDefault is callable ? TDefaultReturn : TDefault)
+ *      : (TCallbackReturn|TDefaultReturn|TDefault)
+ *    )
+ *  )
+ */
+function transform($value, callable $callback, $default = null) {}
+
+// windows_os: nothing to stub
+// with: nothing to stub
