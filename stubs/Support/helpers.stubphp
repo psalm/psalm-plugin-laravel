@@ -32,7 +32,10 @@ class NullObject {
  * Determine if the given value is "blank".
  *
  * @param  mixed  $value
- * @return ($value is (empty-scalar|array<never, never>|null) ? true : bool)
+ * @psalm-return ($value is (bool|numeric|non-empty-array)
+ *  ? false
+ *  : ($value is (null|''|array<never, never>) ? true : bool)
+ * )
  */
 function blank($value) {}
 
@@ -54,6 +57,19 @@ function class_uses_recursive($class) {}
 
 // e: nothing to stub (taint analysis only)
 // env: nothing to stub
+
+/**
+ * Determine if a value is "filled".
+ *
+ * @param  mixed  $value
+ * @psalm-return ($value is (bool|numeric|non-empty-array)
+ *  ? true
+ *  : ($value is (null|''|array<never, never>) ? false : bool)
+ * )
+ */
+function filled($value) {}
+
+// object_get: nothing to stub
 
 /**
  * Provide access to optional objects.
