@@ -23,18 +23,22 @@ Feature: Foundation helpers
   Scenario: abort_if() support
     Given I have the following code
     """
-    function abortIfNullable(?string $nullable): string {
-      abort_if(is_null($nullable), 422);
-
-      return $nullable;
+    /** @return false */
+    function abort_if_filters_out_possible_types(bool $flag): bool {
+        abort_if($flag, 422);
+        return $flag;
     }
+    """
+    When I run Psalm
+    Then I see no errors
 
-    function test_abort_asserts_not_null(?string $nullable): string {
-      if ($nullable === null) {
-          abort(422);
-      }
-
-      return $nullable;
+  Scenario: abort_unless() support
+    Given I have the following code
+    """
+    /** @return true */
+    function abort_unless_filters_out_possible_types(bool $flag): bool {
+        abort_unless($flag, 422);
+        return $flag;
     }
     """
     When I run Psalm
