@@ -80,6 +80,27 @@ Feature: Foundation helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: cache() support
+    Given I have the following code
+    """
+    function test_cache_call_without_args_should_return_CacheManager(): \Illuminate\Cache\CacheManager
+    {
+        return cache();
+    }
+
+    function test_cache_call_with_string_as_arg_should_return_string(): mixed
+    {
+        return cache('key'); // get value
+    }
+
+    function test_cache_call_with_array_as_arg_should_return_bool(): bool
+    {
+      return cache(['key' => 42]); // set value
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: cookie() support
     Given I have the following code
     """
