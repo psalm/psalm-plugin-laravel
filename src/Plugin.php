@@ -55,6 +55,7 @@ class Plugin implements PluginEntryPointInterface
             glob(dirname(__DIR__) . '/stubs/Database/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Foundation/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Http/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/legacy-factories/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Lumen/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Pagination/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Support/*.stubphp'),
