@@ -18,7 +18,6 @@ Feature: Foundation helpers
       <?php declare(strict_types=1);
 
       use App\Models\User;
-      use Illuminate\Support\Optional;
       """
 
   Scenario: abort_if() support
@@ -93,6 +92,27 @@ Feature: Foundation helpers
     function no_args(): \Illuminate\Cookie\CookieJar
     {
       return cookie();
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: config() support
+    Given I have the following code
+    """
+    function config_with_one_argument(): mixed
+    {
+        return config('app.name');
+    }
+
+    function config_with_first_null_argument_and_second_argument_provided(): mixed
+    {
+        return config('app.non-existent', false);
+    }
+
+    function config_setting_at_runtime(): null
+    {
+        return config(['app.non-existent' => false]);
     }
     """
     When I run Psalm
