@@ -231,6 +231,23 @@ Feature: Support helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: str() support
+    Given I have the following code
+    """
+        /** @return stringable-object */
+        function str_without_args_returns_anonymous_class_instance(): object
+        {
+            return str();
+        }
+
+        function str_with_arh_returns_Stringable_instance(): \Illuminate\Support\Stringable
+        {
+            return str('some string');
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: tap() support
     Given I have the following code
     """
