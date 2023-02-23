@@ -310,16 +310,3 @@ function view($view = null, $data = [], $mergeData = []) {}
  * @return ($key is null ? null : mixed)
  */
 function __($key = null, $replace = [], $locale = null) {}
-
-/**
- * Support old syntax of test factories (still used by some Laravel 9 projects using a composer package).
- * Create a model factory builder for a given class and amount.
- *
- * @template TModel of \Illuminate\Database\Eloquent\Model
- * @template TCount of positive-int
- *
- * @param  class-string<TModel>  $class
- * @param  TCount  $amount
- * @return \Illuminate\Database\Eloquent\FactoryBuilder<TModel, TCount>
- */
-function factory($class, $amount = null) {}

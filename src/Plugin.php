@@ -50,6 +50,7 @@ class Plugin implements PluginEntryPointInterface
     protected function getCommonStubs(): array
     {
         return array_merge(
+            glob(dirname(__DIR__) . '/stubs/Collections/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Contracts/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Database/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Http/*.stubphp'),
