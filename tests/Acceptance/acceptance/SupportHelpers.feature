@@ -21,24 +21,6 @@ Feature: Support helpers
       use Illuminate\Support\Optional;
       """
 
-  Scenario: transform() support
-    Given I have the following code
-    """
-    function it_uses_callback_return_type_if_value_is_not_blank(): float {
-      return transform(42, fn ($value) => $value * 1.1, fn () => null);
-    }
-
-    function it_uses_default_return_type_if_value_is_blank_and_default_is_callable(): int {
-      return transform([], fn () => 'any', fn () => 42);
-    }
-
-    function it_uses_default_return_type_if_value_is_blank_and_default_is_not_callable(): int {
-      return transform(null, fn () => 'any', 42);
-    }
-    """
-    When I run Psalm
-    Then I see no errors
-
   Scenario: optional() support
     Given I have the following code
     """
@@ -378,6 +360,24 @@ Feature: Support helpers
         function test_trait_uses_recursive(): array {
           return trait_uses_recursive(CustomSoftDeletes::class);
         }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: transform() support
+    Given I have the following code
+    """
+    function it_uses_callback_return_type_if_value_is_not_blank(): float {
+      return transform(42, fn ($value) => $value * 1.1, fn () => null);
+    }
+
+    function it_uses_default_return_type_if_value_is_blank_and_default_is_callable(): int {
+      return transform([], fn () => 'any', fn () => 42);
+    }
+
+    function it_uses_default_return_type_if_value_is_blank_and_default_is_not_callable(): int {
+      return transform(null, fn () => 'any', 42);
+    }
     """
     When I run Psalm
     Then I see no errors

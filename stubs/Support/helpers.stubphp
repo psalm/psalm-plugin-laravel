@@ -79,12 +79,14 @@ function filled($value) {}
  * @template TCallback of null|callable(TValue): TResult
  * @psalm-param TValue $value
  * @psalm-return (
-            TValue is null
-            ? NullObject
-            : ( TCallback is null ? TValue : TResult )
-    )
+ *  TValue is null
+ *      ? NullObject
+ *      : (TCallback is null ? TValue : TResult)
+ * )
  */
 function optional($value = null, callable $callback = null) {}
+
+// preg_replace_array: nothing to stub
 
 /**
  * @template TValue
@@ -114,9 +116,9 @@ function str($string = null) {}
  */
 function tap($value, $callback = null) {}
 
- /**
-  * Throw the given exception if the given condition is true.
-  *
+/**
+ * Throw the given exception if the given condition is true.
+ *
  * @template TCondition
  * @template TException of \Throwable
  *
@@ -145,13 +147,6 @@ function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {
 function throw_unless($condition, $exception = 'RuntimeException', ...$parameters) {}
 
 /**
- * Returns all traits used by a class, its parent classes and trait of their traits.
- * @param object|class-string $trait
- * @return array<trait-string|class-string, trait-string|class-string>
- */
-function class_uses_recursive($class) {}
-
-/**
  * Returns all traits used by a trait and its traits.
  * @param class-string $trait
  * @return array<trait-string, trait-string>
@@ -160,9 +155,6 @@ function trait_uses_recursive($trait) {}
 
 /**
  * Transform the given value if it is present.
- *
- * @psalm-type Blank = (''|array<never, never>|null)
- * @psalm-type NotBlank = (bool|numeric|non-empty-array)
  *
  * @template TValue
  * @template TCallbackReturn
