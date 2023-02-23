@@ -1,5 +1,8 @@
 <?php
 
+/**
+ * Stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Support/helpers.php}
+ */
 
 /**
 * @see https://github.com/vimeo/psalm/issues/4816 for why this hack exists
@@ -22,6 +25,16 @@ class NullObject {
     public function __set(string $_name, string $_value) : void {
     }
 }
+
+// append_config: nothing to stub
+
+/**
+ * Determine if the given value is "blank".
+ *
+ * @param  mixed  $value
+ * @return ($value is (empty-scalar|array<never, never>|null) ? true : bool)
+ */
+function blank($value) {}
 
 /**
  * Provide access to optional objects.
