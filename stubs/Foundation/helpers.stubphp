@@ -10,7 +10,7 @@
  * @param  bool  $boolean
  * @psalm-assert falsy $boolean
  * @psalm-return ($boolean is false ? never-return : void )
- * @param  int  $code
+ * @param  \Symfony\Component\HttpFoundation\Response|\Illuminate\Contracts\Support\Responsable|int<400, 511>  $code
  * @param  string  $message
  * @param  array  $headers
  * @return void
@@ -19,6 +19,22 @@
  * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
  */
 function abort_if($boolean, $code, $message = '', array $headers = []) {}
+
+/**
+ * Throw an HttpException with the given data unless the given condition is true.
+ *
+ * @param  bool  $boolean
+ * @param  \Symfony\Component\HttpFoundation\Response|\Illuminate\Contracts\Support\Responsable|int<400, 511>  $code
+ * @param  string  $message
+ * @param  array  $headers
+ * @return void
+ * @psalm-return ($boolean is true ? never-return : void )
+ * @psalm-assert !falsy $boolean
+ *
+ * @throws \Symfony\Component\HttpKernel\Exception\HttpException
+ * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
+ */
+function abort_unless($boolean, $code, $message = '', array $headers = []) {}
 
 /**
  * @param  string|null  $guard
