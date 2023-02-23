@@ -96,6 +96,22 @@ Feature: Support helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: class_uses_recursive() support
+    Given I have the following code
+    """
+        function class_uses_recursive_allows_passing_fqcn(): array
+        {
+            return class_uses_recursive(\App\Models\User::class);
+        }
+
+        function class_uses_recursive_allows_passing_object(): array
+        {
+            return class_uses_recursive(new \stdClass());
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: cache() support
     Given I have the following code
     """
