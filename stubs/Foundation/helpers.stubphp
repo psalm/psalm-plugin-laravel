@@ -57,6 +57,16 @@ function action($name, $parameters = [], $absolute = true) {}
 function auth($guard = null) {}
 
 /**
+ * Create a new redirect response to the previous location.
+ *
+ * @param  int<300, 308>  $status
+ * @param  array<string, mixed>  $headers
+ * @param  false|string  $fallback
+ * @return \Illuminate\Http\RedirectResponse
+ */
+function back($status = 302, $headers = [], $fallback = false) {}
+
+/**
  * Get / set the specified configuration value.
  *
  * If an array is passed as the key, we will assume you want to set an array of values.
