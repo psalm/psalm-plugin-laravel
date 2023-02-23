@@ -245,6 +245,20 @@ Feature: Foundation helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: response() support
+    Given I have the following code
+    """
+    function response_called_with_no_arguments_returns_an_instance_of_ResponseFactory(): \Illuminate\Contracts\Routing\ResponseFactory {
+      return response();
+    }
+
+    function response_called_with_arguments_returns_an_instance_of_response(): \Illuminate\Http\Response {
+      return response('ok');
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: session() support
     Given I have the following code
     """
