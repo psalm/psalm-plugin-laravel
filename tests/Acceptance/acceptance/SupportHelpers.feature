@@ -35,47 +35,64 @@ Feature: Support helpers
   Scenario: blank() support
     Given I have the following code
     """
-        /** @return true */
-        function empty_string_is_blank(): bool
-        {
-            return blank('');
-        }
+    /** @return false */
+    function false_is_not_blank(): bool
+    {
+        return blank(false);
+    }
 
-        /** @return true */
-        function zero_string_is_blank(): bool
-        {
-            return blank('0');
-        }
+    /** @return false */
+    function true_is_not_blank(): bool
+    {
+        return blank(true);
+    }
 
-        /** @return true */
-        function zero_int_is_blank(): bool
-        {
-            return blank(0);
-        }
+    /** @return false */
+    function zero_int_is_not_blank(): bool
+    {
+        return blank(0);
+    }
 
-        /** @return true */
-        function zero_float_is_blank(): bool
-        {
-            return blank(0.0);
-        }
+    /** @return false */
+    function zero_float_is_not_blank(): bool
+    {
+        return blank(0.0);
+    }
 
-        /** @return true */
-        function null_is_blank(): bool
-        {
-            return blank(null);
-        }
+    /** @return false */
+    function zero_numeric_string_is_not_blank(): bool
+    {
+        return blank('0');
+    }
 
-        /** @return true */
-        function false_is_blank(): bool
-        {
-            return blank(false);
-        }
+    /** @return false */
+    function non_empty_array_is_not_blank(): bool
+    {
+        return blank(['a']);
+    }
 
-        /** @return true */
-        function empty_array_is_blank(): bool
-        {
-            return blank([]);
-        }
+    /** @return true */
+    function null_is_blank(): bool
+    {
+        return blank(null);
+    }
+
+    /** @return true */
+    function empty_string_is_blank(): bool
+    {
+        return blank('');
+    }
+
+    /** @return true */
+    function empty_array_is_blank(): bool
+    {
+        return blank([]);
+    }
+
+    function string_that_trimmed_to_empty_string_is_bool(): bool
+    {
+        return blank('  ');
+    }
     """
     When I run Psalm
     Then I see no errors
@@ -108,6 +125,71 @@ Feature: Support helpers
         {
             return class_uses_recursive(new \stdClass());
         }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: filled() support
+    Given I have the following code
+    """
+    /** @return true */
+    function false_is_filled(): bool
+    {
+        return filled(false);
+    }
+
+    /** @return true */
+    function true_is_filled(): bool
+    {
+        return filled(true);
+    }
+
+    /** @return true */
+    function zero_int_is_filled(): bool
+    {
+        return filled(0);
+    }
+
+    /** @return true */
+    function zero_float_is_filled(): bool
+    {
+        return filled(0.0);
+    }
+
+    /** @return true */
+    function zero_numeric_string_is_filled(): bool
+    {
+        return filled('0');
+    }
+
+    /** @return true */
+    function non_empty_array_is_filled(): bool
+    {
+        return filled(['a']);
+    }
+
+    /** @return false */
+    function null_is_not_filled(): bool
+    {
+        return filled(null);
+    }
+
+    /** @return false */
+    function empty_string_is_not_filled(): bool
+    {
+        return filled('');
+    }
+
+    /** @return false */
+    function empty_array_is_not_filled(): bool
+    {
+        return filled([]);
+    }
+
+    function string_that_trimmed_to_empty_string_is_bool(): bool
+    {
+        return filled('  ');
+    }
     """
     When I run Psalm
     Then I see no errors
