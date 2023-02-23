@@ -32,6 +32,54 @@ Feature: Support helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: blank() support
+    Given I have the following code
+    """
+        /** @return true */
+        function empty_string_is_blank(): bool
+        {
+            return blank('');
+        }
+
+        /** @return true */
+        function zero_string_is_blank(): bool
+        {
+            return blank('0');
+        }
+
+        /** @return true */
+        function zero_int_is_blank(): bool
+        {
+            return blank(0);
+        }
+
+        /** @return true */
+        function zero_float_is_blank(): bool
+        {
+            return blank(0.0);
+        }
+
+        /** @return true */
+        function null_is_blank(): bool
+        {
+            return blank(null);
+        }
+
+        /** @return true */
+        function false_is_blank(): bool
+        {
+            return blank(false);
+        }
+
+        /** @return true */
+        function empty_array_is_blank(): bool
+        {
+            return blank([]);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: cache() support
     Given I have the following code
     """
