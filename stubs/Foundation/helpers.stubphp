@@ -54,6 +54,8 @@ function action($name, $parameters = [], $absolute = true) {}
 // auth: processed by Psalm handlers
 
 /**
+ * Get the available auth instance.
+ *
  * @param  string|null  $guard
  * @return (
  *  $guard is null
@@ -73,6 +75,8 @@ function auth($guard = null) {}
  */
 function back($status = 302, $headers = [], $fallback = false) {}
 
+// base_path: processed by Psalm handlers
+
 /**
  * Hash the given value against the bcrypt algorithm.
  *
@@ -89,6 +93,8 @@ function bcrypt($value, $options = []) {}
  * @return \Illuminate\Broadcasting\PendingBroadcast
  */
 function broadcast($event = null) {}
+
+// cache: processed by Psalm handlers
 
 /**
  * Get / set the specified configuration value.
@@ -157,7 +163,6 @@ function event(...$args) {}
 
 // fake: nothing to stub
 // info: nothing to stub
-// lang_path: processed by Psalm handlers
 
 /**
  * Log a debug message to the logs.
@@ -165,15 +170,17 @@ function event(...$args) {}
  * @param  string|null  $message
  * @param  array  $context
  * @return \Illuminate\Log\LogManager|null
- * @psalm-return (func_num_args() is 0 ? \Illuminate\Log\LogManager : void)
+ * @psalm-return ($message is null ? \Illuminate\Log\LogManager : null)
  */
 function logger($message = null, array $context = []) {}
+
+// lang_path: processed by Psalm handlers
 
 /**
  * Get a log driver instance.
  *
  * @param  string|null  $driver
- * @return ($driver is null ? \Illuminate\Log\LogManager : \Psr\Log\LoggerInterface)
+ * @return ($driver is null ? \Illuminate\Log\LogManager : \Psr\Log\LoggerInterface&\Illuminate\Log\Logger)
  */
 function logs($driver = null) {}
 
@@ -182,7 +189,17 @@ function logs($driver = null) {}
 // now: nothing to stub
 // old: nothing to stub
 // policy: nothing to stub
-// precognitive: nothing to stub
+
+/**
+ * Handle a Precognition controller hook.
+ *
+ * @template TCallableReturn
+ *
+ * @param  null|callable(callable(\Illuminate\Http\Response=, mixed=): void): TCallableReturn  $callable
+ * @return TCallableReturn
+ */
+function precognitive($callable = null) {}
+
 // public_path: processed by Psalm handlers
 
 /**
@@ -208,6 +225,8 @@ function redirect($to = null, $status = 302, $headers = [], $secure = null) {}
 function request($key = null, $default = null) {}
 
 /**
+ * Catch a potential exception and return a default value.
+ *
  * @template TValue
  * @template TDefault
  * @template TDefaultCallableReturn
@@ -286,6 +305,7 @@ function __($key = null, $replace = [], $locale = null) {}
 
 /**
  * Generate a url for the application.
+ *
  * @param  string|null  $path
  * @param  mixed  $parameters
  * @param  bool|null  $secure
@@ -305,6 +325,8 @@ function url($path = null, $parameters = [], $secure = null) {}
 function validator(array $data = [], array $rules = [], array $messages = [], array $customAttributes = []) {}
 
 /**
+ * Get the evaluated view contents for the given view.
+ *
  * @param  string|null  $view
  * @param  \Illuminate\Contracts\Support\Arrayable<string, mixed>|array<string, mixed>  $data
  * @param  array<string, mixed>  $mergeData

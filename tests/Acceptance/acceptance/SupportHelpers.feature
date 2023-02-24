@@ -194,6 +194,22 @@ Feature: Support helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: object_get() support
+    Given I have the following code
+    """
+        function object_get_returns_first_arg_when_second_is_null(\stdClass $object): \stdClass
+        {
+            return object_get($object, null);
+        }
+
+        function object_get_returns_first_arg_when_second_is_empty_string(\stdClass $object): \stdClass
+        {
+            return object_get($object, '');
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: retry() support
     Given I have the following code
     """

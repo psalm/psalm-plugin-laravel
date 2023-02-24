@@ -69,7 +69,17 @@ function class_uses_recursive($class) {}
  */
 function filled($value) {}
 
-// object_get: nothing to stub
+/**
+ * Get an item from an object using "dot" notation.
+ *
+ * @template TObject
+ *
+ * @param  object  $object
+ * @param  string|null  $key
+ * @param  mixed  $default
+ * @return ($key is (null|'') ? TObject : mixed)
+ */
+function object_get($object, $key, $default = null) {}
 
 /**
  * Provide access to optional objects.
@@ -89,6 +99,8 @@ function optional($value = null, callable $callback = null) {}
 // preg_replace_array: nothing to stub
 
 /**
+ * Retry an operation a given number of times.
+ *
  * @template TValue
  * @param positive-int|list<int> $times
  * @param callable(int): TValue $callback
@@ -112,7 +124,10 @@ function retry($times, callable $callback, $sleep = 0, $when = null) {}
 function str($string = null) {}
 
 /**
+ * Call the given Closure with the given value then return the value.
+ *
  * @template TValue
+ *
  * @param TValue $value
  * @param null|callable(TValue): void $callback
  * @return TValue
@@ -151,6 +166,7 @@ function throw_unless($condition, $exception = 'RuntimeException', ...$parameter
 
 /**
  * Returns all traits used by a trait and its traits.
+ *
  * @param class-string $trait
  * @return array<trait-string, trait-string>
  */
