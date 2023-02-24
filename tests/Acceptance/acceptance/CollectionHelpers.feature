@@ -18,6 +18,38 @@ Feature: Collection helpers
     <?php declare(strict_types=1);
     """
 
+  Scenario: data_fill() support
+    Given I have the following code
+    """
+    function data_fill_supports_array(array $input): array
+    {
+        return data_fill($input, 'key', 'value');
+    }
+
+    function data_fill_supports_object(object $input): object
+    {
+        return data_fill($input, 'property', 'value');
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: data_set() support
+    Given I have the following code
+    """
+    function data_set_supports_array(array $input): array
+    {
+        return data_set($input, 'key', 'value');
+    }
+
+    function data_set_supports_object(object $input): object
+    {
+        return data_set($input, 'property', 'value');
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: head() and last() support
     Given I have the following code
     """

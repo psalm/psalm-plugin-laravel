@@ -187,6 +187,17 @@ Feature: Foundation helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: precognitive() support
+    Given I have the following code
+    """
+    $payload = precognitive(function () {
+        return ['foo' => 'bar'];
+    });
+    /** @psalm-check-type $payload = array{'foo': 'bar'} */
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: redirect() support
     Given I have the following code
     """
