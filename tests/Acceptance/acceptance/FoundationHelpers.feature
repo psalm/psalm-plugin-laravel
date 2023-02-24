@@ -44,6 +44,18 @@ Feature: Foundation helpers
     When I run Psalm
     Then I see no errors
 
+  Scenario: action() support
+    Given I have the following code
+    """
+      class FooController { public function show(): string { return 'foo';} }
+      class BarController { public function __invoke(): string { return 'foo';} }
+
+      action([FooController::class, 'show']);
+      action(BarController::class);
+    """
+    When I run Psalm
+    Then I see no errors
+
   Scenario: app() support: env can be pulled off the app
     Given I have the following code
     """
