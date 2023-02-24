@@ -74,7 +74,7 @@ function filled($value) {}
  *
  * @template TObject
  *
- * @param  object  $object
+ * @param  TObject  $object
  * @param  string|null  $key
  * @param  mixed  $default
  * @return ($key is (null|'') ? TObject : mixed)
