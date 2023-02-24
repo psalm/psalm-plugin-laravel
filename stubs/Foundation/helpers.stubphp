@@ -41,7 +41,7 @@ function abort_unless($boolean, $code, $message = '', array $headers = []) {}
 /**
  * Generate the URL to a controller action.
  *
- * @param  callable-array|callable-string $name
+ * @param  callable-array|class-string $name
  * @param  mixed  $parameters
  * @param  bool  $absolute
  * @return string
