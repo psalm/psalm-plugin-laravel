@@ -330,6 +330,6 @@ function validator(array $data = [], array $rules = [], array $messages = [], ar
  * @param  string|null  $view
  * @param  \Illuminate\Contracts\Support\Arrayable<string, mixed>|array<string, mixed>  $data
  * @param  array<string, mixed>  $mergeData
- * @return ($view is null ? \Illuminate\Contracts\View\Factory : \Illuminate\View\View)
+ * @return ($view is null ? \Illuminate\Contracts\View\Factory : (\Illuminate\View\View|\Illuminate\Contracts\View\View))
  */
 function view($view = null, $data = [], $mergeData = []) {}
