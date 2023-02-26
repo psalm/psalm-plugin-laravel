@@ -4,13 +4,15 @@
  * Stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Foundation/helpers.php}
  */
 
+// abort: nothing to stub
+
 /**
  * Throw an HttpException with the given data if the given condition is true.
  *
  * @param  bool  $boolean
  * @psalm-assert falsy $boolean
  * @psalm-return ($boolean is false ? never-return : void )
- * @param  int  $code
+ * @param  \Symfony\Component\HttpFoundation\Response|\Illuminate\Contracts\Support\Responsable|int<400, 511>  $code
  * @param  string  $message
  * @param  array  $headers
  * @return void
@@ -21,6 +23,39 @@
 function abort_if($boolean, $code, $message = '', array $headers = []) {}
 
 /**
+ * Throw an HttpException with the given data unless the given condition is true.
+ *
+ * @param  bool  $boolean
+ * @param  \Symfony\Component\HttpFoundation\Response|\Illuminate\Contracts\Support\Responsable|int<400, 511>  $code
+ * @param  string  $message
+ * @param  array  $headers
+ * @return void
+ * @psalm-return ($boolean is true ? never-return : void )
+ * @psalm-assert !falsy $boolean
+ *
+ * @throws \Symfony\Component\HttpKernel\Exception\HttpException
+ * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
+ */
+function abort_unless($boolean, $code, $message = '', array $headers = []) {}
+
+/**
+ * Generate the URL to a controller action.
+ *
+ * @param  callable-array|class-string $name
+ * @param  mixed  $parameters
+ * @param  bool  $absolute
+ * @return string
+ */
+function action($name, $parameters = [], $absolute = true) {}
+
+// app: processed by Psalm handlers
+// app_path: processed by Psalm handlers
+// asset: nothing to stub
+// auth: processed by Psalm handlers
+
+/**
+ * Get the available auth instance.
+ *
  * @param  string|null  $guard
  * @return (
  *  $guard is null
@@ -29,6 +64,37 @@ function abort_if($boolean, $code, $message = '', array $headers = []) {}
  * )
  */
 function auth($guard = null) {}
+
+/**
+ * Create a new redirect response to the previous location.
+ *
+ * @param  int<300, 308>  $status
+ * @param  array<string, mixed>  $headers
+ * @param  false|string  $fallback
+ * @return \Illuminate\Http\RedirectResponse
+ */
+function back($status = 302, $headers = [], $fallback = false) {}
+
+// base_path: processed by Psalm handlers
+
+/**
+ * Hash the given value against the bcrypt algorithm.
+ *
+ * @param  string  $value
+ * @param  array{rounds?: string, ...}  $options
+ * @return non-empty-string
+ */
+function bcrypt($value, $options = []) {}
+
+/**
+ * Begin broadcasting an event.
+ *
+ * @param  object|null  $event
+ * @return \Illuminate\Broadcasting\PendingBroadcast
+ */
+function broadcast($event = null) {}
+
+// cache: processed by Psalm handlers
 
 /**
  * Get / set the specified configuration value.
@@ -40,6 +106,8 @@ function auth($guard = null) {}
  * @return ($key is null ? \Illuminate\Config\Repository : ($key is array ? null : mixed))
  */
 function config($key = null, $default = null) {}
+
+// config_path: processed by Psalm handlers
 
 /**
  * Create a new cookie instance.
@@ -57,13 +125,44 @@ function config($key = null, $default = null) {}
  */
 function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain = null, $secure = null, $httpOnly = true, $raw = false, $sameSite = null) {}
 
+// csrf_field: nothing to stub
+// csrf_token: nothing to stub
+// database_path: processed by Psalm handlers
+// decrypt: nothing to stub
+
 /**
  * Dispatch a job to its appropriate handler.
  *
- * @param  mixed  $job
+ * @param  object|callable  $job
  * @return ($job is \Closure ? \Illuminate\Foundation\Bus\PendingDispatch : \Illuminate\Foundation\Bus\PendingDispatch)
  */
 function dispatch($job) {}
+
+/**
+ * Dispatch a command to its appropriate handler in the current process.
+ *
+ * Queueable jobs will be dispatched to the "sync" queue.
+ *
+ * @param  object|callable  $job
+ * @param  mixed  $handler
+ * @return mixed
+ */
+function dispatch_sync($job, $handler = null) {}
+
+// encrypt: nothing to stub
+
+/**
+ * Dispatch an event and call the listeners.
+ *
+ * @param  string|object  $event
+ * @param  mixed  $payload
+ * @param  bool  $halt
+ * @return list<scalar|array|object>|scalar|array|object|null
+ */
+function event(...$args) {}
+
+// fake: nothing to stub
+// info: nothing to stub
 
 /**
  * Log a debug message to the logs.
@@ -71,17 +170,37 @@ function dispatch($job) {}
  * @param  string|null  $message
  * @param  array  $context
  * @return \Illuminate\Log\LogManager|null
- * @psalm-return (func_num_args() is 0 ? \Illuminate\Log\LogManager : void)
+ * @psalm-return ($message is null ? \Illuminate\Log\LogManager : null)
  */
 function logger($message = null, array $context = []) {}
+
+// lang_path: processed by Psalm handlers
 
 /**
  * Get a log driver instance.
  *
  * @param  string|null  $driver
- * @return ($driver is null ? \Illuminate\Log\LogManager : \Psr\Log\LoggerInterface)
+ * @return ($driver is null ? \Illuminate\Log\LogManager : \Psr\Log\LoggerInterface&\Illuminate\Log\Logger)
  */
 function logs($driver = null) {}
+
+// method_field: nothing to stub
+// mix: nothing to stub
+// now: nothing to stub
+// old: nothing to stub
+// policy: nothing to stub
+
+/**
+ * Handle a Precognition controller hook.
+ *
+ * @template TCallableReturn
+ *
+ * @param  null|callable(callable(\Illuminate\Http\Response=, mixed=): void): TCallableReturn  $callable
+ * @return TCallableReturn
+ */
+function precognitive($callable = null) {}
+
+// public_path: processed by Psalm handlers
 
 /**
  * @param  string|null  $to
@@ -91,6 +210,10 @@ function logs($driver = null) {}
  * @return ($to is null ? \Illuminate\Routing\Redirector : \Illuminate\Http\RedirectResponse)
  */
 function redirect($to = null, $status = 302, $headers = [], $secure = null) {}
+
+// report: nothing to stub
+// report_if: nothing to stub
+// report_unless: nothing to stub
 
 /**
  * Get an instance of the current request or an input item from the request.
@@ -102,6 +225,8 @@ function redirect($to = null, $status = 302, $headers = [], $secure = null) {}
 function request($key = null, $default = null) {}
 
 /**
+ * Catch a potential exception and return a default value.
+ *
  * @template TValue
  * @template TDefault
  * @template TDefaultCallableReturn
@@ -112,6 +237,9 @@ function request($key = null, $default = null) {}
  * @return TValue|(TDefault is callable ? TDefaultCallableReturn : TDefault)
  */
 function rescue(callable $callback, $rescue = null, $report = true) {}
+
+// resolve: processed by Psalm handlers
+// resource_path: processed by Psalm handlers
 
 /**
  * Return a new response from the application.
@@ -125,6 +253,19 @@ function rescue(callable $callback, $rescue = null, $report = true) {}
 function response($content = '', $status = 200, array $headers = []) {}
 
 /**
+ * Generate the URL to a named route.
+ *
+ * @param  string  $name
+ * @param  scalar|array|null  $parameters
+ * @param  bool  $absolute
+ * @return string
+ */
+function route($name, $parameters = [], $absolute = true) {}
+
+// secure_asset: nothing to stub
+// secure_url: nothing to stub
+
+/**
  * Get / set the specified session value.
  *
  * If an array is passed as the key, we will assume you want to set an array of values.
@@ -134,6 +275,8 @@ function response($content = '', $status = 200, array $headers = []) {}
  * @return ($key is null ? \Illuminate\Session\SessionManager : ($key is array ? null : mixed))
  */
 function session($key = null, $default = null) {}
+
+// storage_path: nothing to stub
 
 /**
  * Create a new redirect response to a named route.
@@ -145,6 +288,10 @@ function session($key = null, $default = null) {}
  * @return \Illuminate\Http\RedirectResponse
  */
 function to_route($route, $parameters = [], $status = 302, $headers = []) {}
+
+// today: nothing to stub
+// trans: processed by Psalm handlers
+// trans_choice: processed by Psalm handlers
 
 /**
  * Translate the given message.
@@ -158,6 +305,7 @@ function __($key = null, $replace = [], $locale = null) {}
 
 /**
  * Generate a url for the application.
+ *
  * @param  string|null  $path
  * @param  mixed  $parameters
  * @param  bool|null  $secure
@@ -177,9 +325,11 @@ function url($path = null, $parameters = [], $secure = null) {}
 function validator(array $data = [], array $rules = [], array $messages = [], array $customAttributes = []) {}
 
 /**
+ * Get the evaluated view contents for the given view.
+ *
  * @param  string|null  $view
- * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<string, mixed>  $data
+ * @param  \Illuminate\Contracts\Support\Arrayable<string, mixed>|array<string, mixed>  $data
  * @param  array<string, mixed>  $mergeData
- * @return ($view is null ? \Illuminate\Contracts\View\Factory : \Illuminate\Contracts\View\View)
+ * @return ($view is null ? \Illuminate\Contracts\View\Factory : (\Illuminate\View\View|\Illuminate\Contracts\View\View))
  */
 function view($view = null, $data = [], $mergeData = []) {}

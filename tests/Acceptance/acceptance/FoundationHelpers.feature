@@ -23,19 +23,35 @@ Feature: Foundation helpers
   Scenario: abort_if() support
     Given I have the following code
     """
-    function abortIfNullable(?string $nullable): string {
-      abort_if(is_null($nullable), 422);
-
-      return $nullable;
+    /** @return false */
+    function abort_if_filters_out_possible_types(bool $flag): bool {
+        abort_if($flag, 422);
+        return $flag;
     }
+    """
+    When I run Psalm
+    Then I see no errors
 
-    function test_abort_asserts_not_null(?string $nullable): string {
-      if ($nullable === null) {
-          abort(422);
-      }
-
-      return $nullable;
+  Scenario: abort_unless() support
+    Given I have the following code
+    """
+    /** @return true */
+    function abort_unless_filters_out_possible_types(bool $flag): bool {
+        abort_unless($flag, 422);
+        return $flag;
     }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: action() support
+    Given I have the following code
+    """
+      class FooController { public function show(): string { return 'foo';} }
+      class BarController { public function __invoke(): string { return 'foo';} }
+
+      action([FooController::class, 'show']);
+      action(BarController::class);
     """
     When I run Psalm
     Then I see no errors
@@ -71,6 +87,27 @@ Feature: Foundation helpers
     function test_auth_check_call(): bool
     {
       return auth()->check();
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: cache() support
+    Given I have the following code
+    """
+    function test_cache_call_without_args_should_return_CacheManager(): \Illuminate\Cache\CacheManager
+    {
+        return cache();
+    }
+
+    function test_cache_call_with_string_as_arg_should_return_string(): mixed
+    {
+        return cache('key'); // get value
+    }
+
+    function test_cache_call_with_array_as_arg_should_return_bool(): bool
+    {
+      return cache(['key' => 42]); // set value
     }
     """
     When I run Psalm
@@ -146,6 +183,17 @@ Feature: Foundation helpers
     {
         return logs('driver-name');
     }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: precognitive() support
+    Given I have the following code
+    """
+    $payload = precognitive(function () {
+        return ['foo' => 'bar'];
+    });
+    /** @psalm-check-type $payload = array{'foo': 'bar'} */
     """
     When I run Psalm
     Then I see no errors
@@ -310,7 +358,7 @@ Feature: Foundation helpers
         return view();
     }
 
-    function view_with_one_arg(): \Illuminate\Contracts\View\View
+    function view_with_one_arg(): Illuminate\Contracts\View\View
     {
         return view('home');
     }
