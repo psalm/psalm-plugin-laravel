@@ -32,22 +32,179 @@ Feature: Support helpers
     When I run Psalm
     Then I see no errors
 
-  Scenario: cache() support
+  Scenario: blank() support
     Given I have the following code
     """
-        function test_cache_call_without_args_should_return_CacheManager(): \Illuminate\Cache\CacheManager
+    /** @return false */
+    function false_is_not_blank(): bool
+    {
+        return blank(false);
+    }
+
+    /** @return false */
+    function true_is_not_blank(): bool
+    {
+        return blank(true);
+    }
+
+    /** @return false */
+    function zero_int_is_not_blank(): bool
+    {
+        return blank(0);
+    }
+
+    /** @return false */
+    function zero_float_is_not_blank(): bool
+    {
+        return blank(0.0);
+    }
+
+    /** @return false */
+    function zero_numeric_string_is_not_blank(): bool
+    {
+        return blank('0');
+    }
+
+    /** @return false */
+    function non_empty_array_is_not_blank(): bool
+    {
+        return blank(['a']);
+    }
+
+    /** @return true */
+    function null_is_blank(): bool
+    {
+        return blank(null);
+    }
+
+    /** @return true */
+    function empty_string_is_blank(): bool
+    {
+        return blank('');
+    }
+
+    /** @return true */
+    function empty_array_is_blank(): bool
+    {
+        return blank([]);
+    }
+
+    function string_that_trimmed_to_empty_string_is_bool(): bool
+    {
+        return blank('  ');
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: class_basename() support
+    Given I have the following code
+    """
+        function class_basename_allows_passing_fqcn(): string
         {
-            return cache();
+            return class_basename(\App\Models\User::class);
         }
 
-        function test_cache_call_with_string_as_arg_should_return_string(): mixed
+        function class_basename_allows_passing_object(): string
         {
-            return cache('key'); // get value
+            return class_basename(new \stdClass());
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: class_uses_recursive() support
+    Given I have the following code
+    """
+        function class_uses_recursive_allows_passing_fqcn(): array
+        {
+            return class_uses_recursive(\App\Models\User::class);
         }
 
-        function test_cache_call_with_array_as_arg_should_return_bool(): bool
+        function class_uses_recursive_allows_passing_object(): array
         {
-          return cache(['key' => 42]); // set value
+            return class_uses_recursive(new \stdClass());
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: filled() support
+    Given I have the following code
+    """
+    /** @return true */
+    function false_is_filled(): bool
+    {
+        return filled(false);
+    }
+
+    /** @return true */
+    function true_is_filled(): bool
+    {
+        return filled(true);
+    }
+
+    /** @return true */
+    function zero_int_is_filled(): bool
+    {
+        return filled(0);
+    }
+
+    /** @return true */
+    function zero_float_is_filled(): bool
+    {
+        return filled(0.0);
+    }
+
+    /** @return true */
+    function zero_numeric_string_is_filled(): bool
+    {
+        return filled('0');
+    }
+
+    /** @return true */
+    function non_empty_array_is_filled(): bool
+    {
+        return filled(['a']);
+    }
+
+    /** @return false */
+    function null_is_not_filled(): bool
+    {
+        return filled(null);
+    }
+
+    /** @return false */
+    function empty_string_is_not_filled(): bool
+    {
+        return filled('');
+    }
+
+    /** @return false */
+    function empty_array_is_not_filled(): bool
+    {
+        return filled([]);
+    }
+
+    function string_that_trimmed_to_empty_string_is_bool(): bool
+    {
+        return filled('  ');
+    }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: object_get() support
+    Given I have the following code
+    """
+        function object_get_returns_first_arg_when_second_is_null(\stdClass $object): \stdClass
+        {
+            return object_get($object, null);
+        }
+
+        function object_get_returns_first_arg_when_second_is_empty_string(\stdClass $object): \stdClass
+        {
+            return object_get($object, '');
         }
     """
     When I run Psalm
@@ -64,6 +221,23 @@ Feature: Support helpers
         function retry_has_callable_without_return_type(): int
         {
             return retry(2, fn () => 42);
+        }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: str() support
+    Given I have the following code
+    """
+        /** @return stringable-object */
+        function str_without_args_returns_anonymous_class_instance(): object
+        {
+            return str();
+        }
+
+        function str_with_arh_returns_Stringable_instance(): \Illuminate\Support\Stringable
+        {
+            return str('some string');
         }
     """
     When I run Psalm
@@ -181,6 +355,24 @@ Feature: Support helpers
         function test_trait_uses_recursive(): array {
           return trait_uses_recursive(CustomSoftDeletes::class);
         }
+    """
+    When I run Psalm
+    Then I see no errors
+
+  Scenario: transform() support
+    Given I have the following code
+    """
+    function it_uses_callback_return_type_if_value_is_not_blank(): float {
+      return transform(42, fn ($value) => $value * 1.1, fn () => null);
+    }
+
+    function it_uses_default_return_type_if_value_is_blank_and_default_is_callable(): int {
+      return transform([], fn () => 'any', fn () => 42);
+    }
+
+    function it_uses_default_return_type_if_value_is_blank_and_default_is_not_callable(): int {
+      return transform(null, fn () => 'any', 42);
+    }
     """
     When I run Psalm
     Then I see no errors

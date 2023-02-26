@@ -75,7 +75,10 @@ class Plugin implements PluginEntryPointInterface
     {
         [$majorVersion] = explode('.', $version);
 
-        return glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp');
+        return array_merge(
+            glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp'),
+        );
     }
 
     private function registerStubs(RegistrationInterface $registration): void
