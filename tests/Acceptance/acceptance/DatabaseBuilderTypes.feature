@@ -21,7 +21,7 @@ Feature: Database Builder types
     """
     <?php declare(strict_types=1);
 
-    use Tests\Psalm\LaravelPlugin\Models\User;
+    use App\Models\User;
 
     final class UserRepository
     {

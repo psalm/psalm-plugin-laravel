@@ -135,12 +135,10 @@ class Module extends BaseModule
      */
     public function runPsalmOn(string $filename, array $options = []): void
     {
-        $suppressProgress = $this->packageSatisfiesVersionConstraint('vimeo/psalm', '>=3.4.0');
-
         $options = array_map('escapeshellarg', $options);
         $cmd = $this->getPsalmPath()
             . ' --output-format=json '
-            . ($suppressProgress ? ' --no-progress ' : ' ')
+            . ' --no-progress '
             . join(' ', $options) . ' '
             . ($filename ? escapeshellarg($filename) : '')
             . ' 2>&1';
@@ -156,7 +154,7 @@ class Module extends BaseModule
     }
 
     /**
-     * @param string[] $options
+     * @param list<string> $options
      */
     public function runPsalmIn(string $dir, array $options = []): void
     {

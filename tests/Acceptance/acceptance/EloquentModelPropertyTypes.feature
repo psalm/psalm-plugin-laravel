@@ -20,8 +20,8 @@ Feature: Eloquent Model property types
       <?php declare(strict_types=1);
       namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
-      use Tests\Psalm\LaravelPlugin\Models\Secret;
-      use Tests\Psalm\LaravelPlugin\Models\User;
+      use App\Models\Secret;
+      use App\Models\User;
       """
 
   Scenario: Property annotation with scalar type

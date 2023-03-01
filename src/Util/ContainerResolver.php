@@ -62,7 +62,7 @@ final class ContainerResolver
     }
 
     /**
-     * @param array<Arg> $call_args
+     * @param list<Arg> $call_args
      */
     public static function resolvePsalmTypeFromApplicationContainerViaArgs(NodeTypeProvider $nodeTypeProvider, array $call_args): ?Union
     {
@@ -74,7 +74,7 @@ final class ContainerResolver
 
         if ($firstArgType && $firstArgType->isSingleStringLiteral()) {
             $abstract = $firstArgType->getSingleStringLiteral()->value;
-            $concrete = static::resolveFromApplicationContainer($abstract);
+            $concrete = self::resolveFromApplicationContainer($abstract);
 
             if (is_null($concrete)) {
                 return null;
