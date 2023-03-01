@@ -1,6 +1,7 @@
 name: Tests
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - '**.php'
@@ -20,6 +21,7 @@ on:
 jobs:
 
   unit_tests:
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -53,7 +55,7 @@ jobs:
         exclude:
           - php: 8.0
             laravel: ^10.0
-    name: P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
+    name: Acceptance P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -62,8 +64,9 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M
           coverage: none
-          tools: composer:v2
+          tools: composer
 
       - name: Install lowest dependencies from composer.json
         if: "matrix.dependencies == 'lowest'"

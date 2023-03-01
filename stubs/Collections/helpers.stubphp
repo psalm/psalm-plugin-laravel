@@ -1,0 +1,68 @@
+<?php
+
+/**
+ * Stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Collections/helpers.php}
+ */
+
+// collect: nothing to stub
+
+/**
+ * Fill in data where it's missing.
+ *
+ * @template TTarget
+ *
+ * @param  TTarget  $target
+ * @param  string|array  $key
+ * @param  mixed  $value
+ * @return mixed
+ * @psalm-return TTarget is array ? array : TTarget
+ */
+function data_fill(&$target, $key, $value) {}
+
+// data_get: nothing to stub
+
+/**
+ * Set an item on an array or object using dot notation.
+ *
+ * @template TTarget
+ *
+ * @param  TTarget  $target
+ * @param  string|array  $key
+ * @param  mixed  $value
+ * @param  bool  $overwrite
+ * @psalm-return TTarget is array ? array : TTarget
+ */
+function data_set(&$target, $key, $value, $overwrite = true) {}
+
+/**
+ * Get the first element of an array. Useful for method chaining.
+ *
+ * @template TValue
+ * @template TParam of TValue[]
+ * @param  TParam  $array
+ * @return (TParam is non-empty-array ? TValue : false)
+ */
+function head($array) {}
+
+/**
+ * Get the last element from an array.
+ *
+ * @template TValue
+ * @template TParam of TValue[]
+ *
+ * @param  TParam  $array
+ * @return (TParam is non-empty-array ? TValue : false)
+ */
+function last($array) {}
+
+/**
+ * Return the default value of the given value.
+ *
+ * @template TValue
+ * @template TClosureReturn
+ *
+ * @param  mixed|(Closure(): TClosureReturn)  $value
+ * @param  mixed  ...$args
+ * @return (TValue is Closure ? TClosureReturn : TValue)
+ */
+function value($value, ...$args) {}
