@@ -45,9 +45,10 @@ final class ApplicationProvider
             return self::$app;
         }
 
-        if (file_exists($applicationPath = __DIR__ . '/../../../../bootstrap/app.php')) { // plugin installed to vendor
+        $bootstrapPathFromVendor = __DIR__ . '/../../../../bootstrap/app.php';
+        if (file_exists($bootstrapPathFromVendor)) { // plugin installed to vendor
             /** @psalm-suppress MixedAssignment */
-            $app = require $applicationPath;
+            $app = require $bootstrapPathFromVendor;
             if (! $app instanceof LaravelApplication && ! $app instanceof LumenApplication) {
                 throw new \RuntimeException('Could not instantiate Application: unknown path.');
             }

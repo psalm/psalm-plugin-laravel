@@ -66,9 +66,6 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
         };
     }
 
-    /**
-     * @psalm-param lowercase-string $method_name_lowercase
-     */
     public static function getReturnTypeForGuard(string $guard): ?Type\Atomic\TNamedObject
     {
         $user_model_fqcn = AuthConfigHelper::getAuthModel($guard);
