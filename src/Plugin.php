@@ -53,13 +53,23 @@ class Plugin implements PluginEntryPointInterface
     protected function getCommonStubs(): array
     {
         return array_merge(
+            glob(dirname(__DIR__) . '/stubs/Collections/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Contracts/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Database/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/Foundation/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Http/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/legacy-factories/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Lumen/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Pagination/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Support/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/*.stubphp')
+        );
+    }
+
+    /** @return array<array-key, string> */
+    protected function getTaintAnalysisStubs(): array
+    {
+        return array_merge(
+            glob(dirname(__DIR__) . '/stubs/TaintAnalysis/Http/*.stubphp'),
         );
     }
 
@@ -68,7 +78,10 @@ class Plugin implements PluginEntryPointInterface
     {
         [$majorVersion] = explode('.', $version);
 
-        return glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp');
+        return array_merge(
+            glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp'),
+        );
     }
 
     private function registerStubs(RegistrationInterface $registration): void
@@ -76,6 +89,7 @@ class Plugin implements PluginEntryPointInterface
         $stubs = array_merge(
             $this->getCommonStubs(),
             $this->getStubsForVersion(Application::VERSION),
+            $this->getTaintAnalysisStubs(),
         );
 
         foreach ($stubs as $stubFilePath) {
