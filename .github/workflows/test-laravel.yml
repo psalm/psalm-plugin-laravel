@@ -27,8 +27,8 @@ jobs:
 
     - name: Test Laravel
       run: |
-        ./tests/laravel-test.sh
+        ./tests/Application/laravel-test.sh
 
     - name: Test Lumen
       run: |
-        ./tests/lumen-test.sh
+        ./tests/Application/lumen-test.sh
