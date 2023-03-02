@@ -83,11 +83,6 @@ class ModelRelationshipPropertyHandler implements
         return null;
     }
 
-    /**
-     * @param  array<PhpParser\Node\Arg>    $call_args
-     *
-     * @return ?Union
-     */
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();
