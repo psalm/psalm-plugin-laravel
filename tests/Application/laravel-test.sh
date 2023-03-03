@@ -10,7 +10,7 @@ rm -rf $APP_INSTALLATION_PATH
 
 echo "Installing Laravel"
 # See https://github.com/laravel/laravel/tags for Laravel versions
-composer create-project laravel/laravel $APP_INSTALLATION_PATH 10.0 --quiet --prefer-dist
+composer create-project --quiet --prefer-dist laravel/laravel $APP_INSTALLATION_PATH 10.0 --quiet --prefer-dist
 cd $APP_INSTALLATION_PATH
 
 echo "Preparing Laravel"
