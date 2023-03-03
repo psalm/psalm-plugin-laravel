@@ -10,7 +10,7 @@ rm -rf $APP_INSTALLATION_PATH
 
 echo "Installing Lumen"
 # See https://github.com/laravel/lumen/tags for Lumen versions
-composer create-project laravel/lumen $APP_INSTALLATION_PATH 10.0 --quiet --prefer-dist
+composer create-project --quiet --prefer-dist laravel/lumen $APP_INSTALLATION_PATH 10.0 --quiet --prefer-dist
 cd $APP_INSTALLATION_PATH
 
 echo "Adding package from source"
