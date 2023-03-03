@@ -41,7 +41,7 @@ jobs:
         run: composer install
 
       - name: Run Unit tests
-        run: composer unit
+        run: composer test:unit
 
 
   acceptance_tests:
@@ -77,4 +77,4 @@ jobs:
         run: composer update --with='laravel/framework:${{ matrix.laravel }}' --no-interaction --no-progress --prefer-dist --prefer-stable
 
       - name: Run Acceptance Tests
-        run: composer test
+        run: composer test:type

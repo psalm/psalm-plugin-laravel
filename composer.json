@@ -66,22 +66,20 @@
     },
     "scripts": {
         "analyze": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
-        "cs": "@lint",
-        "cs-fix": "@lint-fix",
-        "check": [
-            "@unit",
-            "@analyze",
-            "@lint",
-            "@test"
-        ],
         "lint": "phpcs --report-full --report-summary --colors -n -s",
         "lint-fix": "phpcbf -n",
         "psalm": "@analyze",
         "psalm-set-baseline": "@php ./psalm --set-baseline=psalm-baseline.xml",
         "test": [
+            "@lint",
+            "@psalm",
+            "@test:unit",
+            "@test:type"
+        ],
+        "test:type": [
             "Composer\\Config::disableProcessTimeout",
             "codecept run --skip-group skip"
         ],
-        "unit": "phpunit"
+        "test:unit": "phpunit"
     }
 }
