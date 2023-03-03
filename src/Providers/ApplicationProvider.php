@@ -6,33 +6,34 @@ namespace Psalm\LaravelPlugin\Providers;
 
 use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
 use Illuminate\Contracts\Console\Kernel;
-use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Laravel\Lumen\Application as LumenApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
 
+use function define;
+use function defined;
+use function dirname;
 use function file_exists;
 use function get_class;
 use function getcwd;
+use function microtime;
 
 final class ApplicationProvider
 {
     use CreatesApplication;
 
-    /**
-     * @var LaravelApplication|LumenApplication|null
-     */
-    private static $app;
+    /** @var LaravelApplication|LumenApplication|null */
+    private static $app = null;
 
     public static function bootApp(): void
     {
         $app = self::getApp();
 
-        if ($app instanceof Application) {
+        if ($app instanceof LaravelApplication) {
             /** @var \Illuminate\Contracts\Console\Kernel $consoleApp */
             $consoleApp = $app->make(Kernel::class);
             $consoleApp->bootstrap();
-        } else {
+        } else { // LumenApplication
             $app->boot();
         }
 
@@ -41,24 +42,26 @@ final class ApplicationProvider
 
     public static function getApp(): LaravelApplication | LumenApplication
     {
-        if (self::$app) {
+        if (self::$app instanceof \Illuminate\Container\Container) {
             return self::$app;
         }
 
-        if (file_exists($applicationPath = __DIR__ . '/../../../../bootstrap/app.php')) { // plugin installed to vendor
+        if (! defined('LARAVEL_START')) {
+            define('LARAVEL_START', microtime(true));
+        }
+
+        if (file_exists($applicationPath = getcwd() . '/bootstrap/app.php')) { // Applications and Local Dev
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
-            if (! $app instanceof LaravelApplication && ! $app instanceof LumenApplication) {
-                throw new \RuntimeException('Could not instantiate Application: unknown path.');
-            }
-        } elseif (file_exists($applicationPath = getcwd() . '/bootstrap/app.php')) { // Local Dev
+        } elseif (file_exists($applicationPath = dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
-            if (! $app instanceof LaravelApplication && ! $app instanceof LumenApplication) {
-                throw new \RuntimeException('Could not instantiate Application: unknown path.');
-            }
-        } else { // Packages
+        } else { // Laravel Packages
             $app = (new self())->createApplication(); // Orchestra\Testbench
+        }
+
+        if (! $app instanceof LaravelApplication && ! $app instanceof LumenApplication) {
+            throw new \RuntimeException('Could not find Laravel/Lumen bootstrap file.');
         }
 
         self::$app = $app;
