@@ -54,11 +54,11 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
         }
 
         return match ($method_name_lowercase) {
-            'user' => new Type\Union([
+            'user' => new Type\Union([ // nullable
                 $user_model_type,
                 new Type\Atomic\TNull(),
             ]),
-            'loginusingid', 'onceusingid' => new Type\Union([
+            'loginusingid', 'onceusingid' => new Type\Union([ // never nullable
                 $user_model_type,
                 new Type\Atomic\TFalse(),
             ]),
@@ -68,7 +68,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
 
     public static function getReturnTypeForGuard(string $guard): ?Type\Atomic\TNamedObject
     {
-        $user_model_fqcn = AuthConfigHelper::getAuthModel($guard);
+        $user_model_fqcn = AuthConfigHelper::getAuthModel(ConfigRepositoryProvider::get(), $guard);
         if (!is_string($user_model_fqcn)) {
             return null;
         }
