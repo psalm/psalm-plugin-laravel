@@ -2,6 +2,7 @@
 
 namespace Illuminate\Database\Eloquent;
 
+use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
 use Illuminate\Database\Concerns\BuildsQueries;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Traits\ForwardsCalls;
@@ -12,7 +13,7 @@ use Illuminate\Support\Traits\ForwardsCalls;
  *
  * @mixin \Illuminate\Database\Query\Builder
  */
-class Builder
+class Builder implements BuilderContract
 {
     use BuildsQueries, Concerns\QueriesRelationships, ForwardsCalls;
 
@@ -31,13 +32,13 @@ class Builder
     /**
      * @param  string  $identifier
      * @param  \Illuminate\Database\Eloquent\Scope|\Closure  $scope
-     * @return self<TModel>
+     * @return $this
      */
     public function withGlobalScope($identifier, $scope) {}
 
     /**
      * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
-     * @return self<TModel>
+     * @return $this
      */
     public function withoutGlobalScope($scope) {}
 
@@ -54,33 +55,37 @@ class Builder
 
     /**
      * @param  array|null  $scopes
-     * @return self<TModel>
+     * @return $this
      */
     public function withoutGlobalScopes(array $scopes = null) {}
 
     /**
-     * @return array
+     * Get an array of global scopes that were removed from the query.
+     *
+     * @return list<non-empty-string>
      */
     public function removedScopes() {}
 
     /**
      * @param  mixed  $id
-     * @return self<TModel>
+     * @return $this
      */
     public function whereKey($id) {}
 
     /**
      * @param  mixed  $id
-     * @return self<TModel>
+     * @return $this
      */
     public function whereKeyNot($id) {}
 
     /**
-     * @param  string|array|\Closure  $column
+     * Add a basic where clause to the query.
+     *
+     * @param  (\Closure(static): void)|(\Closure(static): static)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed   $operator
      * @param  mixed   $value
      * @param  string  $boolean
-     * @return self<TModel>
+     * @return $this
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -89,7 +94,7 @@ class Builder
      * @param  string  $operator
      * @param  \DateTimeInterface|string|null  $value
      * @param  string  $boolean
-     * @return self<TModel>
+     * @return $this
      */
     public function whereDate($column, $operator, $value = null, $boolean = 'and') {}
 
@@ -97,7 +102,7 @@ class Builder
      * @param  \Closure|array|string  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return self<TModel>
+     * @return $this
      */
     public function orWhere($column, $operator = null, $value = null) {}
 
@@ -106,7 +111,7 @@ class Builder
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return self<TModel>
+     * @return $this
      */
     public function whereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -115,7 +120,7 @@ class Builder
      * @param  \Closure|string|array<mixed>|\Illuminate\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return self<TModel>
+     * @return $this
      */
     public function whereRelation($relation, $column, $operator = null, $value = null) {}
 
@@ -131,7 +136,7 @@ class Builder
      * @param  \Closure|string|array<int, string>|\Illuminate\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return self<TModel>
+     * @return $this
      */
     public function orWhereRelation($relation, $column, $operator = null, $value = null) {}
 
@@ -140,20 +145,20 @@ class Builder
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return self<TModel>
+     * @return $this
      */
     public function orWhereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
     /**
-     * @template TRelatedModel of Model
-     * @template TChildModel of Model
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @template TChildModel of \Illuminate\Database\Eloquent\Model
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
      * @param  string  $operator
      * @param  int  $count
      * @param  string  $boolean
      * @param  \Closure|null  $callback
-     * @return self<TModel>
+     * @return $this
      */
     public function hasMorph($relation, $types, $operator = '>=', $count = 1, $boolean = 'and', \Closure $callback = null) {}
 
@@ -380,13 +385,13 @@ class Builder
     public function getModels($columns = ['*']) {}
 
     /**
-     * @template TRelatedModel of Model
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  string  $operator
      * @param  int  $count
      * @param  string  $boolean
      * @param  \Closure|null  $callback
-     * @return static
+     * @return $this
      *
      * @throws \RuntimeException
      */
@@ -396,7 +401,7 @@ class Builder
      * @param  string  $relation
      * @param  string  $operator
      * @param  int  $count
-     * @return static
+     * @return $this
      */
     public function orHas($relation, $operator = '>=', $count = 1) {}
 
@@ -404,19 +409,19 @@ class Builder
      * @param  string  $relation
      * @param  string  $boolean
      * @param  \Closure|null  $callback
-     * @return static
+     * @return $this
      */
     public function doesntHave($relation, $boolean = 'and', \Closure $callback = null) {}
 
     /**
      * @param  string  $relation
-     * @return static
+     * @return $this
      */
     public function orDoesntHave($relation) {}
 
     /**
-     * @param  array  $models
-     * @return array
+     * @param  array<array-key, \Illuminate\Database\Eloquent\Model>  $models
+     * @return array<array-key, \Illuminate\Database\Eloquent\Model>
      */
     public function eagerLoadRelations(array $models) {}
 
@@ -427,7 +432,9 @@ class Builder
     public function getRelation($name) {}
 
     /**
-     * @return \Generator
+     * Get a lazy collection for the given query.
+     *
+     * @return \Illuminate\Support\LazyCollection
      */
     public function cursor() {}
 
