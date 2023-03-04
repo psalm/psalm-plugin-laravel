@@ -39,7 +39,7 @@ return [
         ],
 
         'special-users' => [
-            'driver' => 'default',
+            'driver' => 'database',
             'table' => 'special-users',
         ],
     ],
