@@ -49,16 +49,12 @@ Feature: Eloquent Relation types
     """
     final class Repository
     {
-      /**
-      * @psalm-return HasOne<Phone>
-      */
+      /** @psalm-return HasOne<Phone> */
       public function getPhoneRelationship(User $user): HasOne {
         return $user->phone();
       }
 
-      /**
-      * @psalm-return BelongsTo<User>
-      */
+      /** @psalm-return BelongsTo<User> */
       public function getUserRelationship(Phone $phone): BelongsTo {
         return $phone->user();
       }
@@ -72,16 +68,12 @@ Feature: Eloquent Relation types
     """
     final class Repository
     {
-      /**
-      * @psalm-return BelongsTo<Post>
-      */
+      /** @psalm-return BelongsTo<Post> */
       public function getPostRelationship(Comment $comment): BelongsTo {
         return $comment->post();
       }
 
-      /**
-      * @psalm-return HasMany<Comment>
-      */
+      /** @psalm-return HasMany<Comment> */
       public function getCommentsRelationship(Post $post): HasMany {
         return $post->comments();
       }
@@ -95,16 +87,12 @@ Feature: Eloquent Relation types
     """
     final class Repository
     {
-      /**
-      * @psalm-return BelongsToMany<Role>
-      */
+      /** @psalm-return BelongsToMany<Role> */
       public function getRolesRelationship(User $user): BelongsToMany {
         return $user->roles();
       }
 
-      /**
-      * @psalm-return BelongsToMany<User>
-      */
+      /** @psalm-return BelongsToMany<User> */
       public function getUserRelationship(Role $role): BelongsToMany {
         return $role->users();
       }
@@ -149,16 +137,12 @@ Feature: Eloquent Relation types
     """
     final class Repository
     {
-      /**
-      * @psalm-return HasManyThrough<Mechanic>
-      */
+      /** @psalm-return HasManyThrough<Mechanic> */
       public function getCarsAtMechanicRelationship(User $user): HasManyThrough {
         return $user->carsAtMechanic();
       }
 
-      /**
-      * @psalm-return HasOneThrough<User>
-      */
+      /** @psalm-return HasOneThrough<User> */
       public function getCarsOwner(Mechanic $mechanic): HasOneThrough {
         return $mechanic->carOwner();
       }
@@ -198,17 +182,17 @@ Feature: Eloquent Relation types
       }
 
       /**
-      * @todo: support for morphTo dynamic property
-      * @psalm-return mixed
-      */
+       * @todo: support for morphTo dynamic property
+       * @psalm-return mixed
+       */
       public function getImageableProperty(Image $image) {
         return $image->imageable;
       }
 
       /**
-      * @todo: better support for morphTo relationships
-      * @psalm-return MorphTo
-      */
+       * @todo: better support for morphTo relationships
+       * @psalm-return MorphTo
+       */
       public function getImageableRelationship(Image $image): MorphTo {
         return $image->imageable();
       }
@@ -222,22 +206,22 @@ Feature: Eloquent Relation types
     """
     final class Repository
     {
-      /** @psalm-return MorphMany<Comment> */
+      /** @return MorphMany<Comment> */
       public function getCommentsRelation(Video $video): MorphMany {
         return $video->comments();
       }
 
-      /** @psalm-return MorphMany<Comment> */
+      /** @return MorphMany<Comment> */
       public function getLatestCommentsRelation(Video $video): MorphMany {
         return $video->comments()->latest();
       }
 
-      /** @psalm-return MorphMany<Comment> */
+      /** @return MorphMany<Comment> */
       public function getOldestCommentsRelation(Video $video): MorphMany {
         return $video->comments()->oldest();
       }
 
-      /** @psalm-return Collection<int, Comment> */
+      /** @return Collection<int, Comment> */
       public function getComments(Video $video): Collection {
         return $video->comments;
       }
@@ -251,16 +235,12 @@ Feature: Eloquent Relation types
     """
     final class Repository
     {
-      /**
-      * @psalm-return MorphToMany<Tag>
-      */
+      /** @psalm-return MorphToMany<Tag> */
       public function getTagsRelation(Post $post): MorphToMany {
         return $post->tags();
       }
 
-      /**
-      * @psalm-return Collection<int, Tag>
-      */
+      /** @psalm-return Collection<int, Tag> */
       public function getTags(Post $post): Collection {
         return $post->tags;
       }
@@ -291,30 +271,22 @@ Feature: Eloquent Relation types
     """
     final class Repository
     {
-      /**
-      * @psalm-return MorphToMany<Post>
-      */
+      /** @psalm-return MorphToMany<Post> */
       public function getPostsRelation(Tag $tag): MorphToMany {
         return $tag->posts();
       }
 
-      /**
-      * @psalm-return MorphToMany<Video>
-      */
+      /** @psalm-return MorphToMany<Video> */
       public function getVideosRelation(Tag $tag): MorphToMany {
         return $tag->videos();
       }
 
-      /**
-      * @psalm-return Collection<int, Post>
-      */
+      /** @psalm-return Collection<int, Post> */
       public function getPosts(Tag $tag): Collection {
         return $tag->posts;
       }
 
-      /**
-      * @psalm-return Collection<int, Video>
-      */
+      /** @psalm-return Collection<int, Video> */
       public function getVideos(Tag $tag): Collection {
         return $tag->videos;
       }
@@ -347,7 +319,6 @@ Feature: Eloquent Relation types
     When I run Psalm
     Then I see no errors
 
-  @skip
   Scenario: Relationships can be further constrained via method
     Given I have the following code
     """
@@ -370,9 +341,7 @@ Feature: Eloquent Relation types
       return $relationship->where('active', 1);
     }
 
-    /**
-    * @psalm-return BelongsTo<User>
-    */
+    /** @psalm-return BelongsTo<User> */
     function testAnother(Phone $phone): BelongsTo {
       return $phone->user()->where('active', 1);
     }

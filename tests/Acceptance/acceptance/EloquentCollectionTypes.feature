@@ -27,9 +27,7 @@ Feature: Eloquent Collection types
 
     final class UserRepository
     {
-        /**
-        * @psalm-return \Illuminate\Database\Eloquent\Collection<int, User>
-        */
+        /** @return \Illuminate\Database\Eloquent\Collection<int, User> */
         public function getAll(): \Illuminate\Database\Eloquent\Collection
         {
           return User::all();
@@ -40,25 +38,19 @@ Feature: Eloquent Collection types
           return $this->getAll()->first();
         }
 
-        /**
-        * @return \Illuminate\Database\Eloquent\Builder<User>
-        */
+        /** @return \Illuminate\Database\Eloquent\Builder<User> */
         public function getBuilder(array $attributes): \Illuminate\Database\Eloquent\Builder
         {
           return User::where($attributes);
         }
 
-        /**
-        * @psalm-return \Illuminate\Database\Eloquent\Collection<int, User>
-        */
+        /** @return \Illuminate\Database\Eloquent\Collection<int, User> */
         public function getWhere(array $attributes): \Illuminate\Database\Eloquent\Collection
         {
           return User::where($attributes)->get();
         }
 
-        /**
-        * @psalm-return \Illuminate\Database\Eloquent\Collection<int, User>
-        */
+        /** @return \Illuminate\Database\Eloquent\Collection<int, User> */
         public function getWhereUsingLessMagic(array $attributes): \Illuminate\Database\Eloquent\Collection
         {
           return User::query()->where($attributes)->get();
