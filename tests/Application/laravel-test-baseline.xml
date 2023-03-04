@@ -111,11 +111,6 @@
       <code>ExampleProvider</code>
     </UnusedClass>
   </file>
-  <file src="app/Providers/RouteServiceProvider.php">
-    <MixedPropertyFetch>
-      <code><![CDATA[$request->user()?->id]]></code>
-    </MixedPropertyFetch>
-  </file>
   <file src="app/Rules/ExampleRule.php">
     <UnusedClass>
       <code>ExampleRule</code>
