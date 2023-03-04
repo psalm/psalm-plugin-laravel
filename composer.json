@@ -65,10 +65,9 @@
         }
     },
     "scripts": {
-        "analyze": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
         "lint": "phpcs --report-full --report-summary --colors -n -s",
         "lint-fix": "phpcbf -n",
-        "psalm": "@analyze",
+        "psalm": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress --output-format=phpstorm",
         "psalm-set-baseline": "@php ./psalm --set-baseline=psalm-baseline.xml",
         "test": [
             "@lint",
