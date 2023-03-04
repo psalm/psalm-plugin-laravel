@@ -9,6 +9,7 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 
 use function in_array;
+use function is_string;
 
 /**
  * Handles cases (methods that return Authenticatable instance) [when called, "default" guard is used]:
@@ -54,21 +55,29 @@ final class AuthHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $user_model_type = GuardHandler::getReturnTypeForGuard('default');
-        if (! $user_model_type instanceof Type\Atomic\TNamedObject) {
-            return null;
+        $default_guard = AuthConfigAnalyzer::instance()->getDefaultGuard();
+        if (! is_string($default_guard)) {
+            return null; // normally should not happen (e.g. empty or invalid auth.php)
+        }
+
+        $authenticatable_fqcn = AuthConfigAnalyzer::instance()->getAuthenticatableFQCN($default_guard);
+
+        if (! is_string($authenticatable_fqcn)) {
+            return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
         return match ($method_name_lowercase) {
-            'user', 'logoutotherdevices', 'getuser' => new Type\Union([
-                $user_model_type,
+            'user', 'logoutotherdevices', 'getuser', 'getlastattempted' => new Type\Union([
+                new Type\Atomic\TNamedObject($authenticatable_fqcn),
                 new Type\Atomic\TNull(),
             ]),
             'loginusingid', 'onceusingid' => new Type\Union([
-                $user_model_type,
+                new Type\Atomic\TNamedObject($authenticatable_fqcn),
                 new Type\Atomic\TFalse(),
             ]),
-            'getlastattempted', 'authenticate' => new Type\Union([$user_model_type]),
+            'authenticate' => new Type\Union([
+                new Type\Atomic\TNamedObject($authenticatable_fqcn),
+            ]),
             default => null,
         };
     }

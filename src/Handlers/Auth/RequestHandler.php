@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
-use PhpParser\Node\Expr\MethodCall;
-use PhpParser\Node\Expr\StaticCall;
-use PhpParser\Node\Scalar\String_;
+use Psalm\LaravelPlugin\Handlers\Auth\Concerns\ExtractsGuardNameFromCallLike;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -20,6 +18,8 @@ use function is_string;
  */
 final class RequestHandler implements MethodReturnTypeProviderInterface
 {
+    use ExtractsGuardNameFromCallLike;
+
     /** @inheritDoc */
     public static function getClassLikeNames(): array
     {
@@ -33,36 +33,24 @@ final class RequestHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $guard_name = self::getGuardName($event->getStmt());
-        if (! is_string($guard_name)) {
+        $default_guard = AuthConfigAnalyzer::instance()->getDefaultGuard();
+        if (! is_string($default_guard)) {
+            return null; // normally should not happen (e.g. empty or invalid auth.php)
+        }
+
+        $guard = self::getGuardNameFromFirstArgument($event->getStmt(), $default_guard);
+        if (! is_string($guard)) {
             return null;
         }
 
-        $user_model_type = GuardHandler::getReturnTypeForGuard($guard_name);
-        if (! $user_model_type instanceof Type\Atomic\TNamedObject) {
-            return null;
+        $authenticatable_fqcn = AuthConfigAnalyzer::instance()->getAuthenticatableFQCN($guard);
+        if (! is_string($authenticatable_fqcn)) {
+            return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
         return new Type\Union([
-            $user_model_type,
+            new Type\Atomic\TNamedObject($authenticatable_fqcn),
             new Type\Atomic\TNull(),
         ]);
-    }
-
-    private static function getGuardName(MethodCall|StaticCall $stmt): ?string
-    {
-        $call_args = $stmt->getArgs();
-        if ($call_args === []) {
-            return 'default';
-        }
-
-        $first_arg_type = $call_args[0]->value;
-
-        if ($first_arg_type instanceof String_) {
-            return $first_arg_type->value;
-        }
-
-        // @todo support const, probably vars that contains string, probably enum value
-        return null;
     }
 }

@@ -5,7 +5,7 @@
 return [
 
     'defaults' => [
-        'guard' => 'web',
+        'guard' => 'special-users',
         'passwords' => 'users',
     ],
 
@@ -40,7 +40,7 @@ return [
 
         'special-users' => [
             'driver' => 'database',
-            'table' => 'special-users',
+            'table' => 'generic-users',
         ],
     ],
 
