@@ -11,8 +11,9 @@
 >
     <projectFiles>
         <directory name="src" />
-        <ignoreFiles>
+        <ignoreFiles allowMissingFiles="true">
             <directory name="vendor"/>
+            <directory name="tests-app"/>
             <directory name="tests/Unit/Handlers/Eloquent/Schema/migrations"/>
         </ignoreFiles>
     </projectFiles>
