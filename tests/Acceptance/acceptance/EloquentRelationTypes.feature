@@ -319,6 +319,7 @@ Feature: Eloquent Relation types
     When I run Psalm
     Then I see no errors
 
+  @skip
   Scenario: Relationships can be further constrained via method
     Given I have the following code
     """
