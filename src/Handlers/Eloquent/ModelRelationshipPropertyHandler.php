@@ -35,6 +35,7 @@ class ModelRelationshipPropertyHandler implements
         return ModelStubProvider::getModelClasses();
     }
 
+    /** @inheritDoc */
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();

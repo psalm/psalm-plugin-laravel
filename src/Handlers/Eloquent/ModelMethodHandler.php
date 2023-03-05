@@ -24,14 +24,13 @@ use function strtolower;
 
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
-    /**
-     * @return array<string>
-     */
+    /** @inheritDoc */
     public static function getClassLikeNames(): array
     {
         return [Model::class];
     }
 
+    /** @inheritDoc */
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         $source = $event->getSource();

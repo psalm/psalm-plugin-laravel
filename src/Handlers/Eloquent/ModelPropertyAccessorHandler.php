@@ -16,14 +16,13 @@ use function str_replace;
 
 final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInterface, PropertyVisibilityProviderInterface, PropertyTypeProviderInterface
 {
-    /**
-     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
-     */
+    /** @inheritDoc */
     public static function getClassLikeNames(): array
     {
         return ModelStubProvider::getModelClasses();
     }
 
+    /** @inheritDoc */
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();
