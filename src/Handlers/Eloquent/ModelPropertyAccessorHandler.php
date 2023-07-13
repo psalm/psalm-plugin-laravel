@@ -88,6 +88,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         return null;
     }
 
+    /** @param class-string $fqcn */
     private static function hasNativeProperty(string $fqcn, string $property_name): bool
     {
         try {
