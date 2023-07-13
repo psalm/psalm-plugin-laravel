@@ -21,4 +21,11 @@
       <code>null</code>
     </TypeDoesNotContainType>
   </file>
+  <file src="src/Handlers/Eloquent/ModelPropertyAccessorHandler.php">
+    <LessSpecificImplementedReturnType>
+      <code>array</code>
+      <code>array</code>
+      <code>array</code>
+    </LessSpecificImplementedReturnType>
+  </file>
 </files>

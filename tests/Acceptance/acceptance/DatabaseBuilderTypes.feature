@@ -25,9 +25,7 @@ Feature: Database Builder types
 
     final class UserRepository
     {
-        /**
-        * @param \Illuminate\Database\Eloquent\Builder<User> $builder
-        */
+        /** @param \Illuminate\Database\Eloquent\Builder<User> $builder */
         public function firstFromDatabaseBuilderInstance(\Illuminate\Database\Eloquent\Builder $builder): ?User {
           return $builder->first();
         }

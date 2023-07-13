@@ -30,32 +30,24 @@ Feature: Eloquent Builder types
     """
     final class UserRepository
     {
-        /**
-         * @return Builder<User>
-         */
+        /** @return Builder<User> */
         public function getNewQuery(): Builder
         {
           return User::query();
         }
 
-        /**
-         * @return Builder<User>
-         */
+        /** @return Builder<User> */
         public function getNewModelQuery(): Builder
         {
           return (new User())->newModelQuery();
         }
 
-        /**
-         * @param Builder<User> $builder
-         */
+        /** @param Builder<User> $builder */
         public function firstOrFailFromBuilderInstance(Builder $builder): User {
           return $builder->firstOrFail();
         }
 
-        /**
-        * @param Builder<User> $builder
-        */
+        /** @param Builder<User> $builder */
         public function findOrFailFromBuilderInstance(Builder $builder): User {
           return $builder->findOrFail(1);
         }
@@ -68,23 +60,17 @@ Feature: Eloquent Builder types
           return $builder->findOrFail([1, 2]);
         }
 
-        /**
-        * @param Builder<User> $builder
-        */
+        /** @param Builder<User> $builder */
         public function findOne(Builder $builder): ?User {
           return $builder->find(1);
         }
 
-        /**
-        * @param Builder<User> $builder
-        */
+        /** @param Builder<User> $builder */
         public function findViaArray(Builder $builder): Collection {
           return $builder->find([1]);
         }
 
-        /**
-        * @return Builder<User>
-        */
+        /** @return Builder<User> */
         public function getWhereBuilderViaInstance(array $attributes): Builder {
           return (new User())->where($attributes);
         }
@@ -110,18 +96,13 @@ Feature: Eloquent Builder types
 
     final class UserRepository
     {
-
-        /**
-        * @return Builder<User>
-        */
+        /** @return Builder<User> */
         public function getWhereBuilderViaStatic(array $attributes): Builder
         {
           return User::where($attributes);
         }
 
-        /**
-        * @psalm-return Collection<int, User>
-        */
+        /** @return Collection<int, User> */
         public function getWhereViaStatic(array $attributes): Collection
         {
           return User::where($attributes)->get();
@@ -147,9 +128,7 @@ Feature: Eloquent Builder types
 
     final class UserRepository
     {
-        /**
-        * @return Builder<User>
-        */
+        /** @return Builder<User> */
         public function test_failure(): Builder
         {
           return User::fakeQueryMethodThatDoesntExist();
@@ -176,7 +155,7 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: can call firstOrNew and firstOrCreate without parameters in Laravel 9.x
+  Scenario: can call firstOrNew and firstOrCreate without parameters in [ Laravel 9 ]
     Given I have the "laravel/framework" package satisfying the "^9.0"
     And I have the following code
     """
@@ -282,9 +261,7 @@ Feature: Eloquent Builder types
     """
     class Post extends \Illuminate\Database\Eloquent\Model {};
 
-    /**
-    * @psalm-return \Illuminate\Pagination\CursorPaginator<Post>
-    */
+    /** @psalm-return \Illuminate\Pagination\CursorPaginator<Post> */
     function test_whereDateWithInt(Builder $builder): \Illuminate\Pagination\CursorPaginator {
       return Post::query()->cursorPaginate();
     }
@@ -299,7 +276,7 @@ Feature: Eloquent Builder types
 
     class Post extends \Illuminate\Database\Eloquent\Model {};
 
-    /** @psalm-return \Illuminate\Database\Eloquent\Collection<int, Post> */
+    /** @return \Illuminate\Database\Eloquent\Collection<int, Post> */
     function test_chunk(Builder $builder): Collection {
       /** @var \Illuminate\Database\Eloquent\Collection<int, Post> $firstChunk */
       $firstChunk = collect();

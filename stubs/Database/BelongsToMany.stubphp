@@ -86,7 +86,7 @@ class BelongsToMany extends Relation
      * Execute the query and get the first result or throw an exception.
      *
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Model|static
+     * @return \Illuminate\Database\Eloquent\Model
      * @psalm-return TRelatedModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException

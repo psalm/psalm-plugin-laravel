@@ -32,6 +32,7 @@ final class ApplicationProvider
         if ($app instanceof LaravelApplication) {
             /** @var \Illuminate\Contracts\Console\Kernel $consoleApp */
             $consoleApp = $app->make(Kernel::class);
+            // @todo do not bootstrap \Illuminate\Foundation\Bootstrap\HandleExceptions
             $consoleApp->bootstrap();
         } else { // LumenApplication
             $app->boot();
