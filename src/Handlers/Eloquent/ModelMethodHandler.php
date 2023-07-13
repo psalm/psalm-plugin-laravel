@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
@@ -18,6 +19,8 @@ use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
 use function strtolower;
@@ -37,6 +40,24 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
 
         if (!$source instanceof StatementsAnalyzer) {
             return null;
+        }
+
+//        echo $event->getMethodNameLowercase().'\n';
+
+        if ($event->getMethodNameLowercase() === 'query') {
+            $called_fq_classlike_name = $event->getCalledFqClasslikeName();
+
+            if (! is_string($called_fq_classlike_name)) {
+                return null;
+            }
+
+            return new Union([
+                new Type\Atomic\TGenericObject(Builder::class, [
+                    new Union([
+                        new Type\Atomic\TNamedObject($called_fq_classlike_name),
+                    ]),
+                ])
+            ]);
         }
 
         // proxy to builder object
