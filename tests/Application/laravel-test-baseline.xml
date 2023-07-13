@@ -21,6 +21,9 @@
     </UnusedClass>
   </file>
   <file src="app/Console/Commands/ExampleCommand.php">
+    <MissingReturnType>
+      <code>handle</code>
+    </MissingReturnType>
     <UnusedClass>
       <code>ExampleCommand</code>
     </UnusedClass>
