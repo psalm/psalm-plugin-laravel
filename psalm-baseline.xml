@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="5.7.7@e028ba46ba0d7f9a78bc3201c251e137383e145f">
+<files psalm-version="5.13.1@086b94371304750d1c673315321a55d15fc59015">
   <file src="src/Handlers/Auth/AuthConfigAnalyzer.php">
     <LessSpecificReturnStatement>
       <code><![CDATA['\Illuminate\Auth\GenericUser']]></code>
@@ -21,11 +21,36 @@
       <code>null</code>
     </TypeDoesNotContainType>
   </file>
+  <file src="src/Handlers/Auth/GuardHandler.php">
+    <DeprecatedProperty>
+      <code><![CDATA[$previous_call->name->parts]]></code>
+    </DeprecatedProperty>
+  </file>
   <file src="src/Handlers/Eloquent/ModelPropertyAccessorHandler.php">
+    <ArgumentTypeCoercion>
+      <code><![CDATA[$event->getFqClasslikeName()]]></code>
+      <code><![CDATA[$event->getFqClasslikeName()]]></code>
+      <code><![CDATA[$event->getFqClasslikeName()]]></code>
+    </ArgumentTypeCoercion>
     <LessSpecificImplementedReturnType>
       <code>array</code>
       <code>array</code>
       <code>array</code>
     </LessSpecificImplementedReturnType>
+  </file>
+  <file src="src/Handlers/Eloquent/Schema/SchemaAggregator.php">
+    <DeprecatedProperty>
+      <code><![CDATA[$first_argument_of_nullable->value->name->parts]]></code>
+    </DeprecatedProperty>
+  </file>
+  <file src="src/Handlers/Helpers/PathHandler.php">
+    <InternalMethod>
+      <code>new TLiteralString($result)</code>
+    </InternalMethod>
+  </file>
+  <file src="src/Util/ContainerResolver.php">
+    <InternalMethod>
+      <code>new TLiteralString($concrete)</code>
+    </InternalMethod>
   </file>
 </files>
