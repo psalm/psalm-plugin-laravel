@@ -13,7 +13,6 @@ use function config;
 use function get_class;
 use function is_a;
 use function in_array;
-use function is_string;
 use function implode;
 
 /** @psalm-suppress PropertyNotSetInConstructor */
@@ -128,7 +127,7 @@ class FakeModelsCommand extends ModelsCommand
             if ($this->write_model_magic_where) {
                 $this->setMethod(
                     Str::camel("where_" . $column_name),
-                    '\Illuminate\Database\Eloquent\Builder|\\' . get_class($model),
+                    '\Illuminate\Database\Eloquent\Builder<static>', // @todo support custom EloquentBuilders
                     array('$value')
                 );
             }

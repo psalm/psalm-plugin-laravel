@@ -10,11 +10,13 @@ use Psalm\Type\Atomic\TNamedObject;
 
 final class CacheHandler implements FunctionReturnTypeProviderInterface
 {
+    /** @inheritDoc */
     public static function getFunctionIds(): array
     {
         return ['cache'];
     }
 
+    /** @inheritDoc */
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
     {
         $call_args = $event->getCallArgs();

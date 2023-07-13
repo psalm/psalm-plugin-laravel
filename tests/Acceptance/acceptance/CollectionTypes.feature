@@ -27,9 +27,7 @@ Feature: Collection types
     """
     final class CollectionTypes
     {
-        /**
-         * @return Collection<int, string>
-         */
+        /** @return Collection<int, string> */
         public function getCollection(): Collection
         {
             return new Collection(['hi']);
@@ -68,9 +66,7 @@ Feature: Collection types
             });
         }
 
-        /**
-         * @return Collection<string, int>
-         */
+        /** @return Collection<string, int> */
         public function testFlip(): Collection
         {
           return $this->getCollection()->flip();
@@ -117,9 +113,7 @@ Feature: Collection types
             });
         }
 
-        /**
-         * @return int|false
-         */
+        /** @return int|false */
         public function searchUsingClosureTest()
         {
             return $this->getCollection()->search(function (string $item) {
@@ -143,9 +137,7 @@ Feature: Collection types
             return $this->getCollection()->shift(2);
         }
 
-        /**
-         * @return array<int, string>
-         */
+        /** @return array<int, string> */
         public function allTest(): array
         {
           return $this->getCollection()->all();

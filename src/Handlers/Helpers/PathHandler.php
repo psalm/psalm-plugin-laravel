@@ -39,6 +39,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         ];
     }
 
+    /** @inheritDoc */
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
         $function_id = $event->getFunctionId();
@@ -51,6 +52,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         });
     }
 
+    /** @inheritDoc */
     public static function getClassLikeNames(): array
     {
         return [

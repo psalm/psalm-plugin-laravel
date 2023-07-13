@@ -23,9 +23,7 @@ Feature: Http Resource types
       use Illuminate\Http\Resources\Json\JsonResource;
       use App\Models\User;
 
-      /**
-       * @property-read User $resource
-       */
+      /** @property-read User $resource */
       class UserResource extends JsonResource
       {
           /**
