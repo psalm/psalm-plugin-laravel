@@ -30,7 +30,6 @@ See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more 
 
 ```bash
 composer require --dev psalm/plugin-laravel
-./vendor/bin/psalm-plugin enable psalm/plugin-laravel
 ```
 
 ### Step 2: Configure
@@ -39,7 +38,13 @@ If you didn't use Psalm on the project before, you need to create a Psalm config
 ./vendor/bin/psalm --init
 ```
 
-### Step 3: Run 🚀
+### Step 3: enable the plugin:
+```bash
+./vendor/bin/psalm-plugin enable psalm/plugin-laravel
+```
+
+
+### Step 4: Run 🚀
 Run your usual Psalm command:
 ```bash
 ./vendor/bin/psalm
