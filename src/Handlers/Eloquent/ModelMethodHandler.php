@@ -24,6 +24,7 @@ use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
 use function strtolower;
+use function is_string;
 
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
