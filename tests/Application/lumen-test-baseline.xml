@@ -39,11 +39,18 @@
       <code>handle</code>
     </PossiblyUnusedMethod>
   </file>
+  <file src="app/Models/User.php">
+    <PropertyNotSetInConstructor>
+      <code>User</code>
+      <code>User</code>
+    </PropertyNotSetInConstructor>
+  </file>
   <file src="app/Providers/AuthServiceProvider.php">
     <MissingClosureParamType>
       <code>$request</code>
     </MissingClosureParamType>
     <MixedMethodCall>
+      <code>first</code>
       <code>input</code>
       <code>input</code>
     </MixedMethodCall>
