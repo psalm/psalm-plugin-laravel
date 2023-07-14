@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Stmt\Class_;
-use Psalm\FileManipulation;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
@@ -19,10 +17,9 @@ use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
-use Psalm\Type\Atomic\TGenericObject;
-use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
+use function is_string;
 use function strtolower;
 use function is_string;
 
@@ -43,15 +40,14 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             return null;
         }
 
-//        echo $event->getMethodNameLowercase().'\n';
+        $called_fq_classlike_name = $event->getCalledFqClasslikeName();
 
+        if (! is_string($called_fq_classlike_name)) {
+            return null;
+        }
+
+        // Model::query()
         if ($event->getMethodNameLowercase() === 'query') {
-            $called_fq_classlike_name = $event->getCalledFqClasslikeName();
-
-            if (! is_string($called_fq_classlike_name)) {
-                return null;
-            }
-
             return new Union([
                 new Type\Atomic\TGenericObject(Builder::class, [
                     new Union([
@@ -63,10 +59,9 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
 
         // proxy to builder object
         if ($event->getMethodNameLowercase() === '__callstatic') {
-            $called_fq_classlike_name = $event->getCalledFqClasslikeName();
             $called_method_name_lowercase = $event->getCalledMethodNameLowercase();
 
-            if (!$called_fq_classlike_name || !$called_method_name_lowercase) {
+            if (!$called_method_name_lowercase) {
                 return null;
             }
             $methodId = new MethodIdentifier($called_fq_classlike_name, $called_method_name_lowercase);
