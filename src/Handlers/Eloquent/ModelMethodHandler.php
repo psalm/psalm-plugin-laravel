@@ -21,7 +21,6 @@ use Psalm\Type\Union;
 
 use function is_string;
 use function strtolower;
-use function is_string;
 
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
