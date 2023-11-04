@@ -302,6 +302,8 @@ class Builder implements BuilderContract
      * @param  T $id
      * @param  list<non-empty-string>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel)
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
     public function findOrFail($id, $columns = ['*']) {}
 
