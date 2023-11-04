@@ -114,7 +114,8 @@ Feature: Path helpers
     Scenario: public path can be resolved from application instance
       Given I have the following code
       """
-      require_once app()->make('path.public');
+      /** @psalm-check-type $path = string */
+      $path = app()->make('path.public');
       """
       When I run Psalm
       Then I see no errors
@@ -152,7 +153,8 @@ Feature: Path helpers
     Scenario: storage path can be resolved from application instance
       Given I have the following code
       """
-      require_once app()->make('path.storage');
+      /** @psalm-check-type $path = string */
+      $path = app()->make('path.storage');
       """
       When I run Psalm
       Then I see no errors
