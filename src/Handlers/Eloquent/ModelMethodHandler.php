@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Stmt\Class_;
-use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
@@ -34,10 +33,6 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         $source = $event->getSource();
-
-        if (!$source instanceof StatementsAnalyzer) {
-            return null;
-        }
 
         $called_fq_classlike_name = $event->getCalledFqClasslikeName();
 
