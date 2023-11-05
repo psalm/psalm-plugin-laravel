@@ -67,7 +67,7 @@
     "scripts": {
         "lint": "phpcs --report-full --report-summary --colors -n -s",
         "lint-fix": "phpcbf -n",
-        "psalm": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress --output-format=phpstorm",
+        "psalm": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
         "psalm-set-baseline": "psalm --set-baseline=psalm-baseline.xml",
         "test": [
             "@lint",
