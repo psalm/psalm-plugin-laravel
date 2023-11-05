@@ -15,10 +15,8 @@ use function unlink;
 
 final class ModelStubProvider implements GeneratesStubs
 {
-    /**
-     * @var list<class-string<\Illuminate\Database\Eloquent\Model>>
-     */
-    private static $model_classes;
+    /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
+    private static $model_classes = [];
 
     public static function generateStubFile(): void
     {

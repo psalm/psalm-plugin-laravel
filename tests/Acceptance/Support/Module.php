@@ -337,7 +337,6 @@ class Module extends BaseModule
         $this->fs()->amInPath($pwd);
     }
 
-
     /**
      * @param string|PyStringNode $config
      * @Given I have the following config :config
