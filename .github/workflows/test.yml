@@ -9,6 +9,7 @@ on:
       - '**.feature'
       - '**.yml'
       - 'composer.json'
+      - '.github/workflows/test.yml'
   pull_request:
     paths:
       - '**.php'
