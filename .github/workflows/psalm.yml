@@ -6,6 +6,7 @@ on:
       - '**.php'
       - 'psalm*'
       - 'composer.json'
+      - '.github/workflows/psalm.yml'
   pull_request:
     paths:
       - '**.php'
