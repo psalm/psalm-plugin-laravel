@@ -1,5 +1,21 @@
 # Psalm plugin for Laravel
 
+## The package is seeking maintainers
+
+⚠️ This is a perfect opportunity to learn Laravel very deep and collaborate with other high-skilled developers.
+At this moment, the package is maintained almost solely by [@alies-dev](https://github.com/sponsors/alies-dev), and he is looking for developers to build a team
+who can constantly improve this package and the whole Psalm ecosystem.
+
+Some ideas to implement:
+ - [ ] Add support for Laravel 11 (easy)
+ - [ ] Fully support custom Model Query Builders (medium)
+ - [ ] Add an option to rely on Model `@property` declarations only
+ - [ ] Get rid of `barryvdh/laravel-ide-helper` dependency and be more accurate with attribute types
+ - [ ] Support .sql files for migrations (to find information about attributes and their types)
+
+________
+
+
 [![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
 [![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
 [![Type coverage](https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg)](https://shepherd.dev/github/psalm/psalm-plugin-laravel)
