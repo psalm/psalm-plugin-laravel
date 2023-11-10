@@ -8,6 +8,7 @@ on:
       - 'composer.json'
       - 'tests/laravel*'
       - 'tests/lumen*'
+      - '.github/workflows/test-laravel.yml'
   pull_request:
     paths:
       - '**.php'
