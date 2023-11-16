@@ -14,6 +14,7 @@
         "php": "^8.0.2",
         "ext-simplexml": "*",
         "barryvdh/laravel-ide-helper": "^2.13",
+        "fakerphp/faker": "^1.21",
         "illuminate/config": "^9.48 || ^10.0",
         "illuminate/container": "^9.48 || ^10.0",
         "illuminate/contracts": "^9.48 || ^10.0",
