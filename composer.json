@@ -24,7 +24,7 @@
         "illuminate/support": "^9.48 || ^10.0",
         "illuminate/view": "^9.48 || ^10.0",
         "nikic/php-parser": "^4.13",
-        "orchestra/testbench": "^7.19 || ^8.0",
+        "orchestra/testbench-core": "^7.35 || ^8.15",
         "symfony/console": "^6.0",
         "vimeo/psalm": "^4.30 || ^5.1"
     },
