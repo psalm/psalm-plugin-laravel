@@ -45,12 +45,6 @@ Feature: Eloquent Collection types
         }
 
         /** @return \Illuminate\Database\Eloquent\Collection<int, User> */
-        public function getWhere(array $attributes): \Illuminate\Database\Eloquent\Collection
-        {
-          return User::where($attributes)->get();
-        }
-
-        /** @return \Illuminate\Database\Eloquent\Collection<int, User> */
         public function getWhereUsingLessMagic(array $attributes): \Illuminate\Database\Eloquent\Collection
         {
           return User::query()->where($attributes)->get();
