@@ -57,10 +57,11 @@ jobs:
           - laravel: 11.*
             testbench: 9.*
         exclude:
-          - php: 8.0
-            laravel: ^10.0
-          - php: 8.0
-            laravel: ^11.0
+          - laravel: 10.*
+            php: 8.0
+          - laravel: 11.*
+            php: 8.0
+
     name: Acceptance P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code
