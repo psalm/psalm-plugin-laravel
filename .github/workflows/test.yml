@@ -77,11 +77,15 @@ jobs:
 
       - name: Install lowest dependencies from composer.json
         if: "matrix.dependencies == 'lowest'"
-        run: composer update --with='laravel/framework:${{ matrix.laravel }}' 'orchestra/testbench:${{ matrix.testbench }}' --no-interaction --no-progress --prefer-dist --prefer-stable --prefer-lowest
+        run: |
+          composer require 'laravel/framework:${{ matrix.laravel }}' 'orchestra/testbench:${{ matrix.testbench }}' --no-interaction --no-update
+          composer update --no-progress --prefer-lowest --prefer-dist --prefer-stable --no-interaction
 
       - name: Install highest dependencies from composer.json
         if: "matrix.dependencies == 'highest'"
-        run: composer update --with='laravel/framework:${{ matrix.laravel }}' 'orchestra/testbench:${{ matrix.testbench }}' --no-interaction --no-progress --prefer-dist --prefer-stable
+        run: |
+          composer require 'laravel/framework:${{ matrix.laravel }}' 'orchestra/testbench:${{ matrix.testbench }}' --no-interaction --no-update
+          composer update --no-progress --prefer-dist --prefer-stable --no-interaction
 
       - name: Run Acceptance Tests
         run: composer test:type
