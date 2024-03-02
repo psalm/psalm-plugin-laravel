@@ -60,7 +60,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         if ($event->getMethodNameLowercase() === '__callstatic') {
             $called_method_name_lowercase = $event->getCalledMethodNameLowercase();
 
-            if (!$called_method_name_lowercase) {
+            if ($called_method_name_lowercase === null) {
                 return null;
             }
             $methodId = new MethodIdentifier($called_fq_classlike_name, $called_method_name_lowercase);
