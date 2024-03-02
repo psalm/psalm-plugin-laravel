@@ -22,7 +22,7 @@ final class ViewFactoryProvider
 
         $file_path = $service_helper_reflection->getFileName();
 
-        if (!$file_path) {
+        if ($file_path === false) {
             throw new UnexpectedValueException('Service helper should have a file path');
         }
 

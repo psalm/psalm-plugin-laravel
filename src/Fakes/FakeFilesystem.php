@@ -19,7 +19,7 @@ final class FakeFilesystem extends Filesystem
      */
     public function put($path, $contents, $lock = false)
     {
-        $destination = $this->destination ?: $path;
+        $destination = $this->destination !== null ? $this->destination : $path;
 
         $this->destination = null;
 
