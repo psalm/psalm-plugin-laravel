@@ -111,13 +111,12 @@ Feature: Path helpers
         | Type                  | Message |
         | MissingFile | Cannot find file |
 
-    Scenario: public path can be resolved from application instance [ Psalm 5 ]
+    Scenario: public path can be resolved from application instance
       Given I have the following code
       """
       /** @psalm-check-type $path = string */
       $path = app()->make('path.public');
       """
-      And I have Psalm newer than "5.0" (because of "new psalm-check-type syntax")
       When I run Psalm
       Then I see no errors
 
@@ -151,12 +150,11 @@ Feature: Path helpers
         | Type                  | Message |
         | MissingFile | Cannot find file |
 
-    Scenario: storage path can be resolved from application instance [ Psalm 5 ]
+    Scenario: storage path can be resolved from application instance
       Given I have the following code
       """
       /** @psalm-check-type $path = string */
       $path = app()->make('path.storage');
       """
-      And I have Psalm newer than "5.0" (because of "new psalm-check-type syntax")
       When I run Psalm
       Then I see no errors
