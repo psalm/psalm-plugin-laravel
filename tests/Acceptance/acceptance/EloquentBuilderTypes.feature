@@ -155,29 +155,6 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: can call firstOrNew and firstOrCreate without parameters in [ Laravel 9 ]
-    Given I have the "laravel/framework" package satisfying the "^9.0"
-    And I have the following code
-    """
-    /**
-    * @psalm-param Builder<User> $builder
-    * @psalm-return Builder<User>|User
-    */
-    function test_firstOrCreate(Builder $builder): Builder|User {
-      return $builder->firstOrCreate();
-    }
-
-    /**
-    * @psalm-param Builder<User> $builder
-    * @psalm-return Builder<User>|User
-    */
-    function test_firstOrNew(Builder $builder): Builder|User {
-      return $builder->firstOrNew();
-    }
-    """
-    When I run Psalm
-    Then I see no errors
-
   Scenario: can call whereDate with \DateTimeInterface|string|null
     Given I have the following code
     """
