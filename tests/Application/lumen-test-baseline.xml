@@ -44,6 +44,9 @@
       <code>User</code>
       <code>User</code>
     </PropertyNotSetInConstructor>
+    <NonInvariantDocblockPropertyType>
+        <code>$fillable</code>
+    </NonInvariantDocblockPropertyType>
   </file>
   <file src="app/Providers/AuthServiceProvider.php">
     <MissingClosureParamType>
