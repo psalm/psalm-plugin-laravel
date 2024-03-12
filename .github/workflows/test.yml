@@ -55,6 +55,9 @@ jobs:
         php: [8.3, 8.2, 8.1]
         laravel: [^11.0, ^10.0]
         dependencies: [lowest, highest]
+        exclude:
+          - php: 8.1
+            laravel: ^11.0
     name: Acceptance P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code
