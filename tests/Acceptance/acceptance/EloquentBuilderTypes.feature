@@ -155,29 +155,6 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: can call firstOrNew and firstOrCreate without parameters in [ Laravel 9 ]
-    Given I have the "laravel/framework" package satisfying the "^9.0"
-    And I have the following code
-    """
-    /**
-    * @psalm-param Builder<User> $builder
-    * @psalm-return Builder<User>|User
-    */
-    function test_firstOrCreate(Builder $builder): Builder|User {
-      return $builder->firstOrCreate();
-    }
-
-    /**
-    * @psalm-param Builder<User> $builder
-    * @psalm-return Builder<User>|User
-    */
-    function test_firstOrNew(Builder $builder): Builder|User {
-      return $builder->firstOrNew();
-    }
-    """
-    When I run Psalm
-    Then I see no errors
-
   Scenario: can call whereDate with \DateTimeInterface|string|null
     Given I have the following code
     """
@@ -208,7 +185,7 @@ Feature: Eloquent Builder types
     When I run Psalm
     Then I see no errors
 
-  Scenario: can not call whereDate with incompatible type [ Psalm 5 ]
+  Scenario: can not call whereDate with incompatible type
     Given I have the following code
     """
     /**
@@ -219,28 +196,10 @@ Feature: Eloquent Builder types
       return $builder->whereDate('created_at', '>', 1);
     }
     """
-    And I have Psalm newer than "5.0" (because of "changed issue type")
     When I run Psalm
     Then I see these errors
       | Type  | Message |
       | InvalidArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, but 1 provided |
-
-  Scenario: can not call whereDate with incompatible type [ Psalm 4 ]
-    Given I have the following code
-    """
-    /**
-    * @psalm-param Builder $builder
-    * @psalm-return Builder
-    */
-    function test_whereDateWithInt(Builder $builder): Builder {
-      return $builder->whereDate('created_at', '>', 1);
-    }
-    """
-    And I have Psalm older than "5.0.0" (because of "changed issue type")
-    When I run Psalm
-    Then I see these errors
-        | Type  | Message |
-        | InvalidScalarArgument | Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface\|null\|string, but 1 provided |
 
   Scenario: can call count on the builder instance
     Given I have the following code

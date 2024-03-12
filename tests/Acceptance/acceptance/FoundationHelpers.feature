@@ -64,7 +64,9 @@ Feature: Foundation helpers
       }
     """
     When I run Psalm
-    Then I see no errors
+    Then I see these errors
+      | Type                  | Message |
+      | RiskyTruthyFalsyComparison | Operand of type bool\|string contains type string, which can be falsy and truthy. This can cause possibly unexpected behavior. Use strict comparison instead. |
 
   Scenario: auth() support
     Given I have the following code

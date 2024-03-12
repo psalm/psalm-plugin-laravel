@@ -21,8 +21,4 @@
     <issueHandlers>
         <LessSpecificReturnType errorLevel="info" />
     </issueHandlers>
-
-    <stubs>
-        <file name="stubs/Lumen/Application.stubphp"/>
-    </stubs>
 </psalm>
