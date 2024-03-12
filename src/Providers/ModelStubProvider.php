@@ -10,27 +10,30 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
 
 use function glob;
+use function method_exists;
 use function unlink;
 
 final class ModelStubProvider implements GeneratesStubs
 {
-    /**
-     * @var list<class-string<\Illuminate\Database\Eloquent\Model>>
-     */
-    private static $model_classes;
+    /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
+    private static $model_classes = [];
 
     public static function generateStubFile(): void
     {
         $app = ApplicationProvider::getApp();
-        $migrations_folder = $app->databasePath('migrations/');
+
+        if (!method_exists($app, 'databasePath')) {
+            throw new \RuntimeException('Unsupported Application type.');
+        }
+
+        $migrations_directory = $app->databasePath('migrations/');
 
         $project_analyzer = ProjectAnalyzer::getInstance();
         $codebase = $project_analyzer->getCodebase();
 
         $schema_aggregator = new SchemaAggregator();
 
-        foreach (glob($migrations_folder . '*.php') as $file) {
-            //echo $file . "\n";
+        foreach (glob($migrations_directory . '*.php') as $file) {
             $schema_aggregator->addStatements($codebase->getStatementsForFile($file));
         }
 

@@ -23,9 +23,7 @@ final class OffsetHandler implements
     MethodVisibilityProviderInterface,
     MethodParamsProviderInterface
 {
-    /**
-     * @return array<class-string>
-     */
+    /** @return list<class-string> */
     public static function getClassLikeNames(): array
     {
         return ApplicationInterfaceProvider::getApplicationInterfaceClassLikes();
@@ -86,6 +84,6 @@ final class OffsetHandler implements
         return in_array($methodName, [
             'offsetget',
             'offsetset',
-        ]);
+        ], true);
     }
 }

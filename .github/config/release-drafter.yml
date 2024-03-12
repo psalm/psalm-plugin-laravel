@@ -17,7 +17,7 @@ categories:
 exclude-labels:
   - 'release:skip-changelog'
 category-template: '### $TITLE'
-change-template: '- $TITLE (#$NUMBER)  @$AUTHOR '
+change-template: '- $TITLE (#$NUMBER) @$AUTHOR '
 version-template: 'v$MAJOR.$MINOR.$PATCH'
 version-resolver:
   major:

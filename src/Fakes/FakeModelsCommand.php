@@ -7,9 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 
 use function config;
 use function get_class;
+use function is_a;
 use function in_array;
 use function implode;
 
@@ -31,11 +33,28 @@ class FakeModelsCommand extends ModelsCommand
     /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
     public function getModels(): array
     {
-        return $this->model_classes + $this->loadModels();
+        if ($this->dirs === []) {
+            throw new \LogicException('Directories to scan models are not set.');
+        }
+
+        $models = [];
+
+        // Bypass an issue https://github.com/barryvdh/laravel-ide-helper/issues/1414
+        /** @var list<class-string> $classlike_fq_names */
+        $classlike_fq_names = $this->loadModels();
+        foreach ($classlike_fq_names as $probably_model_fqcn) {
+            if (is_a($probably_model_fqcn, Model::class, true)) {
+                $models[] = $probably_model_fqcn;
+            }
+        }
+
+        return [...$this->model_classes, ...$models];
     }
 
     /**
-     * Load the properties from the database table.
+     * Load Model's properties.
+     * Overrides {@see \Barryvdh\LaravelIdeHelper\Console\ModelsCommand::getPropertiesFromTable}
+     * in order to avoid using DB connection and use SchemaAggregator instead.
      *
      * @param Model $model
      */
@@ -52,19 +71,19 @@ class FakeModelsCommand extends ModelsCommand
         $columns = $this->schema->tables[$table_name]->columns;
 
         foreach ($columns as $column) {
-            $name = $column->name;
+            $column_name = $column->name;
 
-            if (in_array($name, $model->getDates())) {
+            if (in_array($column_name, $model->getDates(), true)) {
                 $get_type = $set_type = '\Illuminate\Support\Carbon';
             } else {
                 switch ($column->type) {
-                    case 'string':
-                    case 'int':
-                    case 'float':
+                    case SchemaColumn::TYPE_STRING:
+                    case SchemaColumn::TYPE_INT:
+                    case SchemaColumn::TYPE_FLOAT:
                         $get_type = $set_type = $column->type;
                         break;
 
-                    case 'bool':
+                    case SchemaColumn::TYPE_BOOL:
                         switch (config('database.default')) {
                             case 'sqlite':
                             case 'mysql':
@@ -78,7 +97,7 @@ class FakeModelsCommand extends ModelsCommand
 
                         break;
 
-                    case 'enum':
+                    case SchemaColumn::TYPE_ENUM:
                         if (!$column->options) {
                             $get_type = $set_type = 'string';
                         } else {
@@ -88,26 +107,27 @@ class FakeModelsCommand extends ModelsCommand
                         break;
 
                     default:
-                        $get_type = $set_type = 'mixed';
+                        $get_type = $set_type = SchemaColumn::TYPE_MIXED;
                         break;
                 }
             }
 
             if ($column->nullable) {
-                $this->nullableColumns[$name] = true;
+                /** @psalm-suppress MixedArrayAssignment */
+                $this->nullableColumns[$column_name] = true;
             }
 
             if ($get_type === $set_type) {
-                $this->setProperty($name, $get_type, true, true, '', $column->nullable);
+                $this->setProperty($column_name, $get_type, true, true, '', $column->nullable);
             } else {
-                $this->setProperty($name, $get_type, true, null, '', $column->nullable);
-                $this->setProperty($name, $set_type, null, true, '', $column->nullable);
+                $this->setProperty($column_name, $get_type, true, null, '', $column->nullable);
+                $this->setProperty($column_name, $set_type, null, true, '', $column->nullable);
             }
 
             if ($this->write_model_magic_where) {
                 $this->setMethod(
-                    Str::camel("where_" . $name),
-                    '\Illuminate\Database\Eloquent\Builder|\\' . get_class($model),
+                    Str::camel("where_" . $column_name),
+                    '\Illuminate\Database\Eloquent\Builder<static>', // @todo support custom EloquentBuilders
                     array('$value')
                 );
             }

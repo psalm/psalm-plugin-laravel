@@ -19,6 +19,7 @@ use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
 use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
 use function in_array;
@@ -34,6 +35,7 @@ class ModelRelationshipPropertyHandler implements
         return ModelStubProvider::getModelClasses();
     }
 
+    /** @inheritDoc */
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();
@@ -82,11 +84,6 @@ class ModelRelationshipPropertyHandler implements
         return null;
     }
 
-    /**
-     * @param  array<PhpParser\Node\Arg>    $call_args
-     *
-     * @return ?Union
-     */
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();
@@ -140,9 +137,10 @@ class ModelRelationshipPropertyHandler implements
                 MorphToMany::class,
             ];
 
-            if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection)) {
+            if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection, true)) {
                 $returnType = new Union([
                     new TGenericObject(Collection::class, [
+                        new Union([new TInt()]),
                         $modelType
                     ]),
                 ]);

@@ -1,0 +1,150 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+* @template-extends Relation<TRelatedModel>
+* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+*/
+class HasManyThrough extends Relation
+{
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  \Illuminate\Database\Eloquent\Model  $farParent
+     * @param  \Illuminate\Database\Eloquent\Model  $throughParent
+     * @param  string  $firstKey
+     * @param  string  $secondKey
+     * @param  string  $localKey
+     * @param  string  $secondLocalKey
+     * @return void
+     */
+    public function __construct(Builder $query, Model $farParent, Model $throughParent, $firstKey, $secondKey, $localKey, $secondLocalKey)
+    {
+        $this->localKey = $localKey;
+        $this->firstKey = $firstKey;
+        $this->secondKey = $secondKey;
+        $this->farParent = $farParent;
+        $this->throughParent = $throughParent;
+        $this->secondLocalKey = $secondLocalKey;
+
+        parent::__construct($query, $throughParent);
+    }
+
+    /**
+     * Get the results of the relationship.
+     *
+     * @psalm-return \Traversable<int, TRelatedModel>
+     */
+    public function getResults() {}
+
+    /**
+     * Get a paginator for the "select" statement.
+     *
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @return \Illuminate\Pagination\LengthAwarePaginator<TRelatedModel>
+     */
+    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+
+    /**
+     * Paginate the given query into a simple paginator.
+     *
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @return \Illuminate\Pagination\Paginator<TRelatedModel>
+     */
+    public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+
+    /**
+     * Paginate the given query into a cursor paginator.
+     *
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>  $columns
+     * @param  string  $cursorName
+     * @param  string|null  $cursor
+     * @return \Illuminate\Pagination\CursorPaginator<TRelatedModel>
+     */
+    public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
+
+    /**
+     * Get the first related model record matching the attributes or instantiate it.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function firstOrNew(array $attributes) {}
+
+    /**
+     * Create or update a related record matching the attributes, and fill it with values.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  array  $values
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function updateOrCreate(array $attributes, array $values = []) {}
+
+    /**
+     * Execute the query and get the first related model.
+     *
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Database\Eloquent\Model|null
+     * @psalm-return TRelatedModel|null
+     */
+    public function first($columns = ['*']) {}
+
+    /**
+     * Execute the query and get the first result or throw an exception.
+     *
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     */
+    public function firstOrFail($columns = ['*']) {}
+
+    /**
+     * Find a related model by its primary key.
+     *
+     * @template T
+     * @psalm-param T $id
+     * @param  mixed  $id
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
+     */
+    public function find($id, $columns = ['*']) {}
+
+    /**
+     * Find multiple related models by their primary keys.
+     *
+     * @param  mixed  $ids
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Database\Eloquent\Collection
+     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     */
+    public function findMany($ids, $columns = ['*']) {}
+
+    /**
+     * Find a related model by its primary key or throw an exception.
+     * @template T
+     * @psalm-param T $id
+     * @param  mixed  $id
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     */
+    public function findOrFail($id, $columns = ['*']) {}
+}

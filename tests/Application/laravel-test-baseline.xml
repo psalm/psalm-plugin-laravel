@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<files psalm-version="5.7.7@e028ba46ba0d7f9a78bc3201c251e137383e145f">
+  <file src="app/Broadcasting/ExampleChannel.php">
+    <InvalidReturnType>
+      <code>array|bool</code>
+    </InvalidReturnType>
+    <UnusedClass>
+      <code>ExampleChannel</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Casts/ExampleCast.php">
+    <MissingTemplateParam>
+      <code>CastsAttributes</code>
+    </MissingTemplateParam>
+    <MoreSpecificImplementedParamType>
+      <code>$attributes</code>
+      <code>$attributes</code>
+    </MoreSpecificImplementedParamType>
+    <UnusedClass>
+      <code>ExampleCast</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Console/Commands/ExampleCommand.php">
+    <MissingReturnType>
+      <code>handle</code>
+    </MissingReturnType>
+    <UnusedClass>
+      <code>ExampleCommand</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Exceptions/ExampleException.php">
+    <UnusedClass>
+      <code>ExampleException</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Exceptions/Handler.php">
+    <UnusedClosureParam>
+      <code>$e</code>
+    </UnusedClosureParam>
+  </file>
+  <file src="app/Http/Controllers/ExampleController.php">
+    <UnusedClass>
+      <code>ExampleController</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Http/Middleware/ExampleMiddleware.php">
+    <UnusedClass>
+      <code>ExampleMiddleware</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Http/Middleware/ValidateSignature.php">
+    <PossiblyUnusedProperty>
+      <code>$except</code>
+    </PossiblyUnusedProperty>
+  </file>
+  <file src="app/Http/Requests/ExampleRequest.php">
+    <DeprecatedInterface>
+      <code><![CDATA[array<string, \Illuminate\Contracts\Validation\Rule|array|string>]]></code>
+    </DeprecatedInterface>
+    <UnusedClass>
+      <code>ExampleRequest</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Http/Resources/ExampleResource.php">
+    <MixedReturnTypeCoercion>
+      <code><![CDATA[array<string, mixed>]]></code>
+      <code>parent::toArray($request)</code>
+    </MixedReturnTypeCoercion>
+    <UnusedClass>
+      <code>ExampleResource</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Listeners/ExampleListener.php">
+    <UnusedClass>
+      <code>ExampleListener</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Mail/ExampleMail.php">
+    <PossiblyUnusedMethod>
+      <code>attachments</code>
+      <code>content</code>
+      <code>envelope</code>
+    </PossiblyUnusedMethod>
+  </file>
+  <file src="app/Models/Scopes/ExampleScope.php">
+    <UnusedClass>
+      <code>ExampleScope</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Models/User.php">
+    <NonInvariantDocblockPropertyType>
+      <code>$casts</code>
+      <code>$fillable</code>
+      <code>$hidden</code>
+    </NonInvariantDocblockPropertyType>
+  </file>
+  <file src="app/Observers/ExampleObserver.php">
+    <UnusedClass>
+      <code>ExampleObserver</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Policies/ExamplePolicy.php">
+    <UnusedClass>
+      <code>ExamplePolicy</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Providers/EventServiceProvider.php">
+    <NonInvariantDocblockPropertyType>
+      <code>$listen</code>
+    </NonInvariantDocblockPropertyType>
+  </file>
+  <file src="app/Providers/ExampleProvider.php">
+    <UnusedClass>
+      <code>ExampleProvider</code>
+    </UnusedClass>
+  </file>
+  <file src="app/Providers/RouteServiceProvider.php">
+    <RiskyTruthyFalsyComparison>
+        <code><![CDATA[$request->user()?->id]]></code>
+    </RiskyTruthyFalsyComparison>
+  </file>
+  <file src="app/Rules/ExampleRule.php">
+    <UnusedClass>
+      <code>ExampleRule</code>
+    </UnusedClass>
+  </file>
+  <file src="app/View/Components/ExampleComponent.php">
+    <PropertyNotSetInConstructor>
+      <code>ExampleComponent</code>
+      <code>ExampleComponent</code>
+    </PropertyNotSetInConstructor>
+    <UnusedClass>
+      <code>ExampleComponent</code>
+    </UnusedClass>
+  </file>
+</files>

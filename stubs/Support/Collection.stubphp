@@ -1,0 +1,119 @@
+<?php
+
+namespace Illuminate\Support;
+
+use ArrayAccess;
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
+use Illuminate\Support\Traits\EnumeratesValues;
+
+/**
+ * @template TKey of array-key
+ * @template TValue
+ * @implements \ArrayAccess<TKey, TValue>
+ * @implements \Illuminate\Support\Enumerable<TKey, TValue>
+ */
+class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerable
+{
+    /**
+     * @use \Illuminate\Support\Traits\EnumeratesValues<TKey, TValue>
+     */
+    use EnumeratesValues;
+
+    /**
+     * Get the first item from the collection passing the given truth test.
+     *
+     * @psalm-mutation-free
+     *
+     * @template TFirstDefault
+     * @template TFirstDefaultFromClosure
+     *
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TFirstDefault|(\Closure(): TFirstDefaultFromClosure)  $default
+     * @return ($default is \Closure ? TFirstDefaultFromClosure : (TFirstDefault | TValue))
+     */
+    public function first(callable $callback = null, $default = null) {}
+
+    /**
+     * @psalm-mutation-free
+     *
+     * @template TGetDefault
+     * @template TGetClosureReturn
+     *
+     * @param  TKey  $key
+     * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
+     * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
+     */
+    public function get($key, $default = null) {}
+
+    /**
+     * @template TCount of int
+     * @param  TCount  $count
+     * @return (
+     *     TCount is 1
+     *     ? TValue|null
+     *     : static
+     * )
+     */
+    public function pop($count = 1) {}
+
+    /**
+     * @template TPullDefault
+     * @template TPullClosureReturn
+     *
+     * @param  TKey  $key
+     * @param  TPullDefault|(\Closure(): TPullClosureReturn)  $default
+     * @return ($default is \Closure ? TPullClosureReturn : (TPullDefault | TValue))
+     */
+    public function pull($key, $default = null) {}
+
+    /**
+     * @psalm-mutation-free
+     *
+     * @param  TKey  $number
+     * @param  (callable(TValue): int)|int|null  $number
+     * @return (TKey is null ? TValue : static<int, TValue>)
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function random($number = null) {}
+
+    /**
+     * @psalm-mutation-free
+     *
+     * @param  TValue|(callable(TValue,TKey): bool)  $value
+     * @param  bool  $strict
+     * @return TKey|false
+     */
+    public function search($value, $strict = false) {}
+
+    /**
+     * @template TCount of int
+     * @param  TCount  $count
+     * @return (
+     *     TCount is 1
+     *     ? TValue|null
+     *     : static
+     * )
+     */
+    public function shift($count = 1) {}
+
+    /**
+     * Determine if the collection is empty or not.
+     *
+     * @psalm-mutation-free
+     * @psalm-assert-if-true null $this->first()
+     * @psalm-assert-if-true 0 $this->count()
+     * @psalm-assert-if-false positive-int $this->count()
+     * @return bool
+     */
+    public function isEmpty() {}
+
+    /**
+     * Determine if the collection is not empty.
+     *
+     * @psalm-mutation-free
+     * @psalm-assert-if-false null $this->first()
+     * @return bool
+     */
+    public function isNotEmpty() {}
+}
