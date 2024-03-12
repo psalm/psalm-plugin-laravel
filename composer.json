@@ -26,7 +26,7 @@
         "nikic/php-parser": "^4.18 || ^5.0",
         "orchestra/testbench": "^7.40 || ^8.21 || ^9.0",
         "symfony/console": "^6.0 || ^7.0",
-        "vimeo/psalm": "^4.30 || ^5.23"
+        "vimeo/psalm": "^5.23"
     },
     "require-dev": {
         "codeception/codeception": "^5.0",
