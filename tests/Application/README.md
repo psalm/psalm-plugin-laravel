@@ -1,6 +1,6 @@
 # Application tests
 
-Idea of application test: create an [almost] empty Laravel (or Lumen) app and run Psalm over its codebase.
+Idea of application test: create an [almost] empty Laravel app and run Psalm over its codebase.
 
 ## FAQ
 

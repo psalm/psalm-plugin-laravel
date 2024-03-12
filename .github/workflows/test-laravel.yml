@@ -8,7 +8,6 @@ on:
       - '**.stubphp'
       - 'composer.json'
       - 'tests/laravel*'
-      - 'tests/lumen*'
       - '.github/workflows/test-laravel.yml'
   pull_request:
     paths:
@@ -16,7 +15,6 @@ on:
       - '**.stubphp'
       - 'composer.json'
       - 'tests/laravel*'
-      - 'tests/lumen*'
       - '.github/workflows/test-laravel.yml'
 
 jobs:
@@ -32,7 +30,3 @@ jobs:
     - name: Test Laravel
       run: |
         ./tests/Application/laravel-test.sh
-
-    - name: Test Lumen
-      run: |
-        ./tests/Application/lumen-test.sh
