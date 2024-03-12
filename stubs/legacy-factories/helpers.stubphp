@@ -1,6 +1,6 @@
 <?php
 /**
- * Support old syntax of test factories (still used by some Laravel 9 projects using a composer package).
+ * Support old syntax of test factories (still used by some Laravel 9+ projects using a composer package).
  * Stubs for {@see https://github.com/laravel/legacy-factories/blob/master/helpers.php}
  */
 
