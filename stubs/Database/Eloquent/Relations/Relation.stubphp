@@ -1,0 +1,121 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Traits\ForwardsCalls;
+use Illuminate\Support\Traits\Macroable;
+
+/**
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
+abstract class Relation
+{
+    use ForwardsCalls, Macroable {
+        __call as macroCall;
+    }
+
+    /**
+     * The Eloquent query builder instance.
+     *
+     * @var \Illuminate\Database\Eloquent\Builder
+     * @psalm-var \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+     */
+    protected $query;
+
+    /**
+     * The parent model instance.
+     *
+     * @var \Illuminate\Database\Eloquent\Model
+     */
+    protected $parent;
+
+    /**
+     * The related model instance.
+     *
+     * @var \Illuminate\Database\Eloquent\Model
+     * @psalm-var TRelatedModel
+     */
+    protected $related;
+
+    /**
+     * Create a new relation instance.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  \Illuminate\Database\Eloquent\Model  $parent
+     * @return void
+     */
+    public function __construct(Builder $query, Model $parent)
+    {
+        $this->query = $query;
+        $this->parent = $parent;
+        $this->related = $query->getModel();
+
+        $this->addConstraints();
+    }
+
+    /**
+     * Get the relationship for eager loading.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection
+     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     */
+    public function getEager()
+    {
+        return $this->get();
+    }
+
+    /**
+     * Execute the query as a "select" statement.
+     *
+     * @param  list<non-empty-string>  $columns
+     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     */
+    public function get($columns = ['*'])
+    {
+        return $this->query->get($columns);
+    }
+
+    /**
+     * Add an "order by" clause for a timestamp to the query.
+     *
+     * Psalm note: ideally the type should be inferred from $this->query
+     *
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @return $this
+     */
+    public function latest($column = null) {}
+
+    /**
+     * Add an "order by" clause for a timestamp to the query.
+     *
+     * Psalm note: ideally the type should be inferred from $this->query
+     *
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @return $this
+     */
+    public function oldest($column = null) {}
+
+    /**
+     * Get the underlying query for the relation.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+     */
+    public function getQuery()
+    {
+        return $this->query;
+    }
+
+    /**
+     * Get the related model of the relation.
+     *
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function getRelated()
+    {
+        return $this->related;
+    }
+}

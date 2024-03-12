@@ -1,0 +1,42 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Concerns\SupportsDefaultModels;
+
+/**
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+* @template-extends HasManyThrough<TRelatedModel>
+* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+*/
+class HasOneThrough extends HasManyThrough
+{
+    use SupportsDefaultModels;
+
+    /**
+     * @param array<string, mixed> $attributes
+     *
+     * @psalm-return TRelatedModel
+     */
+    public function create(array $attributes = []) {}
+
+    /**
+     * Get the results of the relationship.
+     *
+     * @psalm-return \Traversable<int, TRelatedModel>
+     */
+    public function getResults()
+    {
+        return $this->first() ?: $this->getDefaultFor($this->farParent);
+    }
+
+    /**
+     * Make a new related instance for the given model.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model  $parent
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function newRelatedInstanceFor(Model $parent) {}
+}

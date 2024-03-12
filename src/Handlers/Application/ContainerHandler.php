@@ -24,24 +24,25 @@ use function get_class;
 use function in_array;
 use function is_object;
 use function strtolower;
+use function is_string;
+use function is_callable;
 
 final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
-    /**
-     * @return array<array-key, lowercase-string>
-     */
+    /** @inheritDoc */
     public static function getFunctionIds(): array
     {
         return ['app', 'resolve'];
     }
 
+    /** @inheritDoc */
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
         $call_args = $event->getCallArgs();
 
-        if (!$call_args) {
+        if ($call_args === []) {
             return new Union([
-                new TNamedObject(get_class(ApplicationProvider::getApp())),
+                new TNamedObject(ApplicationProvider::getAppFullyQualifiedClassName()),
             ]);
         }
 
@@ -50,25 +51,14 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
         return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($statements_source->getNodeTypeProvider(), $call_args) ?? Type::getMixed();
     }
 
+    /** @inheritDoc */
     public static function getClassLikeNames(): array
     {
-        return [get_class(ApplicationProvider::getApp())];
+        return [ApplicationProvider::getAppFullyQualifiedClassName()];
     }
 
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
-        // lumen doesn't have the likes of makeWith, so we will ensure these methods actually exist on the underlying
-        // app contract
-        $methods = array_filter(['make', 'makewith'], function (string $methodName) use ($event) {
-
-            $methodId = new MethodIdentifier($event->getFqClasslikeName(), $methodName);
-            return $event->getSource()->getCodebase()->methodExists($methodId);
-        });
-
-        if (!in_array($event->getMethodNameLowercase(), $methods)) {
-            return null;
-        }
-
         return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($event->getSource()->getNodeTypeProvider(), $event->getCallArgs());
     }
 
@@ -86,6 +76,10 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
 
         foreach ($bindings as $abstract) {
             try {
+                if (!is_string($abstract) && !is_callable($abstract)) {
+                    continue;
+                }
+
                 $concrete = ApplicationProvider::getApp()->make($abstract);
 
                 if (!is_object($concrete)) {

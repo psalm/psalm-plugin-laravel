@@ -4,7 +4,7 @@ namespace Psalm\LaravelPlugin\Fakes;
 
 use Illuminate\Filesystem\Filesystem;
 
-class FakeFilesystem extends Filesystem
+final class FakeFilesystem extends Filesystem
 {
     /** @var ?string */
     private $destination = '';
@@ -19,7 +19,7 @@ class FakeFilesystem extends Filesystem
      */
     public function put($path, $contents, $lock = false)
     {
-        $destination = $this->destination ?: $path;
+        $destination = $this->destination !== null ? $this->destination : $path;
 
         $this->destination = null;
 

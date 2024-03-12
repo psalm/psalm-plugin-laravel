@@ -1,0 +1,18 @@
+<?php
+
+namespace Illuminate\Http\Concerns;
+
+trait InteractsWithInput
+{
+    /**
+     * Retrieve an input item from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     * @psalm-mutation-free
+     */
+    public function input($key = null, $default = null) {}
+}

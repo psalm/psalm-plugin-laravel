@@ -1,0 +1,18 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+/**
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+* @template-extends HasOneOrMany<TRelatedModel>
+* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+*/
+class MorphOneOrMany extends HasOneOrMany
+{
+    /**
+     * @param array<string, mixed> $attributes
+     *
+     * @psalm-return TRelatedModel
+     */
+    public function create(array $attributes = []) {}
+}

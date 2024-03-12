@@ -1,38 +1,24 @@
 <?xml version="1.0"?>
 <psalm
-    errorLevel="2"
-    reportMixedIssues="false"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
-    xsi:schemaLocation="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config config.xsd"
+    errorLevel="1"
     errorBaseline="psalm-baseline.xml"
+    findUnusedBaselineEntry="false"
+    findUnusedCode="true"
     phpVersion="8.0"
 >
     <projectFiles>
         <directory name="src" />
-        <ignoreFiles>
+        <ignoreFiles allowMissingFiles="true">
             <directory name="vendor"/>
+            <directory name="tests-app"/>
+            <directory name="tests/Unit/Handlers/Eloquent/Schema/migrations"/>
         </ignoreFiles>
     </projectFiles>
 
     <issueHandlers>
         <LessSpecificReturnType errorLevel="info" />
-
-        <PropertyNotSetInConstructor>
-            <errorLevel type="suppress">
-                <file name="src/Fakes/FakeMetaCommand.php" />
-                <file name="src/Fakes/FakeModelsCommand291.php" />
-                <file name="src/Fakes/FakeModelsCommand210.php" />
-            </errorLevel>
-        </PropertyNotSetInConstructor>
-        <OverriddenMethodAccess>
-            <errorLevel type="suppress">
-                <file name="src/Fakes/FakeModelsCommand291.php" />
-            </errorLevel>
-        </OverriddenMethodAccess>
     </issueHandlers>
-
-    <stubs>
-        <file name="stubs/LumenApplication.stubphp"/>
-    </stubs>
 </psalm>

@@ -39,13 +39,14 @@ final class ContainerResolver
 
         // dynamic analysis to resolve the actual type from the container
         try {
+            /** @var mixed $concrete */
             $concrete = ApplicationProvider::getApp()->make($abstract);
         } catch (\Throwable $e) {
             return null;
         }
 
         if (is_string($concrete)) {
-            // some of the path helpers actually return a string when being resolved
+            // some path-helpers actually return a string when being resolved
             $concreteClass = $concrete;
         } elseif (is_object($concrete)) {
             // normally we have an object resolved
@@ -61,7 +62,7 @@ final class ContainerResolver
     }
 
     /**
-     * @param array<Arg> $call_args
+     * @param list<Arg> $call_args
      */
     public static function resolvePsalmTypeFromApplicationContainerViaArgs(NodeTypeProvider $nodeTypeProvider, array $call_args): ?Union
     {
@@ -73,7 +74,7 @@ final class ContainerResolver
 
         if ($firstArgType && $firstArgType->isSingleStringLiteral()) {
             $abstract = $firstArgType->getSingleStringLiteral()->value;
-            $concrete = static::resolveFromApplicationContainer($abstract);
+            $concrete = self::resolveFromApplicationContainer($abstract);
 
             if (is_null($concrete)) {
                 return null;

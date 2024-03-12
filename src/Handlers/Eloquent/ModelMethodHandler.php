@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Stmt\Class_;
-use Psalm\FileManipulation;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
@@ -20,18 +19,18 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Union;
 
+use function is_string;
 use function strtolower;
 
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
-    /**
-     * @return array<string>
-     */
+    /** @inheritDoc */
     public static function getClassLikeNames(): array
     {
         return [Model::class];
     }
 
+    /** @inheritDoc */
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         $source = $event->getSource();
@@ -40,12 +39,28 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             return null;
         }
 
+        $called_fq_classlike_name = $event->getCalledFqClasslikeName();
+
+        if (! is_string($called_fq_classlike_name)) {
+            return null;
+        }
+
+        // Model::query()
+        if ($event->getMethodNameLowercase() === 'query') {
+            return new Union([
+                new Type\Atomic\TGenericObject(Builder::class, [
+                    new Union([
+                        new Type\Atomic\TNamedObject($called_fq_classlike_name),
+                    ]),
+                ])
+            ]);
+        }
+
         // proxy to builder object
         if ($event->getMethodNameLowercase() === '__callstatic') {
-            $called_fq_classlike_name = $event->getCalledFqClasslikeName();
             $called_method_name_lowercase = $event->getCalledMethodNameLowercase();
 
-            if (!$called_fq_classlike_name || !$called_method_name_lowercase) {
+            if ($called_method_name_lowercase === null) {
                 return null;
             }
             $methodId = new MethodIdentifier($called_fq_classlike_name, $called_method_name_lowercase);
@@ -68,12 +83,8 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         return null;
     }
 
-    /**
-     * @param  FileManipulation[] $file_replacements
-     *
-     * @return void
-     */
-    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event)
+    /** @inheritDoc */
+    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
         $storage = $event->getStorage();
         if (

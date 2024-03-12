@@ -1,0 +1,26 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Concerns\SupportsDefaultModels;
+
+/**
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+* @template-extends HasOneOrMany<TRelatedModel>
+* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+*/
+class HasOne extends HasOneOrMany
+{
+    use SupportsDefaultModels;
+
+    /** @psalm-return ?TRelatedModel */
+    public function getResults() {}
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Model  $parent
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function newRelatedInstanceFor(Model $parent) {}
+}

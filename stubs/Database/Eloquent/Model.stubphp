@@ -1,0 +1,84 @@
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+use ArrayAccess;
+use JsonSerializable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Routing\UrlRoutable;
+use Illuminate\Contracts\Queue\QueueableEntity;
+use Illuminate\Support\Traits\ForwardsCalls;
+
+/**
+ * @implements \ArrayAccess<string, mixed>
+ * @mixin \Illuminate\Database\Eloquent\Builder<static>
+ */
+abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializable, QueueableEntity, UrlRoutable
+{
+    use Concerns\HasAttributes,
+            Concerns\HasEvents,
+            Concerns\HasGlobalScopes,
+            Concerns\HasRelationships,
+            Concerns\HasTimestamps,
+            Concerns\HidesAttributes,
+            Concerns\GuardsAttributes,
+            ForwardsCalls;
+
+    /**
+     * @param  array|mixed  $columns
+     * @return \Illuminate\Database\Eloquent\Collection<int, static>
+     */
+    public static function all($columns = ['*']) {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<static>
+     */
+    public static function query() {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQuery() {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newModelQuery() {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQueryWithoutRelationships() {}
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder  $builder
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function registerGlobalScopes($builder) {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQueryWithoutScopes() {}
+
+    /**
+     * Get a new query instance without a given scope.
+     *
+     * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQueryWithoutScope($scope) {}
+
+    /**
+     * @param  array|int  $ids
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQueryForRestoration($ids) {}
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newEloquentBuilder($query) {}
+}

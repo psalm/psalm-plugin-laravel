@@ -1,0 +1,18 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+/**
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+* @template-extends MorphOneOrMany<TRelatedModel>
+* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+*/
+class MorphOne extends MorphOneOrMany
+{
+    /**
+     * Get the results of the relationship.
+     *
+     * @psalm-return ?TRelatedModel
+     */
+    public function getResults() {}
+}

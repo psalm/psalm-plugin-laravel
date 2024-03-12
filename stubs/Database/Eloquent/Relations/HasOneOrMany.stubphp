@@ -1,0 +1,85 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
+
+/**
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+* @template-extends Relation<TRelatedModel>
+* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+*/
+abstract class HasOneOrMany extends Relation
+{
+
+    /**
+     * Create a new has one or many relationship instance.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  \Illuminate\Database\Eloquent\Model  $parent
+     * @param  string  $foreignKey
+     * @param  string  $localKey
+     * @return void
+     */
+    public function __construct(Builder $query, Model $parent, $foreignKey, $localKey)
+    {
+        $this->localKey = $localKey;
+        $this->foreignKey = $foreignKey;
+
+        parent::__construct($query, $parent);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function make(array $attributes = []) {}
+
+    /**
+     * @param  mixed  $id
+     * @param  list<non-empty-string>  $columns
+     * @return \Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function findOrNew($id, $columns = ['*']) {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array  $values
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function updateOrCreate(array $attributes, array $values = []) {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function create(array $attributes = []) {}
+
+    /**
+     * @param  array  $records
+     * @return \Illuminate\Database\Eloquent\Collection
+     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     */
+    public function createMany(array $records) {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array  $values
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function firstOrNew(array $attributes = [], array $values = []) {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array  $values
+     * @return \Illuminate\Database\Eloquent\Model
+     * @psalm-return TRelatedModel
+     */
+    public function firstOrCreate(array $attributes = [], array $values = []) {}
+}

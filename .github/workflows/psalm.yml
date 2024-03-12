@@ -1,22 +1,35 @@
 name: Psalm
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [master]
+    paths:
+      - '**.php'
+      - 'psalm*'
+      - 'composer.json'
+      - '.github/workflows/psalm.yml'
+  pull_request:
+    paths:
+      - '**.php'
+      - 'psalm*'
+      - 'composer.json'
+      - '.github/workflows/psalm.yml'
 
 jobs:
   psalm:
     name: Psalm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.0'
+          php-version: 8.3
           coverage: none
 
       - name: Install composer dependencies
         run: composer install -n --prefer-dist
 
       - name: Run Psalm
-        run: ./vendor/bin/psalm  --threads=2 --shepherd
+        run: ./vendor/bin/psalm --threads=2 --output-format=github --shepherd

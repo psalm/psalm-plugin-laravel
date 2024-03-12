@@ -1,13 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="4.22.0@fc2c6ab4d5fa5d644d8617089f012f3bb84b8703">
-  <file src="src/Providers/ApplicationProvider.php">
-    <MissingFile occurrences="1">
-      <code>require $applicationPath</code>
-    </MissingFile>
+<files psalm-version="5.23.1@8471a896ccea3526b26d082f4461eeea467f10a4">
+  <file src="src/Handlers/Auth/AuthConfigAnalyzer.php">
+    <LessSpecificReturnStatement>
+      <code><![CDATA['\Illuminate\Auth\GenericUser']]></code>
+    </LessSpecificReturnStatement>
+    <MixedArgument>
+      <code><![CDATA[$this->config->get('auth.guards')]]></code>
+    </MixedArgument>
+    <MixedInferredReturnType>
+      <code><![CDATA[?string]]></code>
+      <code><![CDATA[class-string<\Illuminate\Contracts\Auth\Authenticatable>|null]]></code>
+    </MixedInferredReturnType>
+    <MixedReturnStatement>
+      <code><![CDATA[$this->config->get("auth.providers.$provider.model", null)]]></code>
+      <code><![CDATA[$this->config->get('auth.defaults.guard')]]></code>
+    </MixedReturnStatement>
   </file>
-  <file src="src/Providers/ModelStubProvider.php">
-    <PossiblyUndefinedMethod occurrences="1">
-      <code>databasePath</code>
-    </PossiblyUndefinedMethod>
+  <file src="src/Handlers/Auth/AuthHandler.php">
+    <TypeDoesNotContainType>
+      <code><![CDATA[null]]></code>
+    </TypeDoesNotContainType>
+  </file>
+  <file src="src/Handlers/Auth/GuardHandler.php">
+    <DeprecatedProperty>
+      <code><![CDATA[$previous_call->name->parts]]></code>
+    </DeprecatedProperty>
+  </file>
+  <file src="src/Handlers/Eloquent/ModelPropertyAccessorHandler.php">
+    <ArgumentTypeCoercion>
+      <code><![CDATA[$event->getFqClasslikeName()]]></code>
+      <code><![CDATA[$event->getFqClasslikeName()]]></code>
+      <code><![CDATA[$event->getFqClasslikeName()]]></code>
+    </ArgumentTypeCoercion>
+    <LessSpecificImplementedReturnType>
+      <code><![CDATA[array]]></code>
+      <code><![CDATA[array]]></code>
+      <code><![CDATA[array]]></code>
+    </LessSpecificImplementedReturnType>
+  </file>
+  <file src="src/Handlers/Eloquent/Schema/SchemaAggregator.php">
+    <DeprecatedProperty>
+      <code><![CDATA[$first_argument_of_nullable->value->name->parts]]></code>
+    </DeprecatedProperty>
+  </file>
+  <file src="src/Handlers/Helpers/PathHandler.php">
+    <InternalMethod>
+      <code><![CDATA[new TLiteralString($result)]]></code>
+    </InternalMethod>
+  </file>
+  <file src="src/Providers/ApplicationProvider.php">
+    <InternalMethod>
+      <code><![CDATA[createApplication]]></code>
+    </InternalMethod>
+  </file>
+  <file src="src/Util/ContainerResolver.php">
+    <InternalMethod>
+      <code><![CDATA[new TLiteralString($concrete)]]></code>
+    </InternalMethod>
   </file>
 </files>

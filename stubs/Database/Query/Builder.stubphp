@@ -1,0 +1,33 @@
+<?php
+
+namespace Illuminate\Database\Query;
+
+use Illuminate\Database\Concerns\BuildsQueries;
+use Illuminate\Support\Traits\ForwardsCalls;
+use Illuminate\Support\Traits\Macroable;
+
+class Builder
+{
+    use BuildsQueries, ForwardsCalls, Macroable {
+        __call as macroCall;
+    }
+
+    /**
+     * Execute a query for a single record by ID.
+     *
+     * @template T
+     * @param  list<non-empty-string>  $columns
+     * @return \stdClass|null
+     */
+    public function find($id, $columns = ['*']) {}
+
+    /**
+     * Create a raw database expression.
+     *
+     * @param  mixed  $value
+     * @return \Illuminate\Database\Query\Expression
+     *
+     * @psalm-taint-sink sql $value
+     */
+    public function raw($value) {}
+}

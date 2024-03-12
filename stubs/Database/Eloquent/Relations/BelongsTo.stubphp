@@ -1,0 +1,45 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Concerns\SupportsDefaultModels;
+
+/**
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * @template-extends Relation<TRelatedModel>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
+class BelongsTo extends Relation
+{
+    use SupportsDefaultModels;
+
+    /**
+     * Create a new belongs to relationship instance.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  \Illuminate\Database\Eloquent\Model  $child
+     * @param  string  $foreignKey
+     * @param  string  $ownerKey
+     * @param  string  $relationName
+     *
+     * @return void
+     */
+    public function __construct(Builder $query, Model $child, $foreignKey, $ownerKey, $relationName)
+    {
+        $this->ownerKey = $ownerKey;
+        $this->relationName = $relationName;
+        $this->foreignKey = $foreignKey;
+
+        // In the underlying base relationship class, this variable is referred to as
+        // the "parent" since most relationships are not inversed. But, since this
+        // one is we will create a "child" variable for much better readability.
+        $this->child = $child;
+
+        parent::__construct($query, $child);
+    }
+
+    /** @psalm-return ?TRelatedModel */
+    public function getResults() {}
+}

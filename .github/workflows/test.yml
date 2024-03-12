@@ -1,33 +1,80 @@
 name: Tests
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '**.php'
+      - '**.stubphp'
+      - '**.feature'
+      - '**.yml'
+      - 'composer.json'
+      - '.github/workflows/test.yml'
+  pull_request:
+    paths:
+      - '**.php'
+      - '**.stubphp'
+      - '**.feature'
+      - 'composer.json'
+      - '.github/workflows/test.yml'
+  schedule:
+    - cron: "0 6 * * *"
 
 jobs:
-  build:
+
+  unit_tests:
+    name: Unit tests
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        php: [8.0, 8.1]
-        illuminate_version: [8.67.*, 9.7.*]
-        stability: [prefer-lowest, prefer-stable]
-
-    name: P${{ matrix.php }} | I ${{ matrix.illuminate_version }} | ${{ matrix.stability }}
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+          coverage: none
+          tools: composer:v2
+
+      - name: Check Composer configuration
+        run: composer validate --strict
+
+      - name: Install composer dependencies
+        run: composer install
+
+      - name: Run Unit tests
+        run: composer test:unit
+
+
+  acceptance_tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        php: [8.3, 8.2, 8.1]
+        laravel: [^11.0, ^10.0]
+        dependencies: [lowest, highest]
+        exclude:
+          - php: 8.1
+            laravel: ^11.0
+    name: Acceptance P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M
           coverage: none
-          tools: composer:v2
+          tools: composer
 
-      - name: Install dependencies
+      - name: Install dependencies from composer.json
         run: |
-          composer require "laravel/framework:${{ matrix.illuminate_version }}" "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --${{ matrix.stability }}
+          composer require "illuminate/support:${{ matrix.laravel }}" --no-update
+          composer update --no-interaction --no-progress --prefer-dist --prefer-stable ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }}
 
-      - name: Run Tests
-        run: composer test
+      - name: Run Acceptance Tests
+        run: composer test:type

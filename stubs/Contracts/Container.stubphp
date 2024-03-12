@@ -1,0 +1,25 @@
+<?php
+
+namespace Illuminate\Contracts\Container;
+
+use Psr\Container\ContainerInterface;
+
+interface Container extends ContainerInterface, \ArrayAccess
+{
+    /**
+     * @param mixed $offset
+     * @return mixed
+     *
+     * @since 5.0.0
+     */
+    public function offsetGet($offset);
+
+    /**
+     * @param mixed $offset The offset to assign the value to.
+     * @param mixed $value The value to set.
+     * @return void
+     *
+     * @since 5.0.0
+     */
+    public function offsetSet($offset, $value);
+}

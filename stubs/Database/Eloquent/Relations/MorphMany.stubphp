@@ -1,0 +1,25 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+/**
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+* @template-extends MorphOneOrMany<TRelatedModel>
+* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+*/
+class MorphMany extends MorphOneOrMany
+{
+    /**
+     * @param array<string, mixed> $attributes
+     *
+     * @psalm-return TRelatedModel
+     */
+    public function create(array $attributes = []) {}
+
+    /**
+     * Get the results of the relationship.
+     *
+     * @psalm-return \Traversable<int, TRelatedModel>
+     */
+    public function getResults() {}
+}

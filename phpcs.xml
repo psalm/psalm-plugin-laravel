@@ -18,9 +18,19 @@
         <exclude-pattern>*</exclude-pattern>
     </rule>
 
+    <rule ref="PSR1.Methods.CamelCapsMethodName.NotCamelCaps">
+        <exclude-pattern>tests/Unit</exclude-pattern>
+    </rule>
+
     <file>src/</file>
     <file>tests</file>
-    <exclude-pattern>src/cache/</exclude-pattern>
-    <exclude-pattern>tests/_support/</exclude-pattern>
-    <exclude-pattern>tests/Support/</exclude-pattern>
+    <exclude-pattern>cache/</exclude-pattern>
+    <exclude-pattern>tests/_run/</exclude-pattern>
+    <exclude-pattern>tests/Acceptance/_output</exclude-pattern>
+    <exclude-pattern>tests/Acceptance/_run</exclude-pattern>
+    <exclude-pattern>tests/Acceptance/_support</exclude-pattern>
+    <exclude-pattern>tests/Acceptance/Support/</exclude-pattern><!-- This code mostly copy-paste from https://github.com/psalm/codeception-psalm-module and thus may have different coding-style rules -->
+    <exclude-pattern>tests/Application/</exclude-pattern>
+    <exclude-pattern>tests/Unit/Handlers/Eloquent/Schema/migrations</exclude-pattern>
+    <exclude-pattern>tests-app/</exclude-pattern>
 </ruleset>

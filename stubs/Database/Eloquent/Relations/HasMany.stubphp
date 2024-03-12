@@ -1,0 +1,14 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+/**
+* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+* @template-extends HasOneOrMany<TRelatedModel>
+* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+*/
+class HasMany extends HasOneOrMany
+{
+    /** @psalm-return \Traversable<int, TRelatedModel> */
+    public function getResults() {}
+}
