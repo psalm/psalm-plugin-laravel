@@ -22,20 +22,23 @@ ________
 [![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel.yml)
 
 ## Overview
-This [Psalm](https://github.com/vimeo/psalm) plugin brings static analysis and type support to projects using Laravel. Our goal is to find as many type-related
- bugs as possible, therefore increasing developer productivity and application health. Find bugs without the overhead
- of writing tests!
+This [Psalm](https://github.com/vimeo/psalm) plugin brings static analysis and type support to projects using Laravel.
+Our goal is to find as many type-related bugs as possible, therefore increasing developer productivity and application health.
+Find bugs without the overhead of writing tests!
  
  ![Screenshot](/assets/screenshot.png)
 
 
 ## Versions & Dependencies
 
-| Laravel Psalm Plugin | PHP   | Laravel      | Psalm |
-|----------------------|-------|--------------|-------|
-| 2.10+                | ^8.0  | 9, 10, 11    | 5     |
-| 2.0-2.9              | ^8.0  | 8, 9, 10, 11 | 4, 5  |
-| 1.x                  | ^7.1  | 5, 6, 7, 8   | 3, 4  |
+| Laravel Psalm Plugin | PHP  | Laravel    | Psalm |
+|----------------------|------|------------|-------|
+| 2.10+                | ^8.1 | 10, 11     | 5     |
+| 2.9.x                | ^8.0 | 9, 10, 11  | 4, 5  |
+| 2.7-2.8              | ^8.0 | 9, 10      | 4, 5  |
+| 2.1-2.6              | ^8.0 | 9          | 4, 5  |
+| 2.0.x                | ^8.0 | 8, 9       | 4, 5  |
+| 1.x                  | ^7.1 | 5, 6, 7, 8 | 3, 4  |
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
 
