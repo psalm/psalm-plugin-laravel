@@ -56,25 +56,13 @@ Feature: Foundation helpers
     When I run Psalm
     Then I see no errors
 
-  Scenario: app() support: env can be pulled off the app [ Psalm <5.20 ]
+  Scenario: app() support: env can be pulled off the app
     Given I have the following code
     """
       if (app()->environment('production')) {
         // do something
       }
     """
-    And I have Psalm older than "5.20.0" (because of "changed issue type")
-    When I run Psalm
-    Then I see no errors
-
-  Scenario: app() support: env can be pulled off the app [ Psalm >5.20 ]
-    Given I have the following code
-    """
-      if (app()->environment('production')) {
-        // do something
-      }
-    """
-    And I have Psalm newer than "5.20.0" (because of "changed issue type")
     When I run Psalm
     Then I see these errors
       | Type                  | Message |
