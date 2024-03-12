@@ -59,17 +59,6 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
 
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
-        // lumen doesn't have the likes of makeWith, so we will ensure these methods actually exist on the underlying
-        // app contract
-        $methods = array_filter(['make', 'makewith'], static function (string $methodName) use ($event) {
-            $methodId = new MethodIdentifier($event->getFqClasslikeName(), $methodName);
-            return $event->getSource()->getCodebase()->methodExists($methodId);
-        });
-
-        if (!in_array($event->getMethodNameLowercase(), $methods, true)) {
-            return null;
-        }
-
         return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($event->getSource()->getNodeTypeProvider(), $event->getCallArgs());
     }
 
@@ -91,7 +80,6 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
                     continue;
                 }
 
-                /** @psalm-suppress MixedArgument */
                 $concrete = ApplicationProvider::getApp()->make($abstract);
 
                 if (!is_object($concrete)) {

@@ -7,7 +7,6 @@ namespace Psalm\LaravelPlugin\Providers;
 use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Application as LaravelApplication;
-use Laravel\Lumen\Application as LumenApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
 
 use function define;
@@ -22,26 +21,22 @@ final class ApplicationProvider
 {
     use CreatesApplication;
 
-    /** @var LaravelApplication|LumenApplication|null */
+    /** @var LaravelApplication|null */
     private static $app = null;
 
     public static function bootApp(): void
     {
         $app = self::getApp();
 
-        if ($app instanceof LaravelApplication) {
-            /** @var \Illuminate\Contracts\Console\Kernel $consoleApp */
-            $consoleApp = $app->make(Kernel::class);
-            // @todo do not bootstrap \Illuminate\Foundation\Bootstrap\HandleExceptions
-            $consoleApp->bootstrap();
-        } else { // LumenApplication
-            $app->boot();
-        }
+        /** @var \Illuminate\Contracts\Console\Kernel $consoleApp */
+        $consoleApp = $app->make(Kernel::class);
+        // @todo do not bootstrap \Illuminate\Foundation\Bootstrap\HandleExceptions
+        $consoleApp->bootstrap();
 
         $app->register(IdeHelperServiceProvider::class);
     }
 
-    public static function getApp(): LaravelApplication | LumenApplication
+    public static function getApp(): LaravelApplication
     {
         if (self::$app instanceof \Illuminate\Container\Container) {
             return self::$app;
@@ -61,8 +56,8 @@ final class ApplicationProvider
             $app = (new self())->createApplication(); // Orchestra\Testbench
         }
 
-        if (! $app instanceof LaravelApplication && ! $app instanceof LumenApplication) {
-            throw new \RuntimeException('Could not find Laravel/Lumen bootstrap file.');
+        if (! $app instanceof LaravelApplication) {
+            throw new \RuntimeException('Could not find Laravel bootstrap file.');
         }
 
         self::$app = $app;
@@ -71,7 +66,7 @@ final class ApplicationProvider
     }
 
     /**
-     * @psalm-return class-string<\Illuminate\Foundation\Application|\Laravel\Lumen\Application>
+     * @psalm-return class-string<\Illuminate\Foundation\Application>
      */
     public static function getAppFullyQualifiedClassName(): string
     {

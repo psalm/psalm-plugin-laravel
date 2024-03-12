@@ -35,6 +35,6 @@ class SchemaColumn
         $this->name = $name;
         $this->type = $type;
         $this->nullable = $nullable;
-        $this->options = $options ?: [];
+        $this->options = $options !== null ? $options : [];
     }
 }

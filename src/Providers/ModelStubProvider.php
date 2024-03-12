@@ -26,7 +26,6 @@ final class ModelStubProvider implements GeneratesStubs
             throw new \RuntimeException('Unsupported Application type.');
         }
 
-        /** @var string $migrations_directory */
         $migrations_directory = $app->databasePath('migrations/');
 
         $project_analyzer = ProjectAnalyzer::getInstance();

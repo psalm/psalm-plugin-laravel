@@ -2,19 +2,20 @@ name: Test laravel projects
 
 on:
   push:
+    branches: [master]
     paths:
       - '**.php'
       - '**.stubphp'
       - 'composer.json'
       - 'tests/laravel*'
-      - 'tests/lumen*'
       - '.github/workflows/test-laravel.yml'
   pull_request:
     paths:
       - '**.php'
       - '**.stubphp'
+      - 'composer.json'
       - 'tests/laravel*'
-      - 'tests/lumen*'
+      - '.github/workflows/test-laravel.yml'
 
 jobs:
   build:
@@ -29,7 +30,3 @@ jobs:
     - name: Test Laravel
       run: |
         ./tests/Application/laravel-test.sh
-
-    - name: Test Lumen
-      run: |
-        ./tests/Application/lumen-test.sh

@@ -3,6 +3,7 @@ name: Tests
 on:
   workflow_dispatch:
   push:
+    branches: [master]
     paths:
       - '**.php'
       - '**.stubphp'
@@ -16,6 +17,7 @@ on:
       - '**.stubphp'
       - '**.feature'
       - 'composer.json'
+      - '.github/workflows/test.yml'
   schedule:
     - cron: "0 6 * * *"
 
@@ -31,7 +33,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.0
+          php-version: 8.3
           coverage: none
           tools: composer:v2
 
@@ -50,12 +52,12 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        php: [8.3, 8.2, 8.0]
-        laravel: [^10.0, ^9.0]
+        php: [8.3, 8.2, 8.1]
+        laravel: [^11.0, ^10.0]
         dependencies: [lowest, highest]
         exclude:
-          - php: 8.0
-            laravel: ^10.0
+          - php: 8.1
+            laravel: ^11.0
     name: Acceptance P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code
@@ -69,13 +71,10 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Install lowest dependencies from composer.json
-        if: "matrix.dependencies == 'lowest'"
-        run: composer update --with='laravel/framework:${{ matrix.laravel }}' --no-interaction --no-progress --prefer-dist --prefer-stable --prefer-lowest
-
-      - name: Install highest dependencies from composer.json
-        if: "matrix.dependencies == 'highest'"
-        run: composer update --with='laravel/framework:${{ matrix.laravel }}' --no-interaction --no-progress --prefer-dist --prefer-stable
+      - name: Install dependencies from composer.json
+        run: |
+          composer require "illuminate/support:${{ matrix.laravel }}" --no-update
+          composer update --no-interaction --no-progress --prefer-dist --prefer-stable ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }}
 
       - name: Run Acceptance Tests
         run: composer test:type

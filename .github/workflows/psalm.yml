@@ -2,6 +2,7 @@ name: Psalm
 
 on:
   push:
+    branches: [master]
     paths:
       - '**.php'
       - 'psalm*'
@@ -12,6 +13,7 @@ on:
       - '**.php'
       - 'psalm*'
       - 'composer.json'
+      - '.github/workflows/psalm.yml'
 
 jobs:
   psalm:
@@ -23,7 +25,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: 8.3
           coverage: none
 
       - name: Install composer dependencies
