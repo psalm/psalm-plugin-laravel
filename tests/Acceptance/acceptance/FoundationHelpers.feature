@@ -201,7 +201,7 @@ Feature: Foundation helpers
     When I run Psalm
     Then I see no errors
 
-  Scenario: precognitive() support [ Psalm 5 ]
+  Scenario: precognitive() support
     Given I have the following code
     """
     $payload = precognitive(function () {
@@ -209,7 +209,6 @@ Feature: Foundation helpers
     });
     /** @psalm-check-type $payload = array{'foo': 'bar'} */
     """
-    And I have Psalm newer than "5.0" (because of "new psalm-check-type syntax")
     When I run Psalm
     Then I see no errors
 

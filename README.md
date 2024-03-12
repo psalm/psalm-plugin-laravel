@@ -33,7 +33,8 @@ This [Psalm](https://github.com/vimeo/psalm) plugin brings static analysis and t
 
 | Laravel Psalm Plugin | PHP   | Laravel      | Psalm |
 |----------------------|-------|--------------|-------|
-| 2.x                  | ^8.0  | 8, 9, 10, 11 | 4, 5  |
+| 2.10+                | ^8.0  | 9, 10, 11    | 5     |
+| 2.0-2.9              | ^8.0  | 8, 9, 10, 11 | 4, 5  |
 | 1.x                  | ^7.1  | 5, 6, 7, 8   | 3, 4  |
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
