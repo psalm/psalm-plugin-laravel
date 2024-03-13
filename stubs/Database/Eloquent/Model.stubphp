@@ -26,6 +26,26 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
             ForwardsCalls;
 
     /**
+     * @var array<string, string>
+     */
+    protected $casts = [];
+
+    /**
+     * @var list<string>
+     */
+    protected $hidden = [];
+
+    /**
+     * @var list<string>
+     */
+    protected $visible = [];
+
+    /**
+     * @var list<string>
+     */
+    protected $appends = [];
+
+    /**
      * @param  array|mixed  $columns
      * @return \Illuminate\Database\Eloquent\Collection<int, static>
      */
