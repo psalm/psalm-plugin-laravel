@@ -1,6 +1,6 @@
 {
     "name": "psalm/plugin-laravel",
-    "description": "A Laravel plugin for Psalm",
+    "description": "Psalm plugin for Laravel",
     "license": "MIT",
     "type": "psalm-plugin",
     "authors": [
