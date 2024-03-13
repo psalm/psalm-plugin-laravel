@@ -69,6 +69,8 @@ function class_uses_recursive($class) {}
  */
 function filled($value) {}
 
+// literal: @todo add stub
+
 /**
  * Get an item from an object using "dot" notation.
  *

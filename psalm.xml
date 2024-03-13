@@ -7,7 +7,6 @@
     errorBaseline="psalm-baseline.xml"
     findUnusedBaselineEntry="false"
     findUnusedCode="true"
-    phpVersion="8.0"
 >
     <projectFiles>
         <directory name="src" />

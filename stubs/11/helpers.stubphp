@@ -1,0 +1,16 @@
+<?php
+
+/**
+ * Stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Support/helpers.php}
+ */
+
+/**
+ * Ensures a callable is only called once, and returns the result on subsequent calls.
+ *
+ * @template  TReturnType
+ *
+ * @param callable(): TReturnType $callback
+ * @return TReturnType
+ * @psalm-pure
+ */
+function once(callable $callback) {}
