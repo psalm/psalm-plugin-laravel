@@ -70,7 +70,7 @@ final class ApplicationProvider
      */
     public static function getAppFullyQualifiedClassName(): string
     {
-        return get_class(self::getApp());
+        return self::getApp()::class;
     }
 
     /**
@@ -87,16 +87,16 @@ final class ApplicationProvider
         // of 0
         //$app->make('Illuminate\Foundation\Bootstrap\HandleExceptions')->bootstrap($app);
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Foundation\Bootstrap\RegisterFacades')->bootstrap($app);
+        $app->make(\Illuminate\Foundation\Bootstrap\RegisterFacades::class)->bootstrap($app);
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Foundation\Bootstrap\SetRequestForConsole')->bootstrap($app);
+        $app->make(\Illuminate\Foundation\Bootstrap\SetRequestForConsole::class)->bootstrap($app);
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Foundation\Bootstrap\RegisterProviders')->bootstrap($app);
+        $app->make(\Illuminate\Foundation\Bootstrap\RegisterProviders::class)->bootstrap($app);
 
         $this->getEnvironmentSetUp($app);
 
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Foundation\Bootstrap\BootProviders')->bootstrap($app);
+        $app->make(\Illuminate\Foundation\Bootstrap\BootProviders::class)->bootstrap($app);
 
         foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
             /** @psalm-suppress MixedMethodCall */
@@ -104,7 +104,7 @@ final class ApplicationProvider
         }
 
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
+        $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
         /** @var \Illuminate\Routing\Router $router */
         $router = $app['router'];

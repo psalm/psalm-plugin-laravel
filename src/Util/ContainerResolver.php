@@ -41,7 +41,7 @@ final class ContainerResolver
         try {
             /** @var mixed $concrete */
             $concrete = ApplicationProvider::getApp()->make($abstract);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return null;
         }
 
@@ -50,7 +50,7 @@ final class ContainerResolver
             $concreteClass = $concrete;
         } elseif (is_object($concrete)) {
             // normally we have an object resolved
-            $concreteClass = get_class($concrete);
+            $concreteClass = $concrete::class;
         } else {
             // not sure how to handle this yet
             return null;

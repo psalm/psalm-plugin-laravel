@@ -91,13 +91,13 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
                 if ($reflectionClass->isAnonymous()) {
                     continue;
                 }
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 // cannot just catch binding exception as the following error is emitted within laravel:
                 // Class 'Symfony\Component\Cache\Adapter\Psr16Adapter' not found
                 continue;
             }
 
-            $className = get_class($concrete);
+            $className = $concrete::class;
             $filePath = $event->getStatementsSource()->getFilePath();
             $fileStorage = $event->getCodebase()->file_storage_provider->get($filePath);
             $fileStorage->referenced_classlikes[strtolower($className)] = $className;

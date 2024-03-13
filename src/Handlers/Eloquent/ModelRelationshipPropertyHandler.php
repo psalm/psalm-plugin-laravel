@@ -153,9 +153,6 @@ class ModelRelationshipPropertyHandler implements
     }
 
     /**
-     * @param Codebase $codebase
-     * @param string $fq_classlike_name
-     * @param string $property_name
      *
      * @return bool
      */
