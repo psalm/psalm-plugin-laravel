@@ -40,8 +40,8 @@ class Plugin implements PluginEntryPointInterface
         try {
             ApplicationProvider::bootApp();
             $this->generateStubFiles();
-        } catch (\Throwable $t) {
-            fwrite(\STDERR, "Laravel plugin error: “{$t->getMessage()}”\n");
+        } catch (\Throwable $throwable) {
+            fwrite(\STDERR, "Laravel plugin error: “{$throwable->getMessage()}”\n");
             return;
         }
 

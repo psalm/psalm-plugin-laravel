@@ -40,17 +40,17 @@ final class AuthConfigAnalyzer
             }
         }
 
-        $provider = $this->config->get("auth.guards.$guard.provider");
+        $provider = $this->config->get("auth.guards.{$guard}.provider");
 
         if (! is_string($provider)) {
             return null;
         }
 
-        if ($this->config->get("auth.providers.$provider.driver") === 'database') {
+        if ($this->config->get("auth.providers.{$provider}.driver") === 'database') {
             return \Illuminate\Auth\GenericUser::class;
         }
 
-        return $this->config->get("auth.providers.$provider.model", null);
+        return $this->config->get("auth.providers.{$provider}.model", null);
     }
 
     public function getDefaultGuard(): ?string

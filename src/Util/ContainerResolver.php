@@ -66,7 +66,7 @@ final class ContainerResolver
      */
     public static function resolvePsalmTypeFromApplicationContainerViaArgs(NodeTypeProvider $nodeTypeProvider, array $call_args): ?Union
     {
-        if (! count($call_args)) {
+        if ($call_args === []) {
             return null;
         }
 

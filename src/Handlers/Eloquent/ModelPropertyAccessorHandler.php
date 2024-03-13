@@ -82,7 +82,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
 
         if (self::accessorExists($codebase, $fq_classlike_name, $property_name)) {
             $attributeGetterName = 'get' . str_replace('_', '', $property_name) . 'Attribute';
-            return $codebase->getMethodReturnType("$fq_classlike_name::$attributeGetterName", $fq_classlike_name)
+            return $codebase->getMethodReturnType("{$fq_classlike_name}::{$attributeGetterName}", $fq_classlike_name)
                 ?: Type::getMixed();
         }
 
