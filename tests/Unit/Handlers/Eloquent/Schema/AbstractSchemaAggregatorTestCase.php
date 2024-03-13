@@ -44,7 +44,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         foreach ($migrationFiles as $migrationFile) {
             $fileContents = file_get_contents($migrationFile);
             if ($fileContents === false) {
-                $this->fail("Could not read $migrationFile file. Please make sure it exists and readable.");
+                $this->fail("Could not read {$migrationFile} file. Please make sure it exists and readable.");
             }
 
             $statements = StatementsProvider::parseStatements($fileContents, PHP_VERSION_ID, $hasErrors);
@@ -119,7 +119,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
 
         [$tableName, $columnName] = self::parseTableWithColumn($tableWithColumn);
 
-        self::assertTrue($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column $tableWithColumn is not nullable");
+        self::assertTrue($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is not nullable");
     }
 
     protected function assertSchemaHasTableAndNotNullableColumnOfType(string $tableWithColumn, string $type, SchemaAggregator $schemaAggregator): void
@@ -128,7 +128,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
 
         [$tableName, $columnName] = self::parseTableWithColumn($tableWithColumn);
 
-        self::assertFalse($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column $tableWithColumn is nullable");
+        self::assertFalse($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is nullable");
     }
 
     /**

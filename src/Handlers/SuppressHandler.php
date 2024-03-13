@@ -10,8 +10,8 @@ use Psalm\Storage\PropertyStorage;
 
 use function array_intersect;
 use function in_array;
-use function strpos;
 use function strtolower;
+use function str_starts_with;
 
 class SuppressHandler implements AfterClassLikeVisitInterface
 {
@@ -95,7 +95,7 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_NAMESPACE as $issue => $namespaces) {
             foreach ($namespaces as $namespace) {
-                if (!str_starts_with($class->name, "$namespace\\")) {
+                if (!str_starts_with($class->name, "{$namespace}\\")) {
                     continue;
                 }
 
@@ -106,7 +106,7 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_NAMESPACE_METHOD as $issue => $methods_by_namespaces) {
             foreach ($methods_by_namespaces as $namespace => $method_names) {
-                if (!str_starts_with($class->name, "$namespace\\")) {
+                if (!str_starts_with($class->name, "{$namespace}\\")) {
                     continue;
                 }
 

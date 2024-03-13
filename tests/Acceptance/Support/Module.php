@@ -110,6 +110,7 @@ class Module extends BaseModule
             if (is_dir($defaultDir)) {
                 return;
             }
+
             unlink($defaultDir);
         }
 
@@ -193,7 +194,7 @@ class Module extends BaseModule
     {
         $this->parseErrors();
         if (empty($this->errors)) {
-            Assert::fail("No errors! Didn't see [ $type $message ] in an empty output.\n");
+            Assert::fail("No errors! Didn't see [ {$type} {$message} ] in an empty output.\n");
         }
 
         foreach ($this->errors as $i => $error) {
@@ -206,7 +207,7 @@ class Module extends BaseModule
             }
         }
 
-        Assert::fail("Didn't see [ $type $message ] in: \n" . $this->remainingErrors());
+        Assert::fail("Didn't see [ {$type} {$message} ] in: \n" . $this->remainingErrors());
     }
 
     private function matches(string $expected, string $actual): bool
@@ -268,7 +269,7 @@ class Module extends BaseModule
 
         $result = Semver::satisfies($currentVersion, $versionConstraint);
 
-        $this->debug("Comparing $currentVersion against $versionConstraint => " . ($result ? 'ok' : 'ko'));
+        $this->debug("Comparing {$currentVersion} against {$versionConstraint} => " . ($result ? 'ok' : 'ko'));
 
         return $result;
     }
@@ -370,7 +371,7 @@ class Module extends BaseModule
     public function haveSomeFuturePsalmThatSupportsThisFeature(string $ref): void
     {
         /** @psalm-suppress InternalClass,InternalMethod */
-        throw new SkippedTestSuiteError("Future functionality that Psalm has yet to support: $ref");
+        throw new SkippedTestSuiteError("Future functionality that Psalm has yet to support: {$ref}");
     }
 
     /**
@@ -379,14 +380,14 @@ class Module extends BaseModule
     public function havePsalmOfACertainVersionRangeBecauseOf(string $operator, string $version, string $reason): void
     {
         if (!isset(self::VERSION_OPERATORS[$operator])) {
-            throw new TestRuntimeException("Unknown operator: $operator");
+            throw new TestRuntimeException("Unknown operator: {$operator}");
         }
 
         $op = self::VERSION_OPERATORS[$operator];
 
         if (!$this->packageSatisfiesVersionConstraint('vimeo/psalm', $op . $version)) {
             /** @psalm-suppress InternalClass,InternalMethod */
-            throw new SkippedTestSuiteError("This scenario requires Psalm $op $version because of $reason");
+            throw new SkippedTestSuiteError("This scenario requires Psalm {$op} {$version} because of {$reason}");
         }
     }
 
@@ -401,6 +402,7 @@ class Module extends BaseModule
             if (0 === $i) {
                 continue;
             }
+
             $this->seeThisError((string) $error[0], (string) $error[1]);
         }
     }
@@ -429,6 +431,7 @@ class Module extends BaseModule
             if (0 === $i) {
                 continue;
             }
+
             assert(is_string($row[0]));
             assert(is_string($row[1]));
             $map[] = [$row[0], $row[1]];
@@ -472,7 +475,7 @@ class Module extends BaseModule
         }
 
         /** @psalm-suppress InternalClass,InternalMethod */
-        throw new SkippedTestSuiteError("This scenario requires $package to match $versionConstraint");
+        throw new SkippedTestSuiteError("This scenario requires {$package} to match {$versionConstraint}");
     }
 
     private function convertToRegexp(string $in): string
@@ -487,8 +490,10 @@ class Module extends BaseModule
             if (!$cli instanceof Cli) {
                 throw new ModuleRequireException($this, 'Needs Cli module');
             }
+
             $this->cli = $cli;
         }
+
         return $this->cli;
     }
 
@@ -499,8 +504,10 @@ class Module extends BaseModule
             if (!$fs instanceof Filesystem) {
                 throw new ModuleRequireException($this, 'Needs Filesystem module');
             }
+
             $this->fs = $fs;
         }
+
         return $this->fs;
     }
 
