@@ -12,13 +12,26 @@ use function implode;
 
 trait FakeModelsCommandLogic
 {
-    /** @var array<class-string> */
+    /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
     private $model_classes = [];
 
     /** @return array<class-string> */
     public function getModels(): array
     {
-        return $this->model_classes + $this->loadModels();
+        if ($this->dirs === []) {
+            throw new \LogicException('Directories to scan models are not set.');
+        }
+
+        $models = [];
+
+        // Bypass an issue https://github.com/barryvdh/laravel-ide-helper/issues/1414
+        foreach ($this->loadModels() as $probably_model_fqcn) {
+            if (is_string($probably_model_fqcn) && is_a($probably_model_fqcn, Model::class, true)) {
+                $models[] = $probably_model_fqcn;
+            }
+        }
+
+        return array_merge($this->model_classes, $models);
     }
 
     /**
