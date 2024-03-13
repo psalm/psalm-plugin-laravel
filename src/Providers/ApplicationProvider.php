@@ -22,7 +22,7 @@ final class ApplicationProvider
     use CreatesApplication;
 
     /** @var LaravelApplication|null */
-    private static $app = null;
+    private static $app;
 
     public static function bootApp(): void
     {
