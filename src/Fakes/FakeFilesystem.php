@@ -17,7 +17,7 @@ final class FakeFilesystem extends Filesystem
      * @param  bool  $lock
      * @return bool|int
      */
-    public function put($path, $contents, $lock = false)
+    public function put($path, $contents, $lock = false): bool|int
     {
         $destination = $this->destination ?? $path;
 
@@ -26,10 +26,7 @@ final class FakeFilesystem extends Filesystem
         return parent::put($destination, $contents, $lock);
     }
 
-    /**
-     * @return void
-     */
-    public function setDestination(string $destination)
+    public function setDestination(string $destination): void
     {
         $this->destination = $destination;
     }
