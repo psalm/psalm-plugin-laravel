@@ -22,8 +22,7 @@ final class ApplicationProvider
 {
     use CreatesApplication;
 
-    /** @var LaravelApplication|null */
-    private static $app;
+    private static ?\Illuminate\Foundation\Application $app = null;
 
     public static function bootApp(): void
     {
@@ -79,10 +78,8 @@ final class ApplicationProvider
      * Resolve application bootstrapper.
      *
      * @param LaravelApplication $app
-     *
-     * @return void
      */
-    protected function resolveApplicationBootstrappers($app)
+    protected function resolveApplicationBootstrappers($app): void
     {
         // we want to keep the default psalm exception handler, otherwise the Laravel one will always return exit codes
         // of 0
@@ -115,7 +112,7 @@ final class ApplicationProvider
          * @psalm-suppress MissingClosureParamType
          * @psalm-suppress UnusedClosureParam
          */
-        $app->resolving('url', static function ($url, $app) use ($router) {
+        $app->resolving('url', static function ($url, $app) use ($router): void {
             $router->getRoutes()->refreshNameLookups();
         });
     }
@@ -123,7 +120,7 @@ final class ApplicationProvider
     /**
      * @param LaravelApplication $app
      */
-    protected function getEnvironmentSetUp($app): void
+    protected function getEnvironmentSetUp(array $app): void
     {
         /** @var \Illuminate\Config\Repository $config */
         $config = $app['config'];

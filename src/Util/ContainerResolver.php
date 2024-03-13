@@ -23,10 +23,9 @@ final class ContainerResolver
 {
     /**
      * map of abstract to concrete class fqn
-     * @var array
      * @psalm-var array<string, class-string|string>
      */
-    private static $cache = [];
+    private static array $cache = [];
 
     /**
      * @psalm-return class-string|string|null
