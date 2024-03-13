@@ -8,7 +8,10 @@ use Illuminate\Support\Str;
 use function config;
 use function get_class;
 use function in_array;
+use function is_string;
 use function implode;
+use function is_a;
+use function array_merge;
 
 trait FakeModelsCommandLogic
 {
