@@ -117,7 +117,7 @@ final class ApplicationProvider
         });
     }
 
-    protected function getEnvironmentSetUp(array|LaravelApplication $app): void
+    protected function getEnvironmentSetUp(LaravelApplication $app): void
     {
         /** @var \Illuminate\Config\Repository $config */
         $config = $app['config'];
