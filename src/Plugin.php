@@ -66,6 +66,7 @@ class Plugin implements PluginEntryPointInterface
             glob(dirname(__DIR__) . '/stubs/Pagination/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Routing/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Support/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/Support/**/*.stubphp'),
         );
     }
 
