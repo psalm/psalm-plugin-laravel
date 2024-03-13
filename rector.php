@@ -1,6 +1,9 @@
 <?php
 
 use Rector\CodeQuality\Rector\FunctionLike\SimplifyUselessVariableRector;
+use Rector\CodingStyle\Rector\Closure\StaticClosureRector;
+use Rector\CodingStyle\Rector\Encapsed\EncapsedStringsToSprintfRector;
+use Rector\CodingStyle\Rector\If_\NullableCompareToNullRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPrivateMethodRector;
 use Rector\Php74\Rector\Closure\ClosureToArrowFunctionRector;
@@ -12,8 +15,9 @@ use Rector\Strict\Rector\If_\BooleanInIfConditionRuleFixerRector;
 
 return RectorConfig::configure()
     ->withPaths(['src', 'tests'])
+    ->withSkipPath('tests/Acceptance/_support/_generated')
     ->withPhpSets(php81: true)
-    ->withPreparedSets(deadCode: true)
+    ->withPreparedSets(deadCode: true, codingStyle: true)
     ->withSkip([
         ReadOnlyPropertyRector::class,
         ClosureToArrowFunctionRector::class,
@@ -23,4 +27,7 @@ return RectorConfig::configure()
         BooleanInBooleanNotRuleFixerRector::class,
         RemoveUnusedPrivateMethodRector::class,
         SimplifyUselessVariableRector::class,
+        NullableCompareToNullRector::class,
+        EncapsedStringsToSprintfRector::class,
+        StaticClosureRector::class,
     ]);
