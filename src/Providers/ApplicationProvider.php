@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Providers;
 
 use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
@@ -38,7 +39,7 @@ final class ApplicationProvider
 
     public static function getApp(): LaravelApplication
     {
-        if (self::$app instanceof \Illuminate\Container\Container) {
+        if (self::$app instanceof Container) {
             return self::$app;
         }
 
