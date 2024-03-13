@@ -50,6 +50,11 @@
       <code>new TLiteralString($result)</code>
     </InternalMethod>
   </file>
+  <file src="src/Providers/ApplicationProvider.php">
+     <InternalMethod>
+       <code><![CDATA[createApplication]]></code>
+     </InternalMethod>
+  </file>
   <file src="src/Util/ContainerResolver.php">
     <InternalMethod>
       <code>new TLiteralString($concrete)</code>

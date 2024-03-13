@@ -31,4 +31,4 @@ jobs:
         run: composer install -n --prefer-dist
 
       - name: Run Psalm
-        run: ./vendor/bin/psalm --threads=2 --output-format=github --shepherd
+        run: ./vendor/bin/psalm --threads=2 --output-format=github --shepherd --show-info=true
