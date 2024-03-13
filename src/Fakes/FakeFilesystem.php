@@ -6,8 +6,7 @@ use Illuminate\Filesystem\Filesystem;
 
 final class FakeFilesystem extends Filesystem
 {
-    /** @var ?string */
-    private $destination = '';
+    private ?string $destination = '';
 
     /**
      * Write the contents of a file.

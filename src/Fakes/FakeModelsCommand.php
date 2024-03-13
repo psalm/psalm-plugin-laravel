@@ -19,7 +19,7 @@ use function implode;
 class FakeModelsCommand extends ModelsCommand
 {
     /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
-    private $model_classes = [];
+    private array $model_classes = [];
 
     public function __construct(Filesystem $files, private SchemaAggregator $schema)
     {

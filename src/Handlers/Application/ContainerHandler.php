@@ -66,7 +66,7 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
      * @see https://github.com/psalm/psalm-plugin-symfony/issues/25
      * psalm needs to know about any classes that could be returned before analysis begins. This is a naive first approach
      */
-    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event)
+    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
         if (!in_array($event->getStorage()->name, ApplicationInterfaceProvider::getApplicationInterfaceClassLikes())) {
             return;
