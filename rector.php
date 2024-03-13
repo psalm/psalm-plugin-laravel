@@ -13,7 +13,7 @@ use Rector\Strict\Rector\If_\BooleanInIfConditionRuleFixerRector;
 return RectorConfig::configure()
     ->withPaths(['src', 'tests'])
     ->withPhpSets(php81: true)
-    ->withPreparedSets(deadCode: true)
+    //->withPreparedSets(deadCode: true)
     ->withSkip([
         ReadOnlyPropertyRector::class,
         ClosureToArrowFunctionRector::class,

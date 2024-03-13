@@ -94,7 +94,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
     {
         try {
             new \ReflectionProperty($fqcn, $property_name);
-        } catch (\ReflectionException $exception) {
+        } catch (\ReflectionException) {
             return false;
         }
 

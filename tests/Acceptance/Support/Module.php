@@ -250,7 +250,7 @@ class Module extends BaseModule
     {
         try {
             $currentVersion = $this->getShortVersion($package);
-        } catch (OutOfBoundsException $ex) {
+        } catch (OutOfBoundsException) {
             $this->debug(sprintf("Package %s is not installed", $package));
             return false;
         }
@@ -540,7 +540,7 @@ class Module extends BaseModule
             );
         }
 
-        if (false === strpos($version, '@')) {
+        if (!str_contains($version, '@')) {
             throw new RuntimeException('$version must contain @');
         }
 

@@ -132,7 +132,6 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
     }
 
     /**
-     * @param string $tableWithColumn
      * @return array{0: non-empty-string, 1: non-empty-string}
      */
     private function parseTableWithColumn(string $tableWithColumn): array

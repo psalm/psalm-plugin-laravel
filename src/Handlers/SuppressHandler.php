@@ -95,7 +95,7 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_NAMESPACE as $issue => $namespaces) {
             foreach ($namespaces as $namespace) {
-                if (0 !== strpos($class->name, "$namespace\\")) {
+                if (!str_starts_with($class->name, "$namespace\\")) {
                     continue;
                 }
 
@@ -106,7 +106,7 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_NAMESPACE_METHOD as $issue => $methods_by_namespaces) {
             foreach ($methods_by_namespaces as $namespace => $method_names) {
-                if (0 !== strpos($class->name, "$namespace\\")) {
+                if (!str_starts_with($class->name, "$namespace\\")) {
                     continue;
                 }
 
@@ -146,7 +146,6 @@ class SuppressHandler implements AfterClassLikeVisitInterface
     }
 
     /**
-     * @param string $issue
      * @param ClassLikeStorage|PropertyStorage|MethodStorage|null $storage
      */
     private static function suppress(string $issue, $storage): void

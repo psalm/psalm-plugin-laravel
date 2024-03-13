@@ -21,13 +21,9 @@ class FakeModelsCommand extends ModelsCommand
     /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
     private $model_classes = [];
 
-    /** @var SchemaAggregator */
-    private $schema;
-
-    public function __construct(Filesystem $files, SchemaAggregator $schema)
+    public function __construct(Filesystem $files, private SchemaAggregator $schema)
     {
         parent::__construct($files);
-        $this->schema = $schema;
     }
 
     /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
@@ -66,7 +62,7 @@ class FakeModelsCommand extends ModelsCommand
             return;
         }
 
-        $this->model_classes[] = get_class($model);
+        $this->model_classes[] = $model::class;
 
         $columns = $this->schema->tables[$table_name]->columns;
 
@@ -74,7 +70,7 @@ class FakeModelsCommand extends ModelsCommand
             $column_name = $column->name;
 
             if (in_array($column_name, $model->getDates(), true)) {
-                $get_type = $set_type = '\Illuminate\Support\Carbon';
+                $get_type = $set_type = \Illuminate\Support\Carbon::class;
             } else {
                 switch ($column->type) {
                     case SchemaColumn::TYPE_STRING:
@@ -128,7 +124,7 @@ class FakeModelsCommand extends ModelsCommand
                 $this->setMethod(
                     Str::camel("where_" . $column_name),
                     '\Illuminate\Database\Eloquent\Builder<static>', // @todo support custom EloquentBuilders
-                    array('$value')
+                    ['$value']
                 );
             }
         }
