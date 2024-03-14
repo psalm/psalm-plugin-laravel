@@ -12,6 +12,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
+use Psalm\LaravelPlugin\Handlers\Helpers\ConfigHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
@@ -137,6 +138,8 @@ class Plugin implements PluginEntryPointInterface
 
         require_once 'Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(SuppressHandler::class);
+        require_once 'Handlers/Helpers/ConfigHandler.php';
+        $registration->registerHooksFromClass(ConfigHandler::class);
     }
 
     private function generateStubFiles(): void
