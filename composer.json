@@ -1,17 +1,17 @@
 {
     "name": "psalm/plugin-laravel",
-    "description": "A Laravel plugin for Psalm",
-    "type": "psalm-plugin",
-    "homepage": "https://github.com/psalm/psalm-plugin-laravel",
+    "description": "Psalm plugin for Laravel",
     "license": "MIT",
+    "type": "psalm-plugin",
     "authors": [
         {
             "name": "Matthew Brown",
             "email": "github@muglug.com"
         }
     ],
+    "homepage": "https://github.com/psalm/psalm-plugin-laravel",
     "require": {
-        "php": "^7.3|^8.0",
+        "php": "^7.3 || ^8.0",
         "ext-simplexml": "*",
         "illuminate/config": "^6.0 || ^8.0",
         "illuminate/container": "^6.0 || ^8.0",

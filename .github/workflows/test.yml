@@ -3,7 +3,8 @@ name: Tests
 on: [push, pull_request]
 
 jobs:
-  build:
+
+  acceptance_tests:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -41,22 +42,23 @@ jobs:
             php: 8.1
             stability: 'prefer-stable'
 
-    name: ${{ matrix.php }} | Illuminate ${{ matrix.illuminate_version }} | ${{ matrix.stability }}
+    name: Acceptance P${{ matrix.php }} | L${{ matrix.illuminate_version }} | ${{ matrix.stability == 'prefer-stable' && '↑' || '↓' }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M
           coverage: none
-          tools: composer:v2
+          tools: composer
 
       - name: Install dependencies
         run: |
           composer require "illuminate/container:${{ matrix.illuminate_version }}" "illuminate/contracts:${{ matrix.illuminate_version }}" "illuminate/database:${{ matrix.illuminate_version }}" "illuminate/http:${{ matrix.illuminate_version }}" "illuminate/support:${{ matrix.illuminate_version }}" --no-interaction --no-progress --prefer-dist --${{ matrix.stability }}
 
-      - name: Run Tests
+      - name: Run Acceptance Tests
         run: composer test
