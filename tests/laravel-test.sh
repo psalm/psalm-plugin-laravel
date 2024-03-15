@@ -32,8 +32,9 @@ echo "Preparing Laravel"
 ./artisan make:seeder ExampleSeeder
 
 echo "Adding package from source"
-sed -e 's|"type": "project",|&"repositories": [ { "type": "path", "url": "../psalm-plugin-laravel" } ],|' -i composer.json
-COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" -W
+composer config repositories.0 '{"type": "path", "url": "../../"}'
+composer config minimum-stability 'dev'
+COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" --update-with-all-dependencies
 
 echo "Analyzing Laravel"
 ./vendor/bin/psalm -c ../psalm-plugin-laravel/tests/laravel-test-psalm.xml
