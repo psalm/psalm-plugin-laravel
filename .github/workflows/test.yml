@@ -76,5 +76,8 @@ jobs:
           composer require "illuminate/support:${{ matrix.laravel }}" --no-update
           composer update --no-interaction --no-progress --prefer-dist --prefer-stable ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }}
 
-      - name: Run Acceptance Tests
+      - name: Run Psalm/Type tests
         run: composer test:type
+
+      - name: Run Acceptance tests
+        run: composer test:acceptance
