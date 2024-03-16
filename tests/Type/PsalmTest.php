@@ -18,9 +18,9 @@ final class PsalmTest extends TestCase
     /** @return \Generator<string, array{string}> */
     public static function providePhptFiles(): \Generator
     {
-        $filePaths = glob(__DIR__.'/tests/*.phpt');
+        $filePaths = glob(__DIR__ . '/tests/*.phpt');
 
-        foreach($filePaths as $filePath) {
+        foreach ($filePaths as $filePath) {
             yield basename($filePath) => [$filePath];
         }
     }
