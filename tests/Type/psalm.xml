@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<psalm
+    checkForThrowsDocblock="true"
+    checkForThrowsInGlobalScope="true"
+    disableSuppressAll="true"
+    ensureArrayStringOffsetsExist="true"
+    errorLevel="1"
+    findUnusedBaselineEntry="true"
+    findUnusedCode="true"
+    findUnusedPsalmSuppress="true"
+    findUnusedVariablesAndParams="true"
+    memoizeMethodCallResults="true"
+    reportMixedIssues="true"
+    sealAllMethods="true"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config ../vendor/vimeo/psalm/config.xsd"
+>
+    <plugins>
+        <pluginClass class="\Psalm\LaravelPlugin\Plugin"/>
+    </plugins>
+</psalm>
