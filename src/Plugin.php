@@ -29,6 +29,7 @@ use function dirname;
 use function fwrite;
 use function explode;
 use function glob;
+use function is_string;
 
 /**
  * @psalm-suppress UnusedClass
