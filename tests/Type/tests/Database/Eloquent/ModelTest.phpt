@@ -1,9 +1,9 @@
 --FILE--
 <?php declare(strict_types=1);
 
-use App\Models\User;
+use Illuminate\Foundation\Auth\User;
 
 User::fakeQueryMethodThatDoesntExist();
 ?>
 --EXPECTF--
-UndefinedMagicMethod on line %d: Magic method App\Models\User::fakequerymethodthatdoesntexist does not exist
+UndefinedMagicMethod on line %d: Magic method Illuminate\Foundation\Auth\User::fakequerymethodthatdoesntexist does not exist
