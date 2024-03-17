@@ -24,6 +24,7 @@ use SimpleXMLElement;
 use Throwable;
 
 use function array_merge;
+use function class_exists;
 use function dirname;
 use function explode;
 use function glob;
