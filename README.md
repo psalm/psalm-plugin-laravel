@@ -31,14 +31,14 @@ Find bugs without the overhead of writing tests!
 
 ## Versions & Dependencies
 
-| Laravel Psalm Plugin | PHP  | Laravel    | Psalm |
-|----------------------|------|------------|-------|
-| 2.10+                | ^8.1 | 10, 11     | 5     |
-| 2.9.x                | ^8.0 | 9, 10, 11  | 4, 5  |
-| 2.7-2.8              | ^8.0 | 9, 10      | 4, 5  |
-| 2.1-2.6              | ^8.0 | 9          | 4, 5  |
-| 2.0.x                | ^8.0 | 8, 9       | 4, 5  |
-| 1.x                  | ^7.1 | 5, 6, 7, 8 | 3, 4  |
+Maintaned versions:
+
+| Laravel Psalm Plugin | PHP   | Laravel    | Psalm |
+|----------------------|-------|------------|-------|
+| master               | ^8.1  | 10, 11     | 5     |
+| 2.9.x                | ^8.0  | 9, 10, 11  | 4, 5  |
+| 1.6.x                | >=7.3 | 6, 8       | 4     |
+| 1.4.x                | >=7.2 | 6, 7, 8    | 3, 4  |
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
 
