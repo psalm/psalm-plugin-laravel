@@ -1,5 +1,6 @@
 --FILE--
 <?php declare(strict_types=1);
+
 function args(): null
 {
     return logger('this should return void');
@@ -7,7 +8,7 @@ function args(): null
 
 function no_args(): \Illuminate\Log\LogManager
 {
-  return logger();
+    return logger();
 }
 ?>
 --EXPECTF--

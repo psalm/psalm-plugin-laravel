@@ -13,7 +13,7 @@ function array_arg_to_set_session(): null
 
 function no_args(): \Illuminate\Session\SessionManager
 {
-  return session();
+    return session();
 }
 ?>
 --EXPECTF--

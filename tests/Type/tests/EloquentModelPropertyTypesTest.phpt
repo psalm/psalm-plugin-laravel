@@ -1,5 +1,6 @@
 --FILE--
 <?php declare(strict_types=1);
+
 namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
 use App\Models\Secret;

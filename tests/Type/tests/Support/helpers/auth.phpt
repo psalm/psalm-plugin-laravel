@@ -13,12 +13,12 @@ function test_auth_call_with_null_as_arg_should_return_Factory(): \Illuminate\Co
 
 function test_auth_call_with_string_arg_should_return_Guard(): \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard
 {
-  return auth('user');
+    return auth('user');
 }
 
 function test_auth_check_call(): bool
 {
-  return auth()->check();
+    return auth()->check();
 }
 ?>
 --EXPECTF--
