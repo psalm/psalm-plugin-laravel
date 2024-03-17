@@ -1,7 +1,0 @@
-actor: AcceptanceTester
-
-modules:
-    enabled:
-        - Cli
-        - Filesystem
-        - \Tests\Psalm\LaravelPlugin\Acceptance\Support\Module
