@@ -58,6 +58,7 @@ class Plugin implements PluginEntryPointInterface
             glob(dirname(__DIR__) . '/stubs/Database/Eloquent/Concerns/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Database/Eloquent/Relations/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Database/Eloquent/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/Database/Migrations/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Database/Query/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Database/*.stubphp'),
             glob(dirname(__DIR__) . '/stubs/Foundation/*.stubphp'),
