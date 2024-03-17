@@ -2,8 +2,17 @@
 
 namespace Illuminate\Foundation;
 
-class Application
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Foundation\Application as ApplicationContract;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
+use Illuminate\Contracts\Foundation\CachesRoutes;
+use Illuminate\Support\Traits\Macroable;
+use Symfony\Component\HttpKernel\HttpKernelInterface;
+
+class Application extends Container implements ApplicationContract, CachesConfiguration, CachesRoutes, HttpKernelInterface
 {
+    use Macroable;
+
     /**
      * Get or check the current application environment.
      * @param string|list<string> ...$environments
