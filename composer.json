@@ -18,13 +18,12 @@
         "illuminate/contracts": "^6.0 || ^8.0",
         "illuminate/database": "^6.0 || ^8.0",
         "illuminate/events": "^6.0 || ^8.0",
-        "illuminated/helper-functions": "^6.0 || ^8.0",
         "illuminate/http": "^6.0 || ^8.0",
         "illuminate/routing": "^6.0 || ^8.0",
         "illuminate/support": "^6.0 || ^8.0",
         "illuminate/view": "^6.0 || ^8.0",
         "vimeo/psalm": "^4.8.1",
-        "orchestra/testbench-core": "^4.0 || ^6.0",
+        "orchestra/testbench": "^4.0 || ^6.0",
         "barryvdh/laravel-ide-helper": ">=2.8.0"
     },
     "require-dev": {
