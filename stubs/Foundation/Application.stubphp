@@ -1,0 +1,21 @@
+<?php
+
+namespace Illuminate\Foundation;
+
+class Application
+{
+    /**
+     * Get or check the current application environment.
+     * @param string|list<string> ...$environments
+     * @return string|bool
+     * @psalm-return ($environments is null ? string : bool)
+     */
+    public function environment(...$environments) {}
+
+    /**
+     * Get the registered service provider instances if any exist.
+     * @param \Illuminate\Support\ServiceProvider|string $provider
+     * @psalm-return array{int?, \Illuminate\Support\ServiceProvider}
+     */
+    public function getProviders($provider) {}
+}
