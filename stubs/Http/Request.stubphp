@@ -1,0 +1,30 @@
+<?php
+
+namespace Illuminate\Http;
+
+use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
+
+class Request extends SymfonyRequest
+{
+    /**
+     * Retrieve a header from the request.
+     *
+     * @template TDefault of string|array<string, string>|null
+     *
+     * @param string|null $key
+     * @param TDefault $default
+     * @return ($key is null ? array<string, array<int, string|null>> : string|TDefault)
+     */
+    public function header($key = null, $default = null) {}
+
+    /**
+     * Get the route handling the request.
+     *
+     * @template TDefault
+     *
+     * @param string|null $param
+     * @param TDefault $default
+     * @psalm-return $param is null ? \Illuminate\Routing\Route : TDefault|string|null
+     */
+    public function route($param = null, $default = null) {}
+}
