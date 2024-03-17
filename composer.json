@@ -45,9 +45,11 @@
         }
     },
     "scripts": {
-        "analyze": "psalm",
+        "analyze": "@psalm",
         "lint": "phpcs -n",
         "lint-fix": "phpcbf -n",
+        "psalm": "psalm",
+        "psalm-set-baseline": "psalm --set-baseline=psalm-baseline.xml",
         "test": "codecept run --skip-group skip",
         "check": [
             "@analyze",
