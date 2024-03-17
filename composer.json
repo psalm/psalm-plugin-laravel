@@ -26,6 +26,7 @@
         "nikic/php-parser": "^4.18 || ^5.0",
         "orchestra/testbench-core": "^8.22 || ^9.0",
         "symfony/console": "^6.0 || ^7.0",
+        "symfony/finder": "^6.0 || ^7.0",
         "vimeo/psalm": "^5.20"
     },
     "require-dev": {
