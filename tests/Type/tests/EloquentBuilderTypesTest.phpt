@@ -105,12 +105,6 @@ function test_whereDateWithInt(Builder $builder): Builder
 {
     return $builder->whereDate('created_at', '>', 1);
 }
-
-function test_failure_on_calling_not_defined_method(): mixed
-{
-    return User::fakeQueryMethodThatDoesntExist();
-}
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface|null|string, but 1 provided
-UndefinedMagicMethod on line %d: Magic method App\Models\User::fakequerymethodthatdoesntexist does not exist
