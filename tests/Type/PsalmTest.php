@@ -8,21 +8,30 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use PHPyh\PsalmTester\PsalmTester;
 
-use function basename;
-use function glob;
+use function str_replace;
 
 final class PsalmTest extends TestCase
 {
     private ?PsalmTester $psalmTester = null;
 
-    /** @return \Generator<string, array{string}> */
-    public static function providePhptFiles(): \Generator
+    /** @return iterable<string, list{string}> */
+    public static function providePhptFiles(): iterable
     {
-        $filePaths = glob(__DIR__ . '/tests/*.phpt');
+        $baseDir = __DIR__ . \DIRECTORY_SEPARATOR . 'tests' . \DIRECTORY_SEPARATOR;
+        $testExtension = 'phpt';
 
-        foreach ($filePaths as $filePath) {
-            yield basename($filePath) => [$filePath];
+        $dirItr = new \RecursiveDirectoryIterator($baseDir);
+        $itr = new \RecursiveIteratorIterator($dirItr);
+        $regItr = new \RegexIterator($itr, "/^.+.{$testExtension}\$/", \RegexIterator::GET_MATCH);
+
+        $filePaths = [];
+
+        foreach ($regItr as $file) {
+            $filepath = $file[0];
+            $filePaths[str_replace($baseDir, '', $filepath)] = [$filepath];
         }
+
+        return $filePaths;
     }
 
     #[DataProvider('providePhptFiles')]
