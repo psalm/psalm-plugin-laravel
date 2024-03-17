@@ -56,7 +56,7 @@ final class UserRepository
     {
         User::query()
             ->chunk(10, function (Collection $collection) {
-                /** @psalm-check-type-exact $collection = Collection<int, User> */
+                /** @psalm-check-type-exact $collection = \Illuminate\Database\Eloquent\Collection<int, \App\Models\User> */
                 echo $collection->count();
             });
     }
