@@ -9,9 +9,5 @@ final class UserRepository
         return $builder->first();
     }
 }
-
-function test_db_raw(): \Illuminate\Contracts\Database\Query\Expression {
-    return \DB::raw(1);
-}
 ?>
 --EXPECTF--
