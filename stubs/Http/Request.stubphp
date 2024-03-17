@@ -24,7 +24,7 @@ class Request extends SymfonyRequest
      *
      * @param string|null $param
      * @param TDefault $default
-     * @psalm-return $param is null ? \Illuminate\Routing\Route : TDefault|string|null
+     * @psalm-return ($param is null ? \Illuminate\Routing\Route : TDefault|string|null)
      */
     public function route($param = null, $default = null) {}
 }
