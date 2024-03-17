@@ -22,12 +22,14 @@ use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
+use Symfony\Component\Finder\Finder;
 
 use function array_merge;
 use function dirname;
 use function fwrite;
 use function explode;
 use function glob;
+use function is_string;
 
 /**
  * @psalm-suppress UnusedClass
@@ -49,30 +51,26 @@ class Plugin implements PluginEntryPointInterface
         $this->registerStubs($registration);
     }
 
-    /** @return array<array-key, string> */
+    /** @return list<string> */
     protected function getCommonStubs(): array
     {
-        return array_merge(
-            glob(dirname(__DIR__) . '/stubs/Collections/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Contracts/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Database/Eloquent/Concerns/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Database/Eloquent/Relations/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Database/Eloquent/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Database/Migrations/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Database/Query/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Database/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Foundation/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Http/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/legacy-factories/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Pagination/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Notifications/**/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Routing/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Support/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/Support/**/*.stubphp'),
-        );
+        $stubFilepaths = [];
+
+        $basePath = dirname(__DIR__) . \DIRECTORY_SEPARATOR . 'stubs' . \DIRECTORY_SEPARATOR . 'common';
+
+        $stubFiles = Finder::create()->files()->name('*.stubphp')->in($basePath);
+
+        foreach ($stubFiles as $stubFile) {
+            $stubFilepath = $stubFile->getRealPath();
+            if (is_string($stubFilepath)) {
+                $stubFilepaths[] = $stubFilepath;
+            }
+        }
+
+        return $stubFilepaths;
     }
 
-    /** @return array<array-key, string> */
+    /** @return list<string> */
     protected function getTaintAnalysisStubs(): array
     {
         return array_merge(
@@ -80,7 +78,7 @@ class Plugin implements PluginEntryPointInterface
         );
     }
 
-    /** @return array<array-key, string> */
+    /** @return list<string> */
     protected function getStubsForVersion(string $version): array
     {
         [$majorVersion] = explode('.', $version);
