@@ -13,7 +13,7 @@ function single_arg_to_get_cookie(): \Symfony\Component\HttpFoundation\Cookie
 
 function no_args(): \Illuminate\Cookie\CookieJar
 {
-  return cookie();
+    return cookie();
 }
 ?>
 --EXPECTF--
