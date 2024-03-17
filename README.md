@@ -31,7 +31,7 @@ Find bugs without the overhead of writing tests!
 
 ## Versions & Dependencies
 
-Maintaned versions:
+Maintained versions:
 
 | Laravel Psalm Plugin | PHP   | Laravel    | Psalm |
 |----------------------|-------|------------|-------|
