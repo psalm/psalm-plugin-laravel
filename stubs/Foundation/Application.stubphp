@@ -1,16 +1,14 @@
 <?php
 
-namespace Illuminate\Contracts\Foundation;
+namespace Illuminate\Foundation;
 
-use Illuminate\Contracts\Container\Container;
-
-interface Application extends Container
+class Application
 {
     /**
      * Get or check the current application environment.
      * @param string|list<string> ...$environments
      * @return string|bool
-     * @psalm-return ($environments is (string|non-empty-array) ? bool : string)
+     * @psalm-return ($environments is null ? string : bool)
      */
     public function environment(...$environments) {}
 
