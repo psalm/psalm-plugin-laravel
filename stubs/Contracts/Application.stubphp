@@ -1,0 +1,23 @@
+<?php
+
+namespace Illuminate\Contracts\Foundation;
+
+use Illuminate\Contracts\Container\Container;
+
+interface Application extends Container
+{
+    /**
+     * Get or check the current application environment.
+     * @param string|list<string> ...$environments
+     * @return string|bool
+     * @psalm-return ($environments is (string|non-empty-array) ? bool : string)
+     */
+    public function environment(...$environments) {}
+
+    /**
+     * Get the registered service provider instances if any exist.
+     * @param \Illuminate\Support\ServiceProvider|string $provider
+     * @psalm-return array{int?, \Illuminate\Support\ServiceProvider}
+     */
+    public function getProviders($provider) {}
+}
