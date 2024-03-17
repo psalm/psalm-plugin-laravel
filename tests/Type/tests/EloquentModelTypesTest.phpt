@@ -3,7 +3,7 @@
 
 use App\Models\User;
 
-/** @return \Illuminate\Database\Eloquent\Collection<array-key, \App\Models\User> */
+///** @return \Illuminate\Database\Eloquent\Collection<array-key, \App\Models\User> */
 /*function test_scope(): \Illuminate\Database\Eloquent\Collection
 {
     return User::active()->get();
