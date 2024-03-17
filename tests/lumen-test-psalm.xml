@@ -5,7 +5,7 @@
     findUnusedCode="true"
     resolveFromConfigFile="false"
     xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
-    errorBaseline="../psalm-plugin-laravel/tests/lumen-test-baseline.xml"
+    errorBaseline="psalm-baseline.xml"
     phpVersion="8.0"
 >
     <projectFiles>

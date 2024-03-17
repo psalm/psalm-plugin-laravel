@@ -24,6 +24,7 @@ use SimpleXMLElement;
 use Throwable;
 
 use function array_merge;
+use function class_exists;
 use function dirname;
 use function explode;
 use function glob;
@@ -57,10 +58,14 @@ class Plugin implements PluginEntryPointInterface
 
     private function registerStubs(RegistrationInterface $registration): void
     {
-        $stubs = array_merge(
-            $this->getCommonStubs(),
-            $this->getStubsForVersion(Application::VERSION),
-        );
+        $stubs = $this->getCommonStubs();
+
+        if (class_exists(Application::class)) {  // Ensure the class is loaded (for Lumen support
+            $stubs = array_merge(
+                $stubs,
+                $this->getStubsForVersion(Application::VERSION),
+            );
+        }
 
         foreach ($stubs as $stubFilePath) {
             $registration->addStubFile($stubFilePath);
