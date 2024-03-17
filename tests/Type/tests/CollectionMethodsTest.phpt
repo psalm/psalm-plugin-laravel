@@ -154,11 +154,10 @@ foreach ($collection as $key => $value) {
 }
 
 /** @var Collection<int, string> */
-$collection = new Collection(["data"]);
+$collection = new Collection(['data']);
 
 foreach ($collection as $key => $value) {
-    /** @psalm-suppress UnusedFunctionCall we need type-check only */
-    substr($value, $key);
+    echo substr($value, $key);
 }
 ?>
 --EXPECT--

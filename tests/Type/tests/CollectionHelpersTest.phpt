@@ -2,7 +2,7 @@
 <?php declare(strict_types=1);
 
 $_false = head([]);
-/** @tests-check-type-exact $_false = false */
+/** @psalm-check-type-exact $_false = false */
 
 function data_fill_supports_array(array $input): array
 {

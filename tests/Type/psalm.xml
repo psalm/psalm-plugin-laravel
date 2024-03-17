@@ -1,12 +1,9 @@
 <?xml version="1.0"?>
 <psalm
-    checkForThrowsDocblock="true"
-    checkForThrowsInGlobalScope="true"
     disableSuppressAll="true"
     ensureArrayStringOffsetsExist="true"
     errorLevel="1"
     findUnusedBaselineEntry="true"
-    findUnusedCode="true"
     findUnusedPsalmSuppress="true"
     findUnusedVariablesAndParams="true"
     memoizeMethodCallResults="true"
