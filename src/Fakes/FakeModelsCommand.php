@@ -3,23 +3,14 @@
 namespace Psalm\LaravelPlugin\Fakes;
 
 use Composer\Autoload\ClassMapGenerator;
-use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
-use ReflectionClass;
-use Symfony\Component\Console\Input\InputOption;
-use Symfony\Component\Console\Input\InputArgument;
-use Symfony\Component\Console\Output\OutputInterface;
-use Barryvdh\Reflection\DocBlock;
-use Barryvdh\Reflection\DocBlock\Context;
-use Barryvdh\Reflection\DocBlock\Tag;
-use Barryvdh\Reflection\DocBlock\Serializer as DocBlockSerializer;
-use function get_class;
-use function in_array;
 use function config;
+use function get_class;
 use function implode;
+use function in_array;
 
 class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
 {
@@ -41,7 +32,20 @@ class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
     /** @return array<class-string> */
     public function getModels()
     {
-        return $this->model_classes + $this->loadModels();
+        if ($this->dirs === []) {
+            throw new \LogicException('Directories to scan models are not set.');
+        }
+
+        $models = [];
+
+        // Bypass an issue https://github.com/barryvdh/laravel-ide-helper/issues/1414
+        foreach ($this->loadModels() as $probably_model_fqcn) {
+            if (is_string($probably_model_fqcn) && is_a($probably_model_fqcn, Model::class, true)) {
+                $models[] = $probably_model_fqcn;
+            }
+        }
+
+        return array_merge($this->model_classes, $models);
     }
 
     /**
