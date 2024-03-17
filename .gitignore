@@ -1,6 +1,7 @@
-composer.phar
 /laravel/
+/lumen/
+
 /vendor/
 composer.lock
+
 cache/*.stubphp
-.DS_Store
