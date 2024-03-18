@@ -76,10 +76,8 @@ final class ApplicationProvider
     /**
      * Overrides {@see \Orchestra\Testbench\Concerns\CreatesApplication::resolveApplicationBootstrappers}
      * Resolve application bootstrapper.
-     *
-     * @param LaravelApplication $app
      */
-    protected function resolveApplicationBootstrappers($app): void
+    protected function resolveApplicationBootstrappers(LaravelApplication $app): void
     {
         // we want to keep the default psalm exception handler, otherwise the Laravel one will always return exit codes
         // of 0

@@ -1,6 +1,7 @@
 <?php
 
 use Rector\CodeQuality\Rector\FunctionLike\SimplifyUselessVariableRector;
+use Rector\CodingStyle\Rector\Assign\SplitDoubleAssignRector;
 use Rector\CodingStyle\Rector\Closure\StaticClosureRector;
 use Rector\CodingStyle\Rector\Encapsed\EncapsedStringsToSprintfRector;
 use Rector\CodingStyle\Rector\If_\NullableCompareToNullRector;
@@ -30,4 +31,5 @@ return RectorConfig::configure()
         NullableCompareToNullRector::class,
         EncapsedStringsToSprintfRector::class,
         StaticClosureRector::class,
+        SplitDoubleAssignRector::class,
     ]);
