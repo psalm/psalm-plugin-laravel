@@ -76,8 +76,7 @@ class FakeModelsCommand extends ModelsCommand
                     case SchemaColumn::TYPE_STRING:
                     case SchemaColumn::TYPE_INT:
                     case SchemaColumn::TYPE_FLOAT:
-                        $get_type = $column->type;
-                        $set_type = $column->type;
+                        $get_type = $set_type = $column->type;
                         break;
 
                     case SchemaColumn::TYPE_BOOL:
