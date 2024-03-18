@@ -70,8 +70,7 @@ class FakeModelsCommand extends ModelsCommand
             $column_name = $column->name;
 
             if (in_array($column_name, $model->getDates(), true)) {
-                $get_type = \Illuminate\Support\Carbon::class;
-                $set_type = \Illuminate\Support\Carbon::class;
+                $get_type = $set_type = \Illuminate\Support\Carbon::class;
             } else {
                 switch ($column->type) {
                     case SchemaColumn::TYPE_STRING:
@@ -89,8 +88,7 @@ class FakeModelsCommand extends ModelsCommand
                                 $get_type = '0|1';
                                 break;
                             default:
-                                $get_type = 'bool';
-                                $set_type = 'bool';
+                                $get_type = $set_type = 'bool';
                                 break;
                         }
 
@@ -98,18 +96,15 @@ class FakeModelsCommand extends ModelsCommand
 
                     case SchemaColumn::TYPE_ENUM:
                         if (!$column->options) {
-                            $get_type = 'string';
-                            $set_type = 'string';
+                            $get_type = $set_type = 'string';
                         } else {
-                            $get_type = "'" . implode("'|'", $column->options) . "'";
-                            $set_type = "'" . implode("'|'", $column->options) . "'";
+                            $get_type = $set_type = "'" . implode("'|'", $column->options) . "'";
                         }
 
                         break;
 
                     default:
-                        $get_type = SchemaColumn::TYPE_MIXED;
-                        $set_type = SchemaColumn::TYPE_MIXED;
+                        $get_type = $set_type = SchemaColumn::TYPE_MIXED;
                         break;
                 }
             }
