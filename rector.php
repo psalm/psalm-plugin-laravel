@@ -16,7 +16,6 @@ use Rector\Strict\Rector\If_\BooleanInIfConditionRuleFixerRector;
 
 return RectorConfig::configure()
     ->withPaths(['src', 'tests'])
-    ->withSkipPath('tests/Acceptance/_support/_generated')
     ->withPhpSets(php81: true)
     ->withPreparedSets(deadCode: true, codingStyle: true, typeDeclarations: true)
     ->withSkip([
