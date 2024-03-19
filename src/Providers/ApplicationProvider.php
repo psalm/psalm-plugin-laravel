@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Providers;
 
 use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
@@ -21,8 +22,7 @@ final class ApplicationProvider
 {
     use CreatesApplication;
 
-    /** @var LaravelApplication|null */
-    private static $app = null;
+    private static ?\Illuminate\Foundation\Application $app = null;
 
     public static function bootApp(): void
     {
@@ -38,7 +38,7 @@ final class ApplicationProvider
 
     public static function getApp(): LaravelApplication
     {
-        if (self::$app instanceof \Illuminate\Container\Container) {
+        if (self::$app instanceof Container) {
             return self::$app;
         }
 
@@ -70,33 +70,29 @@ final class ApplicationProvider
      */
     public static function getAppFullyQualifiedClassName(): string
     {
-        return get_class(self::getApp());
+        return self::getApp()::class;
     }
 
     /**
      * Overrides {@see \Orchestra\Testbench\Concerns\CreatesApplication::resolveApplicationBootstrappers}
      * Resolve application bootstrapper.
-     *
-     * @param LaravelApplication $app
-     *
-     * @return void
      */
-    protected function resolveApplicationBootstrappers($app)
+    protected function resolveApplicationBootstrappers(LaravelApplication $app): void
     {
         // we want to keep the default psalm exception handler, otherwise the Laravel one will always return exit codes
         // of 0
         //$app->make('Illuminate\Foundation\Bootstrap\HandleExceptions')->bootstrap($app);
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Foundation\Bootstrap\RegisterFacades')->bootstrap($app);
+        $app->make(\Illuminate\Foundation\Bootstrap\RegisterFacades::class)->bootstrap($app);
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Foundation\Bootstrap\SetRequestForConsole')->bootstrap($app);
+        $app->make(\Illuminate\Foundation\Bootstrap\SetRequestForConsole::class)->bootstrap($app);
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Foundation\Bootstrap\RegisterProviders')->bootstrap($app);
+        $app->make(\Illuminate\Foundation\Bootstrap\RegisterProviders::class)->bootstrap($app);
 
         $this->getEnvironmentSetUp($app);
 
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Foundation\Bootstrap\BootProviders')->bootstrap($app);
+        $app->make(\Illuminate\Foundation\Bootstrap\BootProviders::class)->bootstrap($app);
 
         foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
             /** @psalm-suppress MixedMethodCall */
@@ -104,7 +100,7 @@ final class ApplicationProvider
         }
 
         /** @psalm-suppress MixedMethodCall */
-        $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
+        $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
         /** @var \Illuminate\Routing\Router $router */
         $router = $app['router'];
@@ -114,15 +110,12 @@ final class ApplicationProvider
          * @psalm-suppress MissingClosureParamType
          * @psalm-suppress UnusedClosureParam
          */
-        $app->resolving('url', static function ($url, $app) use ($router) {
+        $app->resolving('url', static function ($url, $app) use ($router): void {
             $router->getRoutes()->refreshNameLookups();
         });
     }
 
-    /**
-     * @param LaravelApplication $app
-     */
-    protected function getEnvironmentSetUp($app): void
+    protected function getEnvironmentSetUp(LaravelApplication $app): void
     {
         /** @var \Illuminate\Config\Repository $config */
         $config = $app['config'];

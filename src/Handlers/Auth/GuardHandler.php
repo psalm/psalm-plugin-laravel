@@ -118,6 +118,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
 
             $previous_call = null; // exit from while loop
         }
+
         unset($previous_call);
 
         if (! $call_contains_guard_name instanceof CallLike) {

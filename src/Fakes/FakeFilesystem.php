@@ -6,8 +6,7 @@ use Illuminate\Filesystem\Filesystem;
 
 final class FakeFilesystem extends Filesystem
 {
-    /** @var ?string */
-    private $destination = '';
+    private ?string $destination = '';
 
     /**
      * Write the contents of a file.
@@ -15,21 +14,17 @@ final class FakeFilesystem extends Filesystem
      * @param  string  $path
      * @param  string  $contents
      * @param  bool  $lock
-     * @return bool|int
      */
-    public function put($path, $contents, $lock = false)
+    public function put($path, $contents, $lock = false): bool|int
     {
-        $destination = $this->destination !== null ? $this->destination : $path;
+        $destination = $this->destination ?? $path;
 
         $this->destination = null;
 
         return parent::put($destination, $contents, $lock);
     }
 
-    /**
-     * @return void
-     */
-    public function setDestination(string $destination)
+    public function setDestination(string $destination): void
     {
         $this->destination = $destination;
     }

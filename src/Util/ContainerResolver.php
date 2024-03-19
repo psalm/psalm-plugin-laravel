@@ -23,10 +23,9 @@ final class ContainerResolver
 {
     /**
      * map of abstract to concrete class fqn
-     * @var array
      * @psalm-var array<string, class-string|string>
      */
-    private static $cache = [];
+    private static array $cache = [];
 
     /**
      * @psalm-return class-string|string|null
@@ -41,7 +40,7 @@ final class ContainerResolver
         try {
             /** @var mixed $concrete */
             $concrete = ApplicationProvider::getApp()->make($abstract);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return null;
         }
 
@@ -50,7 +49,7 @@ final class ContainerResolver
             $concreteClass = $concrete;
         } elseif (is_object($concrete)) {
             // normally we have an object resolved
-            $concreteClass = get_class($concrete);
+            $concreteClass = $concrete::class;
         } else {
             // not sure how to handle this yet
             return null;
@@ -66,7 +65,7 @@ final class ContainerResolver
      */
     public static function resolvePsalmTypeFromApplicationContainerViaArgs(NodeTypeProvider $nodeTypeProvider, array $call_args): ?Union
     {
-        if (! count($call_args)) {
+        if ($call_args === []) {
             return null;
         }
 

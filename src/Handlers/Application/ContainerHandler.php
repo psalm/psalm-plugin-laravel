@@ -66,7 +66,7 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
      * @see https://github.com/psalm/psalm-plugin-symfony/issues/25
      * psalm needs to know about any classes that could be returned before analysis begins. This is a naive first approach
      */
-    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event)
+    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
         if (!in_array($event->getStorage()->name, ApplicationInterfaceProvider::getApplicationInterfaceClassLikes())) {
             return;
@@ -91,13 +91,13 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
                 if ($reflectionClass->isAnonymous()) {
                     continue;
                 }
-            } catch (Throwable $e) {
+            } catch (Throwable) {
                 // cannot just catch binding exception as the following error is emitted within laravel:
                 // Class 'Symfony\Component\Cache\Adapter\Psr16Adapter' not found
                 continue;
             }
 
-            $className = get_class($concrete);
+            $className = $concrete::class;
             $filePath = $event->getStatementsSource()->getFilePath();
             $fileStorage = $event->getCodebase()->file_storage_provider->get($filePath);
             $fileStorage->referenced_classlikes[strtolower($className)] = $className;
