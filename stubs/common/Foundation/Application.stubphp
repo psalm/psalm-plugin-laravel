@@ -1,0 +1,30 @@
+<?php
+
+namespace Illuminate\Foundation;
+
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Foundation\Application as ApplicationContract;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
+use Illuminate\Contracts\Foundation\CachesRoutes;
+use Illuminate\Support\Traits\Macroable;
+use Symfony\Component\HttpKernel\HttpKernelInterface;
+
+class Application extends Container implements ApplicationContract, CachesConfiguration, CachesRoutes, HttpKernelInterface
+{
+    use Macroable;
+
+    /**
+     * Get or check the current application environment.
+     * @param string|list<string> ...$environments
+     * @return string|bool
+     * @psalm-return ($environments is null ? string : bool)
+     */
+    public function environment(...$environments) {}
+
+    /**
+     * Get the registered service provider instances if any exist.
+     * @param \Illuminate\Support\ServiceProvider|string $provider
+     * @psalm-return array{int?, \Illuminate\Support\ServiceProvider}
+     */
+    public function getProviders($provider) {}
+}

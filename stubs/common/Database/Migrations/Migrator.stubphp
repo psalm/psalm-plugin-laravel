@@ -1,0 +1,16 @@
+<?php
+
+namespace Illuminate\Database\Migrations;
+
+class Migrator
+{
+    /**
+     * Execute the given callback using the given connection as the default connection.
+     *
+     * @template TCalbackReturn
+     * @param string $name
+     * @param callable(): TCalbackReturn $callback
+     * @return TCalbackReturn
+     */
+    public function usingConnection($name, callable $callback) {}
+}
