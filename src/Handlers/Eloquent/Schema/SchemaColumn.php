@@ -5,10 +5,15 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 class SchemaColumn
 {
     public const TYPE_STRING = 'string';
+
     public const TYPE_INT = 'int';
+
     public const TYPE_FLOAT = 'float';
+
     public const TYPE_BOOL = 'bool';
+
     public const TYPE_ENUM = 'enum';
+
     public const TYPE_MIXED = 'mixed';
 
     /** @var string */
@@ -35,6 +40,6 @@ class SchemaColumn
         $this->name = $name;
         $this->type = $type;
         $this->nullable = $nullable;
-        $this->options = $options !== null ? $options : [];
+        $this->options = $options ?? [];
     }
 }

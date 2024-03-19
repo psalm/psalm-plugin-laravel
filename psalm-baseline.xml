@@ -1,24 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="5.23.1@8471a896ccea3526b26d082f4461eeea467f10a4">
+<files psalm-version="5.15.0@5c774aca4746caf3d239d9c8cadb9f882ca29352">
+  <file src="src/Handlers/Application/ContainerHandler.php">
+    <MixedArgument>
+      <code>$abstract</code>
+    </MixedArgument>
+  </file>
   <file src="src/Handlers/Auth/AuthConfigAnalyzer.php">
-    <LessSpecificReturnStatement>
-      <code><![CDATA['\Illuminate\Auth\GenericUser']]></code>
-    </LessSpecificReturnStatement>
     <MixedArgument>
       <code><![CDATA[$this->config->get('auth.guards')]]></code>
     </MixedArgument>
     <MixedInferredReturnType>
-      <code><![CDATA[?string]]></code>
+      <code>?string</code>
       <code><![CDATA[class-string<\Illuminate\Contracts\Auth\Authenticatable>|null]]></code>
     </MixedInferredReturnType>
     <MixedReturnStatement>
-      <code><![CDATA[$this->config->get("auth.providers.$provider.model", null)]]></code>
+      <code><![CDATA[$this->config->get("auth.providers.{$provider}.model", null)]]></code>
       <code><![CDATA[$this->config->get('auth.defaults.guard')]]></code>
     </MixedReturnStatement>
   </file>
   <file src="src/Handlers/Auth/AuthHandler.php">
     <TypeDoesNotContainType>
-      <code><![CDATA[null]]></code>
+      <code>null</code>
     </TypeDoesNotContainType>
   </file>
   <file src="src/Handlers/Auth/GuardHandler.php">
@@ -33,9 +35,9 @@
       <code><![CDATA[$event->getFqClasslikeName()]]></code>
     </ArgumentTypeCoercion>
     <LessSpecificImplementedReturnType>
-      <code><![CDATA[array]]></code>
-      <code><![CDATA[array]]></code>
-      <code><![CDATA[array]]></code>
+      <code>array</code>
+      <code>array</code>
+      <code>array</code>
     </LessSpecificImplementedReturnType>
   </file>
   <file src="src/Handlers/Eloquent/Schema/SchemaAggregator.php">
@@ -45,17 +47,17 @@
   </file>
   <file src="src/Handlers/Helpers/PathHandler.php">
     <InternalMethod>
-      <code><![CDATA[new TLiteralString($result)]]></code>
+      <code>new TLiteralString($result)</code>
     </InternalMethod>
   </file>
   <file src="src/Providers/ApplicationProvider.php">
-    <InternalMethod>
-      <code><![CDATA[createApplication]]></code>
-    </InternalMethod>
+     <InternalMethod>
+       <code><![CDATA[createApplication]]></code>
+     </InternalMethod>
   </file>
   <file src="src/Util/ContainerResolver.php">
     <InternalMethod>
-      <code><![CDATA[new TLiteralString($concrete)]]></code>
+      <code>new TLiteralString($concrete)</code>
     </InternalMethod>
   </file>
 </files>

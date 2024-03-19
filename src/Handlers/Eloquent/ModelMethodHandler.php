@@ -63,6 +63,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             if ($called_method_name_lowercase === null) {
                 return null;
             }
+
             $methodId = new MethodIdentifier($called_fq_classlike_name, $called_method_name_lowercase);
 
             $fake_method_call = new MethodCall(

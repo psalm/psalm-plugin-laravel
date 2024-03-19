@@ -152,13 +152,6 @@ class ModelRelationshipPropertyHandler implements
         return null;
     }
 
-    /**
-     * @param Codebase $codebase
-     * @param string $fq_classlike_name
-     * @param string $property_name
-     *
-     * @return bool
-     */
     private static function relationExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
         // @todo: ensure this is a relation method

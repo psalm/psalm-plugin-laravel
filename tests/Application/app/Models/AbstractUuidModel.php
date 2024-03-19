@@ -15,7 +15,7 @@ abstract class AbstractUuidModel extends Model
     {
         parent::boot();
 
-        static::creating(function (Model $model) {
+        static::creating(function (Model $model): void {
             $model->setAttribute('uuid', Str::uuid());
         });
     }

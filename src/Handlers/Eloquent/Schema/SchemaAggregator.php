@@ -458,6 +458,7 @@ class SchemaAggregator
                     if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
                         $table->renameColumn($column_name, $second_arg->value);
                     }
+
                     break;
 
                 case 'set':
@@ -479,6 +480,7 @@ class SchemaAggregator
                         // @todo extract nullable value from 3rd arg
                         $table->renameColumn($_column_type, $column_name);
                     }
+
                     break;
             }
         }
