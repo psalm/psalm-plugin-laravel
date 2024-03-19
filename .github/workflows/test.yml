@@ -57,7 +57,7 @@ jobs:
         exclude:
           - php: 8.1
             laravel: ^11.0
-    name: Acceptance P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
+    name: Type P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -75,5 +75,5 @@ jobs:
           composer require "illuminate/support:${{ matrix.laravel }}" --no-update
           composer update --no-interaction --no-progress --prefer-dist --prefer-stable ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }}
 
-      - name: Run Acceptance Tests
+      - name: Run Psalm/Type tests
         run: composer test:type

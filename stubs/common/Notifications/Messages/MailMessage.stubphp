@@ -1,0 +1,38 @@
+<?php
+
+namespace Illuminate\Notifications\Messages;
+
+class MailMessage
+{
+    /**
+     * The "cc" information for the message.
+     * @var list<array{0: string, 1: string|null}> Where the first value is email, second — name (optional).
+     */
+    public $cc = [];
+
+    /**
+     * The "bcc" information for the message.
+     * @var list<array{0: string, 1: string|null}> Where the first value is email, second — name (optional).
+     */
+    public $bcc = [];
+
+    /**
+     * Set the cc address for the mail message.
+     * @param string|list<string>|array<string, string> $address
+     * @param string|null $name
+     * @return $this
+     */
+    public function cc($address, $name = null)
+    {
+    }
+
+    /**
+     * Set the bcc address for the mail message.
+     * @param string|list<string>|array<string, string> $address
+     * @param string|null $name
+     * @return $this
+     */
+    public function bcc($address, $name = null)
+    {
+    }
+}
