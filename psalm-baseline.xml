@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="dev-master@b07de1fefde4714f29bca0b56c632bd82855fc64">
+<files psalm-version="4.30.0@d0bc6e25d89f649e4f36a534f330f8bb4643dd69">
   <file src="src/Handlers/Eloquent/ModelMethodHandler.php">
     <DeprecatedInterface occurrences="1">
       <code>ModelMethodHandler</code>
@@ -14,6 +14,15 @@
     <DeprecatedInterface occurrences="1">
       <code>RelationsMethodHandler</code>
     </DeprecatedInterface>
+  </file>
+  <file src="src/Handlers/Eloquent/Schema/SchemaAggregator.php">
+    <UndefinedPropertyFetch occurrences="5">
+      <code>$call-&gt;args[0]-&gt;value</code>
+      <code>$call-&gt;args[0]-&gt;value</code>
+      <code>$call-&gt;args[0]-&gt;value</code>
+      <code>$call-&gt;args[1]-&gt;value</code>
+      <code>$call-&gt;args[1]-&gt;value</code>
+    </UndefinedPropertyFetch>
   </file>
   <file src="src/Handlers/Helpers/PathHandler.php">
     <DeprecatedInterface occurrences="1">
@@ -39,5 +48,10 @@
     <DeprecatedInterface occurrences="1">
       <code>ViewHandler</code>
     </DeprecatedInterface>
+  </file>
+  <file src="src/Providers/ApplicationProvider.php">
+    <MissingFile occurrences="1">
+      <code>require $applicationPath</code>
+    </MissingFile>
   </file>
 </files>
