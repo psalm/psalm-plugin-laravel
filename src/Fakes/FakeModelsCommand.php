@@ -11,6 +11,9 @@ use function config;
 use function get_class;
 use function implode;
 use function in_array;
+use function is_string;
+use function is_a;
+use function array_merge;
 
 class FakeModelsCommand extends \Barryvdh\LaravelIdeHelper\Console\ModelsCommand
 {
