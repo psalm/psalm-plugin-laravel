@@ -1,34 +1,36 @@
 {
     "name": "psalm/plugin-laravel",
-    "description": "A Laravel plugin for Psalm",
-    "type": "psalm-plugin",
-    "require": {
-        "php": "^7.3|^8",
-        "ext-simplexml": "*",
-        "illuminate/container": "^6.0 || ^7.0 || ^8.0",
-        "illuminate/contracts": "^6.0 || ^7.0 || ^8.0",
-        "illuminate/database": "^6.0 || ^7.0 || ^8.0",
-        "illuminate/http": "^6.0 || ^7.0 || ^8.0",
-        "illuminate/support": "^6.0 || ^7.0 || ^8.0",
-        "vimeo/psalm": "^4.8.1",
-        "orchestra/testbench": "^3.8 || ^4.0 || ^5.0 || ^6.0",
-        "barryvdh/laravel-ide-helper": ">=2.8.0 <2.9.2"
-    },
+    "description": "Psalm plugin for Laravel",
     "license": "MIT",
+    "type": "psalm-plugin",
     "authors": [
         {
             "name": "Matthew Brown",
             "email": "github@muglug.com"
         }
     ],
-    "extra": {
-        "branch-alias": {
-            "dev-master": "1.x-dev"
-        },
-        "psalm": {
-            "pluginClass": "Psalm\\LaravelPlugin\\Plugin"
-        }
+    "require": {
+        "php": "^7.3 || ^8",
+        "ext-simplexml": "*",
+        "barryvdh/laravel-ide-helper": ">=2.8.0 <2.9.2",
+        "illuminate/container": "^6.0 || ^7.0 || ^8.0",
+        "illuminate/contracts": "^6.0 || ^7.0 || ^8.0",
+        "illuminate/database": "^6.0 || ^7.0 || ^8.0",
+        "illuminate/http": "^6.0 || ^7.0 || ^8.0",
+        "illuminate/support": "^6.0 || ^7.0 || ^8.0",
+        "orchestra/testbench": "^3.8 || ^4.0 || ^5.0 || ^6.0",
+        "vimeo/psalm": "^4.8.1"
     },
+    "require-dev": {
+        "codeception/codeception": "^4.1.6",
+        "codeception/module-asserts": "^1.0.0",
+        "codeception/module-phpbrowser": "^1.0.0",
+        "slevomat/coding-standard": "^6.2",
+        "squizlabs/php_codesniffer": "*",
+        "weirdan/codeception-psalm-module": "^0.13.1"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
     "autoload": {
         "psr-4": {
             "Psalm\\LaravelPlugin\\": "src"
@@ -39,24 +41,31 @@
             "Tests\\Psalm\\LaravelPlugin\\": "tests"
         }
     },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "sort-packages": true
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "1.x-dev"
+        },
+        "psalm": {
+            "pluginClass": "Psalm\\LaravelPlugin\\Plugin"
+        }
+    },
     "scripts": {
+        "analyze": "@psalm",
         "check": [
             "@analyze",
             "@lint",
             "@test"
         ],
-        "analyze": "psalm",
-        "lint": "phpcs -n",
+        "lint": "phpcs --report-full --report-summary --colors -n -s",
         "lint-fix": "phpcbf -n",
+        "psalm": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
+        "psalm-set-baseline": "psalm --set-baseline=psalm-baseline.xml",
         "test": "codecept run --skip-group skip"
-    },
-    "require-dev": {
-        "codeception/codeception": "^4.1.6",
-        "codeception/module-phpbrowser": "^1.0.0",
-        "codeception/module-asserts": "^1.0.0",
-        "weirdan/codeception-psalm-module": "^0.13.1",
-        "squizlabs/php_codesniffer": "*",
-        "slevomat/coding-standard": "^6.2"
-    },
-    "minimum-stability": "dev"
+    }
 }
