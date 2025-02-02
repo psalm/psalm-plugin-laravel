@@ -3,6 +3,7 @@
 namespace Psalm\LaravelPlugin\Providers;
 
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\LaravelPlugin\Exceptions\UnknownApplicationConfiguration;
 use Psalm\LaravelPlugin\Fakes\FakeFilesystem;
 use Psalm\LaravelPlugin\Fakes\FakeModelsCommand;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
@@ -33,7 +34,12 @@ final class ModelStubProvider implements GeneratesStubs
 
         $schema_aggregator = new SchemaAggregator();
 
-        foreach (glob($migrations_directory . '*.php') as $file) {
+        $migrationFilePathnames = glob($migrations_directory . '*.php');
+        if (! is_array($migrationFilePathnames)) {
+            throw new UnknownApplicationConfiguration("No migration files found in {$migrations_directory} directory.");
+        }
+
+        foreach ($migrationFilePathnames as $file) {
             $schema_aggregator->addStatements($codebase->getStatementsForFile($file));
         }
 

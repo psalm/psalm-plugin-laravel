@@ -8,7 +8,6 @@ use Illuminate\Contracts\Config\Repository;
 
 final class ConfigRepositoryProvider
 {
-    /** @psalm-suppress MixedInferredReturnType */
     public static function get(): Repository
     {
         /** @psalm-suppress MixedReturnStatement */
