@@ -16,7 +16,9 @@
         </ignoreFiles>
     </projectFiles>
     <plugins>
-        <pluginClass class="Psalm\LaravelPlugin\Plugin"/>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <failOnInternalError>true</failOnInternalError>
+        </pluginClass>
     </plugins>
 
     <issueHandlers>

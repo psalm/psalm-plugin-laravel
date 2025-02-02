@@ -43,8 +43,8 @@ class Plugin implements PluginEntryPointInterface
             ApplicationProvider::bootApp();
             $this->generateStubFiles();
         } catch (\Throwable $throwable) {
-            $failOnError = (string) $config?->failOnError === 'true';
-            if ($failOnError) {
+            $failOnInternalError = (string) $config?->failOnInternalError === 'true';
+            if ($failOnInternalError) {
                 throw $throwable;
             }
 
