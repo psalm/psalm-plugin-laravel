@@ -41,8 +41,8 @@ final class ModelStubProvider implements GeneratesStubs
 
         $models_generator_command = new FakeModelsCommand(
             $fake_filesystem,
-            $app->make('config'),
-            $app->make('view')
+            $app->make(\Illuminate\Contracts\Config\Repository::class),
+            $app->make(\Illuminate\View\Factory::class)
         );
         $models_generator_command->setSchemaAggregator($schema_aggregator);
         $models_generator_command->setLaravel($app);
