@@ -46,7 +46,7 @@ final class ApplicationProvider
             define('LARAVEL_START', microtime(true));
         }
 
-        if (file_exists($applicationPath = getcwd() . '/bootstrap/app.php')) { // Applications and Local Dev
+        if (file_exists($applicationPath = (getcwd() ?: '.') . '/bootstrap/app.php')) { // Applications and Local Dev
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
         } elseif (file_exists($applicationPath = dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor

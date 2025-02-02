@@ -115,7 +115,6 @@ class FakeModelsCommand extends ModelsCommand
             }
 
             if ($column->nullable) {
-                /** @psalm-suppress MixedArrayAssignment */
                 $this->nullableColumns[$column_name] = true;
             }
 
