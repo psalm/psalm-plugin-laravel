@@ -14,8 +14,8 @@ final class PsalmTest extends TestCase
 {
     private ?PsalmTester $psalmTester = null;
 
-    /** @return iterable<string, list{string}> */
-    public static function providePhptFiles(): iterable
+    /** @return \Generator<string, array{0: string}> */
+    public static function providePhptFiles(): \Generator
     {
         $baseDir = __DIR__ . \DIRECTORY_SEPARATOR . 'tests' . \DIRECTORY_SEPARATOR;
         $testExtension = 'phpt';
@@ -24,14 +24,11 @@ final class PsalmTest extends TestCase
         $itr = new \RecursiveIteratorIterator($dirItr);
         $regItr = new \RegexIterator($itr, "/^.+.{$testExtension}\$/", \RegexIterator::GET_MATCH);
 
-        $filePaths = [];
-
         foreach ($regItr as $file) {
             $filepath = $file[0];
-            $filePaths[str_replace($baseDir, '', $filepath)] = [$filepath];
+            $relativeFilepath = str_replace($baseDir, '', $filepath);
+            yield $relativeFilepath => [$filepath];
         }
-
-        return $filePaths;
     }
 
     #[DataProvider('providePhptFiles')]
