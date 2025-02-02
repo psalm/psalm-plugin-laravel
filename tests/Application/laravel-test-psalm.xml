@@ -5,7 +5,7 @@
     findUnusedBaselineEntry="false"
     findUnusedCode="true"
     resolveFromConfigFile="false"
-    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+    xsi:schemaLocation="https://getpsalm.org/schema/config ../../vendor/vimeo/psalm/config.xsd"
     errorBaseline="../../tests/Application/laravel-test-baseline.xml"
     phpVersion="8.2"
 >
