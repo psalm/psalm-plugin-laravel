@@ -14,6 +14,8 @@
     xsi:schemaLocation="https://getpsalm.org/schema/config ../vendor/vimeo/psalm/config.xsd"
 >
     <plugins>
-        <pluginClass class="\Psalm\LaravelPlugin\Plugin"/>
+        <pluginClass class="\Psalm\LaravelPlugin\Plugin">
+            <failOnError>true</failOnError>
+        </pluginClass>
     </plugins>
 </psalm>
