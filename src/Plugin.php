@@ -43,7 +43,12 @@ class Plugin implements PluginEntryPointInterface
             ApplicationProvider::bootApp();
             $this->generateStubFiles();
         } catch (\Throwable $throwable) {
-            fwrite(\STDERR, "Laravel plugin error: “{$throwable->getMessage()}”\n");
+            $failOnError = (string) $config?->failOnError === 'true';
+            if ($failOnError) {
+                throw $throwable;
+            }
+
+            fwrite(\STDERR, "\nLaravel plugin error on generating stub files: \"{$throwable->getMessage()}\"\n");
             return;
         }
 
