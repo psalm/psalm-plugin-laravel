@@ -41,9 +41,10 @@ final class ModelStubProvider implements GeneratesStubs
 
         $models_generator_command = new FakeModelsCommand(
             $fake_filesystem,
-            $schema_aggregator
+            $app->make('config'),
+            $app->make('view')
         );
-
+        $models_generator_command->setSchemaAggregator($schema_aggregator);
         $models_generator_command->setLaravel($app);
 
         @unlink(self::getStubFileLocation());

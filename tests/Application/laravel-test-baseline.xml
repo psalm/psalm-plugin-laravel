@@ -1,136 +1,171 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="5.7.7@e028ba46ba0d7f9a78bc3201c251e137383e145f">
+<files psalm-version="6.0.0@b8e96bb617bf59382113b1b56cef751f648a7dc9">
   <file src="app/Broadcasting/ExampleChannel.php">
     <InvalidReturnType>
-      <code>array|bool</code>
+      <code><![CDATA[array|bool]]></code>
     </InvalidReturnType>
     <UnusedClass>
-      <code>ExampleChannel</code>
+      <code><![CDATA[ExampleChannel]]></code>
     </UnusedClass>
   </file>
   <file src="app/Casts/ExampleCast.php">
     <MissingTemplateParam>
-      <code>CastsAttributes</code>
+      <code><![CDATA[CastsAttributes]]></code>
     </MissingTemplateParam>
-    <MoreSpecificImplementedParamType>
-      <code>$attributes</code>
-      <code>$attributes</code>
-    </MoreSpecificImplementedParamType>
     <UnusedClass>
-      <code>ExampleCast</code>
+      <code><![CDATA[ExampleCast]]></code>
     </UnusedClass>
   </file>
   <file src="app/Console/Commands/ExampleCommand.php">
     <MissingReturnType>
-      <code>handle</code>
+      <code><![CDATA[handle]]></code>
     </MissingReturnType>
+    <NonInvariantDocblockPropertyType>
+      <code><![CDATA[$description]]></code>
+    </NonInvariantDocblockPropertyType>
+    <PropertyNotSetInConstructor>
+      <code><![CDATA[ExampleCommand]]></code>
+      <code><![CDATA[ExampleCommand]]></code>
+      <code><![CDATA[ExampleCommand]]></code>
+      <code><![CDATA[ExampleCommand]]></code>
+      <code><![CDATA[ExampleCommand]]></code>
+    </PropertyNotSetInConstructor>
     <UnusedClass>
-      <code>ExampleCommand</code>
+      <code><![CDATA[ExampleCommand]]></code>
     </UnusedClass>
+  </file>
+  <file src="app/Events/ExampleEvent.php">
+    <PossiblyUnusedMethod>
+      <code><![CDATA[broadcastOn]]></code>
+    </PossiblyUnusedMethod>
   </file>
   <file src="app/Exceptions/ExampleException.php">
     <UnusedClass>
-      <code>ExampleException</code>
+      <code><![CDATA[ExampleException]]></code>
     </UnusedClass>
-  </file>
-  <file src="app/Exceptions/Handler.php">
-    <UnusedClosureParam>
-      <code>$e</code>
-    </UnusedClosureParam>
   </file>
   <file src="app/Http/Controllers/ExampleController.php">
     <UnusedClass>
-      <code>ExampleController</code>
+      <code><![CDATA[ExampleController]]></code>
     </UnusedClass>
   </file>
   <file src="app/Http/Middleware/ExampleMiddleware.php">
     <UnusedClass>
-      <code>ExampleMiddleware</code>
+      <code><![CDATA[ExampleMiddleware]]></code>
     </UnusedClass>
   </file>
-  <file src="app/Http/Middleware/ValidateSignature.php">
-    <PossiblyUnusedProperty>
-      <code>$except</code>
-    </PossiblyUnusedProperty>
-  </file>
   <file src="app/Http/Requests/ExampleRequest.php">
-    <DeprecatedInterface>
-      <code><![CDATA[array<string, \Illuminate\Contracts\Validation\Rule|array|string>]]></code>
-    </DeprecatedInterface>
+    <PropertyNotSetInConstructor>
+      <code><![CDATA[ExampleRequest]]></code>
+      <code><![CDATA[ExampleRequest]]></code>
+      <code><![CDATA[ExampleRequest]]></code>
+      <code><![CDATA[ExampleRequest]]></code>
+      <code><![CDATA[ExampleRequest]]></code>
+      <code><![CDATA[ExampleRequest]]></code>
+      <code><![CDATA[ExampleRequest]]></code>
+      <code><![CDATA[ExampleRequest]]></code>
+      <code><![CDATA[ExampleRequest]]></code>
+    </PropertyNotSetInConstructor>
     <UnusedClass>
-      <code>ExampleRequest</code>
+      <code><![CDATA[ExampleRequest]]></code>
     </UnusedClass>
   </file>
   <file src="app/Http/Resources/ExampleResource.php">
     <MixedReturnTypeCoercion>
       <code><![CDATA[array<string, mixed>]]></code>
-      <code>parent::toArray($request)</code>
+      <code><![CDATA[parent::toArray($request)]]></code>
     </MixedReturnTypeCoercion>
     <UnusedClass>
-      <code>ExampleResource</code>
+      <code><![CDATA[ExampleResource]]></code>
     </UnusedClass>
+  </file>
+  <file src="app/Jobs/ExampleJob.php">
+    <PossiblyUnusedMethod>
+      <code><![CDATA[handle]]></code>
+    </PossiblyUnusedMethod>
   </file>
   <file src="app/Listeners/ExampleListener.php">
     <UnusedClass>
-      <code>ExampleListener</code>
+      <code><![CDATA[ExampleListener]]></code>
     </UnusedClass>
   </file>
   <file src="app/Mail/ExampleMail.php">
     <PossiblyUnusedMethod>
-      <code>attachments</code>
-      <code>content</code>
-      <code>envelope</code>
+      <code><![CDATA[__construct]]></code>
+      <code><![CDATA[attachments]]></code>
+      <code><![CDATA[content]]></code>
+      <code><![CDATA[envelope]]></code>
     </PossiblyUnusedMethod>
+    <PropertyNotSetInConstructor>
+      <code><![CDATA[ExampleMail]]></code>
+      <code><![CDATA[ExampleMail]]></code>
+      <code><![CDATA[ExampleMail]]></code>
+      <code><![CDATA[ExampleMail]]></code>
+      <code><![CDATA[ExampleMail]]></code>
+      <code><![CDATA[ExampleMail]]></code>
+      <code><![CDATA[ExampleMail]]></code>
+      <code><![CDATA[ExampleMail]]></code>
+    </PropertyNotSetInConstructor>
+  </file>
+  <file src="app/Models/Example.php">
+    <UnusedClass>
+      <code><![CDATA[Example]]></code>
+    </UnusedClass>
   </file>
   <file src="app/Models/Scopes/ExampleScope.php">
     <UnusedClass>
-      <code>ExampleScope</code>
+      <code><![CDATA[ExampleScope]]></code>
     </UnusedClass>
   </file>
   <file src="app/Models/User.php">
     <NonInvariantDocblockPropertyType>
-      <code>$casts</code>
-      <code>$fillable</code>
-      <code>$hidden</code>
+      <code><![CDATA[$fillable]]></code>
+      <code><![CDATA[$hidden]]></code>
     </NonInvariantDocblockPropertyType>
+  </file>
+  <file src="app/Notifications/ExampleNotification.php">
+    <PossiblyUnusedMethod>
+      <code><![CDATA[__construct]]></code>
+      <code><![CDATA[toArray]]></code>
+      <code><![CDATA[toMail]]></code>
+      <code><![CDATA[via]]></code>
+    </PossiblyUnusedMethod>
+    <PropertyNotSetInConstructor>
+      <code><![CDATA[ExampleNotification]]></code>
+    </PropertyNotSetInConstructor>
   </file>
   <file src="app/Observers/ExampleObserver.php">
     <UnusedClass>
-      <code>ExampleObserver</code>
+      <code><![CDATA[ExampleObserver]]></code>
     </UnusedClass>
   </file>
   <file src="app/Policies/ExamplePolicy.php">
     <UnusedClass>
-      <code>ExamplePolicy</code>
+      <code><![CDATA[ExamplePolicy]]></code>
     </UnusedClass>
   </file>
-  <file src="app/Providers/EventServiceProvider.php">
-    <NonInvariantDocblockPropertyType>
-      <code>$listen</code>
-    </NonInvariantDocblockPropertyType>
+  <file src="app/Providers/AppServiceProvider.php">
+    <UnusedClass>
+      <code><![CDATA[AppServiceProvider]]></code>
+    </UnusedClass>
   </file>
   <file src="app/Providers/ExampleProvider.php">
     <UnusedClass>
-      <code>ExampleProvider</code>
+      <code><![CDATA[ExampleProvider]]></code>
     </UnusedClass>
-  </file>
-  <file src="app/Providers/RouteServiceProvider.php">
-    <RiskyTruthyFalsyComparison>
-        <code><![CDATA[$request->user()?->id]]></code>
-    </RiskyTruthyFalsyComparison>
   </file>
   <file src="app/Rules/ExampleRule.php">
     <UnusedClass>
-      <code>ExampleRule</code>
+      <code><![CDATA[ExampleRule]]></code>
     </UnusedClass>
   </file>
   <file src="app/View/Components/ExampleComponent.php">
     <PropertyNotSetInConstructor>
-      <code>ExampleComponent</code>
-      <code>ExampleComponent</code>
+      <code><![CDATA[ExampleComponent]]></code>
+      <code><![CDATA[ExampleComponent]]></code>
     </PropertyNotSetInConstructor>
     <UnusedClass>
-      <code>ExampleComponent</code>
+      <code><![CDATA[ExampleComponent]]></code>
     </UnusedClass>
   </file>
 </files>
