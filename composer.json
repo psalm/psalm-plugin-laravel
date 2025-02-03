@@ -76,6 +76,7 @@
             "@test:unit",
             "@test:type"
         ],
+        "test:app": "./tests/Application/laravel-test.sh",
         "test:type": "phpunit --testsuite=type",
         "test:unit": "phpunit --testsuite=unit"
     }

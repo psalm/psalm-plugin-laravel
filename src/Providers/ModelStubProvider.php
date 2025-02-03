@@ -13,6 +13,7 @@ use Symfony\Component\Console\Output\NullOutput;
 use function glob;
 use function method_exists;
 use function unlink;
+use function is_array;
 
 final class ModelStubProvider implements GeneratesStubs
 {
