@@ -14,7 +14,6 @@ use function define;
 use function defined;
 use function dirname;
 use function file_exists;
-use function get_class;
 use function getcwd;
 use function microtime;
 
@@ -53,7 +52,7 @@ final class ApplicationProvider
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
         } else { // Laravel Packages
-            $app = (new self())->createApplication(); // Orchestra\Testbench
+            $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
         }
 
         if (! $app instanceof LaravelApplication) {
