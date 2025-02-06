@@ -34,7 +34,7 @@ final class FacadeStubProvider implements GeneratesStubs
         $stubs_generator_command = new GeneratorCommand(
             $config,
             $fake_filesystem,
-            ViewFactoryProvider::get(),
+            $app->make('view') // required a real one as ide-helper registers and uses its own views inside console commands the Psalm plugin uses
         );
 
         $stubs_generator_command->setLaravel($app);
