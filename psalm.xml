@@ -19,5 +19,6 @@
 
     <issueHandlers>
         <LessSpecificReturnType errorLevel="info" />
+        <ClassMustBeFinal errorLevel="info" />
     </issueHandlers>
 </psalm>
