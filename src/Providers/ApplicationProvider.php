@@ -27,12 +27,18 @@ final class ApplicationProvider
     {
         $app = self::getApp();
 
-        /** @var \Illuminate\Contracts\Console\Kernel $consoleApp */
         $consoleApp = $app->make(Kernel::class);
-        // @todo do not bootstrap \Illuminate\Foundation\Bootstrap\HandleExceptions
+        // Prevent Laravel's exception handler from interfering with Psalm's analysis
+        $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function () {
+            return new class {
+                public function bootstrap(): void
+                {
+                }
+            };
+        });
         $consoleApp->bootstrap();
 
-        $app->register(IdeHelperServiceProvider::class);
+        $app->registerDeferredProvider(IdeHelperServiceProvider::class);
     }
 
     public static function getApp(): LaravelApplication
@@ -81,24 +87,18 @@ final class ApplicationProvider
         // we want to keep the default psalm exception handler, otherwise the Laravel one will always return exit codes
         // of 0
         //$app->make('Illuminate\Foundation\Bootstrap\HandleExceptions')->bootstrap($app);
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Foundation\Bootstrap\RegisterFacades::class)->bootstrap($app);
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Foundation\Bootstrap\SetRequestForConsole::class)->bootstrap($app);
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Foundation\Bootstrap\RegisterProviders::class)->bootstrap($app);
 
         $this->getEnvironmentSetUp($app);
 
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Foundation\Bootstrap\BootProviders::class)->bootstrap($app);
 
         foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
-            /** @psalm-suppress MixedMethodCall */
             $app->make($bootstrap)->bootstrap($app);
         }
 
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
         /** @var \Illuminate\Routing\Router $router */
