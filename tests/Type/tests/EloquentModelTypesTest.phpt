@@ -13,5 +13,10 @@ function test_find_or_fail(): User
 {
     return User::findOrFail(1);
 }
+
+function test_factory(): \Database\Factories\UserFactory
+{
+    return User::factory();
+}
 ?>
 --EXPECTF--

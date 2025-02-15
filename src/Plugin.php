@@ -10,6 +10,7 @@ use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelStaticPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
@@ -43,7 +44,7 @@ class Plugin implements PluginEntryPointInterface
             ApplicationProvider::bootApp();
             $this->generateStubFiles();
         } catch (\Throwable $throwable) {
-            $failOnInternalError = (string) $config?->failOnInternalError === 'true';
+            $failOnInternalError = ((string) $config?->failOnInternalError) === 'true';
             if ($failOnInternalError) {
                 throw $throwable;
             }
@@ -128,6 +129,8 @@ class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ModelRelationshipPropertyHandler::class);
         require_once 'Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         $registration->registerHooksFromClass(ModelPropertyAccessorHandler::class);
+        require_once 'Handlers/Eloquent/ModelStaticPropertyHandler.php';
+        $registration->registerHooksFromClass(ModelStaticPropertyHandler::class);
         require_once 'Handlers/Eloquent/RelationsMethodHandler.php';
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
         require_once 'Handlers/Eloquent/ModelMethodHandler.php';
