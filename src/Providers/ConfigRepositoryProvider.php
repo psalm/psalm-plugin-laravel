@@ -10,7 +10,6 @@ final class ConfigRepositoryProvider
 {
     public static function get(): Repository
     {
-        /** @psalm-suppress MixedReturnStatement */
         return ApplicationProvider::getApp()->get(Repository::class);
     }
 }
