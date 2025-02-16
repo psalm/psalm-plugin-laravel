@@ -52,7 +52,7 @@ jobs:
       fail-fast: true
       matrix:
         php: [8.4, 8.3, 8.2]
-        laravel: [^11.0]
+        laravel: [^11.35]
         dependencies: [lowest, highest]
     name: Type P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
