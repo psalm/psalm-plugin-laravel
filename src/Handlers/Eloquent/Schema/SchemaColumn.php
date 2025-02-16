@@ -2,7 +2,7 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
-class SchemaColumn
+final class SchemaColumn
 {
     public const TYPE_STRING = 'string';
 

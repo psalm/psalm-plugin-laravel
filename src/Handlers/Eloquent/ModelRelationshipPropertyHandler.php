@@ -26,7 +26,7 @@ use Psalm\Type\Union;
 use function in_array;
 use function is_a;
 
-class ModelRelationshipPropertyHandler implements
+final class ModelRelationshipPropertyHandler implements
     PropertyExistenceProviderInterface,
     PropertyVisibilityProviderInterface,
     PropertyTypeProviderInterface

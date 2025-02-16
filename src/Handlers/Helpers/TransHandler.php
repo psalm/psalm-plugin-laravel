@@ -6,7 +6,7 @@ use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
 
-class TransHandler implements FunctionReturnTypeProviderInterface
+final class TransHandler implements FunctionReturnTypeProviderInterface
 {
     /** @inheritDoc */
     public static function getFunctionIds(): array
