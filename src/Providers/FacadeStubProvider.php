@@ -38,6 +38,9 @@ final class FacadeStubProvider implements GeneratesStubs
          */
         $viewFactory = $app->make('view');
 
+        // Register ide-helper views path
+        $viewFactory->addNamespace('ide-helper', dirname((new \ReflectionClass(\Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider::class))->getFileName(), 2) . '/resources/views');
+
         $stubs_generator_command = new GeneratorCommand(
             $config,
             $fake_filesystem,
