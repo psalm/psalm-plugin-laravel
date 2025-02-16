@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="6.6.0@07e9a53713232e924da9acb4a6e47507461cd411">
+<files psalm-version="6.6.1@dae5a05eac03b55e8f50ae00f4cd2ba5d5588d59">
   <file src="src/Handlers/Auth/AuthConfigAnalyzer.php">
     <MixedArgument>
       <code><![CDATA[$this->config->get('auth.guards')]]></code>
@@ -10,6 +10,10 @@
     </MixedReturnStatement>
   </file>
   <file src="src/Handlers/Auth/AuthHandler.php">
+    <LessSpecificImplementedReturnType>
+      <code><![CDATA[array]]></code>
+      <code><![CDATA[array]]></code>
+    </LessSpecificImplementedReturnType>
     <TypeDoesNotContainType>
       <code><![CDATA[null]]></code>
     </TypeDoesNotContainType>
