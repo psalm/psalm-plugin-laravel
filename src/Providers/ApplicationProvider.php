@@ -29,21 +29,10 @@ final class ApplicationProvider
 
     public static function bootApp(): void
     {
-        $app = self::getApp();
-
-        $consoleApp = $app->make(Kernel::class);
-        // Prevent Laravel's exception handler from interfering with Psalm's analysis
-        $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function () {
-            return new class {
-                public function bootstrap(): void
-                {
-                }
-            };
-        });
-        $consoleApp->bootstrap();
-
-        $app->registerDeferredProvider(IdeHelperServiceProvider::class);
+        self::getApp();
     }
+
+    private static bool $booted = false;
 
     public static function getApp(): LaravelApplication
     {
@@ -70,6 +59,31 @@ final class ApplicationProvider
         }
 
         self::$app = $app;
+
+        // Initialize view system first
+        if (!$app->bound('view')) {
+            $filesystem = new \Illuminate\Filesystem\Filesystem();
+            $viewFinder = new FileViewFinder($filesystem, []);
+            $engineResolver = new EngineResolver();
+            $engineResolver->register('php', fn() => new PhpEngine($filesystem));
+            $app->singleton('view', fn() => new Factory($engineResolver, $viewFinder, $app['events']));
+        }
+
+        if (!self::$booted) {
+            // Bootstrap console app
+            $consoleApp = $app->make(Kernel::class);
+            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function () {
+                return new class {
+                    public function bootstrap(): void
+                    {
+                    }
+                };
+            });
+            $consoleApp->bootstrap();
+
+            $app->register(IdeHelperServiceProvider::class);
+            self::$booted = true;
+        }
 
         return $app;
     }
