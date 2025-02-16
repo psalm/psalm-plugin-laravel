@@ -65,8 +65,8 @@ final class ApplicationProvider
             $filesystem = new \Illuminate\Filesystem\Filesystem();
             $viewFinder = new FileViewFinder($filesystem, []);
             $engineResolver = new EngineResolver();
-            $engineResolver->register('php', fn() => new PhpEngine($filesystem));
-            $app->singleton('view', fn() => new Factory($engineResolver, $viewFinder, $app['events']));
+            $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
+            $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $app['events']));
         }
 
         if (!self::$booted) {
@@ -156,11 +156,12 @@ final class ApplicationProvider
 
             // Set up the engine resolver
             $engineResolver = new EngineResolver();
-            $engineResolver->register('php', fn() => new PhpEngine($filesystem));
+            $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
 
             // Create and bind the view factory
-            $app->singleton('view', fn() => new Factory($engineResolver, $viewFinder, $app['events']));
+            $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $app['events']));
         }
+
         $app['view']->addNamespace('ide-helper', $viewPath);
     }
 }

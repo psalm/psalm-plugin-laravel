@@ -9,14 +9,12 @@ use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPrivateMethodRector;
 use Rector\Php74\Rector\Closure\ClosureToArrowFunctionRector;
 use Rector\Php81\Rector\Array_\FirstClassCallableRector;
 use Rector\Php81\Rector\FuncCall\NullToStrictStringFuncCallArgRector;
-use Rector\Php81\Rector\Property\ReadOnlyPropertyRector;
 
 return RectorConfig::configure()
     ->withPaths(['src', 'tests'])
     ->withPhpSets(php82: true)
-    ->withPreparedSets(deadCode: true, codingStyle: true, typeDeclarations: true)
+    ->withPreparedSets(deadCode: true, codingStyle: true, typeDeclarations: true, codeQuality: true)
     ->withSkip([
-        ReadOnlyPropertyRector::class,
         ClosureToArrowFunctionRector::class,
         FirstClassCallableRector::class,
         NullToStrictStringFuncCallArgRector::class,

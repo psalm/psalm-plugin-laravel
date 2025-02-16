@@ -84,7 +84,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 
             $type = ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $proxyType);
 
-            if (!$type) {
+            if (!$type instanceof \Psalm\Type\Union) {
                 return null;
             }
 

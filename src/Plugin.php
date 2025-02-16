@@ -113,37 +113,37 @@ class Plugin implements PluginEntryPointInterface
 
     private function registerHandlers(RegistrationInterface $registration): void
     {
-        require_once 'Handlers/Application/ContainerHandler.php';
+        require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(ContainerHandler::class);
-        require_once 'Handlers/Application/OffsetHandler.php';
+        require_once __DIR__ . '/Handlers/Application/OffsetHandler.php';
         $registration->registerHooksFromClass(OffsetHandler::class);
 
-        require_once 'Handlers/Auth/AuthHandler.php';
+        require_once __DIR__ . '/Handlers/Auth/AuthHandler.php';
         $registration->registerHooksFromClass(AuthHandler::class);
-        require_once 'Handlers/Auth/GuardHandler.php';
+        require_once __DIR__ . '/Handlers/Auth/GuardHandler.php';
         $registration->registerHooksFromClass(GuardHandler::class);
-        require_once 'Handlers/Auth/RequestHandler.php';
+        require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(RequestHandler::class);
 
-        require_once 'Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         $registration->registerHooksFromClass(ModelRelationshipPropertyHandler::class);
-        require_once 'Handlers/Eloquent/ModelFactoryTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
         $registration->registerHooksFromClass(ModelFactoryTypeProvider::class);
-        require_once 'Handlers/Eloquent/ModelPropertyAccessorHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         $registration->registerHooksFromClass(ModelPropertyAccessorHandler::class);
-        require_once 'Handlers/Eloquent/RelationsMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/RelationsMethodHandler.php';
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
-        require_once 'Handlers/Eloquent/ModelMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(ModelMethodHandler::class);
 
-        require_once 'Handlers/Helpers/CacheHandler.php';
+        require_once __DIR__ . '/Handlers/Helpers/CacheHandler.php';
         $registration->registerHooksFromClass(CacheHandler::class);
-        require_once 'Handlers/Helpers/PathHandler.php';
+        require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(PathHandler::class);
-        require_once 'Handlers/Helpers/TransHandler.php';
+        require_once __DIR__ . '/Handlers/Helpers/TransHandler.php';
         $registration->registerHooksFromClass(TransHandler::class);
 
-        require_once 'Handlers/SuppressHandler.php';
+        require_once __DIR__ . '/Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(SuppressHandler::class);
     }
 

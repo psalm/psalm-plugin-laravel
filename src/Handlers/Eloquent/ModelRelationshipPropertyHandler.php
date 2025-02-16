@@ -99,7 +99,7 @@ class ModelRelationshipPropertyHandler implements
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             $methodReturnType = $codebase->getMethodReturnType($fq_classlike_name . '::' . $property_name, $fq_classlike_name);
-            if (!$methodReturnType) {
+            if (!$methodReturnType instanceof \Psalm\Type\Union) {
                 return Type::getMixed();
             }
 
@@ -164,7 +164,7 @@ class ModelRelationshipPropertyHandler implements
         // ensure this is a relation method
 
         $return_type = $codebase->getMethodReturnType($method, $fq_classlike_name);
-        if (!$return_type) {
+        if (!$return_type instanceof \Psalm\Type\Union) {
             return false;
         }
 

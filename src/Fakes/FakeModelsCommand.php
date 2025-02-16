@@ -100,11 +100,9 @@ class FakeModelsCommand extends ModelsCommand
                         break;
 
                     case SchemaColumn::TYPE_ENUM:
-                        if (!$column->options) {
-                            $get_type = $set_type = 'string';
-                        } else {
-                            $get_type = $set_type = "'" . implode("'|'", $column->options) . "'";
-                        }
+                        $get_type = $column->options
+                            ? $set_type = "'" . implode("'|'", $column->options) . "'"
+                            : $set_type = 'string';
 
                         break;
 

@@ -110,7 +110,8 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
             }
 
             // auth() or auth('guard') call
-            if ($previous_call instanceof FuncCall
+            if (
+                $previous_call instanceof FuncCall
                 && ($previous_call->name instanceof Name && $previous_call->name->getParts()[0] === 'auth')
             ) {
                 $call_contains_guard_name = $previous_call;
