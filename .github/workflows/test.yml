@@ -54,7 +54,7 @@ jobs:
         php: [8.4, 8.3, 8.2]
         laravel: [^11.35]
         dependencies: [highest]
-    name: Type P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
+    name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
