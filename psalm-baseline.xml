@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="5.15.0@5c774aca4746caf3d239d9c8cadb9f882ca29352">
-  <file src="src/Handlers/Application/ContainerHandler.php">
-    <MixedArgument>
-      <code>$abstract</code>
-    </MixedArgument>
+<files psalm-version="6.6.0@07e9a53713232e924da9acb4a6e47507461cd411">
+  <file src="src/Fakes/FakeModelsCommand.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[FakeModelsCommand]]></code>
+    </ClassMustBeFinal>
+    <TooFewArguments>
+      <code><![CDATA[parent::__construct($files)]]></code>
+      <code><![CDATA[parent::__construct($files)]]></code>
+    </TooFewArguments>
   </file>
   <file src="src/Handlers/Auth/AuthConfigAnalyzer.php">
     <MixedArgument>
       <code><![CDATA[$this->config->get('auth.guards')]]></code>
     </MixedArgument>
-    <MixedInferredReturnType>
-      <code>?string</code>
-      <code><![CDATA[class-string<\Illuminate\Contracts\Auth\Authenticatable>|null]]></code>
-    </MixedInferredReturnType>
     <MixedReturnStatement>
       <code><![CDATA[$this->config->get("auth.providers.{$provider}.model", null)]]></code>
       <code><![CDATA[$this->config->get('auth.defaults.guard')]]></code>
@@ -20,13 +20,8 @@
   </file>
   <file src="src/Handlers/Auth/AuthHandler.php">
     <TypeDoesNotContainType>
-      <code>null</code>
+      <code><![CDATA[null]]></code>
     </TypeDoesNotContainType>
-  </file>
-  <file src="src/Handlers/Auth/GuardHandler.php">
-    <DeprecatedProperty>
-      <code><![CDATA[$previous_call->name->parts]]></code>
-    </DeprecatedProperty>
   </file>
   <file src="src/Handlers/Eloquent/ModelPropertyAccessorHandler.php">
     <ArgumentTypeCoercion>
@@ -35,29 +30,97 @@
       <code><![CDATA[$event->getFqClasslikeName()]]></code>
     </ArgumentTypeCoercion>
     <LessSpecificImplementedReturnType>
-      <code>array</code>
-      <code>array</code>
-      <code>array</code>
+      <code><![CDATA[array]]></code>
+      <code><![CDATA[array]]></code>
+      <code><![CDATA[array]]></code>
     </LessSpecificImplementedReturnType>
   </file>
+  <file src="src/Handlers/Eloquent/ModelRelationshipPropertyHandler.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[ModelRelationshipPropertyHandler]]></code>
+    </ClassMustBeFinal>
+  </file>
   <file src="src/Handlers/Eloquent/Schema/SchemaAggregator.php">
-    <DeprecatedProperty>
-      <code><![CDATA[$first_argument_of_nullable->value->name->parts]]></code>
-    </DeprecatedProperty>
+    <ClassMustBeFinal>
+      <code><![CDATA[SchemaAggregator]]></code>
+    </ClassMustBeFinal>
+    <UnnecessaryVarAnnotation>
+      <code><![CDATA[PhpParser\Node\Stmt\Class_[]]]></code>
+    </UnnecessaryVarAnnotation>
+  </file>
+  <file src="src/Handlers/Eloquent/Schema/SchemaColumn.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[SchemaColumn]]></code>
+    </ClassMustBeFinal>
+  </file>
+  <file src="src/Handlers/Eloquent/Schema/SchemaTable.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[SchemaTable]]></code>
+    </ClassMustBeFinal>
   </file>
   <file src="src/Handlers/Helpers/PathHandler.php">
     <InternalMethod>
-      <code>new TLiteralString($result)</code>
+      <code><![CDATA[new TLiteralString($result)]]></code>
     </InternalMethod>
   </file>
+  <file src="src/Handlers/Helpers/TransHandler.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[TransHandler]]></code>
+    </ClassMustBeFinal>
+  </file>
+  <file src="src/Handlers/SuppressHandler.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[SuppressHandler]]></code>
+    </ClassMustBeFinal>
+  </file>
+  <file src="src/Plugin.php">
+    <ClassMustBeFinal>
+      <code><![CDATA[Plugin]]></code>
+    </ClassMustBeFinal>
+    <LessSpecificReturnStatement>
+      <code><![CDATA[array_merge(
+            glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp'),
+            glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp'),
+        )]]></code>
+      <code><![CDATA[array_merge(
+            glob(dirname(__DIR__) . '/stubs/TaintAnalysis/Http/*.stubphp'),
+        )]]></code>
+    </LessSpecificReturnStatement>
+    <MoreSpecificReturnType>
+      <code><![CDATA[list<string>]]></code>
+      <code><![CDATA[list<string>]]></code>
+    </MoreSpecificReturnType>
+    <PossiblyFalseArgument>
+      <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp')]]></code>
+      <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp')]]></code>
+      <code><![CDATA[glob(dirname(__DIR__) . '/stubs/TaintAnalysis/Http/*.stubphp')]]></code>
+    </PossiblyFalseArgument>
+  </file>
   <file src="src/Providers/ApplicationProvider.php">
-     <InternalMethod>
-       <code><![CDATA[createApplication]]></code>
-     </InternalMethod>
+    <InternalMethod>
+      <code><![CDATA[createApplication]]></code>
+    </InternalMethod>
+    <PossiblyFalseOperand>
+      <code><![CDATA[getcwd()]]></code>
+    </PossiblyFalseOperand>
+    <UnnecessaryVarAnnotation>
+      <code><![CDATA[\Illuminate\Contracts\Console\Kernel]]></code>
+    </UnnecessaryVarAnnotation>
+  </file>
+  <file src="src/Providers/ModelStubProvider.php">
+    <MixedArgument>
+      <code><![CDATA[$file]]></code>
+    </MixedArgument>
+    <MixedAssignment>
+      <code><![CDATA[$file]]></code>
+    </MixedAssignment>
+    <PossiblyFalseIterator>
+      <code><![CDATA[glob($migrations_directory . '*.php')]]></code>
+    </PossiblyFalseIterator>
   </file>
   <file src="src/Util/ContainerResolver.php">
     <InternalMethod>
-      <code>new TLiteralString($concrete)</code>
+      <code><![CDATA[new TLiteralString($concrete)]]></code>
     </InternalMethod>
   </file>
 </files>
