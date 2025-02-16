@@ -1,18 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="5.15.0@5c774aca4746caf3d239d9c8cadb9f882ca29352">
-  <file src="src/Handlers/Application/ContainerHandler.php">
-    <MixedArgument>
-      <code>$abstract</code>
-    </MixedArgument>
-  </file>
+<files psalm-version="6.6.0@07e9a53713232e924da9acb4a6e47507461cd411">
   <file src="src/Handlers/Auth/AuthConfigAnalyzer.php">
     <MixedArgument>
       <code><![CDATA[$this->config->get('auth.guards')]]></code>
     </MixedArgument>
-    <MixedInferredReturnType>
-      <code>?string</code>
-      <code><![CDATA[class-string<\Illuminate\Contracts\Auth\Authenticatable>|null]]></code>
-    </MixedInferredReturnType>
     <MixedReturnStatement>
       <code><![CDATA[$this->config->get("auth.providers.{$provider}.model", null)]]></code>
       <code><![CDATA[$this->config->get('auth.defaults.guard')]]></code>
@@ -20,13 +11,8 @@
   </file>
   <file src="src/Handlers/Auth/AuthHandler.php">
     <TypeDoesNotContainType>
-      <code>null</code>
+      <code><![CDATA[null]]></code>
     </TypeDoesNotContainType>
-  </file>
-  <file src="src/Handlers/Auth/GuardHandler.php">
-    <DeprecatedProperty>
-      <code><![CDATA[$previous_call->name->parts]]></code>
-    </DeprecatedProperty>
   </file>
   <file src="src/Handlers/Eloquent/ModelPropertyAccessorHandler.php">
     <ArgumentTypeCoercion>
@@ -35,29 +21,39 @@
       <code><![CDATA[$event->getFqClasslikeName()]]></code>
     </ArgumentTypeCoercion>
     <LessSpecificImplementedReturnType>
-      <code>array</code>
-      <code>array</code>
-      <code>array</code>
+      <code><![CDATA[array]]></code>
+      <code><![CDATA[array]]></code>
+      <code><![CDATA[array]]></code>
     </LessSpecificImplementedReturnType>
-  </file>
-  <file src="src/Handlers/Eloquent/Schema/SchemaAggregator.php">
-    <DeprecatedProperty>
-      <code><![CDATA[$first_argument_of_nullable->value->name->parts]]></code>
-    </DeprecatedProperty>
   </file>
   <file src="src/Handlers/Helpers/PathHandler.php">
     <InternalMethod>
-      <code>new TLiteralString($result)</code>
+      <code><![CDATA[new TLiteralString($result)]]></code>
     </InternalMethod>
   </file>
+  <file src="src/Plugin.php">
+    <RiskyTruthyFalsyComparison>
+      <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp')]]></code>
+      <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp')]]></code>
+      <code><![CDATA[glob(dirname(__DIR__) . '/stubs/common/TaintAnalysis/Http/*.stubphp')]]></code>
+    </RiskyTruthyFalsyComparison>
+  </file>
   <file src="src/Providers/ApplicationProvider.php">
-     <InternalMethod>
-       <code><![CDATA[createApplication]]></code>
-     </InternalMethod>
+    <InternalMethod>
+      <code><![CDATA[createApplication]]></code>
+    </InternalMethod>
+    <MixedArgument>
+      <code><![CDATA[$app['events']]]></code>
+      <code><![CDATA[$app['events']]]></code>
+    </MixedArgument>
+    <MixedMethodCall>
+      <code><![CDATA[addNamespace]]></code>
+      <code><![CDATA[bootstrap]]></code>
+    </MixedMethodCall>
   </file>
   <file src="src/Util/ContainerResolver.php">
     <InternalMethod>
-      <code>new TLiteralString($concrete)</code>
+      <code><![CDATA[new TLiteralString($concrete)]]></code>
     </InternalMethod>
   </file>
 </files>

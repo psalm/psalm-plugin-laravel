@@ -57,7 +57,6 @@ class SchemaAggregator
     {
         $nodeFinder = new NodeFinder();
 
-        /** @var PhpParser\Node\Stmt\Class_[] $classes */
         $classes = $nodeFinder->findInstanceOf($stmts, PhpParser\Node\Stmt\Class_::class);
 
         foreach ($classes as $stmt) {
@@ -236,7 +235,7 @@ class SchemaAggregator
                      *
                      * Process this ->nullable(false)
                      */
-                    if (count($root_var->args) > 0) {
+                    if ($root_var->args !== []) {
                         $first_argument_of_nullable = $root_var->args[0];
                         if (
                             $first_argument_of_nullable instanceof PhpParser\Node\Arg

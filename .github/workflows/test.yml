@@ -6,7 +6,7 @@ on:
     paths:
       - '**.php'
       - '**.stubphp'
-      - '**.feature'
+      - '**.phpt'
       - '**.yml'
       - 'composer.json'
       - '.github/workflows/test.yml'
@@ -14,7 +14,7 @@ on:
     paths:
       - '**.php'
       - '**.stubphp'
-      - '**.feature'
+      - '**.phpt'
       - 'composer.json'
       - '.github/workflows/test.yml'
   schedule:
@@ -51,13 +51,10 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        php: [8.4, 8.3, 8.2, 8.1]
-        laravel: [^11.0, ^10.0]
-        dependencies: [lowest, highest]
-        exclude:
-          - php: 8.1
-            laravel: ^11.0
-    name: Type P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
+        php: [8.4, 8.3, 8.2]
+        laravel: [^11.35]
+        dependencies: [highest]
+    name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
