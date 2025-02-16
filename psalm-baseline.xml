@@ -26,11 +26,6 @@
       <code><![CDATA[array]]></code>
     </LessSpecificImplementedReturnType>
   </file>
-  <file src="src/Handlers/Eloquent/ModelStaticPropertyHandler.php">
-    <UnusedClass>
-      <code><![CDATA[ModelStaticPropertyHandler]]></code>
-    </UnusedClass>
-  </file>
   <file src="src/Handlers/Helpers/PathHandler.php">
     <InternalMethod>
       <code><![CDATA[new TLiteralString($result)]]></code>
@@ -47,7 +42,12 @@
     <InternalMethod>
       <code><![CDATA[createApplication]]></code>
     </InternalMethod>
+    <MixedArgument>
+      <code><![CDATA[$app['events']]]></code>
+      <code><![CDATA[$app['events']]]></code>
+    </MixedArgument>
     <MixedMethodCall>
+      <code><![CDATA[addNamespace]]></code>
       <code><![CDATA[bootstrap]]></code>
     </MixedMethodCall>
   </file>
