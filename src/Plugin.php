@@ -10,6 +10,7 @@ use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelFactoryTypeProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
@@ -43,7 +44,12 @@ class Plugin implements PluginEntryPointInterface
             ApplicationProvider::bootApp();
             $this->generateStubFiles();
         } catch (\Throwable $throwable) {
-            fwrite(\STDERR, "Laravel plugin error: “{$throwable->getMessage()}”\n");
+            $failOnInternalError = ((string) $config?->failOnInternalError) === 'true';
+            if ($failOnInternalError) {
+                throw $throwable;
+            }
+
+            fwrite(\STDERR, "\nLaravel plugin error on generating stub files: \"{$throwable->getMessage()}\"\n");
             return;
         }
 
@@ -73,9 +79,9 @@ class Plugin implements PluginEntryPointInterface
     /** @return list<string> */
     protected function getTaintAnalysisStubs(): array
     {
-        return array_merge(
-            glob(dirname(__DIR__) . '/stubs/TaintAnalysis/Http/*.stubphp'),
-        );
+        return [
+            ...glob(dirname(__DIR__) . '/stubs/common/TaintAnalysis/Http/*.stubphp') ?: []
+        ];
     }
 
     /** @return list<string> */
@@ -83,10 +89,10 @@ class Plugin implements PluginEntryPointInterface
     {
         [$majorVersion] = explode('.', $version);
 
-        return array_merge(
-            glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp'),
-            glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp'),
-        );
+        return [
+            ...glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp') ?: [],
+            ...glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp') ?: [],
+        ];
     }
 
     private function registerStubs(RegistrationInterface $registration): void
@@ -121,6 +127,8 @@ class Plugin implements PluginEntryPointInterface
 
         require_once 'Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         $registration->registerHooksFromClass(ModelRelationshipPropertyHandler::class);
+        require_once 'Handlers/Eloquent/ModelFactoryTypeProvider.php';
+        $registration->registerHooksFromClass(ModelFactoryTypeProvider::class);
         require_once 'Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         $registration->registerHooksFromClass(ModelPropertyAccessorHandler::class);
         require_once 'Handlers/Eloquent/RelationsMethodHandler.php';

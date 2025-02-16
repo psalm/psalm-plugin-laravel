@@ -7,6 +7,10 @@ namespace Psalm\LaravelPlugin\Providers;
 use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\View\Factory;
+use Illuminate\View\FileViewFinder;
+use Illuminate\View\Engines\EngineResolver;
+use Illuminate\View\Engines\PhpEngine;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
 
@@ -14,7 +18,6 @@ use function define;
 use function defined;
 use function dirname;
 use function file_exists;
-use function get_class;
 use function getcwd;
 use function microtime;
 
@@ -26,15 +29,10 @@ final class ApplicationProvider
 
     public static function bootApp(): void
     {
-        $app = self::getApp();
-
-        /** @var \Illuminate\Contracts\Console\Kernel $consoleApp */
-        $consoleApp = $app->make(Kernel::class);
-        // @todo do not bootstrap \Illuminate\Foundation\Bootstrap\HandleExceptions
-        $consoleApp->bootstrap();
-
-        $app->register(IdeHelperServiceProvider::class);
+        self::getApp();
     }
+
+    private static bool $booted = false;
 
     public static function getApp(): LaravelApplication
     {
@@ -46,14 +44,14 @@ final class ApplicationProvider
             define('LARAVEL_START', microtime(true));
         }
 
-        if (file_exists($applicationPath = getcwd() . '/bootstrap/app.php')) { // Applications and Local Dev
+        if (file_exists($applicationPath = (getcwd() ?: '.') . '/bootstrap/app.php')) { // Applications and Local Dev
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
         } elseif (file_exists($applicationPath = dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
         } else { // Laravel Packages
-            $app = (new self())->createApplication(); // Orchestra\Testbench
+            $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
         }
 
         if (! $app instanceof LaravelApplication) {
@@ -61,6 +59,31 @@ final class ApplicationProvider
         }
 
         self::$app = $app;
+
+        // Initialize view system first
+        if (!$app->bound('view')) {
+            $filesystem = new \Illuminate\Filesystem\Filesystem();
+            $viewFinder = new FileViewFinder($filesystem, []);
+            $engineResolver = new EngineResolver();
+            $engineResolver->register('php', fn() => new PhpEngine($filesystem));
+            $app->singleton('view', fn() => new Factory($engineResolver, $viewFinder, $app['events']));
+        }
+
+        if (!self::$booted) {
+            // Bootstrap console app
+            $consoleApp = $app->make(Kernel::class);
+            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function () {
+                return new class {
+                    public function bootstrap(): void
+                    {
+                    }
+                };
+            });
+            $consoleApp->bootstrap();
+
+            $app->register(IdeHelperServiceProvider::class);
+            self::$booted = true;
+        }
 
         return $app;
     }
@@ -82,24 +105,18 @@ final class ApplicationProvider
         // we want to keep the default psalm exception handler, otherwise the Laravel one will always return exit codes
         // of 0
         //$app->make('Illuminate\Foundation\Bootstrap\HandleExceptions')->bootstrap($app);
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Foundation\Bootstrap\RegisterFacades::class)->bootstrap($app);
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Foundation\Bootstrap\SetRequestForConsole::class)->bootstrap($app);
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Foundation\Bootstrap\RegisterProviders::class)->bootstrap($app);
 
         $this->getEnvironmentSetUp($app);
 
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Foundation\Bootstrap\BootProviders::class)->bootstrap($app);
 
         foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
-            /** @psalm-suppress MixedMethodCall */
             $app->make($bootstrap)->bootstrap($app);
         }
 
-        /** @psalm-suppress MixedMethodCall */
         $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
         /** @var \Illuminate\Routing\Router $router */
@@ -127,5 +144,23 @@ final class ApplicationProvider
         $config->set('ide-helper.model_locations', [
             '../../../../tests/Application/app/Models',
         ]);
+
+        // Set up view paths for ide-helper
+        $viewPath = dirname((new \ReflectionClass(IdeHelperServiceProvider::class))->getFileName(), 2) . '/resources/views';
+
+        if (!$app->bound('view')) {
+            $filesystem = new \Illuminate\Filesystem\Filesystem();
+
+            // Set up the view finder
+            $viewFinder = new FileViewFinder($filesystem, [$viewPath]);
+
+            // Set up the engine resolver
+            $engineResolver = new EngineResolver();
+            $engineResolver->register('php', fn() => new PhpEngine($filesystem));
+
+            // Create and bind the view factory
+            $app->singleton('view', fn() => new Factory($engineResolver, $viewFinder, $app['events']));
+        }
+        $app['view']->addNamespace('ide-helper', $viewPath);
     }
 }

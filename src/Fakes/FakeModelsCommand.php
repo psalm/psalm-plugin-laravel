@@ -21,9 +21,15 @@ class FakeModelsCommand extends ModelsCommand
     /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
     private array $model_classes = [];
 
-    public function __construct(Filesystem $files, private SchemaAggregator $schema)
+    private SchemaAggregator $schema;
+
+    /**
+     * While the setter of a required property is an anti-pattern,
+     * this is the only way to be less independent of changes in the parent ModelsCommand constructor.
+     */
+    public function setSchemaAggregator(SchemaAggregator $schemaAggregator): void
     {
-        parent::__construct($files);
+        $this->schema = $schemaAggregator;
     }
 
     /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
@@ -109,7 +115,6 @@ class FakeModelsCommand extends ModelsCommand
             }
 
             if ($column->nullable) {
-                /** @psalm-suppress MixedArrayAssignment */
                 $this->nullableColumns[$column_name] = true;
             }
 

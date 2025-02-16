@@ -4,6 +4,6 @@ Idea of application test: create an [almost] empty Laravel app and run Psalm ove
 
 ## FAQ
 
- - Q1: How to update baselines
- - A1: Inside .sh files change `--use-baseline` to `--set-baseline`, run sh files and revert changes in .sh files.
+ - Q1: How to update the baseline file for the Laravel Application test?
+ - A1: Run `laravel-test.sh` script with the `-u` (or `--update`) flag, e.g., `./laravel-test.sh -u`.
 ____
