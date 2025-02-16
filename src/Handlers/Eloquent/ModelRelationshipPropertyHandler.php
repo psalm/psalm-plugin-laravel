@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
-use PhpParser;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
@@ -23,6 +23,7 @@ use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
 use function in_array;
+use function is_a;
 
 class ModelRelationshipPropertyHandler implements
     PropertyExistenceProviderInterface,
@@ -154,7 +155,25 @@ class ModelRelationshipPropertyHandler implements
 
     private static function relationExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
-        // @todo: ensure this is a relation method
-        return $codebase->methodExists($fq_classlike_name . '::' . $property_name);
+        $method = $fq_classlike_name . '::' . $property_name;
+
+        if (!$codebase->methodExists($method)) {
+            return false;
+        }
+
+        // ensure this is a relation method
+
+        $return_type = $codebase->getMethodReturnType($method, $fq_classlike_name);
+        if (!$return_type) {
+            return false;
+        }
+
+        foreach ($return_type->getAtomicTypes() as $type) {
+            if ($type instanceof TGenericObject && is_a($type->value, Relation::class, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
