@@ -2,7 +2,6 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Application;
 
-use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Providers\ApplicationInterfaceProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Util\ContainerResolver;
@@ -18,9 +17,7 @@ use Psalm\Type\Union;
 use ReflectionClass;
 use Throwable;
 
-use function array_filter;
 use function array_keys;
-use function get_class;
 use function in_array;
 use function is_object;
 use function strtolower;
@@ -68,7 +65,7 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
      */
     public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
-        if (!in_array($event->getStorage()->name, ApplicationInterfaceProvider::getApplicationInterfaceClassLikes())) {
+        if (!in_array($event->getStorage()->name, ApplicationInterfaceProvider::getApplicationInterfaceClassLikes(), true)) {
             return;
         }
 

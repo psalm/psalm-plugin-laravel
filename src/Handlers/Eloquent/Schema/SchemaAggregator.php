@@ -48,7 +48,7 @@ final class SchemaAggregator
     ];
 
     /** @var array<string, SchemaTable> */
-    public $tables = [];
+    public array $tables = [];
 
     /**
      * @param array<int, PhpParser\Node\Stmt> $stmts

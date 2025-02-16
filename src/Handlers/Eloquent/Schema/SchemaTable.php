@@ -5,7 +5,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 final class SchemaTable
 {
     /** @var array<string, SchemaColumn> */
-    public $columns = [];
+    public array $columns = [];
 
     public function setColumn(SchemaColumn $column): void
     {

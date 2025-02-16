@@ -16,17 +16,14 @@ final class SchemaColumn
 
     public const TYPE_MIXED = 'mixed';
 
-    /** @var string */
-    public $name;
+    public string $name;
 
-    /** @var string */
-    public $type;
+    public string $type;
 
-    /** @var bool */
-    public $nullable;
+    public bool $nullable;
 
     /** @var array<int, string> */
-    public $options = [];
+    public array $options = [];
 
     /**
      * @param array<int, string>|null $options
