@@ -23,6 +23,7 @@ use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
 use function in_array;
+use function is_a;
 
 class ModelRelationshipPropertyHandler implements
     PropertyExistenceProviderInterface,
@@ -155,7 +156,7 @@ class ModelRelationshipPropertyHandler implements
     private static function relationExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
         $method = $fq_classlike_name . '::' . $property_name;
-        
+
         if (!$codebase->methodExists($method)) {
             return false;
         }
