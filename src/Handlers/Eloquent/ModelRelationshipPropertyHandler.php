@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use PhpParser;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
