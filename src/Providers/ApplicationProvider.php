@@ -7,6 +7,10 @@ namespace Psalm\LaravelPlugin\Providers;
 use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\View\Factory;
+use Illuminate\View\FileViewFinder;
+use Illuminate\View\Engines\EngineResolver;
+use Illuminate\View\Engines\PhpEngine;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Orchestra\Testbench\Concerns\CreatesApplication;
 
@@ -126,5 +130,23 @@ final class ApplicationProvider
         $config->set('ide-helper.model_locations', [
             '../../../../tests/Application/app/Models',
         ]);
+
+        // Set up view paths for ide-helper
+        $viewPath = dirname((new \ReflectionClass(IdeHelperServiceProvider::class))->getFileName(), 2) . '/resources/views';
+
+        if (!$app->bound('view')) {
+            $filesystem = new \Illuminate\Filesystem\Filesystem();
+
+            // Set up the view finder
+            $viewFinder = new FileViewFinder($filesystem, [$viewPath]);
+
+            // Set up the engine resolver
+            $engineResolver = new EngineResolver();
+            $engineResolver->register('php', fn() => new PhpEngine($filesystem));
+
+            // Create and bind the view factory
+            $app->singleton('view', fn() => new Factory($engineResolver, $viewFinder, $app['events']));
+        }
+        $app['view']->addNamespace('ide-helper', $viewPath);
     }
 }
