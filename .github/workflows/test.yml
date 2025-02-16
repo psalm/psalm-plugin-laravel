@@ -6,7 +6,7 @@ on:
     paths:
       - '**.php'
       - '**.stubphp'
-      - '**.feature'
+      - '**.phpt'
       - '**.yml'
       - 'composer.json'
       - '.github/workflows/test.yml'
@@ -14,7 +14,7 @@ on:
     paths:
       - '**.php'
       - '**.stubphp'
-      - '**.feature'
+      - '**.phpt'
       - 'composer.json'
       - '.github/workflows/test.yml'
   schedule:
