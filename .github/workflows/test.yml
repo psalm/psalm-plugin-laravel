@@ -63,7 +63,8 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M, ini-values=error_reporting=7# error_reporting=7 is E_ERROR | E_WARNING | E_PARSE
+          # error_reporting=7 is E_ERROR | E_WARNING | E_PARSE
+          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M, ini-values=error_reporting=7
           coverage: none
           tools: composer
 
