@@ -36,7 +36,7 @@ use function is_string;
  * @psalm-suppress UnusedClass
  * @internal
  */
-class Plugin implements PluginEntryPointInterface
+final class Plugin implements PluginEntryPointInterface
 {
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
     {

@@ -13,7 +13,7 @@ use function in_array;
 use function strtolower;
 use function str_starts_with;
 
-class SuppressHandler implements AfterClassLikeVisitInterface
+final class SuppressHandler implements AfterClassLikeVisitInterface
 {
     private const BY_CLASS = [
         'UnusedClass' => [

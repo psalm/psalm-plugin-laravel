@@ -14,7 +14,7 @@ use function strtolower;
 use function in_array;
 use function is_array;
 
-class SchemaAggregator
+final class SchemaAggregator
 {
     /**
      * @psalm-var list<lowercase-string>

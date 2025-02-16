@@ -2,7 +2,7 @@
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
-class SchemaTable
+final class SchemaTable
 {
     /** @var array<string, SchemaColumn> */
     public $columns = [];
