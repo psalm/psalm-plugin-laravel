@@ -14,7 +14,7 @@ use function strtolower;
 
 final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
 {
-    /** @return array<string> */
+    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -36,19 +36,18 @@ final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
         $classlike = $source->getCodebase()->classlike_storage_provider->get($event->getFqClasslikeName());
 
         $usesHasFactory = isset($classlike->used_traits[strtolower(HasFactory::class)]);
-        $hasFactoryProperty = isset($classlike->properties['factory']);
-        if (!$usesHasFactory && !$hasFactoryProperty) {
+        if (! $usesHasFactory) {
             return null;
         }
 
-        // Check for @use HasFactory<SomeFactory> annotation
-        foreach ($classlike->docblock_type_tags['use'] ?? [] as $useTag) {
-            if (
-                $useTag->type instanceof Type\Atomic\TGenericObject
-                && $useTag->type->value === HasFactory::class
-                && isset($useTag->type->type_params[0])
-            ) {
-                return new Type\Union([$useTag->type->type_params[0]]);
+        $hasFactoryProperty = isset($classlike->properties['factory']);
+        // Check for static $factory property
+        if ($hasFactoryProperty && isset($classlike->properties['factory']->type)) {
+            $factoryType = $classlike->properties['factory']->type;
+            foreach ($factoryType->getAtomicTypes() as $type) {
+                if ($type instanceof Type\Atomic\TNamedObject) {
+                    return new Type\Union([new Type\Atomic\TNamedObject($type->value)]);
+                }
             }
         }
 
