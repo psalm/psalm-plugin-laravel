@@ -66,7 +66,7 @@ final class OffsetHandler implements
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
         $source = $event->getStatementsSource();
-        if (!$source) {
+        if (!$source instanceof \Psalm\StatementsSource) {
             return null;
         }
 

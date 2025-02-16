@@ -14,13 +14,13 @@ final class AuthConfigAnalyzer
 {
     private static ?AuthConfigAnalyzer $instance = null;
 
-    private function __construct(private ConfigRepository $config)
+    private function __construct(private readonly ConfigRepository $config)
     {
     }
 
     public static function instance(): self
     {
-        if (self::$instance === null) {
+        if (!self::$instance instanceof AuthConfigAnalyzer) {
             self::$instance = new AuthConfigAnalyzer(ConfigRepositoryProvider::get());
         }
 

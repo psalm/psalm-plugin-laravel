@@ -19,7 +19,7 @@ class TransHandler implements FunctionReturnTypeProviderInterface
     {
         $call_args = $event->getCallArgs();
 
-        if ($call_args) {
+        if ($call_args !== []) {
             $first_arg_type = $event->getStatementsSource()->getNodeTypeProvider()->getType($call_args[0]->value);
 
             if ($first_arg_type && $first_arg_type->isString()) {

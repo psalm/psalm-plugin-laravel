@@ -29,7 +29,7 @@ final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
         }
 
         $source = $event->getSource();
-        if ($source === null) {
+        if (!$source instanceof \Psalm\StatementsSource) {
             return null;
         }
 
@@ -42,7 +42,7 @@ final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
 
         $hasFactoryProperty = isset($classlike->properties['factory']);
         // Check for static $factory property
-        if ($hasFactoryProperty && isset($classlike->properties['factory']->type)) {
+        if ($hasFactoryProperty && $classlike->properties['factory']->type !== null) {
             $factoryType = $classlike->properties['factory']->type;
             foreach ($factoryType->getAtomicTypes() as $type) {
                 if ($type instanceof Type\Atomic\TNamedObject) {
