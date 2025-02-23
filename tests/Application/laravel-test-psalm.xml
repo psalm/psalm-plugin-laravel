@@ -25,5 +25,6 @@
         <ParamNameMismatch errorLevel="suppress" />
         <PossiblyUnusedParam errorLevel="suppress" /><!-- Default Listeners, Notifications have empty methods with unused params, created just for example -->
         <ClassMustBeFinal errorLevel="suppress" />
+        <MissingOverrideAttribute errorLevel="suppress" />
     </issueHandlers>
 </psalm>
