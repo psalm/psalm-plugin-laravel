@@ -15,6 +15,7 @@ use function is_array;
 
 final class FacadeStubProvider implements GeneratesStubs
 {
+    #[\Override]
     public static function generateStubFile(): void
     {
         $app = ApplicationProvider::getApp();
@@ -56,6 +57,7 @@ final class FacadeStubProvider implements GeneratesStubs
         );
     }
 
+    #[\Override]
     public static function getStubFileLocation(): string
     {
         return CacheDirectoryProvider::getCacheLocation() . '/facades.stubphp';

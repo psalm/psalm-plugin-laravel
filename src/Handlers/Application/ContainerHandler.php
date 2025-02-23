@@ -29,12 +29,14 @@ use function is_callable;
 final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
     /** @inheritDoc */
+    #[\Override]
     public static function getFunctionIds(): array
     {
         return ['app', 'resolve'];
     }
 
     /** @inheritDoc */
+    #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
         $call_args = $event->getCallArgs();
@@ -51,11 +53,13 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
     }
 
     /** @inheritDoc */
+    #[\Override]
     public static function getClassLikeNames(): array
     {
         return [ApplicationProvider::getAppFullyQualifiedClassName()];
     }
 
+    #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($event->getSource()->getNodeTypeProvider(), $event->getCallArgs());
@@ -65,6 +69,7 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
      * @see https://github.com/psalm/psalm-plugin-symfony/issues/25
      * psalm needs to know about any classes that could be returned before analysis begins. This is a naive first approach
      */
+    #[\Override]
     public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
         if (!in_array($event->getStorage()->name, ApplicationInterfaceProvider::getApplicationInterfaceClassLikes(), true)) {
