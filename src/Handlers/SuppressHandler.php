@@ -78,6 +78,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
         ]
     ];
 
+    #[\Override]
     public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
         $class = $event->getStorage();

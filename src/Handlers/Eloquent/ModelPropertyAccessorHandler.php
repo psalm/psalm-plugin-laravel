@@ -19,12 +19,14 @@ use function str_replace;
 final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInterface, PropertyVisibilityProviderInterface, PropertyTypeProviderInterface
 {
     /** @inheritDoc */
+    #[\Override]
     public static function getClassLikeNames(): array
     {
         return ModelStubProvider::getModelClasses();
     }
 
     /** @inheritDoc */
+    #[\Override]
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();
@@ -46,6 +48,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         return null;
     }
 
+    #[\Override]
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -65,6 +68,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         return null;
     }
 
+    #[\Override]
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Type\Union
     {
         $source = $event->getSource();

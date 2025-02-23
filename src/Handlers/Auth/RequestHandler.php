@@ -21,12 +21,14 @@ final class RequestHandler implements MethodReturnTypeProviderInterface
     use ExtractsGuardNameFromCallLike;
 
     /** @inheritDoc */
+    #[\Override]
     public static function getClassLikeNames(): array
     {
         return [\Illuminate\Http\Request::class];
     }
 
     /** @inheritDoc */
+    #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         if ($event->getMethodNameLowercase() !== 'user') {

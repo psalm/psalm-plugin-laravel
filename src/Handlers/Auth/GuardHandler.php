@@ -29,12 +29,14 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
     use ExtractsGuardNameFromCallLike;
 
     /** @inheritDoc */
+    #[\Override]
     public static function getClassLikeNames(): array
     {
         return [\Illuminate\Contracts\Auth\Guard::class];
     }
 
     /** @inheritDoc */
+    #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         $method_name_lowercase = $event->getMethodNameLowercase();
