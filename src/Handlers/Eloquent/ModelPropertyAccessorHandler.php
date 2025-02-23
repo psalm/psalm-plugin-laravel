@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Psalm\Codebase;
