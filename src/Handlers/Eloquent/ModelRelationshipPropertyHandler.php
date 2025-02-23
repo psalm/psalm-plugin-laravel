@@ -33,12 +33,14 @@ final class ModelRelationshipPropertyHandler implements
     PropertyTypeProviderInterface
 {
     /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
+    #[\Override]
     public static function getClassLikeNames(): array
     {
         return ModelStubProvider::getModelClasses();
     }
 
     /** @inheritDoc */
+    #[\Override]
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();
@@ -64,6 +66,7 @@ final class ModelRelationshipPropertyHandler implements
         return null;
     }
 
+    #[\Override]
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -87,6 +90,7 @@ final class ModelRelationshipPropertyHandler implements
         return null;
     }
 
+    #[\Override]
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();

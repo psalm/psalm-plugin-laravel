@@ -25,6 +25,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
      * @inheritDoc
      * @see https://laravel.com/docs/master/helpers#paths
      */
+    #[\Override]
     public static function getFunctionIds(): array
     {
         return [
@@ -40,6 +41,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
     }
 
     /** @inheritDoc */
+    #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
         $function_id = $event->getFunctionId();
@@ -53,6 +55,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
     }
 
     /** @inheritDoc */
+    #[\Override]
     public static function getClassLikeNames(): array
     {
         return [
@@ -61,6 +64,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
     }
 
     /** @inheritDoc */
+    #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
         $methods = [

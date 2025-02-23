@@ -17,6 +17,7 @@ final class FakeFilesystem extends Filesystem
      * @param  string  $contents
      * @param  bool  $lock
      */
+    #[\Override]
     public function put($path, $contents, $lock = false): bool|int
     {
         $destination = $this->destination ?? $path;
