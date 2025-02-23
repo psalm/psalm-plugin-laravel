@@ -134,6 +134,14 @@ info "Making different types of classes for Laravel"
 ./artisan make:rule ExampleRule
 ./artisan make:scope ExampleScope
 ./artisan make:seeder ExampleSeeder
+./artisan make:class Services/ExampleServiceClass
+./artisan make:interface Services/ExampleServiceInterface
+#./artisan make:migration
+./artisan make:enum Enums/UserRole
+./artisan make:job-middleware ExampleJobMiddleware
+./artisan make:test NewExampleTest
+./artisan make:trait Traits/ExampleTrait
+./artisan make:view example-view
 
 info "Adding package from source"
 composer config repositories.0 '{"type": "path", "url": "../../"}'
