@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Providers;
 
 use Barryvdh\LaravelIdeHelper\Console\GeneratorCommand;

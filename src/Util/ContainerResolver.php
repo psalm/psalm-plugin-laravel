@@ -13,8 +13,6 @@ use Psalm\Type\Union;
 
 use function array_key_exists;
 use function class_exists;
-use function count;
-use function get_class;
 use function is_null;
 use function is_object;
 use function is_string;
