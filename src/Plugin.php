@@ -40,6 +40,8 @@ use function is_string;
  */
 final class Plugin implements PluginEntryPointInterface
 {
+    /** @inheritDoc */
+    #[\Override]
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
     {
         try {

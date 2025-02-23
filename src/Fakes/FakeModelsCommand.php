@@ -60,6 +60,7 @@ final class FakeModelsCommand extends ModelsCommand
      *
      * @param Model $model
      */
+    #[\Override]
     public function getPropertiesFromTable($model): void
     {
         $table_name = $model->getTable();

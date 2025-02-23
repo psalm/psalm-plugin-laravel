@@ -22,6 +22,7 @@ final class ModelStubProvider implements GeneratesStubs
     /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
     private static array $model_classes = [];
 
+    #[\Override]
     public static function generateStubFile(): void
     {
         $app = ApplicationProvider::getApp();
@@ -71,14 +72,13 @@ final class ModelStubProvider implements GeneratesStubs
         self::$model_classes = $models_generator_command->getModels();
     }
 
+    #[\Override]
     public static function getStubFileLocation(): string
     {
         return CacheDirectoryProvider::getCacheLocation() . '/models.stubphp';
     }
 
-    /**
-     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
-     */
+    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
     public static function getModelClasses(): array
     {
         return self::$model_classes;
