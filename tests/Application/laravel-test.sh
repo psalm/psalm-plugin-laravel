@@ -11,7 +11,7 @@ set -o pipefail
 set -u
 
 # See https://github.com/laravel/laravel/tags for Laravel versions
-LARAVEL_INSTALLER_VERSION=11.6
+LARAVEL_INSTALLER_VERSION=11.6.1
 
 # Terminal colors
 RED='\033[0;31m'
