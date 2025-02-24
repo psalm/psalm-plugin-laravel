@@ -92,7 +92,10 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
         foreach (self::BY_CLASS_METHOD as $issue => $method_by_class) {
             foreach ($method_by_class[$class->name] ?? [] as $method_name) {
                 /** @psalm-suppress RedundantFunctionCall */
-                self::suppress($issue, $class->methods[strtolower($method_name)] ?? null);
+                $method_storage = $class->methods[strtolower($method_name)] ?? null;
+                if ($method_storage instanceof MethodStorage) {
+                    self::suppress($issue, $method_storage);
+                }
             }
         }
 
@@ -114,7 +117,10 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
                 }
 
                 foreach ($method_names as $method_name) {
-                    self::suppress($issue, $class->methods[strtolower($method_name)] ?? null);
+                    $method_storage = $class->methods[strtolower($method_name)] ?? null;
+                    if ($method_storage instanceof MethodStorage) {
+                        self::suppress($issue, $method_storage);
+                    }
                 }
             }
         }
@@ -134,7 +140,10 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
                 }
 
                 foreach ($property_names as $property_name) {
-                    self::suppress($issue, $class->properties[$property_name] ?? null);
+                    $property_storage = $class->properties[$property_name] ?? null;
+                    if ($property_storage instanceof PropertyStorage) {
+                        self::suppress($issue, $property_storage);
+                    }
                 }
             }
         }
@@ -150,7 +159,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
 
     private static function suppress(string $issue, ClassLikeStorage|PropertyStorage|MethodStorage $storage): void
     {
-        if ($storage && !in_array($issue, $storage->suppressed_issues, true)) {
+        if (!in_array($issue, $storage->suppressed_issues, true)) {
             $storage->suppressed_issues[] = $issue;
         }
     }
