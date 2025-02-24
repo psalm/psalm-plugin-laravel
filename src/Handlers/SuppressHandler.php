@@ -148,10 +148,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
         }
     }
 
-    /**
-     * @param ClassLikeStorage|PropertyStorage|MethodStorage|null $storage
-     */
-    private static function suppress(string $issue, $storage): void
+    private static function suppress(string $issue, ClassLikeStorage|PropertyStorage|MethodStorage $storage): void
     {
         if ($storage && !in_array($issue, $storage->suppressed_issues, true)) {
             $storage->suppressed_issues[] = $issue;
