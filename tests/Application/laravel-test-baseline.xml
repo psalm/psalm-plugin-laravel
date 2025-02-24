@@ -23,13 +23,6 @@
     <NonInvariantDocblockPropertyType>
       <code><![CDATA[$description]]></code>
     </NonInvariantDocblockPropertyType>
-    <PropertyNotSetInConstructor>
-      <code><![CDATA[ExampleCommand]]></code>
-      <code><![CDATA[ExampleCommand]]></code>
-      <code><![CDATA[ExampleCommand]]></code>
-      <code><![CDATA[ExampleCommand]]></code>
-      <code><![CDATA[ExampleCommand]]></code>
-    </PropertyNotSetInConstructor>
     <UnusedClass>
       <code><![CDATA[ExampleCommand]]></code>
     </UnusedClass>
@@ -55,17 +48,6 @@
     </UnusedClass>
   </file>
   <file src="app/Http/Requests/ExampleRequest.php">
-    <PropertyNotSetInConstructor>
-      <code><![CDATA[ExampleRequest]]></code>
-      <code><![CDATA[ExampleRequest]]></code>
-      <code><![CDATA[ExampleRequest]]></code>
-      <code><![CDATA[ExampleRequest]]></code>
-      <code><![CDATA[ExampleRequest]]></code>
-      <code><![CDATA[ExampleRequest]]></code>
-      <code><![CDATA[ExampleRequest]]></code>
-      <code><![CDATA[ExampleRequest]]></code>
-      <code><![CDATA[ExampleRequest]]></code>
-    </PropertyNotSetInConstructor>
     <UnusedClass>
       <code><![CDATA[ExampleRequest]]></code>
     </UnusedClass>
@@ -96,16 +78,6 @@
       <code><![CDATA[content]]></code>
       <code><![CDATA[envelope]]></code>
     </PossiblyUnusedMethod>
-    <PropertyNotSetInConstructor>
-      <code><![CDATA[ExampleMail]]></code>
-      <code><![CDATA[ExampleMail]]></code>
-      <code><![CDATA[ExampleMail]]></code>
-      <code><![CDATA[ExampleMail]]></code>
-      <code><![CDATA[ExampleMail]]></code>
-      <code><![CDATA[ExampleMail]]></code>
-      <code><![CDATA[ExampleMail]]></code>
-      <code><![CDATA[ExampleMail]]></code>
-    </PropertyNotSetInConstructor>
   </file>
   <file src="app/Models/Example.php">
     <UnusedClass>
@@ -130,9 +102,6 @@
       <code><![CDATA[toMail]]></code>
       <code><![CDATA[via]]></code>
     </PossiblyUnusedMethod>
-    <PropertyNotSetInConstructor>
-      <code><![CDATA[ExampleNotification]]></code>
-    </PropertyNotSetInConstructor>
   </file>
   <file src="app/Observers/ExampleObserver.php">
     <UnusedClass>
@@ -160,10 +129,6 @@
     </UnusedClass>
   </file>
   <file src="app/View/Components/ExampleComponent.php">
-    <PropertyNotSetInConstructor>
-      <code><![CDATA[ExampleComponent]]></code>
-      <code><![CDATA[ExampleComponent]]></code>
-    </PropertyNotSetInConstructor>
     <UnusedClass>
       <code><![CDATA[ExampleComponent]]></code>
     </UnusedClass>
