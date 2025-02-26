@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use Illuminate\Database\Schema\Blueprint;
@@ -14,7 +16,7 @@ use function strtolower;
 use function in_array;
 use function is_array;
 
-class SchemaAggregator
+final class SchemaAggregator
 {
     /**
      * @psalm-var list<lowercase-string>
@@ -48,7 +50,7 @@ class SchemaAggregator
     ];
 
     /** @var array<string, SchemaTable> */
-    public $tables = [];
+    public array $tables = [];
 
     /**
      * @param array<int, PhpParser\Node\Stmt> $stmts
@@ -57,7 +59,6 @@ class SchemaAggregator
     {
         $nodeFinder = new NodeFinder();
 
-        /** @var PhpParser\Node\Stmt\Class_[] $classes */
         $classes = $nodeFinder->findInstanceOf($stmts, PhpParser\Node\Stmt\Class_::class);
 
         foreach ($classes as $stmt) {
@@ -236,12 +237,12 @@ class SchemaAggregator
                      *
                      * Process this ->nullable(false)
                      */
-                    if (count($root_var->args) > 0) {
+                    if ($root_var->args !== []) {
                         $first_argument_of_nullable = $root_var->args[0];
                         if (
                             $first_argument_of_nullable instanceof PhpParser\Node\Arg
                             && $first_argument_of_nullable->value instanceof PhpParser\Node\Expr\ConstFetch
-                            && $first_argument_of_nullable->value->name->parts === ['false']
+                            && $first_argument_of_nullable->value->name->getParts() === ['false']
                         ) {
                             $nullable = false;
                         }
@@ -458,6 +459,7 @@ class SchemaAggregator
                     if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
                         $table->renameColumn($column_name, $second_arg->value);
                     }
+
                     break;
 
                 case 'set':
@@ -479,6 +481,7 @@ class SchemaAggregator
                         // @todo extract nullable value from 3rd arg
                         $table->renameColumn($_column_type, $column_name);
                     }
+
                     break;
             }
         }

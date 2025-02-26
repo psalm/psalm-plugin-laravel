@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
@@ -10,11 +12,15 @@ use Psalm\Type\Atomic\TNamedObject;
 
 final class CacheHandler implements FunctionReturnTypeProviderInterface
 {
+    /** @inheritDoc */
+    #[\Override]
     public static function getFunctionIds(): array
     {
         return ['cache'];
     }
 
+    /** @inheritDoc */
+    #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
     {
         $call_args = $event->getCallArgs();

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Handlers\Application;
 
 use Psalm\LaravelPlugin\Providers\ApplicationInterfaceProvider;
@@ -24,11 +26,13 @@ final class OffsetHandler implements
     MethodParamsProviderInterface
 {
     /** @return list<class-string> */
+    #[\Override]
     public static function getClassLikeNames(): array
     {
         return ApplicationInterfaceProvider::getApplicationInterfaceClassLikes();
     }
 
+    #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         $method_name_lowercase = $event->getMethodNameLowercase();
@@ -53,20 +57,23 @@ final class OffsetHandler implements
         return null;
     }
 
+    #[\Override]
     public static function doesMethodExist(MethodExistenceProviderEvent $event): ?bool
     {
         return self::isOffsetMethod($event->getMethodNameLowercase()) ? true : null;
     }
 
+    #[\Override]
     public static function isMethodVisible(MethodVisibilityProviderEvent $event): ?bool
     {
         return self::isOffsetMethod($event->getMethodNameLowercase()) ? true : null;
     }
 
+    #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
         $source = $event->getStatementsSource();
-        if (!$source) {
+        if (!$source instanceof \Psalm\StatementsSource) {
             return null;
         }
 

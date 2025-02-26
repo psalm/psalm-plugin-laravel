@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Providers;
 
 use Barryvdh\LaravelIdeHelper\Console\GeneratorCommand;
@@ -13,6 +15,7 @@ use function is_array;
 
 final class FacadeStubProvider implements GeneratesStubs
 {
+    #[\Override]
     public static function generateStubFile(): void
     {
         $app = ApplicationProvider::getApp();
@@ -31,10 +34,15 @@ final class FacadeStubProvider implements GeneratesStubs
 
         $fake_filesystem = new FakeFilesystem();
 
+        /**
+         * @var \Illuminate\View\Factory $viewFactory
+         */
+        $viewFactory = $app->make('view');
+
         $stubs_generator_command = new GeneratorCommand(
             $config,
             $fake_filesystem,
-            ViewFactoryProvider::get(),
+            $viewFactory
         );
 
         $stubs_generator_command->setLaravel($app);
@@ -49,6 +57,7 @@ final class FacadeStubProvider implements GeneratesStubs
         );
     }
 
+    #[\Override]
     public static function getStubFileLocation(): string
     {
         return CacheDirectoryProvider::getCacheLocation() . '/facades.stubphp';

@@ -1,4 +1,4 @@
-name: Test laravel projects
+name: Test Laravel app
 
 on:
   push:
@@ -7,28 +7,34 @@ on:
       - '**.stubphp'
       - 'composer.json'
       - 'tests/laravel*'
-      - 'tests/lumen*'
+      - '.github/workflows/test-laravel.yml'
   pull_request:
     paths:
       - '**.php'
       - '**.stubphp'
+      - 'composer.json'
       - 'tests/laravel*'
-      - 'tests/lumen*'
+      - '.github/workflows/test-laravel.yml'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    name: Test Laravel
+    name: Test Laravel app
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Test Laravel
-      run: |
-        ./tests/laravel-test.sh
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.3
+        coverage: none
 
-    - name: Test Lumen
+    - name: Build a Laravel project and run Psalm on it
       run: |
-        ./tests/lumen-test.sh
+        ./tests/Application/laravel-test.sh
+
+    - run: |
+        echo "Psalm analysis failed on a fresh Laravel project. Please consider updating baseline: tests/Application/laravel-test-baseline.xml"
+      if: ${{ failure() }}

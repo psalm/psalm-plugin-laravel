@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
-class SchemaTable
+final class SchemaTable
 {
     /** @var array<string, SchemaColumn> */
-    public $columns = [];
+    public array $columns = [];
 
     public function setColumn(SchemaColumn $column): void
     {

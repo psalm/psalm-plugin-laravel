@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Util;
 
 use PhpParser\Node\Expr\MethodCall;
@@ -16,7 +18,6 @@ final class ProxyMethodReturnTypeProvider
     /**
      * Psalm struggles with saying "this method returns whatever class X with the same method returns. This performs
      * a fake method call to get the analyzed proxy method return type
-     * @psalm-param class-string $className
      * @psalm-param TNamedObject $typeToCall the fake object to execute a fake method call on
      */
     public static function executeFakeCall(

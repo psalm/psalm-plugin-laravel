@@ -26,9 +26,8 @@ use Psalm\Type\Union;
 
 final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 {
-    /**
-     * @return array<string>
-     */
+    /** @return list<string> */
+    #[\Override]
     public static function getClassLikeNames(): array
     {
         return [
@@ -43,6 +42,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
         ];
     }
 
+    #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();
@@ -84,7 +84,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 
             $type = ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $proxyType);
 
-            if (!$type) {
+            if (!$type instanceof \Psalm\Type\Union) {
                 return null;
             }
 

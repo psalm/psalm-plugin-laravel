@@ -1,34 +1,35 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Fakes;
 
 use Barryvdh\LaravelIdeHelper\Console\ModelsCommand;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 
 use function config;
-use function get_class;
 use function is_a;
 use function in_array;
-use function is_string;
 use function implode;
 
 /** @psalm-suppress PropertyNotSetInConstructor */
-class FakeModelsCommand extends ModelsCommand
+final class FakeModelsCommand extends ModelsCommand
 {
     /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
-    private $model_classes = [];
+    private array $model_classes = [];
 
-    /** @var SchemaAggregator */
-    private $schema;
+    private SchemaAggregator $schema;
 
-    public function __construct(Filesystem $files, SchemaAggregator $schema)
+    /**
+     * While the setter of a required property is an anti-pattern,
+     * this is the only way to be less independent of changes in the parent ModelsCommand constructor.
+     */
+    public function setSchemaAggregator(SchemaAggregator $schemaAggregator): void
     {
-        parent::__construct($files);
-        $this->schema = $schema;
+        $this->schema = $schemaAggregator;
     }
 
     /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
@@ -59,6 +60,7 @@ class FakeModelsCommand extends ModelsCommand
      *
      * @param Model $model
      */
+    #[\Override]
     public function getPropertiesFromTable($model): void
     {
         $table_name = $model->getTable();
@@ -67,7 +69,7 @@ class FakeModelsCommand extends ModelsCommand
             return;
         }
 
-        $this->model_classes[] = get_class($model);
+        $this->model_classes[] = $model::class;
 
         $columns = $this->schema->tables[$table_name]->columns;
 
@@ -75,7 +77,7 @@ class FakeModelsCommand extends ModelsCommand
             $column_name = $column->name;
 
             if (in_array($column_name, $model->getDates(), true)) {
-                $get_type = $set_type = '\Illuminate\Support\Carbon';
+                $get_type = $set_type = \Illuminate\Support\Carbon::class;
             } else {
                 switch ($column->type) {
                     case SchemaColumn::TYPE_STRING:
@@ -99,11 +101,9 @@ class FakeModelsCommand extends ModelsCommand
                         break;
 
                     case SchemaColumn::TYPE_ENUM:
-                        if (!$column->options) {
-                            $get_type = $set_type = 'string';
-                        } else {
-                            $get_type = $set_type = '\'' . implode('\'|\'', $column->options) . '\'';
-                        }
+                        $get_type = $column->options
+                            ? $set_type = "'" . implode("'|'", $column->options) . "'"
+                            : $set_type = 'string';
 
                         break;
 
@@ -114,7 +114,6 @@ class FakeModelsCommand extends ModelsCommand
             }
 
             if ($column->nullable) {
-                /** @psalm-suppress MixedArrayAssignment */
                 $this->nullableColumns[$column_name] = true;
             }
 
@@ -128,8 +127,8 @@ class FakeModelsCommand extends ModelsCommand
             if ($this->write_model_magic_where) {
                 $this->setMethod(
                     Str::camel("where_" . $column_name),
-                    '\Illuminate\Database\Eloquent\Builder|\\' . get_class($model),
-                    array('$value')
+                    '\Illuminate\Database\Eloquent\Builder<static>', // @todo support custom EloquentBuilders
+                    ['$value']
                 );
             }
         }

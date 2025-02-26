@@ -2,24 +2,23 @@
 <psalm
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
-    xsi:schemaLocation="https://getpsalm.org/schema/config config.xsd"
+    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
     errorLevel="1"
     errorBaseline="psalm-baseline.xml"
-    phpVersion="8.0"
+    findUnusedBaselineEntry="false"
+    findUnusedCode="true"
 >
     <projectFiles>
         <directory name="src" />
-        <ignoreFiles>
+        <ignoreFiles allowMissingFiles="true">
             <directory name="vendor"/>
+            <directory name="tests-app"/>
             <directory name="tests/Unit/Handlers/Eloquent/Schema/migrations"/>
         </ignoreFiles>
     </projectFiles>
 
     <issueHandlers>
         <LessSpecificReturnType errorLevel="info" />
+        <ClassMustBeFinal errorLevel="info" />
     </issueHandlers>
-
-    <stubs>
-        <file name="stubs/Lumen/Application.stubphp"/>
-    </stubs>
 </psalm>

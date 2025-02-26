@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Handlers;
 
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
@@ -10,10 +12,10 @@ use Psalm\Storage\PropertyStorage;
 
 use function array_intersect;
 use function in_array;
-use function strpos;
 use function strtolower;
+use function str_starts_with;
 
-class SuppressHandler implements AfterClassLikeVisitInterface
+final class SuppressHandler implements AfterClassLikeVisitInterface
 {
     private const BY_CLASS = [
         'UnusedClass' => [
@@ -76,7 +78,8 @@ class SuppressHandler implements AfterClassLikeVisitInterface
         ]
     ];
 
-    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event)
+    #[\Override]
+    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
         $class = $event->getStorage();
 
@@ -95,7 +98,7 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_NAMESPACE as $issue => $namespaces) {
             foreach ($namespaces as $namespace) {
-                if (0 !== strpos($class->name, "$namespace\\")) {
+                if (!str_starts_with($class->name, "{$namespace}\\")) {
                     continue;
                 }
 
@@ -106,7 +109,7 @@ class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::BY_NAMESPACE_METHOD as $issue => $methods_by_namespaces) {
             foreach ($methods_by_namespaces as $namespace => $method_names) {
-                if (0 !== strpos($class->name, "$namespace\\")) {
+                if (!str_starts_with($class->name, "{$namespace}\\")) {
                     continue;
                 }
 
@@ -146,7 +149,6 @@ class SuppressHandler implements AfterClassLikeVisitInterface
     }
 
     /**
-     * @param string $issue
      * @param ClassLikeStorage|PropertyStorage|MethodStorage|null $storage
      */
     private static function suppress(string $issue, $storage): void

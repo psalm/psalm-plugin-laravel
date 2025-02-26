@@ -1,14 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
-use PhpParser;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
@@ -23,18 +25,22 @@ use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
 use function in_array;
+use function is_a;
 
-class ModelRelationshipPropertyHandler implements
+final class ModelRelationshipPropertyHandler implements
     PropertyExistenceProviderInterface,
     PropertyVisibilityProviderInterface,
     PropertyTypeProviderInterface
 {
     /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
+    #[\Override]
     public static function getClassLikeNames(): array
     {
         return ModelStubProvider::getModelClasses();
     }
 
+    /** @inheritDoc */
+    #[\Override]
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();
@@ -60,6 +66,7 @@ class ModelRelationshipPropertyHandler implements
         return null;
     }
 
+    #[\Override]
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -83,11 +90,7 @@ class ModelRelationshipPropertyHandler implements
         return null;
     }
 
-    /**
-     * @param  array<PhpParser\Node\Arg>    $call_args
-     *
-     * @return ?Union
-     */
+    #[\Override]
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();
@@ -102,7 +105,7 @@ class ModelRelationshipPropertyHandler implements
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             $methodReturnType = $codebase->getMethodReturnType($fq_classlike_name . '::' . $property_name, $fq_classlike_name);
-            if (!$methodReturnType) {
+            if (!$methodReturnType instanceof \Psalm\Type\Union) {
                 return Type::getMixed();
             }
 
@@ -156,16 +159,27 @@ class ModelRelationshipPropertyHandler implements
         return null;
     }
 
-    /**
-     * @param Codebase $codebase
-     * @param string $fq_classlike_name
-     * @param string $property_name
-     *
-     * @return bool
-     */
     private static function relationExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
-        // @todo: ensure this is a relation method
-        return $codebase->methodExists($fq_classlike_name . '::' . $property_name);
+        $method = $fq_classlike_name . '::' . $property_name;
+
+        if (!$codebase->methodExists($method)) {
+            return false;
+        }
+
+        // ensure this is a relation method
+
+        $return_type = $codebase->getMethodReturnType($method, $fq_classlike_name);
+        if (!$return_type instanceof \Psalm\Type\Union) {
+            return false;
+        }
+
+        foreach ($return_type->getAtomicTypes() as $type) {
+            if ($type instanceof TGenericObject && is_a($type->value, Relation::class, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -1,10 +1,13 @@
-composer.phar
-/laravel/
-/vendor/
+# Composer
 composer.lock
+/vendor/
+
 cache/*.stubphp
-.DS_Store
 
 # PHPUnit
 .phpunit.result.cache
 .phpunit.cache/
+phpunit.xml
+
+# App tests
+/tests-app/
