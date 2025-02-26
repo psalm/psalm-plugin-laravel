@@ -3,6 +3,12 @@
     "description": "Psalm plugin for Laravel",
     "license": "MIT",
     "type": "psalm-plugin",
+    "keywords": [
+        "psalm",
+        "psalm-plugin",
+        "laravel",
+        "dev"
+    ],
     "authors": [
         {
             "name": "Matthew Brown",
