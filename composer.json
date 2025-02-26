@@ -3,6 +3,12 @@
     "description": "Psalm plugin for Laravel",
     "license": "MIT",
     "type": "psalm-plugin",
+    "keywords": [
+        "psalm",
+        "psalm-plugin",
+        "laravel",
+        "dev"
+    ],
     "authors": [
         {
             "name": "Matthew Brown",
@@ -13,7 +19,7 @@
     "require": {
         "php": "^8.1",
         "ext-simplexml": "*",
-        "barryvdh/laravel-ide-helper": "~3.5.4",
+        "barryvdh/laravel-ide-helper": "^2.15 || >=3.4.0 <3.6",
         "illuminate/config": "^10.48 || ^11.0",
         "illuminate/container": "^10.48 || ^11.0",
         "illuminate/contracts": "^10.48 || ^11.0",
@@ -27,7 +33,7 @@
         "orchestra/testbench-core": "^8.22 || ^9.0",
         "symfony/console": "^6.0 || ^7.0",
         "symfony/finder": "^6.0 || ^7.0",
-        "vimeo/psalm": "^5.20|^6"
+        "vimeo/psalm": "^5.20 || ^6"
     },
     "require-dev": {
         "laravel/framework": "^10.48 || ^11.0",
@@ -68,14 +74,16 @@
         "lint-fix": "phpcbf -n",
         "psalm": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
         "psalm-set-baseline": "psalm --set-baseline=psalm-baseline.xml",
+        "rector": "./vendor/bin/rector",
+        "rector:dry": "./vendor/bin/rector --dry-run",
         "test": [
             "@lint",
             "@psalm",
             "@test:unit",
             "@test:type"
         ],
+        "test:app": "./tests/Application/laravel-test.sh",
         "test:type": "phpunit --testsuite=type",
-        "test:unit": "phpunit --testsuite=unit",
-        "rector": "./vendor/bin/rector --dry-run"
+        "test:unit": "phpunit --testsuite=unit"
     }
 }
