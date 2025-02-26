@@ -31,10 +31,15 @@ final class FacadeStubProvider implements GeneratesStubs
 
         $fake_filesystem = new FakeFilesystem();
 
+        /**
+         * @var \Illuminate\View\Factory $viewFactory
+         */
+        $viewFactory = $app->make('view');
+
         $stubs_generator_command = new GeneratorCommand(
             $config,
             $fake_filesystem,
-            ViewFactoryProvider::get(),
+            $viewFactory
         );
 
         $stubs_generator_command->setLaravel($app);

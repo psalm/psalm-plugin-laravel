@@ -41,9 +41,10 @@ final class ModelStubProvider implements GeneratesStubs
 
         $models_generator_command = new FakeModelsCommand(
             $fake_filesystem,
-            $schema_aggregator
+            $app->make(\Illuminate\Contracts\Config\Repository::class),
+            $app->make(\Illuminate\View\Factory::class)
         );
-
+        $models_generator_command->setSchemaAggregator($schema_aggregator);
         $models_generator_command->setLaravel($app);
 
         @unlink(self::getStubFileLocation());
@@ -66,9 +67,7 @@ final class ModelStubProvider implements GeneratesStubs
         return CacheDirectoryProvider::getCacheLocation() . '/models.stubphp';
     }
 
-    /**
-     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
-     */
+    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
     public static function getModelClasses(): array
     {
         return self::$model_classes;
