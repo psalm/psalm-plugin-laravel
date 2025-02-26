@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="6.6.0@07e9a53713232e924da9acb4a6e47507461cd411">
+<files psalm-version="6.8.8@1361cd33008feb3ae2b4a93f1860e14e538ec8c2">
   <file src="src/Fakes/FakeModelsCommand.php">
     <ClassMustBeFinal>
       <code><![CDATA[FakeModelsCommand]]></code>
     </ClassMustBeFinal>
-    <TooFewArguments>
-      <code><![CDATA[parent::__construct($files)]]></code>
-      <code><![CDATA[parent::__construct($files)]]></code>
-    </TooFewArguments>
   </file>
   <file src="src/Handlers/Auth/AuthConfigAnalyzer.php">
     <MixedArgument>
@@ -19,6 +15,10 @@
     </MixedReturnStatement>
   </file>
   <file src="src/Handlers/Auth/AuthHandler.php">
+    <LessSpecificImplementedReturnType>
+      <code><![CDATA[array]]></code>
+      <code><![CDATA[array]]></code>
+    </LessSpecificImplementedReturnType>
     <TypeDoesNotContainType>
       <code><![CDATA[null]]></code>
     </TypeDoesNotContainType>

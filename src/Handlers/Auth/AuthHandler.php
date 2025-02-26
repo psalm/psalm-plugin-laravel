@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Type;
 
 use function in_array;
@@ -28,7 +30,7 @@ use function is_string;
  * @see \Illuminate\Support\Facades\Auth::setRequest()
  * @see \Illuminate\Support\Facades\Auth::forgetUser()
  */
-final class AuthHandler implements MethodReturnTypeProviderInterface
+final class AuthHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
     /** @inheritDoc */
     public static function getClassLikeNames(): array
@@ -79,6 +81,20 @@ final class AuthHandler implements MethodReturnTypeProviderInterface
                 new Type\Atomic\TNamedObject($authenticatable_fqcn),
             ]),
             default => null,
+        };
+    }
+
+    #[\Override]
+    public static function getMethodParams(MethodParamsProviderEvent $event): ?array
+    {
+        $method_name_lowercase = $event->getMethodNameLowercase();
+
+        if ($method_name_lowercase !== 'user') {
+            return null;
+        }
+
+        return match ($method_name_lowercase) {
+            'user' => [], // Explicitly define that user() has no parameters
         };
     }
 }
