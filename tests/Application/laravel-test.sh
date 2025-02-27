@@ -103,15 +103,16 @@ CURRENT_SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
 APP_INSTALLATION_PATH="$(dirname "$(dirname "$CURRENT_SCRIPT_PATH")")/tests-app/laravel-example"
 
 if [ -d "$APP_INSTALLATION_PATH" ]; then
-    info "Removing previous installation"
+    info "Removing previous installation..."
     rm -rf "$APP_INSTALLATION_PATH"
+    info "Removed."
 fi
 
-info "Creating a new Laravel project (installer v${LARAVEL_INSTALLER_VERSION})"
+info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} ..."
 composer create-project --quiet --prefer-dist laravel/laravel "$APP_INSTALLATION_PATH" $LARAVEL_INSTALLER_VERSION
 cd "$APP_INSTALLATION_PATH"
 
-info "Making different types of classes for Laravel"
+info "Making different types of classes for Laravel to analyze them using Psalm"
 ./artisan make:cast ExampleCast
 ./artisan make:channel ExampleChannel
 ./artisan make:component ExampleComponent
@@ -164,5 +165,6 @@ fi
 echo
 
 if [ "$REMOVE" = false ]; then
-    info "A sample Laravel application installed at the $APP_INSTALLATION_PATH directory, feel free to remove it."
+    info "A sample Laravel application installed at the $APP_INSTALLATION_PATH directory."
+    info "Feel free to remove it."
 fi
