@@ -25,7 +25,7 @@ use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\PluginRegistrationSocket;
-use Psalm\Progress\VoidProgress;
+use Psalm\Progress\DefaultProgress;
 use SimpleXMLElement;
 use Symfony\Component\Finder\Finder;
 
@@ -48,10 +48,14 @@ final class Plugin implements PluginEntryPointInterface
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
     {
         $failOnInternalError = ((string) $config?->failOnInternalError) === 'true';
-        $output = new VoidProgress();
+        $output = new DefaultProgress();
 
         if ($registration instanceof PluginRegistrationSocket) {
-            $output = $registration->codebase->progress;
+            // $registration->codebase is available/public from Psalm v6.7
+            // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
+            if (($registration->codebase ?? null) instanceof \Psalm\Codebase) {
+                $output = $registration->codebase->progress;
+            }
         }
 
         try {
