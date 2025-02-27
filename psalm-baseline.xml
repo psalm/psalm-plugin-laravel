@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="6.6.1@dae5a05eac03b55e8f50ae00f4cd2ba5d5588d59">
+<files psalm-version="6.8.8@1361cd33008feb3ae2b4a93f1860e14e538ec8c2">
   <file src="src/Handlers/Auth/AuthConfigAnalyzer.php">
     <MixedArgument>
       <code><![CDATA[$this->config->get('auth.guards')]]></code>
@@ -36,11 +36,17 @@
     </InternalMethod>
   </file>
   <file src="src/Plugin.php">
+    <RedundantCondition>
+      <code><![CDATA[$registration->codebase]]></code>
+    </RedundantCondition>
     <RiskyTruthyFalsyComparison>
       <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp')]]></code>
       <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp')]]></code>
       <code><![CDATA[glob(dirname(__DIR__) . '/stubs/common/TaintAnalysis/Http/*.stubphp')]]></code>
     </RiskyTruthyFalsyComparison>
+    <TypeDoesNotContainType>
+      <code><![CDATA[null]]></code>
+    </TypeDoesNotContainType>
   </file>
   <file src="src/Providers/ApplicationProvider.php">
     <InternalMethod>
