@@ -65,4 +65,5 @@ function cannotResolveUnknownDependency(): \Illuminate\Log\LogManager
 }
 ?>
 --EXPECTF--
+UndefinedMagicMethod on line %d: Magic method Illuminate\Foundation\Application::undefined_method does not exist
 MixedReturnStatement on line %d: Could not infer a return type

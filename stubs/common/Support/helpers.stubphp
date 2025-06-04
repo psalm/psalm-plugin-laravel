@@ -196,5 +196,17 @@ function trait_uses_recursive($trait) {}
  */
 function transform($value, callable $callback, $default = null) {}
 
+/**
+ * Alias lowercase() for Eloquent\Builder chains.
+ *
+ * @psalm-api
+ * @template TModel of \Illuminate\Database\Eloquent\Model
+ * @param \Illuminate\Database\Eloquent\Builder<TModel> $builder
+ * @return \Illuminate\Database\Eloquent\Builder<TModel>
+ */
+function lowercase(\Illuminate\Database\Eloquent\Builder $builder) {
+    return $builder;
+}
+
 // windows_os: nothing to stub
 // with: nothing to stub
