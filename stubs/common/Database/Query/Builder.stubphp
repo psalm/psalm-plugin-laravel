@@ -30,4 +30,74 @@ class Builder
      * @psalm-taint-sink sql $value
      */
     public function raw($value) {}
+
+    /**
+     * Add a new "raw" select expression to the query.
+     *
+     * @param  string  $expression
+     * @param  array  $bindings
+     * @return $this
+     *
+     * @psalm-taint-sink sql $expression
+     */
+    public function selectRaw($expression, array $bindings = []) {}
+
+    /**
+     * Add a raw from clause to the query.
+     *
+     * @param  string  $expression
+     * @param  array|\BackedEnum|callable  $bindings
+     * @return $this
+     *
+     * @psalm-taint-sink sql $expression
+     */
+    public function fromRaw($expression, $bindings = []) {}
+
+    /**
+     * Add a basic where clause to the query.
+     *
+     * @param  \Closure|string|array  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @psalm-taint-sink sql $operator
+     * @psalm-taint-sink sql $value
+     */
+    public function where($column, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * Add a raw where clause to the query.
+     *
+     * @param  string  $sql
+     * @param  mixed  $bindings
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @psalm-taint-sink sql $sql
+     */
+    public function whereRaw($sql, $bindings = [], $boolean = 'and') {}
+
+    /**
+     * Add a raw or where clause to the query.
+     *
+     * @param  string  $sql
+     * @param  mixed  $bindings
+     * @return $this
+     *
+     * @psalm-taint-sink sql $sql
+     */
+    public function orWhereRaw($sql, $bindings = []) {}
+
+    /**
+     * Get a single expression value from the first result of a query.
+     *
+     * @param  string  $expression
+     * @param  array  $bindings
+     * @return mixed
+     *
+     * @psalm-taint-sink sql $expression
+     */
+    public function rawValue(string $expression, array $bindings = []) {}
 }
