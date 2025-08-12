@@ -134,7 +134,7 @@ function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain
  * Dispatch a job to its appropriate handler.
  *
  * @param  object|callable  $job
- * @return ($job is \Closure ? \Illuminate\Foundation\Bus\PendingDispatch : \Illuminate\Foundation\Bus\PendingDispatch)
+ * @return ($job is \Closure ? \Illuminate\Foundation\Bus\PendingClosureDispatch : \Illuminate\Foundation\Bus\PendingDispatch)
  */
 function dispatch($job) {}
 
