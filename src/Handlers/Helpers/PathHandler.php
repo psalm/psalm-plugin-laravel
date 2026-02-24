@@ -120,7 +120,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         }
 
         return new Union([
-            new TLiteralString($result),
+            TLiteralString::make($result),
         ]);
     }
 }

@@ -85,7 +85,7 @@ final class ContainerResolver
 
             // the likes of publicPath, which returns a literal string
             return new Union([
-                new TLiteralString($concrete),
+                TLiteralString::make($concrete),
             ]);
         }
 
