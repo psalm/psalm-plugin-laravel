@@ -33,7 +33,7 @@
         "orchestra/testbench-core": "^9.11 || ^10.0",
         "symfony/console": "^7.1",
         "symfony/finder": "^7.1",
-        "vimeo/psalm": "^6.0 || ^7.0.0-beta1 || dev-master"
+        "vimeo/psalm": "^6.15 || ^7.0.0-beta16 || dev-master"
     },
     "require-dev": {
         "laravel/framework": "^11.35 || ^12.0",
