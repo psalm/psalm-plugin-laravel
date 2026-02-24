@@ -3,10 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
+function exportPosts(\Illuminate\Http\Request $request) {
     $conn = new \Illuminate\Database\Connection(new \PDO('sqlite::memory:'));
-    $input = $request->input('query');
-    $conn->unprepared($input);
+    $sql = $request->input('query');
+    $conn->unprepared($sql);
 }
 ?>
 --EXPECTF--

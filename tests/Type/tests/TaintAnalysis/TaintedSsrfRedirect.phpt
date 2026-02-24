@@ -3,9 +3,9 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
-    $url = $request->input('url');
-    redirect($url);
+function loginRedirect(\Illuminate\Http\Request $request) {
+    $returnUrl = $request->input('return_url');
+    redirect($returnUrl);
 }
 ?>
 --EXPECTF--

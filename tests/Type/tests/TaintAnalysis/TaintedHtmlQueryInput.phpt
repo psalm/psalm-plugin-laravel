@@ -3,8 +3,8 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
-    echo $request->query('search');
+function showSearchResults(\Illuminate\Http\Request $request) {
+    echo $request->query('q');
 }
 ?>
 --EXPECTF--

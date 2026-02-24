@@ -3,8 +3,8 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test() {
-    echo request('name');
+function renderTitle() {
+    echo request('title');
 }
 ?>
 --EXPECTF--

@@ -1,0 +1,224 @@
+<?php
+
+namespace Illuminate\Filesystem;
+
+class Filesystem
+{
+    /**
+     * Get the contents of a file.
+     *
+     * @param  string  $path
+     * @param  bool  $lock
+     * @return string
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function get($path, $lock = false) {}
+
+    /**
+     * Write the contents of a file.
+     *
+     * @param  string  $path
+     * @param  string  $contents
+     * @param  bool  $lock
+     * @return int|bool
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function put($path, $contents, $lock = false) {}
+
+    /**
+     * Delete the file at a given path.
+     *
+     * @param  string|array  $paths
+     * @return bool
+     *
+     * @psalm-taint-sink file $paths
+     */
+    public function delete($paths) {}
+
+    /**
+     * Move a file to a new location.
+     *
+     * @param  string  $path
+     * @param  string  $target
+     * @return bool
+     *
+     * @psalm-taint-sink file $path
+     * @psalm-taint-sink file $target
+     */
+    public function move($path, $target) {}
+
+    /**
+     * Copy a file to a new location.
+     *
+     * @param  string  $path
+     * @param  string  $target
+     * @return bool
+     *
+     * @psalm-taint-sink file $path
+     * @psalm-taint-sink file $target
+     */
+    public function copy($path, $target) {}
+
+    /**
+     * Get the returned value of a file.
+     *
+     * @param  string  $path
+     * @param  array  $data
+     * @return mixed
+     *
+     * @psalm-taint-sink include $path
+     * @psalm-taint-sink file $path
+     */
+    public function getRequire($path, array $data = []) {}
+
+    /**
+     * Require the given file once.
+     *
+     * @param  string  $path
+     * @param  array  $data
+     * @return mixed
+     *
+     * @psalm-taint-sink include $path
+     * @psalm-taint-sink file $path
+     */
+    public function requireOnce($path, array $data = []) {}
+
+    /**
+     * Append to a file.
+     *
+     * @param  string  $path
+     * @param  string  $data
+     * @return int
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function append($path, $data, $lock = false) {}
+
+    /**
+     * Prepend to a file.
+     *
+     * @param  string  $path
+     * @param  string  $data
+     * @return int
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function prepend($path, $data) {}
+
+    /**
+     * Write the contents of a file, replacing it atomically if it already exists.
+     *
+     * @param  string  $path
+     * @param  string  $content
+     * @param  int|null  $mode
+     * @return void
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function replace($path, $content, $mode = null) {}
+
+    /**
+     * Create a symlink to the target file or directory.
+     *
+     * @param  string  $target
+     * @param  string  $link
+     * @return bool
+     *
+     * @psalm-taint-sink file $target
+     * @psalm-taint-sink file $link
+     */
+    public function link($target, $link) {}
+
+    /**
+     * Determine if a file or directory exists.
+     *
+     * Not a taint sink: file_exists() is a read-only boolean check with
+     * minimal security risk. Marking it would cause false positives in
+     * common patterns like checking if a user upload exists.
+     *
+     * @param  string  $path
+     * @return bool
+     */
+    public function exists($path) {}
+
+    /**
+     * Get the contents of a file one line at a time.
+     *
+     * @param  string  $path
+     * @return \Illuminate\Support\LazyCollection
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function lines($path) {}
+
+    /**
+     * Get or set UNIX mode of a file or directory.
+     *
+     * @param  string  $path
+     * @param  int|null  $mode
+     * @return mixed
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function chmod($path, $mode = null) {}
+
+    /**
+     * Create a directory.
+     *
+     * @param  string  $path
+     * @param  int  $mode
+     * @param  bool  $recursive
+     * @param  bool  $force
+     * @return bool
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function makeDirectory($path, $mode = 0755, $recursive = false, $force = false) {}
+
+    /**
+     * Get the hash of the file at the given path.
+     *
+     * @param  string  $path
+     * @param  string  $algorithm
+     * @return string
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function hash($path, $algorithm = 'md5') {}
+
+    /**
+     * Get contents of a file with shared access.
+     *
+     * @param  string  $path
+     * @return string
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function sharedGet($path) {}
+
+    /**
+     * Get the JSON decoded contents of a file.
+     *
+     * @param  string  $path
+     * @param  int  $flags
+     * @param  bool  $lock
+     * @return mixed
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function json($path, $flags = 0, $lock = false) {}
+
+    /**
+     * Replace a given string within a given file.
+     *
+     * @param  array|string  $search
+     * @param  array|string  $replace
+     * @param  string  $path
+     * @return void
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function replaceInFile($search, $replace, $path) {}
+}

@@ -3,9 +3,9 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
-    $input = $request->input('name');
-    echo e($input);
+function renderComment(\Illuminate\Http\Request $request) {
+    $comment = $request->input('comment');
+    echo e($comment);
 }
 ?>
 --EXPECTF--

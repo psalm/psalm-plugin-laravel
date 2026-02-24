@@ -3,10 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
+function listPosts(\Illuminate\Http\Request $request) {
     $builder = new \Illuminate\Database\Query\Builder();
-    $input = $request->input('sort');
-    $builder->orderByRaw($input);
+    $sortClause = $request->input('sort');
+    $builder->orderByRaw($sortClause);
 }
 ?>
 --EXPECTF--

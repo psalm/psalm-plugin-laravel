@@ -3,10 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test_db_raw(\Illuminate\Http\Request $request) {
-    $taint_input = $request->input('foo');
+function renderComment(\Illuminate\Http\Request $request) {
+    $comment = $request->input('comment');
 
-    return new \Illuminate\Http\Response($taint_input);
+    return new \Illuminate\Http\Response($comment);
 }
 ?>
 --EXPECTF--

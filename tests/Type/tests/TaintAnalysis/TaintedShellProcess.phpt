@@ -3,10 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
-    $input = $request->input('cmd');
+function convertImage(\Illuminate\Http\Request $request) {
+    $filename = $request->input('filename');
     $process = new \Illuminate\Process\PendingProcess();
-    $process->run($input);
+    $process->run($filename);
 }
 ?>
 --EXPECTF--
