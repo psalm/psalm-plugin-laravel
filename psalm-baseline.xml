@@ -1,19 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="6.8.8@1361cd33008feb3ae2b4a93f1860e14e538ec8c2">
+<files psalm-version="6.15.1@28dc127af1b5aecd52314f6f645bafc10d0e11f9">
   <file src="src/Handlers/Auth/AuthConfigAnalyzer.php">
-    <MixedArgument>
-      <code><![CDATA[$this->config->get('auth.guards')]]></code>
-    </MixedArgument>
-    <MixedReturnStatement>
-      <code><![CDATA[$this->config->get("auth.providers.{$provider}.model", null)]]></code>
-      <code><![CDATA[$this->config->get('auth.defaults.guard')]]></code>
-    </MixedReturnStatement>
+    <MixedAssignment>
+      <code><![CDATA[$authGuards]]></code>
+    </MixedAssignment>
   </file>
   <file src="src/Handlers/Auth/AuthHandler.php">
-    <LessSpecificImplementedReturnType>
-      <code><![CDATA[array]]></code>
-      <code><![CDATA[array]]></code>
-    </LessSpecificImplementedReturnType>
     <TypeDoesNotContainType>
       <code><![CDATA[null]]></code>
     </TypeDoesNotContainType>
@@ -24,46 +16,33 @@
       <code><![CDATA[$event->getFqClasslikeName()]]></code>
       <code><![CDATA[$event->getFqClasslikeName()]]></code>
     </ArgumentTypeCoercion>
-    <LessSpecificImplementedReturnType>
-      <code><![CDATA[array]]></code>
-      <code><![CDATA[array]]></code>
-      <code><![CDATA[array]]></code>
-    </LessSpecificImplementedReturnType>
-  </file>
-  <file src="src/Handlers/Helpers/PathHandler.php">
-    <InternalMethod>
-      <code><![CDATA[new TLiteralString($result)]]></code>
-    </InternalMethod>
   </file>
   <file src="src/Plugin.php">
     <RedundantCondition>
-      <code><![CDATA[$registration->codebase]]></code>
+      <code><![CDATA[$registration instanceof PluginRegistrationSocket && isset($registration->codebase)]]></code>
     </RedundantCondition>
     <RiskyTruthyFalsyComparison>
       <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp')]]></code>
       <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp')]]></code>
       <code><![CDATA[glob(dirname(__DIR__) . '/stubs/common/TaintAnalysis/Http/*.stubphp')]]></code>
     </RiskyTruthyFalsyComparison>
-    <TypeDoesNotContainType>
-      <code><![CDATA[null]]></code>
-    </TypeDoesNotContainType>
   </file>
   <file src="src/Providers/ApplicationProvider.php">
     <InternalMethod>
       <code><![CDATA[createApplication]]></code>
     </InternalMethod>
-    <MixedArgument>
-      <code><![CDATA[$app['events']]]></code>
-      <code><![CDATA[$app['events']]]></code>
-    </MixedArgument>
     <MixedMethodCall>
-      <code><![CDATA[addNamespace]]></code>
       <code><![CDATA[bootstrap]]></code>
     </MixedMethodCall>
   </file>
+  <file src="src/Providers/FacadeStubProvider.php">
+    <MixedAssignment>
+      <code><![CDATA[$ideHelperExtra]]></code>
+    </MixedAssignment>
+  </file>
   <file src="src/Util/ContainerResolver.php">
-    <InternalMethod>
-      <code><![CDATA[new TLiteralString($concrete)]]></code>
-    </InternalMethod>
+    <MixedAssignment>
+      <code><![CDATA[$concrete]]></code>
+    </MixedAssignment>
   </file>
 </files>

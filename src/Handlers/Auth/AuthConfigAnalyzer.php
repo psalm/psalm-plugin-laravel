@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Auth;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Psalm\LaravelPlugin\Providers\ConfigRepositoryProvider;
 
+use function is_array;
 use function is_string;
 use function array_keys;
 
@@ -50,12 +51,19 @@ final class AuthConfigAnalyzer
             return \Illuminate\Auth\GenericUser::class;
         }
 
-        return $this->config->get("auth.providers.{$provider}.model");
+        /** @var string|null $model */
+        $model = $this->config->get("auth.providers.{$provider}.model");
+
+        /** @var class-string<\Illuminate\Contracts\Auth\Authenticatable>|null */
+        return is_string($model) ? $model : null;
     }
 
     public function getDefaultGuard(): ?string
     {
-        return $this->config->get('auth.defaults.guard');
+        /** @var string|null $guard */
+        $guard = $this->config->get('auth.defaults.guard');
+
+        return is_string($guard) ? $guard : null;
     }
 
     /** @return list<class-string<\Illuminate\Contracts\Auth\Authenticatable>> */
@@ -63,8 +71,9 @@ final class AuthConfigAnalyzer
     {
         $all_authenticatables = [];
 
+        $authGuards = $this->config->get('auth.guards');
         /** @var list<string> $guards */
-        $guards = array_keys($this->config->get('auth.guards'));
+        $guards = is_array($authGuards) ? array_keys($authGuards) : [];
 
         foreach ($guards as $guard) {
             $authenticatable_fqcn = $this->getAuthenticatableFQCN($guard);

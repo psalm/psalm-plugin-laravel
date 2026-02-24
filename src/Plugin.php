@@ -52,7 +52,7 @@ final class Plugin implements PluginEntryPointInterface
 
         // $registration->codebase is available/public from Psalm v6.7
         // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
-        if ($registration instanceof PluginRegistrationSocket && ($registration->codebase ?? null) instanceof \Psalm\Codebase) {
+        if ($registration instanceof PluginRegistrationSocket && isset($registration->codebase)) {
             $output = $registration->codebase->progress;
         }
 
