@@ -50,12 +50,10 @@ final class Plugin implements PluginEntryPointInterface
         $failOnInternalError = ((string) $config?->failOnInternalError) === 'true';
         $output = new DefaultProgress();
 
-        if ($registration instanceof PluginRegistrationSocket) {
-            // $registration->codebase is available/public from Psalm v6.7
-            // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
-            if (($registration->codebase ?? null) instanceof \Psalm\Codebase) {
-                $output = $registration->codebase->progress;
-            }
+        // $registration->codebase is available/public from Psalm v6.7
+        // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
+        if ($registration instanceof PluginRegistrationSocket && ($registration->codebase ?? null) instanceof \Psalm\Codebase) {
+            $output = $registration->codebase->progress;
         }
 
         try {
@@ -67,6 +65,7 @@ final class Plugin implements PluginEntryPointInterface
             if ($failOnInternalError) {
                 throw $throwable;
             }
+
             return;
         }
 
@@ -79,6 +78,7 @@ final class Plugin implements PluginEntryPointInterface
             if ($failOnInternalError) {
                 throw $throwable;
             }
+
             return;
         }
 

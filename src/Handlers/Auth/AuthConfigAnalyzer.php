@@ -50,7 +50,7 @@ final class AuthConfigAnalyzer
             return \Illuminate\Auth\GenericUser::class;
         }
 
-        return $this->config->get("auth.providers.{$provider}.model", null);
+        return $this->config->get("auth.providers.{$provider}.model");
     }
 
     public function getDefaultGuard(): ?string
