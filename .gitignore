@@ -11,3 +11,6 @@ phpunit.xml
 
 # App tests
 /tests-app/
+
+# AI
+CLAUDE.md
