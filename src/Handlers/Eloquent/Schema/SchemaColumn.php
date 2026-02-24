@@ -18,12 +18,6 @@ final class SchemaColumn
 
     public const TYPE_MIXED = 'mixed';
 
-    public string $name;
-
-    public string $type;
-
-    public bool $nullable;
-
     /** @var array<int, string> */
     public array $options = [];
 
@@ -31,14 +25,11 @@ final class SchemaColumn
      * @param array<int, string>|null $options
      */
     public function __construct(
-        string $name,
-        string $type,
-        bool $nullable = false,
+        public string $name,
+        public string $type,
+        public bool $nullable = false,
         ?array $options = []
     ) {
-        $this->name = $name;
-        $this->type = $type;
-        $this->nullable = $nullable;
         $this->options = $options ?? [];
     }
 }

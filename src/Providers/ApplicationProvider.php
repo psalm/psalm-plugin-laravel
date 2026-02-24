@@ -66,7 +66,9 @@ final class ApplicationProvider
             $viewFinder = new FileViewFinder($filesystem, []);
             $engineResolver = new EngineResolver();
             $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
-            $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $app['events']));
+            /** @var \Illuminate\Contracts\Events\Dispatcher $events */
+            $events = $app['events'];
+            $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events));
         }
 
         if (!self::$booted) {
@@ -159,9 +161,13 @@ final class ApplicationProvider
             $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
 
             // Create and bind the view factory
-            $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $app['events']));
+            /** @var \Illuminate\Contracts\Events\Dispatcher $events */
+            $events = $app['events'];
+            $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events));
         }
 
-        $app['view']->addNamespace('ide-helper', $viewPath);
+        /** @var \Illuminate\View\Factory $view */
+        $view = $app['view'];
+        $view->addNamespace('ide-helper', $viewPath);
     }
 }

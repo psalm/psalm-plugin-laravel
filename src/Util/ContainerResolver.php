@@ -30,13 +30,12 @@ final class ContainerResolver
      */
     private static function resolveFromApplicationContainer(string $abstract): ?string
     {
-        if (array_key_exists($abstract, static::$cache)) {
-            return static::$cache[$abstract];
+        if (array_key_exists($abstract, self::$cache)) {
+            return self::$cache[$abstract];
         }
 
         // dynamic analysis to resolve the actual type from the container
         try {
-            /** @var mixed $concrete */
             $concrete = ApplicationProvider::getApp()->make($abstract);
         } catch (\Throwable) {
             return null;
@@ -53,7 +52,7 @@ final class ContainerResolver
             return null;
         }
 
-        static::$cache[$abstract] = $concreteClass;
+        self::$cache[$abstract] = $concreteClass;
 
         return $concreteClass;
     }
@@ -86,7 +85,7 @@ final class ContainerResolver
 
             // the likes of publicPath, which returns a literal string
             return new Union([
-                new TLiteralString($concrete),
+                TLiteralString::make($concrete),
             ]);
         }
 

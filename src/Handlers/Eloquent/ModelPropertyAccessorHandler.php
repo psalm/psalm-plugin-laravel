@@ -18,7 +18,7 @@ use function str_replace;
 
 final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInterface, PropertyVisibilityProviderInterface, PropertyTypeProviderInterface
 {
-    /** @inheritDoc */
+    /** @return list<string> */
     #[\Override]
     public static function getClassLikeNames(): array
     {

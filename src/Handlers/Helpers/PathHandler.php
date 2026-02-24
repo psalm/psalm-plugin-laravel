@@ -42,7 +42,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
 
     /** @inheritDoc */
     #[\Override]
-    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): \Psalm\Type\Union
     {
         $function_id = $event->getFunctionId();
 
@@ -120,7 +120,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         }
 
         return new Union([
-            new TLiteralString($result),
+            TLiteralString::make($result),
         ]);
     }
 }
