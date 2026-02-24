@@ -3,10 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
+function filterPosts(\Illuminate\Http\Request $request) {
     $builder = new \Illuminate\Database\Query\Builder();
-    $input = $request->input('filter');
-    $builder->whereRaw($input);
+    $filter = $request->input('filter');
+    $builder->whereRaw($filter);
 }
 ?>
 --EXPECTF--

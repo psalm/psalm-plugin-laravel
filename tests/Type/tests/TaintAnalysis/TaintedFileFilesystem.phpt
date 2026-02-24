@@ -3,10 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
-    $path = $request->input('path');
+function downloadAttachment(\Illuminate\Http\Request $request) {
+    $filePath = $request->input('file');
     $fs = new \Illuminate\Filesystem\Filesystem();
-    $fs->get($path);
+    $fs->get($filePath);
 }
 ?>
 --EXPECTF--

@@ -3,10 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
-    $url = $request->input('url');
+function fetchEmbed(\Illuminate\Http\Request $request) {
+    $embedUrl = $request->input('embed_url');
     $http = new \Illuminate\Http\Client\PendingRequest();
-    $http->get($url);
+    $http->get($embedUrl);
 }
 ?>
 --EXPECTF--

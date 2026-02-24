@@ -3,9 +3,9 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
-    $input = $request->input('name');
-    return response($input);
+function showAuthor(\Illuminate\Http\Request $request) {
+    $authorName = $request->input('author');
+    return response($authorName);
 }
 ?>
 --EXPECTF--

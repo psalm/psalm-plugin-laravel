@@ -3,8 +3,8 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test(\Illuminate\Http\Request $request) {
-    echo $request->cookie('session');
+function showGreeting(\Illuminate\Http\Request $request) {
+    echo $request->cookie('username');
 }
 ?>
 --EXPECTF--
