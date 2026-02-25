@@ -90,6 +90,7 @@ class Filesystem
      *
      * @param  string  $path
      * @param  string  $data
+     * @param  bool  $lock
      * @return int
      *
      * @psalm-taint-sink file $path
