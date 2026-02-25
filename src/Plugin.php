@@ -93,7 +93,7 @@ final class Plugin implements PluginEntryPointInterface
 
         $basePath = dirname(__DIR__) . \DIRECTORY_SEPARATOR . 'stubs' . \DIRECTORY_SEPARATOR . 'common';
 
-        $stubFiles = Finder::create()->files()->name('*.stubphp')->in($basePath);
+        $stubFiles = Finder::create()->files()->name('*.stubphp')->exclude('TaintAnalysis')->in($basePath);
 
         foreach ($stubFiles as $stubFile) {
             $stubFilepath = $stubFile->getRealPath();
