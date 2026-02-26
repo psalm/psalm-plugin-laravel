@@ -83,6 +83,8 @@ function back($status = 302, $headers = [], $fallback = false) {}
  * @param  string  $value
  * @param  array{rounds?: string, ...}  $options
  * @return non-empty-string
+ *
+ * @psalm-taint-escape user_secret
  */
 function bcrypt($value, $options = []) {}
 
@@ -208,6 +210,9 @@ function precognitive($callable = null) {}
  * @param  array<string, mixed>  $headers
  * @param  bool|null  $secure
  * @return ($to is null ? \Illuminate\Routing\Redirector : \Illuminate\Http\RedirectResponse)
+ *
+ * @psalm-taint-sink ssrf $to
+ * @psalm-taint-sink header $to
  */
 function redirect($to = null, $status = 302, $headers = [], $secure = null) {}
 
@@ -221,6 +226,8 @@ function redirect($to = null, $status = 302, $headers = [], $secure = null) {}
  * @param  string[]|string|null  $key
  * @param  mixed  $default
  * @return ($key is null ? \Illuminate\Http\Request : ($key is array ? string[] : mixed))
+ *
+ * @psalm-taint-source input
  */
 function request($key = null, $default = null) {}
 
@@ -249,6 +256,8 @@ function rescue(callable $callback, $rescue = null, $report = true) {}
  * @param  array   $headers
  * @return \Illuminate\Http\Response|\Illuminate\Contracts\Routing\ResponseFactory
  * @psalm-return (func_num_args() is 0 ? \Illuminate\Contracts\Routing\ResponseFactory : \Illuminate\Http\Response)
+ *
+ * @psalm-taint-sink html $content
  */
 function response($content = '', $status = 200, array $headers = []) {}
 
@@ -331,5 +340,7 @@ function validator(array $data = [], array $rules = [], array $messages = [], ar
  * @param  \Illuminate\Contracts\Support\Arrayable<string, mixed>|array<string, mixed>  $data
  * @param  array<string, mixed>  $mergeData
  * @return ($view is null ? \Illuminate\Contracts\View\Factory : (\Illuminate\View\View|\Illuminate\Contracts\View\View))
+ *
+ * @psalm-taint-sink html $data
  */
 function view($view = null, $data = [], $mergeData = []) {}

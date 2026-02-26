@@ -24,7 +24,6 @@
     <RiskyTruthyFalsyComparison>
       <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp')]]></code>
       <code><![CDATA[glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp')]]></code>
-      <code><![CDATA[glob(dirname(__DIR__) . '/stubs/common/TaintAnalysis/Http/*.stubphp')]]></code>
     </RiskyTruthyFalsyComparison>
   </file>
   <file src="src/Providers/ApplicationProvider.php">

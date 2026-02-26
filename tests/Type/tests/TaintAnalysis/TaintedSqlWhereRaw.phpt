@@ -3,11 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function searchPosts(\Illuminate\Http\Request $request) {
+function filterPosts(\Illuminate\Http\Request $request) {
     $builder = new \Illuminate\Database\Query\Builder();
-    $searchTerm = $request->input('search');
-
-    $builder->raw($searchTerm);
+    $filter = $request->input('filter');
+    $builder->whereRaw($filter);
 }
 ?>
 --EXPECTF--

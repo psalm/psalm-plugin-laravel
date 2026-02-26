@@ -13,4 +13,5 @@ phpunit.xml
 /tests-app/
 
 # AI
+.claude
 CLAUDE.md

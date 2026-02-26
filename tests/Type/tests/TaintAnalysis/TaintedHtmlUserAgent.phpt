@@ -3,11 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderComment(\Illuminate\Http\Request $request) {
-    $comment = $request->input('comment');
-
-    return new \Illuminate\Http\Response($comment);
+function logVisitor(\Illuminate\Http\Request $request) {
+    echo $request->userAgent();
 }
 ?>
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

@@ -3,11 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function searchPosts(\Illuminate\Http\Request $request) {
+function listPosts(\Illuminate\Http\Request $request) {
     $builder = new \Illuminate\Database\Query\Builder();
-    $searchTerm = $request->input('search');
-
-    $builder->raw($searchTerm);
+    $sortClause = $request->input('sort');
+    $builder->orderByRaw($sortClause);
 }
 ?>
 --EXPECTF--

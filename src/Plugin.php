@@ -93,7 +93,7 @@ final class Plugin implements PluginEntryPointInterface
 
         $basePath = dirname(__DIR__) . \DIRECTORY_SEPARATOR . 'stubs' . \DIRECTORY_SEPARATOR . 'common';
 
-        $stubFiles = Finder::create()->files()->name('*.stubphp')->in($basePath);
+        $stubFiles = Finder::create()->files()->name('*.stubphp')->exclude('TaintAnalysis')->in($basePath);
 
         foreach ($stubFiles as $stubFile) {
             $stubFilepath = $stubFile->getRealPath();
@@ -108,9 +108,19 @@ final class Plugin implements PluginEntryPointInterface
     /** @return list<string> */
     private function getTaintAnalysisStubs(): array
     {
-        return [
-            ...glob(dirname(__DIR__) . '/stubs/common/TaintAnalysis/Http/*.stubphp') ?: []
-        ];
+        $stubs = [];
+
+        $basePath = dirname(__DIR__) . '/stubs/common/TaintAnalysis';
+        $stubFiles = Finder::create()->files()->name('*.stubphp')->in($basePath);
+
+        foreach ($stubFiles as $stubFile) {
+            $stubFilepath = $stubFile->getRealPath();
+            if (is_string($stubFilepath)) {
+                $stubs[] = $stubFilepath;
+            }
+        }
+
+        return $stubs;
     }
 
     /** @return list<string> */
