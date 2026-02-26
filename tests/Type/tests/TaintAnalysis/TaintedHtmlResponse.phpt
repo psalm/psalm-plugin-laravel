@@ -3,10 +3,9 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderComment(\Illuminate\Http\Request $request) {
-    $comment = $request->input('comment');
-
-    return new \Illuminate\Http\Response($comment);
+function showAuthor(\Illuminate\Http\Request $request) {
+    $authorName = $request->input('author');
+    return response($authorName);
 }
 ?>
 --EXPECTF--

@@ -5,9 +5,7 @@
 
 function renderComment(\Illuminate\Http\Request $request) {
     $comment = $request->input('comment');
-
-    return new \Illuminate\Http\Response($comment);
+    echo e($comment);
 }
 ?>
 --EXPECTF--
-TaintedHtml on line %d: Detected tainted HTML
