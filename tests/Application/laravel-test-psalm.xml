@@ -7,7 +7,6 @@
     resolveFromConfigFile="false"
     xsi:schemaLocation="https://getpsalm.org/schema/config ../../vendor/vimeo/psalm/config.xsd"
     errorBaseline="../../tests/Application/laravel-test-psalm-baseline.xml"
-    phpVersion="8.2"
 >
     <projectFiles>
         <directory name="app"/>
