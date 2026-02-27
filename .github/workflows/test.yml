@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -52,12 +52,12 @@ jobs:
       fail-fast: true
       matrix:
         php: [8.4, 8.3, 8.2]
-        laravel: [^11.35]
+        laravel: [^11.35, ^12.0]
         dependencies: [highest]
     name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2

@@ -3,11 +3,11 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function test_db_raw(\Illuminate\Http\Request $request) {
-    $query_builder = new \Illuminate\Database\Query\Builder();
-    $user_input = $request->input('foo');
+function searchPosts(\Illuminate\Http\Request $request) {
+    $builder = new \Illuminate\Database\Query\Builder();
+    $searchTerm = $request->input('search');
 
-    $query_builder->raw($user_input);
+    $builder->raw($searchTerm);
 }
 ?>
 --EXPECTF--

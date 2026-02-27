@@ -35,11 +35,11 @@ Maintained versions:
 
 | Laravel Psalm Plugin | PHP   | Laravel   | Psalm |
 |----------------------|-------|-----------|-------|
-| 3.x                  | ^8.2  | 11, 12    | 6     |
+| 3.x                  | ^8.2  | 11, 12    | 6, 7  |
 | 2.12+                | ^8.0  | 9, 10, 11 | 5, 6  |
-| 2.9.x                | ^8.0  | 9, 10, 11 | 4, 5  |
-| 1.6.x                | >=7.3 | 6, 8      | 4     |
-| 1.4.x                | >=7.2 | 6, 7, 8   | 3, 4  |
+
+_(Older versions of Laravel, PHP, and Psalm were supported by version 1.x of the plugin, but they are no longer maintained)_
+
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
 
