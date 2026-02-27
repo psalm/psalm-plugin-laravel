@@ -37,7 +37,7 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
 
     /** @inheritDoc */
     #[\Override]
-    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): \Psalm\Type\Union
     {
         $call_args = $event->getCallArgs();
 

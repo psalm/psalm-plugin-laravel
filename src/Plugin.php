@@ -24,15 +24,18 @@ use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
+use Psalm\PluginRegistrationSocket;
+use Psalm\Progress\DefaultProgress;
 use SimpleXMLElement;
 use Symfony\Component\Finder\Finder;
 
 use function array_merge;
 use function dirname;
-use function fwrite;
 use function explode;
 use function glob;
 use function is_string;
+use function sprintf;
+use function urlencode;
 
 /**
  * @psalm-suppress UnusedClass
@@ -44,16 +47,38 @@ final class Plugin implements PluginEntryPointInterface
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
     {
+        $failOnInternalError = ((string) $config?->failOnInternalError) === 'true';
+        $output = new DefaultProgress();
+
+        // $registration->codebase is available/public from Psalm v6.7
+        // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
+        if ($registration instanceof PluginRegistrationSocket && isset($registration->codebase)) {
+            $output = $registration->codebase->progress;
+        }
+
         try {
             ApplicationProvider::bootApp();
-            $this->generateStubFiles();
         } catch (\Throwable $throwable) {
-            $failOnInternalError = ((string) $config?->failOnInternalError) === 'true';
+            $output->warning("Laravel plugin error on booting Laravel app: “{$throwable->getMessage()}”");
+            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $this->generateReportIssueUrl($throwable));
+
             if ($failOnInternalError) {
                 throw $throwable;
             }
 
-            fwrite(\STDERR, "\nLaravel plugin error on generating stub files: \"{$throwable->getMessage()}\"\n");
+            return;
+        }
+
+        try {
+            $this->generateStubFiles();
+        } catch (\Throwable $throwable) {
+            $output->warning("Laravel plugin error on generating stub files: “{$throwable->getMessage()}”");
+            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $this->generateReportIssueUrl($throwable));
+
+            if ($failOnInternalError) {
+                throw $throwable;
+            }
+
             return;
         }
 
@@ -62,13 +87,13 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /** @return list<string> */
-    protected function getCommonStubs(): array
+    private function getCommonStubs(): array
     {
         $stubFilepaths = [];
 
         $basePath = dirname(__DIR__) . \DIRECTORY_SEPARATOR . 'stubs' . \DIRECTORY_SEPARATOR . 'common';
 
-        $stubFiles = Finder::create()->files()->name('*.stubphp')->in($basePath);
+        $stubFiles = Finder::create()->files()->name('*.stubphp')->exclude('TaintAnalysis')->in($basePath);
 
         foreach ($stubFiles as $stubFile) {
             $stubFilepath = $stubFile->getRealPath();
@@ -81,15 +106,25 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /** @return list<string> */
-    protected function getTaintAnalysisStubs(): array
+    private function getTaintAnalysisStubs(): array
     {
-        return [
-            ...glob(dirname(__DIR__) . '/stubs/common/TaintAnalysis/Http/*.stubphp') ?: []
-        ];
+        $stubs = [];
+
+        $basePath = dirname(__DIR__) . '/stubs/common/TaintAnalysis';
+        $stubFiles = Finder::create()->files()->name('*.stubphp')->in($basePath);
+
+        foreach ($stubFiles as $stubFile) {
+            $stubFilepath = $stubFile->getRealPath();
+            if (is_string($stubFilepath)) {
+                $stubs[] = $stubFilepath;
+            }
+        }
+
+        return $stubs;
     }
 
     /** @return list<string> */
-    protected function getStubsForVersion(string $version): array
+    private function getStubsForVersion(string $version): array
     {
         [$majorVersion] = explode('.', $version);
 
@@ -155,5 +190,14 @@ final class Plugin implements PluginEntryPointInterface
     {
         FacadeStubProvider::generateStubFile();
         ModelStubProvider::generateStubFile();
+    }
+
+    private function generateReportIssueUrl(\Throwable $throwable): string
+    {
+        return sprintf(
+            'https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md&title=%s&body=%s',
+            urlencode("Error on generating stub files: {$throwable->getMessage()}"),
+            urlencode("```\n{$throwable->__toString()}\n```")
+        );
     }
 }

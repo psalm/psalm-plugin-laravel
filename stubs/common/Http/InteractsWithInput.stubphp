@@ -15,4 +15,232 @@ trait InteractsWithInput
      * @psalm-mutation-free
      */
     public function input($key = null, $default = null) {}
+
+    /**
+     * Retrieve input from the request as a collection.
+     *
+     * @param  string[]|string|null  $key
+     * @return \Illuminate\Support\Collection
+     *
+     * @psalm-taint-source input
+     */
+    public function collect($key = null) {}
+
+    /**
+     * Get all of the input and files for the request.
+     *
+     * @param  string[]|string|null  $keys
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function all($keys = null) {}
+
+    /**
+     * Retrieve a query string item from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function query($key = null, $default = null) {}
+
+    /**
+     * Retrieve a request payload item from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function post($key = null, $default = null) {}
+
+    /**
+     * Retrieve a cookie from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function cookie($key = null, $default = null) {}
+
+    /**
+     * Retrieve a server variable from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function server($key = null, $default = null) {}
+
+    /**
+     * Retrieve a header from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function header($key = null, $default = null) {}
+
+    /**
+     * Retrieve a file from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return \Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]|null
+     *
+     * @psalm-taint-source input
+     */
+    public function file($key = null, $default = null) {}
+
+    /**
+     * Get all uploaded files for the request.
+     *
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function allFiles() {}
+
+    /**
+     * Get the JSON payload for the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function json($key = null, $default = null) {}
+
+    /**
+     * Get the bearer token from the request headers.
+     *
+     * @return string|null
+     *
+     * @psalm-taint-source input
+     */
+    public function bearerToken() {}
+
+    /**
+     * Retrieve input from the request as a Stringable instance.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return \Illuminate\Support\Stringable
+     *
+     * @psalm-taint-source input
+     */
+    public function str($key, $default = null) {}
+
+    /**
+     * Retrieve input from the request as a Stringable instance.
+     *
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return \Illuminate\Support\Stringable
+     *
+     * @psalm-taint-source input
+     */
+    public function string($key, $default = null) {}
+
+    /**
+     * Retrieve input as an integer value.
+     *
+     * @param  string  $key
+     * @param  int  $default
+     * @return int
+     *
+     * @psalm-taint-source input
+     */
+    public function integer($key, $default = 0) {}
+
+    /**
+     * Retrieve input as a float value.
+     *
+     * @param  string  $key
+     * @param  float  $default
+     * @return float
+     *
+     * @psalm-taint-source input
+     */
+    public function float($key, $default = 0.0) {}
+
+    /**
+     * Retrieve input from the request as a boolean value.
+     *
+     * Returns strict true/false via filter_var(FILTER_VALIDATE_BOOLEAN).
+     * Not a taint source: a boolean cannot carry injectable content.
+     *
+     * @param  string|null  $key
+     * @param  bool  $default
+     * @return bool
+     */
+    public function boolean($key = null, $default = false) {}
+
+    /**
+     * Retrieve input from the request as a Carbon instance.
+     *
+     * Not a taint source: Date::parse()/createFromFormat() validates input
+     * into a structured Carbon object. The string representation is a
+     * formatted date, not raw user input.
+     *
+     * @param  string  $key
+     * @param  string|null  $format
+     * @param  string|null  $tz
+     * @return \Illuminate\Support\Carbon|null
+     */
+    public function date($key, $format = null, $tz = null) {}
+
+    /**
+     * Retrieve input from the request as an enum.
+     *
+     * Not a taint source: BackedEnum::tryFrom() is a strict whitelist.
+     * The return value can only be one of the developer-defined enum cases.
+     *
+     * @param  string  $key
+     * @param  class-string  $enumClass
+     * @return \BackedEnum|null
+     */
+    public function enum($key, $enumClass) {}
+
+    /**
+     * Get a subset containing the provided keys with values from the input data.
+     *
+     * @param  string[]|string  $keys
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function only($keys) {}
+
+    /**
+     * Get all of the input except for a specified array of items.
+     *
+     * @param  string[]|string  $keys
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function except($keys) {}
+
+    /**
+     * Retrieve old input for the given key.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function old($key = null, $default = null) {}
 }

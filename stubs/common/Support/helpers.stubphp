@@ -104,9 +104,9 @@ function optional($value = null, callable $callback = null) {}
  * Retry an operation a given number of times.
  *
  * @template TValue
- * @param positive-int|list<int> $times
+ * @param int|list<int> $times
  * @param callable(int): TValue $callback
- * @param int<0, max> $sleep
+ * @param int $sleep
  * @param null|callable(\Exception): bool $when
  * @psalm-return TValue
  *

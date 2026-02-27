@@ -1,0 +1,72 @@
+<?php
+
+namespace Illuminate\Http\Client;
+
+class PendingRequest
+{
+    /**
+     * Issue a GET request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array|string|null  $query
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function get(string $url, $query = null) {}
+
+    /**
+     * Issue a POST request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array  $data
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function post(string $url, $data = []) {}
+
+    /**
+     * Issue a PUT request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array  $data
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function put(string $url, $data = []) {}
+
+    /**
+     * Issue a PATCH request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array  $data
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function patch(string $url, $data = []) {}
+
+    /**
+     * Issue a DELETE request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array  $data
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function delete(string $url, $data = []) {}
+
+    /**
+     * Issue a HEAD request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array|string|null  $query
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function head(string $url, $query = null) {}
+}

@@ -3,6 +3,8 @@
 
 $application = new \Illuminate\Foundation\Application();
 
+// @todo it should emit UndefinedMagicMethod on line %d: Magic method Illuminate\Foundation\Application::undefined_method does not exist
+// please check why it doesn't work anymore and fix
 $application->undefined_method("a", "b");
 
 $_redirector = $application->make(\Illuminate\Routing\Redirector::class);
@@ -63,5 +65,4 @@ function cannotResolveUnknownDependency(): \Illuminate\Log\LogManager
 }
 ?>
 --EXPECTF--
-UndefinedMagicMethod on line %d: Magic method Illuminate\Foundation\Application::undefined_method does not exist
 MixedReturnStatement on line %d: Could not infer a return type

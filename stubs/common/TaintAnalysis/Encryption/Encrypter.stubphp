@@ -1,0 +1,56 @@
+<?php
+
+namespace Illuminate\Encryption;
+
+class Encrypter
+{
+    /**
+     * Encrypt the given value.
+     *
+     * @param  mixed  $value
+     * @param  bool  $serialize
+     * @return string
+     *
+     * @psalm-taint-escape user_secret
+     * @psalm-taint-escape system_secret
+     * @psalm-flow ($value) -> return
+     */
+    public function encrypt($value, $serialize = true) {}
+
+    /**
+     * Encrypt a string without serialization.
+     *
+     * @param  string  $value
+     * @return string
+     *
+     * @psalm-taint-escape user_secret
+     * @psalm-taint-escape system_secret
+     * @psalm-flow ($value) -> return
+     */
+    public function encryptString($value) {}
+
+    /**
+     * Decrypt the given value.
+     *
+     * @param  string  $payload
+     * @param  bool  $unserialize
+     * @return mixed
+     *
+     * @psalm-taint-unescape user_secret
+     * @psalm-taint-unescape system_secret
+     * @psalm-flow ($payload) -> return
+     */
+    public function decrypt($payload, $unserialize = true) {}
+
+    /**
+     * Decrypt the given string without unserialization.
+     *
+     * @param  string  $payload
+     * @return string
+     *
+     * @psalm-taint-unescape user_secret
+     * @psalm-taint-unescape system_secret
+     * @psalm-flow ($payload) -> return
+     */
+    public function decryptString($payload) {}
+}

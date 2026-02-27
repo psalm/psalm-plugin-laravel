@@ -32,7 +32,7 @@ use function is_string;
  */
 final class AuthHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
-    /** @inheritDoc */
+    /** @return list<string> */
     #[\Override]
     public static function getClassLikeNames(): array
     {
