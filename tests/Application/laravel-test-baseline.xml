@@ -20,17 +20,6 @@
     <MissingReturnType>
       <code><![CDATA[handle]]></code>
     </MissingReturnType>
-    <NonInvariantDocblockPropertyType>
-      <code><![CDATA[$description]]></code>
-    </NonInvariantDocblockPropertyType>
-    <UnusedClass>
-      <code><![CDATA[ExampleCommand]]></code>
-    </UnusedClass>
-  </file>
-  <file src="app/Events/ExampleEvent.php">
-    <PossiblyUnusedMethod>
-      <code><![CDATA[broadcastOn]]></code>
-    </PossiblyUnusedMethod>
   </file>
   <file src="app/Exceptions/ExampleException.php">
     <UnusedClass>
@@ -61,23 +50,10 @@
       <code><![CDATA[ExampleResource]]></code>
     </UnusedClass>
   </file>
-  <file src="app/Jobs/ExampleJob.php">
-    <PossiblyUnusedMethod>
-      <code><![CDATA[handle]]></code>
-    </PossiblyUnusedMethod>
-  </file>
   <file src="app/Listeners/ExampleListener.php">
     <UnusedClass>
       <code><![CDATA[ExampleListener]]></code>
     </UnusedClass>
-  </file>
-  <file src="app/Mail/ExampleMail.php">
-    <PossiblyUnusedMethod>
-      <code><![CDATA[__construct]]></code>
-      <code><![CDATA[attachments]]></code>
-      <code><![CDATA[content]]></code>
-      <code><![CDATA[envelope]]></code>
-    </PossiblyUnusedMethod>
   </file>
   <file src="app/Models/Example.php">
     <UnusedClass>
@@ -89,20 +65,6 @@
       <code><![CDATA[ExampleScope]]></code>
     </UnusedClass>
   </file>
-  <file src="app/Models/User.php">
-    <NonInvariantDocblockPropertyType>
-      <code><![CDATA[$fillable]]></code>
-      <code><![CDATA[$hidden]]></code>
-    </NonInvariantDocblockPropertyType>
-  </file>
-  <file src="app/Notifications/ExampleNotification.php">
-    <PossiblyUnusedMethod>
-      <code><![CDATA[__construct]]></code>
-      <code><![CDATA[toArray]]></code>
-      <code><![CDATA[toMail]]></code>
-      <code><![CDATA[via]]></code>
-    </PossiblyUnusedMethod>
-  </file>
   <file src="app/Observers/ExampleObserver.php">
     <UnusedClass>
       <code><![CDATA[ExampleObserver]]></code>
@@ -113,24 +75,9 @@
       <code><![CDATA[ExamplePolicy]]></code>
     </UnusedClass>
   </file>
-  <file src="app/Providers/AppServiceProvider.php">
-    <UnusedClass>
-      <code><![CDATA[AppServiceProvider]]></code>
-    </UnusedClass>
-  </file>
-  <file src="app/Providers/ExampleProvider.php">
-    <UnusedClass>
-      <code><![CDATA[ExampleProvider]]></code>
-    </UnusedClass>
-  </file>
   <file src="app/Rules/ExampleRule.php">
     <UnusedClass>
       <code><![CDATA[ExampleRule]]></code>
-    </UnusedClass>
-  </file>
-  <file src="app/View/Components/ExampleComponent.php">
-    <UnusedClass>
-      <code><![CDATA[ExampleComponent]]></code>
     </UnusedClass>
   </file>
 </files>
