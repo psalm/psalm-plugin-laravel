@@ -19,7 +19,7 @@
     "require": {
         "php": "^8.2",
         "ext-simplexml": "*",
-        "barryvdh/laravel-ide-helper": "~3.5.4",
+        "barryvdh/laravel-ide-helper": "^3.6",
         "illuminate/config": "^11.35 || ^12.0",
         "illuminate/container": "^11.35 || ^12.0",
         "illuminate/contracts": "^11.35 || ^12.0",
