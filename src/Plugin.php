@@ -52,7 +52,7 @@ final class Plugin implements PluginEntryPointInterface
 
         // $registration->codebase is available/public from Psalm v6.7
         // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
-        if ($registration instanceof PluginRegistrationSocket && isset($registration->codebase)) {
+        if ($registration instanceof PluginRegistrationSocket) {
             $output = $registration->codebase->progress;
         }
 
@@ -128,9 +128,13 @@ final class Plugin implements PluginEntryPointInterface
     {
         [$majorVersion] = explode('.', $version);
 
+        $baseDir = dirname(__DIR__) . '/stubs/' . $majorVersion;
+        $topLevel = glob($baseDir . '/*.stubphp');
+        $nested = glob($baseDir . '/**/*.stubphp');
+
         return [
-            ...glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp') ?: [],
-            ...glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp') ?: [],
+            ...($topLevel !== false ? $topLevel : []),
+            ...($nested !== false ? $nested : []),
         ];
     }
 
