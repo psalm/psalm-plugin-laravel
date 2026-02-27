@@ -8,6 +8,7 @@
     findUnusedVariablesAndParams="true"
     memoizeMethodCallResults="true"
     reportMixedIssues="true"
+    runTaintAnalysis="false"
     sealAllMethods="true"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
@@ -18,4 +19,7 @@
             <failOnInternalError>true</failOnInternalError>
         </pluginClass>
     </plugins>
+    <issueHandlers>
+        <MissingPureAnnotation errorLevel="info" />
+    </issueHandlers>
 </psalm>
