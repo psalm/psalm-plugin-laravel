@@ -24,7 +24,10 @@ use function strtolower;
 
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {

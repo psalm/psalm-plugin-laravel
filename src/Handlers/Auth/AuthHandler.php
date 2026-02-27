@@ -32,7 +32,10 @@ use function is_string;
  */
 final class AuthHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
-    /** @return list<string> */
+    /**
+     * @return list<string>
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -86,6 +89,7 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
         };
     }
 
+    /** @psalm-mutation-free */
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {

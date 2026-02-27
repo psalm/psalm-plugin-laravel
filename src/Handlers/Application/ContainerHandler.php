@@ -28,7 +28,10 @@ use function is_callable;
 
 final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getFunctionIds(): array
     {

@@ -158,6 +158,7 @@ final class SchemaAggregator
         }
     }
 
+    /** @psalm-external-mutation-free */
     private function dropTable(PhpParser\Node\Expr\StaticCall $call): void
     {
         if (
@@ -173,6 +174,7 @@ final class SchemaAggregator
         unset($this->tables[$table_name]);
     }
 
+    /** @psalm-external-mutation-free */
     private function renameTable(PhpParser\Node\Expr\StaticCall $call): void
     {
         if (

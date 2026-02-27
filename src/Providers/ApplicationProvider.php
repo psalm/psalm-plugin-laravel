@@ -76,6 +76,7 @@ final class ApplicationProvider
             $consoleApp = $app->make(Kernel::class);
             $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function (): object {
                 return new class {
+                    /** @psalm-mutation-free */
                     public function bootstrap(): void
                     {
                     }

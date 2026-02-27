@@ -25,7 +25,10 @@ final class OffsetHandler implements
     MethodVisibilityProviderInterface,
     MethodParamsProviderInterface
 {
-    /** @return list<class-string> */
+    /**
+     * @return list<class-string>
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -57,12 +60,14 @@ final class OffsetHandler implements
         return null;
     }
 
+    /** @psalm-mutation-free */
     #[\Override]
     public static function doesMethodExist(MethodExistenceProviderEvent $event): ?bool
     {
         return self::isOffsetMethod($event->getMethodNameLowercase()) ? true : null;
     }
 
+    /** @psalm-mutation-free */
     #[\Override]
     public static function isMethodVisible(MethodVisibilityProviderEvent $event): ?bool
     {
@@ -86,6 +91,7 @@ final class OffsetHandler implements
         );
     }
 
+    /** @psalm-pure */
     private static function isOffsetMethod(string $methodName): bool
     {
         return in_array($methodName, [

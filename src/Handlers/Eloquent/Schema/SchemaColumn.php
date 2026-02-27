@@ -23,6 +23,7 @@ final class SchemaColumn
 
     /**
      * @param array<int, string>|null $options
+     * @psalm-mutation-free
      */
     public function __construct(
         public string $name,
