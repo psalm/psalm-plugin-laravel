@@ -4,6 +4,9 @@ composer.lock
 
 cache/*.stubphp
 
+# CS
+.php-cs-fixer.cache
+
 # PHPUnit
 .phpunit.result.cache
 .phpunit.cache/
