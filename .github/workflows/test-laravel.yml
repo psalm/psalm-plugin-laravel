@@ -19,7 +19,21 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Test Laravel app
+    name: Test Laravel ${{ matrix.laravel-installer-version }} (PHP ${{ matrix.php-version }})
+
+    strategy:
+      fail-fast: true
+      matrix:
+        php-version:
+          - '8.3'
+          - '8.4'
+          - '8.5'
+        laravel-installer-version:
+          - '11.6.1'
+          - '12.11.2'
+        exclude:
+          - php-version: '8.5'
+            laravel-installer-version: '11.6.1' # RuntimeException: PHP Error: Constant PDO::MYSQL_ATTR_SSL_CA is deprecated since 8.5, use Pdo\Mysql::ATTR_SSL_CA
 
     steps:
     - name: Checkout code
@@ -28,13 +42,13 @@ jobs:
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
-        php-version: 8.3
+        php-version: ${{ matrix.php-version }}
         coverage: none
 
     - name: Build a Laravel project and run Psalm on it
       run: |
-        ./tests/Application/laravel-test.sh
+        LARAVEL_INSTALLER_VERSION=${{ matrix.laravel-installer-version }} ./tests/Application/laravel-test.sh
 
     - run: |
-        echo "Psalm analysis failed on a fresh Laravel project. Please consider updating baseline: tests/Application/laravel-test-baseline.xml"
+        echo "Psalm analysis failed on a fresh Laravel project. Please consider updating baseline: tests/Application/laravel-test-psalm-baseline.xml"
       if: ${{ failure() }}
