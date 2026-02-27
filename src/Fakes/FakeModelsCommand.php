@@ -130,7 +130,7 @@ final class FakeModelsCommand extends ModelsCommand
                 $this->setMethod(
                     Str::camel("where_" . $column_name),
                     '\Illuminate\Database\Eloquent\Builder<static>', // @todo support custom EloquentBuilders
-                    ['$value']
+                    ['$value'],
                 );
             }
         }

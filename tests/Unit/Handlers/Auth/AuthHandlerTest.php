@@ -16,7 +16,7 @@ final class AuthHandlerTest extends TestCase
     {
         $event = new MethodParamsProviderEvent(
             \Illuminate\Support\Facades\Auth::class,
-            'user'
+            'user',
         );
 
         $params = AuthHandler::getMethodParams($event);
@@ -29,7 +29,7 @@ final class AuthHandlerTest extends TestCase
     {
         $event = new MethodParamsProviderEvent(
             \Illuminate\Support\Facades\Auth::class,
-            'unknown'
+            'unknown',
         );
 
         $params = AuthHandler::getMethodParams($event);

@@ -77,9 +77,7 @@ final class ApplicationProvider
             $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function (): object {
                 return new class {
                     /** @psalm-mutation-free */
-                    public function bootstrap(): void
-                    {
-                    }
+                    public function bootstrap(): void {}
                 };
             });
             $consoleApp->bootstrap();

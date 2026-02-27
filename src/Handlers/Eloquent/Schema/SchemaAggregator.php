@@ -341,10 +341,10 @@ final class SchemaAggregator
                     $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                     break;
 
-                /**
-                 * @todo use type and column name based on model's PK.
-                 * Pairs are [id, int] and [uuid, string]
-                 */
+                    /**
+                     * @todo use type and column name based on model's PK.
+                     * Pairs are [id, int] and [uuid, string]
+                     */
                 case 'foreignidfor':
                     $table->setColumn(new SchemaColumn('id', 'int', $nullable));
                     break;

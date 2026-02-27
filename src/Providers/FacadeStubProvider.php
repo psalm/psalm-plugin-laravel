@@ -41,7 +41,7 @@ final class FacadeStubProvider implements GeneratesStubs
         $stubs_generator_command = new GeneratorCommand(
             $config,
             $fake_filesystem,
-            $viewFactory
+            $viewFactory,
         );
 
         $stubs_generator_command->setLaravel($app);
@@ -52,7 +52,7 @@ final class FacadeStubProvider implements GeneratesStubs
 
         $stubs_generator_command->run(
             new ArrayInput([]),
-            new NullOutput()
+            new NullOutput(),
         );
     }
 
