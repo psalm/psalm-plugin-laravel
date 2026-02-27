@@ -72,13 +72,17 @@ final class ModelStubProvider implements GeneratesStubs
         self::$model_classes = $models_generator_command->getModels();
     }
 
+    /** @psalm-pure */
     #[\Override]
     public static function getStubFileLocation(): string
     {
         return CacheDirectoryProvider::getCacheLocation() . '/models.stubphp';
     }
 
-    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
+    /**
+     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
+     * @psalm-external-mutation-free
+     */
     public static function getModelClasses(): array
     {
         return self::$model_classes;

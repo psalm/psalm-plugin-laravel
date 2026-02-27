@@ -24,6 +24,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
     /**
      * @inheritDoc
      * @see https://laravel.com/docs/master/helpers#paths
+     * @psalm-pure
      */
     #[\Override]
     public static function getFunctionIds(): array

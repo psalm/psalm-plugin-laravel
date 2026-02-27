@@ -28,7 +28,10 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
 {
     use ExtractsGuardNameFromCallLike;
 
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {

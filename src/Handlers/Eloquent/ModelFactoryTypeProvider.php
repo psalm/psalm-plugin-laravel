@@ -14,7 +14,10 @@ use function strtolower;
 
 final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
 {
-    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
+    /**
+     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
+     * @psalm-external-mutation-free
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {

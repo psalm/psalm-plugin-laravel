@@ -12,7 +12,10 @@ use Psalm\Type\Atomic\TNamedObject;
 
 final class CacheHandler implements FunctionReturnTypeProviderInterface
 {
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getFunctionIds(): array
     {

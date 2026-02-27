@@ -26,7 +26,10 @@ use Psalm\Type\Union;
 
 final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 {
-    /** @return list<string> */
+    /**
+     * @return list<string>
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {

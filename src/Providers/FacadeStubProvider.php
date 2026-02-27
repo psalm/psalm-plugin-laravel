@@ -56,6 +56,7 @@ final class FacadeStubProvider implements GeneratesStubs
         );
     }
 
+    /** @psalm-pure */
     #[\Override]
     public static function getStubFileLocation(): string
     {
