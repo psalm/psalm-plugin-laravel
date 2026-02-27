@@ -68,9 +68,7 @@ jobs:
           tools: composer
 
       - name: Install dependencies from composer.json
-        run: |
-          composer require "illuminate/support:${{ matrix.laravel }}" --no-update
-          composer update --no-interaction --no-progress --prefer-dist --prefer-stable ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }}
+        run: composer update --with="laravel/framework:${{ matrix.laravel }}" --no-interaction --no-progress --prefer-dist --prefer-stable ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }}
 
       - name: Run Psalm/Type tests
         run: composer test:type
