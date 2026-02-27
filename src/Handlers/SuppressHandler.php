@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers;
 
-use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
@@ -139,7 +138,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
-        foreach (ClassLikeStorageProvider::getAll() as $classStorage) {
+        foreach ($event->getCodebase()->classlike_storage_provider->getAll() as $classStorage) {
             if (!$classStorage->user_defined) {
                 continue;
             }
@@ -157,12 +156,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         $parents = $classStorage->parent_classes;
 
         if ($parents === []) {
-            // Fallback to direct parent_class if parent_classes is not yet populated
-            if ($classStorage->parent_class !== null) {
-                $parents = [$classStorage->parent_class];
-            } else {
-                return;
-            }
+            return;
         }
 
         foreach (self::CLASS_LEVEL_BY_PARENT_CLASS as $issue => $parent_classes) {
