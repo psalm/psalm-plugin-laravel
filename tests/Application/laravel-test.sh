@@ -2,6 +2,9 @@
 
 # Laravel Test Environment Setup Script
 # This script sets up a fresh Laravel installation and runs Psalm analysis
+# examples:
+#   bash tests/Application/laravel-test.sh
+#   LARAVEL_INSTALLER_VERSION=11.6.1 bash tests/Application/laravel-test.sh
 
 # Exit on error. Append "|| true" if you expect an error.
 set -e
@@ -11,7 +14,7 @@ set -o pipefail
 set -u
 
 # See https://github.com/laravel/laravel/tags for Laravel versions
-LARAVEL_INSTALLER_VERSION=11.6.1
+LARAVEL_INSTALLER_VERSION="${LARAVEL_INSTALLER_VERSION:-12.11.2}"
 
 # Terminal colors
 RED='\033[0;31m'
@@ -32,13 +35,14 @@ Usage: $(basename "$0") [options]
 Sets up a fresh Laravel installation and runs Psalm analysis.
 
 Options:
-    -h, --help      Show this help message
-    -u, --update    Update Psalm baseline
-    -v, --verbose   Enable verbose output
+    -h, --help                          Show this help message
+    -u, --update                        Update Psalm baseline
+    -v, --verbose                       Enable verbose output
     -r, --remove   Remove Laravel project directory after execution
 
 Environment variables:
-    COMPOSER_MEMORY_LIMIT    Memory limit for Composer (default: -1)
+    LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 12.11.2)
+    COMPOSER_MEMORY_LIMIT        Memory limit for Composer (default: -1)
 EOF
 }
 
@@ -109,7 +113,7 @@ if [ -d "$APP_INSTALLATION_PATH" ]; then
 fi
 
 info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} ..."
-composer create-project --quiet --prefer-dist laravel/laravel "$APP_INSTALLATION_PATH" $LARAVEL_INSTALLER_VERSION
+composer create-project --quiet --prefer-dist laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
 cd "$APP_INSTALLATION_PATH"
 
 info "Making different types of classes for Laravel to analyze them using Psalm"
@@ -151,7 +155,7 @@ COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" --updat
 
 info "Analyzing Laravel"
 PSALM_CONFIG="../../tests/Application/laravel-test-psalm.xml"
-PSALM_BASELINE="../../tests/Application/laravel-test-baseline.xml"
+PSALM_BASELINE="../../tests/Application/laravel-test-psalm-baseline.xml"
 
 if [ "$UPDATE_BASELINE" = true ]; then
     info "Updating Psalm baseline"
