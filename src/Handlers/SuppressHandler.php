@@ -29,6 +29,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         ],
         'UnusedClass' => [
             'Illuminate\Console\Command',
+            'Illuminate\Support\ServiceProvider',
         ],
     ];
 
@@ -53,10 +54,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             'App\Http\Kernel',
             'App\Http\Middleware\Authenticate',
             'App\Http\Middleware\TrustHosts',
-            'App\Providers\AppServiceProvider',
-            'App\Providers\AuthServiceProvider',
-            'App\Providers\BroadcastServiceProvider',
-            'App\Providers\EventServiceProvider',
         ],
     ];
 
