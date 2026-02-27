@@ -206,15 +206,18 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             return;
         }
 
-        foreach (self::CLASS_LEVEL_BY_USED_TRAITS as $issue => $used_traits) {
-            if (array_intersect($classStorage->used_traits, $used_traits)) {
-                self::suppress($issue, $classStorage);
+        foreach (self::CLASS_LEVEL_BY_USED_TRAITS as $issue => $traits) {
+            foreach ($traits as $trait) {
+                if (isset($classStorage->used_traits[strtolower($trait)])) {
+                    self::suppress($issue, $classStorage);
+                    break;
+                }
             }
         }
 
         foreach (self::METHOD_LEVEL_BY_USED_TRAITS as $issue => $methods_by_trait) {
             foreach ($methods_by_trait as $trait => $method_names) {
-                if (!in_array($trait, $classStorage->used_traits, true)) {
+                if (!isset($classStorage->used_traits[strtolower($trait)])) {
                     continue;
                 }
 
