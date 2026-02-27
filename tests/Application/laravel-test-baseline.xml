@@ -75,6 +75,11 @@
       <code><![CDATA[ExamplePolicy]]></code>
     </UnusedClass>
   </file>
+  <file src="app/Providers/ExampleProvider.php">
+    <UnusedClass>
+      <code><![CDATA[ExampleProvider]]></code>
+    </UnusedClass>
+  </file>
   <file src="app/Rules/ExampleRule.php">
     <UnusedClass>
       <code><![CDATA[ExampleRule]]></code>
