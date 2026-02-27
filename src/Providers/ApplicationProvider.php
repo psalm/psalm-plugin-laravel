@@ -74,11 +74,10 @@ final class ApplicationProvider
         if (!self::$booted) {
             // Bootstrap console app
             $consoleApp = $app->make(Kernel::class);
-            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function () {
+            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function (): object {
                 return new class {
-                    public function bootstrap(): void
-                    {
-                    }
+                    /** @psalm-mutation-free */
+                    public function bootstrap(): void {}
                 };
             });
             $consoleApp->bootstrap();

@@ -28,7 +28,10 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
 {
     use ExtractsGuardNameFromCallLike;
 
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -136,7 +139,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
 
         return self::getGuardNameFromFirstArgument(
             $call_contains_guard_name,
-            $default_guard
+            $default_guard,
         );
     }
 }

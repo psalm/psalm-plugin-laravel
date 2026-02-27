@@ -27,6 +27,7 @@ final class FakeFilesystem extends Filesystem
         return parent::put($destination, $contents, $lock);
     }
 
+    /** @psalm-external-mutation-free */
     public function setDestination(string $destination): void
     {
         $this->destination = $destination;

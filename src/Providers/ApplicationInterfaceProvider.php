@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Providers;
 
+/** @psalm-pure */
 final class ApplicationInterfaceProvider
 {
-    /** @return list<class-string> */
+    /**
+     * @return list<class-string>
+     * @psalm-pure
+     */
     public static function getApplicationInterfaceClassLikes(): array
     {
         return [

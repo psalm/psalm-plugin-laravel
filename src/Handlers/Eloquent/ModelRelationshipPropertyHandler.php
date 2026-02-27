@@ -32,7 +32,10 @@ final class ModelRelationshipPropertyHandler implements
     PropertyVisibilityProviderInterface,
     PropertyTypeProviderInterface
 {
-    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
+    /**
+     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
+     * @psalm-external-mutation-free
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -148,7 +151,7 @@ final class ModelRelationshipPropertyHandler implements
                 $returnType = new Union([
                     new TGenericObject(Collection::class, [
                         new Union([new TInt()]),
-                        $modelType
+                        $modelType,
                     ]),
                 ]);
             }

@@ -25,7 +25,10 @@ final class OffsetHandler implements
     MethodVisibilityProviderInterface,
     MethodParamsProviderInterface
 {
-    /** @return list<class-string> */
+    /**
+     * @return list<class-string>
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -42,7 +45,7 @@ final class OffsetHandler implements
             // offsetget is an alias for make
             return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs(
                 $source->getNodeTypeProvider(),
-                $event->getCallArgs()
+                $event->getCallArgs(),
             );
         }
 
@@ -50,19 +53,21 @@ final class OffsetHandler implements
             $fq_classlike_name = $event->getFqClasslikeName();
             return $source->getCodebase()->getMethodReturnType(
                 ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $method_name_lowercase,
-                $fq_classlike_name
+                $fq_classlike_name,
             );
         }
 
         return null;
     }
 
+    /** @psalm-mutation-free */
     #[\Override]
     public static function doesMethodExist(MethodExistenceProviderEvent $event): ?bool
     {
         return self::isOffsetMethod($event->getMethodNameLowercase()) ? true : null;
     }
 
+    /** @psalm-mutation-free */
     #[\Override]
     public static function isMethodVisible(MethodVisibilityProviderEvent $event): ?bool
     {
@@ -82,10 +87,11 @@ final class OffsetHandler implements
         }
 
         return $source->getCodebase()->getMethodParams(
-            ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $event->getMethodNameLowercase()
+            ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $event->getMethodNameLowercase(),
         );
     }
 
+    /** @psalm-pure */
     private static function isOffsetMethod(string $methodName): bool
     {
         return in_array($methodName, [

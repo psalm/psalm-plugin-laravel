@@ -24,7 +24,7 @@ final class ProxyMethodReturnTypeProvider
         StatementsAnalyzer $statements_analyzer,
         MethodCall $fake_method_call,
         Context $context,
-        TNamedObject $typeToCall
+        TNamedObject $typeToCall,
     ): ?Union {
         $old_data_provider = $statements_analyzer->node_data;
         $statements_analyzer->node_data = clone $statements_analyzer->node_data;
@@ -47,7 +47,7 @@ final class ProxyMethodReturnTypeProvider
                 $statements_analyzer,
                 $fake_method_call,
                 $context,
-                false
+                false,
             ) === false
         ) {
             return null;
