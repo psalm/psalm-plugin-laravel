@@ -26,7 +26,10 @@ use Psalm\Type\Union;
 
 final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 {
-    /** @return list<string> */
+    /**
+     * @return list<string>
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -60,8 +63,8 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
         // If this method name is on the builder object, proxy it over there
 
         if (
-            $source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase)) ||
-            $source->getCodebase()->methods->methodExists(new MethodIdentifier(QueryBuilder::class, $method_name_lowercase))
+            $source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase))
+            || $source->getCodebase()->methods->methodExists(new MethodIdentifier(QueryBuilder::class, $method_name_lowercase))
         ) {
             $template_type_parameters = $event->getTemplateTypeParameters();
             if (!$template_type_parameters) {
@@ -71,7 +74,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
             $fake_method_call = new MethodCall(
                 new Variable('builder'),
                 $method_name_lowercase,
-                $event->getCallArgs()
+                $event->getCallArgs(),
             );
 
             $templateType = $template_type_parameters[0];

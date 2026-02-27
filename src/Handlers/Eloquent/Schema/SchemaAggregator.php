@@ -158,6 +158,7 @@ final class SchemaAggregator
         }
     }
 
+    /** @psalm-external-mutation-free */
     private function dropTable(PhpParser\Node\Expr\StaticCall $call): void
     {
         if (
@@ -173,6 +174,7 @@ final class SchemaAggregator
         unset($this->tables[$table_name]);
     }
 
+    /** @psalm-external-mutation-free */
     private function renameTable(PhpParser\Node\Expr\StaticCall $call): void
     {
         if (
@@ -339,19 +341,16 @@ final class SchemaAggregator
                     $table->setColumn(new SchemaColumn($column_name, 'int', $nullable));
                     break;
 
-                /**
-                 * @todo use type and column name based on model's PK.
-                 * Pairs are [id, int] and [uuid, string]
-                 */
+                    /**
+                     * @todo use type and column name based on model's PK.
+                     * Pairs are [id, int] and [uuid, string]
+                     */
                 case 'foreignidfor':
                     $table->setColumn(new SchemaColumn('id', 'int', $nullable));
                     break;
 
                 case 'binary':
                 case 'foreignulid':
-                    $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
-                    break;
-
                 case 'char':
                 case 'date':
                 case 'datetime':

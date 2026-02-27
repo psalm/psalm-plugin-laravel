@@ -23,12 +23,13 @@ final class SchemaColumn
 
     /**
      * @param array<int, string>|null $options
+     * @psalm-mutation-free
      */
     public function __construct(
         public string $name,
         public string $type,
         public bool $nullable = false,
-        ?array $options = []
+        ?array $options = [],
     ) {
         $this->options = $options ?? [];
     }

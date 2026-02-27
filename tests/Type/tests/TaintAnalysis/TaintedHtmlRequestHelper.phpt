@@ -8,5 +8,5 @@ function renderTitle() {
 }
 ?>
 --EXPECTF--
-TaintedHtml on line %d: Detected tainted HTML
+%ATaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

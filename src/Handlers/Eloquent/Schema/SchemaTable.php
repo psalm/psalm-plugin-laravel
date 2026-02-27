@@ -9,6 +9,7 @@ final class SchemaTable
     /** @var array<string, SchemaColumn> */
     public array $columns = [];
 
+    /** @psalm-external-mutation-free */
     public function setColumn(SchemaColumn $column): void
     {
         $this->columns[$column->name] = $column;
@@ -29,6 +30,7 @@ final class SchemaTable
         $this->columns[$new_name] = $old_column;
     }
 
+    /** @psalm-external-mutation-free */
     public function dropColumn(string $column_name): void
     {
         unset($this->columns[$column_name]);

@@ -12,7 +12,10 @@ use Psalm\Type\Atomic\TNamedObject;
 
 final class CacheHandler implements FunctionReturnTypeProviderInterface
 {
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getFunctionIds(): array
     {
@@ -27,7 +30,7 @@ final class CacheHandler implements FunctionReturnTypeProviderInterface
 
         if ($call_args === []) {
             return new Type\Union([
-                new TNamedObject(\Illuminate\Cache\CacheManager::class)
+                new TNamedObject(\Illuminate\Cache\CacheManager::class),
             ]);
         }
 
