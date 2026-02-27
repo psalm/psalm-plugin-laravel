@@ -29,7 +29,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         ],
         'UnusedClass' => [
             'Illuminate\Console\Command',
-            'Illuminate\Support\ServiceProvider',
         ],
     ];
 
@@ -77,7 +76,12 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     private const PROPERTY_LEVEL_BY_PARENT_CLASS = [
         'NonInvariantDocblockPropertyType' => [
             'Illuminate\Console\Command' => ['description'],
-            'Illuminate\Database\Eloquent\Model' => ['fillable', 'guarded', 'hidden', 'casts', 'appends', 'touches', 'with', 'withCount', 'connection', 'table', 'primaryKey', 'keyType', 'perPage', 'incrementing', 'timestamps', 'dateFormat', 'attributes', 'dispatchesEvents', 'observables'],
+            'Illuminate\Database\Eloquent\Model' => [
+                'fillable', 'guarded', 'hidden', 'casts', 'appends', 'touches',
+                'with', 'withCount', 'connection', 'table', 'primaryKey', 'keyType',
+                'perPage', 'incrementing', 'timestamps', 'dateFormat',
+                'attributes', 'dispatchesEvents', 'observables',
+            ],
             'Illuminate\View\Component' => ['componentName'],
         ],
         'PropertyNotSetInConstructor' => [
