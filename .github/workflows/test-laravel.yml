@@ -19,7 +19,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Test Laravel app
+    name: Test Laravel app (PHP ${{ matrix.php-version }})
+
+    strategy:
+      fail-fast: true
+      matrix:
+        php-version:
+          - '8.3'
+          - '8.4'
+          - '8.5'
 
     steps:
     - name: Checkout code
@@ -28,7 +36,7 @@ jobs:
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
-        php-version: 8.3
+        php-version: ${{ matrix.php-version }}
         coverage: none
 
     - name: Build a Laravel project and run Psalm on it
