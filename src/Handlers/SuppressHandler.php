@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers;
 
+use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
+use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -15,28 +17,36 @@ use function array_intersect;
 use function in_array;
 use function strtolower;
 
-final class SuppressHandler implements AfterClassLikeVisitInterface
+final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodebasePopulatedInterface
 {
+    /** @var array<string, list<string>> */
     private const CLASS_LEVEL_BY_PARENT_CLASS = [
         'PropertyNotSetInConstructor' => [
             'Illuminate\Console\Command',
             'Illuminate\Foundation\Http\FormRequest',
             'Illuminate\Mail\Mailable',
             'Illuminate\Notifications\Notification',
+            'Illuminate\View\Component',
         ],
-        'UnusedClass' => [ // usually classes with auto-discovery
+        'UnusedClass' => [
             'Illuminate\Console\Command',
             'Illuminate\Support\ServiceProvider',
         ],
     ];
 
+    /** @var array<string, list<string>> */
     private const CLASS_LEVEL_BY_USED_TRAITS = [
         'PropertyNotSetInConstructor' => [
             'Illuminate\Queue\InteractsWithQueue',
-        ]
+        ],
     ];
 
-    /** Less flexible way, used when we can't rely on parent classes */
+    /**
+     * Suppress class-level issues by FQCN.
+     * Less flexible — use parent class or trait based checks when possible.
+     *
+     * @var array<string, list<string>>
+     */
     private const CLASS_LEVEL_BY_FQCN = [
         'UnusedClass' => [
             'App\Console\Kernel',
@@ -52,20 +62,43 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
         ],
     ];
 
-    /** Not preferable way as applications may use custom namespaces and structure */
+    /**
+     * Suppress method-level issues by FQCN.
+     * Not preferable — applications may use custom namespaces.
+     *
+     * @var array<string, array<string, list<string>>>
+     */
     private const METHOD_LEVEL_BY_FQCN = [
         'PossiblyUnusedMethod' => [
             'App\Http\Middleware\RedirectIfAuthenticated' => ['handle'],
         ],
     ];
 
+    /** @var array<string, array<string, list<string>>> */
     private const PROPERTY_LEVEL_BY_PARENT_CLASS = [
         'NonInvariantDocblockPropertyType' => [
             'Illuminate\Console\Command' => ['description'],
+            'Illuminate\Database\Eloquent\Model' => ['fillable', 'guarded', 'hidden', 'casts', 'appends', 'touches', 'with', 'withCount', 'connection', 'table', 'primaryKey', 'keyType', 'perPage', 'incrementing', 'timestamps', 'dateFormat', 'attributes', 'dispatchesEvents', 'observables'],
             'Illuminate\View\Component' => ['componentName'],
         ],
         'PropertyNotSetInConstructor' => [
             'Illuminate\Foundation\Testing\TestCase' => ['callbackException', 'app'],
+        ],
+    ];
+
+    /** @var array<string, array<string, list<string>>> */
+    private const METHOD_LEVEL_BY_PARENT_CLASS = [
+        'PossiblyUnusedMethod' => [
+            'Illuminate\Mail\Mailable' => ['__construct', 'build', 'envelope', 'content', 'attachments'],
+            'Illuminate\Notifications\Notification' => ['__construct', 'via', 'toMail', 'toArray'],
+        ],
+    ];
+
+    /** @var array<string, array<string, list<string>>> */
+    private const METHOD_LEVEL_BY_USED_TRAITS = [
+        'PossiblyUnusedMethod' => [
+            'Illuminate\Foundation\Events\Dispatchable' => ['broadcastOn'],
+            'Illuminate\Foundation\Bus\Dispatchable' => ['handle'],
         ],
     ];
 
@@ -75,7 +108,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
     {
         $classStorage = $event->getStorage();
 
-        if (! $classStorage->user_defined) {
+        if (!$classStorage->user_defined) {
             return;
         }
         if ($classStorage->is_interface) {
@@ -90,38 +123,57 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
 
         foreach (self::METHOD_LEVEL_BY_FQCN as $issue => $method_by_class) {
             foreach ($method_by_class[$classStorage->name] ?? [] as $method_name) {
-                /** @psalm-suppress RedundantFunctionCall */
+                /** @psalm-suppress RedundantFunctionCall method names in constants may contain uppercase */
                 $method_storage = $classStorage->methods[strtolower($method_name)] ?? null;
                 if ($method_storage instanceof MethodStorage) {
                     self::suppress($issue, $method_storage);
                 }
             }
         }
+    }
+
+    /**
+     * Hierarchy-based suppressions run after codebase population, when parent_classes is fully resolved.
+     * This fixes the issue where AfterClassLikeVisit only has one level of parent hierarchy.
+     */
+    #[\Override]
+    public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
+    {
+        foreach (ClassLikeStorageProvider::getAll() as $classStorage) {
+            if (!$classStorage->user_defined) {
+                continue;
+            }
+            if ($classStorage->is_interface) {
+                continue;
+            }
+
+            self::suppressByParentClass($classStorage);
+            self::suppressByUsedTraits($classStorage);
+        }
+    }
+
+    private static function suppressByParentClass(ClassLikeStorage $classStorage): void
+    {
+        $parents = $classStorage->parent_classes;
+
+        if ($parents === []) {
+            // Fallback to direct parent_class if parent_classes is not yet populated
+            if ($classStorage->parent_class !== null) {
+                $parents = [$classStorage->parent_class];
+            } else {
+                return;
+            }
+        }
 
         foreach (self::CLASS_LEVEL_BY_PARENT_CLASS as $issue => $parent_classes) {
-            // Check if any of the parent classes match our targets
-            if ($classStorage->parent_classes !== [] && array_intersect($classStorage->parent_classes, $parent_classes)) {
-                self::suppress($issue, $classStorage);
-            } elseif (is_string($classStorage->parent_class) && in_array($classStorage->parent_class, $parent_classes, true)) {
-                // If parent_classes array is empty, but we have a direct parent_class, check that
+            if (array_intersect($parents, $parent_classes)) {
                 self::suppress($issue, $classStorage);
             }
         }
 
         foreach (self::PROPERTY_LEVEL_BY_PARENT_CLASS as $issue => $properties_by_parent_class) {
             foreach ($properties_by_parent_class as $parent_class => $property_names) {
-                // Check both parent_classes array and direct parent_class property
-                $is_child_of_target_class = false;
-
-                // Check if it inherits from the specific parent class
-                if (in_array($parent_class, $classStorage->parent_classes, true)) {
-                    $is_child_of_target_class = true;
-                } elseif (is_string($classStorage->parent_class) && ($classStorage->parent_class === $parent_class)) {
-                    // If parent_classes array is empty, but we have a direct parent_class, check that
-                    $is_child_of_target_class = true;
-                }
-
-                if (!$is_child_of_target_class) {
+                if (!in_array($parent_class, $parents, true)) {
                     continue;
                 }
 
@@ -134,13 +186,47 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
             }
         }
 
-        foreach (self::CLASS_LEVEL_BY_USED_TRAITS as $issue => $used_traits) {
-            // Skip if traits are empty or if no intersection found
-            if ($classStorage->used_traits === [] || !array_intersect($classStorage->used_traits, $used_traits)) {
-                continue;
-            }
+        foreach (self::METHOD_LEVEL_BY_PARENT_CLASS as $issue => $methods_by_parent_class) {
+            foreach ($methods_by_parent_class as $parent_class => $method_names) {
+                if (!in_array($parent_class, $parents, true)) {
+                    continue;
+                }
 
-            self::suppress($issue, $classStorage);
+                foreach ($method_names as $method_name) {
+                    $method_storage = $classStorage->methods[strtolower($method_name)] ?? null;
+                    if ($method_storage instanceof MethodStorage) {
+                        self::suppress($issue, $method_storage);
+                    }
+                }
+            }
+        }
+    }
+
+    private static function suppressByUsedTraits(ClassLikeStorage $classStorage): void
+    {
+        if ($classStorage->used_traits === []) {
+            return;
+        }
+
+        foreach (self::CLASS_LEVEL_BY_USED_TRAITS as $issue => $used_traits) {
+            if (array_intersect($classStorage->used_traits, $used_traits)) {
+                self::suppress($issue, $classStorage);
+            }
+        }
+
+        foreach (self::METHOD_LEVEL_BY_USED_TRAITS as $issue => $methods_by_trait) {
+            foreach ($methods_by_trait as $trait => $method_names) {
+                if (!in_array($trait, $classStorage->used_traits, true)) {
+                    continue;
+                }
+
+                foreach ($method_names as $method_name) {
+                    $method_storage = $classStorage->methods[strtolower($method_name)] ?? null;
+                    if ($method_storage instanceof MethodStorage) {
+                        self::suppress($issue, $method_storage);
+                    }
+                }
+            }
         }
     }
 
@@ -149,10 +235,5 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
         if (!in_array($issue, $storage->suppressed_issues, true)) {
             $storage->suppressed_issues[] = $issue;
         }
-    }
-
-    public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event)
-    {
-        // TODO: Implement afterCodebasePopulated() method.
     }
 }
