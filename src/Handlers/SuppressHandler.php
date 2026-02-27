@@ -30,6 +30,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         'UnusedClass' => [
             'Illuminate\Console\Command',
             'Illuminate\Support\ServiceProvider',
+            'Illuminate\View\Component',
         ],
     ];
 
