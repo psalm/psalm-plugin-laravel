@@ -51,6 +51,7 @@ final class ApplicationProvider
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
         } else { // Laravel Packages
+            /** @psalm-suppress InternalMethod */
             $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
         }
 
@@ -115,6 +116,7 @@ final class ApplicationProvider
         $app->make(\Illuminate\Foundation\Bootstrap\BootProviders::class)->bootstrap($app);
 
         foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
+            /** @psalm-suppress MixedMethodCall - bootstrapper classes resolved from container */
             $app->make($bootstrap)->bootstrap($app);
         }
 

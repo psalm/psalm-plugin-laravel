@@ -85,7 +85,6 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
             'authenticate' => new Type\Union([
                 new Type\Atomic\TNamedObject($authenticatable_fqcn),
             ]),
-            default => null,
         };
     }
 
