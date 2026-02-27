@@ -4,7 +4,7 @@
 # This script sets up a fresh Laravel installation and runs Psalm analysis
 # examples:
 #   bash tests/Application/laravel-test.sh
-#   LARAVEL_INSTALLER_VERSION=11.6.1 bash tests/Application/laravel-test.sh
+#   LARAVEL_INSTALLER_VERSION=12.11.2 bash tests/Application/laravel-test.sh
 
 # Exit on error. Append "|| true" if you expect an error.
 set -e
