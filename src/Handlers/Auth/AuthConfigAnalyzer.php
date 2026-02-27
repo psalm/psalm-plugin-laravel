@@ -16,9 +16,7 @@ final class AuthConfigAnalyzer
     private static ?AuthConfigAnalyzer $instance = null;
 
     /** @psalm-mutation-free */
-    private function __construct(private readonly ConfigRepository $config)
-    {
-    }
+    private function __construct(private readonly ConfigRepository $config) {}
 
     public static function instance(): self
     {

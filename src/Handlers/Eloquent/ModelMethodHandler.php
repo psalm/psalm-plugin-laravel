@@ -57,7 +57,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
                     new Union([
                         new Type\Atomic\TNamedObject($called_fq_classlike_name),
                     ]),
-                ])
+                ]),
             ]);
         }
 
@@ -74,7 +74,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             $fake_method_call = new MethodCall(
                 new Variable('builder'),
                 $methodId->method_name,
-                $event->getCallArgs()
+                $event->getCallArgs(),
             );
 
             $fakeProxy = new Type\Atomic\TGenericObject(Builder::class, [
@@ -102,7 +102,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             unset(
                 $storage->pseudo_static_methods['newmodelquery'],
                 $storage->pseudo_static_methods['newquery'],
-                $storage->pseudo_static_methods['query']
+                $storage->pseudo_static_methods['query'],
             );
         }
     }

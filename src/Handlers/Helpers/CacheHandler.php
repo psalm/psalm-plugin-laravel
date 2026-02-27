@@ -30,7 +30,7 @@ final class CacheHandler implements FunctionReturnTypeProviderInterface
 
         if ($call_args === []) {
             return new Type\Union([
-                new TNamedObject(\Illuminate\Cache\CacheManager::class)
+                new TNamedObject(\Illuminate\Cache\CacheManager::class),
             ]);
         }
 

@@ -29,7 +29,7 @@ final class SchemaColumn
         public string $name,
         public string $type,
         public bool $nullable = false,
-        ?array $options = []
+        ?array $options = [],
     ) {
         $this->options = $options ?? [];
     }

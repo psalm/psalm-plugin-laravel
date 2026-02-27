@@ -57,8 +57,8 @@ final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
         // Default to Factory<static>
         return new Type\Union([
             new Type\Atomic\TGenericObject('Illuminate\Database\Eloquent\Factories\Factory', [
-                new Type\Union([new Type\Atomic\TNamedObject($event->getFqClasslikeName())])
-            ])
+                new Type\Union([new Type\Atomic\TNamedObject($event->getFqClasslikeName())]),
+            ]),
         ]);
     }
 }

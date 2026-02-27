@@ -50,13 +50,13 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
 
         if (
             ! in_array($method_name_lowercase, [
-            'user',
-            'loginusingid',
-            'onceusingid',
-            'logoutotherdevices',
-            'getlastattempted',
-            'getuser',
-            'authenticate',
+                'user',
+                'loginusingid',
+                'onceusingid',
+                'logoutotherdevices',
+                'getlastattempted',
+                'getuser',
+                'authenticate',
             ], true)
         ) {
             return null;

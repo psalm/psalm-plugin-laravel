@@ -139,7 +139,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
 
         return self::getGuardNameFromFirstArgument(
             $call_contains_guard_name,
-            $default_guard
+            $default_guard,
         );
     }
 }
