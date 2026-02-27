@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
 use PHPUnit\Framework\Assert;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psalm\Internal\Provider\StatementsProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
@@ -21,7 +22,7 @@ use function realpath;
 use const DIRECTORY_SEPARATOR;
 use const PHP_VERSION_ID;
 
-/** @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator */
+#[CoversClass(SchemaAggregator::class)]
 abstract class AbstractSchemaAggregatorTestCase extends TestCase
 {
     final protected function instantiateSchemaAggregator(string $filepath): SchemaAggregator
@@ -80,7 +81,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         self::assertTableHasColumn($column, $table);
 
         $column = $table->columns[$column];
-        self::assertInstanceOf(SchemaColumn::class, $column);
+        $this->assertInstanceOf(SchemaColumn::class, $column);
 
         self::assertColumnHasType($type, $column);
         self::assertColumnNullable($column);
@@ -91,7 +92,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         self::assertTableHasColumn($column, $table);
 
         $column = $table->columns[$column];
-        self::assertInstanceOf(SchemaColumn::class, $column);
+        $this->assertInstanceOf(SchemaColumn::class, $column);
 
         self::assertColumnHasType($type, $column);
         self::assertColumnNotNullable($column);
@@ -101,7 +102,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
     {
         [$tableName, $columnName] = self::parseTableWithColumn($tableWithColumn);
         $table = $schemaAggregator->tables[$tableName];
-        self::assertInstanceOf(SchemaTable::class, $table);
+        $this->assertInstanceOf(SchemaTable::class, $table);
 
         self::assertTableHasColumn($columnName, $table);
         self::assertTableHasColumn($type, $columnName);
@@ -119,7 +120,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
 
         [$tableName, $columnName] = self::parseTableWithColumn($tableWithColumn);
 
-        self::assertTrue($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is not nullable");
+        $this->assertTrue($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is not nullable");
     }
 
     protected function assertSchemaHasTableAndNotNullableColumnOfType(string $tableWithColumn, string $type, SchemaAggregator $schemaAggregator): void
@@ -128,7 +129,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
 
         [$tableName, $columnName] = self::parseTableWithColumn($tableWithColumn);
 
-        self::assertFalse($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is nullable");
+        $this->assertFalse($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is nullable");
     }
 
     /**
