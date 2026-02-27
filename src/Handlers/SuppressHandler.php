@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers;
 
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
+use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
+use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
 use Psalm\Storage\PropertyStorage;
@@ -13,11 +15,39 @@ use Psalm\Storage\PropertyStorage;
 use function array_intersect;
 use function in_array;
 use function strtolower;
-use function str_starts_with;
 
-final class SuppressHandler implements AfterClassLikeVisitInterface
+final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodebasePopulatedInterface
 {
-    private const BY_CLASS = [
+    /** @var array<string, list<string>> */
+    private const CLASS_LEVEL_BY_PARENT_CLASS = [
+        'PropertyNotSetInConstructor' => [
+            'Illuminate\Console\Command',
+            'Illuminate\Foundation\Http\FormRequest',
+            'Illuminate\Mail\Mailable',
+            'Illuminate\Notifications\Notification',
+            'Illuminate\View\Component',
+        ],
+        'UnusedClass' => [
+            'Illuminate\Console\Command',
+            'Illuminate\Support\ServiceProvider',
+            'Illuminate\View\Component',
+        ],
+    ];
+
+    /** @var array<string, list<string>> */
+    private const CLASS_LEVEL_BY_USED_TRAITS = [
+        'PropertyNotSetInConstructor' => [
+            'Illuminate\Queue\InteractsWithQueue',
+        ],
+    ];
+
+    /**
+     * Suppress class-level issues by FQCN.
+     * Less flexible — use parent class or trait based checks when possible.
+     *
+     * @var array<string, list<string>>
+     */
+    private const CLASS_LEVEL_BY_FQCN = [
         'UnusedClass' => [
             'App\Console\Kernel',
             'App\Exceptions\Handler',
@@ -25,135 +55,183 @@ final class SuppressHandler implements AfterClassLikeVisitInterface
             'App\Http\Kernel',
             'App\Http\Middleware\Authenticate',
             'App\Http\Middleware\TrustHosts',
-            'App\Providers\AppServiceProvider',
-            'App\Providers\AuthServiceProvider',
-            'App\Providers\BroadcastServiceProvider',
-            'App\Providers\EventServiceProvider',
         ],
     ];
 
-    private const BY_CLASS_METHOD = [
+    /**
+     * Suppress method-level issues by FQCN.
+     * Not preferable — applications may use custom namespaces.
+     *
+     * @var array<string, array<string, list<string>>>
+     */
+    private const METHOD_LEVEL_BY_FQCN = [
         'PossiblyUnusedMethod' => [
             'App\Http\Middleware\RedirectIfAuthenticated' => ['handle'],
         ],
     ];
 
-    private const BY_NAMESPACE = [
-        'PropertyNotSetInConstructor' => [
-            'App\Jobs',
-        ],
-        'PossiblyUnusedMethod' => [
-            'App\Events',
-            'App\Jobs',
-        ],
-    ];
-
-    private const BY_NAMESPACE_METHOD = [
-        'PossiblyUnusedMethod' => [
-            'App\Events' => ['broadcastOn'],
-            'App\Jobs' => ['handle'],
-            'App\Mail' => ['__construct', 'build'],
-            'App\Notifications' => ['__construct', 'via', 'toMail', 'toArray'],
-        ]
-    ];
-
-    private const BY_PARENT_CLASS = [
-        'PropertyNotSetInConstructor' => [
-            'Illuminate\Console\Command',
-            'Illuminate\Foundation\Http\FormRequest',
-            'Illuminate\Mail\Mailable',
-            'Illuminate\Notifications\Notification',
-        ],
-    ];
-
-    private const BY_PARENT_CLASS_PROPERTY = [
+    /** @var array<string, array<string, list<string>>> */
+    private const PROPERTY_LEVEL_BY_PARENT_CLASS = [
         'NonInvariantDocblockPropertyType' => [
             'Illuminate\Console\Command' => ['description'],
+            'Illuminate\Database\Eloquent\Model' => [
+                'fillable', 'guarded', 'hidden', 'casts', 'appends', 'touches',
+                'with', 'withCount', 'connection', 'table', 'primaryKey', 'keyType',
+                'perPage', 'incrementing', 'timestamps', 'dateFormat',
+                'attributes', 'dispatchesEvents', 'observables',
+            ],
+            'Illuminate\View\Component' => ['componentName'],
+        ],
+        'PropertyNotSetInConstructor' => [
+            'Illuminate\Foundation\Testing\TestCase' => ['callbackException', 'app'],
         ],
     ];
 
-    private const BY_USED_TRAITS = [
-        'PropertyNotSetInConstructor' => [
-            'Illuminate\Queue\InteractsWithQueue',
-        ]
+    /** @var array<string, array<string, list<string>>> */
+    private const METHOD_LEVEL_BY_PARENT_CLASS = [
+        'PossiblyUnusedMethod' => [
+            'Illuminate\Mail\Mailable' => ['__construct', 'build', 'envelope', 'content', 'attachments'],
+            'Illuminate\Notifications\Notification' => ['__construct', 'via', 'toMail', 'toArray'],
+        ],
     ];
 
+    /** @var array<string, array<string, list<string>>> */
+    private const METHOD_LEVEL_BY_USED_TRAITS = [
+        'PossiblyUnusedMethod' => [
+            'Illuminate\Foundation\Events\Dispatchable' => ['broadcastOn'],
+            'Illuminate\Foundation\Bus\Dispatchable' => ['handle'],
+        ],
+    ];
+
+    /** @inheritDoc */
     #[\Override]
     public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
-        $class = $event->getStorage();
+        $classStorage = $event->getStorage();
 
-        foreach (self::BY_CLASS as $issue => $class_names) {
-            if (in_array($class->name, $class_names, true)) {
-                self::suppress($issue, $class);
+        if (!$classStorage->user_defined) {
+            return;
+        }
+        if ($classStorage->is_interface) {
+            return;
+        }
+
+        foreach (self::CLASS_LEVEL_BY_FQCN as $issue => $classNames) {
+            if (in_array($classStorage->name, $classNames, true)) {
+                self::suppress($issue, $classStorage);
             }
         }
 
-        foreach (self::BY_CLASS_METHOD as $issue => $method_by_class) {
-            foreach ($method_by_class[$class->name] ?? [] as $method_name) {
-                /** @psalm-suppress RedundantFunctionCall */
-                self::suppress($issue, $class->methods[strtolower($method_name)] ?? null);
-            }
-        }
-
-        foreach (self::BY_NAMESPACE as $issue => $namespaces) {
-            foreach ($namespaces as $namespace) {
-                if (!str_starts_with($class->name, "{$namespace}\\")) {
-                    continue;
-                }
-
-                self::suppress($issue, $class);
-                break;
-            }
-        }
-
-        foreach (self::BY_NAMESPACE_METHOD as $issue => $methods_by_namespaces) {
-            foreach ($methods_by_namespaces as $namespace => $method_names) {
-                if (!str_starts_with($class->name, "{$namespace}\\")) {
-                    continue;
-                }
-
-                foreach ($method_names as $method_name) {
-                    self::suppress($issue, $class->methods[strtolower($method_name)] ?? null);
+        foreach (self::METHOD_LEVEL_BY_FQCN as $issue => $method_by_class) {
+            foreach ($method_by_class[$classStorage->name] ?? [] as $method_name) {
+                /** @psalm-suppress RedundantFunctionCall method names in constants may contain uppercase */
+                $method_storage = $classStorage->methods[strtolower($method_name)] ?? null;
+                if ($method_storage instanceof MethodStorage) {
+                    self::suppress($issue, $method_storage);
                 }
             }
-        }
-
-        foreach (self::BY_PARENT_CLASS as $issue => $parent_classes) {
-            if (!array_intersect($class->parent_classes, $parent_classes)) {
-                continue;
-            }
-
-            self::suppress($issue, $class);
-        }
-
-        foreach (self::BY_PARENT_CLASS_PROPERTY as $issue => $properties_by_parent_class) {
-            foreach ($properties_by_parent_class as $parent_class => $property_names) {
-                if (!in_array($parent_class, $class->parent_classes, true)) {
-                    continue;
-                }
-
-                foreach ($property_names as $property_name) {
-                    self::suppress($issue, $class->properties[$property_name] ?? null);
-                }
-            }
-        }
-
-        foreach (self::BY_USED_TRAITS as $issue => $used_traits) {
-            if (!array_intersect($class->used_traits, $used_traits)) {
-                continue;
-            }
-
-            self::suppress($issue, $class);
         }
     }
 
     /**
-     * @param ClassLikeStorage|PropertyStorage|MethodStorage|null $storage
+     * Hierarchy-based suppressions run after codebase population, when parent_classes is fully resolved.
+     * This fixes the issue where AfterClassLikeVisit only has one level of parent hierarchy.
      */
-    private static function suppress(string $issue, $storage): void
+    #[\Override]
+    public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
-        if ($storage && !in_array($issue, $storage->suppressed_issues, true)) {
+        foreach ($event->getCodebase()->classlike_storage_provider->getAll() as $classStorage) {
+            if (!$classStorage->user_defined) {
+                continue;
+            }
+            if ($classStorage->is_interface) {
+                continue;
+            }
+
+            self::suppressByParentClass($classStorage);
+            self::suppressByUsedTraits($classStorage);
+        }
+    }
+
+    private static function suppressByParentClass(ClassLikeStorage $classStorage): void
+    {
+        $parents = $classStorage->parent_classes;
+
+        if ($parents === []) {
+            return;
+        }
+
+        foreach (self::CLASS_LEVEL_BY_PARENT_CLASS as $issue => $parent_classes) {
+            if (array_intersect($parents, $parent_classes)) {
+                self::suppress($issue, $classStorage);
+            }
+        }
+
+        foreach (self::PROPERTY_LEVEL_BY_PARENT_CLASS as $issue => $properties_by_parent_class) {
+            foreach ($properties_by_parent_class as $parent_class => $property_names) {
+                if (!in_array($parent_class, $parents, true)) {
+                    continue;
+                }
+
+                foreach ($property_names as $property_name) {
+                    $property_storage = $classStorage->properties[$property_name] ?? null;
+                    if ($property_storage instanceof PropertyStorage) {
+                        self::suppress($issue, $property_storage);
+                    }
+                }
+            }
+        }
+
+        foreach (self::METHOD_LEVEL_BY_PARENT_CLASS as $issue => $methods_by_parent_class) {
+            foreach ($methods_by_parent_class as $parent_class => $method_names) {
+                if (!in_array($parent_class, $parents, true)) {
+                    continue;
+                }
+
+                foreach ($method_names as $method_name) {
+                    $method_storage = $classStorage->methods[strtolower($method_name)] ?? null;
+                    if ($method_storage instanceof MethodStorage) {
+                        self::suppress($issue, $method_storage);
+                    }
+                }
+            }
+        }
+    }
+
+    private static function suppressByUsedTraits(ClassLikeStorage $classStorage): void
+    {
+        if ($classStorage->used_traits === []) {
+            return;
+        }
+
+        foreach (self::CLASS_LEVEL_BY_USED_TRAITS as $issue => $traits) {
+            foreach ($traits as $trait) {
+                if (isset($classStorage->used_traits[strtolower($trait)])) {
+                    self::suppress($issue, $classStorage);
+                    break;
+                }
+            }
+        }
+
+        foreach (self::METHOD_LEVEL_BY_USED_TRAITS as $issue => $methods_by_trait) {
+            foreach ($methods_by_trait as $trait => $method_names) {
+                if (!isset($classStorage->used_traits[strtolower($trait)])) {
+                    continue;
+                }
+
+                foreach ($method_names as $method_name) {
+                    $method_storage = $classStorage->methods[strtolower($method_name)] ?? null;
+                    if ($method_storage instanceof MethodStorage) {
+                        self::suppress($issue, $method_storage);
+                    }
+                }
+            }
+        }
+    }
+
+    private static function suppress(string $issue, ClassLikeStorage|PropertyStorage|MethodStorage $storage): void
+    {
+        if (!in_array($issue, $storage->suppressed_issues, true)) {
             $storage->suppressed_issues[] = $issue;
         }
     }
