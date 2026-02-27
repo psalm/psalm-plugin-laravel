@@ -349,9 +349,6 @@ final class SchemaAggregator
 
                 case 'binary':
                 case 'foreignulid':
-                    $table->setColumn(new SchemaColumn($column_name, 'string', $nullable));
-                    break;
-
                 case 'char':
                 case 'date':
                 case 'datetime':

@@ -51,10 +51,9 @@ final class AuthConfigAnalyzer
             return \Illuminate\Auth\GenericUser::class;
         }
 
-        /** @var string|null $model */
+        /** @var class-string<\Illuminate\Contracts\Auth\Authenticatable>|null $model */
         $model = $this->config->get("auth.providers.{$provider}.model");
 
-        /** @var class-string<\Illuminate\Contracts\Auth\Authenticatable>|null */
         return is_string($model) ? $model : null;
     }
 

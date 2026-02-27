@@ -112,6 +112,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         if (!$classStorage->user_defined) {
             return;
         }
+
         if ($classStorage->is_interface) {
             return;
         }
@@ -144,6 +145,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             if (!$classStorage->user_defined) {
                 continue;
             }
+
             if ($classStorage->is_interface) {
                 continue;
             }
