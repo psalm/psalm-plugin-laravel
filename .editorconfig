@@ -15,6 +15,3 @@ trim_trailing_whitespace = false
 
 [*.{yml,yaml}]
 indent_size = 2
-
-[*.feature]
-indent_size = 2
