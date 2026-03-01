@@ -26,13 +26,11 @@ use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\PluginRegistrationSocket;
 use Psalm\Progress\DefaultProgress;
-use SimpleXMLElement;
-use Symfony\Component\Finder\Finder;
 
 use function array_merge;
 use function dirname;
 use function explode;
-use function glob;
+use function is_dir;
 use function is_string;
 use function sprintf;
 use function urlencode;
@@ -45,14 +43,14 @@ final class Plugin implements PluginEntryPointInterface
 {
     /** @inheritDoc */
     #[\Override]
-    public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
+    public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
         $failOnInternalError = ((string) $config?->failOnInternalError) === 'true';
         $output = new DefaultProgress();
 
         // $registration->codebase is available/public from Psalm v6.7
         // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
-        if ($registration instanceof PluginRegistrationSocket && isset($registration->codebase)) {
+        if ($registration instanceof PluginRegistrationSocket) {
             $output = $registration->codebase->progress;
         }
 
@@ -89,38 +87,13 @@ final class Plugin implements PluginEntryPointInterface
     /** @return list<string> */
     private function getCommonStubs(): array
     {
-        $stubFilepaths = [];
-
-        $basePath = dirname(__DIR__) . \DIRECTORY_SEPARATOR . 'stubs' . \DIRECTORY_SEPARATOR . 'common';
-
-        $stubFiles = Finder::create()->files()->name('*.stubphp')->exclude('TaintAnalysis')->in($basePath);
-
-        foreach ($stubFiles as $stubFile) {
-            $stubFilepath = $stubFile->getRealPath();
-            if (is_string($stubFilepath)) {
-                $stubFilepaths[] = $stubFilepath;
-            }
-        }
-
-        return $stubFilepaths;
+        return $this->findStubFiles(dirname(__DIR__) . '/stubs/common');
     }
 
     /** @return list<string> */
     private function getTaintAnalysisStubs(): array
     {
-        $stubs = [];
-
-        $basePath = dirname(__DIR__) . '/stubs/common/TaintAnalysis';
-        $stubFiles = Finder::create()->files()->name('*.stubphp')->in($basePath);
-
-        foreach ($stubFiles as $stubFile) {
-            $stubFilepath = $stubFile->getRealPath();
-            if (is_string($stubFilepath)) {
-                $stubs[] = $stubFilepath;
-            }
-        }
-
-        return $stubs;
+        return $this->findStubFiles(dirname(__DIR__) . '/stubs/taintAnalysis');
     }
 
     /** @return list<string> */
@@ -128,10 +101,37 @@ final class Plugin implements PluginEntryPointInterface
     {
         [$majorVersion] = explode('.', $version);
 
-        return [
-            ...glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/*.stubphp') ?: [],
-            ...glob(dirname(__DIR__) . '/stubs/' . $majorVersion . '/**/*.stubphp') ?: [],
-        ];
+        return $this->findStubFiles(dirname(__DIR__) . '/stubs/' . $majorVersion);
+    }
+
+    /**
+     * Recursively find all .stubphp files in a directory.
+     * @return list<string>
+     */
+    private function findStubFiles(string $directory): array
+    {
+        if (! is_dir($directory)) {
+            return [];
+        }
+
+        $stubs = [];
+
+        /** @var \SplFileInfo $file */
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS)) as $file) {
+            if ($file->getExtension() !== 'stubphp') {
+                continue;
+            }
+
+            $realPath = $file->getRealPath();
+
+            if (! is_string($realPath)) {
+                continue;
+            }
+
+            $stubs[] = $realPath;
+        }
+
+        return $stubs;
     }
 
     private function registerStubs(RegistrationInterface $registration): void
