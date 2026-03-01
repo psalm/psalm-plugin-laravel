@@ -32,7 +32,6 @@
         "nikic/php-parser": "^5.0",
         "orchestra/testbench-core": "^9.11 || ^10.0",
         "symfony/console": "^7.1",
-        "symfony/finder": "^7.1",
         "vimeo/psalm": "^6.15 || ^7.0.0-beta16 || dev-master"
     },
     "require-dev": {
@@ -73,6 +72,7 @@
         "cs": "@lint-fix",
         "cs:check": "@lint",
         "cs:fix": "@lint-fix",
+        "dep": "composer-dependency-analyser",
         "lint": "phpcs --report-full --report-summary --colors -n -s",
         "lint-fix": "phpcbf -n",
         "psalm": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
