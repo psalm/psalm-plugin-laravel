@@ -15,9 +15,8 @@ final class AuthConfigAnalyzer
 {
     private static ?AuthConfigAnalyzer $instance = null;
 
-    private function __construct(private readonly ConfigRepository $config)
-    {
-    }
+    /** @psalm-mutation-free */
+    private function __construct(private readonly ConfigRepository $config) {}
 
     public static function instance(): self
     {
@@ -51,10 +50,9 @@ final class AuthConfigAnalyzer
             return \Illuminate\Auth\GenericUser::class;
         }
 
-        /** @var string|null $model */
+        /** @var class-string<\Illuminate\Contracts\Auth\Authenticatable>|null $model */
         $model = $this->config->get("auth.providers.{$provider}.model");
 
-        /** @var class-string<\Illuminate\Contracts\Auth\Authenticatable>|null */
         return is_string($model) ? $model : null;
     }
 
@@ -71,8 +69,8 @@ final class AuthConfigAnalyzer
     {
         $all_authenticatables = [];
 
+        /** @var array<string, mixed>|null $authGuards */
         $authGuards = $this->config->get('auth.guards');
-        /** @var list<string> $guards */
         $guards = is_array($authGuards) ? array_keys($authGuards) : [];
 
         foreach ($guards as $guard) {

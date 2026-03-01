@@ -51,6 +51,7 @@ final class ApplicationProvider
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
         } else { // Laravel Packages
+            /** @psalm-suppress InternalMethod */
             $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
         }
 
@@ -74,11 +75,10 @@ final class ApplicationProvider
         if (!self::$booted) {
             // Bootstrap console app
             $consoleApp = $app->make(Kernel::class);
-            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function () {
+            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function (): object {
                 return new class {
-                    public function bootstrap(): void
-                    {
-                    }
+                    /** @psalm-mutation-free */
+                    public function bootstrap(): void {}
                 };
             });
             $consoleApp->bootstrap();
@@ -116,6 +116,7 @@ final class ApplicationProvider
         $app->make(\Illuminate\Foundation\Bootstrap\BootProviders::class)->bootstrap($app);
 
         foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
+            /** @psalm-suppress MixedMethodCall - bootstrapper classes resolved from container */
             $app->make($bootstrap)->bootstrap($app);
         }
 

@@ -25,6 +25,7 @@ final class FacadeStubProvider implements GeneratesStubs
 
         // The \Eloquent mixin has less specific return types than our custom plugin can determine, so we unset it here
         // to not taint our analysis
+        /** @var mixed $ideHelperExtra */
         $ideHelperExtra = $config->get('ide-helper.extra');
         if (is_array($ideHelperExtra) && isset($ideHelperExtra['Eloquent'])) {
             unset($ideHelperExtra['Eloquent']);
@@ -41,7 +42,7 @@ final class FacadeStubProvider implements GeneratesStubs
         $stubs_generator_command = new GeneratorCommand(
             $config,
             $fake_filesystem,
-            $viewFactory
+            $viewFactory,
         );
 
         $stubs_generator_command->setLaravel($app);
@@ -52,10 +53,11 @@ final class FacadeStubProvider implements GeneratesStubs
 
         $stubs_generator_command->run(
             new ArrayInput([]),
-            new NullOutput()
+            new NullOutput(),
         );
     }
 
+    /** @psalm-pure */
     #[\Override]
     public static function getStubFileLocation(): string
     {

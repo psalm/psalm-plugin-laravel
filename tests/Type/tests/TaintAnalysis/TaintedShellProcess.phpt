@@ -10,4 +10,4 @@ function convertImage(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-TaintedShell on line %d: Detected tainted shell code
+%ATaintedShell on line %d: Detected tainted shell code

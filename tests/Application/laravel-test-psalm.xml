@@ -7,7 +7,6 @@
     resolveFromConfigFile="false"
     xsi:schemaLocation="https://getpsalm.org/schema/config ../../vendor/vimeo/psalm/config.xsd"
     errorBaseline="../../tests/Application/laravel-test-psalm-baseline.xml"
-    phpVersion="8.2"
 >
     <projectFiles>
         <directory name="app"/>
@@ -25,7 +24,10 @@
         <ParamNameMismatch errorLevel="suppress" />
         <PossiblyUnusedParam errorLevel="suppress" /><!-- Default Listeners, Notifications have empty methods with unused params, created just for example -->
         <ClassMustBeFinal errorLevel="suppress" />
+        <MissingImmutableAnnotation errorLevel="suppress" />
+        <MissingInterfaceImmutableAnnotation errorLevel="suppress" />
         <MissingOverrideAttribute errorLevel="suppress" />
+        <MissingPureAnnotation errorLevel="suppress" />
         <UnusedClass errorLevel="suppress" />
     </issueHandlers>
 </psalm>

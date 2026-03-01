@@ -32,7 +32,10 @@ use function is_string;
  */
 final class AuthHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
-    /** @return list<string> */
+    /**
+     * @return list<string>
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -47,13 +50,13 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
 
         if (
             ! in_array($method_name_lowercase, [
-            'user',
-            'loginusingid',
-            'onceusingid',
-            'logoutotherdevices',
-            'getlastattempted',
-            'getuser',
-            'authenticate',
+                'user',
+                'loginusingid',
+                'onceusingid',
+                'logoutotherdevices',
+                'getlastattempted',
+                'getuser',
+                'authenticate',
             ], true)
         ) {
             return null;
@@ -82,10 +85,10 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
             'authenticate' => new Type\Union([
                 new Type\Atomic\TNamedObject($authenticatable_fqcn),
             ]),
-            default => null,
         };
     }
 
+    /** @psalm-mutation-free */
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {

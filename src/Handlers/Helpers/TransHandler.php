@@ -10,7 +10,10 @@ use Psalm\Type;
 
 final class TransHandler implements FunctionReturnTypeProviderInterface
 {
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getFunctionIds(): array
     {

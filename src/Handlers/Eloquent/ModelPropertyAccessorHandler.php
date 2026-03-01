@@ -18,7 +18,10 @@ use function str_replace;
 
 final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInterface, PropertyVisibilityProviderInterface, PropertyTypeProviderInterface
 {
-    /** @return list<string> */
+    /**
+     * @return list<string>
+     * @psalm-external-mutation-free
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -95,10 +98,10 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         return null;
     }
 
-    /** @param class-string $fqcn */
     private static function hasNativeProperty(string $fqcn, string $property_name): bool
     {
         try {
+            /** @psalm-suppress ArgumentTypeCoercion - $fqcn comes from Psalm's classlike name which is a valid class */
             new \ReflectionProperty($fqcn, $property_name);
         } catch (\ReflectionException) {
             return false;

@@ -26,6 +26,8 @@ final class FakeModelsCommand extends ModelsCommand
     /**
      * While the setter of a required property is an anti-pattern,
      * this is the only way to be less independent of changes in the parent ModelsCommand constructor.
+     *
+     * @psalm-external-mutation-free
      */
     public function setSchemaAggregator(SchemaAggregator $schemaAggregator): void
     {
@@ -128,7 +130,7 @@ final class FakeModelsCommand extends ModelsCommand
                 $this->setMethod(
                     Str::camel("where_" . $column_name),
                     '\Illuminate\Database\Eloquent\Builder<static>', // @todo support custom EloquentBuilders
-                    ['$value']
+                    ['$value'],
                 );
             }
         }

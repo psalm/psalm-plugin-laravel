@@ -10,4 +10,4 @@ function filterPosts(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-TaintedSql on line %d: Detected tainted SQL
+%ATaintedSql on line %d: Detected tainted SQL
