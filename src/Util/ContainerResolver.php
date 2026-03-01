@@ -36,6 +36,7 @@ final class ContainerResolver
 
         // dynamic analysis to resolve the actual type from the container
         try {
+            /** @var mixed $concrete */
             $concrete = ApplicationProvider::getApp()->make($abstract);
         } catch (\Throwable) {
             return null;
