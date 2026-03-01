@@ -69,8 +69,8 @@ final class AuthConfigAnalyzer
     {
         $all_authenticatables = [];
 
+        /** @var array<string, mixed>|null $authGuards */
         $authGuards = $this->config->get('auth.guards');
-        /** @var list<string> $guards */
         $guards = is_array($authGuards) ? array_keys($authGuards) : [];
 
         foreach ($guards as $guard) {

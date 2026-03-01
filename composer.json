@@ -45,7 +45,7 @@
         "friendsofphp/php-cs-fixer": "^3.94",
         "laravel/framework": "^12.0 || ^13.0",
         "phpunit/phpunit": "^12.5 || ^13.0",
-        "phpyh/psalm-tester": "^0.2.0 || dev-main",
+        "phpyh/psalm-tester": "dev-batch",
         "ramsey/collection": "^1.3",
         "rector/rector": "^2.3",
         "symfony/http-foundation": "^7.1 || ^8.0"
