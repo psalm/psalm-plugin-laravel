@@ -38,7 +38,6 @@
         "nikic/php-parser": "^5.0",
         "orchestra/testbench-core": "^10.0 || ^11.0",
         "symfony/console": "^7.1 || ^8.0",
-        "symfony/finder": "^7.1 || ^8.0",
         "vimeo/psalm": "^7.0.0-beta16 || dev-master"
     },
     "require-dev": {
