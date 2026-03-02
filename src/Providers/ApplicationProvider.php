@@ -114,8 +114,9 @@ final class ApplicationProvider
         $app->make(\Illuminate\Foundation\Bootstrap\BootProviders::class)->bootstrap($app);
 
         foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
-            /** @psalm-suppress MixedMethodCall - bootstrapper classes resolved from container */
-            $app->make($bootstrap)->bootstrap($app);
+            /** @var \Illuminate\Foundation\Bootstrap\BootProviders $bootstrapper */
+            $bootstrapper = $app->make($bootstrap);
+            $bootstrapper->bootstrap($app);
         }
 
         $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
