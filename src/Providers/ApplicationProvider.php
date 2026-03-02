@@ -47,16 +47,14 @@ final class ApplicationProvider
         if (file_exists($applicationPath = (getcwd() ?: '.') . '/bootstrap/app.php')) { // Applications and Local Dev
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
+            assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
         } elseif (file_exists($applicationPath = dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
+            assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
         } else { // Laravel Packages
             /** @psalm-suppress InternalMethod */
             $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
-        }
-
-        if (! $app instanceof LaravelApplication) {
-            throw new \RuntimeException('Could not find Laravel bootstrap file.');
         }
 
         self::$app = $app;

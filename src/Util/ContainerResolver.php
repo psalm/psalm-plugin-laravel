@@ -36,8 +36,8 @@ final class ContainerResolver
 
         // dynamic analysis to resolve the actual type from the container
         try {
-            /** @var mixed $concrete */
             $concrete = ApplicationProvider::getApp()->make($abstract);
+            assert(is_object($concrete) || is_string($concrete));
         } catch (\Throwable) {
             return null;
         }
@@ -45,12 +45,9 @@ final class ContainerResolver
         if (is_string($concrete)) {
             // some path-helpers actually return a string when being resolved
             $concreteClass = $concrete;
-        } elseif (is_object($concrete)) {
+        } else {
             // normally we have an object resolved
             $concreteClass = $concrete::class;
-        } else {
-            // not sure how to handle this yet
-            return null;
         }
 
         self::$cache[$abstract] = $concreteClass;
