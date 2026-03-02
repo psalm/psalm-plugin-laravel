@@ -13,6 +13,7 @@ use Symfony\Component\Console\Output\NullOutput;
 use function unlink;
 use function is_array;
 
+/** @psalm-mutable */
 final class FacadeStubProvider implements GeneratesStubs
 {
     #[\Override]
@@ -57,6 +58,7 @@ final class FacadeStubProvider implements GeneratesStubs
         );
     }
 
+    /** @psalm-pure */
     #[\Override]
     public static function getStubFileLocation(): string
     {

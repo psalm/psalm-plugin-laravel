@@ -17,6 +17,7 @@ use function method_exists;
 use function unlink;
 use function is_array;
 
+/** @psalm-mutable */
 final class ModelStubProvider implements GeneratesStubs
 {
     /** @var list<class-string<\Illuminate\Database\Eloquent\Model>> */
@@ -72,6 +73,7 @@ final class ModelStubProvider implements GeneratesStubs
         self::$model_classes = $models_generator_command->getModels();
     }
 
+    /** @psalm-pure */
     #[\Override]
     public static function getStubFileLocation(): string
     {
