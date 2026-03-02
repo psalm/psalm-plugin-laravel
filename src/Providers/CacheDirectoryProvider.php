@@ -9,8 +9,10 @@ use function rtrim;
 
 use const DIRECTORY_SEPARATOR;
 
+/** @psalm-immutable */
 final class CacheDirectoryProvider
 {
+    /** @psalm-pure */
     public static function getCacheLocation(): string
     {
         $env = getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
