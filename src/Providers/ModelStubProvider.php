@@ -72,7 +72,6 @@ final class ModelStubProvider implements GeneratesStubs
         self::$model_classes = $models_generator_command->getModels();
     }
 
-    /** @psalm-pure */
     #[\Override]
     public static function getStubFileLocation(): string
     {
