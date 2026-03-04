@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
 use PHPUnit\Framework\Assert;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psalm\Internal\Provider\StatementsProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
@@ -21,7 +22,7 @@ use function realpath;
 use const DIRECTORY_SEPARATOR;
 use const PHP_VERSION_ID;
 
-/** @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator */
+#[CoversClass(SchemaAggregator::class)]
 abstract class AbstractSchemaAggregatorTestCase extends TestCase
 {
     final protected function instantiateSchemaAggregator(string $filepath): SchemaAggregator
