@@ -221,8 +221,7 @@ final class SchemaAggregator
             $first_method_call = $root_var;
 
             $nullable = false;
-            $hasDefault = false;
-            /** @var string|int|float|bool|null $default */
+            /** @var SchemaColumnDefault|null $default */
             $default = null;
 
             while ($root_var instanceof PhpParser\Node\Expr\MethodCall) {
@@ -255,8 +254,7 @@ final class SchemaAggregator
                         && isset($root_var->args[0])
                         && $root_var->args[0] instanceof PhpParser\Node\Arg
                     ) {
-                        $hasDefault = true;
-                        $default = self::resolveScalarValue($root_var->args[0]->value);
+                        $default = self::resolveDefaultValue($root_var->args[0]->value);
                     }
                 }
 
@@ -347,7 +345,7 @@ final class SchemaAggregator
                 case 'integer':
                 case 'increments':
                 case 'foreignid':
-                    $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, default: $default));
                     break;
 
                 /**
@@ -355,12 +353,12 @@ final class SchemaAggregator
                  * Pairs are [id, int] and [uuid, string]
                  */
                 case 'foreignidfor':
-                    $table->setColumn(new SchemaColumn('id', 'int', $nullable, hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn('id', 'int', $nullable, default: $default));
                     break;
 
                 case 'binary':
                 case 'foreignulid':
-                    $table->setColumn(new SchemaColumn($column_name, 'string', $nullable, hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'string', $nullable, default: $default));
                     break;
 
                 case 'char':
@@ -383,11 +381,11 @@ final class SchemaAggregator
                 case 'json':
                 case 'ipaddress':
                 case 'foreignuuid':
-                    $table->setColumn(new SchemaColumn($column_name, 'string', $nullable, hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'string', $nullable, default: $default));
                     break;
 
                 case 'boolean':
-                    $table->setColumn(new SchemaColumn($column_name, 'bool', $nullable, hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'bool', $nullable, default: $default));
                     break;
 
                 case 'polygon':
@@ -398,7 +396,7 @@ final class SchemaAggregator
                 case 'geometrycollection':
                 case 'geometry':
                 case 'computed':
-                    $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable, hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable, default: $default));
                     break;
 
                 case 'double':
@@ -407,7 +405,7 @@ final class SchemaAggregator
                 case 'unsignedfloat':
                 case 'unsigneddouble':
                 case 'decimal':
-                    $table->setColumn(new SchemaColumn($column_name, 'float', $nullable, hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'float', $nullable, default: $default));
                     break;
 
                 case 'dropcolumn':
@@ -438,7 +436,7 @@ final class SchemaAggregator
                     break;
 
                 case 'enum':
-                    $table->setColumn(new SchemaColumn($column_name, 'enum', $nullable, $second_arg_array ?? [], hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'enum', $nullable, $second_arg_array ?? [], default: $default));
                     break;
 
                 case 'numericmorphs':
@@ -474,7 +472,7 @@ final class SchemaAggregator
                     break;
 
                 case 'set':
-                    $table->setColumn(new SchemaColumn($column_name, 'set', $nullable, $second_arg_array ?? [], hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'set', $nullable, $second_arg_array ?? [], default: $default));
                     break;
 
                 case 'year':
@@ -482,7 +480,7 @@ final class SchemaAggregator
                 case 'timestamptz':
                 case 'softdeletestz':
                 case 'softdeletes':
-                    $table->setColumn(new SchemaColumn($column_name, 'string', true, hasDefault: $hasDefault, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'string', true, default: $default));
                     break;
 
                 case 'addcolumn':
@@ -498,40 +496,40 @@ final class SchemaAggregator
         }
     }
 
-    private static function resolveScalarValue(PhpParser\Node\Expr $expr): string|int|float|bool|null
+    private static function resolveDefaultValue(PhpParser\Node\Expr $expr): SchemaColumnDefault
     {
         if ($expr instanceof PhpParser\Node\Scalar\String_) {
-            return $expr->value;
+            return SchemaColumnDefault::resolved($expr->value);
         }
 
         if ($expr instanceof PhpParser\Node\Scalar\LNumber) {
-            return $expr->value;
+            return SchemaColumnDefault::resolved($expr->value);
         }
 
         if ($expr instanceof PhpParser\Node\Scalar\DNumber) {
-            return $expr->value;
+            return SchemaColumnDefault::resolved($expr->value);
         }
 
         if ($expr instanceof PhpParser\Node\Expr\ConstFetch) {
             return match (strtolower($expr->name->getParts()[0])) {
-                'true' => true,
-                'false' => false,
-                'null' => null,
-                default => null,
+                'true' => SchemaColumnDefault::resolved(true),
+                'false' => SchemaColumnDefault::resolved(false),
+                'null' => SchemaColumnDefault::resolved(null),
+                default => SchemaColumnDefault::unresolvable(),
             };
         }
 
         if ($expr instanceof PhpParser\Node\Expr\UnaryMinus) {
             if ($expr->expr instanceof PhpParser\Node\Scalar\LNumber) {
-                return -$expr->expr->value;
+                return SchemaColumnDefault::resolved(-$expr->expr->value);
             }
 
             if ($expr->expr instanceof PhpParser\Node\Scalar\DNumber) {
-                return -$expr->expr->value;
+                return SchemaColumnDefault::resolved(-$expr->expr->value);
             }
         }
 
         // new Expression('...'), variables, function calls → not statically resolvable
-        return null;
+        return SchemaColumnDefault::unresolvable();
     }
 }

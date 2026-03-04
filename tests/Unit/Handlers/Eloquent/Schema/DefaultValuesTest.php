@@ -93,13 +93,12 @@ final class DefaultValuesTest extends AbstractSchemaAggregatorTestCase
 
     /**
      * Non-resolvable expressions (e.g. new Expression('NOW()')) are tracked as
-     * having a default, but the value falls back to null since it cannot be
-     * statically resolved from the AST.
+     * having a default, but marked as unresolvable — distinct from ->default(null).
      */
-    public function test_it_handles_non_resolvable_expression_default(): void
+    public function test_it_marks_non_resolvable_expression_as_unresolvable(): void
     {
         $column = $this->schemaAggregator->tables['products']->columns['published_at'];
 
-        $this->assertColumnHasDefault(null, $column);
+        $this->assertColumnHasUnresolvableDefault($column);
     }
 }
