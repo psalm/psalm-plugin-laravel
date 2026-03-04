@@ -70,6 +70,13 @@ final class DefaultValuesTest extends AbstractSchemaAggregatorTestCase
         $this->assertColumnHasDefault(-1, $column);
     }
 
+    public function test_it_extracts_negative_float_default(): void
+    {
+        $column = $this->schemaAggregator->tables['products']->columns['discount'];
+
+        $this->assertColumnHasDefault(-0.5, $column);
+    }
+
     public function test_it_detects_column_without_default(): void
     {
         $column = $this->schemaAggregator->tables['products']->columns['no_default'];
@@ -82,5 +89,17 @@ final class DefaultValuesTest extends AbstractSchemaAggregatorTestCase
         $column = $this->schemaAggregator->tables['products']->columns['name'];
 
         $this->assertColumnHasNoDefault($column);
+    }
+
+    /**
+     * Non-resolvable expressions (e.g. new Expression('NOW()')) are tracked as
+     * having a default, but the value falls back to null since it cannot be
+     * statically resolved from the AST.
+     */
+    public function test_it_handles_non_resolvable_expression_default(): void
+    {
+        $column = $this->schemaAggregator->tables['products']->columns['published_at'];
+
+        $this->assertColumnHasDefault(null, $column);
     }
 }

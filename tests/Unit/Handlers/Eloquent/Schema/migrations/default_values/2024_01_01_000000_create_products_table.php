@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
@@ -21,6 +22,8 @@ return new class extends Migration {
             $table->string('description')->nullable()->default(null);
             $table->integer('negative')->default(-1);
             $table->string('no_default');
+            $table->float('discount')->default(-0.5);
+            $table->timestamp('published_at')->default(new Expression('NOW()'));
         });
     }
 
