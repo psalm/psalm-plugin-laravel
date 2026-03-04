@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
-/** @psalm-api */
+/**
+ * @psalm-suppress PossiblyUnusedProperty $hasDefault and $default will be used for model attribute type inference
+ */
 final class SchemaColumn
 {
     public const TYPE_STRING = 'string';
@@ -26,19 +28,24 @@ final class SchemaColumn
      *
      * @var array<int, string>
      */
-    public array $options = [];
+    public array $options;
 
     /**
-     * @param array<int, string>|null $options Allowed enum values (see {@see $options})
+     * @param array<int, string> $options Allowed enum values (see {@see $options})
      */
     public function __construct(
         public string $name,
         public string $type,
         public bool $nullable = false,
-        ?array $options = [],
+        array $options = [],
         public bool $hasDefault = false,
+        /**
+         * The column's default value, or null when the default is literally null
+         * or when the expression couldn't be statically resolved (e.g. `new Expression('NOW()')`).
+         * Check {@see $hasDefault} to distinguish "no default" from "default is null".
+         */
         public string|int|float|bool|null $default = null,
     ) {
-        $this->options = $options ?? [];
+        $this->options = $options;
     }
 }
