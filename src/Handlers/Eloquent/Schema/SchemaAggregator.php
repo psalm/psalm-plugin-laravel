@@ -511,12 +511,21 @@ final class SchemaAggregator
         }
 
         if ($expr instanceof PhpParser\Node\Expr\ConstFetch) {
-            return match (strtolower($expr->name->getParts()[0])) {
-                'true' => SchemaColumnDefault::resolved(true),
-                'false' => SchemaColumnDefault::resolved(false),
-                'null' => SchemaColumnDefault::resolved(null),
-                default => SchemaColumnDefault::unresolvable(),
-            };
+            $parts = $expr->name->getParts();
+
+            if ($parts === ['true'] || $parts === ['TRUE']) {
+                return SchemaColumnDefault::resolved(true);
+            }
+
+            if ($parts === ['false'] || $parts === ['FALSE']) {
+                return SchemaColumnDefault::resolved(false);
+            }
+
+            if ($parts === ['null'] || $parts === ['NULL']) {
+                return SchemaColumnDefault::resolved(null);
+            }
+
+            return SchemaColumnDefault::unresolvable();
         }
 
         if ($expr instanceof PhpParser\Node\Expr\UnaryMinus) {
