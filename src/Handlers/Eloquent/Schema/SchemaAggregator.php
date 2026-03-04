@@ -513,7 +513,7 @@ final class SchemaAggregator
         }
 
         if ($expr instanceof PhpParser\Node\Expr\ConstFetch) {
-            return match (strtolower($expr->name->getFirst())) {
+            return match (strtolower($expr->name->getParts()[0])) {
                 'true' => true,
                 'false' => false,
                 'null' => null,
