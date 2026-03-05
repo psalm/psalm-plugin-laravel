@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use PhpParser\NodeFinder;
@@ -15,6 +16,7 @@ use function is_string;
 use function strtolower;
 use function in_array;
 use function is_array;
+use function is_a;
 
 final class SchemaAggregator
 {
@@ -47,6 +49,28 @@ final class SchemaAggregator
         'ulid' => 'uuid',
         'ipaddress' => 'ip_address',
         'macaddress' => 'mac_address',
+    ];
+
+    /**
+     * Blueprint methods that produce unsigned integers (non-negative-int).
+     *
+     * @psalm-var list<lowercase-string>
+     */
+    private const UNSIGNED_INT_METHODS = [
+        'bigincrements',
+        'foreignid',
+        'foreignidfor',
+        'id',
+        'increments',
+        'integerincrements',
+        'mediumincrements',
+        'smallincrements',
+        'tinyincrements',
+        'unsignedbiginteger',
+        'unsignedinteger',
+        'unsignedmediuminteger',
+        'unsignedsmallinteger',
+        'unsignedtinyinteger',
     ];
 
     /** @var array<string, SchemaTable> */
@@ -213,7 +237,7 @@ final class SchemaAggregator
                 && $stmt->expr->name instanceof PhpParser\Node\Identifier;
 
             if (!$is_named_method_call) {
-                return;
+                continue;
             }
 
             $root_var = $stmt->expr;
@@ -223,6 +247,7 @@ final class SchemaAggregator
             $nullable = false;
             /** @var SchemaColumnDefault|null $default */
             $default = null;
+            $unsigned = false;
 
             while ($root_var instanceof PhpParser\Node\Expr\MethodCall) {
                 if ($root_var->name instanceof PhpParser\Node\Identifier) {
@@ -256,6 +281,10 @@ final class SchemaAggregator
                     ) {
                         $default = self::resolveDefaultValue($root_var->args[0]->value);
                     }
+
+                    if ($root_var->name->name === 'unsigned') {
+                        $unsigned = true;
+                    }
                 }
 
                 $first_method_call = $root_var;
@@ -267,7 +296,7 @@ final class SchemaAggregator
                 && $first_method_call->name instanceof PhpParser\Node\Identifier;
 
             if (!$is_first_method_named_method) {
-                return;
+                continue;
             }
 
             $first_arg = $first_method_call->args[0]->value ?? null;
@@ -311,6 +340,16 @@ final class SchemaAggregator
             } elseif ($first_arg instanceof PhpParser\Node\Scalar\String_) {
                 $column_name = $first_arg->value;
             } else {
+                // foreignIdFor() with class reference: $table->foreignIdFor(User::class)
+                if ($first_method_name_lc === 'foreignidfor') {
+                    $resolved_column = self::resolveForeignIdForColumn($first_arg, $second_arg);
+                    if ($resolved_column !== null) {
+                        $table->setColumn(new SchemaColumn($resolved_column, 'int', $nullable, unsigned: true));
+                    }
+
+                    continue;
+                }
+
                 continue; // unknown type [method call with unknown argument type] :/
             }
 
@@ -325,6 +364,8 @@ final class SchemaAggregator
                     }
                 }
             }
+
+            $is_unsigned = $unsigned || in_array($first_method_name_lc, self::UNSIGNED_INT_METHODS, true);
 
             switch ($first_method_name_lc) {
                 case 'biginteger':
@@ -345,15 +386,12 @@ final class SchemaAggregator
                 case 'integer':
                 case 'increments':
                 case 'foreignid':
-                    $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, default: $default, unsigned: $is_unsigned));
                     break;
 
-                /**
-                 * @todo use type and column name based on model's PK.
-                 * Pairs are [id, int] and [uuid, string]
-                 */
                 case 'foreignidfor':
-                    $table->setColumn(new SchemaColumn('id', 'int', $nullable, default: $default));
+                    // foreignIdFor with a string column name — already handled above for class refs
+                    $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, default: $default, unsigned: true));
                     break;
 
                 case 'binary':
@@ -442,13 +480,13 @@ final class SchemaAggregator
                 case 'numericmorphs':
                 case 'morphs': // @todo support UUID and ULID types
                     $table->setColumn(new SchemaColumn($column_name . '_type', 'string', $nullable));
-                    $table->setColumn(new SchemaColumn($column_name . '_id', 'int', $nullable));
+                    $table->setColumn(new SchemaColumn($column_name . '_id', 'int', $nullable, unsigned: true));
                     break;
 
                 case 'nullablenumericmorphs':
                 case 'nullablemorphs': // @todo support UUID and ULID types
                     $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
-                    $table->setColumn(new SchemaColumn($column_name . '_id', 'int', true));
+                    $table->setColumn(new SchemaColumn($column_name . '_id', 'int', true, unsigned: true));
                     break;
 
                 case 'uuidmorphs':
@@ -540,5 +578,48 @@ final class SchemaAggregator
 
         // new Expression('...'), variables, function calls → not statically resolvable
         return SchemaColumnDefault::unresolvable();
+    }
+
+    /**
+     * Resolve the column name for foreignIdFor() when called with a class reference.
+     *
+     * foreignIdFor(User::class) should resolve to 'user_id' (based on model's class name),
+     * not the hardcoded 'id' that was used before.
+     */
+    private static function resolveForeignIdForColumn(
+        ?PhpParser\Node\Expr $first_arg,
+        ?PhpParser\Node\Expr $second_arg,
+    ): ?string {
+        // If a custom column name is provided as the second argument, use it
+        if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
+            return $second_arg->value;
+        }
+
+        if (!$first_arg instanceof PhpParser\Node\Expr\ClassConstFetch) {
+            return null;
+        }
+
+        if (
+            !$first_arg->class instanceof PhpParser\Node\Name
+            || !$first_arg->name instanceof PhpParser\Node\Identifier
+            || $first_arg->name->name !== 'class'
+        ) {
+            return null;
+        }
+
+        $class_name = $first_arg->class->getAttribute('resolvedName');
+
+        if (!is_string($class_name) || !is_a($class_name, Model::class, true)) {
+            return null;
+        }
+
+        try {
+            $reflection = new \ReflectionClass($class_name);
+            $instance = $reflection->newInstanceWithoutConstructor();
+
+            return $instance->getForeignKey();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
