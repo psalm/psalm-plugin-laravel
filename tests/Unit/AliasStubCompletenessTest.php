@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\Tests\Unit;
+namespace Tests\Psalm\LaravelPlugin\Unit;
 
 use Illuminate\Support\Facades\Facade;
 use PHPUnit\Framework\Attributes\CoversClass;
