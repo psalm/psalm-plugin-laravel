@@ -24,7 +24,6 @@ use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -35,11 +34,17 @@ use Psalm\Progress\DefaultProgress;
 use function array_merge;
 use function dirname;
 use function explode;
+use function file_put_contents;
+use function getenv;
 use function is_dir;
 use function is_string;
 use function method_exists;
+use function rtrim;
 use function sprintf;
+use function sys_get_temp_dir;
 use function urlencode;
+
+use const DIRECTORY_SEPARATOR;
 
 /**
  * @psalm-suppress UnusedClass
@@ -77,7 +82,7 @@ final class Plugin implements PluginEntryPointInterface
         try {
             $this->buildSchema();
             ModelDiscoveryProvider::discoverModels(ApplicationProvider::getApp());
-            $this->generateFacadeStubs();
+            $this->generateAliasStubs();
         } catch (\Throwable $throwable) {
             $output->warning("Laravel plugin error on generating stub files: \u{201c}{$throwable->getMessage()}\u{201d}");
             $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $this->generateReportIssueUrl($throwable));
@@ -155,7 +160,7 @@ final class Plugin implements PluginEntryPointInterface
             $registration->addStubFile($stubFilePath);
         }
 
-        $registration->addStubFile(FacadeStubProvider::getStubFileLocation());
+        $registration->addStubFile(self::getAliasStubLocation());
     }
 
     private function registerHandlers(RegistrationInterface $registration, string $modelDiscoverySource): void
@@ -259,9 +264,31 @@ final class Plugin implements PluginEntryPointInterface
         return $files;
     }
 
-    private function generateFacadeStubs(): void
+    private function generateAliasStubs(): void
     {
-        FacadeStubProvider::generateStubFile();
+        $aliases = \Illuminate\Support\Facades\Facade::defaultAliases();
+        $stub = "<?php\n\n";
+
+        foreach ($aliases as $alias => $fqcn) {
+            $stub .= "class {$alias} extends \\{$fqcn} {}\n";
+        }
+
+        file_put_contents(self::getAliasStubLocation(), $stub);
+    }
+
+    private static function getAliasStubLocation(): string
+    {
+        return self::getCacheLocation() . DIRECTORY_SEPARATOR . 'aliases.stubphp';
+    }
+
+    private static function getCacheLocation(): string
+    {
+        $env = getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
+        if ($env !== false && $env !== '') {
+            return rtrim($env, DIRECTORY_SEPARATOR);
+        }
+
+        return sys_get_temp_dir();
     }
 
     private function generateReportIssueUrl(\Throwable $throwable): string

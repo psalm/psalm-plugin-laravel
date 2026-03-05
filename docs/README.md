@@ -13,22 +13,21 @@ A single callstack looks like:
 Plugin::__invoke
     Providers\ApplicationProvider::bootApp
         {instantiate Laravel Application}
-    Plugin::generateStubFiles
-        Providers\FacadeStubProvider::generateStubFile
-            {call `ide-helper:generate` command} // generates "facades.stubphp"
-        Providers\ModelStubProvider::generateStubFile
-            Fakes\FakeModelsCommand::run(schema_aggregator(migrations))
-                - override parent ModelsCommand::getPropertiesFromTable (extract info from migration files instead using DB connection)
-                - {call `ide-helper:models --nowrite --reset`} // generates "models.stubphp"
+    Plugin::buildSchema
+        {parse migration files to build schema info}
+    Providers\ModelDiscoveryProvider::discoverModels
+        {discover model classes for property inference}
+    Plugin::generateAliasStubs
+        {read Facade::defaultAliases() and write aliases.stubphp}
     Plugin::registerHandlers
         - Container
         - Eloquent
         - Helpers (that not covered by stubs)
     Plugin::registerStubs
         - common
-        - for speficic laravel version
-        - facades.stubphp (generated)
-        - models.stubphp (generated)
+        - for specific laravel version
+        - taint analysis
+        - aliases.stubphp (generated)
 ```
 
 ## Materials

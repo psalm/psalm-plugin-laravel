@@ -25,7 +25,6 @@
     "require": {
         "php": "^8.3",
         "ext-simplexml": "*",
-        "barryvdh/laravel-ide-helper": "^3.7 || dev-master",
         "illuminate/config": "^12.0 || ^13.0",
         "illuminate/container": "^12.0 || ^13.0",
         "illuminate/contracts": "^12.0 || ^13.0",
@@ -37,7 +36,6 @@
         "illuminate/view": "^12.0 || ^13.0",
         "nikic/php-parser": "^5.0",
         "orchestra/testbench-core": "^10.0 || ^11.0",
-        "symfony/console": "^7.1 || ^8.0",
         "vimeo/psalm": "^7.0.0-beta16 || dev-master"
     },
     "require-dev": {
