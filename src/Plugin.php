@@ -197,7 +197,7 @@ final class Plugin implements PluginEntryPointInterface
         return sprintf(
             'https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md&title=%s&body=%s',
             urlencode("Error on generating stub files: {$throwable->getMessage()}"),
-            urlencode("```\n{$throwable->__toString()}\n```")
+            urlencode("```\n{$throwable->__toString()}\n```"),
         );
     }
 }

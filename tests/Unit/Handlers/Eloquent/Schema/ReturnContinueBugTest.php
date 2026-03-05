@@ -12,7 +12,7 @@ final class ReturnContinueBugTest extends AbstractSchemaAggregatorTestCase
     public function columns_after_non_method_call_statements_are_detected(): void
     {
         $schemaAggregator = $this->instantiateSchemaAggregator(
-            __DIR__ . '/migrations/return_continue_bug'
+            __DIR__ . '/migrations/return_continue_bug',
         );
 
         self::assertArrayHasKey('orders', $schemaAggregator->tables);

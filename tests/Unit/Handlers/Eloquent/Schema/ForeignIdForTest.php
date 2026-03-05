@@ -12,7 +12,7 @@ final class ForeignIdForTest extends AbstractSchemaAggregatorTestCase
     public function foreign_id_for_with_custom_column_name(): void
     {
         $schemaAggregator = $this->instantiateSchemaAggregator(
-            __DIR__ . '/migrations/foreign_id_for'
+            __DIR__ . '/migrations/foreign_id_for',
         );
 
         self::assertArrayHasKey('posts', $schemaAggregator->tables);
