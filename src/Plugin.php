@@ -35,10 +35,13 @@ use function array_merge;
 use function dirname;
 use function explode;
 use function file_put_contents;
+use function getcwd;
 use function getenv;
 use function is_dir;
 use function is_string;
+use function md5;
 use function method_exists;
+use function mkdir;
 use function rtrim;
 use function sprintf;
 use function sys_get_temp_dir;
@@ -273,7 +276,16 @@ final class Plugin implements PluginEntryPointInterface
             $stub .= "class {$alias} extends \\{$fqcn} {}\n";
         }
 
-        file_put_contents(self::getAliasStubLocation(), $stub);
+        $location = self::getAliasStubLocation();
+        $result = file_put_contents($location, $stub);
+
+        if ($result === false) {
+            throw new \RuntimeException(
+                "Failed to write alias stub file to '{$location}'. "
+                . 'Check that the directory exists and is writable. '
+                . 'You can set PSALM_LARAVEL_PLUGIN_CACHE_PATH to specify a custom writable directory.',
+            );
+        }
     }
 
     private static function getAliasStubLocation(): string
@@ -288,7 +300,13 @@ final class Plugin implements PluginEntryPointInterface
             return rtrim($env, DIRECTORY_SEPARATOR);
         }
 
-        return sys_get_temp_dir();
+        $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'psalm-laravel-' . md5(getcwd() ?: __DIR__);
+
+        if (! is_dir($dir) && ! mkdir($dir, 0777, true) && ! is_dir($dir)) {
+            throw new \RuntimeException("Cache directory '{$dir}' does not exist and could not be created.");
+        }
+
+        return $dir;
     }
 
     private function generateReportIssueUrl(\Throwable $throwable): string
