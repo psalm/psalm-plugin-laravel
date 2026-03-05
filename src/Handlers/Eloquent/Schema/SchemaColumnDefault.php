@@ -21,14 +21,15 @@ final class SchemaColumnDefault
     private function __construct(
         public readonly string|int|float|bool|null $value,
         public readonly bool $resolvable,
-    ) {
-    }
+    ) {}
 
+    /** @psalm-pure */
     public static function resolved(string|int|float|bool|null $value): self
     {
         return new self($value, true);
     }
 
+    /** @psalm-pure */
     public static function unresolvable(): self
     {
         return new self(null, false);

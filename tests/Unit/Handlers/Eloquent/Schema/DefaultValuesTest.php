@@ -16,7 +16,7 @@ final class DefaultValuesTest extends AbstractSchemaAggregatorTestCase
         parent::setUp();
 
         $this->schemaAggregator = $this->instantiateSchemaAggregator(
-            __DIR__ . '/migrations/default_values'
+            __DIR__ . '/migrations/default_values',
         );
     }
 
