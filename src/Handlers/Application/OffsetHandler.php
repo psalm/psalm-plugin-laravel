@@ -42,7 +42,7 @@ final class OffsetHandler implements
             // offsetget is an alias for make
             return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs(
                 $source->getNodeTypeProvider(),
-                $event->getCallArgs()
+                $event->getCallArgs(),
             );
         }
 
@@ -50,7 +50,7 @@ final class OffsetHandler implements
             $fq_classlike_name = $event->getFqClasslikeName();
             return $source->getCodebase()->getMethodReturnType(
                 ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $method_name_lowercase,
-                $fq_classlike_name
+                $fq_classlike_name,
             );
         }
 
@@ -82,7 +82,7 @@ final class OffsetHandler implements
         }
 
         return $source->getCodebase()->getMethodParams(
-            ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $event->getMethodNameLowercase()
+            ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $event->getMethodNameLowercase(),
         );
     }
 
