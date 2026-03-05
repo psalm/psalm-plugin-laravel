@@ -15,4 +15,13 @@
       <code><![CDATA[$fqcn]]></code>
     </ArgumentTypeCoercion>
   </file>
+  <file src="src/Providers/SchemaStateProvider.php">
+    <MissingImmutableAnnotation>
+      <code><![CDATA[SchemaStateProvider]]></code>
+    </MissingImmutableAnnotation>
+    <MissingPureAnnotation>
+      <code><![CDATA[getSchema]]></code>
+      <code><![CDATA[setSchema]]></code>
+    </MissingPureAnnotation>
+  </file>
 </files>
