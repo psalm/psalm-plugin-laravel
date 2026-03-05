@@ -502,7 +502,7 @@ final class SchemaAggregator
                     break;
 
                 case 'nullableuuidmorphs':
-                case 'nullableUlidMorphs':
+                case 'nullableulidmorphs':
                     $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
                     $table->setColumn(new SchemaColumn($column_name . '_id', 'string', true));
                     break;

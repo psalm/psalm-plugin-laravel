@@ -7,7 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
-use Psalm\LaravelPlugin\Providers\ModelStubProvider;
+use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\Type;
 
 use function strtolower;
@@ -21,7 +21,7 @@ final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return ModelStubProvider::getModelClasses();
+        return ModelDiscoveryProvider::getModelClasses();
     }
 
     #[\Override]
