@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
+/** @psalm-suppress PossiblyUnusedProperty $default will be used for model attribute type inference */
 final class SchemaColumn
 {
     public const TYPE_STRING = 'string';
@@ -18,18 +19,25 @@ final class SchemaColumn
 
     public const TYPE_MIXED = 'mixed';
 
-    /** @var array<int, string> */
-    public array $options = [];
+    /**
+     * Allowed values for enum columns, e.g. ['draft', 'published'] from
+     * {@see \Illuminate\Database\Schema\Blueprint::enum()}'s second argument.
+     * Empty for non-enum column types.
+     *
+     * @var array<int, string>
+     */
+    public array $options;
 
     /**
-     * @param array<int, string>|null $options
+     * @param array<int, string> $options Allowed enum values (see {@see $options})
      */
     public function __construct(
         public string $name,
         public string $type,
         public bool $nullable = false,
-        ?array $options = []
+        array $options = [],
+        public ?SchemaColumnDefault $default = null,
     ) {
-        $this->options = $options ?? [];
+        $this->options = $options;
     }
 }

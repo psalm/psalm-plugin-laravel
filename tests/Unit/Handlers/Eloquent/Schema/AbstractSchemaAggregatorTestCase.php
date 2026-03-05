@@ -132,6 +132,24 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         self::assertFalse($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is nullable");
     }
 
+    protected function assertColumnHasDefault(string|int|float|bool|null $expected, SchemaColumn $column): void
+    {
+        Assert::assertNotNull($column->default, "Column {$column->name} has no default");
+        Assert::assertTrue($column->default->resolvable, "Column {$column->name} default is not resolvable");
+        Assert::assertSame($expected, $column->default->value);
+    }
+
+    protected function assertColumnHasUnresolvableDefault(SchemaColumn $column): void
+    {
+        Assert::assertNotNull($column->default, "Column {$column->name} has no default");
+        Assert::assertFalse($column->default->resolvable, "Column {$column->name} default is resolvable");
+    }
+
+    protected function assertColumnHasNoDefault(SchemaColumn $column): void
+    {
+        Assert::assertNull($column->default, "Column {$column->name} has a default");
+    }
+
     /**
      * @return array{0: non-empty-string, 1: non-empty-string}
      */
