@@ -4,12 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
-use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 
-#[CoversClass(SchemaAggregator::class)]
 final class ForeignIdForTest extends AbstractSchemaAggregatorTestCase
 {
     #[Test]
