@@ -140,9 +140,8 @@ final class ApplicationProvider
         $config = $app['config'];
         $config->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
 
-        // in testing, we want ide-helper to load our test models. Unfortunately this has to be a relative path, with
-        // the base path being inside of orchestra/testbench-core/laravel
-
+        // ModelDiscoveryProvider falls back to ide-helper.model_locations for model scanning.
+        // In testing, this path is relative to orchestra/testbench-core/laravel base path.
         $config->set('ide-helper.model_locations', [
             '../../../../tests/Application/app/Models',
         ]);
