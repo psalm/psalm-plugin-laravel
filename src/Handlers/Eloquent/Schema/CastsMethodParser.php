@@ -79,7 +79,7 @@ final class CastsMethodParser
                 return $parent->namespacedName->toString() === $modelClass;
             }
 
-            return true;
+            return false;
         });
 
         if (!$castsMethod instanceof PhpParser\Node\Stmt\ClassMethod || $castsMethod->stmts === null) {

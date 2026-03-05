@@ -46,36 +46,39 @@ final class ModelDiscoveryProvider
             }
 
             $phpFiles = self::findPhpFiles($directory);
+            if ($phpFiles === []) {
+                continue;
+            }
+
+            $classesBefore = get_declared_classes();
 
             foreach ($phpFiles as $file) {
-                $classesBefore = get_declared_classes();
                 try {
                     /** @psalm-suppress UnresolvableInclude */
                     include_once $file;
                 } catch (\Throwable) {
                     continue;
                 }
-                $classesAfter = get_declared_classes();
+            }
 
-                $newClasses = array_values(array_diff($classesAfter, $classesBefore));
+            $newClasses = array_values(array_diff(get_declared_classes(), $classesBefore));
 
-                foreach ($newClasses as $class) {
-                    if (!is_a($class, Model::class, true)) {
-                        continue;
-                    }
-
-                    try {
-                        $reflection = new ReflectionClass($class);
-                    } catch (\ReflectionException) {
-                        continue;
-                    }
-
-                    if ($reflection->isAbstract()) {
-                        continue;
-                    }
-
-                    $models[] = $class;
+            foreach ($newClasses as $class) {
+                if (!is_a($class, Model::class, true)) {
+                    continue;
                 }
+
+                try {
+                    $reflection = new ReflectionClass($class);
+                } catch (\ReflectionException) {
+                    continue;
+                }
+
+                if ($reflection->isAbstract()) {
+                    continue;
+                }
+
+                $models[] = $class;
             }
         }
 
