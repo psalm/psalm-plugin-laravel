@@ -15,7 +15,7 @@ final class UnsignedIntegerTest extends AbstractSchemaAggregatorTestCase
     public function unsigned_integer_methods_produce_unsigned_columns(): void
     {
         $schemaAggregator = $this->instantiateSchemaAggregator(
-            __DIR__ . '/migrations/unsigned_integers'
+            __DIR__ . '/migrations/unsigned_integers',
         );
 
         self::assertArrayHasKey('products', $schemaAggregator->tables);
@@ -63,7 +63,7 @@ final class UnsignedIntegerTest extends AbstractSchemaAggregatorTestCase
     {
         self::assertTrue(
             $column->unsigned,
-            "Column '{$column->name}' should be unsigned but is not"
+            "Column '{$column->name}' should be unsigned but is not",
         );
         self::assertSame('int', $column->type, "Unsigned column '{$column->name}' should be int type");
     }
@@ -72,7 +72,7 @@ final class UnsignedIntegerTest extends AbstractSchemaAggregatorTestCase
     {
         self::assertFalse(
             $column->unsigned,
-            "Column '{$column->name}' should not be unsigned but is"
+            "Column '{$column->name}' should not be unsigned but is",
         );
     }
 }
