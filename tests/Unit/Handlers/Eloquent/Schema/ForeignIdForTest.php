@@ -4,21 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 
-/**
- * @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator
- *
- * Tests foreignIdFor() column name resolution.
- * Previously, foreignIdFor(User::class) hardcoded the column name to 'id'.
- * Now:
- * - With a class reference + custom column: uses the custom column name
- * - With a class reference (no custom): resolves via model's getForeignKey() (requires autoloading)
- * - Produces unsigned int columns (foreignIdFor is always unsigned)
- */
+#[CoversClass(SchemaAggregator::class)]
 final class ForeignIdForTest extends AbstractSchemaAggregatorTestCase
 {
-    /** @test */
+    #[Test]
     public function foreign_id_for_with_custom_column_name(): void
     {
         $schemaAggregator = $this->instantiateSchemaAggregator(
