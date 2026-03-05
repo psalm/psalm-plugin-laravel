@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Plugin;
 
+use function file_exists;
 use function file_get_contents;
 use function sys_get_temp_dir;
 
@@ -21,7 +22,7 @@ final class AliasStubCompletenessTest extends TestCase
     {
         $stubPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'aliases.stubphp';
 
-        if (! \file_exists($stubPath)) {
+        if (! file_exists($stubPath)) {
             self::markTestSkipped('Alias stub not generated yet (run the plugin first).');
         }
 
