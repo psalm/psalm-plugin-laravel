@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
-/**
- * @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator
- *
- * Tests the fix for `return` → `continue` in processColumnUpdates().
- * Previously, non-method-call statements (like `if` blocks) caused the method
- * to exit early, silently dropping all subsequent column definitions.
- */
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
+
+#[CoversClass(SchemaAggregator::class)]
 final class ReturnContinueBugTest extends AbstractSchemaAggregatorTestCase
 {
-    /** @test */
+    #[Test]
     public function columns_after_non_method_call_statements_are_detected(): void
     {
         $schemaAggregator = $this->instantiateSchemaAggregator(

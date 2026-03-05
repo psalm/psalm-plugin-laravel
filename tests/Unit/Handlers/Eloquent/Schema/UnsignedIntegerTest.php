@@ -4,18 +4,16 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 
-/**
- * @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator
- * @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn
- *
- * Tests unsigned integer tracking: methods like unsignedBigInteger, increments,
- * foreignId etc. should set the unsigned flag on SchemaColumn.
- */
+#[CoversClass(SchemaAggregator::class)]
+#[CoversClass(SchemaColumn::class)]
 final class UnsignedIntegerTest extends AbstractSchemaAggregatorTestCase
 {
-    /** @test */
+    #[Test]
     public function unsigned_integer_methods_produce_unsigned_columns(): void
     {
         $schemaAggregator = $this->instantiateSchemaAggregator(
