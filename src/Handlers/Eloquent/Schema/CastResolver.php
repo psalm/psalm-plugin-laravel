@@ -43,6 +43,16 @@ final class CastResolver
             return self::resolve($innerCast, $nullable);
         }
 
+        // Handle enum casts: enum:App\Enums\Status → the enum class
+        if (str_starts_with($baseCast, 'enum:')) {
+            $enumClass = substr($cast, 5); // preserve original case
+            if (enum_exists($enumClass)) {
+                return self::makeNullable(new Union([new TNamedObject($enumClass)]), $nullable);
+            }
+
+            return self::makeNullable(Type::getMixed(), $nullable);
+        }
+
         // Strip parameters after colon (e.g., 'decimal:2' → 'decimal')
         if (str_contains($baseCast, ':')) {
             $baseCast = substr($baseCast, 0, (int) strpos($baseCast, ':'));

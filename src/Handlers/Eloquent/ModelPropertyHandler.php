@@ -48,6 +48,16 @@ final class ModelPropertyHandler implements
     private static array $castsCache = [];
 
     /**
+     * @psalm-suppress PossiblyUnusedMethod called externally by test infrastructure
+     * @psalm-suppress MissingPureAnnotation mutates static caches intentionally
+     */
+    public static function reset(): void
+    {
+        self::$tableNameCache = [];
+        self::$castsCache = [];
+    }
+
+    /**
      * @return list<class-string<Model>>
      * @psalm-external-mutation-free
      */
@@ -196,7 +206,7 @@ final class ModelPropertyHandler implements
             }
 
             $tableName = $instance->getTable();
-        } catch (\Throwable) {
+        } catch (\ReflectionException) {
             return null;
         }
 
@@ -231,7 +241,7 @@ final class ModelPropertyHandler implements
                 /** @var array<string, string> $instanceCasts */
                 $instanceCasts = $instance->getCasts();
                 $casts = array_merge($casts, $instanceCasts);
-            } catch (\Throwable) {
+            } catch (\ReflectionException) {
                 // Can't instantiate model — skip instance casts
             }
         }
