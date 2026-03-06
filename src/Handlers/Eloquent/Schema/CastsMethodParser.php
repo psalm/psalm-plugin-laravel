@@ -43,7 +43,7 @@ final class CastsMethodParser
             $methodStorage = $codebase->methods->getStorage(
                 MethodIdentifier::wrap($methodId),
             );
-        } catch (\Throwable) {
+        } catch (\InvalidArgumentException) {
             return [];
         }
 
@@ -56,7 +56,7 @@ final class CastsMethodParser
 
         try {
             $stmts = $codebase->getStatementsForFile($filePath);
-        } catch (\Throwable) {
+        } catch (\InvalidArgumentException) {
             return [];
         }
 

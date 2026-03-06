@@ -43,7 +43,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         }
 
         if (self::hasNativeProperty($event->getFqClasslikeName(), $event->getPropertyName())) {
-            return true;
+            return null;
         }
 
         $codebase = $source->getCodebase();
