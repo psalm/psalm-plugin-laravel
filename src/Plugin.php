@@ -44,6 +44,7 @@ use function method_exists;
 use function mkdir;
 use function rtrim;
 use function sprintf;
+use function str_contains;
 use function sys_get_temp_dir;
 use function urlencode;
 
@@ -273,6 +274,12 @@ final class Plugin implements PluginEntryPointInterface
         $stub = "<?php\n\n";
 
         foreach ($aliases as $alias => $fqcn) {
+            // Skip namespaced aliases — `class Some\Name extends ...` is invalid PHP
+            // without a namespace block, and Laravel's default aliases are all simple names
+            if (str_contains((string) $alias, '\\')) {
+                continue;
+            }
+
             $stub .= "class {$alias} extends \\{$fqcn} {}\n";
         }
 
@@ -288,19 +295,19 @@ final class Plugin implements PluginEntryPointInterface
         }
     }
 
-    private static function getAliasStubLocation(): string
+    public static function getAliasStubLocation(): string
     {
         return self::getCacheLocation() . DIRECTORY_SEPARATOR . 'aliases.stubphp';
     }
 
-    private static function getCacheLocation(): string
+    public static function getCacheLocation(): string
     {
         $env = getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
         if ($env !== false && $env !== '') {
-            return rtrim($env, DIRECTORY_SEPARATOR);
+            $dir = rtrim($env, DIRECTORY_SEPARATOR);
+        } else {
+            $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'psalm-laravel-' . md5(getcwd() ?: __DIR__);
         }
-
-        $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'psalm-laravel-' . md5(getcwd() ?: __DIR__);
 
         if (! is_dir($dir) && ! mkdir($dir, 0777, true) && ! is_dir($dir)) {
             throw new \RuntimeException("Cache directory '{$dir}' does not exist and could not be created.");
