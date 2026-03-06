@@ -58,7 +58,7 @@ final class CastResolver
             $baseCast = substr($baseCast, 0, (int) strpos($baseCast, ':'));
         }
 
-        $type = self::resolveBaseCast($baseCast, $cast, $nullable);
+        $type = self::resolveBaseCast($baseCast, $nullable);
 
         if ($type !== null) {
             return $type;
@@ -84,7 +84,7 @@ final class CastResolver
         return self::makeNullable(Type::getMixed(), $nullable);
     }
 
-    private static function resolveBaseCast(string $baseCast, string $originalCast, bool $nullable): ?Union
+    private static function resolveBaseCast(string $baseCast, bool $nullable): ?Union
     {
         return match ($baseCast) {
             'int', 'integer' => self::makeNullable(Type::getInt(), $nullable),
