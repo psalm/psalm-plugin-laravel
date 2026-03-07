@@ -1,0 +1,60 @@
+<?php
+
+namespace Illuminate\Routing;
+
+class Redirector
+{
+    /**
+     * Create a new redirect response to the given path.
+     *
+     * @param  string  $path
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  bool|null  $secure
+     * @return \Illuminate\Http\RedirectResponse
+     *
+     * @psalm-taint-sink ssrf $path
+     * @psalm-taint-sink header $path
+     */
+    public function to($path, $status = 302, $headers = [], $secure = null) {}
+
+    /**
+     * Create a new redirect response to an external URL (no validation).
+     *
+     * @param  string  $path
+     * @param  int  $status
+     * @param  array  $headers
+     * @return \Illuminate\Http\RedirectResponse
+     *
+     * @psalm-taint-sink ssrf $path
+     * @psalm-taint-sink header $path
+     */
+    public function away($path, $status = 302, $headers = []) {}
+
+    /**
+     * Create a new redirect response to the given HTTPS path.
+     *
+     * @param  string  $path
+     * @param  int  $status
+     * @param  array  $headers
+     * @return \Illuminate\Http\RedirectResponse
+     *
+     * @psalm-taint-sink ssrf $path
+     * @psalm-taint-sink header $path
+     */
+    public function secure($path, $status = 302, $headers = []) {}
+
+    /**
+     * Create a new redirect response to the given path while storing the current URL in the session.
+     *
+     * @param  string  $path
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  bool|null  $secure
+     * @return \Illuminate\Http\RedirectResponse
+     *
+     * @psalm-taint-sink ssrf $path
+     * @psalm-taint-sink header $path
+     */
+    public function guest($path, $status = 302, $headers = [], $secure = null) {}
+}

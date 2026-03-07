@@ -148,7 +148,7 @@ final class ModelRelationshipPropertyHandler implements
                 $returnType = new Union([
                     new TGenericObject(Collection::class, [
                         new Union([new TInt()]),
-                        $modelType
+                        $modelType,
                     ]),
                 ]);
             }

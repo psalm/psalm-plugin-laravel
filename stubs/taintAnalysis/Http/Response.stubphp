@@ -2,7 +2,7 @@
 
 namespace Illuminate\Http;
 
-final class Response
+class Response
 {
     /**
      * @throws \InvalidArgumentException When the HTTP status code is not valid

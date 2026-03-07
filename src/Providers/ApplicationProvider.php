@@ -76,9 +76,7 @@ final class ApplicationProvider
             $consoleApp = $app->make(Kernel::class);
             $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function () {
                 return new class {
-                    public function bootstrap(): void
-                    {
-                    }
+                    public function bootstrap(): void {}
                 };
             });
             $consoleApp->bootstrap();
