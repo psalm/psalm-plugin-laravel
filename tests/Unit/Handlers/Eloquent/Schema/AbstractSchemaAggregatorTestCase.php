@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
 use PHPUnit\Framework\Assert;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psalm\Internal\Provider\StatementsProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
@@ -21,7 +22,7 @@ use function realpath;
 use const DIRECTORY_SEPARATOR;
 use const PHP_VERSION_ID;
 
-/** @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator */
+#[CoversClass(SchemaAggregator::class)]
 abstract class AbstractSchemaAggregatorTestCase extends TestCase
 {
     final protected function instantiateSchemaAggregator(string $filepath): SchemaAggregator
@@ -129,6 +130,24 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         [$tableName, $columnName] = self::parseTableWithColumn($tableWithColumn);
 
         self::assertFalse($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is nullable");
+    }
+
+    protected function assertColumnHasDefault(string|int|float|bool|null $expected, SchemaColumn $column): void
+    {
+        Assert::assertNotNull($column->default, "Column {$column->name} has no default");
+        Assert::assertTrue($column->default->resolvable, "Column {$column->name} default is not resolvable");
+        Assert::assertSame($expected, $column->default->value);
+    }
+
+    protected function assertColumnHasUnresolvableDefault(SchemaColumn $column): void
+    {
+        Assert::assertNotNull($column->default, "Column {$column->name} has no default");
+        Assert::assertFalse($column->default->resolvable, "Column {$column->name} default is resolvable");
+    }
+
+    protected function assertColumnHasNoDefault(SchemaColumn $column): void
+    {
+        Assert::assertNull($column->default, "Column {$column->name} has a default");
     }
 
     /**
