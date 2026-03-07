@@ -270,13 +270,17 @@ final class Plugin implements PluginEntryPointInterface
 
     private function generateAliasStubs(): void
     {
-        $aliases = \Illuminate\Support\Facades\Facade::defaultAliases();
+        // Read aliases from the booted app's AliasLoader — this reflects the actual
+        // aliases registered for this project (config app.aliases + package discovery),
+        // not just Laravel's hardcoded defaults.
+        /** @var array<string, class-string> $aliases */
+        $aliases = \Illuminate\Foundation\AliasLoader::getInstance()->getAliases();
         $stub = "<?php\n\n";
 
         foreach ($aliases as $alias => $fqcn) {
             // Skip namespaced aliases — `class Some\Name extends ...` is invalid PHP
-            // without a namespace block, and Laravel's default aliases are all simple names
-            if (str_contains((string) $alias, '\\')) {
+            // without a namespace block
+            if (str_contains($alias, '\\')) {
                 continue;
             }
 
