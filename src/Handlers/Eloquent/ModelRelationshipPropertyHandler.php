@@ -36,7 +36,7 @@ final class ModelRelationshipPropertyHandler implements
     /** @var array<string, bool> Cache for relationExists() keyed by "class::property" */
     private static array $relationExistsCache = [];
 
-    /** @var array<string, Union|null> Cache for getPropertyType() keyed by "class::property" */
+    /** @var array<string, Union> Cache for getPropertyType() keyed by "class::property" */
     private static array $propertyTypeCache = [];
 
     /**
@@ -125,8 +125,9 @@ final class ModelRelationshipPropertyHandler implements
 
         $methodReturnType = $codebase->getMethodReturnType($cacheKey, $fq_classlike_name);
         if (!$methodReturnType instanceof \Psalm\Type\Union) {
-            self::$propertyTypeCache[$cacheKey] = Type::getMixed();
-            return Type::getMixed();
+            $result = Type::getMixed();
+            self::$propertyTypeCache[$cacheKey] = $result;
+            return $result;
         }
 
         /** @var Union|null $modelType */

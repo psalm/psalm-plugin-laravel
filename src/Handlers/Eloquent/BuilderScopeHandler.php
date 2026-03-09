@@ -28,8 +28,8 @@ use function ucfirst;
  *
  * @internal
  */
-final class BuilderScopeHandler implements MethodReturnTypeProviderInterface{
-
+final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
+{
     /** @var array<string, bool> */
     private static array $scopeCache = [];
 
