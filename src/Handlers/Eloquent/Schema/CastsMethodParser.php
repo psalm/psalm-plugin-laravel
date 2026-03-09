@@ -43,7 +43,7 @@ final class CastsMethodParser
             $methodStorage = $codebase->methods->getStorage(
                 MethodIdentifier::wrap($methodId),
             );
-        } catch (\InvalidArgumentException) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
             return [];
         }
 
