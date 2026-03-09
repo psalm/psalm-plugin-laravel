@@ -3,7 +3,6 @@
 
 use App\Models\User;
 use App\Models\Phone;
-use App\Models\Role;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
