@@ -10,6 +10,7 @@ use ReflectionClass;
 
 use function array_values;
 use function class_exists;
+use function file_get_contents;
 use function get_declared_classes;
 use function is_a;
 use function is_array;
@@ -17,6 +18,7 @@ use function is_dir;
 use function is_string;
 use function array_diff;
 use function in_array;
+use function preg_match;
 use function realpath;
 use function str_starts_with;
 
@@ -50,26 +52,28 @@ final class ModelDiscoveryProvider
                 continue;
             }
 
-            $classesBefore = get_declared_classes();
-
             foreach ($phpFiles as $file) {
+                $className = self::extractClassName($file);
+                if ($className === null) {
+                    continue;
+                }
+
+                // Use Composer's autoloader to load the class safely
+                // class_exists() triggers autoloading without fatal errors
                 try {
-                    /** @psalm-suppress UnresolvableInclude */
-                    include_once $file;
+                    if (!class_exists($className, true)) {
+                        continue;
+                    }
                 } catch (\Throwable) {
                     continue;
                 }
-            }
 
-            $newClasses = array_values(array_diff(get_declared_classes(), $classesBefore));
-
-            foreach ($newClasses as $class) {
-                if (!is_a($class, Model::class, true)) {
+                if (!is_a($className, Model::class, true)) {
                     continue;
                 }
 
                 try {
-                    $reflection = new ReflectionClass($class);
+                    $reflection = new ReflectionClass($className);
                 } catch (\ReflectionException) {
                     continue;
                 }
@@ -78,7 +82,9 @@ final class ModelDiscoveryProvider
                     continue;
                 }
 
-                $models[] = $class;
+                if (!in_array($className, $models, true)) {
+                    $models[] = $className;
+                }
             }
         }
 
@@ -172,6 +178,32 @@ final class ModelDiscoveryProvider
         }
 
         return $directories;
+    }
+
+    /**
+     * Extract the fully qualified class name from a PHP file by parsing
+     * the namespace and class declarations.
+     *
+     * @return class-string|null
+     */
+    private static function extractClassName(string $filePath): ?string
+    {
+        $contents = file_get_contents($filePath);
+        if ($contents === false) {
+            return null;
+        }
+
+        $namespace = '';
+        if (preg_match('/^\s*namespace\s+([^\s;{]+)/m', $contents, $matches)) {
+            $namespace = $matches[1] . '\\';
+        }
+
+        if (preg_match('/^\s*(?:abstract\s+|final\s+)?class\s+(\w+)/m', $contents, $matches)) {
+            /** @var class-string */
+            return $namespace . $matches[1];
+        }
+
+        return null;
     }
 
     /**
