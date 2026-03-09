@@ -12,14 +12,15 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 use function array_key_exists;
+use function implode;
 use function in_array;
 
 final class ProxyMethodReturnTypeProvider
 {
     /**
-     * Cache keyed by "{proxyClass}::{methodName}" → resolved Union.
-     * The return type of proxied Builder methods is determined by the proxy class
-     * (which carries the TModel parameter) and the method name, not by arguments.
+     * Cache keyed by "{proxyClass}::{methodName}({argTypes})" → resolved Union.
+     * Argument types are included because some methods (e.g. find(), findOrFail())
+     * have conditional return types that depend on argument types.
      *
      * @var array<string, Union|null>
      */
@@ -38,7 +39,12 @@ final class ProxyMethodReturnTypeProvider
     ): ?Union {
         $methodName = $fake_method_call->name;
         if ($methodName instanceof \PhpParser\Node\Identifier) {
-            $cacheKey = $typeToCall->getId() . '::' . $methodName->name;
+            $argSignatures = [];
+            foreach ($fake_method_call->getArgs() as $arg) {
+                $argType = $statements_analyzer->node_data->getType($arg->value);
+                $argSignatures[] = $argType !== null ? $argType->getId() : 'mixed';
+            }
+            $cacheKey = $typeToCall->getId() . '::' . $methodName->name . '(' . implode(',', $argSignatures) . ')';
 
             if (array_key_exists($cacheKey, self::$cache)) {
                 return self::$cache[$cacheKey];
@@ -71,9 +77,11 @@ final class ProxyMethodReturnTypeProvider
                 false,
             ) === false
         ) {
-            if ($cacheKey !== null) {
-                self::$cache[$cacheKey] = null;
+            if (!in_array('PossiblyInvalidMethodCall', $suppressed_issues, true)) {
+                $statements_analyzer->removeSuppressedIssues(['PossiblyInvalidMethodCall']);
             }
+            $statements_analyzer->node_data = $old_data_provider;
+            // Don't cache — analysis failure is transient
             return null;
         }
 
