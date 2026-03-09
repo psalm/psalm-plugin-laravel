@@ -5,15 +5,10 @@ namespace Illuminate\Database\Eloquent\Relations;
 /**
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
  * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
- * @template-extends MorphOneOrMany<TRelatedModel, TDeclaringModel, ?TRelatedModel>
+ * @template-extends BelongsTo<TRelatedModel, TDeclaringModel>
  * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
  */
-class MorphOne extends MorphOneOrMany
+class MorphTo extends BelongsTo
 {
-    /**
-     * Get the results of the relationship.
-     *
-     * @return ?TRelatedModel
-     */
-    public function getResults() {}
+
 }
