@@ -24,6 +24,7 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
+use function array_key_exists;
 use function in_array;
 use function is_a;
 
@@ -32,6 +33,12 @@ final class ModelRelationshipPropertyHandler implements
     PropertyVisibilityProviderInterface,
     PropertyTypeProviderInterface
 {
+    /** @var array<string, bool> Cache for relationExists() keyed by "class::property" */
+    private static array $relationExistsCache = [];
+
+    /** @var array<string, Union|null> Cache for getPropertyType() keyed by "class::property" */
+    private static array $propertyTypeCache = [];
+
     /**
      * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
      * @psalm-external-mutation-free
@@ -106,83 +113,95 @@ final class ModelRelationshipPropertyHandler implements
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
 
-        if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
-            $methodReturnType = $codebase->getMethodReturnType($fq_classlike_name . '::' . $property_name, $fq_classlike_name);
-            if (!$methodReturnType instanceof \Psalm\Type\Union) {
-                return Type::getMixed();
-            }
-
-            /** @var Union|null $modelType */
-            $modelType = null;
-            /** @var TGenericObject|null $relationType */
-            $relationType = null;
-
-            // In order to get the property value, we need to decipher the generic relation object
-            foreach ($methodReturnType->getAtomicTypes() as $atomicType) {
-                if (!$atomicType instanceof TGenericObject) {
-                    continue;
-                }
-
-                $relationType = $atomicType;
-
-                foreach ($atomicType->type_params as $childNode) {
-                    foreach ($childNode->getAtomicTypes() as $atomicType) {
-                        if (!$atomicType instanceof Type\Atomic\TNamedObject) {
-                            continue;
-                        }
-
-                        $modelType = $childNode;
-                        break 3;
-                    }
-                }
-            }
-
-            $returnType = $modelType;
-
-            $relationsThatReturnACollection = [
-                BelongsToMany::class,
-                HasMany::class,
-                HasManyThrough::class,
-                MorphMany::class,
-                MorphToMany::class,
-            ];
-
-            if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection, true)) {
-                $returnType = new Union([
-                    new TGenericObject(Collection::class, [
-                        new Union([new TInt()]),
-                        $modelType,
-                    ]),
-                ]);
-            }
-
-            return $returnType ?: Type::getMixed();
+        if (!self::relationExists($codebase, $fq_classlike_name, $property_name)) {
+            return null;
         }
 
-        return null;
+        $cacheKey = $fq_classlike_name . '::' . $property_name;
+
+        if (array_key_exists($cacheKey, self::$propertyTypeCache)) {
+            return self::$propertyTypeCache[$cacheKey];
+        }
+
+        $methodReturnType = $codebase->getMethodReturnType($cacheKey, $fq_classlike_name);
+        if (!$methodReturnType instanceof \Psalm\Type\Union) {
+            self::$propertyTypeCache[$cacheKey] = Type::getMixed();
+            return Type::getMixed();
+        }
+
+        /** @var Union|null $modelType */
+        $modelType = null;
+        /** @var TGenericObject|null $relationType */
+        $relationType = null;
+
+        foreach ($methodReturnType->getAtomicTypes() as $atomicType) {
+            if (!$atomicType instanceof TGenericObject) {
+                continue;
+            }
+
+            $relationType = $atomicType;
+
+            foreach ($atomicType->type_params as $childNode) {
+                foreach ($childNode->getAtomicTypes() as $atomicType) {
+                    if (!$atomicType instanceof Type\Atomic\TNamedObject) {
+                        continue;
+                    }
+
+                    $modelType = $childNode;
+                    break 3;
+                }
+            }
+        }
+
+        $returnType = $modelType;
+
+        $relationsThatReturnACollection = [
+            BelongsToMany::class,
+            HasMany::class,
+            HasManyThrough::class,
+            MorphMany::class,
+            MorphToMany::class,
+        ];
+
+        if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection, true)) {
+            $returnType = new Union([
+                new TGenericObject(Collection::class, [
+                    new Union([new TInt()]),
+                    $modelType,
+                ]),
+            ]);
+        }
+
+        $result = $returnType ?: Type::getMixed();
+        self::$propertyTypeCache[$cacheKey] = $result;
+
+        return $result;
     }
 
     private static function relationExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
-        $method = $fq_classlike_name . '::' . $property_name;
+        $key = $fq_classlike_name . '::' . $property_name;
 
-        if (!$codebase->methodExists($method)) {
-            return false;
+        if (array_key_exists($key, self::$relationExistsCache)) {
+            return self::$relationExistsCache[$key];
         }
 
-        // ensure this is a relation method
+        $result = false;
 
-        $return_type = $codebase->getMethodReturnType($method, $fq_classlike_name);
-        if (!$return_type instanceof \Psalm\Type\Union) {
-            return false;
-        }
-
-        foreach ($return_type->getAtomicTypes() as $type) {
-            if ($type instanceof TGenericObject && is_a($type->value, Relation::class, true)) {
-                return true;
+        if ($codebase->methodExists($key)) {
+            $return_type = $codebase->getMethodReturnType($key, $fq_classlike_name);
+            if ($return_type instanceof \Psalm\Type\Union) {
+                foreach ($return_type->getAtomicTypes() as $type) {
+                    if ($type instanceof TGenericObject && is_a($type->value, Relation::class, true)) {
+                        $result = true;
+                        break;
+                    }
+                }
             }
         }
 
-        return false;
+        self::$relationExistsCache[$key] = $result;
+
+        return $result;
     }
 }

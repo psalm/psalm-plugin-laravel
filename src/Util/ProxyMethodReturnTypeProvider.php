@@ -11,10 +11,20 @@ use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
+use function array_key_exists;
 use function in_array;
 
 final class ProxyMethodReturnTypeProvider
 {
+    /**
+     * Cache keyed by "{proxyClass}::{methodName}" → resolved Union.
+     * The return type of proxied Builder methods is determined by the proxy class
+     * (which carries the TModel parameter) and the method name, not by arguments.
+     *
+     * @var array<string, Union|null>
+     */
+    private static array $cache = [];
+
     /**
      * Psalm struggles with saying "this method returns whatever class X with the same method returns. This performs
      * a fake method call to get the analyzed proxy method return type
@@ -26,6 +36,17 @@ final class ProxyMethodReturnTypeProvider
         Context $context,
         TNamedObject $typeToCall,
     ): ?Union {
+        $methodName = $fake_method_call->name;
+        if ($methodName instanceof \PhpParser\Node\Identifier) {
+            $cacheKey = $typeToCall->getId() . '::' . $methodName->name;
+
+            if (array_key_exists($cacheKey, self::$cache)) {
+                return self::$cache[$cacheKey];
+            }
+        } else {
+            $cacheKey = null;
+        }
+
         $old_data_provider = $statements_analyzer->node_data;
         $statements_analyzer->node_data = clone $statements_analyzer->node_data;
 
@@ -50,6 +71,9 @@ final class ProxyMethodReturnTypeProvider
                 false,
             ) === false
         ) {
+            if ($cacheKey !== null) {
+                self::$cache[$cacheKey] = null;
+            }
             return null;
         }
 
@@ -60,6 +84,10 @@ final class ProxyMethodReturnTypeProvider
         $returnType = $statements_analyzer->node_data->getType($fake_method_call);
 
         $statements_analyzer->node_data = $old_data_provider;
+
+        if ($cacheKey !== null) {
+            self::$cache[$cacheKey] = $returnType;
+        }
 
         return $returnType;
     }
