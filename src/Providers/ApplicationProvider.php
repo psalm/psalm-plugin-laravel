@@ -39,6 +39,17 @@ final class ApplicationProvider
             return self::$app;
         }
 
+        // Psalm's ErrorHandler converts ALL PHP warnings/notices to RuntimeException.
+        // Laravel's bootstrap process emits warnings during service provider loading
+        // (e.g., deprecated features, missing extensions). We must suppress Psalm's
+        // error handler during boot to prevent these from crashing the plugin.
+        return self::withDefaultErrorHandler(static function (): LaravelApplication {
+            return (new self())->doGetApp();
+        });
+    }
+
+    private function doGetApp(): LaravelApplication
+    {
         if (! defined('LARAVEL_START')) {
             define('LARAVEL_START', microtime(true));
         }
@@ -84,6 +95,36 @@ final class ApplicationProvider
         }
 
         return $app;
+    }
+
+    /**
+     * Run a callback with PHP's default error handler instead of Psalm's.
+     *
+     * Psalm's ErrorHandler converts ALL PHP warnings to RuntimeException, which
+     * crashes Laravel's bootstrap process. This temporarily restores the default
+     * error handler, runs the callback, then restores whatever handler was active.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    private static function withDefaultErrorHandler(callable $callback): mixed
+    {
+        // If Psalm's ErrorHandler is loaded, use its built-in suppression mechanism
+        if (\class_exists(\Psalm\Internal\ErrorHandler::class, false)) {
+            return \Psalm\Internal\ErrorHandler::runWithExceptionsSuppressed($callback);
+        }
+
+        // Fallback: install a passthrough handler that lets PHP handle errors normally
+        \set_error_handler(static function (): bool {
+            return false;
+        });
+
+        try {
+            return $callback();
+        } finally {
+            \restore_error_handler();
+        }
     }
 
     /**
