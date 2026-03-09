@@ -123,7 +123,7 @@ final class ApplicationProvider
         }
 
         // Fallback: install a passthrough handler that delegates to PHP's default behavior
-        set_error_handler(static function (int $errno, string $errstr): bool {
+        set_error_handler(static function (int $_errno, string $_errstr): bool {
             return false;
         });
 
