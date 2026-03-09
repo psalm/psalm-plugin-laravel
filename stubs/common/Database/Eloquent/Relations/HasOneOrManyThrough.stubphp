@@ -1,0 +1,29 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * @template TIntermediateModel of \Illuminate\Database\Eloquent\Model
+ * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template TResult
+ * @template-extends Relation<TRelatedModel, TIntermediateModel, TResult>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
+abstract class HasOneOrManyThrough extends Relation
+{
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<TRelatedModel>  $query
+     * @param  TDeclaringModel  $farParent
+     * @param  TIntermediateModel  $throughParent
+     * @param  string  $firstKey
+     * @param  string  $secondKey
+     * @param  string  $localKey
+     * @param  string  $secondLocalKey
+     * @return void
+     */
+    public function __construct(Builder $query, Model $farParent, Model $throughParent, $firstKey, $secondKey, $localKey, $secondLocalKey) {}
+}

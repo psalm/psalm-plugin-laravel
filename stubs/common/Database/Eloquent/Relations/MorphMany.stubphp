@@ -3,23 +3,24 @@
 namespace Illuminate\Database\Eloquent\Relations;
 
 /**
-* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
-* @template-extends MorphOneOrMany<TRelatedModel>
-* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
-*/
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template-extends MorphOneOrMany<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
 class MorphMany extends MorphOneOrMany
 {
     /**
      * @param array<string, mixed> $attributes
      *
-     * @psalm-return TRelatedModel
+     * @return TRelatedModel
      */
     public function create(array $attributes = []) {}
 
     /**
      * Get the results of the relationship.
      *
-     * @psalm-return \Traversable<int, TRelatedModel>
+     * @return \Traversable<int, TRelatedModel>
      */
     public function getResults() {}
 }
