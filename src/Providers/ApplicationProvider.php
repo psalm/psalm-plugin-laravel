@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Providers;
 
-use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\View\Factory;
@@ -81,7 +80,6 @@ final class ApplicationProvider
             });
             $consoleApp->bootstrap();
 
-            $app->register(IdeHelperServiceProvider::class);
             self::$booted = true;
         }
 
@@ -140,34 +138,10 @@ final class ApplicationProvider
         $config = $app['config'];
         $config->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
 
-        // in testing, we want ide-helper to load our test models. Unfortunately this has to be a relative path, with
-        // the base path being inside of orchestra/testbench-core/laravel
-
+        // ModelDiscoveryProvider falls back to ide-helper.model_locations for model scanning.
+        // In testing, this path is relative to orchestra/testbench-core/laravel base path.
         $config->set('ide-helper.model_locations', [
             '../../../../tests/Application/app/Models',
         ]);
-
-        // Set up view paths for ide-helper
-        $viewPath = dirname((new \ReflectionClass(IdeHelperServiceProvider::class))->getFileName(), 2) . '/resources/views';
-
-        if (!$app->bound('view')) {
-            $filesystem = new \Illuminate\Filesystem\Filesystem();
-
-            // Set up the view finder
-            $viewFinder = new FileViewFinder($filesystem, [$viewPath]);
-
-            // Set up the engine resolver
-            $engineResolver = new EngineResolver();
-            $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
-
-            // Create and bind the view factory
-            /** @var \Illuminate\Contracts\Events\Dispatcher $events */
-            $events = $app['events'];
-            $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events));
-        }
-
-        /** @var \Illuminate\View\Factory $view */
-        $view = $app['view'];
-        $view->addNamespace('ide-helper', $viewPath);
     }
 }

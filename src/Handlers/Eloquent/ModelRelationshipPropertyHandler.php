@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Providers\ModelStubProvider;
+use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
@@ -39,7 +39,7 @@ final class ModelRelationshipPropertyHandler implements
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return ModelStubProvider::getModelClasses();
+        return ModelDiscoveryProvider::getModelClasses();
     }
 
     /** @inheritDoc */
