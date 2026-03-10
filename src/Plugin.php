@@ -234,7 +234,11 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         foreach ($migrationFilePathnames as $file) {
-            $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
+            try {
+                $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
+            } catch (\InvalidArgumentException|\UnexpectedValueException) {
+                continue; // Skip unparseable migration files rather than crashing the entire plugin
+            }
         }
 
         SchemaStateProvider::setSchema($schemaAggregator);
