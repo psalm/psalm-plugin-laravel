@@ -7,16 +7,8 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use PhpParser\NodeFinder;
 use PhpParser;
-
-use function array_key_exists;
-use function count;
-use function is_string;
-use function strtolower;
-use function in_array;
-use function is_array;
-use function is_a;
+use PhpParser\NodeFinder;
 
 final class SchemaAggregator
 {
@@ -99,7 +91,7 @@ final class SchemaAggregator
             if (
                 $stmt instanceof PhpParser\Node\Stmt\ClassMethod
                 && $stmt->name->name === 'up'
-                && is_array($stmt->stmts)
+                && \is_array($stmt->stmts)
             ) {
                 $this->addUpMethodStatements($stmt->stmts);
             }
@@ -116,7 +108,7 @@ final class SchemaAggregator
                 && $stmt->expr instanceof PhpParser\Node\Expr\StaticCall
                 && $stmt->expr->class instanceof PhpParser\Node\Name
                 && $stmt->expr->name instanceof PhpParser\Node\Identifier
-                && in_array($stmt->expr->class->getAttribute('resolvedName'), [Schema::class, 'Schema'], true);
+                && \in_array($stmt->expr->class->getAttribute('resolvedName'), [Schema::class, 'Schema'], true);
 
             if (! $is_schema_method_call) {
                 continue;
@@ -162,7 +154,7 @@ final class SchemaAggregator
             !isset($call->args[1])
             || !$call->args[1] instanceof PhpParser\Node\Arg
             || !$call->args[1]->value instanceof PhpParser\Node\Expr\Closure
-            || count($call->args[1]->value->params) < 1
+            || \count($call->args[1]->value->params) < 1
             || ($call->args[1]->value->params[0]->type instanceof PhpParser\Node\Name
                 && $call->args[1]->value->params[0]->type->getAttribute('resolvedName')
                 !== Blueprint::class)
@@ -174,7 +166,7 @@ final class SchemaAggregator
 
         if (
             $call->args[1]->value->params[0]->var instanceof PhpParser\Node\Expr\Variable
-            && is_string($call->args[1]->value->params[0]->var->name)
+            && \is_string($call->args[1]->value->params[0]->var->name)
         ) {
             $call_arg_name = $call->args[1]->value->params[0]->var->name;
 
@@ -304,10 +296,10 @@ final class SchemaAggregator
             $first_arg = $first_method_call->args[0]->value ?? null;
             $second_arg = $first_method_call->args[1]->value ?? null;
 
-            $first_method_name_lc = strtolower($first_method_call->name->name);
+            $first_method_name_lc = \strtolower($first_method_call->name->name);
 
             if ($first_method_call->args === []) {
-                if (in_array($first_method_name_lc, self::METHODS_USE_HARDCODED_COLUMN_NAME, true)) {
+                if (\in_array($first_method_name_lc, self::METHODS_USE_HARDCODED_COLUMN_NAME, true)) {
                     switch ($first_method_name_lc) {
                         case 'droptimestamps':
                         case 'droptimestampstz':
@@ -334,7 +326,7 @@ final class SchemaAggregator
                     continue; // foreach
                 }
 
-                if (array_key_exists($first_method_name_lc, self::METHODS_HAVE_DEFAULT_COLUMN_NAME)) {
+                if (\array_key_exists($first_method_name_lc, self::METHODS_HAVE_DEFAULT_COLUMN_NAME)) {
                     $column_name = self::METHODS_HAVE_DEFAULT_COLUMN_NAME[$first_method_name_lc];
                 } else {
                     continue; // unknown type [method call without args] :/
@@ -367,7 +359,7 @@ final class SchemaAggregator
                 }
             }
 
-            $is_unsigned = $unsigned || in_array($first_method_name_lc, self::UNSIGNED_INT_METHODS, true);
+            $is_unsigned = $unsigned || \in_array($first_method_name_lc, self::UNSIGNED_INT_METHODS, true);
 
             switch ($first_method_name_lc) {
                 case 'biginteger':
@@ -615,7 +607,7 @@ final class SchemaAggregator
 
         $class_name = $first_arg->class->getAttribute('resolvedName');
 
-        if (!is_string($class_name) || !is_a($class_name, Model::class, true)) {
+        if (!\is_string($class_name) || !\is_a($class_name, Model::class, true)) {
             return null;
         }
 

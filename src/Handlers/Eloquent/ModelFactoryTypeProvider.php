@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
-use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\Type;
-
-use function strtolower;
 
 final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
 {
@@ -38,7 +36,7 @@ final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
 
         $classlike = $source->getCodebase()->classlike_storage_provider->get($event->getFqClasslikeName());
 
-        $usesHasFactory = isset($classlike->used_traits[strtolower(HasFactory::class)]);
+        $usesHasFactory = isset($classlike->used_traits[\strtolower(HasFactory::class)]);
         if (! $usesHasFactory) {
             return null;
         }

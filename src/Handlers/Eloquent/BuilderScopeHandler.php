@@ -9,14 +9,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
-use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
-
-use function array_key_exists;
-use function is_a;
-use function ucfirst;
 
 /**
  * Handles scope method discovery on Eloquent Builder.
@@ -78,7 +73,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
 
         foreach ($templateTypeParameters as $type) {
             foreach ($type->getAtomicTypes() as $atomic) {
-                if ($atomic instanceof TNamedObject && is_a($atomic->value, Model::class, true)) {
+                if ($atomic instanceof TNamedObject && \is_a($atomic->value, Model::class, true)) {
                     return $atomic->value;
                 }
             }
@@ -94,12 +89,12 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
     {
         $key = $modelClass . '::' . $methodName;
 
-        if (array_key_exists($key, self::$scopeCache)) {
+        if (\array_key_exists($key, self::$scopeCache)) {
             return self::$scopeCache[$key];
         }
 
         // Check legacy scope prefix: scopeActive → active
-        $legacyScopeMethod = $modelClass . '::scope' . ucfirst($methodName);
+        $legacyScopeMethod = $modelClass . '::scope' . \ucfirst($methodName);
         if ($codebase->methodExists($legacyScopeMethod)) {
             self::$scopeCache[$key] = true;
             return true;

@@ -6,22 +6,12 @@ namespace Psalm\LaravelPlugin\Providers;
 
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
-use Illuminate\View\Factory;
-use Illuminate\View\FileViewFinder;
+use Illuminate\Foundation\Application as LaravelApplication;
 use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
-use Illuminate\Foundation\Application as LaravelApplication;
+use Illuminate\View\Factory;
+use Illuminate\View\FileViewFinder;
 use Orchestra\Testbench\Concerns\CreatesApplication;
-
-use function class_exists;
-use function define;
-use function defined;
-use function dirname;
-use function file_exists;
-use function getcwd;
-use function microtime;
-use function restore_error_handler;
-use function set_error_handler;
 
 final class ApplicationProvider
 {
@@ -57,15 +47,15 @@ final class ApplicationProvider
      */
     private function doGetApp(): LaravelApplication
     {
-        if (! defined('LARAVEL_START')) {
-            define('LARAVEL_START', microtime(true));
+        if (! \defined('LARAVEL_START')) {
+            \define('LARAVEL_START', \microtime(true));
         }
 
-        if (file_exists($applicationPath = (getcwd() ?: '.') . '/bootstrap/app.php')) { // Applications and Local Dev
+        if (\file_exists($applicationPath = (\getcwd() ?: '.') . '/bootstrap/app.php')) { // Applications and Local Dev
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
             assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
-        } elseif (file_exists($applicationPath = dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
+        } elseif (\file_exists($applicationPath = \dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
             assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
@@ -118,19 +108,19 @@ final class ApplicationProvider
      */
     private static function withErrorExceptionsSuppressed(callable $callback): mixed
     {
-        if (class_exists(\Psalm\Internal\ErrorHandler::class, false)) {
+        if (\class_exists(\Psalm\Internal\ErrorHandler::class, false)) {
             return \Psalm\Internal\ErrorHandler::runWithExceptionsSuppressed($callback);
         }
 
         // Fallback: install a passthrough handler that delegates to PHP's default behavior
-        set_error_handler(static function (int $_errno, string $_errstr): bool {
+        \set_error_handler(static function (int $_errno, string $_errstr): bool {
             return false;
         });
 
         try {
             return $callback();
         } finally {
-            restore_error_handler();
+            \restore_error_handler();
         }
     }
 

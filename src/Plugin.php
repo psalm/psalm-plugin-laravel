@@ -12,10 +12,10 @@ use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelFactoryTypeProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelFactoryTypeProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
@@ -30,25 +30,6 @@ use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\PluginRegistrationSocket;
 use Psalm\Progress\DefaultProgress;
-
-use function array_merge;
-use function dirname;
-use function explode;
-use function file_put_contents;
-use function getcwd;
-use function getenv;
-use function is_dir;
-use function is_string;
-use function md5;
-use function method_exists;
-use function mkdir;
-use function rtrim;
-use function sprintf;
-use function str_contains;
-use function sys_get_temp_dir;
-use function urlencode;
-
-use const DIRECTORY_SEPARATOR;
 
 /**
  * @psalm-suppress UnusedClass
@@ -105,21 +86,21 @@ final class Plugin implements PluginEntryPointInterface
     /** @return list<string> */
     private function getCommonStubs(): array
     {
-        return $this->findStubFiles(dirname(__DIR__) . '/stubs/common');
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/common');
     }
 
     /** @return list<string> */
     private function getTaintAnalysisStubs(): array
     {
-        return $this->findStubFiles(dirname(__DIR__) . '/stubs/taintAnalysis');
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/taintAnalysis');
     }
 
     /** @return list<string> */
     private function getStubsForVersion(string $version): array
     {
-        [$majorVersion] = explode('.', $version);
+        [$majorVersion] = \explode('.', $version);
 
-        return $this->findStubFiles(dirname(__DIR__) . '/stubs/' . $majorVersion);
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/' . $majorVersion);
     }
 
     /**
@@ -128,7 +109,7 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function findStubFiles(string $directory): array
     {
-        if (! is_dir($directory)) {
+        if (! \is_dir($directory)) {
             return [];
         }
 
@@ -142,7 +123,7 @@ final class Plugin implements PluginEntryPointInterface
 
             $realPath = $file->getRealPath();
 
-            if (! is_string($realPath)) {
+            if (! \is_string($realPath)) {
                 continue;
             }
 
@@ -154,7 +135,7 @@ final class Plugin implements PluginEntryPointInterface
 
     private function registerStubs(RegistrationInterface $registration): void
     {
-        $stubs = array_merge(
+        $stubs = \array_merge(
             $this->getCommonStubs(),
             $this->getStubsForVersion(Application::VERSION),
             $this->getTaintAnalysisStubs(),
@@ -216,7 +197,7 @@ final class Plugin implements PluginEntryPointInterface
     {
         $app = ApplicationProvider::getApp();
 
-        if (!method_exists($app, 'databasePath')) {
+        if (!\method_exists($app, 'databasePath')) {
             return;
         }
 
@@ -254,7 +235,7 @@ final class Plugin implements PluginEntryPointInterface
      */
     private static function findPhpFilesRecursive(string $directory): array
     {
-        if (!is_dir($directory)) {
+        if (!\is_dir($directory)) {
             return [];
         }
 
@@ -267,7 +248,7 @@ final class Plugin implements PluginEntryPointInterface
             }
 
             $realPath = $file->getRealPath();
-            if (is_string($realPath)) {
+            if (\is_string($realPath)) {
                 $files[] = $realPath;
             }
         }
@@ -287,7 +268,7 @@ final class Plugin implements PluginEntryPointInterface
         foreach ($aliases as $alias => $fqcn) {
             // Skip namespaced aliases — `class Some\Name extends ...` is invalid PHP
             // without a namespace block
-            if (str_contains($alias, '\\')) {
+            if (\str_contains($alias, '\\')) {
                 continue;
             }
 
@@ -295,7 +276,7 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $location = self::getAliasStubLocation();
-        $result = file_put_contents($location, $stub);
+        $result = \file_put_contents($location, $stub);
 
         if ($result === false) {
             throw new \RuntimeException(
@@ -308,19 +289,19 @@ final class Plugin implements PluginEntryPointInterface
 
     public static function getAliasStubLocation(): string
     {
-        return self::getCacheLocation() . DIRECTORY_SEPARATOR . 'aliases.stubphp';
+        return self::getCacheLocation() . \DIRECTORY_SEPARATOR . 'aliases.stubphp';
     }
 
     public static function getCacheLocation(): string
     {
-        $env = getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
+        $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
         if ($env !== false && $env !== '') {
-            $dir = rtrim($env, DIRECTORY_SEPARATOR);
+            $dir = \rtrim($env, \DIRECTORY_SEPARATOR);
         } else {
-            $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'psalm-laravel-' . md5(getcwd() ?: __DIR__);
+            $dir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-' . \md5(\getcwd() ?: __DIR__);
         }
 
-        if (! is_dir($dir) && ! mkdir($dir, 0777, true) && ! is_dir($dir)) {
+        if (! \is_dir($dir) && ! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
             throw new \RuntimeException("Cache directory '{$dir}' does not exist and could not be created.");
         }
 
@@ -329,10 +310,10 @@ final class Plugin implements PluginEntryPointInterface
 
     private function generateReportIssueUrl(\Throwable $throwable): string
     {
-        return sprintf(
+        return \sprintf(
             'https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md&title=%s&body=%s',
-            urlencode("Error on generating stub files: {$throwable->getMessage()}"),
-            urlencode("```\n{$throwable->__toString()}\n```"),
+            \urlencode("Error on generating stub files: {$throwable->getMessage()}"),
+            \urlencode("```\n{$throwable->__toString()}\n```"),
         );
     }
 }

@@ -12,10 +12,6 @@ use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
 use Psalm\Storage\PropertyStorage;
 
-use function array_intersect;
-use function in_array;
-use function strtolower;
-
 final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodebasePopulatedInterface
 {
     /** @var array<string, list<string>> */
@@ -118,7 +114,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         }
 
         foreach (self::CLASS_LEVEL_BY_FQCN as $issue => $classNames) {
-            if (in_array($classStorage->name, $classNames, true)) {
+            if (\in_array($classStorage->name, $classNames, true)) {
                 self::suppress($issue, $classStorage);
             }
         }
@@ -126,7 +122,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         foreach (self::METHOD_LEVEL_BY_FQCN as $issue => $method_by_class) {
             foreach ($method_by_class[$classStorage->name] ?? [] as $method_name) {
                 /** @psalm-suppress RedundantFunctionCall method names in constants may contain uppercase */
-                $method_storage = $classStorage->methods[strtolower($method_name)] ?? null;
+                $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
                 if ($method_storage instanceof MethodStorage) {
                     self::suppress($issue, $method_storage);
                 }
@@ -164,14 +160,14 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         }
 
         foreach (self::CLASS_LEVEL_BY_PARENT_CLASS as $issue => $parent_classes) {
-            if (array_intersect($parents, $parent_classes)) {
+            if (\array_intersect($parents, $parent_classes)) {
                 self::suppress($issue, $classStorage);
             }
         }
 
         foreach (self::PROPERTY_LEVEL_BY_PARENT_CLASS as $issue => $properties_by_parent_class) {
             foreach ($properties_by_parent_class as $parent_class => $property_names) {
-                if (!in_array($parent_class, $parents, true)) {
+                if (!\in_array($parent_class, $parents, true)) {
                     continue;
                 }
 
@@ -186,12 +182,12 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
         foreach (self::METHOD_LEVEL_BY_PARENT_CLASS as $issue => $methods_by_parent_class) {
             foreach ($methods_by_parent_class as $parent_class => $method_names) {
-                if (!in_array($parent_class, $parents, true)) {
+                if (!\in_array($parent_class, $parents, true)) {
                     continue;
                 }
 
                 foreach ($method_names as $method_name) {
-                    $method_storage = $classStorage->methods[strtolower($method_name)] ?? null;
+                    $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
                     if ($method_storage instanceof MethodStorage) {
                         self::suppress($issue, $method_storage);
                     }
@@ -208,7 +204,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
         foreach (self::CLASS_LEVEL_BY_USED_TRAITS as $issue => $traits) {
             foreach ($traits as $trait) {
-                if (isset($classStorage->used_traits[strtolower($trait)])) {
+                if (isset($classStorage->used_traits[\strtolower($trait)])) {
                     self::suppress($issue, $classStorage);
                     break;
                 }
@@ -217,12 +213,12 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
         foreach (self::METHOD_LEVEL_BY_USED_TRAITS as $issue => $methods_by_trait) {
             foreach ($methods_by_trait as $trait => $method_names) {
-                if (!isset($classStorage->used_traits[strtolower($trait)])) {
+                if (!isset($classStorage->used_traits[\strtolower($trait)])) {
                     continue;
                 }
 
                 foreach ($method_names as $method_name) {
-                    $method_storage = $classStorage->methods[strtolower($method_name)] ?? null;
+                    $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
                     if ($method_storage instanceof MethodStorage) {
                         self::suppress($issue, $method_storage);
                     }
@@ -233,7 +229,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
     private static function suppress(string $issue, ClassLikeStorage|PropertyStorage|MethodStorage $storage): void
     {
-        if (!in_array($issue, $storage->suppressed_issues, true)) {
+        if (!\in_array($issue, $storage->suppressed_issues, true)) {
             $storage->suppressed_issues[] = $issue;
         }
     }

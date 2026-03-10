@@ -10,16 +10,6 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
-use function class_exists;
-use function enum_exists;
-use function interface_exists;
-use function is_a;
-use function str_contains;
-use function str_starts_with;
-use function strtolower;
-use function substr;
-use function strpos;
-
 /**
  * Resolves a Laravel cast string (e.g., 'integer', 'datetime', 'array') to a Psalm type.
  *
@@ -35,18 +25,18 @@ final class CastResolver
      */
     public static function resolve(string $cast, bool $nullable): Union
     {
-        $baseCast = strtolower($cast);
+        $baseCast = \strtolower($cast);
 
         // Handle encrypted casts first: encrypted:X → recursively resolve X
-        if (str_starts_with($baseCast, 'encrypted:')) {
-            $innerCast = substr($cast, 10); // preserve original case for class names
+        if (\str_starts_with($baseCast, 'encrypted:')) {
+            $innerCast = \substr($cast, 10); // preserve original case for class names
             return self::resolve($innerCast, $nullable);
         }
 
         // Handle enum casts: enum:App\Enums\Status → the enum class
-        if (str_starts_with($baseCast, 'enum:')) {
-            $enumClass = substr($cast, 5); // preserve original case
-            if (enum_exists($enumClass)) {
+        if (\str_starts_with($baseCast, 'enum:')) {
+            $enumClass = \substr($cast, 5); // preserve original case
+            if (\enum_exists($enumClass)) {
                 return self::makeNullable(new Union([new TNamedObject($enumClass)]), $nullable);
             }
 
@@ -54,8 +44,8 @@ final class CastResolver
         }
 
         // Strip parameters after colon (e.g., 'decimal:2' → 'decimal')
-        if (str_contains($baseCast, ':')) {
-            $baseCast = substr($baseCast, 0, (int) strpos($baseCast, ':'));
+        if (\str_contains($baseCast, ':')) {
+            $baseCast = \substr($baseCast, 0, (int) \strpos($baseCast, ':'));
         }
 
         $type = self::resolveBaseCast($baseCast, $nullable);
@@ -65,17 +55,17 @@ final class CastResolver
         }
 
         // Check for backed enum
-        if (enum_exists($cast)) {
+        if (\enum_exists($cast)) {
             return self::makeNullable(new Union([new TNamedObject($cast)]), $nullable);
         }
 
         // Check for CastsAttributes implementation
-        if (class_exists($cast) || interface_exists($cast)) {
-            if (is_a($cast, CastsAttributes::class, true)) {
+        if (\class_exists($cast) || \interface_exists($cast)) {
+            if (\is_a($cast, CastsAttributes::class, true)) {
                 return self::makeNullable(Type::getMixed(), $nullable);
             }
 
-            if (is_a($cast, Attribute::class, true)) {
+            if (\is_a($cast, Attribute::class, true)) {
                 return self::makeNullable(Type::getMixed(), $nullable);
             }
         }

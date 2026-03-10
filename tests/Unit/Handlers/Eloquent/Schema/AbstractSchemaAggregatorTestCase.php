@@ -12,26 +12,16 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
 
-use function glob;
-use function file_get_contents;
-use function explode;
-use function is_dir;
-use function is_file;
-use function realpath;
-
-use const DIRECTORY_SEPARATOR;
-use const PHP_VERSION_ID;
-
 #[CoversClass(SchemaAggregator::class)]
 abstract class AbstractSchemaAggregatorTestCase extends TestCase
 {
     final protected function instantiateSchemaAggregator(string $filepath): SchemaAggregator
     {
-        if (is_file($filepath)) {
+        if (\is_file($filepath)) {
             $migrationFiles = [$filepath];
-        } elseif (is_dir($filepath)) {
-            $migrationsDirectory = realpath($filepath) . DIRECTORY_SEPARATOR;
-            $migrationFiles = glob($migrationsDirectory . '*.php');
+        } elseif (\is_dir($filepath)) {
+            $migrationsDirectory = \realpath($filepath) . \DIRECTORY_SEPARATOR;
+            $migrationFiles = \glob($migrationsDirectory . '*.php');
 
             if ($migrationFiles === []) {
                 $this->fail("Migrations not found in “{$migrationsDirectory}” directory.");
@@ -43,12 +33,12 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         $schemaAggregator = new SchemaAggregator();
         $hasErrors = false;
         foreach ($migrationFiles as $migrationFile) {
-            $fileContents = file_get_contents($migrationFile);
+            $fileContents = \file_get_contents($migrationFile);
             if ($fileContents === false) {
                 $this->fail("Could not read {$migrationFile} file. Please make sure it exists and readable.");
             }
 
-            $statements = StatementsProvider::parseStatements($fileContents, PHP_VERSION_ID, $hasErrors);
+            $statements = StatementsProvider::parseStatements($fileContents, \PHP_VERSION_ID, $hasErrors);
 
             $schemaAggregator->addStatements($statements);
         }
@@ -155,7 +145,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
      */
     private function parseTableWithColumn(string $tableWithColumn): array
     {
-        [$tableName, $columnName] = explode('.', $tableWithColumn);
+        [$tableName, $columnName] = \explode('.', $tableWithColumn);
         // @todo validate these values
 
         return [$tableName, $columnName];

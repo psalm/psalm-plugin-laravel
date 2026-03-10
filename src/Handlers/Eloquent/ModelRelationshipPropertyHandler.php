@@ -6,11 +6,11 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
@@ -23,10 +23,6 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
-
-use function array_key_exists;
-use function in_array;
-use function is_a;
 
 final class ModelRelationshipPropertyHandler implements
     PropertyExistenceProviderInterface,
@@ -107,7 +103,7 @@ final class ModelRelationshipPropertyHandler implements
 
         $cacheKey = $fq_classlike_name . '::' . $property_name;
 
-        if (array_key_exists($cacheKey, self::$propertyTypeCache)) {
+        if (\array_key_exists($cacheKey, self::$propertyTypeCache)) {
             return self::$propertyTypeCache[$cacheKey];
         }
 
@@ -152,7 +148,7 @@ final class ModelRelationshipPropertyHandler implements
             MorphToMany::class,
         ];
 
-        if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection, true)) {
+        if ($modelType && $relationType && \in_array($relationType->value, $relationsThatReturnACollection, true)) {
             $returnType = new Union([
                 new TGenericObject(Collection::class, [
                     new Union([new TInt()]),
@@ -171,7 +167,7 @@ final class ModelRelationshipPropertyHandler implements
     {
         $key = $fq_classlike_name . '::' . $property_name;
 
-        if (array_key_exists($key, self::$relationExistsCache)) {
+        if (\array_key_exists($key, self::$relationExistsCache)) {
             return self::$relationExistsCache[$key];
         }
 
@@ -179,7 +175,7 @@ final class ModelRelationshipPropertyHandler implements
             $return_type = $codebase->getMethodReturnType($key, $fq_classlike_name);
             if ($return_type instanceof Union) {
                 foreach ($return_type->getAtomicTypes() as $type) {
-                    if ($type instanceof TGenericObject && is_a($type->value, Relation::class, true)) {
+                    if ($type instanceof TGenericObject && \is_a($type->value, Relation::class, true)) {
                         self::$relationExistsCache[$key] = true;
                         return true;
                     }

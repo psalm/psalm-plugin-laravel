@@ -16,15 +16,6 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
-use ReflectionClass;
-use Throwable;
-
-use function array_keys;
-use function in_array;
-use function is_object;
-use function strtolower;
-use function is_string;
-use function is_callable;
 
 final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
@@ -75,30 +66,30 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
     #[\Override]
     public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
-        if (!in_array($event->getStorage()->name, ApplicationInterfaceProvider::getApplicationInterfaceClassLikes(), true)) {
+        if (!\in_array($event->getStorage()->name, ApplicationInterfaceProvider::getApplicationInterfaceClassLikes(), true)) {
             return;
         }
 
-        $bindings = array_keys(ApplicationProvider::getApp()->getBindings());
+        $bindings = \array_keys(ApplicationProvider::getApp()->getBindings());
 
         foreach ($bindings as $abstract) {
             try {
-                if (!is_string($abstract) && !is_callable($abstract)) {
+                if (!\is_string($abstract) && !\is_callable($abstract)) {
                     continue;
                 }
 
                 $concrete = ApplicationProvider::getApp()->make($abstract);
 
-                if (!is_object($concrete)) {
+                if (!\is_object($concrete)) {
                     continue;
                 }
 
-                $reflectionClass = new ReflectionClass($concrete);
+                $reflectionClass = new \ReflectionClass($concrete);
 
                 if ($reflectionClass->isAnonymous()) {
                     continue;
                 }
-            } catch (Throwable) {
+            } catch (\Throwable) {
                 // cannot just catch binding exception as the following error is emitted within laravel:
                 // Class 'Symfony\Component\Cache\Adapter\Psr16Adapter' not found
                 continue;
@@ -107,7 +98,7 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
             $className = $concrete::class;
             $filePath = $event->getStatementsSource()->getFilePath();
             $fileStorage = $event->getCodebase()->file_storage_provider->get($filePath);
-            $fileStorage->referenced_classlikes[strtolower($className)] = $className;
+            $fileStorage->referenced_classlikes[\strtolower($className)] = $className;
             $event->getCodebase()->queueClassLikeForScanning($className);
         }
     }

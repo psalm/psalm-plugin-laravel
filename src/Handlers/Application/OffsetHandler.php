@@ -17,8 +17,6 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Plugin\EventHandler\MethodVisibilityProviderInterface;
 use Psalm\Type;
 
-use function in_array;
-
 final class OffsetHandler implements
     MethodReturnTypeProviderInterface,
     MethodExistenceProviderInterface,
@@ -94,7 +92,7 @@ final class OffsetHandler implements
     /** @psalm-pure */
     private static function isOffsetMethod(string $methodName): bool
     {
-        return in_array($methodName, [
+        return \in_array($methodName, [
             'offsetget',
             'offsetset',
         ], true);

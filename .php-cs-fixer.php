@@ -11,6 +11,16 @@ return (new Config())
     ->setRules([
         '@PER-CS3x0' => true,
     ])
+    ->setRules([
+        // import
+        'global_namespace_import' => [
+            'import_classes' => false,
+            'import_constants' => false,
+            'import_functions' => false,
+        ],
+        'no_unused_imports' => true,
+        'ordered_imports' => true,
+    ])
     ->setFinder(
         (new Finder())
             ->in(__DIR__ . '/src')

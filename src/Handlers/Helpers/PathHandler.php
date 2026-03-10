@@ -16,9 +16,6 @@ use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TString;
 use Psalm\Type\Union;
 
-use function in_array;
-use function is_string;
-
 final class PathHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
     /**
@@ -81,7 +78,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
 
         $method_name_lowercase = $event->getMethodNameLowercase();
 
-        if (!in_array($method_name_lowercase, $methods, true)) {
+        if (!\in_array($method_name_lowercase, $methods, true)) {
             return null;
         }
 
@@ -97,7 +94,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
      * @param list<\PhpParser\Node\Arg> $call_args
      * @param \Closure(list<string>=): mixed $closure
      */
-    private static function resolveReturnType(array $call_args, Closure $closure): Union
+    private static function resolveReturnType(array $call_args, \Closure $closure): Union
     {
         // we're going to do some dynamic analysis here. Were going to invoke the closure that is wrapping the
         // app method or the global function in order to determine the literal string path that is returned
@@ -114,7 +111,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
 
         $result = $closure([$argument]);
 
-        if (!$result || !is_string($result)) {
+        if (!$result || !\is_string($result)) {
             return new Union([
                 new TString(),
             ]);

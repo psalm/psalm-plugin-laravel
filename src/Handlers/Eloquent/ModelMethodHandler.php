@@ -19,9 +19,6 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Union;
 
-use function is_string;
-use function strtolower;
-
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
     /**
@@ -46,7 +43,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
 
         $called_fq_classlike_name = $event->getCalledFqClasslikeName();
 
-        if (! is_string($called_fq_classlike_name)) {
+        if (! \is_string($called_fq_classlike_name)) {
             return null;
         }
 
@@ -97,7 +94,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         if (
             $event->getStmt() instanceof Class_
             && !$storage->abstract
-            && isset($storage->parent_classes[strtolower(Model::class)])
+            && isset($storage->parent_classes[\strtolower(Model::class)])
         ) {
             unset(
                 $storage->pseudo_static_methods['newmodelquery'],

@@ -8,9 +8,6 @@ use PhpParser;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
 
-use function array_merge;
-use function is_string;
-
 /**
  * AST-parses a model's casts() method body to extract cast definitions
  * without invoking the method.
@@ -120,7 +117,7 @@ final class CastsMethodParser
                     continue;
                 }
                 if ($arg->value instanceof PhpParser\Node\Expr\Array_) {
-                    $casts = array_merge($casts, self::extractCastsFromArray($arg->value));
+                    $casts = \array_merge($casts, self::extractCastsFromArray($arg->value));
                 }
                 // parent::casts() — skip, we get parent casts from $casts property
             }
@@ -173,7 +170,7 @@ final class CastsMethodParser
         ) {
             /** @var mixed $resolved */
             $resolved = $expr->class->getAttribute('resolvedName');
-            if (is_string($resolved)) {
+            if (\is_string($resolved)) {
                 return $resolved;
             }
 

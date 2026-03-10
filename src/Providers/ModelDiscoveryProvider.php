@@ -6,26 +6,6 @@ namespace Psalm\LaravelPlugin\Providers;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Application;
-use ReflectionClass;
-
-use function array_values;
-use function class_exists;
-use function count;
-use function file_get_contents;
-use function get_declared_classes;
-use function is_a;
-use function is_array;
-use function is_dir;
-use function is_string;
-use function realpath;
-use function str_starts_with;
-use function token_get_all;
-
-use const T_CLASS;
-use const T_NAME_QUALIFIED;
-use const T_NAMESPACE;
-use const T_STRING;
-use const T_WHITESPACE;
 
 /**
  * Discovers Eloquent model classes from the project.
@@ -48,7 +28,7 @@ final class ModelDiscoveryProvider
         $models = [];
 
         foreach ($directories as $directory) {
-            if (!is_dir($directory)) {
+            if (!\is_dir($directory)) {
                 continue;
             }
 
@@ -66,7 +46,7 @@ final class ModelDiscoveryProvider
                 // Trigger Composer's autoloader to load the class; the try/catch
                 // guards against files that fail to compile or have missing dependencies
                 try {
-                    if (!class_exists($className, true)) {
+                    if (!\class_exists($className, true)) {
                         continue;
                     }
                 } catch (\Error) {
@@ -81,25 +61,25 @@ final class ModelDiscoveryProvider
         }
 
         // Also check already-loaded classes (from Composer's classmap)
-        foreach (get_declared_classes() as $class) {
+        foreach (\get_declared_classes() as $class) {
             if (!self::isConcreteModel($class)) {
                 continue;
             }
 
             // Only include classes from the configured directories
-            $reflection = new ReflectionClass($class);
+            $reflection = new \ReflectionClass($class);
             $fileName = $reflection->getFileName();
-            if (!is_string($fileName)) {
+            if (!\is_string($fileName)) {
                 continue;
             }
 
             foreach ($directories as $directory) {
-                if (!is_dir($directory)) {
+                if (!\is_dir($directory)) {
                     continue;
                 }
 
-                $realDir = realpath($directory);
-                if ($realDir !== false && str_starts_with($fileName, $realDir)) {
+                $realDir = \realpath($directory);
+                if ($realDir !== false && \str_starts_with($fileName, $realDir)) {
                     /** @var class-string<Model> $class */
                     $models[$class] = $class;
                     break;
@@ -107,7 +87,7 @@ final class ModelDiscoveryProvider
             }
         }
 
-        self::$modelClasses = array_values($models);
+        self::$modelClasses = \array_values($models);
     }
 
     /**
@@ -129,13 +109,13 @@ final class ModelDiscoveryProvider
         /** @var mixed $locations */
         $locations = $config->get('psalm-laravel.model_locations');
 
-        if (!is_array($locations) || $locations === []) {
+        if (!\is_array($locations) || $locations === []) {
             // Fall back to ide-helper config
             /** @var mixed $locations */
             $locations = $config->get('ide-helper.model_locations');
         }
 
-        if (!is_array($locations) || $locations === []) {
+        if (!\is_array($locations) || $locations === []) {
             // Default locations
             $locations = [
                 $app->path('Models'),
@@ -147,12 +127,12 @@ final class ModelDiscoveryProvider
         $directories = [];
 
         foreach ($locations as $location) {
-            if (!is_string($location)) {
+            if (!\is_string($location)) {
                 continue;
             }
 
             // If relative, resolve against app base path
-            if (!str_starts_with($location, '/')) {
+            if (!\str_starts_with($location, '/')) {
                 $location = $app->basePath($location);
             }
 
@@ -170,12 +150,12 @@ final class ModelDiscoveryProvider
      */
     private static function isConcreteModel(string $className): bool
     {
-        if (!is_a($className, Model::class, true)) {
+        if (!\is_a($className, Model::class, true)) {
             return false;
         }
 
         try {
-            $reflection = new ReflectionClass($className);
+            $reflection = new \ReflectionClass($className);
         } catch (\ReflectionException) {
             return false;
         }
@@ -191,26 +171,26 @@ final class ModelDiscoveryProvider
      */
     private static function extractClassName(string $filePath): ?string
     {
-        $contents = @file_get_contents($filePath);
+        $contents = @\file_get_contents($filePath);
         if ($contents === false) {
             return null;
         }
 
-        $tokens = token_get_all($contents);
-        $count = count($tokens);
+        $tokens = \token_get_all($contents);
+        $count = \count($tokens);
         $namespace = '';
 
         for ($i = 0; $i < $count; $i++) {
-            if (!is_array($tokens[$i])) {
+            if (!\is_array($tokens[$i])) {
                 continue;
             }
 
-            if ($tokens[$i][0] === T_NAMESPACE) {
+            if ($tokens[$i][0] === \T_NAMESPACE) {
                 $namespace = self::parseNamespace($tokens, $i, $count);
                 continue;
             }
 
-            if ($tokens[$i][0] === T_CLASS) {
+            if ($tokens[$i][0] === \T_CLASS) {
                 $name = self::parseClassName($tokens, $i, $count);
                 if ($name !== null) {
                     return $namespace !== '' ? $namespace . '\\' . $name : $name;
@@ -230,15 +210,15 @@ final class ModelDiscoveryProvider
         $i++;
 
         for (; $i < $count; $i++) {
-            if (!is_array($tokens[$i])) {
+            if (!\is_array($tokens[$i])) {
                 break;
             }
 
-            if ($tokens[$i][0] === T_WHITESPACE) {
+            if ($tokens[$i][0] === \T_WHITESPACE) {
                 continue;
             }
 
-            if ($tokens[$i][0] === T_STRING || $tokens[$i][0] === T_NAME_QUALIFIED) {
+            if ($tokens[$i][0] === \T_STRING || $tokens[$i][0] === \T_NAME_QUALIFIED) {
                 $namespace .= $tokens[$i][1];
             } else {
                 break;
@@ -258,15 +238,15 @@ final class ModelDiscoveryProvider
         // Skip whitespace after 'class' keyword to find the class name
         $i++;
         for (; $i < $count; $i++) {
-            if (!is_array($tokens[$i])) {
+            if (!\is_array($tokens[$i])) {
                 return null;
             }
 
-            if ($tokens[$i][0] === T_WHITESPACE) {
+            if ($tokens[$i][0] === \T_WHITESPACE) {
                 continue;
             }
 
-            if ($tokens[$i][0] === T_STRING) {
+            if ($tokens[$i][0] === \T_STRING) {
                 return $tokens[$i][1];
             }
 
@@ -293,7 +273,7 @@ final class ModelDiscoveryProvider
 
             $realPath = $file->getRealPath();
 
-            if (!is_string($realPath)) {
+            if (!\is_string($realPath)) {
                 continue;
             }
 
