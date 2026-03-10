@@ -15,13 +15,27 @@ use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
 use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 
+use function array_key_exists;
 use function is_a;
 use function lcfirst;
+use function property_exists;
 use function str_replace;
 use function ucwords;
 
 final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInterface, PropertyVisibilityProviderInterface, PropertyTypeProviderInterface
 {
+    /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
+    private static array $nativePropertyCache = [];
+
+    /** @var array<string, bool> Cache for legacyAccessorExists() keyed by "class::property" */
+    private static array $legacyAccessorCache = [];
+
+    /** @var array<string, bool> Cache for newStyleAccessorExists() keyed by "class::property" */
+    private static array $newStyleAccessorCache = [];
+
+    /** @var array<string, Type\Union> Cache for getNewStyleAccessorType() keyed by "class::property" */
+    private static array $accessorTypeCache = [];
+
     /**
      * @return list<string>
      * @psalm-external-mutation-free
@@ -116,21 +130,33 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         return null;
     }
 
+    /** @psalm-external-mutation-free */
     private static function hasNativeProperty(string $fqcn, string $property_name): bool
     {
-        try {
-            /** @psalm-suppress ArgumentTypeCoercion - $fqcn comes from Psalm's classlike name which is a valid class */
-            new \ReflectionProperty($fqcn, $property_name);
-        } catch (\ReflectionException) {
-            return false;
+        $key = $fqcn . '::' . $property_name;
+
+        if (array_key_exists($key, self::$nativePropertyCache)) {
+            return self::$nativePropertyCache[$key];
         }
 
-        return true;
+        $result = property_exists($fqcn, $property_name);
+        self::$nativePropertyCache[$key] = $result;
+
+        return $result;
     }
 
     private static function legacyAccessorExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
-        return $codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute');
+        $key = $fq_classlike_name . '::' . $property_name;
+
+        if (array_key_exists($key, self::$legacyAccessorCache)) {
+            return self::$legacyAccessorCache[$key];
+        }
+
+        $result = $codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute');
+        self::$legacyAccessorCache[$key] = $result;
+
+        return $result;
     }
 
     /**
@@ -140,27 +166,29 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
      */
     private static function newStyleAccessorExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
+        $key = $fq_classlike_name . '::' . $property_name;
+
+        if (array_key_exists($key, self::$newStyleAccessorCache)) {
+            return self::$newStyleAccessorCache[$key];
+        }
+
         $methodName = self::propertyToCamelCase($property_name);
         $method = $fq_classlike_name . '::' . $methodName;
 
-        if (!$codebase->methodExists($method)) {
-            return false;
-        }
-
-        $returnType = $codebase->getMethodReturnType($method, $fq_classlike_name);
-        if ($returnType === null) {
-            return false;
-        }
-
-        foreach ($returnType->getAtomicTypes() as $type) {
-            if ($type instanceof Type\Atomic\TNamedObject && is_a($type->value, Attribute::class, true)) {
-                return true;
-            }
-            if ($type instanceof Type\Atomic\TGenericObject && is_a($type->value, Attribute::class, true)) {
-                return true;
+        if ($codebase->methodExists($method)) {
+            $returnType = $codebase->getMethodReturnType($method, $fq_classlike_name);
+            if ($returnType !== null) {
+                foreach ($returnType->getAtomicTypes() as $type) {
+                    // TGenericObject extends TNamedObject, so this catches both
+                    if ($type instanceof Type\Atomic\TNamedObject && is_a($type->value, Attribute::class, true)) {
+                        self::$newStyleAccessorCache[$key] = true;
+                        return true;
+                    }
+                }
             }
         }
 
+        self::$newStyleAccessorCache[$key] = false;
         return false;
     }
 
@@ -169,24 +197,35 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
      */
     private static function getNewStyleAccessorType(Codebase $codebase, string $fq_classlike_name, string $property_name): Type\Union
     {
+        $key = $fq_classlike_name . '::' . $property_name;
+
+        if (array_key_exists($key, self::$accessorTypeCache)) {
+            return self::$accessorTypeCache[$key];
+        }
+
         $methodName = self::propertyToCamelCase($property_name);
         $method = $fq_classlike_name . '::' . $methodName;
 
         $returnType = $codebase->getMethodReturnType($method, $fq_classlike_name);
         if ($returnType === null) {
-            return Type::getMixed();
+            $result = Type::getMixed();
+            self::$accessorTypeCache[$key] = $result;
+            return $result;
         }
 
         foreach ($returnType->getAtomicTypes() as $type) {
             if ($type instanceof Type\Atomic\TGenericObject && is_a($type->value, Attribute::class, true)) {
                 // TGet is the first template parameter
                 if (isset($type->type_params[0])) {
+                    self::$accessorTypeCache[$key] = $type->type_params[0];
                     return $type->type_params[0];
                 }
             }
         }
 
-        return Type::getMixed();
+        $result = Type::getMixed();
+        self::$accessorTypeCache[$key] = $result;
+        return $result;
     }
 
     /**

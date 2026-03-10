@@ -234,7 +234,14 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         foreach ($migrationFilePathnames as $file) {
-            $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
+            try {
+                $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
+            } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+                $codebase->progress->debug(
+                    "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}\n",
+                );
+                continue;
+            }
         }
 
         SchemaStateProvider::setSchema($schemaAggregator);

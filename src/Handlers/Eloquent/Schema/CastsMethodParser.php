@@ -56,7 +56,7 @@ final class CastsMethodParser
 
         try {
             $stmts = $codebase->getStatementsForFile($filePath);
-        } catch (\InvalidArgumentException) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
             return [];
         }
 
