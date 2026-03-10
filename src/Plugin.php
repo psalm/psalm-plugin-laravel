@@ -236,8 +236,11 @@ final class Plugin implements PluginEntryPointInterface
         foreach ($migrationFilePathnames as $file) {
             try {
                 $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
-            } catch (\InvalidArgumentException|\UnexpectedValueException) {
-                continue; // Skip unparseable migration files rather than crashing the entire plugin
+            } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+                $codebase->progress->debug(
+                    "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}\n",
+                );
+                continue;
             }
         }
 
