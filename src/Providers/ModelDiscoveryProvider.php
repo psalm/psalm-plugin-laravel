@@ -10,15 +10,22 @@ use ReflectionClass;
 
 use function array_values;
 use function class_exists;
+use function count;
+use function file_get_contents;
 use function get_declared_classes;
 use function is_a;
 use function is_array;
 use function is_dir;
 use function is_string;
-use function array_diff;
-use function in_array;
 use function realpath;
 use function str_starts_with;
+use function token_get_all;
+
+use const T_CLASS;
+use const T_NAME_QUALIFIED;
+use const T_NAMESPACE;
+use const T_STRING;
+use const T_WHITESPACE;
 
 /**
  * Discovers Eloquent model classes from the project.
@@ -37,7 +44,7 @@ final class ModelDiscoveryProvider
     {
         $directories = self::resolveModelDirectories($app);
 
-        /** @var list<class-string<Model>> $models */
+        /** @var array<class-string<Model>, class-string<Model>> $models */
         $models = [];
 
         foreach ($directories as $directory) {
@@ -50,55 +57,37 @@ final class ModelDiscoveryProvider
                 continue;
             }
 
-            $classesBefore = get_declared_classes();
-
             foreach ($phpFiles as $file) {
+                $className = self::extractClassName($file);
+                if ($className === null) {
+                    continue;
+                }
+
+                // Trigger Composer's autoloader to load the class; the try/catch
+                // guards against files that fail to compile or have missing dependencies
                 try {
-                    /** @psalm-suppress UnresolvableInclude */
-                    include_once $file;
-                } catch (\Throwable) {
-                    continue;
-                }
-            }
-
-            $newClasses = array_values(array_diff(get_declared_classes(), $classesBefore));
-
-            foreach ($newClasses as $class) {
-                if (!is_a($class, Model::class, true)) {
+                    if (!class_exists($className, true)) {
+                        continue;
+                    }
+                } catch (\Error) {
                     continue;
                 }
 
-                try {
-                    $reflection = new ReflectionClass($class);
-                } catch (\ReflectionException) {
-                    continue;
+                if (self::isConcreteModel($className)) {
+                    /** @var class-string<Model> $className */
+                    $models[$className] = $className;
                 }
-
-                if ($reflection->isAbstract()) {
-                    continue;
-                }
-
-                $models[] = $class;
             }
         }
 
         // Also check already-loaded classes (from Composer's classmap)
         foreach (get_declared_classes() as $class) {
-            if (!is_a($class, Model::class, true)) {
-                continue;
-            }
-
-            try {
-                $reflection = new ReflectionClass($class);
-            } catch (\ReflectionException) {
-                continue;
-            }
-
-            if ($reflection->isAbstract()) {
+            if (!self::isConcreteModel($class)) {
                 continue;
             }
 
             // Only include classes from the configured directories
+            $reflection = new ReflectionClass($class);
             $fileName = $reflection->getFileName();
             if (!is_string($fileName)) {
                 continue;
@@ -111,15 +100,14 @@ final class ModelDiscoveryProvider
 
                 $realDir = realpath($directory);
                 if ($realDir !== false && str_starts_with($fileName, $realDir)) {
-                    if (!in_array($class, $models, true)) {
-                        $models[] = $class;
-                    }
+                    /** @var class-string<Model> $class */
+                    $models[$class] = $class;
                     break;
                 }
             }
         }
 
-        self::$modelClasses = $models;
+        self::$modelClasses = array_values($models);
     }
 
     /**
@@ -172,6 +160,120 @@ final class ModelDiscoveryProvider
         }
 
         return $directories;
+    }
+
+    /**
+     * Check whether a class is a concrete (non-abstract) Eloquent Model subclass.
+     *
+     * @param class-string $className
+     * @psalm-suppress MissingPureAnnotation uses reflection which has side effects
+     */
+    private static function isConcreteModel(string $className): bool
+    {
+        if (!is_a($className, Model::class, true)) {
+            return false;
+        }
+
+        try {
+            $reflection = new ReflectionClass($className);
+        } catch (\ReflectionException) {
+            return false;
+        }
+
+        return !$reflection->isAbstract();
+    }
+
+    /**
+     * Extract the fully qualified class name from a PHP file using token_get_all().
+     *
+     * This correctly handles comments, strings, and all class modifier keywords
+     * (abstract, final, readonly).
+     */
+    private static function extractClassName(string $filePath): ?string
+    {
+        $contents = @file_get_contents($filePath);
+        if ($contents === false) {
+            return null;
+        }
+
+        $tokens = token_get_all($contents);
+        $count = count($tokens);
+        $namespace = '';
+
+        for ($i = 0; $i < $count; $i++) {
+            if (!is_array($tokens[$i])) {
+                continue;
+            }
+
+            if ($tokens[$i][0] === T_NAMESPACE) {
+                $namespace = self::parseNamespace($tokens, $i, $count);
+                continue;
+            }
+
+            if ($tokens[$i][0] === T_CLASS) {
+                $name = self::parseClassName($tokens, $i, $count);
+                if ($name !== null) {
+                    return $namespace !== '' ? $namespace . '\\' . $name : $name;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<array{0: int, 1: string, 2: int}|string> $tokens
+     */
+    private static function parseNamespace(array $tokens, int &$i, int $count): string
+    {
+        $namespace = '';
+        $i++;
+
+        for (; $i < $count; $i++) {
+            if (!is_array($tokens[$i])) {
+                break;
+            }
+
+            if ($tokens[$i][0] === T_WHITESPACE) {
+                continue;
+            }
+
+            if ($tokens[$i][0] === T_STRING || $tokens[$i][0] === T_NAME_QUALIFIED) {
+                $namespace .= $tokens[$i][1];
+            } else {
+                break;
+            }
+        }
+
+        return $namespace;
+    }
+
+    /**
+     * @psalm-pure
+     *
+     * @param array<array{0: int, 1: string, 2: int}|string> $tokens
+     */
+    private static function parseClassName(array $tokens, int $i, int $count): ?string
+    {
+        // Skip whitespace after 'class' keyword to find the class name
+        $i++;
+        for (; $i < $count; $i++) {
+            if (!is_array($tokens[$i])) {
+                return null;
+            }
+
+            if ($tokens[$i][0] === T_WHITESPACE) {
+                continue;
+            }
+
+            if ($tokens[$i][0] === T_STRING) {
+                return $tokens[$i][1];
+            }
+
+            return null;
+        }
+
+        return null;
     }
 
     /**
