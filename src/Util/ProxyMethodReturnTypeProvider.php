@@ -22,7 +22,7 @@ final class ProxyMethodReturnTypeProvider
      * Argument types are included because some methods (e.g. find(), findOrFail())
      * have conditional return types that depend on argument types.
      *
-     * @var array<string, Union|null>
+     * @var array<string, Union>
      */
     private static array $cache = [];
 
@@ -64,39 +64,38 @@ final class ProxyMethodReturnTypeProvider
         ]);
 
         $suppressed_issues = $statements_analyzer->getSuppressedIssues();
+        $addedSuppression = !in_array('PossiblyInvalidMethodCall', $suppressed_issues, true);
 
-        if (!in_array('PossiblyInvalidMethodCall', $suppressed_issues, true)) {
+        if ($addedSuppression) {
             $statements_analyzer->addSuppressedIssues(['PossiblyInvalidMethodCall']);
         }
 
-        if (
-            MethodCallAnalyzer::analyze(
-                $statements_analyzer,
-                $fake_method_call,
-                $context,
-                false,
-            ) === false
-        ) {
-            if (!in_array('PossiblyInvalidMethodCall', $suppressed_issues, true)) {
+        try {
+            if (
+                MethodCallAnalyzer::analyze(
+                    $statements_analyzer,
+                    $fake_method_call,
+                    $context,
+                    false,
+                ) === false
+            ) {
+                // Don't cache — analysis failure is transient
+                return null;
+            }
+
+            $returnType = $statements_analyzer->node_data->getType($fake_method_call);
+
+            if ($cacheKey !== null && $returnType !== null) {
+                self::$cache[$cacheKey] = $returnType;
+            }
+
+            return $returnType;
+        } finally {
+            if ($addedSuppression) {
                 $statements_analyzer->removeSuppressedIssues(['PossiblyInvalidMethodCall']);
             }
+
             $statements_analyzer->node_data = $old_data_provider;
-            // Don't cache — analysis failure is transient
-            return null;
         }
-
-        if (!in_array('PossiblyInvalidMethodCall', $suppressed_issues, true)) {
-            $statements_analyzer->removeSuppressedIssues(['PossiblyInvalidMethodCall']);
-        }
-
-        $returnType = $statements_analyzer->node_data->getType($fake_method_call);
-
-        $statements_analyzer->node_data = $old_data_provider;
-
-        if ($cacheKey !== null) {
-            self::$cache[$cacheKey] = $returnType;
-        }
-
-        return $returnType;
     }
 }
