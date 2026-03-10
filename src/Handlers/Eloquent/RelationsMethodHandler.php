@@ -14,11 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
-use PhpParser\Node\Expr\MethodCall;
-use PhpParser\Node\Expr\Variable;
+use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
-use Psalm\Internal\MethodIdentifier;
-use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -26,6 +23,9 @@ use Psalm\Type\Union;
 
 final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
 {
+    /** @var array<string, bool> Cache: method name → returns Builder? */
+    private static array $builderReturnCache = [];
+
     /**
      * @return list<string>
      * @psalm-pure
@@ -45,6 +45,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
         ];
     }
 
+    /** @psalm-external-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -55,52 +56,94 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         $method_name_lowercase = $event->getMethodNameLowercase();
+        $codebase = $source->getCodebase();
 
-        // Relations are weird.
-        // If a relation is proxying to the underlying builder, and the builder returns itself, the relation instead
-        // returns an instance of ITSELF, rather than the instance of the builder. That explains this nonsense
+        // Relations proxy method calls to the underlying Builder. When the Builder
+        // method returns $this/static (i.e., returns a Builder), the Relation should
+        // return itself instead, preserving the fluent chain on the Relation type.
+        //
+        // We look up the Builder method's return type directly from the codebase
+        // and check if it contains Builder. This avoids the expensive executeFakeCall()
+        // approach which cloned node_data and caused 50+ GB memory explosion on large
+        // codebases.
 
-        // If this method name is on the builder object, proxy it over there
+        $template_type_parameters = $event->getTemplateTypeParameters();
+        if (!$template_type_parameters) {
+            return null;
+        }
 
-        if (
-            $source->getCodebase()->methods->methodExists(new MethodIdentifier(Builder::class, $method_name_lowercase))
-            || $source->getCodebase()->methods->methodExists(new MethodIdentifier(QueryBuilder::class, $method_name_lowercase))
-        ) {
-            $template_type_parameters = $event->getTemplateTypeParameters();
-            if (!$template_type_parameters) {
-                return null;
-            }
-
-            $fake_method_call = new MethodCall(
-                new Variable('builder'),
-                $method_name_lowercase,
-                $event->getCallArgs(),
-            );
-
-            $templateType = $template_type_parameters[0];
-
-            $proxyType = new Type\Atomic\TGenericObject(Builder::class, [
-                new Union([
-                    new Type\Atomic\TNamedObject($templateType->getKey()),
-                ]),
+        if (self::builderMethodReturnsSelf($codebase, $method_name_lowercase)) {
+            return new Union([
+                new Type\Atomic\TGenericObject($event->getFqClasslikeName(), $template_type_parameters),
             ]);
+        }
 
-            $type = ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $proxyType);
+        // For Builder methods that don't return Builder (e.g., ->first(), ->count()),
+        // or methods not found on Builder, let Psalm resolve the return type naturally.
+        return null;
+    }
 
-            if (!$type instanceof \Psalm\Type\Union) {
-                return null;
+    /** @psalm-external-mutation-free */
+    private static function builderMethodReturnsSelf(Codebase $codebase, string $method_name_lowercase): bool
+    {
+        if (\array_key_exists($method_name_lowercase, self::$builderReturnCache)) {
+            return self::$builderReturnCache[$method_name_lowercase];
+        }
+
+        $result = self::resolveBuilderMethodReturnsSelf($codebase, $method_name_lowercase);
+        self::$builderReturnCache[$method_name_lowercase] = $result;
+
+        return $result;
+    }
+
+    /** @psalm-mutation-free */
+    private static function resolveBuilderMethodReturnsSelf(Codebase $codebase, string $method_name_lowercase): bool
+    {
+        /** @var lowercase-string $method_name_lowercase */
+
+        // Look up the actual declared method storage (not __call) to get the real return
+        // type. Methods like where(), orderBy() are declared in our stubs but
+        // Codebase\Methods::methodExists() may resolve them through __call, and
+        // getStorage() would then return __call's storage (mixed) instead.
+        foreach ([Builder::class, QueryBuilder::class] as $builderClass) {
+            try {
+                $classStorage = $codebase->classlike_storage_provider->get(\strtolower($builderClass));
+            } catch (\InvalidArgumentException) {
+                continue;
             }
 
-            foreach ($type->getAtomicTypes() as $type) {
-                if ($type instanceof Type\Atomic\TNamedObject && $type->value === Builder::class) {
-                    // ta-da. now we return "this" relation instance
-                    return new Union([
-                        new Type\Atomic\TGenericObject($event->getFqClasslikeName(), $template_type_parameters),
-                    ]);
+            $declaringId = $classStorage->declaring_method_ids[$method_name_lowercase] ?? null;
+            if ($declaringId === null) {
+                continue;
+            }
+
+            try {
+                $storage = $codebase->methods->getStorage($declaringId);
+            } catch (\UnexpectedValueException) {
+                continue;
+            }
+
+            $returnType = $storage->return_type;
+            if ($returnType === null) {
+                continue;
+            }
+
+            foreach ($returnType->getAtomicTypes() as $atomicType) {
+                if ($atomicType instanceof Type\Atomic\TNamedObject) {
+                    $fqcn = \strtolower($atomicType->value);
+                    // Match Eloquent\Builder or static/$this return types.
+                    // Do NOT match Query\Builder — methods like toBase()/getQuery()
+                    // return Query\Builder intentionally, not a fluent chain.
+                    if (
+                        $fqcn === \strtolower(Builder::class)
+                        || $fqcn === 'static'
+                    ) {
+                        return true;
+                    }
                 }
             }
         }
 
-        return null;
+        return false;
     }
 }
