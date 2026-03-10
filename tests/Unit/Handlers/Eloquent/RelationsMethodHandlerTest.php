@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\Tests\Unit\Handlers\Eloquent;
+namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -26,8 +26,11 @@ final class RelationsMethodHandlerTest extends TestCase
         $fileName = $reflection->getFileName();
         self::assertIsString($fileName);
 
+        $fileContents = \file_get_contents($fileName);
+        self::assertIsString($fileContents);
+
         // Strip comments to avoid false positives from explanatory comments
-        $tokens = \token_get_all((string) \file_get_contents($fileName));
+        $tokens = \token_get_all($fileContents);
         $codeOnly = '';
         foreach ($tokens as $token) {
             if (\is_array($token) && \in_array($token[0], [\T_COMMENT, \T_DOC_COMMENT], true)) {
