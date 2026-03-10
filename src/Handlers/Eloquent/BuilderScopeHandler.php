@@ -14,6 +14,7 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
+use function array_key_exists;
 use function is_a;
 use function ucfirst;
 
@@ -29,6 +30,9 @@ use function ucfirst;
  */
 final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
 {
+    /** @var array<string, bool> */
+    private static array $scopeCache = [];
+
     /**
      * @return list<string>
      * @psalm-pure
@@ -88,9 +92,16 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
      */
     private static function hasScopeMethod(\Psalm\Codebase $codebase, string $modelClass, string $methodName): bool
     {
+        $key = $modelClass . '::' . $methodName;
+
+        if (array_key_exists($key, self::$scopeCache)) {
+            return self::$scopeCache[$key];
+        }
+
         // Check legacy scope prefix: scopeActive → active
         $legacyScopeMethod = $modelClass . '::scope' . ucfirst($methodName);
         if ($codebase->methodExists($legacyScopeMethod)) {
+            self::$scopeCache[$key] = true;
             return true;
         }
 
@@ -101,6 +112,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
                 $reflection = new \ReflectionMethod($modelClass, $methodName);
                 $attributes = $reflection->getAttributes(Scope::class);
                 if ($attributes !== []) {
+                    self::$scopeCache[$key] = true;
                     return true;
                 }
             } catch (\ReflectionException) {
@@ -108,6 +120,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
             }
         }
 
+        self::$scopeCache[$key] = false;
         return false;
     }
 }
