@@ -175,27 +175,21 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         $methodName = self::propertyToCamelCase($property_name);
         $method = $fq_classlike_name . '::' . $methodName;
 
-        $result = false;
-
         if ($codebase->methodExists($method)) {
             $returnType = $codebase->getMethodReturnType($method, $fq_classlike_name);
             if ($returnType !== null) {
                 foreach ($returnType->getAtomicTypes() as $type) {
+                    // TGenericObject extends TNamedObject, so this catches both
                     if ($type instanceof Type\Atomic\TNamedObject && is_a($type->value, Attribute::class, true)) {
-                        $result = true;
-                        break;
-                    }
-                    if ($type instanceof Type\Atomic\TGenericObject && is_a($type->value, Attribute::class, true)) {
-                        $result = true;
-                        break;
+                        self::$newStyleAccessorCache[$key] = true;
+                        return true;
                     }
                 }
             }
         }
 
-        self::$newStyleAccessorCache[$key] = $result;
-
-        return $result;
+        self::$newStyleAccessorCache[$key] = false;
+        return false;
     }
 
     /**

@@ -67,12 +67,6 @@ final class ModelRelationshipPropertyHandler implements
             return true;
         }
 
-        $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
-
-        if (isset($class_like_storage->pseudo_property_get_types['$' . $property_name])) {
-            return null;
-        }
-
         return null;
     }
 
@@ -89,12 +83,6 @@ final class ModelRelationshipPropertyHandler implements
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
-        }
-
-        $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
-
-        if (isset($class_like_storage->pseudo_property_get_types['$' . $property_name])) {
-            return null;
         }
 
         return null;
@@ -124,7 +112,7 @@ final class ModelRelationshipPropertyHandler implements
         }
 
         $methodReturnType = $codebase->getMethodReturnType($cacheKey, $fq_classlike_name);
-        if (!$methodReturnType instanceof \Psalm\Type\Union) {
+        if (!$methodReturnType instanceof Union) {
             $result = Type::getMixed();
             self::$propertyTypeCache[$cacheKey] = $result;
             return $result;
@@ -187,22 +175,19 @@ final class ModelRelationshipPropertyHandler implements
             return self::$relationExistsCache[$key];
         }
 
-        $result = false;
-
         if ($codebase->methodExists($key)) {
             $return_type = $codebase->getMethodReturnType($key, $fq_classlike_name);
-            if ($return_type instanceof \Psalm\Type\Union) {
+            if ($return_type instanceof Union) {
                 foreach ($return_type->getAtomicTypes() as $type) {
                     if ($type instanceof TGenericObject && is_a($type->value, Relation::class, true)) {
-                        $result = true;
-                        break;
+                        self::$relationExistsCache[$key] = true;
+                        return true;
                     }
                 }
             }
         }
 
-        self::$relationExistsCache[$key] = $result;
-
-        return $result;
+        self::$relationExistsCache[$key] = false;
+        return false;
     }
 }
