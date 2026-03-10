@@ -65,7 +65,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
         // We look up the Builder method's return type directly from the codebase
         // and check if it contains Builder. This avoids the expensive executeFakeCall()
         // approach which cloned node_data and caused 50+ GB memory explosion on large
-        // codebases. See docs/perf-model-analysis.md "Memory Explosion" section.
+        // codebases.
 
         $template_type_parameters = $event->getTemplateTypeParameters();
         if (!$template_type_parameters) {
