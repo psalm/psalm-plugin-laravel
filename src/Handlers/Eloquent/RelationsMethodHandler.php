@@ -131,10 +131,11 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
             foreach ($returnType->getAtomicTypes() as $atomicType) {
                 if ($atomicType instanceof Type\Atomic\TNamedObject) {
                     $fqcn = \strtolower($atomicType->value);
-                    // Match: Builder<TModel>, self<TModel>, Query\Builder, or static/$this
+                    // Match Eloquent\Builder or static/$this return types.
+                    // Do NOT match Query\Builder — methods like toBase()/getQuery()
+                    // return Query\Builder intentionally, not a fluent chain.
                     if (
                         $fqcn === \strtolower(Builder::class)
-                        || $fqcn === \strtolower(QueryBuilder::class)
                         || $fqcn === 'static'
                     ) {
                         return true;
