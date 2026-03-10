@@ -11,10 +11,6 @@ use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
-use function array_key_exists;
-use function implode;
-use function in_array;
-
 final class ProxyMethodReturnTypeProvider
 {
     /**
@@ -44,9 +40,9 @@ final class ProxyMethodReturnTypeProvider
                 $argType = $statements_analyzer->node_data->getType($arg->value);
                 $argSignatures[] = $argType !== null ? $argType->getId() : 'mixed';
             }
-            $cacheKey = $typeToCall->getId() . '::' . $methodName->name . '(' . implode(',', $argSignatures) . ')';
+            $cacheKey = $typeToCall->getId() . '::' . $methodName->name . '(' . \implode(',', $argSignatures) . ')';
 
-            if (array_key_exists($cacheKey, self::$cache)) {
+            if (\array_key_exists($cacheKey, self::$cache)) {
                 return self::$cache[$cacheKey];
             }
         } else {
@@ -64,7 +60,7 @@ final class ProxyMethodReturnTypeProvider
         ]);
 
         $suppressed_issues = $statements_analyzer->getSuppressedIssues();
-        $addedSuppression = !in_array('PossiblyInvalidMethodCall', $suppressed_issues, true);
+        $addedSuppression = !\in_array('PossiblyInvalidMethodCall', $suppressed_issues, true);
 
         if ($addedSuppression) {
             $statements_analyzer->addSuppressedIssues(['PossiblyInvalidMethodCall']);

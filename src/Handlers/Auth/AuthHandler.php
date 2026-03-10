@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
-use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
-use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
+use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
-
-use function in_array;
-use function is_string;
 
 /**
  * Handles cases (methods that return Authenticatable instance) [when called, "default" guard is used]:
@@ -49,7 +46,7 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
         $method_name_lowercase = $event->getMethodNameLowercase();
 
         if (
-            ! in_array($method_name_lowercase, [
+            ! \in_array($method_name_lowercase, [
                 'user',
                 'loginusingid',
                 'onceusingid',
@@ -63,13 +60,13 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
         }
 
         $default_guard = AuthConfigAnalyzer::instance()->getDefaultGuard();
-        if (! is_string($default_guard)) {
+        if (! \is_string($default_guard)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
         $authenticatable_fqcn = AuthConfigAnalyzer::instance()->getAuthenticatableFQCN($default_guard);
 
-        if (! is_string($authenticatable_fqcn)) {
+        if (! \is_string($authenticatable_fqcn)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 

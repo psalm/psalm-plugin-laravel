@@ -20,10 +20,6 @@ use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Union;
 
-use function array_merge;
-use function is_a;
-use function strtolower;
-
 /**
  * Provides property existence, visibility, and type information for Eloquent model
  * attributes based on migration schema and cast definitions.
@@ -193,7 +189,7 @@ final class ModelPropertyHandler implements
             return self::$tableNameCache[$fqClasslikeName];
         }
 
-        if (!is_a($fqClasslikeName, Model::class, true)) {
+        if (!\is_a($fqClasslikeName, Model::class, true)) {
             return null;
         }
 
@@ -228,19 +224,19 @@ final class ModelPropertyHandler implements
 
         // 1. SoftDeletes trait → deleted_at: datetime (lowest priority)
         $classStorage = $codebase->classlike_storage_provider->get($fqClasslikeName);
-        if (isset($classStorage->used_traits[strtolower(SoftDeletes::class)])) {
+        if (isset($classStorage->used_traits[\strtolower(SoftDeletes::class)])) {
             $casts['deleted_at'] = 'datetime';
         }
 
         // 2. $casts property from the model instance
-        if (is_a($fqClasslikeName, Model::class, true)) {
+        if (\is_a($fqClasslikeName, Model::class, true)) {
             try {
                 $reflection = new \ReflectionClass($fqClasslikeName);
                 $instance = $reflection->newInstanceWithoutConstructor();
 
                 /** @var array<string, string> $instanceCasts */
                 $instanceCasts = $instance->getCasts();
-                $casts = array_merge($casts, $instanceCasts);
+                $casts = \array_merge($casts, $instanceCasts);
             } catch (\ReflectionException) {
                 // Can't instantiate model — skip instance casts
             }
@@ -248,7 +244,7 @@ final class ModelPropertyHandler implements
 
         // 3. casts() method (AST-parsed, highest priority)
         $methodCasts = CastsMethodParser::parse($codebase, $fqClasslikeName);
-        $casts = array_merge($casts, $methodCasts);
+        $casts = \array_merge($casts, $methodCasts);
 
         self::$castsCache[$fqClasslikeName] = $casts;
 

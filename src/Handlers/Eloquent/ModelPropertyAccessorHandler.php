@@ -15,13 +15,6 @@ use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
 use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 
-use function array_key_exists;
-use function is_a;
-use function lcfirst;
-use function property_exists;
-use function str_replace;
-use function ucwords;
-
 final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInterface, PropertyVisibilityProviderInterface, PropertyTypeProviderInterface
 {
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
@@ -122,7 +115,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
 
         // Fall back to legacy getXxxAttribute accessor
         if (self::legacyAccessorExists($codebase, $fq_classlike_name, $property_name)) {
-            $attributeGetterName = 'get' . str_replace('_', '', $property_name) . 'Attribute';
+            $attributeGetterName = 'get' . \str_replace('_', '', $property_name) . 'Attribute';
             return $codebase->getMethodReturnType("{$fq_classlike_name}::{$attributeGetterName}", $fq_classlike_name)
                 ?: Type::getMixed();
         }
@@ -135,11 +128,11 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
     {
         $key = $fqcn . '::' . $property_name;
 
-        if (array_key_exists($key, self::$nativePropertyCache)) {
+        if (\array_key_exists($key, self::$nativePropertyCache)) {
             return self::$nativePropertyCache[$key];
         }
 
-        $result = property_exists($fqcn, $property_name);
+        $result = \property_exists($fqcn, $property_name);
         self::$nativePropertyCache[$key] = $result;
 
         return $result;
@@ -149,11 +142,11 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
     {
         $key = $fq_classlike_name . '::' . $property_name;
 
-        if (array_key_exists($key, self::$legacyAccessorCache)) {
+        if (\array_key_exists($key, self::$legacyAccessorCache)) {
             return self::$legacyAccessorCache[$key];
         }
 
-        $result = $codebase->methodExists($fq_classlike_name . '::get' . str_replace('_', '', $property_name) . 'Attribute');
+        $result = $codebase->methodExists($fq_classlike_name . '::get' . \str_replace('_', '', $property_name) . 'Attribute');
         self::$legacyAccessorCache[$key] = $result;
 
         return $result;
@@ -168,7 +161,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
     {
         $key = $fq_classlike_name . '::' . $property_name;
 
-        if (array_key_exists($key, self::$newStyleAccessorCache)) {
+        if (\array_key_exists($key, self::$newStyleAccessorCache)) {
             return self::$newStyleAccessorCache[$key];
         }
 
@@ -180,7 +173,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
             if ($returnType !== null) {
                 foreach ($returnType->getAtomicTypes() as $type) {
                     // TGenericObject extends TNamedObject, so this catches both
-                    if ($type instanceof Type\Atomic\TNamedObject && is_a($type->value, Attribute::class, true)) {
+                    if ($type instanceof Type\Atomic\TNamedObject && \is_a($type->value, Attribute::class, true)) {
                         self::$newStyleAccessorCache[$key] = true;
                         return true;
                     }
@@ -199,7 +192,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
     {
         $key = $fq_classlike_name . '::' . $property_name;
 
-        if (array_key_exists($key, self::$accessorTypeCache)) {
+        if (\array_key_exists($key, self::$accessorTypeCache)) {
             return self::$accessorTypeCache[$key];
         }
 
@@ -214,7 +207,7 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         }
 
         foreach ($returnType->getAtomicTypes() as $type) {
-            if ($type instanceof Type\Atomic\TGenericObject && is_a($type->value, Attribute::class, true)) {
+            if ($type instanceof Type\Atomic\TGenericObject && \is_a($type->value, Attribute::class, true)) {
                 // TGet is the first template parameter
                 if (isset($type->type_params[0])) {
                     self::$accessorTypeCache[$key] = $type->type_params[0];
@@ -238,6 +231,6 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
      */
     private static function propertyToCamelCase(string $property_name): string
     {
-        return lcfirst(str_replace('_', '', ucwords($property_name, '_')));
+        return \lcfirst(\str_replace('_', '', \ucwords($property_name, '_')));
     }
 }

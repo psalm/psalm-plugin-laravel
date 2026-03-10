@@ -8,30 +8,23 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
-use ReflectionMethod;
-
-use function file_exists;
-use function file_put_contents;
-use function sys_get_temp_dir;
-use function tempnam;
-use function unlink;
 
 #[CoversClass(ModelDiscoveryProvider::class)]
 final class ModelDiscoveryProviderTest extends TestCase
 {
-    private static ?ReflectionMethod $extractClassName = null;
+    private static ?\ReflectionMethod $extractClassName = null;
 
     private ?string $tempFile = null;
 
     public static function setUpBeforeClass(): void
     {
-        self::$extractClassName = new ReflectionMethod(ModelDiscoveryProvider::class, 'extractClassName');
+        self::$extractClassName = new \ReflectionMethod(ModelDiscoveryProvider::class, 'extractClassName');
     }
 
     protected function tearDown(): void
     {
-        if ($this->tempFile !== null && file_exists($this->tempFile)) {
-            unlink($this->tempFile);
+        if ($this->tempFile !== null && \file_exists($this->tempFile)) {
+            \unlink($this->tempFile);
         }
     }
 
@@ -191,9 +184,9 @@ final class ModelDiscoveryProviderTest extends TestCase
     #[DataProvider('extract_class_name_cases')]
     public function test_extract_class_name(string $contents, ?string $expected): void
     {
-        $this->tempFile = tempnam(sys_get_temp_dir(), 'psalm_test_');
+        $this->tempFile = \tempnam(\sys_get_temp_dir(), 'psalm_test_');
         self::assertNotFalse($this->tempFile);
-        file_put_contents($this->tempFile, $contents);
+        \file_put_contents($this->tempFile, $contents);
 
         $result = self::$extractClassName->invoke(null, $this->tempFile);
 
