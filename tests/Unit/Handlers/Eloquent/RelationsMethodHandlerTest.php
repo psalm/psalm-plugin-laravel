@@ -18,8 +18,6 @@ final class RelationsMethodHandlerTest extends TestCase
      * executeFakeCall() clones Psalm's node_data for every call — on large codebases with
      * thousands of relation method calls, this causes 50+ GB memory explosion.
      * The handler should resolve return types via Codebase::methods->getStorage() instead.
-     *
-     * @see docs/perf-model-analysis.md "Memory Explosion" section
      */
     #[Test]
     public function it_does_not_use_expensive_fake_call_proxy(): void
@@ -43,8 +41,7 @@ final class RelationsMethodHandlerTest extends TestCase
             $codeOnly,
             'RelationsMethodHandler must not use ProxyMethodReturnTypeProvider::executeFakeCall() — '
             . 'it causes 50+ GB memory explosion on large projects. '
-            . 'Use Codebase::methods->getStorage() for return type lookup instead. '
-            . 'See docs/perf-model-analysis.md "Memory Explosion" section.',
+            . 'Use Codebase::methods->getStorage() for return type lookup instead.',
         );
     }
 }
