@@ -101,4 +101,39 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
     public function newEloquentBuilder($query) {}
+
+    /**
+     * Get the value of the model's primary key.
+     *
+     * @return int|string|null
+     */
+    public function getKey() {}
+
+    /**
+     * Get the attributes that have been changed since the last sync.
+     *
+     * @return array<string, mixed>
+     */
+    public function getDirty() {}
+
+    /**
+     * Get the attributes that were changed when the model was last saved.
+     *
+     * @return array<string, mixed>
+     */
+    public function getChanges() {}
+
+    /**
+     * Convert the model instance to an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray() {}
+
+    /**
+     * Get all of the current attributes on the model.
+     *
+     * @return array<string, mixed>
+     */
+    public function getAttributes() {}
 }

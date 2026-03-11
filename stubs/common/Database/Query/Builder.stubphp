@@ -206,4 +206,12 @@ class Builder
      * @psalm-taint-sink sql $expression
      */
     public function rawValue(string $expression, array $bindings = []) {}
+
+    /**
+     * Retrieve the sum of the values of a given column.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return int|float
+     */
+    public function sum($column) {}
 }
