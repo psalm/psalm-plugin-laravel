@@ -5,6 +5,19 @@ namespace Illuminate\Support\Facades;
 class DB extends Facade
 {
     /**
+     * Execute a Closure within a transaction.
+     *
+     * @template TReturnValue
+     *
+     * @param  \Closure(\Illuminate\Database\Connection): TReturnValue  $callback
+     * @param  int  $attempts
+     * @return TReturnValue
+     *
+     * @throws \Throwable
+     */
+    public static function transaction(\Closure $callback, $attempts = 1) {}
+
+    /**
      * Create a raw database expression.
      *
      * @param  mixed  $value
@@ -20,7 +33,7 @@ class DB extends Facade
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
-     * @return array
+     * @return list<\stdClass>
      *
      * @psalm-taint-sink sql $query
      */
@@ -64,7 +77,7 @@ class DB extends Facade
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
-     * @return mixed
+     * @return \stdClass|null
      *
      * @psalm-taint-sink sql $query
      */

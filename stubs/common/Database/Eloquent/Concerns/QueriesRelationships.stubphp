@@ -1,0 +1,106 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
+
+trait QueriesRelationships
+{
+    /**
+     * Add a relationship count / exists condition to the query with where clauses.
+     * Also load the relationship with same condition.
+     *
+     * @param  string  $relation
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder): mixed)|null  $callback
+     * @param  string  $operator
+     * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
+     * @return $this
+     */
+    public function withWhereHas($relation, ?Closure $callback = null, $operator = '>=', $count = 1) {}
+
+    /**
+     * Add a "belongs to" relationship where clause to the query.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model>  $related
+     * @param  string|null  $relationshipName
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @throws \Illuminate\Database\Eloquent\RelationNotFoundException
+     */
+    public function whereBelongsTo($related, $relationshipName = null, $boolean = 'and') {}
+
+    /**
+     * Add a "belongs to" relationship with an "or where" clause to the query.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model  $related
+     * @param  string|null  $relationshipName
+     * @return $this
+     *
+     * @throws \RuntimeException
+     */
+    public function orWhereBelongsTo($related, $relationshipName = null) {}
+
+    /**
+     * Add subselect queries to include an aggregate value for a relationship.
+     *
+     * @param  mixed  $relations
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  string|null  $function
+     * @return $this
+     */
+    public function withAggregate($relations, $column, $function = null) {}
+
+    /**
+     * Add subselect queries to count the relations.
+     *
+     * @param  mixed  $relations
+     * @return $this
+     */
+    public function withCount($relations) {}
+
+    /**
+     * Add subselect queries to include the max of the relation's column.
+     *
+     * @param  string|array  $relation
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return $this
+     */
+    public function withMax($relation, $column) {}
+
+    /**
+     * Add subselect queries to include the min of the relation's column.
+     *
+     * @param  string|array  $relation
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return $this
+     */
+    public function withMin($relation, $column) {}
+
+    /**
+     * Add subselect queries to include the sum of the relation's column.
+     *
+     * @param  string|array  $relation
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return $this
+     */
+    public function withSum($relation, $column) {}
+
+    /**
+     * Add subselect queries to include the average of the relation's column.
+     *
+     * @param  string|array  $relation
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return $this
+     */
+    public function withAvg($relation, $column) {}
+
+    /**
+     * Add subselect queries to include the existence of related models.
+     *
+     * @param  string|array  $relation
+     * @return $this
+     */
+    public function withExists($relation) {}
+}
