@@ -33,7 +33,7 @@ class DB extends Facade
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
-     * @return list<\stdClass>
+     * @return array
      *
      * @psalm-taint-sink sql $query
      */
@@ -77,7 +77,7 @@ class DB extends Facade
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
-     * @return \stdClass|null
+     * @return mixed
      *
      * @psalm-taint-sink sql $query
      */
