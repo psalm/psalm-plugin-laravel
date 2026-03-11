@@ -337,16 +337,16 @@ class Builder implements BuilderContract
     /**
      * @param  array<string, mixed>  $attributes
      * @param  array  $values
-     * @return TModel|self<TModel>
+     * @return TModel
      */
     public function firstOrNew(array $attributes = [], array $values = []) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $values
-     * @return TModel|self<TModel>
+     * @param  \Closure|array  $values
+     * @return TModel
      */
-    public function firstOrCreate(array $attributes = [], array $values = []) {}
+    public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}
 
     /**
      * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|int, mixed>|\Illuminate\Database\Query\Expression  $column
@@ -436,7 +436,7 @@ class Builder implements BuilderContract
     /**
      * Get a lazy collection for the given query.
      *
-     * @return \Illuminate\Support\LazyCollection
+     * @return \Illuminate\Support\LazyCollection<int, TModel>
      */
     public function cursor() {}
 

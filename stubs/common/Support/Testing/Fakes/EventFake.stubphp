@@ -1,0 +1,15 @@
+<?php
+
+namespace Illuminate\Support\Testing\Fakes;
+
+class EventFake
+{
+    /**
+     * Assert if an event has a listener attached to it.
+     *
+     * @param  string  $expectedEvent
+     * @param  string|array{class-string, string}  $expectedListener
+     * @return void
+     */
+    public function assertListening($expectedEvent, $expectedListener) {}
+}
