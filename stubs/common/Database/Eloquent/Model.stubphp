@@ -105,7 +105,7 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
     /**
      * Get the value of the model's primary key.
      *
-     * @return int|string|null
+     * @return int|string
      */
     public function getKey() {}
 
