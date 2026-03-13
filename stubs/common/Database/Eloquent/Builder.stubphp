@@ -466,7 +466,7 @@ class Builder implements BuilderContract
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, TModel>
      *
      * @throws \InvalidArgumentException
      */
@@ -477,7 +477,7 @@ class Builder implements BuilderContract
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\Paginator
+     * @return \Illuminate\Contracts\Pagination\Paginator<int, TModel>
      */
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -488,7 +488,7 @@ class Builder implements BuilderContract
      * @param  array<array-key, mixed>  $columns
      * @param  string  $cursorName
      * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
-     * @return \Illuminate\Pagination\CursorPaginator<TModel>
+     * @return \Illuminate\Pagination\CursorPaginator<int, TModel>
      */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 
