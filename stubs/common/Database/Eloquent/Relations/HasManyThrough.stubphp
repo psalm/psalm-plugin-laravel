@@ -25,7 +25,7 @@ class HasManyThrough extends HasOneOrManyThrough
      * @param  array<int, mixed>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Pagination\LengthAwarePaginator<TRelatedModel>
+     * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel>
      */
     public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -36,7 +36,7 @@ class HasManyThrough extends HasOneOrManyThrough
      * @param  array<int, mixed>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Pagination\Paginator<TRelatedModel>
+     * @return \Illuminate\Pagination\Paginator<int, TRelatedModel>
      */
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -47,7 +47,7 @@ class HasManyThrough extends HasOneOrManyThrough
      * @param  array<int, mixed>  $columns
      * @param  string  $cursorName
      * @param  string|null  $cursor
-     * @return \Illuminate\Pagination\CursorPaginator<TRelatedModel>
+     * @return \Illuminate\Pagination\CursorPaginator<int, TRelatedModel>
      */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 
