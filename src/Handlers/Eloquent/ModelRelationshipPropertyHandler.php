@@ -12,22 +12,15 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
-use Psalm\Plugin\EventHandler\PropertyExistenceProviderInterface;
-use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
-use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
-final class ModelRelationshipPropertyHandler implements
-    PropertyExistenceProviderInterface,
-    PropertyVisibilityProviderInterface,
-    PropertyTypeProviderInterface
+final class ModelRelationshipPropertyHandler
 {
     /** @var array<string, bool> Cache for relationExists() keyed by "class::property" */
     private static array $relationExistsCache = [];
@@ -35,18 +28,6 @@ final class ModelRelationshipPropertyHandler implements
     /** @var array<string, Union> Cache for getPropertyType() keyed by "class::property" */
     private static array $propertyTypeCache = [];
 
-    /**
-     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
-     * @psalm-external-mutation-free
-     */
-    #[\Override]
-    public static function getClassLikeNames(): array
-    {
-        return ModelDiscoveryProvider::getModelClasses();
-    }
-
-    /** @inheritDoc */
-    #[\Override]
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();
@@ -72,7 +53,6 @@ final class ModelRelationshipPropertyHandler implements
         return null;
     }
 
-    #[\Override]
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -96,7 +76,6 @@ final class ModelRelationshipPropertyHandler implements
         return null;
     }
 
-    #[\Override]
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();
