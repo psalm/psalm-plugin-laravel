@@ -38,7 +38,6 @@ final class ModelPropertyHandler
 
     /**
      * @psalm-suppress PossiblyUnusedMethod called externally by test infrastructure
-     * @psalm-suppress MissingPureAnnotation mutates static caches intentionally
      */
     public static function reset(): void
     {
