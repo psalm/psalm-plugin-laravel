@@ -42,8 +42,8 @@ final class Plugin implements PluginEntryPointInterface
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
-        $failOnInternalError = ((string) $config?->failOnInternalError) === 'true';
-        $modelDiscoverySource = (string) ($config?->modelDiscovery['source'] ?? 'static');
+        $failOnInternalError = ((string) ($config?->failOnInternalError['value'] ?? 'false')) === 'true';
+        $columnFallback = (string) ($config?->modelProperties['columnFallback'] ?? 'migrations');
         $output = new DefaultProgress();
 
         // $registration->codebase is available/public from Psalm v6.7
@@ -80,7 +80,7 @@ final class Plugin implements PluginEntryPointInterface
             return;
         }
 
-        $this->registerHandlers($registration, $modelDiscoverySource);
+        $this->registerHandlers($registration, $columnFallback);
         $this->registerStubs($registration);
     }
 
@@ -149,7 +149,7 @@ final class Plugin implements PluginEntryPointInterface
         $registration->addStubFile(self::getAliasStubLocation());
     }
 
-    private function registerHandlers(RegistrationInterface $registration, string $modelDiscoverySource): void
+    private function registerHandlers(RegistrationInterface $registration, string $columnFallback): void
     {
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(ContainerHandler::class);
@@ -171,7 +171,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         $registration->registerHooksFromClass(ModelPropertyAccessorHandler::class);
 
-        if ($modelDiscoverySource === 'static') {
+        if ($columnFallback === 'migrations') {
             require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
             $registration->registerHooksFromClass(ModelPropertyHandler::class);
         }
