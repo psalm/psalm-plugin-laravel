@@ -13,11 +13,17 @@ return new class extends Migration {
             $table->string('slug');
             $table->text('body');
             $table->string('legacy_field');
+            $table->string('old_status');
+            $table->string('temp_flag');
             $table->timestamps();
         });
 
+        // Blueprint::dropColumn() with array argument
         Schema::table('posts', static function (Blueprint $table) {
             $table->dropColumn(['slug', 'legacy_field']);
         });
+
+        // Schema::dropColumns() with array argument (no closure)
+        Schema::dropColumns('posts', ['old_status', 'temp_flag']);
     }
 };

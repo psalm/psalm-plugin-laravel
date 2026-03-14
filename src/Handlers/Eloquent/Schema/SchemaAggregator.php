@@ -136,6 +136,10 @@ final class SchemaAggregator
                     $this->dropTable($stmt->expr);
                     break;
 
+                case 'dropColumns':
+                    $this->dropColumnsFromTable($stmt->expr);
+                    break;
+
                 case 'rename':
                     $this->renameTable($stmt->expr);
             }
@@ -195,6 +199,40 @@ final class SchemaAggregator
         $table_name = $call->args[0]->value->value;
 
         unset($this->tables[$table_name]);
+    }
+
+    /**
+     * Handle Schema::dropColumns($table, $columns) — drops columns without a closure.
+     */
+    private function dropColumnsFromTable(PhpParser\Node\Expr\StaticCall $call): void
+    {
+        if (
+            !isset($call->args[0], $call->args[1])
+            || !$call->args[0] instanceof PhpParser\Node\Arg
+            || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
+            || !$call->args[1] instanceof PhpParser\Node\Arg
+        ) {
+            return;
+        }
+
+        $table_name = $call->args[0]->value->value;
+
+        if (!isset($this->tables[$table_name])) {
+            return;
+        }
+
+        $table = $this->tables[$table_name];
+        $columns_arg = $call->args[1]->value;
+
+        if ($columns_arg instanceof PhpParser\Node\Scalar\String_) {
+            $table->dropColumn($columns_arg->value);
+        } elseif ($columns_arg instanceof PhpParser\Node\Expr\Array_) {
+            foreach ($columns_arg->items as $item) {
+                if ($item !== null && $item->value instanceof PhpParser\Node\Scalar\String_) {
+                    $table->dropColumn($item->value->value);
+                }
+            }
+        }
     }
 
     private function renameTable(PhpParser\Node\Expr\StaticCall $call): void
