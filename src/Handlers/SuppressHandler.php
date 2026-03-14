@@ -137,7 +137,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
-        foreach ($event->getCodebase()->classlike_storage_provider->getAll() as $classStorage) {
+        foreach ($event->getCodebase()->classlike_storage_provider::getAll() as $classStorage) {
             if (!$classStorage->user_defined) {
                 continue;
             }
