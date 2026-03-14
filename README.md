@@ -77,64 +77,7 @@ Step by step set `errorLevel` to `1` and use Psalm and this plugin at full power
 
 ## Configuration
 
-The plugin can be configured via XML elements inside the `<pluginClass>` tag in your `psalm.xml`:
-
-```xml
-<plugins>
-    <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <failOnInternalError>false</failOnInternalError>
-        <modelDiscovery source="static" />
-    </pluginClass>
-</plugins>
-```
-
-### `failOnInternalError`
-
-- **Type:** `true` | `false`
-- **Default:** `false`
-
-When the plugin encounters an internal error (e.g. failing to boot the Laravel app or generate stubs), it normally prints a warning and disables itself for that run.
-Set this to `true` to throw the exception instead — useful in CI to ensure the plugin is actually running.
-
-### `modelDiscovery`
-
-- **Attribute:** `source`
-- **Values:** `static` (default)
-- **Default:** `static`
-
-Controls how Eloquent model properties (columns) are discovered.
-
-- `static` — Parses your migration files to infer column names and types. This enables type-aware property access on models (e.g. `$user->email` resolves to `string`).
-- Any other value — Disables migration-based property discovery. Use this if you prefer to rely solely on `@property` PHPDoc annotations on your model classes.
-
-### Model directories
-
-The plugin scans directories to discover Eloquent model classes.
-You can configure which directories are scanned by publishing a Laravel config file at `config/psalm-laravel.php`:
-
-```php
-<?php
-
-return [
-    'model_locations' => [
-        'app/Models',
-        'app/Domain/Models',
-    ],
-];
-```
-
-If not set, the plugin falls back to the `ide-helper.model_locations` config key, and then to `app/Models/` and `app/`.
-
-### `PSALM_LARAVEL_PLUGIN_CACHE_PATH`
-
-The plugin generates stub files at runtime (aliases, etc.) and caches them to a temp directory.
-Set this environment variable to override the cache location:
-
-```bash
-PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
-```
-
-By default, stubs are cached in the system temp directory (`sys_get_temp_dir()`).
+See [docs/config.md](docs/config.md) for all configuration options.
 
 
 ## How it works
