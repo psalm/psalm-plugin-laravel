@@ -16,7 +16,7 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <failOnInternalError>true</failOnInternalError>
+            <failOnInternalError value="true" />
         </pluginClass>
     </plugins>
 
