@@ -87,7 +87,9 @@ final class ModelDiscoveryProvider
             }
         }
 
-        self::$modelClasses = \array_values($models);
+        $modelList = \array_values($models);
+        \sort($modelList); // for better DX
+        self::$modelClasses = $modelList;
     }
 
     /**
