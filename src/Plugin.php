@@ -62,7 +62,10 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         try {
-            $this->buildSchema();
+            if ($columnFallback === 'migrations') {
+                $this->buildSchema();
+            }
+
             $this->generateAliasStubs();
         } catch (\Throwable $throwable) {
             $output->warning("Laravel plugin error on generating stub files: {$throwable->getMessage()}");
@@ -105,7 +108,7 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function findStubFiles(string $directory): array
     {
-        if (! \is_dir($directory)) {
+        if (!\is_dir($directory)) {
             return [];
         }
 
@@ -119,7 +122,7 @@ final class Plugin implements PluginEntryPointInterface
 
             $realPath = $file->getRealPath();
 
-            if (! \is_string($realPath)) {
+            if (!\is_string($realPath)) {
                 continue;
             }
 
@@ -168,6 +171,7 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
             ModelRegistrationHandler::enableColumnFallback();
         }
+
         $registration->registerHooksFromClass(ModelRegistrationHandler::class);
 
         require_once __DIR__ . '/Handlers/Eloquent/RelationsMethodHandler.php';
@@ -203,7 +207,7 @@ final class Plugin implements PluginEntryPointInterface
 
         $schemaAggregator = new SchemaAggregator();
 
-        $migrationFilePathnames = self::findPhpFilesRecursive($migrationsDirectory);
+        $migrationFilePathnames = $this->findPhpFilesRecursive($migrationsDirectory);
         if ($migrationFilePathnames === []) {
             SchemaStateProvider::setSchema($schemaAggregator);
             return;
@@ -228,7 +232,7 @@ final class Plugin implements PluginEntryPointInterface
      *
      * @return list<string>
      */
-    private static function findPhpFilesRecursive(string $directory): array
+    private function findPhpFilesRecursive(string $directory): array
     {
         if (!\is_dir($directory)) {
             return [];
@@ -296,7 +300,7 @@ final class Plugin implements PluginEntryPointInterface
             $dir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-' . \md5(\getcwd() ?: __DIR__);
         }
 
-        if (! \is_dir($dir) && ! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
+        if (!\is_dir($dir) && !\mkdir($dir, 0777, true) && !\is_dir($dir)) {
             throw new \RuntimeException("Cache directory '{$dir}' does not exist and could not be created.");
         }
 
