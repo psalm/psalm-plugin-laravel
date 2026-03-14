@@ -36,15 +36,6 @@ final class ModelPropertyHandler
     /** @var array<string, array<string, string>> model class → merged casts cache */
     private static array $castsCache = [];
 
-    /**
-     * @psalm-suppress PossiblyUnusedMethod called externally by test infrastructure
-     */
-    public static function reset(): void
-    {
-        self::$tableNameCache = [];
-        self::$castsCache = [];
-    }
-
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -240,7 +231,7 @@ final class ModelPropertyHandler
             SchemaColumn::TYPE_FLOAT => Type::getFloat(),
             SchemaColumn::TYPE_BOOL => Type::getBool(),
             SchemaColumn::TYPE_ENUM => self::mapEnumColumn($column),
-            SchemaColumn::TYPE_ARRAY => new Union([new Type\Atomic\TKeyedArray(
+            SchemaColumn::TYPE_ARRAY => new Union([Type\Atomic\TKeyedArray::make(
                 [Type::getFloat()],
                 fallback_params: [Type::getInt(), Type::getFloat()],
                 is_list: true,
