@@ -273,7 +273,7 @@ final class SchemaAggregator
                         && isset($root_var->args[0])
                         && $root_var->args[0] instanceof PhpParser\Node\Arg
                     ) {
-                        $default = self::resolveDefaultValue($root_var->args[0]->value);
+                        $default = $this->resolveDefaultValue($root_var->args[0]->value);
                     }
 
                     if ($root_var->name->name === 'unsigned') {
@@ -336,7 +336,7 @@ final class SchemaAggregator
             } else {
                 // foreignIdFor() with class reference: $table->foreignIdFor(User::class)
                 if ($first_method_name_lc === 'foreignidfor') {
-                    $resolved_column = self::resolveForeignIdForColumn($first_arg, $second_arg);
+                    $resolved_column = $this->resolveForeignIdForColumn($first_arg, $second_arg);
                     if ($resolved_column !== null) {
                         $table->setColumn(new SchemaColumn($resolved_column, 'int', $nullable, unsigned: true));
                     }
@@ -394,8 +394,6 @@ final class SchemaAggregator
 
                 case 'binary':
                 case 'foreignulid':
-                    $table->setColumn(new SchemaColumn($column_name, 'string', $nullable, default: $default));
-                    break;
 
                 case 'char':
                 case 'date':
@@ -532,7 +530,7 @@ final class SchemaAggregator
         }
     }
 
-    private static function resolveDefaultValue(PhpParser\Node\Expr $expr): SchemaColumnDefault
+    private function resolveDefaultValue(PhpParser\Node\Expr $expr): SchemaColumnDefault
     {
         if ($expr instanceof PhpParser\Node\Scalar\String_) {
             return SchemaColumnDefault::resolved($expr->value);
@@ -584,7 +582,7 @@ final class SchemaAggregator
      * foreignIdFor(User::class) should resolve to 'user_id' (based on model's class name),
      * not the hardcoded 'id' that was used before.
      */
-    private static function resolveForeignIdForColumn(
+    private function resolveForeignIdForColumn(
         ?PhpParser\Node\Expr $first_arg,
         ?PhpParser\Node\Expr $second_arg,
     ): ?string {

@@ -15,7 +15,7 @@ final class ReturnContinueBugTest extends AbstractSchemaAggregatorTestCase
             __DIR__ . '/migrations/return_continue_bug',
         );
 
-        self::assertArrayHasKey('orders', $schemaAggregator->tables);
+        $this->assertArrayHasKey('orders', $schemaAggregator->tables);
 
         $table = $schemaAggregator->tables['orders'];
 

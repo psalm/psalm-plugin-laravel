@@ -24,10 +24,10 @@ final class RelationsMethodHandlerTest extends TestCase
     {
         $reflection = new \ReflectionClass(RelationsMethodHandler::class);
         $fileName = $reflection->getFileName();
-        self::assertIsString($fileName);
+        $this->assertIsString($fileName);
 
         $fileContents = \file_get_contents($fileName);
-        self::assertIsString($fileContents);
+        $this->assertIsString($fileContents);
 
         // Strip comments to avoid false positives from explanatory comments
         $tokens = \token_get_all($fileContents);
@@ -36,15 +36,12 @@ final class RelationsMethodHandlerTest extends TestCase
             if (\is_array($token) && \in_array($token[0], [\T_COMMENT, \T_DOC_COMMENT], true)) {
                 continue;
             }
+
             $codeOnly .= \is_array($token) ? $token[1] : $token;
         }
 
-        self::assertStringNotContainsString(
-            'ProxyMethodReturnTypeProvider',
-            $codeOnly,
-            'RelationsMethodHandler must not use ProxyMethodReturnTypeProvider::executeFakeCall() — '
-            . 'it causes 50+ GB memory explosion on large projects. '
-            . 'Use Codebase::methods->getStorage() for return type lookup instead.',
-        );
+        $this->assertStringNotContainsString('ProxyMethodReturnTypeProvider', $codeOnly, 'RelationsMethodHandler must not use ProxyMethodReturnTypeProvider::executeFakeCall() — '
+        . 'it causes 50+ GB memory explosion on large projects. '
+        . 'Use Codebase::methods->getStorage() for return type lookup instead.');
     }
 }

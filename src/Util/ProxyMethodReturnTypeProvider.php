@@ -38,8 +38,9 @@ final class ProxyMethodReturnTypeProvider
             $argSignatures = [];
             foreach ($fake_method_call->getArgs() as $arg) {
                 $argType = $statements_analyzer->node_data->getType($arg->value);
-                $argSignatures[] = $argType !== null ? $argType->getId() : 'mixed';
+                $argSignatures[] = $argType instanceof \Psalm\Type\Union ? $argType->getId() : 'mixed';
             }
+
             $cacheKey = $typeToCall->getId() . '::' . $methodName->name . '(' . \implode(',', $argSignatures) . ')';
 
             if (\array_key_exists($cacheKey, self::$cache)) {
@@ -81,7 +82,7 @@ final class ProxyMethodReturnTypeProvider
 
             $returnType = $statements_analyzer->node_data->getType($fake_method_call);
 
-            if ($cacheKey !== null && $returnType !== null) {
+            if ($cacheKey !== null && $returnType instanceof \Psalm\Type\Union) {
                 self::$cache[$cacheKey] = $returnType;
             }
 

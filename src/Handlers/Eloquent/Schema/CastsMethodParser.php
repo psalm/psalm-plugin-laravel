@@ -45,7 +45,7 @@ final class CastsMethodParser
         }
 
         $location = $methodStorage->location;
-        if ($location === null) {
+        if (!$location instanceof \Psalm\CodeLocation) {
             return [];
         }
 
@@ -70,9 +70,9 @@ final class CastsMethodParser
             }
 
             // Check that this is in the right class
-            /** @var mixed $parent */
+            /** @var PhpParser\Node\Stmt\Class_|null $parent */
             $parent = $node->getAttribute('parent');
-            if ($parent instanceof PhpParser\Node\Stmt\Class_ && $parent->namespacedName !== null) {
+            if ($parent instanceof PhpParser\Node\Stmt\Class_ && $parent->namespacedName instanceof \PhpParser\Node\Name) {
                 return $parent->namespacedName->toString() === $modelClass;
             }
 
@@ -85,7 +85,7 @@ final class CastsMethodParser
 
         // Find return statements
         foreach ($castsMethod->stmts as $stmt) {
-            if (!$stmt instanceof PhpParser\Node\Stmt\Return_ || $stmt->expr === null) {
+            if (!$stmt instanceof PhpParser\Node\Stmt\Return_ || !$stmt->expr instanceof \PhpParser\Node\Expr) {
                 continue;
             }
 
@@ -116,9 +116,11 @@ final class CastsMethodParser
                 if (!$arg instanceof PhpParser\Node\Arg) {
                     continue;
                 }
+
                 if ($arg->value instanceof PhpParser\Node\Expr\Array_) {
                     $casts = \array_merge($casts, self::extractCastsFromArray($arg->value));
                 }
+
                 // parent::casts() — skip, we get parent casts from $casts property
             }
 
@@ -168,7 +170,7 @@ final class CastsMethodParser
             && $expr->name instanceof PhpParser\Node\Identifier
             && $expr->name->name === 'class'
         ) {
-            /** @var mixed $resolved */
+            /** @var string|null $resolved */
             $resolved = $expr->class->getAttribute('resolvedName');
             if (\is_string($resolved)) {
                 return $resolved;

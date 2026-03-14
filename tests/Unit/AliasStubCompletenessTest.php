@@ -21,7 +21,7 @@ final class AliasStubCompletenessTest extends TestCase
         }
 
         $stubContent = \file_get_contents($stubPath);
-        self::assertIsString($stubContent);
+        $this->assertIsString($stubContent);
 
         $defaultAliases = Facade::defaultAliases();
 
@@ -30,11 +30,7 @@ final class AliasStubCompletenessTest extends TestCase
                 continue;
             }
 
-            self::assertStringContainsString(
-                "class {$alias} extends",
-                $stubContent,
-                "Missing alias stub for {$alias} -> {$fqcn}",
-            );
+            $this->assertStringContainsString("class {$alias} extends", $stubContent, "Missing alias stub for {$alias} -> {$fqcn}");
         }
     }
 }

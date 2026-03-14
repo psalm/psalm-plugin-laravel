@@ -53,7 +53,7 @@ final class ModelPropertyHandler
         }
 
         $source = $event->getSource();
-        if ($source === null) {
+        if (!$source instanceof \Psalm\StatementsSource) {
             return null;
         }
 
@@ -72,7 +72,7 @@ final class ModelPropertyHandler
         }
 
         $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column !== null) {
+        if ($column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
             return true;
         }
 
@@ -99,7 +99,7 @@ final class ModelPropertyHandler
         }
 
         $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column !== null) {
+        if ($column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
             return true;
         }
 
@@ -109,7 +109,7 @@ final class ModelPropertyHandler
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();
-        if ($source === null || !$event->isReadMode()) {
+        if (!$source instanceof \Psalm\StatementsSource || !$event->isReadMode()) {
             return null;
         }
 
@@ -130,7 +130,7 @@ final class ModelPropertyHandler
         }
 
         $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column === null) {
+        if (!$column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
             return null;
         }
 
@@ -147,7 +147,7 @@ final class ModelPropertyHandler
     private static function resolveColumn(string $fqClasslikeName, string $propertyName): ?SchemaColumn
     {
         $schema = SchemaStateProvider::getSchema();
-        if ($schema === null) {
+        if (!$schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator) {
             return null;
         }
 
