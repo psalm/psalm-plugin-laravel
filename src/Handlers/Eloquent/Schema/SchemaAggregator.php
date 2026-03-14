@@ -413,6 +413,18 @@ final class SchemaAggregator
                 }
             }
 
+            // addColumn('type', 'name') → remap to the resolved type method and re-dispatch
+            if (
+                $first_method_name_lc === 'addcolumn'
+                && $first_arg instanceof PhpParser\Node\Scalar\String_
+                && $second_arg instanceof PhpParser\Node\Scalar\String_
+            ) {
+                $first_method_name_lc = \strtolower($first_arg->value);
+                $column_name = $second_arg->value;
+                $second_arg = null;
+                $second_arg_array = null;
+            }
+
             $is_unsigned = $unsigned || \in_array($first_method_name_lc, self::UNSIGNED_INT_METHODS, true);
 
             switch ($first_method_name_lc) {
@@ -504,6 +516,7 @@ final class SchemaAggregator
                     break;
 
                 case 'removecolumn':
+                case 'dropconstrainedforeignid':
                 case 'dropsoftdeletestz':
                 case 'dropsoftdeletesdatetime':
                 case 'dropsoftdeletes':
@@ -511,6 +524,18 @@ final class SchemaAggregator
                 case 'dropcolumn':
                 case 'drop':
                     $table->dropColumn($column_name);
+                    break;
+
+                case 'after':
+                    if (
+                        $second_arg instanceof PhpParser\Node\Expr\Closure
+                        && \count($second_arg->params) >= 1
+                        && $second_arg->params[0]->var instanceof PhpParser\Node\Expr\Variable
+                        && \is_string($second_arg->params[0]->var->name)
+                    ) {
+                        $this->processColumnUpdates($table_name, $second_arg->params[0]->var->name, $second_arg->stmts);
+                    }
+
                     break;
 
                 case 'dropforeign':
@@ -560,6 +585,14 @@ final class SchemaAggregator
                     break;
 
                 case 'rename':
+                    // $table->rename('new_name') - renames the table itself
+                    $new_table_name = $column_name;
+                    unset($this->tables[$table_name]);
+                    $this->tables[$new_table_name] = $table;
+                    $table_name = $new_table_name;
+
+                    break;
+
                 case 'renamecolumn':
                     if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
                         $table->renameColumn($column_name, $second_arg->value);
@@ -580,15 +613,7 @@ final class SchemaAggregator
                     $table->setColumn(new SchemaColumn($column_name, 'string', true, default: $default));
                     break;
 
-                case 'addcolumn':
-                    if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
-                        $_column_type = $column_name;
-                        $column_name = $second_arg->value;
-                        // @todo extract nullable value from 3rd arg
-                        $table->renameColumn($_column_type, $column_name);
-                    }
-
-                    break;
+                    // addColumn is handled above the switch via variable remapping
             }
         }
     }
