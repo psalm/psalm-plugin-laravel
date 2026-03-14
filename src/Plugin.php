@@ -181,7 +181,7 @@ final class Plugin implements PluginEntryPointInterface
 
         $migrationFilePathnames = [];
         foreach ($this->getMigrationDirectories($app) as $directory) {
-            $migrationFilePathnames = \array_merge($migrationFilePathnames, $this->findPhpFilesRecursive($directory));
+            \array_push($migrationFilePathnames, ...$this->findPhpFilesRecursive($directory));
         }
 
         if ($migrationFilePathnames === []) {
