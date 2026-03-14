@@ -170,7 +170,7 @@ final class ModelPropertyAccessorHandler
 
         if ($codebase->methodExists($method)) {
             $returnType = $codebase->getMethodReturnType($method, $fq_classlike_name);
-            if ($returnType !== null) {
+            if ($returnType instanceof \Psalm\Type\Union) {
                 foreach ($returnType->getAtomicTypes() as $type) {
                     // TGenericObject extends TNamedObject, so this catches both
                     if ($type instanceof Type\Atomic\TNamedObject && \is_a($type->value, Attribute::class, true)) {
@@ -200,19 +200,17 @@ final class ModelPropertyAccessorHandler
         $method = $fq_classlike_name . '::' . $methodName;
 
         $returnType = $codebase->getMethodReturnType($method, $fq_classlike_name);
-        if ($returnType === null) {
+        if (!$returnType instanceof \Psalm\Type\Union) {
             $result = Type::getMixed();
             self::$accessorTypeCache[$key] = $result;
             return $result;
         }
 
         foreach ($returnType->getAtomicTypes() as $type) {
-            if ($type instanceof Type\Atomic\TGenericObject && \is_a($type->value, Attribute::class, true)) {
-                // TGet is the first template parameter
-                if (isset($type->type_params[0])) {
-                    self::$accessorTypeCache[$key] = $type->type_params[0];
-                    return $type->type_params[0];
-                }
+            // TGet is the first template parameter
+            if ($type instanceof Type\Atomic\TGenericObject && \is_a($type->value, Attribute::class, true) && isset($type->type_params[0])) {
+                self::$accessorTypeCache[$key] = $type->type_params[0];
+                return $type->type_params[0];
             }
         }
 

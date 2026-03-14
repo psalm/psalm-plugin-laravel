@@ -30,6 +30,7 @@ final class IssueUrlGenerator
             foreach ($versions as $package => $version) {
                 $body .= "- {$package}: {$version}\n";
             }
+
             $body .= "\n";
         }
 

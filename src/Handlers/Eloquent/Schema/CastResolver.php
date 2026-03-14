@@ -50,7 +50,7 @@ final class CastResolver
 
         $type = self::resolveBaseCast($baseCast, $nullable);
 
-        if ($type !== null) {
+        if ($type instanceof \Psalm\Type\Union) {
             return $type;
         }
 

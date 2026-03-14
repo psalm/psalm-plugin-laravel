@@ -34,7 +34,7 @@ final class PluginCacheLocationTest extends TestCase
 
         $location = Plugin::getCacheLocation();
 
-        self::assertSame('/tmp/psalm-test-custom-cache', $location);
+        $this->assertSame('/tmp/psalm-test-custom-cache', $location);
     }
 
     public function test_cache_location_trims_trailing_separator(): void
@@ -43,7 +43,7 @@ final class PluginCacheLocationTest extends TestCase
 
         $location = Plugin::getCacheLocation();
 
-        self::assertSame('/tmp/psalm-test-custom-cache', $location);
+        $this->assertSame('/tmp/psalm-test-custom-cache', $location);
     }
 
     public function test_cache_location_uses_temp_dir_with_project_hash_by_default(): void
@@ -53,7 +53,7 @@ final class PluginCacheLocationTest extends TestCase
         $location = Plugin::getCacheLocation();
 
         $expectedPrefix = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-';
-        self::assertStringStartsWith($expectedPrefix, $location);
+        $this->assertStringStartsWith($expectedPrefix, $location);
     }
 
     public function test_cache_location_is_deterministic(): void
@@ -63,7 +63,7 @@ final class PluginCacheLocationTest extends TestCase
         $first = Plugin::getCacheLocation();
         $second = Plugin::getCacheLocation();
 
-        self::assertSame($first, $second);
+        $this->assertSame($first, $second);
     }
 
     public function test_alias_stub_location_ends_with_filename(): void
@@ -72,6 +72,6 @@ final class PluginCacheLocationTest extends TestCase
 
         $location = Plugin::getAliasStubLocation();
 
-        self::assertSame('/tmp/psalm-test-cache' . \DIRECTORY_SEPARATOR . 'aliases.stubphp', $location);
+        $this->assertSame('/tmp/psalm-test-cache' . \DIRECTORY_SEPARATOR . 'aliases.stubphp', $location);
     }
 }

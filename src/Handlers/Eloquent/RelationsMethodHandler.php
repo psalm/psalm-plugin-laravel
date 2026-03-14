@@ -124,7 +124,7 @@ final class RelationsMethodHandler implements MethodReturnTypeProviderInterface
             }
 
             $returnType = $storage->return_type;
-            if ($returnType === null) {
+            if (!$returnType instanceof \Psalm\Type\Union) {
                 continue;
             }
 
