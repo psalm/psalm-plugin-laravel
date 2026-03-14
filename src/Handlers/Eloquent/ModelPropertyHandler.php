@@ -134,6 +134,26 @@ final class ModelPropertyHandler
         return self::mapColumnType($column);
     }
 
+    /**
+     * Resolve all migration-inferred columns for a model.
+     *
+     * @return array<string, SchemaColumn>
+     */
+    public static function resolveAllColumns(string $fqClasslikeName): array
+    {
+        $schema = SchemaStateProvider::getSchema();
+        if (!$schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator) {
+            return [];
+        }
+
+        $tableName = self::resolveTableName($fqClasslikeName);
+        if ($tableName === null || !isset($schema->tables[$tableName])) {
+            return [];
+        }
+
+        return $schema->tables[$tableName]->columns;
+    }
+
     private static function resolveColumn(string $fqClasslikeName, string $propertyName): ?SchemaColumn
     {
         $schema = SchemaStateProvider::getSchema();
@@ -165,6 +185,9 @@ final class ModelPropertyHandler
 
         try {
             $reflection = new \ReflectionClass($fqClasslikeName);
+            if ($reflection->isAbstract()) {
+                return null;
+            }
             $instance = $reflection->newInstanceWithoutConstructor();
 
             if (!$instance instanceof Model) {
