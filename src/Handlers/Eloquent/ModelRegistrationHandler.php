@@ -10,9 +10,11 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TNamedObject;
 
 /**
  * Discovers Eloquent model classes from Psalm's scanned codebase and registers
@@ -151,8 +153,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         foreach (\array_keys($columns) as $columnName) {
             $pseudoKey = '$' . $columnName;
 
-            // Skip if user already defined @property-write or @property for this column
-            if (isset($storage->pseudo_property_set_types[$pseudoKey])) {
+            if (self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
                 continue;
             }
 
@@ -176,12 +177,20 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $mixedType = Type::getMixed();
 
         // declaring_method_ids keys are lowercase
-        foreach (\array_keys($storage->declaring_method_ids) as $methodName) {
-            // Legacy mutator: setxxxattribute → property xxx
+        foreach ($storage->declaring_method_ids as $methodName => $methodIdentifier) {
+            // Legacy mutator: setXxxAttribute → property xxx
             if (\str_starts_with($methodName, 'set') && \str_ends_with($methodName, 'attribute') && $methodName !== 'setattribute') {
-                $propertyName = \substr($methodName, 3, -9);
+                $propertyName = self::studlyToSnakeCase(\substr(
+                    self::getCasedMethodName($codebase, $methodIdentifier) ?? $methodName,
+                    3,
+                    -9,
+                ));
+                if ($propertyName === '') {
+                    continue;
+                }
+
                 $pseudoKey = '$' . $propertyName;
-                if ($propertyName !== '' && !isset($storage->pseudo_property_set_types[$pseudoKey])) {
+                if (!self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
                     $storage->pseudo_property_set_types[$pseudoKey] = $mixedType;
                 }
 
@@ -197,21 +206,26 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             foreach ($returnType->getAtomicTypes() as $type) {
-                if (!$type instanceof TGenericObject || !\is_a($type->value, Attribute::class, true)) {
+                if (!$type instanceof TNamedObject || !\is_a($type->value, Attribute::class, true)) {
                     continue;
                 }
 
-                // TSet is the second template parameter
-                $setType = $type->type_params[1] ?? null;
-                if (!$setType instanceof Type\Union || $setType->isNever()) {
+                // Derive snake_case property name from original cased method name
+                $casedName = self::getCasedMethodName($codebase, $methodIdentifier) ?? $methodName;
+                $propertyName = self::studlyToSnakeCase($casedName);
+                $pseudoKey = '$' . $propertyName;
+
+                if (self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
                     break;
                 }
 
-                // camelCase method → snake_case property (keys are already lowercase)
-                $pseudoKey = '$' . $methodName;
-                if (!isset($storage->pseudo_property_set_types[$pseudoKey])) {
-                    $storage->pseudo_property_set_types[$pseudoKey] = $setType;
+                // TSet is the second template parameter (only on TGenericObject)
+                $setType = $type instanceof TGenericObject ? ($type->type_params[1] ?? null) : null;
+                if ($setType instanceof Type\Union && $setType->isNever()) {
+                    break;
                 }
+
+                $storage->pseudo_property_set_types[$pseudoKey] = $setType instanceof Type\Union ? $setType : $mixedType;
 
                 break;
             }
@@ -230,7 +244,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         foreach (\array_keys($storage->declaring_method_ids) as $methodName) {
             $pseudoKey = '$' . $methodName;
 
-            if (isset($storage->pseudo_property_set_types[$pseudoKey])) {
+            if (self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
                 continue;
             }
 
@@ -242,11 +256,43 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             foreach ($returnType->getAtomicTypes() as $type) {
-                if ($type instanceof TGenericObject && \is_a($type->value, Relation::class, true)) {
+                if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
                     $storage->pseudo_property_set_types[$pseudoKey] = $mixedType;
                     break;
                 }
             }
         }
+    }
+
+    /**
+     * Check if the user has already defined a pseudo-property (via @property, @property-read,
+     * or @property-write) for this key. If so, the plugin should not override it.
+     */
+    /** @psalm-mutation-free */
+    private static function hasUserDefinedPseudoProperty(ClassLikeStorage $storage, string $pseudoKey): bool
+    {
+        return isset($storage->pseudo_property_set_types[$pseudoKey])
+            || isset($storage->pseudo_property_get_types[$pseudoKey]);
+    }
+
+    /** @psalm-mutation-free */
+    private static function getCasedMethodName(Codebase $codebase, MethodIdentifier $methodIdentifier): ?string
+    {
+        try {
+            return $codebase->methods->getStorage($methodIdentifier)->cased_name;
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return null;
+        }
+    }
+
+    /**
+     * Convert StudlyCase/camelCase to snake_case.
+     *
+     * 'PublishedAt' → 'published_at', 'firstName' → 'first_name'
+     */
+    /** @psalm-pure */
+    private static function studlyToSnakeCase(string $value): string
+    {
+        return \ltrim(\strtolower(\preg_replace('/[A-Z]/', '_$0', $value) ?? $value), '_');
     }
 }
