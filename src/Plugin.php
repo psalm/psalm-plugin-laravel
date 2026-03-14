@@ -55,7 +55,7 @@ final class Plugin implements PluginEntryPointInterface
         try {
             ApplicationProvider::bootApp();
         } catch (\Throwable $throwable) {
-            $output->warning("Laravel plugin error on booting Laravel app: \u{201c}{$throwable->getMessage()}\u{201d}");
+            $output->warning("Laravel plugin error on booting Laravel app: {$throwable->getMessage()}");
             $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
 
             if ($failOnInternalError) {
@@ -70,7 +70,7 @@ final class Plugin implements PluginEntryPointInterface
             ModelDiscoveryProvider::discoverModels(ApplicationProvider::getApp());
             $this->generateAliasStubs();
         } catch (\Throwable $throwable) {
-            $output->warning("Laravel plugin error on generating stub files: \u{201c}{$throwable->getMessage()}\u{201d}");
+            $output->warning("Laravel plugin error on generating stub files: {$throwable->getMessage()}");
             $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
 
             if ($failOnInternalError) {
