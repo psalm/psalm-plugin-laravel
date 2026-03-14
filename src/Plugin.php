@@ -26,6 +26,7 @@ use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
+use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\PluginRegistrationSocket;
@@ -55,7 +56,7 @@ final class Plugin implements PluginEntryPointInterface
             ApplicationProvider::bootApp();
         } catch (\Throwable $throwable) {
             $output->warning("Laravel plugin error on booting Laravel app: \u{201c}{$throwable->getMessage()}\u{201d}");
-            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $this->generateReportIssueUrl($throwable));
+            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
 
             if ($failOnInternalError) {
                 throw $throwable;
@@ -70,7 +71,7 @@ final class Plugin implements PluginEntryPointInterface
             $this->generateAliasStubs();
         } catch (\Throwable $throwable) {
             $output->warning("Laravel plugin error on generating stub files: \u{201c}{$throwable->getMessage()}\u{201d}");
-            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $this->generateReportIssueUrl($throwable));
+            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
 
             if ($failOnInternalError) {
                 throw $throwable;
@@ -308,12 +309,4 @@ final class Plugin implements PluginEntryPointInterface
         return $dir;
     }
 
-    private function generateReportIssueUrl(\Throwable $throwable): string
-    {
-        return \sprintf(
-            'https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md&title=%s&body=%s',
-            \urlencode("Error on generating stub files: {$throwable->getMessage()}"),
-            \urlencode("```\n{$throwable->__toString()}\n```"),
-        );
-    }
 }
