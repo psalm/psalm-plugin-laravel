@@ -132,7 +132,7 @@ final class ModelDiscoveryProvider
             }
 
             // If relative, resolve against app base path
-            if (!\str_starts_with($location, '/')) {
+            if (!\str_starts_with($location, '/') && !\str_starts_with($location, \DIRECTORY_SEPARATOR) && !\preg_match('/^[a-zA-Z]:/', $location)) {
                 $location = $app->basePath($location);
             }
 
