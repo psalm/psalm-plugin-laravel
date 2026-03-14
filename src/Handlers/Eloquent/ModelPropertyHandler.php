@@ -9,14 +9,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastsMethodParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
-use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
-use Psalm\Plugin\EventHandler\PropertyExistenceProviderInterface;
-use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
-use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Union;
 
@@ -32,10 +28,7 @@ use Psalm\Type\Union;
  *
  * @internal
  */
-final class ModelPropertyHandler implements
-    PropertyExistenceProviderInterface,
-    PropertyVisibilityProviderInterface,
-    PropertyTypeProviderInterface
+final class ModelPropertyHandler
 {
     /** @var array<string, string> model class → table name cache */
     private static array $tableNameCache = [];
@@ -53,17 +46,6 @@ final class ModelPropertyHandler implements
         self::$castsCache = [];
     }
 
-    /**
-     * @return list<class-string<Model>>
-     * @psalm-external-mutation-free
-     */
-    #[\Override]
-    public static function getClassLikeNames(): array
-    {
-        return ModelDiscoveryProvider::getModelClasses();
-    }
-
-    #[\Override]
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -97,7 +79,6 @@ final class ModelPropertyHandler implements
         return null;
     }
 
-    #[\Override]
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -125,7 +106,6 @@ final class ModelPropertyHandler implements
         return null;
     }
 
-    #[\Override]
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();

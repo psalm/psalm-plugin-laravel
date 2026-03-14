@@ -12,11 +12,8 @@ use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelFactoryTypeProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
@@ -24,7 +21,6 @@ use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -67,7 +63,6 @@ final class Plugin implements PluginEntryPointInterface
 
         try {
             $this->buildSchema();
-            ModelDiscoveryProvider::discoverModels(ApplicationProvider::getApp());
             $this->generateAliasStubs();
         } catch (\Throwable $throwable) {
             $output->warning("Laravel plugin error on generating stub files: {$throwable->getMessage()}");
@@ -163,18 +158,17 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(RequestHandler::class);
 
-        // Model property handlers — registration order matters (first non-null wins)
+        // Model property handlers are registered dynamically by ModelRegistrationHandler
+        // after Psalm populates its codebase (AfterCodebasePopulated event).
+        require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
-        $registration->registerHooksFromClass(ModelRelationshipPropertyHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
-        $registration->registerHooksFromClass(ModelFactoryTypeProvider::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
-        $registration->registerHooksFromClass(ModelPropertyAccessorHandler::class);
-
         if ($columnFallback === 'migrations') {
             require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
-            $registration->registerHooksFromClass(ModelPropertyHandler::class);
+            ModelRegistrationHandler::enableColumnFallback();
         }
+        $registration->registerHooksFromClass(ModelRegistrationHandler::class);
 
         require_once __DIR__ . '/Handlers/Eloquent/RelationsMethodHandler.php';
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
