@@ -59,6 +59,12 @@ final class ModelRelationshipPropertyHandler implements
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
 
+        // Defer to user @property PHPDoc
+        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+            return null;
+        }
+
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
         }
@@ -76,6 +82,12 @@ final class ModelRelationshipPropertyHandler implements
         $codebase = $event->getSource()->getCodebase();
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
+
+        // Defer to user @property PHPDoc
+        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+            return null;
+        }
 
         if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             return true;
@@ -96,6 +108,12 @@ final class ModelRelationshipPropertyHandler implements
         $codebase = $source->getCodebase();
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
+
+        // Defer to user @property PHPDoc
+        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+            return null;
+        }
 
         if (!self::relationExists($codebase, $fq_classlike_name, $property_name)) {
             return null;
