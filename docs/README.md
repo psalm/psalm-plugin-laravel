@@ -18,7 +18,7 @@ Plugin::__invoke
     Providers\ModelDiscoveryProvider::discoverModels
         {discover model classes for property inference}
     Plugin::generateAliasStubs
-        {read Facade::defaultAliases() and write aliases.stubphp}
+        {read Illuminate\Foundation\AliasLoader::getInstance()->getAliases() and write aliases.stubphp}
     Plugin::registerHandlers
         - Container
         - Eloquent
