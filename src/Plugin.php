@@ -222,7 +222,6 @@ final class Plugin implements PluginEntryPointInterface
 
     /**
      * Recursively find all .php files in a directory.
-     *
      * @return list<string>
      */
     private function findPhpFilesRecursive(string $directory): array
@@ -295,7 +294,7 @@ final class Plugin implements PluginEntryPointInterface
         return $dir;
     }
 
-    /** @psalm-suppress MissingPureAnnotation creates DefaultProgress instance */
+    /** @psalm-mutation-free */
     private function getProgress(RegistrationInterface $registration): \Psalm\Progress\Progress
     {
         $output = new DefaultProgress();
