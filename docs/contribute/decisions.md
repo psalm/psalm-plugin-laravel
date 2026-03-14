@@ -6,7 +6,7 @@ Decisions made during development of the plugin. Contributors should follow thes
 
 ## Eloquent Model
 
-## `@property` PHPDoc takes priority over plugin inference
+### `@property` PHPDoc takes priority over plugin inference
 
 **Decision:** When a user declares `@property` on their model class, plugin handlers must defer to it by returning `null`.
 
