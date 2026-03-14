@@ -188,6 +188,7 @@ final class ModelPropertyHandler
             if ($reflection->isAbstract()) {
                 return null;
             }
+
             $instance = $reflection->newInstanceWithoutConstructor();
 
             if (!$instance instanceof Model) {

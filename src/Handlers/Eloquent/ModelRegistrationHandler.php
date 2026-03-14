@@ -13,7 +13,6 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
-use Psalm\Type\Atomic\TNamedObject;
 
 /**
  * Discovers Eloquent model classes from Psalm's scanned codebase and registers
