@@ -14,6 +14,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
  * @property string $id
  * @property CarbonInterface|null $email_verified_at
  * @property Phone|null $phone
+ * @property non-empty-string $first_name_using_legacy_accessor
  */
 class User extends Authenticatable
 {

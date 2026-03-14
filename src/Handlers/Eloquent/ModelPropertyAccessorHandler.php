@@ -55,6 +55,12 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
 
         $codebase = $source->getCodebase();
 
+        // Defer to user @property PHPDoc
+        $classStorage = $codebase->classlike_storage_provider->get($event->getFqClasslikeName());
+        if (isset($classStorage->pseudo_property_get_types['$' . $event->getPropertyName()])) {
+            return null;
+        }
+
         if (self::legacyAccessorExists($codebase, $event->getFqClasslikeName(), $event->getPropertyName())) {
             return true;
         }
@@ -78,6 +84,12 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         }
 
         $codebase = $event->getSource()->getCodebase();
+
+        // Defer to user @property PHPDoc
+        $classStorage = $codebase->classlike_storage_provider->get($event->getFqClasslikeName());
+        if (isset($classStorage->pseudo_property_get_types['$' . $event->getPropertyName()])) {
+            return null;
+        }
 
         if (self::legacyAccessorExists($codebase, $event->getFqClasslikeName(), $event->getPropertyName())) {
             return true;
@@ -107,6 +119,12 @@ final class ModelPropertyAccessorHandler implements PropertyExistenceProviderInt
         $codebase = $source->getCodebase();
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
+
+        // Defer to user @property PHPDoc
+        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+            return null;
+        }
 
         // Check new-style Attribute accessor first (takes priority)
         if (self::newStyleAccessorExists($codebase, $fq_classlike_name, $property_name)) {
