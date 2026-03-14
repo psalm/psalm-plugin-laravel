@@ -198,6 +198,7 @@ final class SchemaAggregator
 
     /**
      * Handle Schema::dropColumns($table, $columns) — drops columns without a closure.
+     * @psalm-external-mutation-free
      */
     private function dropColumnsFromTable(PhpParser\Node\Expr\StaticCall $call): void
     {
