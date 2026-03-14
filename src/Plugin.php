@@ -25,8 +25,6 @@ use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
-use Psalm\PluginRegistrationSocket;
-use Psalm\Progress\DefaultProgress;
 
 /**
  * @psalm-suppress UnusedClass
@@ -291,11 +289,11 @@ final class Plugin implements PluginEntryPointInterface
     /** @psalm-mutation-free */
     private function getProgress(RegistrationInterface $registration): \Psalm\Progress\Progress
     {
-        $output = new DefaultProgress();
+        $output = new \Psalm\Progress\DefaultProgress();
 
         // $registration->codebase is available/public from Psalm v6.7
         // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
-        if ($registration instanceof PluginRegistrationSocket) {
+        if ($registration instanceof \Psalm\PluginRegistrationSocket) {
             $output = $registration->codebase->progress;
         }
 
