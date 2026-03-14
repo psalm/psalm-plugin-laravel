@@ -43,31 +43,14 @@ final class Plugin implements PluginEntryPointInterface
 
         try {
             ApplicationProvider::bootApp();
-        } catch (\Throwable $throwable) {
-            $output->warning("Laravel plugin error on booting Laravel app: {$throwable->getMessage()}");
-            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
 
-            if ($pluginConfig->failOnInternalError) {
-                throw $throwable;
-            }
-
-            return;
-        }
-
-        try {
             if ($pluginConfig->shouldUseMigrations()) {
                 $this->buildSchema();
             }
 
             $this->generateAliasStubs($pluginConfig);
         } catch (\Throwable $throwable) {
-            $output->warning("Laravel plugin error on generating stub files: {$throwable->getMessage()}");
-            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
-
-            if ($pluginConfig->failOnInternalError) {
-                throw $throwable;
-            }
-
+            $this->handleInternalError($throwable, $output, $pluginConfig->failOnInternalError);
             return;
         }
 
@@ -292,6 +275,17 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         return $dir;
+    }
+
+    /** @throws \Throwable */
+    private function handleInternalError(\Throwable $throwable, \Psalm\Progress\Progress $output, bool $failOnInternalError): void
+    {
+        $output->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
+        $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
+
+        if ($failOnInternalError) {
+            throw $throwable;
+        }
     }
 
     /** @psalm-mutation-free */
