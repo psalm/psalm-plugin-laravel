@@ -38,15 +38,8 @@ final class Plugin implements PluginEntryPointInterface
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
-        $failOnInternalError = ((string) ($config?->failOnInternalError['value'] ?? 'false')) === 'true';
-        $columnFallback = (string) ($config?->modelProperties['columnFallback'] ?? 'migrations');
-        $output = new DefaultProgress();
-
-        // $registration->codebase is available/public from Psalm v6.7
-        // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
-        if ($registration instanceof PluginRegistrationSocket) {
-            $output = $registration->codebase->progress;
-        }
+        $pluginConfig = PluginConfig::fromXml($config);
+        $output = $this->getProgress($registration);
 
         try {
             ApplicationProvider::bootApp();
@@ -54,7 +47,7 @@ final class Plugin implements PluginEntryPointInterface
             $output->warning("Laravel plugin error on booting Laravel app: {$throwable->getMessage()}");
             $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
 
-            if ($failOnInternalError) {
+            if ($pluginConfig->failOnInternalError) {
                 throw $throwable;
             }
 
@@ -62,24 +55,24 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         try {
-            if ($columnFallback === 'migrations') {
+            if ($pluginConfig->shouldUseMigrations()) {
                 $this->buildSchema();
             }
 
-            $this->generateAliasStubs();
+            $this->generateAliasStubs($pluginConfig);
         } catch (\Throwable $throwable) {
             $output->warning("Laravel plugin error on generating stub files: {$throwable->getMessage()}");
             $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
 
-            if ($failOnInternalError) {
+            if ($pluginConfig->failOnInternalError) {
                 throw $throwable;
             }
 
             return;
         }
 
-        $this->registerHandlers($registration, $columnFallback);
-        $this->registerStubs($registration);
+        $this->registerHandlers($registration, $pluginConfig);
+        $this->registerStubs($registration, $pluginConfig);
     }
 
     /** @return list<string> */
@@ -95,7 +88,7 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /** @return list<string> */
-    private function getStubsForVersion(string $version): array
+    private function getStubsForLaravelVersion(string $version): array
     {
         [$majorVersion] = \explode('.', $version);
 
@@ -132,11 +125,11 @@ final class Plugin implements PluginEntryPointInterface
         return $stubs;
     }
 
-    private function registerStubs(RegistrationInterface $registration): void
+    private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig): void
     {
         $stubs = \array_merge(
             $this->getCommonStubs(),
-            $this->getStubsForVersion(Application::VERSION),
+            $this->getStubsForLaravelVersion(Application::VERSION),
             $this->getTaintAnalysisStubs(),
         );
 
@@ -144,10 +137,10 @@ final class Plugin implements PluginEntryPointInterface
             $registration->addStubFile($stubFilePath);
         }
 
-        $registration->addStubFile(self::getAliasStubLocation());
+        $registration->addStubFile(self::getAliasStubLocation($pluginConfig));
     }
 
-    private function registerHandlers(RegistrationInterface $registration, string $columnFallback): void
+    private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
     {
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(ContainerHandler::class);
@@ -167,9 +160,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
-        if ($columnFallback === 'migrations') {
+        if ($pluginConfig->shouldUseMigrations()) {
             require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
-            ModelRegistrationHandler::enableColumnFallback();
+            ModelRegistrationHandler::enableMigrations();
         }
 
         $registration->registerHooksFromClass(ModelRegistrationHandler::class);
@@ -255,7 +248,7 @@ final class Plugin implements PluginEntryPointInterface
         return $files;
     }
 
-    private function generateAliasStubs(): void
+    private function generateAliasStubs(PluginConfig $pluginConfig): void
     {
         // Read aliases from the booted app's AliasLoader — this reflects the actual
         // aliases registered for this project (config app.aliases + package discovery),
@@ -274,7 +267,7 @@ final class Plugin implements PluginEntryPointInterface
             $stub .= "class {$alias} extends \\{$fqcn} {}\n";
         }
 
-        $location = self::getAliasStubLocation();
+        $location = self::getAliasStubLocation($pluginConfig);
         $result = \file_put_contents($location, $stub);
 
         if ($result === false) {
@@ -286,19 +279,14 @@ final class Plugin implements PluginEntryPointInterface
         }
     }
 
-    public static function getAliasStubLocation(): string
+    public static function getAliasStubLocation(PluginConfig $pluginConfig): string
     {
-        return self::getCacheLocation() . \DIRECTORY_SEPARATOR . 'aliases.stubphp';
+        return self::getCacheLocation($pluginConfig) . \DIRECTORY_SEPARATOR . 'aliases.stubphp';
     }
 
-    public static function getCacheLocation(): string
+    public static function getCacheLocation(PluginConfig $pluginConfig): string
     {
-        $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
-        if ($env !== false && $env !== '') {
-            $dir = \rtrim($env, \DIRECTORY_SEPARATOR);
-        } else {
-            $dir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-' . \md5(\getcwd() ?: __DIR__);
-        }
+        $dir = $pluginConfig->cachePath;
 
         if (!\is_dir($dir) && !\mkdir($dir, 0777, true) && !\is_dir($dir)) {
             throw new \RuntimeException("Cache directory '{$dir}' does not exist and could not be created.");
@@ -307,4 +295,17 @@ final class Plugin implements PluginEntryPointInterface
         return $dir;
     }
 
+    /** @psalm-suppress MissingPureAnnotation creates DefaultProgress instance */
+    private function getProgress(RegistrationInterface $registration): \Psalm\Progress\Progress
+    {
+        $output = new DefaultProgress();
+
+        // $registration->codebase is available/public from Psalm v6.7
+        // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
+        if ($registration instanceof PluginRegistrationSocket) {
+            $output = $registration->codebase->progress;
+        }
+
+        return $output;
+    }
 }

@@ -21,12 +21,12 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  */
 final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 {
-    private static bool $columnFallbackEnabled = false;
+    private static bool $useMigrations = false;
 
     /** @psalm-suppress MissingPureAnnotation mutates static flag intentionally */
-    public static function enableColumnFallback(): void
+    public static function enableMigrations(): void
     {
-        self::$columnFallbackEnabled = true;
+        self::$useMigrations = true;
     }
 
     #[\Override]
@@ -35,7 +35,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $codebase = $event->getCodebase();
         $modelFqcn = \strtolower(Model::class);
 
-        foreach ($codebase->classlike_storage_provider->getAll() as $storage) {
+        foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
             if ($storage->abstract) {
                 continue;
             }
@@ -48,15 +48,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             // reflection works in property handlers (e.g. getTable(), getCasts())
             try {
                 if (!\class_exists($storage->name, true)) {
-                    $codebase->progress->debug(
-                        "Laravel plugin: skipping model '{$storage->name}': class could not be loaded by autoloader\n",
-                    );
+                    $codebase->progress->debug("Laravel plugin: skipping model '{$storage->name}': class could not be loaded by autoloader\n");
                     continue;
                 }
             } catch (\Error $error) {
-                $codebase->progress->debug(
-                    "Laravel plugin: skipping model '{$storage->name}': {$error->getMessage()}\n",
-                );
+                $codebase->progress->debug("Laravel plugin: skipping model '{$storage->name}': {$error->getMessage()}\n", );
                 continue;
             }
 
@@ -69,7 +65,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     {
         $properties = $codebase->properties;
 
-        // Registration order matters — first non-null result wins.
+        // Registration order matters — the first non-null result wins.
 
         // 1. Relationship properties (e.g. $user->posts)
         $properties->property_existence_provider->registerClosure(
@@ -106,7 +102,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         );
 
         // 4. Column properties from migrations (e.g. $user->email)
-        if (self::$columnFallbackEnabled) {
+        if (self::$useMigrations) {
             $properties->property_existence_provider->registerClosure(
                 $className,
                 ModelPropertyHandler::doesPropertyExist(...),
