@@ -5,24 +5,11 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Psalm\LaravelPlugin\Providers\ModelDiscoveryProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
-use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
 use Psalm\Type;
 
-final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
+final class ModelFactoryTypeProvider
 {
-    /**
-     * @return list<class-string<\Illuminate\Database\Eloquent\Model>>
-     * @psalm-external-mutation-free
-     */
-    #[\Override]
-    public static function getClassLikeNames(): array
-    {
-        return ModelDiscoveryProvider::getModelClasses();
-    }
-
-    #[\Override]
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Type\Union
     {
         if ($event->getPropertyName() !== 'factory') {

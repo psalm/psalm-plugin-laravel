@@ -175,11 +175,5 @@ final class ApplicationProvider
         /** @var \Illuminate\Config\Repository $config */
         $config = $app['config'];
         $config->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
-
-        // ModelDiscoveryProvider falls back to ide-helper.model_locations for model scanning.
-        // In testing, this path is relative to orchestra/testbench-core/laravel base path.
-        $config->set('ide-helper.model_locations', [
-            '../../../../tests/Application/app/Models',
-        ]);
     }
 }
