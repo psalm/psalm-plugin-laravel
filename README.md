@@ -139,7 +139,7 @@ By default, stubs are cached in the system temp directory (`sys_get_temp_dir()`)
 
 ## How it works
 
-Under the hood it reads Laravel's native `@method` annotations on facade classes and generates alias stubs from `Facade::defaultAliases()`. It also ships hand-crafted stubs for taint analysis and special cases.
+Under the hood it reads Laravel's native `@method` annotations on facade classes and generates alias stubs based on `Illuminate\Foundation\AliasLoader` (including aliases from your `config/app.php` and package discovery). It also ships hand-crafted stubs for taint analysis and special cases.
 
 It also parses any database migrations it can find to try to understand property types in your database models.
 
