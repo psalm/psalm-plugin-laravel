@@ -25,6 +25,8 @@ use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
+use Psalm\PluginRegistrationSocket;
+use Psalm\Progress\DefaultProgress;
 
 /**
  * @psalm-suppress UnusedClass
@@ -38,10 +40,13 @@ final class Plugin implements PluginEntryPointInterface
     {
         $failOnInternalError = ((string) ($config?->failOnInternalError['value'] ?? 'false')) === 'true';
         $columnFallback = (string) ($config?->modelProperties['columnFallback'] ?? 'migrations');
+        $output = new DefaultProgress();
 
         // $registration->codebase is available/public from Psalm v6.7
         // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
-        $output = $registration->codebase->progress;
+        if ($registration instanceof PluginRegistrationSocket) {
+            $output = $registration->codebase->progress;
+        }
 
         try {
             ApplicationProvider::bootApp();
