@@ -12,7 +12,7 @@ This package is maintained by [@alies-dev](https://github.com/sponsors/alies-dev
 
 Areas where help is especially welcome:
  - [ ] Full support for custom Model Query Builders
- - [ ] Option to rely on Model `@property` declarations only
+ - [x] Option to rely on Model `@property` declarations only
  - [x] ~~Remove `barryvdh/laravel-ide-helper` dependency for more accurate attribute types~~
  - [ ] Support `.sql` migration files for attribute discovery
 
