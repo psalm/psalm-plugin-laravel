@@ -6,7 +6,6 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
-use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 
@@ -36,7 +35,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $codebase = $event->getCodebase();
         $modelFqcn = \strtolower(Model::class);
 
-        foreach (ClassLikeStorageProvider::getAll() as $storage) {
+        foreach ($codebase->classlike_storage_provider->getAll() as $storage) {
             if ($storage->abstract) {
                 continue;
             }
