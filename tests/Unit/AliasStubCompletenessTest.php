@@ -8,13 +8,14 @@ use Illuminate\Support\Facades\Facade;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Plugin;
+use Psalm\LaravelPlugin\PluginConfig;
 
 #[CoversClass(Plugin::class)]
 final class AliasStubCompletenessTest extends TestCase
 {
     public function test_all_default_aliases_are_present_in_generated_stub(): void
     {
-        $stubPath = Plugin::getAliasStubLocation();
+        $stubPath = Plugin::getAliasStubLocation(PluginConfig::fromXml(null));
 
         if (!\file_exists($stubPath)) {
             self::markTestSkipped('Alias stub not generated yet (run the plugin first).');
