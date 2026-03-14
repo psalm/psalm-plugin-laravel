@@ -17,6 +17,8 @@ final class SchemaColumn
 
     public const TYPE_ENUM = 'enum';
 
+    public const TYPE_ARRAY = 'array';
+
     public const TYPE_MIXED = 'mixed';
 
     /**
