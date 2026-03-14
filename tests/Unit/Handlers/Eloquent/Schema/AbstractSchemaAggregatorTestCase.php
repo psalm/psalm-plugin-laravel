@@ -15,6 +15,14 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
 #[CoversClass(SchemaAggregator::class)]
 abstract class AbstractSchemaAggregatorTestCase extends TestCase
 {
+    final protected function schemaFromMigration(string $migrationCode): SchemaAggregator
+    {
+        $schemaAggregator = new SchemaAggregator();
+        $this->addMigrationStatements($schemaAggregator, $migrationCode);
+
+        return $schemaAggregator;
+    }
+
     final protected function instantiateSchemaAggregator(string $filepath): SchemaAggregator
     {
         if (\is_file($filepath)) {
@@ -31,19 +39,23 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         }
 
         $schemaAggregator = new SchemaAggregator();
-        $hasErrors = false;
         foreach ($migrationFiles as $migrationFile) {
             $fileContents = \file_get_contents($migrationFile);
             if ($fileContents === false) {
                 $this->fail("Could not read {$migrationFile} file. Please make sure it exists and readable.");
             }
 
-            $statements = StatementsProvider::parseStatements($fileContents, \PHP_VERSION_ID, $hasErrors);
-
-            $schemaAggregator->addStatements($statements);
+            $this->addMigrationStatements($schemaAggregator, $fileContents);
         }
 
         return $schemaAggregator;
+    }
+
+    private function addMigrationStatements(SchemaAggregator $schemaAggregator, string $code): void
+    {
+        $hasErrors = false;
+        $statements = StatementsProvider::parseStatements($code, \PHP_VERSION_ID, $hasErrors);
+        $schemaAggregator->addStatements($statements);
     }
 
     protected function assertColumnHasType(string $type, SchemaColumn $column): void

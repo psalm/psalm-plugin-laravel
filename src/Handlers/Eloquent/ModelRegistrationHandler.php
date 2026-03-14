@@ -23,7 +23,6 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 {
     private static bool $useMigrations = false;
 
-    /** @psalm-suppress MissingPureAnnotation mutates static flag intentionally */
     public static function enableMigrations(): void
     {
         self::$useMigrations = true;
@@ -60,7 +59,6 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
     }
 
-    /** @psalm-suppress MissingPureAnnotation mutates external codebase property providers */
     private static function registerHandlersForModel(Codebase $codebase, string $className): void
     {
         $properties = $codebase->properties;

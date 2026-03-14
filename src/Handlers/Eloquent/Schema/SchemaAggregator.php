@@ -34,8 +34,10 @@ final class SchemaAggregator
     private const METHODS_HAVE_DEFAULT_COLUMN_NAME = [
         'id' => 'id',
         'dropsoftdeletes' => 'deleted_at',
+        'dropsoftdeletesdatetime' => 'deleted_at',
         'dropsoftdeletestz' => 'deleted_at',
         'softdeletes' => 'deleted_at',
+        'softdeletesdatetime' => 'deleted_at',
         'softdeletestz' => 'deleted_at',
         'uuid' => 'uuid',
         'ulid' => 'uuid',
@@ -196,7 +198,6 @@ final class SchemaAggregator
 
     /**
      * Handle Schema::dropColumns($table, $columns) — drops columns without a closure.
-     * @psalm-external-mutation-free
      */
     private function dropColumnsFromTable(PhpParser\Node\Expr\StaticCall $call): void
     {
@@ -467,6 +468,7 @@ final class SchemaAggregator
                 case 'json':
                 case 'ipaddress':
                 case 'foreignuuid':
+                case 'tsvector':
                     $table->setColumn(new SchemaColumn($column_name, 'string', $nullable, default: $default));
                     break;
 
@@ -474,12 +476,18 @@ final class SchemaAggregator
                     $table->setColumn(new SchemaColumn($column_name, 'bool', $nullable, default: $default));
                     break;
 
+                case 'vector':
+                    $table->setColumn(new SchemaColumn($column_name, 'array', $nullable, default: $default));
+                    break;
+
+                case 'rawcolumn':
                 case 'polygon':
                 case 'point':
                 case 'multipolygonz':
                 case 'multipolygon':
                 case 'multipoint':
                 case 'geometrycollection':
+                case 'geography':
                 case 'geometry':
                 case 'computed':
                     $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable, default: $default));
@@ -494,11 +502,12 @@ final class SchemaAggregator
                     $table->setColumn(new SchemaColumn($column_name, 'float', $nullable, default: $default));
                     break;
 
-                case 'dropcolumn':
-                case 'dropifexists':
-                case 'dropsoftdeletes':
                 case 'removecolumn':
                 case 'dropsoftdeletestz':
+                case 'dropsoftdeletesdatetime':
+                case 'dropsoftdeletes':
+                case 'dropifexists':
+                case 'dropcolumn':
                 case 'drop':
                     $table->dropColumn($column_name);
                     break;
@@ -564,6 +573,7 @@ final class SchemaAggregator
                 case 'year':
                 case 'timetz':
                 case 'timestamptz':
+                case 'softdeletesdatetime':
                 case 'softdeletestz':
                 case 'softdeletes':
                     $table->setColumn(new SchemaColumn($column_name, 'string', true, default: $default));

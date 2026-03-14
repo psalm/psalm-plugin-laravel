@@ -38,7 +38,6 @@ final class ModelPropertyHandler
 
     /**
      * @psalm-suppress PossiblyUnusedMethod called externally by test infrastructure
-     * @psalm-suppress MissingPureAnnotation mutates static caches intentionally
      */
     public static function reset(): void
     {
@@ -241,6 +240,11 @@ final class ModelPropertyHandler
             SchemaColumn::TYPE_FLOAT => Type::getFloat(),
             SchemaColumn::TYPE_BOOL => Type::getBool(),
             SchemaColumn::TYPE_ENUM => self::mapEnumColumn($column),
+            SchemaColumn::TYPE_ARRAY => new Union([new Type\Atomic\TKeyedArray(
+                [Type::getFloat()],
+                fallback_params: [Type::getInt(), Type::getFloat()],
+                is_list: true,
+            )]),
             default => Type::getMixed(),
         };
 
