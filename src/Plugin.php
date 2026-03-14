@@ -174,14 +174,16 @@ final class Plugin implements PluginEntryPointInterface
             return;
         }
 
-        $migrationsDirectory = $app->databasePath('migrations/');
-
         $projectAnalyzer = ProjectAnalyzer::getInstance();
         $codebase = $projectAnalyzer->getCodebase();
 
         $schemaAggregator = new SchemaAggregator();
 
-        $migrationFilePathnames = $this->findPhpFilesRecursive($migrationsDirectory);
+        $migrationFilePathnames = [];
+        foreach ($this->getMigrationDirectories($app) as $directory) {
+            $migrationFilePathnames = \array_merge($migrationFilePathnames, $this->findPhpFilesRecursive($directory));
+        }
+
         if ($migrationFilePathnames === []) {
             SchemaStateProvider::setSchema($schemaAggregator);
             return;
@@ -199,6 +201,20 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         SchemaStateProvider::setSchema($schemaAggregator);
+    }
+
+    /**
+     * Resolve migration directories the same way Laravel does:
+     * extra paths registered via loadMigrationsFrom() + the default database/migrations directory.
+     *
+     * @return non-empty-list<string>
+     */
+    private function getMigrationDirectories(Application $app): array
+    {
+        /** @var \Illuminate\Database\Migrations\Migrator $migrator */
+        $migrator = $app->make('migrator');
+
+        return \array_values(\array_merge($migrator->paths(), [$app->databasePath('migrations')]));
     }
 
     /**
