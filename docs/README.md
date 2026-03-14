@@ -13,8 +13,8 @@ A single callstack looks like:
 Plugin::__invoke
     Providers\ApplicationProvider::bootApp
         {instantiate Laravel Application}
-    Plugin::buildSchema
-        {always runs; parses migration files to build schema info}
+    Plugin::buildSchema (only when columnFallback="migrations")
+        {parse migration files to build schema info}
     Plugin::generateAliasStubs
         {read AliasLoader::getInstance()->getAliases() and write aliases.stubphp}
     Plugin::registerHandlers
