@@ -47,6 +47,7 @@ final class ModelPropertyHandler
             return null;
         }
 
+        /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqClasslikeName */
         $fqClasslikeName = $event->getFqClasslikeName();
         $propertyName = $event->getPropertyName();
 
@@ -75,6 +76,7 @@ final class ModelPropertyHandler
             return null;
         }
 
+        /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqClasslikeName */
         $fqClasslikeName = $event->getFqClasslikeName();
         $propertyName = $event->getPropertyName();
 
@@ -103,6 +105,7 @@ final class ModelPropertyHandler
             return null;
         }
 
+        /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqClasslikeName */
         $fqClasslikeName = $event->getFqClasslikeName();
         $propertyName = $event->getPropertyName();
 
@@ -260,6 +263,7 @@ final class ModelPropertyHandler
         return new Union($literals);
     }
 
+    /** @param class-string $fqcn */
     private static function hasNativeProperty(string $fqcn, string $propertyName): bool
     {
         try {

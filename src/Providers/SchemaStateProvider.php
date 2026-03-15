@@ -14,16 +14,19 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
  * Set once at plugin init, before handler registration.
  *
  * @internal
+ * @psalm-external-mutation-free
  */
 final class SchemaStateProvider
 {
     private static ?SchemaAggregator $schema = null;
 
+    /** @psalm-external-mutation-free */
     public static function setSchema(SchemaAggregator $schema): void
     {
         self::$schema = $schema;
     }
 
+    /** @psalm-external-mutation-free */
     public static function getSchema(): ?SchemaAggregator
     {
         return self::$schema;
