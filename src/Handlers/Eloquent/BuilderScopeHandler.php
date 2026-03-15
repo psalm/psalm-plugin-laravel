@@ -63,6 +63,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
 
     /**
      * @param non-empty-list<Union>|null $templateTypeParameters
+     * @return class-string<\Illuminate\Database\Eloquent\Model>|null
      * @psalm-mutation-free
      */
     private static function resolveModelClass(?array $templateTypeParameters): ?string
@@ -84,6 +85,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Check if the model has a scope for the given method name.
+     * @param class-string<\Illuminate\Database\Eloquent\Model> $modelClass
      */
     private static function hasScopeMethod(\Psalm\Codebase $codebase, string $modelClass, string $methodName): bool
     {

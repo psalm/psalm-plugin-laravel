@@ -27,7 +27,7 @@ use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 
 /**
- * @psalm-suppress UnusedClass
+ * @psalm-api
  * @internal
  */
 final class Plugin implements PluginEntryPointInterface
