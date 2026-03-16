@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
@@ -54,14 +56,20 @@ class User extends Authenticatable
     }
 
     /**
-     * Scope a query to only include active users.
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * Legacy scope: called as User::query()->active()
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<self>
      */
     public function scopeActive($query)
     {
         return $query->where('active', 1);
+    }
+
+    /** Modern scope using #[Scope] attribute (Laravel 12+): called as User::query()->verified() */
+    #[Scope]
+    public function verified(Builder $query): void
+    {
+        $query->whereNotNull('email_verified_at');
     }
 
     public function getFirstNameUsingLegacyAccessorAttribute(): string
