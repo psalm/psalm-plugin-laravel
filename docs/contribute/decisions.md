@@ -15,6 +15,22 @@ Decisions made during development of the plugin. Contributors should follow thes
 **Why:** Users who write `@property` annotations are explicitly declaring the type they want.
 The plugin should respect that consistently across all handlers rather than overriding it with inferred types.
 
+### Property writes use pseudo_property_set_types, not doesPropertyExist()
+
+**Decision:** Migration-inferred columns are registered as `pseudo_property_set_types` on the model's `ClassLikeStorage` during `afterCodebasePopulated`. The property handlers (`doesPropertyExist`, `isPropertyVisible`, `getPropertyType`) remain read-only. The write type is `mixed` (permissive).
+
+**Why:** Psalm's internal `InstancePropertyAssignmentAnalyzer` assumes that any property claimed as existing by a plugin has a `PropertyStorage` entry. Returning `true` from `doesPropertyExist()` for writes causes crashes because plugin-provided properties don't have backing storage. Using `pseudo_property_set_types` is Psalm's intended mechanism — it's how `@property` annotations work natively. The write type is `mixed` rather than the column type because the actual accepted type depends on casts (e.g., a `datetime`-cast column accepts `Carbon`, not just `string`), and casts from the `casts()` method are not fully resolvable during `afterCodebasePopulated`.
+
+**See:** [#446](https://github.com/psalm/psalm-plugin-laravel/issues/446)
+
+### Write-type registration for accessors and relationships is unconditional
+
+**Decision:** `registerWriteTypesForMethods` (which registers `pseudo_property_set_types` for relationship properties, legacy mutators, and new-style `Attribute` accessors) runs for all models regardless of the `modelProperties` config. Only `registerWriteTypesForColumns` (migration-inferred columns) is gated behind `useMigrations`.
+
+**Why:** Accessor and relationship properties are discovered from the model's own method signatures — they don't depend on migration files. A user with `columnFallback="none"` still expects `$user->roles = $collection` to work when `sealAllProperties` is enabled. This is consistent with the read-side handlers, which are also unconditional (see below).
+
+**See:** [#446](https://github.com/psalm/psalm-plugin-laravel/issues/446)
+
 ### Model property handlers always run, no per-handler config toggles
 
 **Decision:** `ModelRelationshipPropertyHandler` and `ModelPropertyAccessorHandler` are always registered. Only `ModelPropertyHandler` (migration-based column inference) is gated by the `modelProperties` config.

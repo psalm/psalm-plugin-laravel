@@ -63,7 +63,7 @@ final class ModelPropertyHandler
         }
 
         $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
+        if ($column instanceof SchemaColumn) {
             return true;
         }
 
@@ -91,7 +91,7 @@ final class ModelPropertyHandler
         }
 
         $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
+        if ($column instanceof SchemaColumn) {
             return true;
         }
 
@@ -123,7 +123,7 @@ final class ModelPropertyHandler
         }
 
         $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if (!$column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
+        if (!$column instanceof SchemaColumn) {
             return null;
         }
 
@@ -137,23 +137,29 @@ final class ModelPropertyHandler
         return self::mapColumnType($column);
     }
 
-    private static function resolveColumn(string $fqClasslikeName, string $propertyName): ?SchemaColumn
+    /**
+     * Resolve all migration-inferred columns for a model.
+     *
+     * @return array<string, SchemaColumn>
+     */
+    public static function resolveAllColumns(string $fqClasslikeName): array
     {
         $schema = SchemaStateProvider::getSchema();
         if (!$schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator) {
-            return null;
+            return [];
         }
 
         $tableName = self::resolveTableName($fqClasslikeName);
-        if ($tableName === null) {
-            return null;
+        if ($tableName === null || !isset($schema->tables[$tableName])) {
+            return [];
         }
 
-        if (!isset($schema->tables[$tableName])) {
-            return null;
-        }
+        return $schema->tables[$tableName]->columns;
+    }
 
-        return $schema->tables[$tableName]->columns[$propertyName] ?? null;
+    private static function resolveColumn(string $fqClasslikeName, string $propertyName): ?SchemaColumn
+    {
+        return self::resolveAllColumns($fqClasslikeName)[$propertyName] ?? null;
     }
 
     private static function resolveTableName(string $fqClasslikeName): ?string
@@ -168,6 +174,10 @@ final class ModelPropertyHandler
 
         try {
             $reflection = new \ReflectionClass($fqClasslikeName);
+            if ($reflection->isAbstract()) {
+                return null;
+            }
+
             $instance = $reflection->newInstanceWithoutConstructor();
 
             if (!$instance instanceof Model) {
