@@ -1,27 +1,2 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="7.0.0-beta16@491dd740b8862db7d4fe8c1f6c161055c32ad651">
-  <file src="src/Exceptions/UnknownApplicationConfiguration.php">
-    <UnusedClass>
-      <code><![CDATA[UnknownApplicationConfiguration]]></code>
-    </UnusedClass>
-  </file>
-  <file src="src/Handlers/Eloquent/BuilderScopeHandler.php">
-    <ArgumentTypeCoercion>
-      <code><![CDATA[$modelClass]]></code>
-    </ArgumentTypeCoercion>
-  </file>
-  <file src="src/Handlers/Eloquent/ModelPropertyHandler.php">
-    <ArgumentTypeCoercion>
-      <code><![CDATA[$fqcn]]></code>
-    </ArgumentTypeCoercion>
-  </file>
-  <file src="src/Providers/SchemaStateProvider.php">
-    <MissingImmutableAnnotation>
-      <code><![CDATA[SchemaStateProvider]]></code>
-    </MissingImmutableAnnotation>
-    <MissingPureAnnotation>
-      <code><![CDATA[getSchema]]></code>
-      <code><![CDATA[setSchema]]></code>
-    </MissingPureAnnotation>
-  </file>
-</files>
+<files psalm-version="7.0.0-beta16@491dd740b8862db7d4fe8c1f6c161055c32ad651"/>
