@@ -17,7 +17,7 @@ use Psalm\Type;
  * @see \Illuminate\Support\Facades\Auth::loginUsingId() returns Authenticatable|false
  * @see \Illuminate\Support\Facades\Auth::onceUsingId() returns Authenticatable|false
  * @see \Illuminate\Support\Facades\Auth::logoutOtherDevices() returns Authenticatable|null
- * @see \Illuminate\Support\Facades\Auth::getLastAttempted() returns Authenticatable
+ * @see \Illuminate\Support\Facades\Auth::getLastAttempted() returns Authenticatable|null
  * @see \Illuminate\Support\Facades\Auth::getUser() returns Authenticatable|null
  * @see \Illuminate\Support\Facades\Auth::authenticate() returns Authenticatable
  *
@@ -93,7 +93,7 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
      * @method annotations on facades causes an UnexpectedValueException crash. We must return
      * explicit params for every method we handle.
      *
-     * @see https://github.com/psalm/psalm-plugin-laravel/issues/XXX
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/454
      */
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
@@ -105,20 +105,20 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
             // SessionGuard::getLastAttempted() — all take no parameters
             'user', 'getuser', 'authenticate', 'getlastattempted' => [],
 
-            // SessionGuard::logoutOtherDevices(#[\SensitiveParameter] string $password, string $attribute = 'password')
+            // SessionGuard::logoutOtherDevices(#[\SensitiveParameter] string $password)
             'logoutotherdevices' => [
-                new FunctionLikeParameter('password', false, Type::getString(), Type::getString()),
+                new FunctionLikeParameter('password', false, Type::getString(), Type::getString(), is_optional: false),
             ],
 
             // StatefulGuard::loginUsingId(mixed $id, bool $remember = false)
             'loginusingid' => [
-                new FunctionLikeParameter('id', false, Type::getMixed(), Type::getMixed()),
+                new FunctionLikeParameter('id', false, Type::getMixed(), Type::getMixed(), is_optional: false),
                 new FunctionLikeParameter('remember', false, Type::getBool(), Type::getBool(), is_optional: true, default_type: Type::getFalse()),
             ],
 
             // StatefulGuard::onceUsingId(mixed $id)
             'onceusingid' => [
-                new FunctionLikeParameter('id', false, Type::getMixed(), Type::getMixed()),
+                new FunctionLikeParameter('id', false, Type::getMixed(), Type::getMixed(), is_optional: false),
             ],
 
             default => null,
