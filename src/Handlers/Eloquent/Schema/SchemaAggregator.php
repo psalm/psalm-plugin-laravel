@@ -376,7 +376,7 @@ final class SchemaAggregator
                 $column_name = $first_arg->value;
             } elseif ($first_arg instanceof PhpParser\Node\Expr\Array_) {
                 // Handle dropColumn/removeColumn with array argument: $table->dropColumn(['col1', 'col2'])
-                if (in_array($first_method_name_lc, ['dropcolumn', 'removecolumn'], true)) {
+                if (\in_array($first_method_name_lc, ['dropcolumn', 'removecolumn'], true)) {
                     foreach ($first_arg->items as $item) {
                         if ($item !== null && $item->value instanceof PhpParser\Node\Scalar\String_) {
                             $table->dropColumn($item->value->value);
