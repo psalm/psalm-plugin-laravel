@@ -63,7 +63,7 @@ final class ModelPropertyHandler
         }
 
         $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
+        if ($column instanceof SchemaColumn) {
             return true;
         }
 
@@ -91,7 +91,7 @@ final class ModelPropertyHandler
         }
 
         $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
+        if ($column instanceof SchemaColumn) {
             return true;
         }
 
@@ -123,7 +123,7 @@ final class ModelPropertyHandler
         }
 
         $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if (!$column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
+        if (!$column instanceof SchemaColumn) {
             return null;
         }
 
@@ -159,21 +159,7 @@ final class ModelPropertyHandler
 
     private static function resolveColumn(string $fqClasslikeName, string $propertyName): ?SchemaColumn
     {
-        $schema = SchemaStateProvider::getSchema();
-        if (!$schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator) {
-            return null;
-        }
-
-        $tableName = self::resolveTableName($fqClasslikeName);
-        if ($tableName === null) {
-            return null;
-        }
-
-        if (!isset($schema->tables[$tableName])) {
-            return null;
-        }
-
-        return $schema->tables[$tableName]->columns[$propertyName] ?? null;
+        return self::resolveAllColumns($fqClasslikeName)[$propertyName] ?? null;
     }
 
     private static function resolveTableName(string $fqClasslikeName): ?string
