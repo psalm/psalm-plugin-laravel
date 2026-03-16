@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -13,7 +14,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 /**
  * @property string $id
  * @property CarbonInterface|null $email_verified_at
- * @property Phone|null $phone
+ * @property Phone|null $phone This is nullable HasOne relationship to the Phone Model
  * @property non-empty-string $first_name_using_legacy_accessor
  */
 class User extends Authenticatable
@@ -66,5 +67,23 @@ class User extends Authenticatable
     public function getFirstNameUsingLegacyAccessorAttribute(): string
     {
         return $this->name;
+    }
+
+    /** Legacy setter */
+    public function setNicknameAttribute(string $value): void
+    {
+        $this->attributes['nickname'] = \strtolower($value);
+    }
+
+    /**
+     * Modern Accessor, see https://laravel.com/docs/master/eloquent-mutators#accessors-and-mutators
+     * @return Attribute<string, string>
+     */
+    protected function firstName(): Attribute
+    {
+        return Attribute::make(
+            get: fn(mixed $value): string => \ucfirst((string) $value),
+            set: fn(string $value): string => \strtolower($value),
+        );
     }
 }
