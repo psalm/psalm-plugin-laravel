@@ -23,4 +23,12 @@ class Collection extends BaseCollection implements QueueableCollection
      * @psalm-return (TKey is \Illuminate\Database\Eloquent\Model ? TModel|TFindDefault : (TKey is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? static<TKey, TModel> : TModel|TFindDefault))
      */
     public function find($key, $default = null) {}
+
+    /**
+     * Load a set of relationships onto the collection if they are not already eager loaded.
+     *
+     * @param  array<array-key, (callable(\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return $this
+     */
+    public function loadMissing($relations) {}
 }

@@ -6,41 +6,28 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
-use Psalm\Plugin\EventHandler\PropertyExistenceProviderInterface;
-use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
-use Psalm\Plugin\EventHandler\PropertyVisibilityProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Union;
 
-use function in_array;
-use function is_a;
-
-final class ModelRelationshipPropertyHandler implements
-    PropertyExistenceProviderInterface,
-    PropertyVisibilityProviderInterface,
-    PropertyTypeProviderInterface
+final class ModelRelationshipPropertyHandler
 {
-    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
-    #[\Override]
-    public static function getClassLikeNames(): array
-    {
-        return ModelStubProvider::getModelClasses();
-    }
+    /** @var array<string, bool> Cache for relationExists() keyed by "class::property" */
+    private static array $relationExistsCache = [];
 
-    /** @inheritDoc */
-    #[\Override]
+    /** @var array<string, Union> Cache for getPropertyType() keyed by "class::property" */
+    private static array $propertyTypeCache = [];
+
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();
@@ -53,20 +40,19 @@ final class ModelRelationshipPropertyHandler implements
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
 
-        if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
-            return true;
+        // Defer to user @property PHPDoc
+        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+            return null;
         }
 
-        $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
-
-        if (isset($class_like_storage->pseudo_property_get_types['$' . $property_name])) {
-            return null;
+        if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
+            return true;
         }
 
         return null;
     }
 
-    #[\Override]
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -77,20 +63,19 @@ final class ModelRelationshipPropertyHandler implements
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
 
-        if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
-            return true;
+        // Defer to user @property PHPDoc
+        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+            return null;
         }
 
-        $class_like_storage = $codebase->classlike_storage_provider->get($fq_classlike_name);
-
-        if (isset($class_like_storage->pseudo_property_get_types['$' . $property_name])) {
-            return null;
+        if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
+            return true;
         }
 
         return null;
     }
 
-    #[\Override]
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
         $source = $event->getSource();
@@ -103,83 +88,99 @@ final class ModelRelationshipPropertyHandler implements
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
 
-        if (self::relationExists($codebase, $fq_classlike_name, $property_name)) {
-            $methodReturnType = $codebase->getMethodReturnType($fq_classlike_name . '::' . $property_name, $fq_classlike_name);
-            if (!$methodReturnType instanceof \Psalm\Type\Union) {
-                return Type::getMixed();
-            }
-
-            /** @var Union|null $modelType */
-            $modelType = null;
-            /** @var TGenericObject|null $relationType */
-            $relationType = null;
-
-            // In order to get the property value, we need to decipher the generic relation object
-            foreach ($methodReturnType->getAtomicTypes() as $atomicType) {
-                if (!$atomicType instanceof TGenericObject) {
-                    continue;
-                }
-
-                $relationType = $atomicType;
-
-                foreach ($atomicType->type_params as $childNode) {
-                    foreach ($childNode->getAtomicTypes() as $atomicType) {
-                        if (!$atomicType instanceof Type\Atomic\TNamedObject) {
-                            continue;
-                        }
-
-                        $modelType = $childNode;
-                        break 3;
-                    }
-                }
-            }
-
-            $returnType = $modelType;
-
-            $relationsThatReturnACollection = [
-                BelongsToMany::class,
-                HasMany::class,
-                HasManyThrough::class,
-                MorphMany::class,
-                MorphToMany::class,
-            ];
-
-            if ($modelType && $relationType && in_array($relationType->value, $relationsThatReturnACollection, true)) {
-                $returnType = new Union([
-                    new TGenericObject(Collection::class, [
-                        new Union([new TInt()]),
-                        $modelType,
-                    ]),
-                ]);
-            }
-
-            return $returnType ?: Type::getMixed();
+        // Defer to user @property PHPDoc
+        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+            return null;
         }
 
-        return null;
+        if (!self::relationExists($codebase, $fq_classlike_name, $property_name)) {
+            return null;
+        }
+
+        $cacheKey = $fq_classlike_name . '::' . $property_name;
+
+        if (\array_key_exists($cacheKey, self::$propertyTypeCache)) {
+            return self::$propertyTypeCache[$cacheKey];
+        }
+
+        $methodReturnType = $codebase->getMethodReturnType($cacheKey, $fq_classlike_name);
+        if (!$methodReturnType instanceof Union) {
+            $result = Type::getMixed();
+            self::$propertyTypeCache[$cacheKey] = $result;
+            return $result;
+        }
+
+        /** @var Union|null $modelType */
+        $modelType = null;
+        /** @var TGenericObject|null $relationType */
+        $relationType = null;
+
+        foreach ($methodReturnType->getAtomicTypes() as $atomicType) {
+            if (!$atomicType instanceof TGenericObject) {
+                continue;
+            }
+
+            $relationType = $atomicType;
+
+            foreach ($atomicType->type_params as $childNode) {
+                foreach ($childNode->getAtomicTypes() as $atomicType) {
+                    if (!$atomicType instanceof Type\Atomic\TNamedObject) {
+                        continue;
+                    }
+
+                    $modelType = $childNode;
+                    break 3;
+                }
+            }
+        }
+
+        $returnType = $modelType;
+
+        $relationsThatReturnACollection = [
+            BelongsToMany::class,
+            HasMany::class,
+            HasManyThrough::class,
+            MorphMany::class,
+            MorphToMany::class,
+        ];
+
+        if ($modelType && $relationType && \in_array($relationType->value, $relationsThatReturnACollection, true)) {
+            $returnType = new Union([
+                new TGenericObject(Collection::class, [
+                    new Union([new TInt()]),
+                    $modelType,
+                ]),
+            ]);
+        }
+
+        $result = $returnType ?: Type::getMixed();
+        self::$propertyTypeCache[$cacheKey] = $result;
+
+        return $result;
     }
 
     private static function relationExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
-        $method = $fq_classlike_name . '::' . $property_name;
+        $key = $fq_classlike_name . '::' . $property_name;
 
-        if (!$codebase->methodExists($method)) {
-            return false;
+        if (\array_key_exists($key, self::$relationExistsCache)) {
+            return self::$relationExistsCache[$key];
         }
 
-        // ensure this is a relation method
-
-        $return_type = $codebase->getMethodReturnType($method, $fq_classlike_name);
-        if (!$return_type instanceof \Psalm\Type\Union) {
-            return false;
-        }
-
-        foreach ($return_type->getAtomicTypes() as $type) {
-            if ($type instanceof TGenericObject && is_a($type->value, Relation::class, true)) {
-                return true;
+        if ($codebase->methodExists($key)) {
+            $return_type = $codebase->getMethodReturnType($key, $fq_classlike_name);
+            if ($return_type instanceof Union) {
+                foreach ($return_type->getAtomicTypes() as $type) {
+                    if ($type instanceof TGenericObject && \is_a($type->value, Relation::class, true)) {
+                        self::$relationExistsCache[$key] = true;
+                        return true;
+                    }
+                }
             }
         }
 
+        self::$relationExistsCache[$key] = false;
         return false;
     }
 }

@@ -12,8 +12,8 @@ This package is maintained by [@alies-dev](https://github.com/sponsors/alies-dev
 
 Areas where help is especially welcome:
  - [ ] Full support for custom Model Query Builders
- - [ ] Option to rely on Model `@property` declarations only
- - [ ] Remove `barryvdh/laravel-ide-helper` dependency for more accurate attribute types
+ - [x] Option to rely on Model `@property` declarations only
+ - [x] ~~Remove `barryvdh/laravel-ide-helper` dependency for more accurate attribute types~~
  - [ ] Support `.sql` migration files for attribute discovery
 
 ________
@@ -32,7 +32,7 @@ Maintained versions:
 
 | Laravel Psalm Plugin | PHP   | Laravel   | Psalm |
 |----------------------|-------|-----------|-------|
-| 4.x (upcoming)       | ^8.3  | 12, 13    | 7     |
+| 4.x                  | ^8.3  | 12, 13    | 7     |
 | 3.x                  | ^8.2  | 11, 12    | 6, 7  |
 | 2.12+                | ^8.0  | 9, 10, 11 | 5, 6  |
 
@@ -75,9 +75,14 @@ and/or [cli parameters](https://psalm.dev/docs/running_psalm/command_line_usage/
 Step by step set `errorLevel` to `1` and use Psalm and this plugin at full power 🚀.  
 
 
+## Configuration
+
+See [docs/config.md](docs/config.md) for all configuration options.
+
+
 ## How it works
 
-Under the hood it just runs https://github.com/barryvdh/laravel-ide-helper and feeds the resultant stubs into Psalm, which can read PhpStorm meta stubs.
+Under the hood it reads Laravel's native `@method` annotations on facade classes and generates alias stubs based on `Illuminate\Foundation\AliasLoader` (including aliases from your `config/app.php` and package discovery). It also ships hand-crafted stubs for taint analysis and special cases.
 
 It also parses any database migrations it can find to try to understand property types in your database models.
 

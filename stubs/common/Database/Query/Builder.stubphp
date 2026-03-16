@@ -63,9 +63,70 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $column
-     * @psalm-taint-sink sql $operator
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * Add an "or where" clause to the query.
+     *
+     * @param  \Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function orWhere($column, $operator = null, $value = null) {}
+
+    /**
+     * Add a basic "where not" clause to the query.
+     *
+     * @param  \Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function whereNot($column, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * Add an "or where not" clause to the query.
+     *
+     * @param  \Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function orWhereNot($column, $operator = null, $value = null) {}
+
+    /**
+     * Add a "having" clause to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|\Closure|string  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function having($column, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * Add an "or having" clause to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|\Closure|string  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function orHaving($column, $operator = null, $value = null) {}
 
     /**
      * Add a raw where clause to the query.
@@ -145,4 +206,12 @@ class Builder
      * @psalm-taint-sink sql $expression
      */
     public function rawValue(string $expression, array $bindings = []) {}
+
+    /**
+     * Retrieve the sum of the values of a given column.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return int|float
+     */
+    public function sum($column) {}
 }

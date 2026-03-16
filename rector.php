@@ -7,16 +7,16 @@ use Rector\CodingStyle\Rector\If_\NullableCompareToNullRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPrivateMethodRector;
 use Rector\Php55\Rector\String_\StringClassNameToClassConstantRector;
-use Rector\Php74\Rector\Closure\ClosureToArrowFunctionRector;
-use Rector\Php81\Rector\FuncCall\NullToStrictStringFuncCallArgRector;
+use Rector\PHPUnit\Set\PHPUnitSetList;
+use Rector\ValueObject\PhpVersion;
 
 return RectorConfig::configure()
     ->withPaths(['src', 'tests'])
-    ->withPhpSets(php82: true)
-    ->withPreparedSets(deadCode: true, codingStyle: true, typeDeclarations: true, codeQuality: true)
+    ->withSkipPath('tests/Unit/Handlers/Eloquent/Schema/migrations')
+    ->withPhpVersion(PhpVersion::PHP_83)
+    ->withSets([PHPUnitSetList::PHPUNIT_120])
+    ->withPreparedSets(deadCode: true, codingStyle: true, typeDeclarations: true, codeQuality: true, phpunitCodeQuality: true)
     ->withSkip([
-        ClosureToArrowFunctionRector::class,
-        NullToStrictStringFuncCallArgRector::class,
         RemoveUnusedPrivateMethodRector::class,
         SimplifyUselessVariableRector::class,
         NullableCompareToNullRector::class,

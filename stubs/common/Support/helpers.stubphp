@@ -106,13 +106,13 @@ function optional($value = null, callable $callback = null) {}
  * @template TValue
  * @param int|list<int> $times
  * @param callable(int): TValue $callback
- * @param int $sleep
- * @param null|callable(\Exception): bool $when
+ * @param int|\Closure(int, \Throwable): int $sleepMilliseconds
+ * @param null|callable(\Throwable): bool $when
  * @psalm-return TValue
  *
- * @throws \Exception
+ * @throws \Throwable
  */
-function retry($times, callable $callback, $sleep = 0, $when = null) {}
+function retry($times, callable $callback, $sleepMilliseconds = 0, $when = null) {}
 
 /**
  * Get a new stringable object from the given string.

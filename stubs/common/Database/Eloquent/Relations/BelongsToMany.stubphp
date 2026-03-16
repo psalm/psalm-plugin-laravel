@@ -3,10 +3,11 @@
 namespace Illuminate\Database\Eloquent\Relations;
 
 /**
-* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
-* @template-extends Relation<TRelatedModel>
-* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
-*/
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template-extends Relation<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
 class BelongsToMany extends Relation
 {
     use Concerns\InteractsWithPivotTable;
@@ -16,15 +17,13 @@ class BelongsToMany extends Relation
      * @psalm-param T $id
      * @param  int|non-empty-string|array<int|non-empty-string>|\Illuminate\Contracts\Support\Arrayable<int|non-empty-string>  $id
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Model
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Support\Collection<int, TRelatedModel>|TRelatedModel
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Support\Collection<int, TRelatedModel> : TRelatedModel)
      */
     public function findOrNew($id, $columns = ['*']) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @return \Illuminate\Database\Eloquent\Model
-     * @psalm-return TRelatedModel
+     * @return TRelatedModel
      */
     public function firstOrNew(array $attributes) {}
 
@@ -32,8 +31,7 @@ class BelongsToMany extends Relation
      * @param  array<string, mixed>  $attributes
      * @param  array  $joining
      * @param  bool   $touch
-     * @return \Illuminate\Database\Eloquent\Model
-     * @psalm-return TRelatedModel
+     * @return TRelatedModel
      */
     public function firstOrCreate(array $attributes, array $joining = [], $touch = true) {}
 
@@ -51,7 +49,6 @@ class BelongsToMany extends Relation
      * @psalm-param T $id
      * @param  mixed  $id
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection|null
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
      */
     public function find($id, $columns = ['*']) {}
@@ -59,8 +56,7 @@ class BelongsToMany extends Relation
     /**
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<array-key, int|string>  $ids
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Collection
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function findMany($ids, $columns = ['*']) {}
 
@@ -68,8 +64,7 @@ class BelongsToMany extends Relation
      * @template T
      * @psalm-param T $id
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
@@ -77,8 +72,7 @@ class BelongsToMany extends Relation
 
     /**
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Model|null
-     * @psalm-return TRelatedModel|null
+     * @return TRelatedModel|null
      */
     public function first($columns = ['*']) {}
 
@@ -86,8 +80,7 @@ class BelongsToMany extends Relation
      * Execute the query and get the first result or throw an exception.
      *
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Model
-     * @psalm-return TRelatedModel
+     * @return TRelatedModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
@@ -118,7 +111,7 @@ class BelongsToMany extends Relation
      * @param  array<int, mixed>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Pagination\LengthAwarePaginator<TRelatedModel>
+     * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel>
      */
     public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -129,7 +122,7 @@ class BelongsToMany extends Relation
      * @param  array<int, mixed>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Pagination\Paginator<TRelatedModel>
+     * @return \Illuminate\Pagination\Paginator<int, TRelatedModel>
      */
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -140,7 +133,7 @@ class BelongsToMany extends Relation
      * @param  array<int, mixed>  $columns
      * @param  string  $cursorName
      * @param  string|null  $cursor
-     * @return \Illuminate\Pagination\CursorPaginator<TRelatedModel>
+     * @return \Illuminate\Pagination\CursorPaginator<int, TRelatedModel>
      */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 }

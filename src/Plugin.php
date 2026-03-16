@@ -5,38 +5,29 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\Application;
+use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelFactoryTypeProvider;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
-use Psalm\LaravelPlugin\Providers\ModelStubProvider;
+use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
+use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
-use Psalm\PluginRegistrationSocket;
-use Psalm\Progress\DefaultProgress;
-
-use function array_merge;
-use function dirname;
-use function explode;
-use function is_dir;
-use function is_string;
-use function sprintf;
-use function urlencode;
 
 /**
- * @psalm-suppress UnusedClass
+ * @psalm-api
  * @internal
  */
 final class Plugin implements PluginEntryPointInterface
@@ -45,63 +36,44 @@ final class Plugin implements PluginEntryPointInterface
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
-        $failOnInternalError = ((string) $config?->failOnInternalError) === 'true';
-        $output = new DefaultProgress();
-
-        // $registration->codebase is available/public from Psalm v6.7
-        // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
-        if ($registration instanceof PluginRegistrationSocket) {
-            $output = $registration->codebase->progress;
-        }
+        $pluginConfig = PluginConfig::fromXml($config);
+        $output = $this->getProgress($registration);
 
         try {
             ApplicationProvider::bootApp();
-        } catch (\Throwable $throwable) {
-            $output->warning("Laravel plugin error on booting Laravel app: “{$throwable->getMessage()}”");
-            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $this->generateReportIssueUrl($throwable));
 
-            if ($failOnInternalError) {
-                throw $throwable;
+            if ($pluginConfig->shouldUseMigrations()) {
+                $this->buildSchema();
             }
 
+            $this->generateAliasStubs($pluginConfig);
+        } catch (\Throwable $throwable) {
+            $this->handleInternalError($throwable, $output, $pluginConfig->failOnInternalError);
             return;
         }
 
-        try {
-            $this->generateStubFiles();
-        } catch (\Throwable $throwable) {
-            $output->warning("Laravel plugin error on generating stub files: “{$throwable->getMessage()}”");
-            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $this->generateReportIssueUrl($throwable));
-
-            if ($failOnInternalError) {
-                throw $throwable;
-            }
-
-            return;
-        }
-
-        $this->registerHandlers($registration);
-        $this->registerStubs($registration);
+        $this->registerHandlers($registration, $pluginConfig);
+        $this->registerStubs($registration, $pluginConfig);
     }
 
     /** @return list<string> */
     private function getCommonStubs(): array
     {
-        return $this->findStubFiles(dirname(__DIR__) . '/stubs/common');
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/common');
     }
 
     /** @return list<string> */
     private function getTaintAnalysisStubs(): array
     {
-        return $this->findStubFiles(dirname(__DIR__) . '/stubs/taintAnalysis');
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/taintAnalysis');
     }
 
     /** @return list<string> */
-    private function getStubsForVersion(string $version): array
+    private function getStubsForLaravelVersion(string $version): array
     {
-        [$majorVersion] = explode('.', $version);
+        [$majorVersion] = \explode('.', $version);
 
-        return $this->findStubFiles(dirname(__DIR__) . '/stubs/' . $majorVersion);
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/' . $majorVersion);
     }
 
     /**
@@ -110,7 +82,7 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function findStubFiles(string $directory): array
     {
-        if (! is_dir($directory)) {
+        if (!\is_dir($directory)) {
             return [];
         }
 
@@ -124,7 +96,7 @@ final class Plugin implements PluginEntryPointInterface
 
             $realPath = $file->getRealPath();
 
-            if (! is_string($realPath)) {
+            if (!\is_string($realPath)) {
                 continue;
             }
 
@@ -134,11 +106,11 @@ final class Plugin implements PluginEntryPointInterface
         return $stubs;
     }
 
-    private function registerStubs(RegistrationInterface $registration): void
+    private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig): void
     {
-        $stubs = array_merge(
+        $stubs = \array_merge(
             $this->getCommonStubs(),
-            $this->getStubsForVersion(Application::VERSION),
+            $this->getStubsForLaravelVersion(Application::VERSION),
             $this->getTaintAnalysisStubs(),
         );
 
@@ -146,11 +118,10 @@ final class Plugin implements PluginEntryPointInterface
             $registration->addStubFile($stubFilePath);
         }
 
-        $registration->addStubFile(FacadeStubProvider::getStubFileLocation());
-        $registration->addStubFile(ModelStubProvider::getStubFileLocation());
+        $registration->addStubFile(self::getAliasStubLocation($pluginConfig));
     }
 
-    private function registerHandlers(RegistrationInterface $registration): void
+    private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
     {
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(ContainerHandler::class);
@@ -164,16 +135,25 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(RequestHandler::class);
 
+        // Model property handlers are registered dynamically by ModelRegistrationHandler
+        // after Psalm populates its codebase (AfterCodebasePopulated event).
+        require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
-        $registration->registerHooksFromClass(ModelRelationshipPropertyHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
-        $registration->registerHooksFromClass(ModelFactoryTypeProvider::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
-        $registration->registerHooksFromClass(ModelPropertyAccessorHandler::class);
+        if ($pluginConfig->shouldUseMigrations()) {
+            require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
+            ModelRegistrationHandler::enableMigrations();
+        }
+
+        $registration->registerHooksFromClass(ModelRegistrationHandler::class);
+
         require_once __DIR__ . '/Handlers/Eloquent/RelationsMethodHandler.php';
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(ModelMethodHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
+        $registration->registerHooksFromClass(BuilderScopeHandler::class);
 
         require_once __DIR__ . '/Handlers/Helpers/CacheHandler.php';
         $registration->registerHooksFromClass(CacheHandler::class);
@@ -186,18 +166,153 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(SuppressHandler::class);
     }
 
-    private function generateStubFiles(): void
+    private function buildSchema(): void
     {
-        FacadeStubProvider::generateStubFile();
-        ModelStubProvider::generateStubFile();
+        $app = ApplicationProvider::getApp();
+
+        if (!\method_exists($app, 'databasePath')) {
+            return;
+        }
+
+        $projectAnalyzer = ProjectAnalyzer::getInstance();
+        $codebase = $projectAnalyzer->getCodebase();
+
+        $schemaAggregator = new SchemaAggregator();
+
+        $migrationFilePathnames = [];
+        foreach ($this->getMigrationDirectories($app) as $directory) {
+            \array_push($migrationFilePathnames, ...$this->findPhpFilesRecursive($directory));
+        }
+
+        if ($migrationFilePathnames === []) {
+            SchemaStateProvider::setSchema($schemaAggregator);
+            return;
+        }
+
+        foreach ($migrationFilePathnames as $file) {
+            try {
+                $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
+            } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+                $codebase->progress->debug(
+                    "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}\n",
+                );
+                continue;
+            }
+        }
+
+        SchemaStateProvider::setSchema($schemaAggregator);
     }
 
-    private function generateReportIssueUrl(\Throwable $throwable): string
+    /**
+     * Resolve migration directories the same way Laravel does:
+     * extra paths registered via loadMigrationsFrom() + the default database/migrations directory.
+     *
+     * @return non-empty-list<string>
+     */
+    private function getMigrationDirectories(Application $app): array
     {
-        return sprintf(
-            'https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md&title=%s&body=%s',
-            urlencode("Error on generating stub files: {$throwable->getMessage()}"),
-            urlencode("```\n{$throwable->__toString()}\n```"),
-        );
+        /** @var \Illuminate\Database\Migrations\Migrator $migrator */
+        $migrator = $app->make('migrator');
+
+        return \array_values(\array_merge($migrator->paths(), [$app->databasePath('migrations')]));
+    }
+
+    /**
+     * Recursively find all .php files in a directory.
+     * @return list<string>
+     */
+    private function findPhpFilesRecursive(string $directory): array
+    {
+        if (!\is_dir($directory)) {
+            return [];
+        }
+
+        $files = [];
+
+        /** @var \SplFileInfo $file */
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS)) as $file) {
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $realPath = $file->getRealPath();
+            if (\is_string($realPath)) {
+                $files[] = $realPath;
+            }
+        }
+
+        return $files;
+    }
+
+    private function generateAliasStubs(PluginConfig $pluginConfig): void
+    {
+        // Read aliases from the booted app's AliasLoader — this reflects the actual
+        // aliases registered for this project (config app.aliases + package discovery),
+        // not just Laravel's hardcoded defaults.
+        /** @var array<string, class-string> $aliases */
+        $aliases = \Illuminate\Foundation\AliasLoader::getInstance()->getAliases();
+        $stub = "<?php\n\n";
+
+        foreach ($aliases as $alias => $fqcn) {
+            // Skip namespaced aliases — `class Some\Name extends ...` is invalid PHP
+            // without a namespace block
+            if (\str_contains($alias, '\\')) {
+                continue;
+            }
+
+            $stub .= "class {$alias} extends \\{$fqcn} {}\n";
+        }
+
+        $location = self::getAliasStubLocation($pluginConfig);
+        $result = \file_put_contents($location, $stub);
+
+        if ($result === false) {
+            throw new \RuntimeException(
+                "Failed to write alias stub file to '{$location}'. "
+                . 'Check that the directory exists and is writable. '
+                . 'You can set PSALM_LARAVEL_PLUGIN_CACHE_PATH to specify a custom writable directory.',
+            );
+        }
+    }
+
+    public static function getAliasStubLocation(PluginConfig $pluginConfig): string
+    {
+        return self::getCacheLocation($pluginConfig) . \DIRECTORY_SEPARATOR . 'aliases.stubphp';
+    }
+
+    public static function getCacheLocation(PluginConfig $pluginConfig): string
+    {
+        $dir = $pluginConfig->cachePath;
+
+        if (!\is_dir($dir) && !\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+            throw new \RuntimeException("Cache directory '{$dir}' does not exist and could not be created.");
+        }
+
+        return $dir;
+    }
+
+    /** @throws \Throwable */
+    private function handleInternalError(\Throwable $throwable, \Psalm\Progress\Progress $output, bool $failOnInternalError): void
+    {
+        $output->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
+        $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
+
+        if ($failOnInternalError) {
+            throw $throwable;
+        }
+    }
+
+    /** @psalm-mutation-free */
+    private function getProgress(RegistrationInterface $registration): \Psalm\Progress\Progress
+    {
+        $output = new \Psalm\Progress\DefaultProgress();
+
+        // $registration->codebase is available/public from Psalm v6.7
+        // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
+        if ($registration instanceof \Psalm\PluginRegistrationSocket) {
+            $output = $registration->codebase->progress;
+        }
+
+        return $output;
     }
 }

@@ -337,16 +337,16 @@ class Builder implements BuilderContract
     /**
      * @param  array<string, mixed>  $attributes
      * @param  array  $values
-     * @return TModel|self<TModel>
+     * @return TModel
      */
     public function firstOrNew(array $attributes = [], array $values = []) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $values
-     * @return TModel|self<TModel>
+     * @param  \Closure|array  $values
+     * @return TModel
      */
-    public function firstOrCreate(array $attributes = [], array $values = []) {}
+    public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}
 
     /**
      * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|int, mixed>|\Illuminate\Database\Query\Expression  $column
@@ -436,7 +436,7 @@ class Builder implements BuilderContract
     /**
      * Get a lazy collection for the given query.
      *
-     * @return \Illuminate\Support\LazyCollection
+     * @return \Illuminate\Support\LazyCollection<int, TModel>
      */
     public function cursor() {}
 
@@ -466,7 +466,7 @@ class Builder implements BuilderContract
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, TModel>
      *
      * @throws \InvalidArgumentException
      */
@@ -477,7 +477,7 @@ class Builder implements BuilderContract
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\Paginator
+     * @return \Illuminate\Contracts\Pagination\Paginator<int, TModel>
      */
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -488,7 +488,7 @@ class Builder implements BuilderContract
      * @param  array<array-key, mixed>  $columns
      * @param  string  $cursorName
      * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
-     * @return \Illuminate\Pagination\CursorPaginator<TModel>
+     * @return \Illuminate\Pagination\CursorPaginator<int, TModel>
      */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 

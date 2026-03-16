@@ -1,0 +1,35 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Casts;
+
+/**
+ * @template TGet
+ * @template TSet
+ */
+class Attribute
+{
+    /**
+     * @param (callable(mixed, array<string, mixed>): TGet)|null $get
+     * @param (callable(TSet, array<string, mixed>): mixed)|null $set
+     */
+    public function __construct(?callable $get = null, ?callable $set = null) {}
+
+    /**
+     * @param (callable(mixed, array<string, mixed>): TGet)|null $get
+     * @param (callable(TSet, array<string, mixed>): mixed)|null $set
+     * @return static
+     */
+    public static function make(?callable $get = null, ?callable $set = null): static {}
+
+    /**
+     * @param callable(mixed, array<string, mixed>): TGet $get
+     * @return static
+     */
+    public static function get(callable $get): static {}
+
+    /**
+     * @param callable(TSet, array<string, mixed>): mixed $set
+     * @return static
+     */
+    public static function set(callable $set): static {}
+}
