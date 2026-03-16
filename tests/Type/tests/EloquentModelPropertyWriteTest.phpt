@@ -5,6 +5,7 @@
 
 namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
+use App\Models\Phone;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
@@ -33,10 +34,23 @@ function test_legacy_mutator_write(User $user): void
     $user->nickname = 'alice';
 }
 
-/** New-style Attribute accessor write */
+/** New-style Attribute accessor write with typed TSet */
 function test_attribute_accessor_write(User $user): void
 {
     $user->first_name = 'Alice';
 }
+
+/** Attribute<TGet, never> must reject writes */
+function test_readonly_attribute_rejects_write(User $user): void
+{
+    $user->full_name = 'should fail';
+}
+
+/** @property Phone|null $phone takes precedence — write uses PHPDoc type, not plugin inference */
+function test_property_annotation_precedence_on_write(User $user, Phone $phone): void
+{
+    $user->phone = $phone;
+}
 ?>
 --EXPECTF--
+UndefinedMagicPropertyAssignment on line %d: Magic instance property App\Models\User::$full_name is not defined
