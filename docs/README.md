@@ -1,6 +1,6 @@
 # About plugin
 
-The plugin helps Psalm to understand Laravel’s code (which uses a lot of magic) better.
+The plugin helps Psalm to understand Laravel's code (which uses a lot of magic) better.
 There are 2 main ways how it does it:
  - **easy**: by providing stub files (you can find them in `/stubs` dir)
  - **medium+**: using custom Handlers (see `/src/Handlers` dir)
@@ -13,24 +13,32 @@ A single callstack looks like:
 Plugin::__invoke
     Providers\ApplicationProvider::bootApp
         {instantiate Laravel Application}
-    Plugin::generateStubFiles
-        Providers\FacadeStubProvider::generateStubFile
-            {call `ide-helper:generate` command} // generates "facades.stubphp"
-        Providers\ModelStubProvider::generateStubFile
-            Fakes\FakeModelsCommand::run(schema_aggregator(migrations))
-                - override parent ModelsCommand::getPropertiesFromTable (extract info from migration files instead using DB connection)
-                - {call `ide-helper:models --nowrite --reset`} // generates "models.stubphp"
+    Plugin::buildSchema (only when columnFallback="migrations")
+        {parse migration files to build schema info}
+    Plugin::generateAliasStubs
+        {read AliasLoader::getInstance()->getAliases() and write aliases.stubphp}
     Plugin::registerHandlers
         - Container
-        - Eloquent
+        - Eloquent (incl. ModelRegistrationHandler for AfterCodebasePopulated)
         - Helpers (that not covered by stubs)
     Plugin::registerStubs
         - common
-        - for speficic laravel version
-        - facades.stubphp (generated)
-        - models.stubphp (generated)
+        - for specific laravel version
+        - taint analysis
+        - aliases.stubphp (generated)
+
+--- later, after Psalm scans all project files ---
+
+ModelRegistrationHandler::afterCodebasePopulated
+    {discover Model subclasses from Psalm's codebase, register property handlers}
 ```
 
-## Materials
+## Documentation
 
- - [Authoring Psalm Plugins](https://psalm.dev/docs/running_psalm/plugins/authoring_plugins/)
+- [Configuration](config.md) — plugin XML config options and environment variables
+- [Architecture Decisions](contribute/decisions.md) — key design decisions and rationale
+- [Debugging with Xdebug](contribute/xdebug.md) — how to debug plugin code
+
+## External resources
+
+- [Authoring Psalm Plugins](https://psalm.dev/docs/running_psalm/plugins/authoring_plugins/)

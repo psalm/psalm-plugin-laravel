@@ -6,22 +6,10 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
-use Psalm\Plugin\EventHandler\PropertyTypeProviderInterface;
-use Psalm\LaravelPlugin\Providers\ModelStubProvider;
 use Psalm\Type;
 
-use function strtolower;
-
-final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
+final class ModelFactoryTypeProvider
 {
-    /** @return list<class-string<\Illuminate\Database\Eloquent\Model>> */
-    #[\Override]
-    public static function getClassLikeNames(): array
-    {
-        return ModelStubProvider::getModelClasses();
-    }
-
-    #[\Override]
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Type\Union
     {
         if ($event->getPropertyName() !== 'factory') {
@@ -35,7 +23,7 @@ final class ModelFactoryTypeProvider implements PropertyTypeProviderInterface
 
         $classlike = $source->getCodebase()->classlike_storage_provider->get($event->getFqClasslikeName());
 
-        $usesHasFactory = isset($classlike->used_traits[strtolower(HasFactory::class)]);
+        $usesHasFactory = isset($classlike->used_traits[\strtolower(HasFactory::class)]);
         if (! $usesHasFactory) {
             return null;
         }

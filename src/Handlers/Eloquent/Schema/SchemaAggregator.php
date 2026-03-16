@@ -7,16 +7,8 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use PhpParser\NodeFinder;
 use PhpParser;
-
-use function array_key_exists;
-use function count;
-use function is_string;
-use function strtolower;
-use function in_array;
-use function is_array;
-use function is_a;
+use PhpParser\NodeFinder;
 
 final class SchemaAggregator
 {
@@ -42,8 +34,10 @@ final class SchemaAggregator
     private const METHODS_HAVE_DEFAULT_COLUMN_NAME = [
         'id' => 'id',
         'dropsoftdeletes' => 'deleted_at',
+        'dropsoftdeletesdatetime' => 'deleted_at',
         'dropsoftdeletestz' => 'deleted_at',
         'softdeletes' => 'deleted_at',
+        'softdeletesdatetime' => 'deleted_at',
         'softdeletestz' => 'deleted_at',
         'uuid' => 'uuid',
         'ulid' => 'uuid',
@@ -99,7 +93,7 @@ final class SchemaAggregator
             if (
                 $stmt instanceof PhpParser\Node\Stmt\ClassMethod
                 && $stmt->name->name === 'up'
-                && is_array($stmt->stmts)
+                && \is_array($stmt->stmts)
             ) {
                 $this->addUpMethodStatements($stmt->stmts);
             }
@@ -116,7 +110,7 @@ final class SchemaAggregator
                 && $stmt->expr instanceof PhpParser\Node\Expr\StaticCall
                 && $stmt->expr->class instanceof PhpParser\Node\Name
                 && $stmt->expr->name instanceof PhpParser\Node\Identifier
-                && in_array($stmt->expr->class->getAttribute('resolvedName'), [Schema::class, 'Schema'], true);
+                && \in_array($stmt->expr->class->getAttribute('resolvedName'), [Schema::class, 'Schema'], true);
 
             if (! $is_schema_method_call) {
                 continue;
@@ -166,7 +160,7 @@ final class SchemaAggregator
             !isset($call->args[1])
             || !$call->args[1] instanceof PhpParser\Node\Arg
             || !$call->args[1]->value instanceof PhpParser\Node\Expr\Closure
-            || count($call->args[1]->value->params) < 1
+            || \count($call->args[1]->value->params) < 1
             || ($call->args[1]->value->params[0]->type instanceof PhpParser\Node\Name
                 && $call->args[1]->value->params[0]->type->getAttribute('resolvedName')
                 !== Blueprint::class)
@@ -178,7 +172,7 @@ final class SchemaAggregator
 
         if (
             $call->args[1]->value->params[0]->var instanceof PhpParser\Node\Expr\Variable
-            && is_string($call->args[1]->value->params[0]->var->name)
+            && \is_string($call->args[1]->value->params[0]->var->name)
         ) {
             $call_arg_name = $call->args[1]->value->params[0]->var->name;
 
@@ -186,6 +180,7 @@ final class SchemaAggregator
         }
     }
 
+    /** @psalm-external-mutation-free */
     private function dropTable(PhpParser\Node\Expr\StaticCall $call): void
     {
         if (
@@ -203,6 +198,7 @@ final class SchemaAggregator
 
     /**
      * Handle Schema::dropColumns($table, $columns) — drops columns without a closure.
+     * @psalm-external-mutation-free
      */
     private function dropColumnsFromTable(PhpParser\Node\Expr\StaticCall $call): void
     {
@@ -235,6 +231,7 @@ final class SchemaAggregator
         }
     }
 
+    /** @psalm-external-mutation-free */
     private function renameTable(PhpParser\Node\Expr\StaticCall $call): void
     {
         if (
@@ -317,7 +314,7 @@ final class SchemaAggregator
                         && isset($root_var->args[0])
                         && $root_var->args[0] instanceof PhpParser\Node\Arg
                     ) {
-                        $default = self::resolveDefaultValue($root_var->args[0]->value);
+                        $default = $this->resolveDefaultValue($root_var->args[0]->value);
                     }
 
                     if ($root_var->name->name === 'unsigned') {
@@ -340,10 +337,10 @@ final class SchemaAggregator
             $first_arg = $first_method_call->args[0]->value ?? null;
             $second_arg = $first_method_call->args[1]->value ?? null;
 
-            $first_method_name_lc = strtolower($first_method_call->name->name);
+            $first_method_name_lc = \strtolower($first_method_call->name->name);
 
             if ($first_method_call->args === []) {
-                if (in_array($first_method_name_lc, self::METHODS_USE_HARDCODED_COLUMN_NAME, true)) {
+                if (\in_array($first_method_name_lc, self::METHODS_USE_HARDCODED_COLUMN_NAME, true)) {
                     switch ($first_method_name_lc) {
                         case 'droptimestamps':
                         case 'droptimestampstz':
@@ -370,7 +367,7 @@ final class SchemaAggregator
                     continue; // foreach
                 }
 
-                if (array_key_exists($first_method_name_lc, self::METHODS_HAVE_DEFAULT_COLUMN_NAME)) {
+                if (\array_key_exists($first_method_name_lc, self::METHODS_HAVE_DEFAULT_COLUMN_NAME)) {
                     $column_name = self::METHODS_HAVE_DEFAULT_COLUMN_NAME[$first_method_name_lc];
                 } else {
                     continue; // unknown type [method call without args] :/
@@ -379,7 +376,7 @@ final class SchemaAggregator
                 $column_name = $first_arg->value;
             } elseif ($first_arg instanceof PhpParser\Node\Expr\Array_) {
                 // Handle dropColumn/removeColumn with array argument: $table->dropColumn(['col1', 'col2'])
-                if (in_array($first_method_name_lc, ['dropcolumn', 'removecolumn'], true)) {
+                if (\in_array($first_method_name_lc, ['dropcolumn', 'removecolumn'], true)) {
                     foreach ($first_arg->items as $item) {
                         if ($item !== null && $item->value instanceof PhpParser\Node\Scalar\String_) {
                             $table->dropColumn($item->value->value);
@@ -393,7 +390,7 @@ final class SchemaAggregator
             } else {
                 // foreignIdFor() with class reference: $table->foreignIdFor(User::class)
                 if ($first_method_name_lc === 'foreignidfor') {
-                    $resolved_column = self::resolveForeignIdForColumn($first_arg, $second_arg);
+                    $resolved_column = $this->resolveForeignIdForColumn($first_arg, $second_arg);
                     if ($resolved_column !== null) {
                         $table->setColumn(new SchemaColumn($resolved_column, 'int', $nullable, unsigned: true));
                     }
@@ -416,7 +413,19 @@ final class SchemaAggregator
                 }
             }
 
-            $is_unsigned = $unsigned || in_array($first_method_name_lc, self::UNSIGNED_INT_METHODS, true);
+            // addColumn('type', 'name') → remap to the resolved type method and re-dispatch
+            if (
+                $first_method_name_lc === 'addcolumn'
+                && $first_arg instanceof PhpParser\Node\Scalar\String_
+                && $second_arg instanceof PhpParser\Node\Scalar\String_
+            ) {
+                $first_method_name_lc = \strtolower($first_arg->value);
+                $column_name = $second_arg->value;
+                $second_arg = null;
+                $second_arg_array = null;
+            }
+
+            $is_unsigned = $unsigned || \in_array($first_method_name_lc, self::UNSIGNED_INT_METHODS, true);
 
             switch ($first_method_name_lc) {
                 case 'biginteger':
@@ -440,6 +449,10 @@ final class SchemaAggregator
                     $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, default: $default, unsigned: $is_unsigned));
                     break;
 
+                    /**
+                     * @todo use type and column name based on model's PK.
+                     * Pairs are [id, int] and [uuid, string]
+                     */
                 case 'foreignidfor':
                     // foreignIdFor with a string column name — already handled above for class refs
                     $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, default: $default, unsigned: true));
@@ -447,8 +460,6 @@ final class SchemaAggregator
 
                 case 'binary':
                 case 'foreignulid':
-                    $table->setColumn(new SchemaColumn($column_name, 'string', $nullable, default: $default));
-                    break;
 
                 case 'char':
                 case 'date':
@@ -470,6 +481,7 @@ final class SchemaAggregator
                 case 'json':
                 case 'ipaddress':
                 case 'foreignuuid':
+                case 'tsvector':
                     $table->setColumn(new SchemaColumn($column_name, 'string', $nullable, default: $default));
                     break;
 
@@ -477,12 +489,18 @@ final class SchemaAggregator
                     $table->setColumn(new SchemaColumn($column_name, 'bool', $nullable, default: $default));
                     break;
 
+                case 'vector':
+                    $table->setColumn(new SchemaColumn($column_name, 'array', $nullable, default: $default));
+                    break;
+
+                case 'rawcolumn':
                 case 'polygon':
                 case 'point':
                 case 'multipolygonz':
                 case 'multipolygon':
                 case 'multipoint':
                 case 'geometrycollection':
+                case 'geography':
                 case 'geometry':
                 case 'computed':
                     $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable, default: $default));
@@ -497,13 +515,27 @@ final class SchemaAggregator
                     $table->setColumn(new SchemaColumn($column_name, 'float', $nullable, default: $default));
                     break;
 
-                case 'dropcolumn':
-                case 'dropifexists':
-                case 'dropsoftdeletes':
                 case 'removecolumn':
+                case 'dropconstrainedforeignid':
                 case 'dropsoftdeletestz':
+                case 'dropsoftdeletesdatetime':
+                case 'dropsoftdeletes':
+                case 'dropifexists':
+                case 'dropcolumn':
                 case 'drop':
                     $table->dropColumn($column_name);
+                    break;
+
+                case 'after':
+                    if (
+                        $second_arg instanceof PhpParser\Node\Expr\Closure
+                        && \count($second_arg->params) >= 1
+                        && $second_arg->params[0]->var instanceof PhpParser\Node\Expr\Variable
+                        && \is_string($second_arg->params[0]->var->name)
+                    ) {
+                        $this->processColumnUpdates($table_name, $second_arg->params[0]->var->name, $second_arg->stmts);
+                    }
+
                     break;
 
                 case 'dropforeign':
@@ -547,12 +579,20 @@ final class SchemaAggregator
                     break;
 
                 case 'nullableuuidmorphs':
-                case 'nullableUlidMorphs':
+                case 'nullableulidmorphs':
                     $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
                     $table->setColumn(new SchemaColumn($column_name . '_id', 'string', true));
                     break;
 
                 case 'rename':
+                    // $table->rename('new_name') - renames the table itself
+                    $new_table_name = $column_name;
+                    unset($this->tables[$table_name]);
+                    $this->tables[$new_table_name] = $table;
+                    $table_name = $new_table_name;
+
+                    break;
+
                 case 'renamecolumn':
                     if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
                         $table->renameColumn($column_name, $second_arg->value);
@@ -567,25 +607,18 @@ final class SchemaAggregator
                 case 'year':
                 case 'timetz':
                 case 'timestamptz':
+                case 'softdeletesdatetime':
                 case 'softdeletestz':
                 case 'softdeletes':
                     $table->setColumn(new SchemaColumn($column_name, 'string', true, default: $default));
                     break;
 
-                case 'addcolumn':
-                    if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
-                        $_column_type = $column_name;
-                        $column_name = $second_arg->value;
-                        // @todo extract nullable value from 3rd arg
-                        $table->renameColumn($_column_type, $column_name);
-                    }
-
-                    break;
+                    // addColumn is handled above the switch via variable remapping
             }
         }
     }
 
-    private static function resolveDefaultValue(PhpParser\Node\Expr $expr): SchemaColumnDefault
+    private function resolveDefaultValue(PhpParser\Node\Expr $expr): SchemaColumnDefault
     {
         if ($expr instanceof PhpParser\Node\Scalar\String_) {
             return SchemaColumnDefault::resolved($expr->value);
@@ -637,7 +670,7 @@ final class SchemaAggregator
      * foreignIdFor(User::class) should resolve to 'user_id' (based on model's class name),
      * not the hardcoded 'id' that was used before.
      */
-    private static function resolveForeignIdForColumn(
+    private function resolveForeignIdForColumn(
         ?PhpParser\Node\Expr $first_arg,
         ?PhpParser\Node\Expr $second_arg,
     ): ?string {
@@ -660,7 +693,7 @@ final class SchemaAggregator
 
         $class_name = $first_arg->class->getAttribute('resolvedName');
 
-        if (!is_string($class_name) || !is_a($class_name, Model::class, true)) {
+        if (!\is_string($class_name) || !\is_a($class_name, Model::class, true)) {
             return null;
         }
 

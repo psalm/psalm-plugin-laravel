@@ -12,26 +12,24 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
 
-use function glob;
-use function file_get_contents;
-use function explode;
-use function is_dir;
-use function is_file;
-use function realpath;
-
-use const DIRECTORY_SEPARATOR;
-use const PHP_VERSION_ID;
-
 #[CoversClass(SchemaAggregator::class)]
 abstract class AbstractSchemaAggregatorTestCase extends TestCase
 {
+    final protected function schemaFromMigration(string $migrationCode): SchemaAggregator
+    {
+        $schemaAggregator = new SchemaAggregator();
+        $this->addMigrationStatements($schemaAggregator, $migrationCode);
+
+        return $schemaAggregator;
+    }
+
     final protected function instantiateSchemaAggregator(string $filepath): SchemaAggregator
     {
-        if (is_file($filepath)) {
+        if (\is_file($filepath)) {
             $migrationFiles = [$filepath];
-        } elseif (is_dir($filepath)) {
-            $migrationsDirectory = realpath($filepath) . DIRECTORY_SEPARATOR;
-            $migrationFiles = glob($migrationsDirectory . '*.php');
+        } elseif (\is_dir($filepath)) {
+            $migrationsDirectory = \realpath($filepath) . \DIRECTORY_SEPARATOR;
+            $migrationFiles = \glob($migrationsDirectory . '*.php');
 
             if ($migrationFiles === []) {
                 $this->fail("Migrations not found in “{$migrationsDirectory}” directory.");
@@ -41,19 +39,23 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         }
 
         $schemaAggregator = new SchemaAggregator();
-        $hasErrors = false;
         foreach ($migrationFiles as $migrationFile) {
-            $fileContents = file_get_contents($migrationFile);
+            $fileContents = \file_get_contents($migrationFile);
             if ($fileContents === false) {
                 $this->fail("Could not read {$migrationFile} file. Please make sure it exists and readable.");
             }
 
-            $statements = StatementsProvider::parseStatements($fileContents, PHP_VERSION_ID, $hasErrors);
-
-            $schemaAggregator->addStatements($statements);
+            $this->addMigrationStatements($schemaAggregator, $fileContents);
         }
 
         return $schemaAggregator;
+    }
+
+    private function addMigrationStatements(SchemaAggregator $schemaAggregator, string $code): void
+    {
+        $hasErrors = false;
+        $statements = StatementsProvider::parseStatements($code, \PHP_VERSION_ID, $hasErrors);
+        $schemaAggregator->addStatements($statements);
     }
 
     protected function assertColumnHasType(string $type, SchemaColumn $column): void
@@ -81,7 +83,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         self::assertTableHasColumn($column, $table);
 
         $column = $table->columns[$column];
-        self::assertInstanceOf(SchemaColumn::class, $column);
+        $this->assertInstanceOf(SchemaColumn::class, $column);
 
         self::assertColumnHasType($type, $column);
         self::assertColumnNullable($column);
@@ -92,7 +94,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
         self::assertTableHasColumn($column, $table);
 
         $column = $table->columns[$column];
-        self::assertInstanceOf(SchemaColumn::class, $column);
+        $this->assertInstanceOf(SchemaColumn::class, $column);
 
         self::assertColumnHasType($type, $column);
         self::assertColumnNotNullable($column);
@@ -102,7 +104,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
     {
         [$tableName, $columnName] = self::parseTableWithColumn($tableWithColumn);
         $table = $schemaAggregator->tables[$tableName];
-        self::assertInstanceOf(SchemaTable::class, $table);
+        $this->assertInstanceOf(SchemaTable::class, $table);
 
         self::assertTableHasColumn($columnName, $table);
         self::assertTableHasColumn($type, $columnName);
@@ -120,7 +122,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
 
         [$tableName, $columnName] = self::parseTableWithColumn($tableWithColumn);
 
-        self::assertTrue($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is not nullable");
+        $this->assertTrue($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is not nullable");
     }
 
     protected function assertSchemaHasTableAndNotNullableColumnOfType(string $tableWithColumn, string $type, SchemaAggregator $schemaAggregator): void
@@ -129,7 +131,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
 
         [$tableName, $columnName] = self::parseTableWithColumn($tableWithColumn);
 
-        self::assertFalse($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is nullable");
+        $this->assertFalse($schemaAggregator->tables[$tableName]->columns[$columnName]->nullable, "Column {$tableWithColumn} is nullable");
     }
 
     protected function assertColumnHasDefault(string|int|float|bool|null $expected, SchemaColumn $column): void
@@ -155,7 +157,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
      */
     private function parseTableWithColumn(string $tableWithColumn): array
     {
-        [$tableName, $columnName] = explode('.', $tableWithColumn);
+        [$tableName, $columnName] = \explode('.', $tableWithColumn);
         // @todo validate these values
 
         return [$tableName, $columnName];

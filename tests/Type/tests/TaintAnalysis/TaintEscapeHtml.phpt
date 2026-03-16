@@ -3,7 +3,8 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderComment(\Illuminate\Http\Request $request) {
+function renderEscapedComment(\Illuminate\Http\Request $request): void {
+    /** @var string $comment */
     $comment = $request->input('comment');
     echo e($comment);
 }

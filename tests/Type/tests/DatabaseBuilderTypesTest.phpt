@@ -3,7 +3,7 @@
 
 use App\Models\User;
 
-final class UserRepository
+final class DatabaseBuilderUserRepository
 {
     /** @param \Illuminate\Database\Eloquent\Builder<\App\Models\User> $builder */
     public function firstFromDatabaseBuilderInstance(\Illuminate\Database\Eloquent\Builder $builder): ?User {

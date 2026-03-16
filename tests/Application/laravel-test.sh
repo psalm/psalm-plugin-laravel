@@ -4,7 +4,7 @@
 # This script sets up a fresh Laravel installation and runs Psalm analysis
 # examples:
 #   bash tests/Application/laravel-test.sh
-#   LARAVEL_INSTALLER_VERSION=11.6.1 bash tests/Application/laravel-test.sh
+#   LARAVEL_INSTALLER_VERSION=12.11.2 bash tests/Application/laravel-test.sh
 
 # Exit on error. Append "|| true" if you expect an error.
 set -e
@@ -104,7 +104,8 @@ fi
 
 # Get absolute path of script directory
 CURRENT_SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
-APP_INSTALLATION_PATH="$(dirname "$(dirname "$CURRENT_SCRIPT_PATH")")/tests-app/laravel-example"
+PROJECT_ROOT="$(dirname "$(dirname "$CURRENT_SCRIPT_PATH")")"
+APP_INSTALLATION_PATH="$PROJECT_ROOT/tests-app/laravel-example"
 
 if [ -d "$APP_INSTALLATION_PATH" ]; then
     info "Removing previous installation..."
@@ -169,6 +170,6 @@ fi
 echo
 
 if [ "$REMOVE" = false ]; then
-    info "A sample Laravel application installed at the $APP_INSTALLATION_PATH directory."
-    info "Feel free to remove it."
+    rm -rf "$PROJECT_ROOT/tests-app"
+    info "Psalm analysis passed, tests-app directory has been removed."
 fi
