@@ -95,7 +95,7 @@ final class ModelPropertyHandlerTest extends TestCase
         $codebase = (new \ReflectionClass(\Psalm\Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
 
-        $source = $this->createMock(StatementsSource::class);
+        $source = $this->createStub(StatementsSource::class);
         $source->method('getCodebase')->willReturn($codebase);
 
         return new PropertyExistenceProviderEvent(
