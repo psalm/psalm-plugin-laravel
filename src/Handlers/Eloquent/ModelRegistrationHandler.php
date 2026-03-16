@@ -12,6 +12,7 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
@@ -149,6 +150,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
 
         $mixedType = Type::getMixed();
+        // Use Psalm's property index instead of per-column \property_exists() reflection calls.
+        // declaring_property_ids includes inherited properties, matching property_exists() semantics.
+        $declaredProperties = $storage->declaring_property_ids;
 
         foreach (\array_keys($columns) as $columnName) {
             $pseudoKey = '$' . $columnName;
@@ -157,8 +161,8 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 continue;
             }
 
-            // Skip native PHP properties
-            if (\property_exists($className, $columnName)) {
+            // Skip native PHP properties (already tracked by Psalm)
+            if (isset($declaredProperties[$columnName])) {
                 continue;
             }
 
@@ -177,7 +181,6 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     private static function registerWriteTypesForMethods(Codebase $codebase, ClassLikeStorage $storage): void
     {
         $mixedType = Type::getMixed();
-        $className = $storage->name;
 
         foreach ($storage->declaring_method_ids as $methodName => $methodIdentifier) {
             // Skip inherited framework methods — only user-defined methods can be accessors/relations
@@ -185,13 +188,21 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 continue;
             }
 
+            // Fetch method storage once — used for both cased_name and return_type.
+            // This avoids the overhead of getMethodReturnType() (alias resolution, declaring/appearing
+            // method lookups, template substitution) and the redundant getStorage() call in getCasedMethodName().
+            $methodStorage = self::getMethodStorage($codebase, $methodIdentifier);
+            if ($methodStorage === null) {
+                continue;
+            }
+
+            $casedName = $methodStorage->cased_name;
+            if ($casedName === null) {
+                continue;
+            }
+
             // Legacy mutator: setXxxAttribute → property xxx
             if (\str_starts_with($methodName, 'set') && \str_ends_with($methodName, 'attribute') && $methodName !== 'setattribute') {
-                $casedName = self::getCasedMethodName($codebase, $methodIdentifier);
-                if ($casedName === null) {
-                    continue;
-                }
-
                 $propertyName = self::studlyToSnakeCase(\substr($casedName, 3, -9));
                 if ($propertyName === '') {
                     continue;
@@ -206,8 +217,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             // Check return type for Attribute accessors and Relation methods
-            $selfClass = $className;
-            $returnType = $codebase->getMethodReturnType($className . '::' . $methodName, $selfClass);
+            $returnType = $methodStorage->return_type;
             if (!$returnType instanceof Union) {
                 continue;
             }
@@ -219,11 +229,6 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
                 // New-style Attribute accessor
                 if (\is_a($type->value, Attribute::class, true)) {
-                    $casedName = self::getCasedMethodName($codebase, $methodIdentifier);
-                    if ($casedName === null) {
-                        break;
-                    }
-
                     $pseudoKey = '$' . self::studlyToSnakeCase($casedName);
                     if (self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
                         break;
@@ -240,8 +245,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
                 // Relationship method
                 if (\is_a($type->value, Relation::class, true)) {
-                    $casedName = self::getCasedMethodName($codebase, $methodIdentifier);
-                    $pseudoKey = '$' . ($casedName ?? $methodName);
+                    $pseudoKey = '$' . $casedName;
 
                     if (!self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
                         $storage->pseudo_property_set_types[$pseudoKey] = $mixedType;
@@ -266,10 +270,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     }
 
     /** @psalm-mutation-free */
-    private static function getCasedMethodName(Codebase $codebase, MethodIdentifier $methodIdentifier): ?string
+    private static function getMethodStorage(Codebase $codebase, MethodIdentifier $methodIdentifier): ?MethodStorage
     {
         try {
-            return $codebase->methods->getStorage($methodIdentifier)->cased_name;
+            return $codebase->methods->getStorage($methodIdentifier);
         } catch (\InvalidArgumentException|\UnexpectedValueException) {
             return null;
         }
