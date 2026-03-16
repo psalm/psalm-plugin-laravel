@@ -89,7 +89,7 @@
             "@psalm",
             "@test:unit",
             "@test:type",
-            "echo 'These tests do not include testing on a real Laravel app. You can run that via `composer test:app`'"
+            "echo '\n\nThese tests do not include testing on a real Laravel app. You can run that via `composer test:app`'"
         ],
         "test:app": "./tests/Application/laravel-test.sh",
         "test:type": [
