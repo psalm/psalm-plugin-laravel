@@ -27,7 +27,7 @@ class Collection extends BaseCollection implements QueueableCollection
     /**
      * Load a set of relationships onto the collection if they are not already eager loaded.
      *
-     * @param  array<array-key, (callable(\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
      * @return $this
      */
     public function loadMissing($relations) {}

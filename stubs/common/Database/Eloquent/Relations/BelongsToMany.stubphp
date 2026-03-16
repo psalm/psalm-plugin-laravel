@@ -23,17 +23,19 @@ class BelongsToMany extends Relation
 
     /**
      * @param  array<string, mixed>  $attributes
+     * @param  array  $values
      * @return TRelatedModel
      */
-    public function firstOrNew(array $attributes) {}
+    public function firstOrNew(array $attributes = [], array $values = []) {}
 
     /**
      * @param  array<string, mixed>  $attributes
+     * @param  \Closure|array  $values
      * @param  array  $joining
      * @param  bool   $touch
      * @return TRelatedModel
      */
-    public function firstOrCreate(array $attributes, array $joining = [], $touch = true) {}
+    public function firstOrCreate(array $attributes = [], \Closure|array $values = [], array $joining = [], $touch = true) {}
 
     /**
      * @param  array<string, mixed>  $attributes

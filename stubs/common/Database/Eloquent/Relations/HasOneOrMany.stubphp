@@ -70,5 +70,5 @@ abstract class HasOneOrMany extends Relation
      * @param  array  $values
      * @return TRelatedModel
      */
-    public function firstOrCreate(array $attributes = [], array $values = []) {}
+    public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}
 }
