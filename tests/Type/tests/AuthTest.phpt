@@ -18,5 +18,14 @@ $_loginUsingId = \Illuminate\Support\Facades\Auth::loginUsingId(1);
 
 $_onceUsingId = \Illuminate\Support\Facades\Auth::onceUsingId(1);
 /** @psalm-check-type-exact $_onceUsingId = \Illuminate\Foundation\Auth\User|false */
+
+$_getLastAttempted = \Illuminate\Support\Facades\Auth::getLastAttempted();
+/** @psalm-check-type-exact $_getLastAttempted = \Illuminate\Foundation\Auth\User|null */
+
+$_logoutOtherDevices = \Illuminate\Support\Facades\Auth::logoutOtherDevices('secret');
+/** @psalm-check-type-exact $_logoutOtherDevices = \Illuminate\Foundation\Auth\User|null */
+
+$_loginUsingIdWithRemember = \Illuminate\Support\Facades\Auth::loginUsingId(1, true);
+/** @psalm-check-type-exact $_loginUsingIdWithRemember = \Illuminate\Foundation\Auth\User|false */
 ?>
 --EXPECT--

@@ -54,6 +54,7 @@ final class AuthHandlerTest extends TestCase
         $this->assertNotNull($params);
         $this->assertCount(2, $params);
         $this->assertSame('id', $params[0]->name);
+        $this->assertFalse($params[0]->is_optional);
         $this->assertSame('remember', $params[1]->name);
         $this->assertTrue($params[1]->is_optional);
     }
@@ -70,6 +71,7 @@ final class AuthHandlerTest extends TestCase
         $this->assertNotNull($params);
         $this->assertCount(1, $params);
         $this->assertSame('id', $params[0]->name);
+        $this->assertFalse($params[0]->is_optional);
     }
 
     public function testGetMethodParamsForLogoutOtherDevices(): void
@@ -84,6 +86,7 @@ final class AuthHandlerTest extends TestCase
         $this->assertNotNull($params);
         $this->assertCount(1, $params);
         $this->assertSame('password', $params[0]->name);
+        $this->assertFalse($params[0]->is_optional);
     }
 
     public function testGetMethodParamsForUnknownMethod(): void
