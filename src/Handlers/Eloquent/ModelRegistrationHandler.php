@@ -192,7 +192,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             // This avoids the overhead of getMethodReturnType() (alias resolution, declaring/appearing
             // method lookups, template substitution) and the redundant getStorage() call in getCasedMethodName().
             $methodStorage = self::getMethodStorage($codebase, $methodIdentifier);
-            if ($methodStorage === null) {
+            if (!$methodStorage instanceof \Psalm\Storage\MethodStorage) {
                 continue;
             }
 
