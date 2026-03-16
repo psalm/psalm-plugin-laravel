@@ -23,6 +23,14 @@ The plugin should respect that consistently across all handlers rather than over
 
 **See:** [#446](https://github.com/psalm/psalm-plugin-laravel/issues/446)
 
+### Write-type registration for accessors and relationships is unconditional
+
+**Decision:** `registerWriteTypesForMethods` (which registers `pseudo_property_set_types` for relationship properties, legacy mutators, and new-style `Attribute` accessors) runs for all models regardless of the `modelProperties` config. Only `registerWriteTypesForColumns` (migration-inferred columns) is gated behind `useMigrations`.
+
+**Why:** Accessor and relationship properties are discovered from the model's own method signatures — they don't depend on migration files. A user with `columnFallback="none"` still expects `$user->roles = $collection` to work when `sealAllProperties` is enabled. This is consistent with the read-side handlers, which are also unconditional (see below).
+
+**See:** [#446](https://github.com/psalm/psalm-plugin-laravel/issues/446)
+
 ### Model property handlers always run, no per-handler config toggles
 
 **Decision:** `ModelRelationshipPropertyHandler` and `ModelPropertyAccessorHandler` are always registered. Only `ModelPropertyHandler` (migration-based column inference) is gated by the `modelProperties` config.
