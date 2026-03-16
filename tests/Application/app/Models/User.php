@@ -86,4 +86,15 @@ class User extends Authenticatable
             set: fn(string $value): string => \strtolower($value),
         );
     }
+
+    /**
+     * Read-only Attribute — TSet is never, so writes should be rejected.
+     * @return Attribute<string, never>
+     */
+    protected function fullName(): Attribute
+    {
+        return Attribute::get(
+            fn(mixed $value): string => 'computed',
+        );
+    }
 }
