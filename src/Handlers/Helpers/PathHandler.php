@@ -44,10 +44,7 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
     {
         $function_id = $event->getFunctionId();
 
-        /**
-         * @psalm-suppress MissingClosureReturnType
-         */
-        return self::resolveReturnType($event->getCallArgs(), function (array $args = []) use ($function_id) {
+        return self::resolveReturnType($event->getCallArgs(), static function (array $args = []) use ($function_id): mixed {
             return $function_id(...$args);
         });
     }
