@@ -86,6 +86,8 @@ class Builder implements BuilderContract
      * @param  mixed   $value
      * @param  string  $boolean
      * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -103,6 +105,8 @@ class Builder implements BuilderContract
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
      */
     public function orWhere($column, $operator = null, $value = null) {}
 
@@ -352,6 +356,8 @@ class Builder implements BuilderContract
      * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|int, mixed>|\Illuminate\Database\Query\Expression  $column
      * @param  string  $boolean
      * @psalm-return TModel|null
+     *
+     * @psalm-taint-sink sql $column
      */
     public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
 
