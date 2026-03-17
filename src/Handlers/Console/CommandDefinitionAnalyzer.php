@@ -185,10 +185,14 @@ final class CommandDefinitionAnalyzer
                 continue;
             }
 
-            // Top-level class (no namespace)
+            // Top-level class (no namespace) — $className is an FQCN from storage,
+            // so extract the short name for comparison with the AST node.
             $shortName = $stmt->name?->toString() ?? '';
+            $classShortName = \str_contains($className, '\\')
+                ? \substr($className, (int) \strrpos($className, '\\') + 1)
+                : $className;
 
-            if (\strtolower($shortName) !== \strtolower($className)) {
+            if (\strtolower($shortName) !== \strtolower($classShortName)) {
                 continue;
             }
 
