@@ -41,7 +41,7 @@ abstract class HasOneOrMany extends Relation
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $values
+     * @param  array<string, mixed>  $values
      * @return TRelatedModel
      */
     public function updateOrCreate(array $attributes, array $values = []) {}
@@ -53,21 +53,21 @@ abstract class HasOneOrMany extends Relation
     public function create(array $attributes = []) {}
 
     /**
-     * @param  array  $records
+     * @param  list<array<string, mixed>>  $records
      * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function createMany(array $records) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $values
+     * @param  array<string, mixed>  $values
      * @return TRelatedModel
      */
     public function firstOrNew(array $attributes = [], array $values = []) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $values
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
      * @return TRelatedModel
      */
     public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}

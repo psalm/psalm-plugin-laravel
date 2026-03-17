@@ -57,27 +57,9 @@ final class CastsMethodParser
             return [];
         }
 
-        $nodeFinder = new PhpParser\NodeFinder();
-
-        // Find the class method named 'casts'
-        $castsMethod = $nodeFinder->findFirst($stmts, static function (PhpParser\Node $node) use ($modelClass): bool {
-            if (!$node instanceof PhpParser\Node\Stmt\ClassMethod) {
-                return false;
-            }
-
-            if ($node->name->name !== 'casts') {
-                return false;
-            }
-
-            // Check that this is in the right class
-            /** @var PhpParser\Node\Stmt\Class_|null $parent */
-            $parent = $node->getAttribute('parent');
-            if ($parent instanceof PhpParser\Node\Stmt\Class_ && $parent->namespacedName instanceof \PhpParser\Node\Name) {
-                return $parent->namespacedName->toString() === $modelClass;
-            }
-
-            return false;
-        });
+        // Walk namespace → class → method manually, since Psalm's AST
+        // does not run ParentConnectingVisitor (getAttribute('parent') is always null).
+        $castsMethod = self::findCastsMethod($stmts, $modelClass);
 
         if (!$castsMethod instanceof PhpParser\Node\Stmt\ClassMethod || $castsMethod->stmts === null) {
             return [];
@@ -186,6 +168,67 @@ final class CastsMethodParser
 
             if ($left !== null && $right !== null) {
                 return $left . $right;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Walk the AST manually (namespace → class → method) to find the casts() method belonging to the given model class.
+     * @param list<PhpParser\Node\Stmt> $stmts
+     * @psalm-mutation-free
+     */
+    private static function findCastsMethod(array $stmts, string $modelClass): ?PhpParser\Node\Stmt\ClassMethod
+    {
+        foreach ($stmts as $stmt) {
+            if ($stmt instanceof PhpParser\Node\Stmt\Namespace_) {
+                $namespaceName = $stmt->name?->toString() ?? '';
+
+                foreach ($stmt->stmts as $nsStmt) {
+                    if (!$nsStmt instanceof PhpParser\Node\Stmt\Class_) {
+                        continue;
+                    }
+
+                    $shortName = $nsStmt->name?->toString() ?? '';
+                    $fqcn = $namespaceName !== '' ? $namespaceName . '\\' . $shortName : $shortName;
+
+                    if (\strtolower($fqcn) !== \strtolower($modelClass)) {
+                        continue;
+                    }
+
+                    return self::findCastsInClass($nsStmt);
+                }
+
+                continue;
+            }
+
+            // Top-level class (no namespace)
+            if (!$stmt instanceof PhpParser\Node\Stmt\Class_) {
+                continue;
+            }
+
+            $shortName = $stmt->name?->toString() ?? '';
+            $classShortName = \str_contains($modelClass, '\\')
+                ? \substr($modelClass, (int) \strrpos($modelClass, '\\') + 1)
+                : $modelClass;
+
+            if (\strtolower($shortName) !== \strtolower($classShortName)) {
+                continue;
+            }
+
+            return self::findCastsInClass($stmt);
+        }
+
+        return null;
+    }
+
+    /** @psalm-mutation-free */
+    private static function findCastsInClass(PhpParser\Node\Stmt\Class_ $class): ?PhpParser\Node\Stmt\ClassMethod
+    {
+        foreach ($class->stmts as $stmt) {
+            if ($stmt instanceof PhpParser\Node\Stmt\ClassMethod && $stmt->name->name === 'casts') {
+                return $stmt;
             }
         }
 
