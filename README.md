@@ -83,6 +83,7 @@ Maintained versions:
 _(Older versions of Laravel, PHP, and Psalm were supported by version 1.x of the plugin, but they are no longer maintained)_
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
+Upgrading from v3? See the [v3 → v4 upgrade guide](docs/upgrade-v4.md).
 
 
 ## Quickstart
@@ -113,15 +114,21 @@ Run your usual Psalm command:
 Security taint analysis runs automatically as part of the standard analysis in Psalm 7.
 No extra flags are needed.
 
-You can customize Psalm configuration using [XML config](https://psalm.dev/docs/running_psalm/configuration/)
-and/or [cli parameters](https://psalm.dev/docs/running_psalm/command_line_usage/).
+### Step 5 (existing projects): Create a baseline
 
-**Recommendation**: use [baseline file](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/#using-a-baseline-file) and increase
-`errorLevel` at least to `4`: this way you can catch more issues.
-Step by step set `errorLevel` to `1` and use Psalm and this plugin at full power.
+On an existing codebase, the first run will likely report many issues.
+A [baseline file](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/#using-a-baseline-file) lets you suppress all current issues and focus only on new code:
 
+```bash
+./vendor/bin/psalm --set-baseline=psalm-baseline.xml
+```
+
+From here, gradually increase `errorLevel` (start at `4`, work toward `1`) and shrink the baseline over time.
 
 ## Configuration
+
+You can customize Psalm configuration using [XML config](https://psalm.dev/docs/running_psalm/configuration/)
+and/or [cli parameters](https://psalm.dev/docs/running_psalm/command_line_usage/).
 
 See [docs/config.md](docs/config.md) for all configuration options.
 
@@ -150,8 +157,8 @@ Psalm and PHPStan use almost the same annotation syntax, so they work side by si
 This package is maintained by [@alies-dev](https://github.com/sponsors/alies-dev) and is open to new contributors. If you're passionate about Laravel internals and static analysis, consider joining the effort.
 
 Areas where help is especially welcome:
- - [ ] Full support for custom Model Query Builders
- - [ ] Support `.sql` migration files for attribute discovery
  - [ ] Expanding taint analysis coverage (new Laravel security surfaces)
+ - [ ] Support `.sql` migration files for attribute discovery
+ - [ ] Full support for custom Model Query Builders
 
 Contributing a taint stub is one of the highest-impact contributions you can make — each stub protects thousands of Laravel apps.
