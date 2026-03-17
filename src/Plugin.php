@@ -20,6 +20,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
+use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
@@ -48,6 +49,10 @@ final class Plugin implements PluginEntryPointInterface
             }
 
             $this->generateAliasStubs($pluginConfig);
+
+            NoEnvOutsideConfigHandler::init(
+                ApplicationProvider::getApp()->configPath(),
+            );
         } catch (\Throwable $throwable) {
             $this->handleInternalError($throwable, $output, $pluginConfig->failOnInternalError);
             return;
@@ -168,6 +173,9 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(SuppressHandler::class);
+
+        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
+        $registration->registerHooksFromClass(NoEnvOutsideConfigHandler::class);
     }
 
     private function buildSchema(): void
