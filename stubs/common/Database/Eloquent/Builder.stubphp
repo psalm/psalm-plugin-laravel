@@ -264,12 +264,16 @@ class Builder implements BuilderContract
     /**
      * @param  string  $column
      * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
      */
     public function latest($column = null) {}
 
     /**
      * @param  string  $column
      * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
      */
     public function oldest($column = null) {}
 
@@ -699,4 +703,319 @@ class Builder implements BuilderContract
      * @return \Illuminate\Support\Collection<int, TReturn>
      */
     public function chunkMap(callable $callback, $count = 1000) {}
+
+    // -------------------------------------------------------------------------
+    // Query\Builder methods forwarded through __call.
+    // Re-declared here so the return type is self<TModel> instead of
+    // Query\Builder ($this) which loses the generic context.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Set the columns to be selected.
+     * Supports both array and variadic usage: select(['a', 'b']) or select('a', 'b').
+     *
+     * @param  mixed  ...$columns
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function select(...$columns) {}
+
+    /**
+     * Add a new select column to the query.
+     * Supports both array and variadic usage: addSelect(['a', 'b']) or addSelect('a', 'b').
+     *
+     * @param  mixed  ...$columns
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function addSelect(...$columns) {}
+
+    /**
+     * Force the query to only return distinct results.
+     *
+     * @return self<TModel>
+     */
+    public function distinct() {}
+
+    /**
+     * Add a "join" clause to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $table
+     * @param  \Closure|\Illuminate\Contracts\Database\Query\Expression|string  $first
+     * @param  string|null  $operator
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|null  $second
+     * @param  string  $type
+     * @param  bool  $where
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public function join($table, $first, $operator = null, $second = null, $type = 'inner', $where = false) {}
+
+    /**
+     * Add a left join to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $table
+     * @param  \Closure|\Illuminate\Contracts\Database\Query\Expression|string  $first
+     * @param  string|null  $operator
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|null  $second
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public function leftJoin($table, $first, $operator = null, $second = null) {}
+
+    /**
+     * Add a right join to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $table
+     * @param  \Closure|string  $first
+     * @param  string|null  $operator
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|null  $second
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public function rightJoin($table, $first, $operator = null, $second = null) {}
+
+    /**
+     * Add a "cross join" clause to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $table
+     * @param  \Closure|\Illuminate\Contracts\Database\Query\Expression|string|null  $first
+     * @param  string|null  $operator
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|null  $second
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public function crossJoin($table, $first = null, $operator = null, $second = null) {}
+
+    /**
+     * Add an "order by" clause to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  string  $direction
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function orderBy($column, $direction = 'asc') {}
+
+    /**
+     * Add a descending "order by" clause to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function orderByDesc($column) {}
+
+    /**
+     * Add a "group by" clause to the query.
+     *
+     * @param  array|\Illuminate\Contracts\Database\Query\Expression|string  ...$groups
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $groups
+     */
+    public function groupBy(...$groups) {}
+
+    /**
+     * Set the "limit" value of the query.
+     *
+     * @param  int  $value
+     * @return self<TModel>
+     */
+    public function limit($value) {}
+
+    /**
+     * Alias to set the "limit" value of the query.
+     *
+     * @param  int  $value
+     * @return self<TModel>
+     */
+    public function take($value) {}
+
+    /**
+     * Set the "offset" value of the query.
+     *
+     * @param  int  $value
+     * @return self<TModel>
+     */
+    public function offset($value) {}
+
+    /**
+     * Alias to set the "offset" value of the query.
+     *
+     * @param  int  $value
+     * @return self<TModel>
+     */
+    public function skip($value) {}
+
+    /**
+     * Add a "where in" clause to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  mixed  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function whereIn($column, $values, $boolean = 'and', $not = false) {}
+
+    /**
+     * Add a "where not in" clause to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  mixed  $values
+     * @param  string  $boolean
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function whereNotIn($column, $values, $boolean = 'and') {}
+
+    /**
+     * Add an "or where in" clause to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  mixed  $values
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function orWhereIn($column, $values) {}
+
+    /**
+     * Add an "or where not in" clause to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  mixed  $values
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function orWhereNotIn($column, $values) {}
+
+    /**
+     * Add a "where between" statement to the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  iterable  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function whereBetween($column, iterable $values, $boolean = 'and', $not = false) {}
+
+    /**
+     * Add a "where not between" statement to the query.
+     *
+     * @param  \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  iterable  $values
+     * @param  string  $boolean
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function whereNotBetween($column, iterable $values, $boolean = 'and') {}
+
+    /**
+     * Add a "where null" clause to the query.
+     *
+     * @param  string|array|\Illuminate\Contracts\Database\Query\Expression  $columns
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function whereNull($columns, $boolean = 'and', $not = false) {}
+
+    /**
+     * Add a "where not null" clause to the query.
+     *
+     * @param  string|array|\Illuminate\Contracts\Database\Query\Expression  $columns
+     * @param  string  $boolean
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function whereNotNull($columns, $boolean = 'and') {}
+
+    /**
+     * Add a "where" clause comparing two columns to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|array  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @param  string|null  $boolean
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $first
+     * @psalm-taint-sink sql $second
+     */
+    public function whereColumn($first, $operator = null, $second = null, $boolean = 'and') {}
+
+    /**
+     * Add an "exists" clause to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder  $callback
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return self<TModel>
+     */
+    public function whereExists($callback, $boolean = 'and', $not = false) {}
+
+    /**
+     * Add a "where not exists" clause to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder  $callback
+     * @param  string  $boolean
+     * @return self<TModel>
+     */
+    public function whereNotExists($callback, $boolean = 'and') {}
+
+    /**
+     * Add a "where fulltext" clause to the query.
+     *
+     * @param  string|string[]  $columns
+     * @param  string  $value
+     * @param  array  $options
+     * @param  string  $boolean
+     * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function whereFullText($columns, $value, array $options = [], $boolean = 'and') {}
+
+    /**
+     * Lock the selected rows in the table.
+     *
+     * @param  string|bool  $value
+     * @return self<TModel>
+     */
+    public function lock($value = true) {}
+
+    /**
+     * Lock the selected rows in the table for updating.
+     *
+     * @return self<TModel>
+     */
+    public function lockForUpdate() {}
+
+    /**
+     * Share lock the selected rows in the table.
+     *
+     * @return self<TModel>
+     */
+    public function sharedLock() {}
 }
