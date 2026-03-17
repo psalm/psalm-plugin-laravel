@@ -771,7 +771,7 @@ class Builder implements BuilderContract
      * Add a right join to the query.
      *
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $table
-     * @param  \Closure|string  $first
+     * @param  \Closure|\Illuminate\Contracts\Database\Query\Expression|string  $first
      * @param  string|null  $operator
      * @param  \Illuminate\Contracts\Database\Query\Expression|string|null  $second
      * @return self<TModel>
