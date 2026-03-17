@@ -16,16 +16,14 @@ final class AuthHandlerTest extends TestCase
     /**
      * Methods with no parameters should return an empty array.
      *
-     * @return list<array{string}>
+     * @return \Iterator<int<0, max>, array{string}>
      */
-    public static function noParamMethodsProvider(): array
+    public static function noParamMethodsProvider(): \Iterator
     {
-        return [
-            ['user'],
-            ['getuser'],
-            ['authenticate'],
-            ['getlastattempted'],
-        ];
+        yield ['user'];
+        yield ['getuser'];
+        yield ['authenticate'];
+        yield ['getlastattempted'];
     }
 
     #[DataProvider('noParamMethodsProvider')]

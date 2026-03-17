@@ -6,6 +6,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit;
 
 use Illuminate\Support\Facades\Facade;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Plugin;
 use Psalm\LaravelPlugin\PluginConfig;
@@ -13,7 +14,8 @@ use Psalm\LaravelPlugin\PluginConfig;
 #[CoversClass(Plugin::class)]
 final class AliasStubCompletenessTest extends TestCase
 {
-    public function test_all_default_aliases_are_present_in_generated_stub(): void
+    #[Test]
+    public function all_default_aliases_are_present_in_generated_stub(): void
     {
         $stubPath = Plugin::getAliasStubLocation(PluginConfig::fromXml(null));
 
