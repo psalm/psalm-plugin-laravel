@@ -12,10 +12,10 @@ class UndefinedArgCommand extends Command
 
     public function handle(): int
     {
-        // This argument is not defined in the signature — should emit UndefinedConsoleInput
+        // This argument is not defined in the signature — should emit InvalidConsoleArgumentName
         $this->argument('nonexistent');
 
-        // This option is not defined in the signature — should emit UndefinedConsoleInput
+        // This option is not defined in the signature — should emit InvalidConsoleOptionName
         $this->option('nonexistent');
 
         return 0;
@@ -23,5 +23,5 @@ class UndefinedArgCommand extends Command
 }
 ?>
 --EXPECT--
-UndefinedConsoleInput on line 16: Console argument 'nonexistent' is not defined in UndefinedArgCommand's signature
-UndefinedConsoleInput on line 19: Console option 'nonexistent' is not defined in UndefinedArgCommand's signature
+InvalidConsoleArgumentName on line 16: Argument 'nonexistent' is not defined in UndefinedArgCommand's signature
+InvalidConsoleOptionName on line 19: Option 'nonexistent' is not defined in UndefinedArgCommand's signature

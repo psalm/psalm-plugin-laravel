@@ -6,7 +6,8 @@ namespace Psalm\LaravelPlugin\Handlers\Console;
 
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Issues\UndefinedConsoleInput;
+use Psalm\LaravelPlugin\Issues\InvalidConsoleArgumentName;
+use Psalm\LaravelPlugin\Issues\InvalidConsoleOptionName;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -21,7 +22,8 @@ use Symfony\Component\Console\Input\InputOption;
  * @see \Illuminate\Console\Concerns\InteractsWithIO::arguments()
  * @see \Illuminate\Console\Concerns\InteractsWithIO::options()
  *
- * Also emits {@see UndefinedConsoleInput} when the requested name is not defined.
+ * Also emits {@see InvalidConsoleArgumentName} / {@see InvalidConsoleOptionName}
+ * when the requested name is not defined.
  */
 final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
 {
@@ -102,7 +104,7 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
         }
 
         if ($exists === false) {
-            self::emitUndefinedIssue($event, 'argument', $name, $commandClass);
+            self::emitInvalidArgumentName($event, $name, $commandClass);
 
             return null;
         }
@@ -132,7 +134,7 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
         }
 
         if ($exists === false) {
-            self::emitUndefinedIssue($event, 'option', $name, $commandClass);
+            self::emitInvalidOptionName($event, $name, $commandClass);
 
             return null;
         }
@@ -213,22 +215,45 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
     /**
      * @param class-string $commandClass
      */
-    private static function emitUndefinedIssue(
+    private static function emitInvalidArgumentName(
         MethodReturnTypeProviderEvent $event,
-        string $kind,
         string $name,
         string $commandClass,
     ): void {
-        $shortClass = \str_contains($commandClass, '\\')
-            ? \substr($commandClass, (int) \strrpos($commandClass, '\\') + 1)
-            : $commandClass;
-
         IssueBuffer::accepts(
-            new UndefinedConsoleInput(
-                "Console {$kind} '{$name}' is not defined in {$shortClass}'s signature",
+            new InvalidConsoleArgumentName(
+                "Argument '{$name}' is not defined in " . self::shortClassName($commandClass) . "'s signature",
                 new CodeLocation($event->getSource(), $event->getStmt()),
             ),
             $event->getSource()->getSuppressedIssues(),
         );
+    }
+
+    /**
+     * @param class-string $commandClass
+     */
+    private static function emitInvalidOptionName(
+        MethodReturnTypeProviderEvent $event,
+        string $name,
+        string $commandClass,
+    ): void {
+        IssueBuffer::accepts(
+            new InvalidConsoleOptionName(
+                "Option '{$name}' is not defined in " . self::shortClassName($commandClass) . "'s signature",
+                new CodeLocation($event->getSource(), $event->getStmt()),
+            ),
+            $event->getSource()->getSuppressedIssues(),
+        );
+    }
+
+    /**
+     * @param class-string $commandClass
+     * @psalm-pure
+     */
+    private static function shortClassName(string $commandClass): string
+    {
+        return \str_contains($commandClass, '\\')
+            ? \substr($commandClass, (int) \strrpos($commandClass, '\\') + 1)
+            : $commandClass;
     }
 }
