@@ -227,7 +227,7 @@ final class CastsMethodParser
     private static function findCastsInClass(PhpParser\Node\Stmt\Class_ $class): ?PhpParser\Node\Stmt\ClassMethod
     {
         foreach ($class->stmts as $stmt) {
-            if ($stmt instanceof PhpParser\Node\Stmt\ClassMethod && $stmt->name->name === 'casts') {
+            if ($stmt instanceof PhpParser\Node\Stmt\ClassMethod && \strtolower($stmt->name->name) === 'casts') {
                 return $stmt;
             }
         }
