@@ -6,7 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Console;
 
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Issues\UndefinedConsoleArgument;
+use Psalm\LaravelPlugin\Issues\UndefinedConsoleInput;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -21,7 +21,7 @@ use Symfony\Component\Console\Input\InputOption;
  * @see \Illuminate\Console\Concerns\InteractsWithIO::arguments()
  * @see \Illuminate\Console\Concerns\InteractsWithIO::options()
  *
- * Also emits {@see UndefinedConsoleArgument} when the requested name is not defined.
+ * Also emits {@see UndefinedConsoleInput} when the requested name is not defined.
  */
 final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
 {
@@ -224,7 +224,7 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
             : $commandClass;
 
         IssueBuffer::accepts(
-            new UndefinedConsoleArgument(
+            new UndefinedConsoleInput(
                 "Console {$kind} '{$name}' is not defined in {$shortClass}'s signature",
                 new CodeLocation($event->getSource(), $event->getStmt()),
             ),
