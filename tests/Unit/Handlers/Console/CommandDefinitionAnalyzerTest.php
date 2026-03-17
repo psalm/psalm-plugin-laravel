@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Tests\Unit\Handlers\Console;
 
 use Illuminate\Console\Parser;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Console\CommandDefinitionAnalyzer;
 use Symfony\Component\Console\Input\InputDefinition;
@@ -35,7 +36,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         return $definition;
     }
 
-    public function test_required_argument(): void
+    #[Test]
+    public function required_argument(): void
     {
         $definition = $this->parseSignature('test:cmd {email : The user email}');
         $argument = $definition->getArgument('email');
@@ -44,7 +46,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $this->assertFalse($argument->isArray());
     }
 
-    public function test_optional_argument(): void
+    #[Test]
+    public function optional_argument(): void
     {
         $definition = $this->parseSignature('test:cmd {role? : Optional role}');
         $argument = $definition->getArgument('role');
@@ -53,7 +56,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $this->assertFalse($argument->isArray());
     }
 
-    public function test_array_argument(): void
+    #[Test]
+    public function array_argument(): void
     {
         $definition = $this->parseSignature('test:cmd {tags?* : Tags array}');
         $argument = $definition->getArgument('tags');
@@ -61,7 +65,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $this->assertTrue($argument->isArray());
     }
 
-    public function test_flag_option(): void
+    #[Test]
+    public function flag_option(): void
     {
         $definition = $this->parseSignature('test:cmd {--F|force : Force flag}');
         $option = $definition->getOption('force');
@@ -69,7 +74,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $this->assertFalse($option->acceptValue());
     }
 
-    public function test_value_accepting_option(): void
+    #[Test]
+    public function value_accepting_option(): void
     {
         $definition = $this->parseSignature('test:cmd {--limit= : Limit value}');
         $option = $definition->getOption('limit');
@@ -78,7 +84,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $this->assertTrue($option->isValueOptional());
     }
 
-    public function test_value_accepting_option_with_default(): void
+    #[Test]
+    public function value_accepting_option_with_default(): void
     {
         $definition = $this->parseSignature('test:cmd {--format=json : Format}');
         $option = $definition->getOption('format');
@@ -87,7 +94,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $this->assertSame('json', $option->getDefault());
     }
 
-    public function test_array_option(): void
+    #[Test]
+    public function array_option(): void
     {
         $definition = $this->parseSignature('test:cmd {--ids=* : IDs}');
         $option = $definition->getOption('ids');
@@ -95,7 +103,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $this->assertTrue($option->isArray());
     }
 
-    public function test_undefined_argument_throws(): void
+    #[Test]
+    public function undefined_argument_throws(): void
     {
         $definition = $this->parseSignature('test:cmd {email}');
 
@@ -103,7 +112,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $definition->getArgument('nonexistent');
     }
 
-    public function test_undefined_option_throws(): void
+    #[Test]
+    public function undefined_option_throws(): void
     {
         $definition = $this->parseSignature('test:cmd {--force}');
 
@@ -111,7 +121,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $definition->getOption('nonexistent');
     }
 
-    public function test_has_argument(): void
+    #[Test]
+    public function has_argument(): void
     {
         $definition = $this->parseSignature('test:cmd {email}');
 
@@ -119,7 +130,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $this->assertFalse($definition->hasArgument('nonexistent'));
     }
 
-    public function test_has_option(): void
+    #[Test]
+    public function has_option(): void
     {
         $definition = $this->parseSignature('test:cmd {--force}');
 
@@ -127,7 +139,8 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $this->assertFalse($definition->hasOption('nonexistent'));
     }
 
-    public function test_get_definition_returns_null_for_unresolvable_class(): void
+    #[Test]
+    public function get_definition_returns_null_for_unresolvable_class(): void
     {
         /** @var class-string $class */
         $class = 'NonExistent\\FakeCommand';
