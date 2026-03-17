@@ -55,15 +55,25 @@ class HasManyThrough extends HasOneOrManyThrough
      * Get the first related model record matching the attributes or instantiate it.
      *
      * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
      * @return TRelatedModel
      */
-    public function firstOrNew(array $attributes) {}
+    public function firstOrNew(array $attributes = [], array $values = []) {}
+
+    /**
+     * Get the first record matching the attributes. If the record is not found, create it.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @return TRelatedModel
+     */
+    public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}
 
     /**
      * Create or update a related record matching the attributes, and fill it with values.
      *
      * @param  array<string, mixed>  $attributes
-     * @param  array  $values
+     * @param  array<string, mixed>  $values
      * @return TRelatedModel
      */
     public function updateOrCreate(array $attributes, array $values = []) {}
