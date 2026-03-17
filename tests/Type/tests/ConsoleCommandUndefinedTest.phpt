@@ -22,6 +22,6 @@ class UndefinedArgCommand extends Command
     }
 }
 ?>
---EXPECT--
-InvalidConsoleArgumentName on line 16: Argument 'nonexistent' is not defined in UndefinedArgCommand's signature
-InvalidConsoleOptionName on line 19: Option 'nonexistent' is not defined in UndefinedArgCommand's signature
+--EXPECTF--
+InvalidConsoleArgumentName on line %d: Argument 'nonexistent' is not defined in UndefinedArgCommand's signature
+InvalidConsoleOptionName on line %d: Option 'nonexistent' is not defined in UndefinedArgCommand's signature
