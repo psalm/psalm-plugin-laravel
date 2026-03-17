@@ -53,10 +53,10 @@ abstract class HasOneOrMany extends Relation
     public function create(array $attributes = []) {}
 
     /**
-     * @param  list<array<string, mixed>>  $records
+     * @param  iterable<array<string, mixed>>  $records
      * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
-    public function createMany(array $records) {}
+    public function createMany(iterable $records) {}
 
     /**
      * @param  array<string, mixed>  $attributes

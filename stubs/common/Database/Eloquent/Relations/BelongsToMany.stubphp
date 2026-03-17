@@ -97,11 +97,11 @@ class BelongsToMany extends Relation
     public function create(array $attributes = [], array $joining = [], $touch = true) {}
 
     /**
-     * @param  list<array<string, mixed>>  $records
-     * @param  list<array<string, mixed>>  $joinings
+     * @param  iterable<array<string, mixed>>  $records
+     * @param  array<array-key, array<string, mixed>>  $joinings
      * @return list<TRelatedModel>
      */
-    public function createMany(array $records, array $joinings = []) {}
+    public function createMany(iterable $records, array $joinings = []) {}
 
     /**
      * @return \Traversable<int, TRelatedModel>

@@ -203,17 +203,14 @@ final class CastsMethodParser
                 continue;
             }
 
-            // Top-level class (no namespace)
+            // Top-level class (no namespace) — FQCN equals the short name
             if (!$stmt instanceof PhpParser\Node\Stmt\Class_) {
                 continue;
             }
 
             $shortName = $stmt->name?->toString() ?? '';
-            $classShortName = \str_contains($modelClass, '\\')
-                ? \substr($modelClass, (int) \strrpos($modelClass, '\\') + 1)
-                : $modelClass;
 
-            if (\strtolower($shortName) !== \strtolower($classShortName)) {
+            if (\strtolower($shortName) !== \strtolower($modelClass)) {
                 continue;
             }
 
