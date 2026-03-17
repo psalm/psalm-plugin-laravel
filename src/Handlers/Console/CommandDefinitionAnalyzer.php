@@ -251,7 +251,12 @@ final class CommandDefinitionAnalyzer
 
     /**
      * Resolve a PhpParser node to a plain string, supporting string literals
-     * and simple concatenation of string literals.
+     * and concatenation expressions.
+     *
+     * For concatenation with non-resolvable parts (class constants, function calls, etc.),
+     * the unresolvable part is replaced with a placeholder. This works because Laravel's
+     * Parser only cares about {argument} and {--option} tokens — description text
+     * containing constants (e.g., 'default: v' . SomeClass::LATEST . ')') is ignored.
      *
      * @psalm-mutation-free
      */
@@ -279,14 +284,14 @@ final class CommandDefinitionAnalyzer
             return $result;
         }
 
-        // Support concatenation: 'part1' . 'part2'
+        // Support concatenation: 'part1' . 'part2' . SomeClass::CONST
+        // Non-resolvable parts (constants, function calls) are replaced with a placeholder
+        // so the signature's {argument}/{--option} tokens can still be parsed.
         if ($expr instanceof Node\Expr\BinaryOp\Concat) {
-            $left = self::resolveStringValue($expr->left);
-            $right = self::resolveStringValue($expr->right);
+            $left = self::resolveStringValue($expr->left) ?? '___';
+            $right = self::resolveStringValue($expr->right) ?? '___';
 
-            if ($left !== null && $right !== null) {
-                return $left . $right;
-            }
+            return $left . $right;
         }
 
         return null;
@@ -313,7 +318,9 @@ final class CommandDefinitionAnalyzer
     }
 
     /**
-     * Look up an option by name from a command's definition.
+     * Look up an option by name or shortcut from a command's definition.
+     *
+     * Supports both long names (e.g., 'force') and shortcuts (e.g., 'F' for {--F|force}).
      *
      * @param class-string $commandClass
      */
@@ -327,6 +334,13 @@ final class CommandDefinitionAnalyzer
 
         try {
             return $definition->getOption($name);
+        } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
+            // Fall through to try shortcut resolution
+        }
+
+        // Try resolving as a shortcut (e.g., 'F' for {--F|force})
+        try {
+            return $definition->getOptionForShortcut($name);
         } catch (\Symfony\Component\Console\Exception\InvalidArgumentException) {
             return null;
         }
@@ -351,6 +365,8 @@ final class CommandDefinitionAnalyzer
     /**
      * Check if an option exists in the command's definition.
      *
+     * Also checks option shortcuts (e.g., 'F' for {--F|force}).
+     *
      * @param class-string $commandClass
      */
     public static function hasOption(string $commandClass, string $name): ?bool
@@ -361,6 +377,11 @@ final class CommandDefinitionAnalyzer
             return null; // cannot determine — definition unavailable
         }
 
-        return $definition->hasOption($name);
+        if ($definition->hasOption($name)) {
+            return true;
+        }
+
+        // Check if the name matches a shortcut
+        return $definition->hasShortcut($name);
     }
 }
