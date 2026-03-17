@@ -19,8 +19,6 @@ use Symfony\Component\Console\Input\InputOption;
  *
  * @see \Illuminate\Console\Concerns\InteractsWithIO::argument()
  * @see \Illuminate\Console\Concerns\InteractsWithIO::option()
- * @see \Illuminate\Console\Concerns\InteractsWithIO::arguments()
- * @see \Illuminate\Console\Concerns\InteractsWithIO::options()
  *
  * Also emits {@see InvalidConsoleArgumentName} / {@see InvalidConsoleOptionName}
  * when the requested name is not defined.
@@ -46,12 +44,8 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
     {
         $methodName = $event->getMethodNameLowercase();
 
-        if (!\in_array($methodName, ['argument', 'option', 'arguments', 'options'], true)) {
-            return null;
-        }
-
         // @todo Narrow arguments()/options() to a constant array shape with per-key types
-        if ($methodName === 'arguments' || $methodName === 'options') {
+        if ($methodName !== 'argument' && $methodName !== 'option') {
             return null;
         }
 
@@ -73,7 +67,7 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
 
         // Determine the concrete command class being analyzed.
         // getCalledFqClasslikeName() returns the concrete subclass (e.g., App\Console\Commands\Example),
-        // getFqClasslikeName() returns the class the handler is hooked to (Illuminate\Console\Command).
+        // getFqClasslikeName() returns the declaring class (Illuminate\Console\Concerns\InteractsWithIO).
         /** @var class-string|null $commandClass */
         $commandClass = $event->getCalledFqClasslikeName();
 
