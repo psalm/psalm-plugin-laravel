@@ -50,7 +50,7 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // arguments() and options() (no-arg variants) — fall through to Psalm's default
+        // @todo Narrow arguments()/options() to a constant array shape with per-key types
         if ($methodName === 'arguments' || $methodName === 'options') {
             return null;
         }
