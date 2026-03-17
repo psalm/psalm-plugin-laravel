@@ -182,6 +182,62 @@ function test_whereExists_instance(): Builder
     });
 }
 
+/** @return Builder<User> */
+function test_rightJoin_instance(): Builder
+{
+    return User::query()->rightJoin('posts', 'users.id', '=', 'posts.user_id');
+}
+
+/** @return Builder<User> */
+function test_crossJoin_instance(): Builder
+{
+    return User::query()->crossJoin('colors');
+}
+
+/** @return Builder<User> */
+function test_orWhereIn_instance(): Builder
+{
+    return User::query()->orWhereIn('id', [1, 2, 3]);
+}
+
+/** @return Builder<User> */
+function test_orWhereNotIn_instance(): Builder
+{
+    return User::query()->orWhereNotIn('id', [4, 5]);
+}
+
+/** @return Builder<User> */
+function test_whereNotBetween_instance(): Builder
+{
+    return User::query()->whereNotBetween('id', [1, 100]);
+}
+
+/** @return Builder<User> */
+function test_whereNotExists_instance(): Builder
+{
+    return User::query()->whereNotExists(function (\Illuminate\Database\Query\Builder $query) {
+        $query->select('id');
+    });
+}
+
+/** @return Builder<User> */
+function test_whereFullText_instance(): Builder
+{
+    return User::query()->whereFullText('name', 'search term');
+}
+
+/** @return Builder<User> */
+function test_lock_instance(): Builder
+{
+    return User::query()->lock();
+}
+
+/** @return Builder<User> */
+function test_sharedLock_instance(): Builder
+{
+    return User::query()->sharedLock();
+}
+
 // --- Chaining: static call + forwarded methods + terminal ---
 
 function test_select_chain_to_first(): ?User
