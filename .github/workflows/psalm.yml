@@ -31,6 +31,4 @@ jobs:
         run: composer install -n --prefer-dist
 
       - name: Run Psalm
-        # TODO: remove PSALM_ALLOW_XDEBUG=1 once https://github.com/vimeo/psalm/issues/11723 is fixed
-        # Disables JIT to work around PHP 8.4.19+ bug causing false InvalidAttribute errors on #[Override]
-        run: PSALM_ALLOW_XDEBUG=1 ./vendor/bin/psalm --threads=2 --output-format=github --shepherd
+        run: ./vendor/bin/psalm --threads=2 --output-format=github --shepherd
