@@ -124,8 +124,8 @@ final class ModelRelationshipPropertyHandler
             $relationType = $atomicType;
 
             foreach ($atomicType->type_params as $childNode) {
-                foreach ($childNode->getAtomicTypes() as $atomicType) {
-                    if (!$atomicType instanceof Type\Atomic\TNamedObject) {
+                foreach ($childNode->getAtomicTypes() as $childAtomicType) {
+                    if (!$childAtomicType instanceof Type\Atomic\TNamedObject) {
                         continue;
                     }
 
