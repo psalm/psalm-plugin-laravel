@@ -65,7 +65,7 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
         // Extract the literal string key from the first argument
         $firstArgType = $event->getSource()->getNodeTypeProvider()->getType($callArgs[0]->value);
 
-        if ($firstArgType === null || !$firstArgType->isSingleStringLiteral()) {
+        if (!$firstArgType instanceof \Psalm\Type\Union || !$firstArgType->isSingleStringLiteral()) {
             return null; // dynamic key — cannot narrow
         }
 
@@ -111,7 +111,7 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
 
         $argument = CommandDefinitionAnalyzer::getArgument($commandClass, $name);
 
-        if ($argument === null) {
+        if (!$argument instanceof \Symfony\Component\Console\Input\InputArgument) {
             return null;
         }
 
@@ -141,7 +141,7 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
 
         $option = CommandDefinitionAnalyzer::getOption($commandClass, $name);
 
-        if ($option === null) {
+        if (!$option instanceof \Symfony\Component\Console\Input\InputOption) {
             return null;
         }
 

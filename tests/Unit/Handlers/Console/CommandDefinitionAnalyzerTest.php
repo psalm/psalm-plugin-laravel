@@ -23,7 +23,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
     /**
      * Helper to parse a Laravel signature into an InputDefinition.
      */
-    private static function parseSignature(string $signature): InputDefinition
+    private function parseSignature(string $signature): InputDefinition
     {
         /** @var array{0: string, 1: list<\Symfony\Component\Console\Input\InputArgument>, 2: list<\Symfony\Component\Console\Input\InputOption>} $parsed */
         $parsed = Parser::parse($signature);
@@ -37,7 +37,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_required_argument(): void
     {
-        $definition = self::parseSignature('test:cmd {email : The user email}');
+        $definition = $this->parseSignature('test:cmd {email : The user email}');
         $argument = $definition->getArgument('email');
 
         $this->assertTrue($argument->isRequired());
@@ -46,7 +46,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_optional_argument(): void
     {
-        $definition = self::parseSignature('test:cmd {role? : Optional role}');
+        $definition = $this->parseSignature('test:cmd {role? : Optional role}');
         $argument = $definition->getArgument('role');
 
         $this->assertFalse($argument->isRequired());
@@ -55,7 +55,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_array_argument(): void
     {
-        $definition = self::parseSignature('test:cmd {tags?* : Tags array}');
+        $definition = $this->parseSignature('test:cmd {tags?* : Tags array}');
         $argument = $definition->getArgument('tags');
 
         $this->assertTrue($argument->isArray());
@@ -63,7 +63,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_flag_option(): void
     {
-        $definition = self::parseSignature('test:cmd {--F|force : Force flag}');
+        $definition = $this->parseSignature('test:cmd {--F|force : Force flag}');
         $option = $definition->getOption('force');
 
         $this->assertFalse($option->acceptValue());
@@ -71,7 +71,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_value_accepting_option(): void
     {
-        $definition = self::parseSignature('test:cmd {--limit= : Limit value}');
+        $definition = $this->parseSignature('test:cmd {--limit= : Limit value}');
         $option = $definition->getOption('limit');
 
         $this->assertTrue($option->acceptValue());
@@ -80,7 +80,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_value_accepting_option_with_default(): void
     {
-        $definition = self::parseSignature('test:cmd {--format=json : Format}');
+        $definition = $this->parseSignature('test:cmd {--format=json : Format}');
         $option = $definition->getOption('format');
 
         $this->assertTrue($option->acceptValue());
@@ -89,7 +89,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_array_option(): void
     {
-        $definition = self::parseSignature('test:cmd {--ids=* : IDs}');
+        $definition = $this->parseSignature('test:cmd {--ids=* : IDs}');
         $option = $definition->getOption('ids');
 
         $this->assertTrue($option->isArray());
@@ -97,7 +97,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_undefined_argument_throws(): void
     {
-        $definition = self::parseSignature('test:cmd {email}');
+        $definition = $this->parseSignature('test:cmd {email}');
 
         $this->expectException(\Symfony\Component\Console\Exception\InvalidArgumentException::class);
         $definition->getArgument('nonexistent');
@@ -105,7 +105,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_undefined_option_throws(): void
     {
-        $definition = self::parseSignature('test:cmd {--force}');
+        $definition = $this->parseSignature('test:cmd {--force}');
 
         $this->expectException(\Symfony\Component\Console\Exception\InvalidArgumentException::class);
         $definition->getOption('nonexistent');
@@ -113,7 +113,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_has_argument(): void
     {
-        $definition = self::parseSignature('test:cmd {email}');
+        $definition = $this->parseSignature('test:cmd {email}');
 
         $this->assertTrue($definition->hasArgument('email'));
         $this->assertFalse($definition->hasArgument('nonexistent'));
@@ -121,7 +121,7 @@ final class CommandDefinitionAnalyzerTest extends TestCase
 
     public function test_has_option(): void
     {
-        $definition = self::parseSignature('test:cmd {--force}');
+        $definition = $this->parseSignature('test:cmd {--force}');
 
         $this->assertTrue($definition->hasOption('force'));
         $this->assertFalse($definition->hasOption('nonexistent'));
@@ -133,6 +133,6 @@ final class CommandDefinitionAnalyzerTest extends TestCase
         $class = 'NonExistent\\FakeCommand';
 
         // Without a Psalm analysis context, getDefinition() gracefully returns null
-        $this->assertNull(CommandDefinitionAnalyzer::getDefinition($class));
+        $this->assertNotInstanceOf(\Symfony\Component\Console\Input\InputDefinition::class, CommandDefinitionAnalyzer::getDefinition($class));
     }
 }

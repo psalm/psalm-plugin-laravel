@@ -262,7 +262,7 @@ final class CommandDefinitionAnalyzer
      */
     private static function resolveStringValue(?Node\Expr $expr): ?string
     {
-        if ($expr === null) {
+        if (!$expr instanceof \PhpParser\Node\Expr) {
             return null;
         }
 
@@ -306,7 +306,7 @@ final class CommandDefinitionAnalyzer
     {
         $definition = self::getDefinition($commandClass);
 
-        if ($definition === null) {
+        if (!$definition instanceof \Symfony\Component\Console\Input\InputDefinition) {
             return null;
         }
 
@@ -328,7 +328,7 @@ final class CommandDefinitionAnalyzer
     {
         $definition = self::getDefinition($commandClass);
 
-        if ($definition === null) {
+        if (!$definition instanceof \Symfony\Component\Console\Input\InputDefinition) {
             return null;
         }
 
@@ -355,7 +355,7 @@ final class CommandDefinitionAnalyzer
     {
         $definition = self::getDefinition($commandClass);
 
-        if ($definition === null) {
+        if (!$definition instanceof \Symfony\Component\Console\Input\InputDefinition) {
             return null; // cannot determine — definition unavailable
         }
 
@@ -373,7 +373,7 @@ final class CommandDefinitionAnalyzer
     {
         $definition = self::getDefinition($commandClass);
 
-        if ($definition === null) {
+        if (!$definition instanceof \Symfony\Component\Console\Input\InputDefinition) {
             return null; // cannot determine — definition unavailable
         }
 
