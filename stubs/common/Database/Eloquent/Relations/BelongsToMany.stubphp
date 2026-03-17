@@ -23,22 +23,24 @@ class BelongsToMany extends Relation
 
     /**
      * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
      * @return TRelatedModel
      */
-    public function firstOrNew(array $attributes) {}
+    public function firstOrNew(array $attributes = [], array $values = []) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $joining
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @param  array<string, mixed>  $joining
      * @param  bool   $touch
      * @return TRelatedModel
      */
-    public function firstOrCreate(array $attributes, array $joining = [], $touch = true) {}
+    public function firstOrCreate(array $attributes = [], \Closure|array $values = [], array $joining = [], $touch = true) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $values
-     * @param  array  $joining
+     * @param  array<string, mixed>  $values
+     * @param  array<string, mixed>  $joining
      * @param  bool   $touch
      * @return TRelatedModel
      */
@@ -88,15 +90,15 @@ class BelongsToMany extends Relation
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $joining
+     * @param  array<string, mixed>  $joining
      * @param  bool   $touch
      * @return TRelatedModel
      */
     public function create(array $attributes = [], array $joining = [], $touch = true) {}
 
     /**
-     * @param  array  $records
-     * @param  array  $joinings
+     * @param  list<array<string, mixed>>  $records
+     * @param  list<array<string, mixed>>  $joinings
      * @return list<TRelatedModel>
      */
     public function createMany(array $records, array $joinings = []) {}
