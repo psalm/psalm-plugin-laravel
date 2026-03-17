@@ -13,7 +13,7 @@ final class IssueUrlGenerator
     {
         return \sprintf(
             'https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md&title=%s&body=%s',
-            \urlencode("Error on generating stub files: {$throwable->getMessage()}"),
+            \urlencode("Plugin initialization error: {$throwable->getMessage()}"),
             \urlencode(self::buildBody($throwable)),
         );
     }
