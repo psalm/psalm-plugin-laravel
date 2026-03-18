@@ -113,7 +113,8 @@ if [ -d "$APP_INSTALLATION_PATH" ]; then
     info "Removed."
 fi
 
-info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} ..."
+RELATIVE_PATH="${APP_INSTALLATION_PATH#"$PROJECT_ROOT"/}"
+info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} at ${RELATIVE_PATH} ..."
 composer create-project --quiet --prefer-dist laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
 cd "$APP_INSTALLATION_PATH"
 
