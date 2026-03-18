@@ -1,13 +1,13 @@
-# Xdebug
+# Debugging with Xdebug
 
-For debugging Plugin code using Xdebug, you need to follow these steps:
+To debug plugin code with Xdebug and PhpStorm:
 
-Step 1: [Set up PhpStorm](https://www.jetbrains.com/help/phpstorm/debugging-a-php-cli-script.html):
+1. [Configure PhpStorm for CLI debugging](https://www.jetbrains.com/help/phpstorm/debugging-a-php-cli-script.html)
+2. Run Psalm with Xdebug enabled:
+
 ```shell
-export XDEBUG_MODE=debug XDEBUG_SESSION=1
+XDEBUG_MODE=debug XDEBUG_SESSION=1 PSALM_ALLOW_XDEBUG=1 vendor/bin/psalm --threads=1 --no-cache
 ```
 
-Step 2: [Enable Xdebug when running Psalm](https://psalm.dev/docs/running_psalm/plugins/authoring_plugins/):
-```shell
-PSALM_ALLOW_XDEBUG=1 vendor/bin/psalm --threads=1 --no-cache
-```
+`--threads=1` is required so Psalm runs in a single process (breakpoints don't work in forked workers).
+`PSALM_ALLOW_XDEBUG=1` prevents Psalm from restarting itself without Xdebug (it does this by default for performance).
