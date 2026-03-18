@@ -1,9 +1,6 @@
-remote_theme: just-the-docs/just-the-docs
+remote_theme: jekyll/minima
 title: psalm-plugin-laravel
 description: Psalm plugin for Laravel — static analysis support for Laravel projects
 permalink: pretty
-color_scheme: light
 
-aux_links:
-  GitHub: https://github.com/psalm/psalm-plugin-laravel
-  Packagist: https://packagist.org/packages/psalm/plugin-laravel
+header_pages: []
