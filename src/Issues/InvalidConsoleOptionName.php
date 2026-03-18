@@ -10,4 +10,7 @@ use Psalm\Issue\PluginIssue;
  * Reported when $command->option('x') references a name not defined
  * in the command's $signature / InputDefinition.
  */
-final class InvalidConsoleOptionName extends PluginIssue {}
+final class InvalidConsoleOptionName extends PluginIssue
+{
+    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/InvalidConsoleOptionName/';
+}

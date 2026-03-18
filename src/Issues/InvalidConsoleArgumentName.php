@@ -10,4 +10,7 @@ use Psalm\Issue\PluginIssue;
  * Reported when $command->argument('x') references a name not defined
  * in the command's $signature / InputDefinition.
  */
-final class InvalidConsoleArgumentName extends PluginIssue {}
+final class InvalidConsoleArgumentName extends PluginIssue
+{
+    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/InvalidConsoleArgumentName/';
+}
