@@ -130,7 +130,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
             $methodStorage = $codebase->methods->getStorage(
                 new MethodIdentifier($modelClass, \strtolower($methodName)),
             );
-        } catch (\UnexpectedValueException) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
             return false;
         }
 
