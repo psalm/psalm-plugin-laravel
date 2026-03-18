@@ -132,6 +132,14 @@ and/or [cli parameters](https://psalm.dev/docs/running_psalm/command_line_usage/
 
 See [docs/config.md](docs/config.md) for all configuration options.
 
+## Custom issues
+
+The plugin emits custom issues beyond Psalm's built-in checks:
+
+- [NoEnvOutsideConfig](docs/issues/NoEnvOutsideConfig.md) — `env()` called outside `config/` directory
+- [InvalidConsoleArgumentName](docs/issues/InvalidConsoleArgumentName.md) — `argument()` references undefined command argument
+- [InvalidConsoleOptionName](docs/issues/InvalidConsoleOptionName.md) — `option()` references undefined command option
+
 
 ## How it works
 
