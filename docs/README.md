@@ -5,40 +5,18 @@ There are 2 main ways how it does it:
  - **easy**: by providing stub files (you can find them in `/stubs` dir)
  - **medium+**: using custom Handlers (see `/src/Handlers` dir)
 
-## How it works
+For details, please check [contributing guide](./contribute/README.md).
 
-A single callstack looks like:
+## Custom Issues
 
-```
-Plugin::__invoke
-    Providers\ApplicationProvider::bootApp
-        {instantiate Laravel Application}
-    Plugin::buildSchema (only when columnFallback="migrations")
-        {parse migration files to build schema info}
-    Plugin::generateAliasStubs
-        {read AliasLoader::getInstance()->getAliases() and write aliases.stubphp}
-    Plugin::registerHandlers
-        - Container
-        - Eloquent (incl. ModelRegistrationHandler for AfterCodebasePopulated)
-        - Helpers (that not covered by stubs)
-    Plugin::registerStubs
-        - common
-        - for specific laravel version
-        - taint analysis
-        - aliases.stubphp (generated)
+The plugin emits custom issues that Psalm does not have built-in.
+Each one links to detailed documentation with examples and fix guidance.
 
---- later, after Psalm scans all project files ---
-
-ModelRegistrationHandler::afterCodebasePopulated
-    {discover Model subclasses from Psalm's codebase, register property handlers}
-```
+- [NoEnvOutsideConfig](issues/NoEnvOutsideConfig.md)
+- [InvalidConsoleArgumentName](issues/InvalidConsoleArgumentName.md)
+- [InvalidConsoleOptionName](issues/InvalidConsoleOptionName.md)
 
 ## Documentation
 
 - [Configuration](config.md) — plugin XML config options and environment variables
-- [Architecture Decisions](contribute/decisions.md) — key design decisions and rationale
-- [Debugging with Xdebug](contribute/xdebug.md) — how to debug plugin code
-
-## External resources
-
-- [Authoring Psalm Plugins](https://psalm.dev/docs/running_psalm/plugins/authoring_plugins/)
+- [Contributing](contribute/README.md)
