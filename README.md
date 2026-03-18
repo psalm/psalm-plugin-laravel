@@ -153,7 +153,7 @@ It also parses any database migrations it can find to try to understand property
 **Use both.** They solve different problems:
 
 - **Larastan** excels at Laravel-specific type rules: `model-property` validation, `view-string` checks, `NoUnnecessaryCollectionCall`, Blade analysis via Bladestan, and 17 custom rules.
-- **psalm-plugin-laravel** in addition to type checks, it provides taint-based security analysis that PHPStan structurally cannot offer ([PHPStan's creator explicitly declined taint analysis](https://github.com/phpstan/phpstan/issues/8038)), plus deep type support for auth guards, Eloquent attributes, `#[Scope]`, and `Attribute<TGet, TSet>` templates.
+- **psalm-plugin-laravel** in addition to type checks, it provides taint-based security analysis that PHPStan structurally [cannot offer](https://github.com/phpstan/phpstan/issues/8038), plus deep type support for auth guards, Eloquent attributes, scopes, attributes, etc.
 
 Psalm and PHPStan use almost the same annotation syntax, so they work side by side without conflicts.
 
