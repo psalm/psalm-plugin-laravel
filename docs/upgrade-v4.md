@@ -34,71 +34,74 @@ Psalm 7 is still in beta. You may need to add this to your project's `composer.j
 }
 ```
 
+Psalm 7 introduces new issue types that may surface in your codebase. These catch real design problems – fixing them improves your code, but you can suppress them during the upgrade and address them later:
+
+- `MissingPureAnnotation` -- a method has no side effects but lacks `@psalm-pure`. Adding it lets Psalm verify the method stays side-effect-free and enables callers to use it in pure contexts.
+- `MissingAbstractPureAnnotation` -- an abstract method should be declared `@psalm-pure` so all implementations are guaranteed pure.
+- `MissingImmutableAnnotation` -- a class has no mutable state but lacks `@psalm-immutable`. Marking it immutable prevents accidental mutation in future changes.
+- `MissingInterfaceImmutableAnnotation` -- an interface should be `@psalm-immutable` so all implementations are guaranteed immutable.
+
+```xml
+<issueHandlers>
+    <MissingPureAnnotation errorLevel="suppress" />
+</issueHandlers>
+```
+
+### Eloquent relation generics now require a declaring model parameter
+
+All Eloquent relation stubs gained additional template parameters. If your codebase has `@psalm-return` (or `@return`) annotations with relation generics, they must be updated:
+
+| Relation type      | v3 signature                    | v4 signature                                          |
+|--------------------|---------------------------------|-------------------------------------------------------|
+| `BelongsTo`        | `BelongsTo<TRelated>`           | `BelongsTo<TRelated, TDeclaringModel>`                |
+| `HasOne`           | `HasOne<TRelated>`              | `HasOne<TRelated, TDeclaringModel>`                   |
+| `HasMany`          | `HasMany<TRelated>`             | `HasMany<TRelated, TDeclaringModel>`                  |
+| `BelongsToMany`    | `BelongsToMany<TRelated>`       | `BelongsToMany<TRelated, TDeclaringModel>`            |
+| `MorphOne`         | `MorphOne<TRelated>`            | `MorphOne<TRelated, TDeclaringModel>`                 |
+| `MorphMany`        | `MorphMany<TRelated>`           | `MorphMany<TRelated, TDeclaringModel>`                |
+| `MorphTo`          | `MorphTo<TRelated>`             | `MorphTo<TRelated, TDeclaringModel>`                  |
+| `MorphToMany`      | `MorphToMany<TRelated>`         | `MorphToMany<TRelated, TDeclaringModel>`              |
+| `HasOneThrough`    | `HasOneThrough<TRelated>`       | `HasOneThrough<TRelated, TIntermediate, TDeclaring>`  |
+| `HasManyThrough`   | `HasManyThrough<TRelated>`      | `HasManyThrough<TRelated, TIntermediate, TDeclaring>` |
+
+`Collection`, `EloquentCollection`, and `Builder` are **unchanged**.
+
 ### Taint analysis runs automatically
 
 In Psalm 6 you had to pass `--taint-analysis` as a separate flag.
 Psalm 7 combines type analysis and taint analysis into a single run by default.
 No flags needed — just run `./vendor/bin/psalm`.
 
-### `barryvdh/laravel-ide-helper` is no longer a dependency
-
-v3 used ide-helper internally to generate facade and model stubs. v4 replaces this with its own lightweight alias and property resolution. This means:
-
-- **Fewer dependencies** — installing the plugin no longer pulls in ide-helper and its transitive dependencies
-- **No action needed** — if you use ide-helper in your own project, it continues to work independently
-- **If you relied on ide-helper being pulled in transitively**, add it as a direct dependency: `composer require --dev barryvdh/laravel-ide-helper`
-
 ## New features in v4
 
-### Console command argument/option validation
+### New issue types
 
-The plugin now reads your Artisan command's `$signature` and reports errors when `argument()` or `option()` references an undefined name:
+**Plugin issues** (suppressible via `<PluginIssue>`):
 
-```php
-// Reports InvalidConsoleArgumentName
-$this->argument('nonexistent');
-
-// Reports InvalidConsoleOptionName
-$this->option('nonexistent');
-```
-
-To suppress these if needed:
+- `InvalidConsoleArgumentName` -- `argument()` references an undefined name in the command's `$signature`
+- `InvalidConsoleOptionName` -- `option()` references an undefined name in the command's `$signature`
+- `NoEnvOutsideConfig` -- `env()` called outside the `config/` directory (`env()` returns `null` when the config is cached)
 
 ```xml
 <issueHandlers>
     <PluginIssue name="InvalidConsoleArgumentName" errorLevel="suppress" />
     <PluginIssue name="InvalidConsoleOptionName" errorLevel="suppress" />
-</issueHandlers>
-```
-
-### `env()` outside config detection
-
-Calling `env()` outside the `config/` directory is reported as `NoEnvOutsideConfig`, because `env()` returns `null` when the config is cached.
-
-```xml
-<issueHandlers>
     <PluginIssue name="NoEnvOutsideConfig" errorLevel="suppress" />
 </issueHandlers>
 ```
 
-### `#[Scope]` attribute support
+**Psalm built-in issues** (new detections via taint analysis):
 
-Laravel 12+ scope detection via the `#[Scope]` attribute is now supported alongside the traditional `scope` method prefix.
+- `TaintedSql` -- `where()`, `orWhere()`, and other query builder methods now have `@psalm-taint-sink sql` annotations, catching SQL injection via dynamic column names
 
-### Improved model property inference
+### Other improvements
 
+- `#[Scope]` attribute support -- Laravel 12+ scope detection alongside the traditional `scope` method prefix
 - AST-based cast parsing (reads `casts()` method without executing it)
 - Write-type registration (`pseudo_property_set_types`) for model properties
 - Support for `Attribute<TGet, TSet>` accessor templates
 - `after()` closures, `Blueprint::rename()`, `addColumn()`, and more migration methods supported
-
-### Taint annotations on Eloquent Builder
-
-`where()`, `orWhere()`, and other query builder methods now have `@psalm-taint-sink sql` annotations, catching SQL injection via dynamic column names.
-
-### Auto-discovery of migration directories
-
-Migration directories registered via `loadMigrationsFrom()` are now auto-discovered, in addition to the default `database/migrations`.
+- Auto-discovery of migration directories registered via `loadMigrationsFrom()`
 
 ## Upgrade steps
 
@@ -111,10 +114,25 @@ composer require --dev vimeo/psalm:^7.0.0-beta17
 # 3. Upgrade the plugin
 composer require --dev psalm/plugin-laravel:^4.0
 
-# 4. Run Psalm and update your baseline
+# 4. Update relation generic annotations (add declaring model parameter)
+#    BelongsTo<Foo>        → BelongsTo<Foo, self>
+#    HasMany<Foo>          → HasMany<Foo, self>
+#    HasOne<Foo>           → HasOne<Foo, self>
+#    BelongsToMany<Foo>    → BelongsToMany<Foo, self>
+#    MorphOne<Foo>         → MorphOne<Foo, self>
+#    MorphMany<Foo>        → MorphMany<Foo, self>
+#    HasManyThrough<Foo>   → HasManyThrough<Foo, Intermediate, self>
+#    HasOneThrough<Foo>    → HasOneThrough<Foo, Intermediate, self>
+#
+#    Quick sed for the common cases (run from project root):
+find app -name '*.php' -exec grep -l '@psalm-return \(BelongsTo\|HasMany\|HasOne\|BelongsToMany\|MorphOne\|MorphMany\|MorphTo\|MorphToMany\)<' {} \; \
+  | xargs sed -i 's/@psalm-return \(BelongsTo\|HasMany\|HasOne\|BelongsToMany\|MorphOne\|MorphMany\|MorphTo\|MorphToMany\)<\([^>]*\)>/@psalm-return \1<\2, self>/g'
+#    HasManyThrough / HasOneThrough need manual edits (add intermediate model).
+
+# 5. Run Psalm and update your baseline
 ./vendor/bin/psalm --set-baseline=psalm-baseline.xml
 
-# 5. Review new issues
+# 6. Review new issues
 #    - InvalidConsoleArgumentName / InvalidConsoleOptionName are real bugs — fix them
 #    - NoEnvOutsideConfig — move env() calls into config files
 #    - TaintedSql on Builder::where() — review for actual SQL injection risk
