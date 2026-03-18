@@ -1,0 +1,4 @@
+theme: jekyll-theme-minimal
+title: psalm-plugin-laravel
+description: Psalm plugin for Laravel — static analysis support for Laravel projects
+permalink: pretty

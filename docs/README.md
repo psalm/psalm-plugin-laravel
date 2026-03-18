@@ -5,40 +5,19 @@ There are 2 main ways how it does it:
  - **easy**: by providing stub files (you can find them in `/stubs` dir)
  - **medium+**: using custom Handlers (see `/src/Handlers` dir)
 
-## How it works
-
-A single callstack looks like:
-
-```
-Plugin::__invoke
-    Providers\ApplicationProvider::bootApp
-        {instantiate Laravel Application}
-    Plugin::buildSchema (only when columnFallback="migrations")
-        {parse migration files to build schema info}
-    Plugin::generateAliasStubs
-        {read AliasLoader::getInstance()->getAliases() and write aliases.stubphp}
-    Plugin::registerHandlers
-        - Container
-        - Eloquent (incl. ModelRegistrationHandler for AfterCodebasePopulated)
-        - Helpers (that not covered by stubs)
-    Plugin::registerStubs
-        - common
-        - for specific laravel version
-        - taint analysis
-        - aliases.stubphp (generated)
-
---- later, after Psalm scans all project files ---
-
-ModelRegistrationHandler::afterCodebasePopulated
-    {discover Model subclasses from Psalm's codebase, register property handlers}
-```
-
 ## Documentation
 
 - [Configuration](config.md) — plugin XML config options and environment variables
+- [Contributing](contribute/README.md) — how the plugin works, getting started, adding stubs and handlers
 - [Architecture Decisions](contribute/decisions.md) — key design decisions and rationale
-- [Debugging with Xdebug](contribute/xdebug.md) — how to debug plugin code
+- [Debugging with Xdebug](contribute/xdebug.md) — stepping through plugin code
+- [Upgrading to v4](upgrade-v4.md) — migration guide from v3
 
-## External resources
+## Custom Issues
 
-- [Authoring Psalm Plugins](https://psalm.dev/docs/running_psalm/plugins/authoring_plugins/)
+The plugin emits custom issues that Psalm does not have built-in.
+Each one links to detailed documentation with examples and fix guidance.
+
+- [NoEnvOutsideConfig](issues/NoEnvOutsideConfig.md)
+- [InvalidConsoleArgumentName](issues/InvalidConsoleArgumentName.md)
+- [InvalidConsoleOptionName](issues/InvalidConsoleOptionName.md)
