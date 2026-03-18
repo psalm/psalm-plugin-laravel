@@ -162,7 +162,8 @@ Psalm and PHPStan use almost the same annotation syntax, so they work side by si
 
 ## Looking for contributors
 
-This package is maintained by [@alies-dev](https://github.com/sponsors/alies-dev) and is open to new contributors. If you're passionate about Laravel internals and static analysis, consider joining the effort.
+This package is maintained by [@alies-dev](https://github.com/sponsors/alies-dev) and is open to new contributors.
+If you're passionate about Laravel internals and static analysis, consider joining the effort.
 
 Areas where help is especially welcome:
  - [ ] Expanding taint analysis coverage (new Laravel security surfaces)

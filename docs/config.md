@@ -57,7 +57,7 @@ With `failOnInternalError`, the Psalm run fails immediately, so you know the plu
 
 ## env `PSALM_LARAVEL_PLUGIN_CACHE_PATH`
 
-**default**: `sys_get_temp_dir()`
+**default**: `sys_get_temp_dir()/psalm-laravel-<hash>` (project-specific subdirectory)
 
 Environment variable to override the cache location for generated stub files (aliases, etc.).
 
