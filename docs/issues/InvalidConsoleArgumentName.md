@@ -1,3 +1,9 @@
+---
+title: InvalidConsoleArgumentName
+parent: Custom Issues
+nav_order: 2
+---
+
 # InvalidConsoleArgumentName
 
 Emitted when `$this->argument('name')` references an argument that is not defined in the command's signature.

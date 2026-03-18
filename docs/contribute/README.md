@@ -1,3 +1,9 @@
+---
+title: Contributing
+nav_order: 3
+has_children: true
+---
+
 # Contributing
 
 ## How the plugin works

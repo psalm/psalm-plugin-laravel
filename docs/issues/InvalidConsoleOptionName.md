@@ -1,3 +1,9 @@
+---
+title: InvalidConsoleOptionName
+parent: Custom Issues
+nav_order: 3
+---
+
 # InvalidConsoleOptionName
 
 Emitted when `$this->option('name')` references an option that is not defined in the command's signature.

@@ -1,3 +1,9 @@
+---
+title: Architecture Decisions
+parent: Contributing
+nav_order: 1
+---
+
 # Architecture Decisions
 
 Decisions made during development of the plugin. Contributors should follow these to keep the codebase consistent.
@@ -84,4 +90,4 @@ This is acceptable — the handlers gracefully handle any Model subclass.
 
 **Handler registration:** Property handlers (`ModelRelationshipPropertyHandler`, `ModelPropertyAccessorHandler`, etc.) no longer implement Psalm's `PropertyExistenceProviderInterface` etc.
 Instead, `ModelRegistrationHandler` registers their static methods as closures via `registerClosure()`.
-Registration order is preserved (relationship → factory → accessor → column).
+Registration order is preserved (relationship > factory > accessor > column).

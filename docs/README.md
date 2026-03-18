@@ -1,3 +1,8 @@
+---
+title: Home
+nav_order: 1
+---
+
 # About plugin
 
 The plugin helps Psalm to understand Laravel's code (which uses a lot of magic) better.

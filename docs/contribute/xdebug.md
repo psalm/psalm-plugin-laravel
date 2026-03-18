@@ -1,3 +1,9 @@
+---
+title: Debugging with Xdebug
+parent: Contributing
+nav_order: 2
+---
+
 # Debugging with Xdebug
 
 To debug plugin code with Xdebug and PhpStorm:
