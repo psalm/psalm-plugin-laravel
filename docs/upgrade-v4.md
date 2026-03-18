@@ -1,3 +1,8 @@
+---
+title: Upgrading to v4
+nav_order: 5
+---
+
 # Upgrading from v3 to v4
 
 ## Requirements

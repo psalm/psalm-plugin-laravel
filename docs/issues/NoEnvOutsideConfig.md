@@ -1,3 +1,9 @@
+---
+title: NoEnvOutsideConfig
+parent: Custom Issues
+nav_order: 1
+---
+
 # NoEnvOutsideConfig
 
 Emitted when `env()` is called outside the `config/` directory.
