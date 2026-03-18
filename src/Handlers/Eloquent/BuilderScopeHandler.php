@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TGenericObject;
@@ -102,22 +103,43 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
             return true;
         }
 
-        // Check #[Scope] attribute: method name matches directly
+        // Check #[Scope] attribute via Psalm's storage instead of runtime Reflection.
+        // This avoids loading the model class into PHP's runtime and constructing
+        // ReflectionMethod objects for every non-scope method on the model.
         $directMethod = $modelClass . '::' . $methodName;
         if ($codebase->methodExists($directMethod)) {
-            try {
-                $reflection = new \ReflectionMethod($modelClass, $methodName);
-                $attributes = $reflection->getAttributes(Scope::class);
-                if ($attributes !== []) {
-                    self::$scopeCache[$key] = true;
-                    return true;
-                }
-            } catch (\ReflectionException) {
-                // Method doesn't exist at runtime
+            if (self::hasScopeAttribute($codebase, $modelClass, $methodName)) {
+                self::$scopeCache[$key] = true;
+                return true;
             }
         }
 
         self::$scopeCache[$key] = false;
+        return false;
+    }
+
+    /**
+     * Check for #[Scope] attribute using Psalm's method storage rather than runtime Reflection.
+     *
+     * @param class-string<Model> $modelClass
+     * @psalm-mutation-free
+     */
+    private static function hasScopeAttribute(\Psalm\Codebase $codebase, string $modelClass, string $methodName): bool
+    {
+        try {
+            $methodStorage = $codebase->methods->getStorage(
+                new MethodIdentifier($modelClass, \strtolower($methodName)),
+            );
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return false;
+        }
+
+        foreach ($methodStorage->attributes as $attribute) {
+            if ($attribute->fq_class_name === Scope::class) {
+                return true;
+            }
+        }
+
         return false;
     }
 }

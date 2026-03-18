@@ -273,15 +273,28 @@ final class ModelPropertyHandler
         return new Union($literals);
     }
 
-    /** @param class-string $fqcn */
+    /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
+    private static array $nativePropertyCache = [];
+
+    /**
+     * Uses property_exists() instead of Reflection — cheaper and avoids exception overhead
+     * on the non-existence path. Cached because this fires up to 3× per property access
+     * (doesPropertyExist, isPropertyVisible, getPropertyType).
+     *
+     * @param class-string $fqcn
+     * @psalm-external-mutation-free
+     */
     private static function hasNativeProperty(string $fqcn, string $propertyName): bool
     {
-        try {
-            new \ReflectionProperty($fqcn, $propertyName);
-        } catch (\ReflectionException) {
-            return false;
+        $key = $fqcn . '::' . $propertyName;
+
+        if (\array_key_exists($key, self::$nativePropertyCache)) {
+            return self::$nativePropertyCache[$key];
         }
 
-        return true;
+        $result = \property_exists($fqcn, $propertyName);
+        self::$nativePropertyCache[$key] = $result;
+
+        return $result;
     }
 }
