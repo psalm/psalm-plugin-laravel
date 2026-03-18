@@ -12,7 +12,7 @@ use Psalm\Issue\PluginIssue;
  */
 final class NoEnvOutsideConfig extends PluginIssue
 {
-    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/NoEnvOutsideConfig';
+    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/NoEnvOutsideConfig/';
 
     public const ERROR_LEVEL = 1;
 }

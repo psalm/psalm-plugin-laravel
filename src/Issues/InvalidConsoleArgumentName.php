@@ -12,5 +12,5 @@ use Psalm\Issue\PluginIssue;
  */
 final class InvalidConsoleArgumentName extends PluginIssue
 {
-    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/InvalidConsoleArgumentName';
+    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/InvalidConsoleArgumentName/';
 }
