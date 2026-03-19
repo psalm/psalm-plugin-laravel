@@ -107,11 +107,9 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
         // This avoids loading the model class into PHP's runtime and constructing
         // ReflectionMethod objects for every non-scope method on the model.
         $directMethod = $modelClass . '::' . $methodName;
-        if ($codebase->methodExists($directMethod)) {
-            if (self::hasScopeAttribute($codebase, $modelClass, $methodName)) {
-                self::$scopeCache[$key] = true;
-                return true;
-            }
+        if ($codebase->methodExists($directMethod) && self::hasScopeAttribute($codebase, $modelClass, $methodName)) {
+            self::$scopeCache[$key] = true;
+            return true;
         }
 
         self::$scopeCache[$key] = false;

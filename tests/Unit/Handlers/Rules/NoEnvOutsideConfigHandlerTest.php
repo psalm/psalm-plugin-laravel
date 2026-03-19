@@ -27,7 +27,7 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     #[Test]
     public function returns_env_function_id(): void
     {
-        self::assertSame(['env'], NoEnvOutsideConfigHandler::getFunctionIds());
+        $this->assertSame(['env'], NoEnvOutsideConfigHandler::getFunctionIds());
     }
 
     /**
@@ -52,7 +52,7 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     {
         $event = $this->createEvent($filePath);
 
-        self::assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, NoEnvOutsideConfigHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -62,7 +62,7 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
 
         $event = $this->createEvent('/project/config/app.php');
 
-        self::assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, NoEnvOutsideConfigHandler::getFunctionReturnType($event));
     }
 
     private function createEvent(string $filePath): FunctionReturnTypeProviderEvent

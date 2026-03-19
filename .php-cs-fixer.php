@@ -7,6 +7,7 @@ use PhpCsFixer\Finder;
 use PhpCsFixer\Runner\Parallel\ParallelConfigFactory;
 
 return (new Config())
+    ->setUnsupportedPhpVersionAllowed(true)
     ->setRiskyAllowed(false)
     ->setRules([
         '@PER-CS3x0' => true,
