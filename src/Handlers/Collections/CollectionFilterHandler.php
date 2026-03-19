@@ -68,7 +68,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         $tValue = $templateTypeParameters[1];
 
         $narrowed = self::removeFalsyTypes($tValue);
-        if ($narrowed === null) {
+        if (!$narrowed instanceof \Psalm\Type\Union) {
             return null; // nothing to narrow, or would become empty
         }
 
