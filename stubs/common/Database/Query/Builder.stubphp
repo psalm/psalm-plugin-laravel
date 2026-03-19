@@ -208,6 +208,131 @@ class Builder
     public function rawValue(string $expression, array $bindings = []) {}
 
     /**
+     * Add a subselect expression to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @param  string  $as
+     * @return $this
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public function selectSub($query, $as) {}
+
+    /**
+     * Add a select expression to the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $expression
+     * @param  string  $as
+     * @return $this
+     *
+     * @psalm-taint-sink sql $expression
+     */
+    public function selectExpression($expression, $as) {}
+
+    /**
+     * Makes "from" fetch from a subquery.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @param  string  $as
+     * @return $this
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public function fromSub($query, $as) {}
+
+    /**
+     * Add a "subquery join" clause to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @param  string  $as
+     * @param  \Closure|\Illuminate\Contracts\Database\Query\Expression|string  $first
+     * @param  string|null  $operator
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|null  $second
+     * @param  string  $type
+     * @param  bool  $where
+     * @return $this
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public function joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false) {}
+
+    /**
+     * Add a subquery left join to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @param  string  $as
+     * @param  \Closure|\Illuminate\Contracts\Database\Query\Expression|string  $first
+     * @param  string|null  $operator
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|null  $second
+     * @return $this
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public function leftJoinSub($query, $as, $first, $operator = null, $second = null) {}
+
+    /**
+     * Add a subquery right join to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @param  string  $as
+     * @param  \Closure|\Illuminate\Contracts\Database\Query\Expression|string  $first
+     * @param  string|null  $operator
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|null  $second
+     * @return $this
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public function rightJoinSub($query, $as, $first, $operator = null, $second = null) {}
+
+    /**
+     * Add a subquery cross join to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @param  string  $as
+     * @return $this
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public function crossJoinSub($query, $as) {}
+
+    /**
+     * Add a subquery straight join to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @param  string  $as
+     * @param  \Closure|\Illuminate\Contracts\Database\Query\Expression|string  $first
+     * @param  string|null  $operator
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|null  $second
+     * @return $this
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public function straightJoinSub($query, $as, $first, $operator = null, $second = null) {}
+
+    /**
+     * Add a "lateral join" clause to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @param  string  $as
+     * @param  string  $type
+     * @return $this
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public function joinLateral($query, string $as, string $type = 'inner') {}
+
+    /**
+     * Add a lateral left join to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @param  string  $as
+     * @return $this
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public function leftJoinLateral($query, string $as) {}
+
+    /**
      * Retrieve the sum of the values of a given column.
      *
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
