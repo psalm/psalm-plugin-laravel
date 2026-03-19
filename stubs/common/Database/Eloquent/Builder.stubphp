@@ -283,6 +283,8 @@ class Builder implements BuilderContract
      * @param  string  $query
      * @param  array  $bindings
      * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
+     *
+     * @psalm-taint-sink sql $query
      */
     public function fromQuery($query, $bindings = []) {}
 
