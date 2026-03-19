@@ -43,7 +43,7 @@ Psalm docs (deep links):
 | `non-negative-int`         | `TIntRange`              | Wide     | `int<0, max>`                                   |
 | `negative-int`             | `TIntRange`              | Rare     | `int<min, -1>`                                  |
 | `non-positive-int`         | `TIntRange`              | Rare     | `int<min, 0>`                                   |
-| `literal-int`              | `TNonspecificLiteralInt`  | Niche    | An int known at analysis time                   |
+| `literal-int`              | `TNonspecificLiteralInt` | Niche    | An int known at analysis time                   |
 | `int<min, max>`            | `TIntRange`              | Medium   | Range. `min` = PHP_INT_MIN, `max` = PHP_INT_MAX |
 | `int-mask<1, 2, 4>`        | `TIntMask`               | Niche    | Bitmask of listed values                        |
 | `int-mask-of<Foo::FLAG_*>` | `TIntMaskOf`             | Niche    | Bitmask from class constants                    |
@@ -158,8 +158,45 @@ object{foo?: string}               // optional property
 
 ## Conditional Types
 
+Syntax: `(condition ? TypeIfTrue : TypeIfFalse)`. Conditions can test `is`, type narrowing on params, or even `func_num_args()`.
+
 ```php
+// Basic: narrow return type based on a template param
 /** @return (T is string ? int : float) */
+
+// Nullable input → nullable output
+/** @return ($path is null ? null : string) */
+
+// Return type depends on a boolean flag
+/** @return ($choose is true ? TA : TB) */
+
+// Non-empty guard
+/** @return ($format is non-empty-string ? non-empty-string : string) */
+
+// Lowercase propagation
+/** @return ($lowercase is true ? lowercase-string : string) */
+
+// Null-or-value pattern (common in Laravel)
+/** @return ($location is null ? int : int|null) */
+
+// Ternary with union fallback
+/** @return ($return is true ? string : void) */
+/** @return ($return is true ? string : true) */
+/** @return ($return is true ? string : bool) */
+
+// Array emptiness drives return type
+/** @return (TArray is non-empty-array ? non-empty-list<key-of<TArray>> : list<key-of<TArray>>) */
+/** @return (TArray is array<never, never> ? null : TValue) */
+/** @return (TArray is array<never, never> ? false : TValue|false) */
+
+// Nested conditionals
+/**
+ * @return ($num is int ? positive-int|0 : ($num is float ? float : positive-int|0|float))
+ */
+
+// Overload based on argument count
+/** @return (func_num_args() is 2 ? (null|list<float|int|string|null>) : int) */
+/** @return (func_num_args() is 0 ? array<string, string> : string|false) */
 ```
 
 ## Union and Intersection
@@ -269,14 +306,14 @@ All of the above also accept a `@psalm-` prefix (e.g. `@psalm-param`) for advanc
 
 | Annotation               | Notes                                                                                                                                                                                                         |
 |--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `@psalm-yield TValue`   | On a class/interface: declares what type a generator receives when yielding this object. Used for Promise/Deferred patterns -- `TValue` must be a `@template` param. Psalm resolves it via template expansion |
+| `@psalm-yield TValue`    | On a class/interface: declares what type a generator receives when yielding this object. Used for Promise/Deferred patterns -- `TValue` must be a `@template` param. Psalm resolves it via template expansion |
 | `@psalm-variadic`        | On a function: marks it as accepting unlimited arguments even without `...` in the signature. Useful for functions that rely on `func_get_args()` internally                                                  |
 | `@psalm-scope-this Type` | On a statement block: overrides the type of `$this` for the enclosed code. Useful for closures bound to other objects at runtime (e.g. `Closure::bind()`, Laravel macros)                                     |
 
 ### Stub-Specific
 
-| Annotation             | Notes                                                                                                                                                            |
-|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Annotation             | Notes                                                                                                                                                                                            |
+|------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `@psalm-stub-override` | Safety guard for stubs: asserts that the annotated class/method exists in the original codebase. Psalm throws an error if no original counterpart is found, catching typos and stale stubs early |
 
 ### Other
