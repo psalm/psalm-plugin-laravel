@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin;
 
+use Composer\InstalledVersions;
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\LaravelPlugin\Handlers\Ai\LlmOutputTaintHandler;
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
@@ -75,6 +77,27 @@ final class Plugin implements PluginEntryPointInterface
         return $this->findStubFiles(\dirname(__DIR__) . '/stubs/taintAnalysis');
     }
 
+    /**
+     * Load stubs for laravel/ai when installed, matched to major.minor version.
+     * @return list<string>
+     */
+    private function getAiStubs(): array
+    {
+        $version = InstalledVersions::getPrettyVersion('laravel/ai');
+
+        if ($version === null) {
+            return [];
+        }
+
+        // Extract major.minor from semver (e.g., "v0.3.2" → "0.3").
+        // Dev versions like "dev-main" or "0.4.x-dev" are handled via regex.
+        if (!\preg_match('/^v?(\d+\.\d+)/', $version, $matches)) {
+            return [];
+        }
+
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/ai/' . $matches[1]);
+    }
+
     /** @return list<string> */
     private function getStubsForLaravelVersion(string $version): array
     {
@@ -119,6 +142,7 @@ final class Plugin implements PluginEntryPointInterface
             $this->getCommonStubs(),
             $this->getStubsForLaravelVersion(Application::VERSION),
             $this->getTaintAnalysisStubs(),
+            $this->getAiStubs(),
         );
 
         foreach ($stubs as $stubFilePath) {
@@ -180,6 +204,11 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(NoEnvOutsideConfigHandler::class);
+
+        if (InstalledVersions::isInstalled('laravel/ai')) {
+            require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
+            $registration->registerHooksFromClass(LlmOutputTaintHandler::class);
+        }
     }
 
     private function buildSchema(): void

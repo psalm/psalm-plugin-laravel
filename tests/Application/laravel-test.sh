@@ -41,7 +41,7 @@ Options:
     -r, --remove   Remove Laravel project directory after execution
 
 Environment variables:
-    LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 12.11.2)
+    LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 13.1.0)
     COMPOSER_MEMORY_LIMIT        Memory limit for Composer (default: -1)
 EOF
 }
@@ -150,6 +150,111 @@ info "Making different types of classes for Laravel to analyze them using Psalm"
 ./artisan make:trait Traits/ExampleTrait
 ./artisan make:view example-view
 
+info "Installing laravel/ai"
+COMPOSER_MEMORY_LIMIT=-1 composer require "laravel/ai:^0.3" --quiet
+
+info "Making AI agent class"
+./artisan make:agent ExampleAgent
+
+info "Creating AI taint analysis test files"
+mkdir -p app/Ai
+cat > app/Ai/UnsafeLlmOutputToSql.php << 'PHPEOF'
+<?php declare(strict_types=1);
+
+namespace App\Ai;
+
+use Illuminate\Database\Connection;
+use Laravel\Ai\Responses\TextResponse;
+
+final class UnsafeLlmOutputToSql
+{
+    /** LLM output used in raw SQL — must trigger TaintedSql */
+    public function handle(TextResponse $response, Connection $db): void
+    {
+        $db->raw($response->text);
+    }
+}
+PHPEOF
+
+cat > app/Ai/UnsafeLlmOutputToHtml.php << 'PHPEOF'
+<?php declare(strict_types=1);
+
+namespace App\Ai;
+
+use Laravel\Ai\Responses\TextResponse;
+
+final class UnsafeLlmOutputToHtml
+{
+    /** LLM output rendered as HTML — must trigger TaintedHtml */
+    public function handle(TextResponse $response): void
+    {
+        echo $response->text;
+    }
+}
+PHPEOF
+
+cat > app/Ai/UnsafeToolArgsToSql.php << 'PHPEOF'
+<?php declare(strict_types=1);
+
+namespace App\Ai;
+
+use Illuminate\Database\Connection;
+use Laravel\Ai\Tools\Request;
+
+final class UnsafeToolArgsToSql
+{
+    /** LLM-controlled tool arguments used in raw SQL — must trigger TaintedSql */
+    public function handle(Request $request, Connection $db): void
+    {
+        $db->raw((string) $request->string('query'));
+    }
+}
+PHPEOF
+
+cat > app/Ai/UnsafePromptInjection.php << 'PHPEOF'
+<?php declare(strict_types=1);
+
+namespace App\Ai;
+
+use Illuminate\Http\Request;
+use Laravel\Ai\Promptable;
+
+final class UnsafePromptInjection
+{
+    use Promptable;
+
+    public function instructions(): string
+    {
+        return 'You are a helpful assistant.';
+    }
+
+    /** User input sent directly as LLM prompt — must trigger taint issue */
+    public function handle(Request $request): void
+    {
+        /** @var string $question */
+        $question = $request->input('question');
+        $this->prompt($question);
+    }
+}
+PHPEOF
+
+cat > app/Ai/SafeLlmOutputEscaped.php << 'PHPEOF'
+<?php declare(strict_types=1);
+
+namespace App\Ai;
+
+use Laravel\Ai\Responses\TextResponse;
+
+final class SafeLlmOutputEscaped
+{
+    /** LLM output escaped before rendering — should be clean */
+    public function handle(TextResponse $response): void
+    {
+        echo e($response->text);
+    }
+}
+PHPEOF
+
 info "Adding package from source"
 composer config repositories.0 '{"type": "path", "url": "../../"}'
 composer config minimum-stability 'dev'
@@ -167,6 +272,46 @@ else
     info "Running Psalm analysis"
     ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE"
 fi
+
+echo
+
+info "Running taint analysis on AI test files"
+TAINT_PSALM_CONFIG="../../tests/Application/laravel-test-psalm-taint.xml"
+set +e
+TAINT_OUTPUT=$(./vendor/bin/psalm --config="$TAINT_PSALM_CONFIG" --taint-analysis --no-cache 2>&1)
+TAINT_EXIT=$?
+set -e
+echo "$TAINT_OUTPUT"
+
+# Exit code 2 means "issues found" (expected). Anything else is a crash.
+if [ $TAINT_EXIT -ne 2 ]; then
+    error "Psalm taint analysis did not find expected issues (exit code $TAINT_EXIT)"
+fi
+
+# Verify each test file triggers its expected taint issue
+if echo "$TAINT_OUTPUT" | grep -q "UnsafeLlmOutputToSql.*TaintedSql\|TaintedSql.*UnsafeLlmOutputToSql"; then
+    info "OK: UnsafeLlmOutputToSql → TaintedSql"
+else
+    error "UnsafeLlmOutputToSql did not trigger TaintedSql"
+fi
+
+if echo "$TAINT_OUTPUT" | grep -q "UnsafeLlmOutputToHtml.*TaintedHtml\|TaintedHtml.*UnsafeLlmOutputToHtml"; then
+    info "OK: UnsafeLlmOutputToHtml → TaintedHtml"
+else
+    error "UnsafeLlmOutputToHtml did not trigger TaintedHtml"
+fi
+
+if echo "$TAINT_OUTPUT" | grep -q "UnsafeToolArgsToSql.*TaintedSql\|TaintedSql.*UnsafeToolArgsToSql"; then
+    info "OK: UnsafeToolArgsToSql → TaintedSql"
+else
+    error "UnsafeToolArgsToSql did not trigger TaintedSql"
+fi
+
+# Verify safe usage does NOT trigger issues
+if echo "$TAINT_OUTPUT" | grep -q "SafeLlmOutputEscaped"; then
+    error "SafeLlmOutputEscaped triggered a taint issue — false positive"
+fi
+info "OK: SafeLlmOutputEscaped is clean (no false positive)"
 
 echo
 
