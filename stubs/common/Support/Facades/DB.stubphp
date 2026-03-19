@@ -33,11 +33,12 @@ class DB extends Facade
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
+     * @param  array  $fetchUsing
      * @return list<\stdClass>
      *
      * @psalm-taint-sink sql $query
      */
-    public static function select($query, $bindings = [], $useReadPdo = true) {}
+    public static function select($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 
     /**
      * Execute an SQL statement and return the boolean result.
@@ -127,4 +128,40 @@ class DB extends Facade
      * @psalm-taint-sink sql $query
      */
     public static function delete($query, $bindings = []) {}
+
+    /**
+     * Get a scalar type value from a raw SQL expression result.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
+     * @param  bool  $useReadPdo
+     * @return string|int|float|bool|null
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public static function scalar($query, $bindings = [], $useReadPdo = true) {}
+
+    /**
+     * Run a select statement against the database using the write PDO connection.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
+     * @return list<\stdClass>
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public static function selectFromWriteConnection($query, $bindings = []) {}
+
+    /**
+     * Run a select statement against the database and return all result sets.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
+     * @param  bool  $useReadPdo
+     * @param  array  $fetchUsing
+     * @return list<list<\stdClass>>
+     *
+     * @psalm-taint-sink sql $query
+     */
+    public static function selectResultSets($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 }
