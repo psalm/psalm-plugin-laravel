@@ -10,6 +10,7 @@ class Connection
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
+     * @param  array  $fetchUsing
      * @return array
      *
      * @psalm-taint-sink sql $query
@@ -144,6 +145,7 @@ class Connection
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
+     * @param  array  $fetchUsing
      * @return list<list<\stdClass>>
      *
      * @psalm-taint-sink sql $query
