@@ -68,15 +68,14 @@ final class PluckHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // Determine key type: int by default, or array-key when a $key column is provided.
+        // Determine key type: int when no $key argument, array-key when $key is provided.
         // Laravel does NOT apply casts/mutators to the key column — keys come from raw PDO
-        // results and are always string|int. We use array-key as a safe representation.
+        // results and are always string|int. We use array-key regardless of whether the key
+        // argument is a literal or variable, since any non-null key argument causes Laravel
+        // to use that column's values as array keys at runtime.
         $keyType = Type::getInt();
         if (\count($args) >= 2) {
-            $keyColumnName = self::extractStringLiteral($event, $args[1]);
-            if ($keyColumnName !== null) {
-                $keyType = Type::getArrayKey();
-            }
+            $keyType = Type::getArrayKey();
         }
 
         return new Union([
