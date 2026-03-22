@@ -31,7 +31,7 @@ final class ModelPropertyResolver
      */
     public static function extractModelFromUnion(?Union $type): ?string
     {
-        if ($type === null) {
+        if (!$type instanceof \Psalm\Type\Union) {
             return null;
         }
 
@@ -89,7 +89,7 @@ final class ModelPropertyResolver
 
         // Extract column name from the first argument as a string literal
         $argType = $nodeTypeProvider->getType($args[0]->value);
-        if ($argType === null || !$argType->isSingleStringLiteral()) {
+        if (!$argType instanceof \Psalm\Type\Union || !$argType->isSingleStringLiteral()) {
             return null;
         }
 
@@ -101,7 +101,7 @@ final class ModelPropertyResolver
         }
 
         $propertyType = self::resolvePropertyType($codebase, $modelClass, $columnName);
-        if ($propertyType === null) {
+        if (!$propertyType instanceof \Psalm\Type\Union) {
             return null;
         }
 
