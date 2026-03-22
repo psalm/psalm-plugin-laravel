@@ -1,0 +1,29 @@
+<?php
+
+namespace Illuminate\Foundation\Console;
+
+class Kernel
+{
+    /**
+     * Run an Artisan console command by name.
+     *
+     * @param  \Symfony\Component\Console\Command\Command|string  $command
+     * @param  array  $parameters
+     * @param  \Symfony\Component\Console\Output\OutputInterface|null  $outputBuffer
+     * @return int
+     *
+     * @psalm-taint-sink shell $command
+     */
+    public function call(\Symfony\Component\Console\Command\Command|string $command, array $parameters = [], $outputBuffer = null) {}
+
+    /**
+     * Queue an Artisan console command by name.
+     *
+     * @param  string  $command
+     * @param  array  $parameters
+     * @return \Illuminate\Foundation\Bus\PendingDispatch
+     *
+     * @psalm-taint-sink shell $command
+     */
+    public function queue($command, array $parameters = []) {}
+}
