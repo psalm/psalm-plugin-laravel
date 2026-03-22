@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
+use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
-use Psalm\Type;
-use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Union;
 
 /**
@@ -44,41 +42,7 @@ final class PluckHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $args = $event->getCallArgs();
-        if ($args === []) {
-            return null;
-        }
-
-        $columnName = ModelPropertyResolver::extractStringLiteral($event, $args[0]);
-        if ($columnName === null) {
-            return null;
-        }
-
-        // Resolve the model class from Builder<TModel> — TModel is the first template param
-        $templateTypeParameters = $event->getTemplateTypeParameters();
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateTypeParameters[0] ?? null);
-        if ($modelClass === null) {
-            return null;
-        }
-
-        $codebase = $event->getSource()->getCodebase();
-        $propertyType = ModelPropertyResolver::resolvePropertyType($codebase, $modelClass, $columnName);
-        if ($propertyType === null) {
-            return null;
-        }
-
-        // Determine key type: int when no $key argument, array-key when $key is provided.
-        // Laravel does NOT apply casts/mutators to the key column — keys come from raw PDO
-        // results and are always string|int. We use array-key regardless of whether the key
-        // argument is a literal or variable, since any non-null key argument causes Laravel
-        // to use that column's values as array keys at runtime.
-        $keyType = Type::getInt();
-        if (\count($args) >= 2) {
-            $keyType = Type::getArrayKey();
-        }
-
-        return new Union([
-            new TGenericObject(Collection::class, [$keyType, $propertyType]),
-        ]);
+        // Builder<TModel> — TModel is template param at index 0
+        return ModelPropertyResolver::resolvePluckReturnType($event, modelTemplateIndex: 0);
     }
 }
