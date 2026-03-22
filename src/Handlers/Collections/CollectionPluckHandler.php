@@ -49,6 +49,12 @@ final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
         // Collection<TKey, TValue> — TValue (the model) is template param at index 1.
         // For non-Model collections, resolvePluckReturnType returns null and Psalm uses
         // its default type inference.
-        return ModelPropertyResolver::resolvePluckReturnType($event, modelTemplateIndex: 1);
+        return ModelPropertyResolver::resolvePluckReturnType(
+            args: $event->getCallArgs(),
+            templateParams: $event->getTemplateTypeParameters(),
+            modelTemplateIndex: 1,
+            nodeTypeProvider: $event->getSource()->getNodeTypeProvider(),
+            codebase: $event->getSource()->getCodebase(),
+        );
     }
 }
