@@ -261,16 +261,6 @@ function rescue(callable $callback, $rescue = null, $report = true) {}
  */
 function response($content = '', $status = 200, array $headers = []) {}
 
-/**
- * Generate the URL to a named route.
- *
- * @param  string  $name
- * @param  scalar|array|null  $parameters
- * @param  bool  $absolute
- * @return string
- */
-function route($name, $parameters = [], $absolute = true) {}
-
 // secure_asset: nothing to stub
 // secure_url: nothing to stub
 
