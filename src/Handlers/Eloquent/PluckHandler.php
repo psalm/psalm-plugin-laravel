@@ -18,7 +18,7 @@ use Psalm\Type\Union;
  * Narrows the return type of pluck() when called on an Eloquent Builder with a
  * string literal column name that maps to a known model @property annotation.
  *
- * Without this handler, Builder::pluck('email') returns Collection<int, mixed>.
+ * Without this handler, Builder::pluck('email') returns Collection<array-key, mixed>.
  * With it, if the model declares `@property string $email`, the return becomes
  * Collection<int, string>.
  *
@@ -123,7 +123,7 @@ final class PluckHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Look up the type of a model property from @property PHPDoc annotations.
+     * Look up the type of a model property from @property / @property-read PHPDoc annotations.
      *
      * @param class-string<Model> $modelClass
      * @psalm-mutation-free
