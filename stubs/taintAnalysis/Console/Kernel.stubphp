@@ -2,6 +2,9 @@
 
 namespace Illuminate\Contracts\Console;
 
+// Taint annotations for the contract interface.
+// Psalm does not inherit taint annotations from an interface to its implementing class,
+// so the concrete Foundation\Console\Kernel is annotated separately in FoundationKernel.stubphp.
 interface Kernel
 {
     /**
