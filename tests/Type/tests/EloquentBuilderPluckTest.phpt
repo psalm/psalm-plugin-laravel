@@ -5,9 +5,11 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 
 /**
- * pluck() on Builder should infer value type from model @property annotations.
+ * pluck() on Builder and Collection should infer value type from model @property annotations.
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/486
  */
+
+// --- Builder::pluck() ---
 
 /** User has @property string $id — pluck should return Collection<int, string> */
 function test_pluck_with_known_property(): void
@@ -66,6 +68,33 @@ function test_pluck_after_where(): void
 {
     $_result = User::query()->where('active', true)->pluck('id');
     /** @psalm-check-type-exact $_result = Collection<int, string> */
+}
+
+// --- Model static call (proxied via ModelMethodHandler) ---
+
+/** User::pluck() goes through __callStatic → Builder<User>→pluck() */
+function test_pluck_on_model_static(): void
+{
+    $_result = User::pluck('id');
+    /** @psalm-check-type-exact $_result = Collection<int, string> */
+}
+
+// --- Collection::pluck() ---
+
+/** pluck on Eloquent Collection infers value type from model @property */
+function test_pluck_on_eloquent_collection(): void
+{
+    $users = User::all();
+    $_result = $users->pluck('id');
+    /** @psalm-check-type-exact $_result = Collection<int, string> */
+}
+
+/** pluck on Collection with unknown column falls back to default */
+function test_pluck_on_collection_unknown_column(): void
+{
+    $users = User::all();
+    $_result = $users->pluck('unknown_column');
+    /** @psalm-check-type-exact $_result = Collection<array-key, mixed> */
 }
 ?>
 --EXPECTF--

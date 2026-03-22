@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -13,19 +13,19 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Union;
 
 /**
- * Narrows the return type of Builder::pluck() using model @property annotations.
+ * Narrows the return type of Collection::pluck() when the collection contains
+ * Eloquent models, using model @property annotations to infer the value type.
  *
- * Without this handler, Builder::pluck('email') returns Collection<array-key, mixed>.
- * With it, if the model declares `@property string $email`, the return becomes
- * Collection<int, string>.
+ * Handles the common pattern: User::all()->pluck('email') or
+ * User::query()->get()->pluck('email').
  *
- * Also handles User::pluck('column') which is proxied through ModelMethodHandler
- * to Builder<User>::pluck('column').
+ * Both Support\Collection and Eloquent\Collection are registered because Psalm
+ * dispatches handlers based on the called class, not the declaring class.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/486
  * @internal
  */
-final class PluckHandler implements MethodReturnTypeProviderInterface
+final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
 {
     /**
      * @return list<string>
@@ -34,7 +34,7 @@ final class PluckHandler implements MethodReturnTypeProviderInterface
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [Builder::class];
+        return [Collection::class, EloquentCollection::class];
     }
 
     #[\Override]
@@ -54,9 +54,15 @@ final class PluckHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // Resolve the model class from Builder<TModel> — TModel is the first template param
+        // Resolve the model class from Collection<TKey, TValue> — TValue is the second param.
+        // For non-Model collections (e.g. Collection<int, array>), this returns null and we
+        // fall back to Psalm's default type inference.
         $templateTypeParameters = $event->getTemplateTypeParameters();
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateTypeParameters[0] ?? null);
+        if ($templateTypeParameters === null || \count($templateTypeParameters) < 2) {
+            return null;
+        }
+
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateTypeParameters[1]);
         if ($modelClass === null) {
             return null;
         }
@@ -67,11 +73,6 @@ final class PluckHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // Determine key type: int when no $key argument, array-key when $key is provided.
-        // Laravel does NOT apply casts/mutators to the key column — keys come from raw PDO
-        // results and are always string|int. We use array-key regardless of whether the key
-        // argument is a literal or variable, since any non-null key argument causes Laravel
-        // to use that column's values as array keys at runtime.
         $keyType = Type::getInt();
         if (\count($args) >= 2) {
             $keyType = Type::getArrayKey();

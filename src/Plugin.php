@@ -14,6 +14,7 @@ use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
 use Psalm\LaravelPlugin\Handlers\Collections\CollectionFilterHandler;
 use Psalm\LaravelPlugin\Handlers\Console\CommandArgumentHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\CollectionPluckHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\PluckHandler;
@@ -162,8 +163,11 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(ModelMethodHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
         $registration->registerHooksFromClass(BuilderScopeHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/PluckHandler.php';
         $registration->registerHooksFromClass(PluckHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/CollectionPluckHandler.php';
+        $registration->registerHooksFromClass(CollectionPluckHandler::class);
 
         require_once __DIR__ . '/Handlers/Collections/CollectionFilterHandler.php';
         $registration->registerHooksFromClass(CollectionFilterHandler::class);
