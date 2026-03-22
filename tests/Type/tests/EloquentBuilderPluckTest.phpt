@@ -54,6 +54,13 @@ function test_pluck_with_unknown_key_column(): void
     /** @psalm-check-type-exact $_result = Collection<array-key, string> */
 }
 
+/** Variable key column should still use array-key (not int) */
+function test_pluck_with_dynamic_key_column(string $keyColumn): void
+{
+    $_result = User::query()->pluck('id', $keyColumn);
+    /** @psalm-check-type-exact $_result = Collection<array-key, string> */
+}
+
 /** Template type should be preserved through chained Builder methods */
 function test_pluck_after_where(): void
 {
