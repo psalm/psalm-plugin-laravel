@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TGenericObject;
@@ -46,7 +47,8 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
         $codebase = $event->getSource()->getCodebase();
         $templateTypeParameters = $event->getTemplateTypeParameters();
 
-        $modelClass = self::resolveModelClass($templateTypeParameters);
+        // Builder<TModel> — TModel is the first template param
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateTypeParameters[0] ?? null);
         if ($modelClass === null) {
             return null;
         }
@@ -57,28 +59,6 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
                     new Union([new TNamedObject($modelClass)]),
                 ]),
             ]);
-        }
-
-        return null;
-    }
-
-    /**
-     * @param non-empty-list<Union>|null $templateTypeParameters
-     * @return class-string<\Illuminate\Database\Eloquent\Model>|null
-     * @psalm-mutation-free
-     */
-    private static function resolveModelClass(?array $templateTypeParameters): ?string
-    {
-        if ($templateTypeParameters === null) {
-            return null;
-        }
-
-        foreach ($templateTypeParameters as $type) {
-            foreach ($type->getAtomicTypes() as $atomic) {
-                if ($atomic instanceof TNamedObject && \is_a($atomic->value, Model::class, true)) {
-                    return $atomic->value;
-                }
-            }
         }
 
         return null;
