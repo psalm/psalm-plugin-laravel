@@ -89,12 +89,27 @@ function test_pluck_on_eloquent_collection(): void
     /** @psalm-check-type-exact $_result = Collection<int, string> */
 }
 
+/** pluck on Collection with key argument should use array-key */
+function test_pluck_on_collection_with_key(): void
+{
+    $users = User::all();
+    $_result = $users->pluck('email_verified_at', 'id');
+    /** @psalm-check-type-exact $_result = Collection<array-key, \Carbon\CarbonInterface|null> */
+}
+
 /** pluck on Collection with unknown column falls back to default */
 function test_pluck_on_collection_unknown_column(): void
 {
     $users = User::all();
     $_result = $users->pluck('unknown_column');
     /** @psalm-check-type-exact $_result = Collection<array-key, mixed> */
+}
+
+/** Full query pipeline: query()->get()->pluck() preserves template types */
+function test_pluck_on_get_result(): void
+{
+    $_result = User::query()->get()->pluck('id');
+    /** @psalm-check-type-exact $_result = Collection<int, string> */
 }
 ?>
 --EXPECTF--
