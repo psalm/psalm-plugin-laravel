@@ -12,10 +12,12 @@ use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
 use Psalm\LaravelPlugin\Handlers\Collections\CollectionFilterHandler;
+use Psalm\LaravelPlugin\Handlers\Collections\CollectionPluckHandler;
 use Psalm\LaravelPlugin\Handlers\Console\CommandArgumentHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\PluckHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
@@ -159,11 +161,16 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(ModelMethodHandler::class);
+        require_once __DIR__ . '/Util/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
         $registration->registerHooksFromClass(BuilderScopeHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/PluckHandler.php';
+        $registration->registerHooksFromClass(PluckHandler::class);
 
         require_once __DIR__ . '/Handlers/Collections/CollectionFilterHandler.php';
         $registration->registerHooksFromClass(CollectionFilterHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
+        $registration->registerHooksFromClass(CollectionPluckHandler::class);
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(CommandArgumentHandler::class);
