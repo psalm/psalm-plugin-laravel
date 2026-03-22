@@ -43,6 +43,12 @@ final class PluckHandler implements MethodReturnTypeProviderInterface
         }
 
         // Builder<TModel> — TModel is template param at index 0
-        return ModelPropertyResolver::resolvePluckReturnType($event, modelTemplateIndex: 0);
+        return ModelPropertyResolver::resolvePluckReturnType(
+            args: $event->getCallArgs(),
+            templateParams: $event->getTemplateTypeParameters(),
+            modelTemplateIndex: 0,
+            nodeTypeProvider: $event->getSource()->getNodeTypeProvider(),
+            codebase: $event->getSource()->getCodebase(),
+        );
     }
 }

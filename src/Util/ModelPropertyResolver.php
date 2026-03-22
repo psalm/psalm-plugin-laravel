@@ -6,9 +6,8 @@ namespace Psalm\LaravelPlugin\Util;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
-use PhpParser\Node\Arg;
 use Psalm\Codebase;
-use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\NodeTypeProvider;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
@@ -24,21 +23,6 @@ use Psalm\Type\Union;
  */
 final class ModelPropertyResolver
 {
-    /**
-     * Extract a string literal value from a call argument.
-     */
-    public static function extractStringLiteral(
-        MethodReturnTypeProviderEvent $event,
-        Arg $arg,
-    ): ?string {
-        $argType = $event->getSource()->getNodeTypeProvider()->getType($arg->value);
-        if ($argType === null || !$argType->isSingleStringLiteral()) {
-            return null;
-        }
-
-        return $argType->getSingleStringLiteral()->value;
-    }
-
     /**
      * Extract a Model class-string from a Union type, if it contains one.
      *
@@ -81,36 +65,41 @@ final class ModelPropertyResolver
     }
 
     /**
-     * Build a typed Collection return type for pluck() from event context.
+     * Build a typed Collection return type for pluck().
      *
-     * Extracts the column name, resolves the model property type, and determines
+     * Resolves the model property type from @property annotations and determines
      * the key type. Returns null if any step fails, causing the handler to fall
      * back to Psalm's default type inference.
      *
-     * @param int $modelTemplateIndex Which template parameter holds the Model type
-     *                                (0 for Builder<TModel>, 1 for Collection<TKey, TModel>)
+     * @param list<\PhpParser\Node\Arg> $args             Call arguments
+     * @param non-empty-list<Union>|null $templateParams   Template type parameters from the event
+     * @param int $modelTemplateIndex                      Which template parameter holds the Model type
+     *                                                     (0 for Builder<TModel>, 1 for Collection<TKey, TModel>)
      */
     public static function resolvePluckReturnType(
-        MethodReturnTypeProviderEvent $event,
+        array $args,
+        ?array $templateParams,
         int $modelTemplateIndex,
+        NodeTypeProvider $nodeTypeProvider,
+        Codebase $codebase,
     ): ?Union {
-        $args = $event->getCallArgs();
         if ($args === []) {
             return null;
         }
 
-        $columnName = self::extractStringLiteral($event, $args[0]);
-        if ($columnName === null) {
+        // Extract column name from the first argument as a string literal
+        $argType = $nodeTypeProvider->getType($args[0]->value);
+        if ($argType === null || !$argType->isSingleStringLiteral()) {
             return null;
         }
 
-        $templateTypeParameters = $event->getTemplateTypeParameters();
-        $modelClass = self::extractModelFromUnion($templateTypeParameters[$modelTemplateIndex] ?? null);
+        $columnName = $argType->getSingleStringLiteral()->value;
+
+        $modelClass = self::extractModelFromUnion($templateParams[$modelTemplateIndex] ?? null);
         if ($modelClass === null) {
             return null;
         }
 
-        $codebase = $event->getSource()->getCodebase();
         $propertyType = self::resolvePropertyType($codebase, $modelClass, $columnName);
         if ($propertyType === null) {
             return null;
