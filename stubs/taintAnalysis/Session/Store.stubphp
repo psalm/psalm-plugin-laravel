@@ -1,0 +1,91 @@
+<?php
+
+namespace Illuminate\Session;
+
+use Closure;
+
+class Store
+{
+    /**
+     * Get an item from the session.
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function get($key, $default = null) {}
+
+    /**
+     * Get the value of a given key and then forget it.
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function pull($key, $default = null) {}
+
+    /**
+     * Get all of the session data.
+     *
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function all() {}
+
+    /**
+     * Get a subset of the session data.
+     *
+     * @param  array  $keys
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function only(array $keys) {}
+
+    /**
+     * Get all the session data except for a specified array of items.
+     *
+     * @param  array  $keys
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function except(array $keys) {}
+
+    /**
+     * Remove an item from the session, returning its value.
+     *
+     * @param  \UnitEnum|string  $key
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function remove($key) {}
+
+    /**
+     * Get the requested item from the flashed input array.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function getOldInput($key = null, $default = null) {}
+
+    /**
+     * Get an item from the session, or store the default value.
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  Closure  $callback
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function remember($key, Closure $callback) {}
+}
