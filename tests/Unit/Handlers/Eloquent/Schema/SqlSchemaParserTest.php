@@ -966,6 +966,7 @@ final class SqlSchemaParserTest extends TestCase
         $schema = $this->parse($sql);
 
         // Malformed table skipped, valid table parsed
+        $this->assertArrayNotHasKey('broken', $schema->tables);
         $this->assertArrayHasKey('valid', $schema->tables);
         $this->assertCount(2, $schema->tables['valid']->columns);
     }

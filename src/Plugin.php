@@ -57,13 +57,12 @@ final class Plugin implements PluginEntryPointInterface
             NoEnvOutsideConfigHandler::init(
                 ApplicationProvider::getApp()->configPath(),
             );
+
+            $this->registerHandlers($registration, $pluginConfig);
+            $this->registerStubs($registration, $pluginConfig);
         } catch (\Throwable $throwable) {
             $this->handleInternalError($throwable, $output, $pluginConfig->failOnInternalError);
-            return;
         }
-
-        $this->registerHandlers($registration, $pluginConfig);
-        $this->registerStubs($registration, $pluginConfig);
     }
 
     /** @return list<string> */
@@ -106,19 +105,23 @@ final class Plugin implements PluginEntryPointInterface
 
         $stubs = [];
 
-        /** @var \SplFileInfo $file */
-        foreach ($iterator as $file) {
-            if ($file->getExtension() !== 'stubphp') {
-                continue;
+        try {
+            /** @var \SplFileInfo $file */
+            foreach ($iterator as $file) {
+                if ($file->getExtension() !== 'stubphp') {
+                    continue;
+                }
+
+                $realPath = $file->getRealPath();
+
+                if (!\is_string($realPath)) {
+                    continue;
+                }
+
+                $stubs[] = $realPath;
             }
-
-            $realPath = $file->getRealPath();
-
-            if (!\is_string($realPath)) {
-                continue;
-            }
-
-            $stubs[] = $realPath;
+        } catch (\UnexpectedValueException) {
+            // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories
         }
 
         return $stubs;
@@ -272,9 +275,7 @@ final class Plugin implements PluginEntryPointInterface
 
                 $sqlParser->addToAggregator($sql, $schemaAggregator);
             } catch (\Throwable $throwable) {
-                $progress->debug(
-                    "Laravel plugin: skipping SQL schema dump '{$file}': {$throwable->getMessage()}\n",
-                );
+                $progress->warning("Laravel plugin: skipping SQL schema dump '{$file}': {$throwable->getMessage()}");
                 continue;
             }
         }
