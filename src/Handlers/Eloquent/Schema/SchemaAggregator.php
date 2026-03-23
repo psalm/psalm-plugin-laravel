@@ -160,14 +160,6 @@ final class SchemaAggregator
 
         $table_name = $call->args[0]->value->value;
 
-        // Schema::create() always starts fresh — a second create replaces the table.
-        // Schema::table() may reference a table created in a migration not seen by
-        // the aggregator (e.g., squashed into an SQL dump, published from a package,
-        // or in a different directory), so auto-create if missing.
-        if ($creating || !isset($this->tables[$table_name])) {
-            $this->tables[$table_name] = new SchemaTable();
-        }
-
         if (
             !isset($call->args[1])
             || !$call->args[1] instanceof PhpParser\Node\Arg
@@ -178,6 +170,15 @@ final class SchemaAggregator
                 !== Blueprint::class)
         ) {
             return;
+        }
+
+        // Schema::create() always starts fresh — a second create replaces the table.
+        // Schema::table() may reference a table created in a migration not seen by
+        // the aggregator (e.g., squashed into an SQL dump or published from a package),
+        // so auto-create if missing. Only done after validating the closure argument
+        // to avoid registering empty tables from unparsable calls.
+        if ($creating || !isset($this->tables[$table_name])) {
+            $this->tables[$table_name] = new SchemaTable();
         }
 
         $update_closure = $call->args[1]->value;
