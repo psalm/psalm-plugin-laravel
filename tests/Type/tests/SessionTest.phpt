@@ -51,4 +51,4 @@ function session_store_remember(Store $session): mixed
     return $session->remember('key', fn () => 'default');
 }
 ?>
---EXPECTF--
+--EXPECT--
