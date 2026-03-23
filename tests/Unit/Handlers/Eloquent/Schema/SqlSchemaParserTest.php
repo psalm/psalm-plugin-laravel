@@ -256,7 +256,7 @@ final class SqlSchemaParserTest extends TestCase
             SQL;
 
         $column = $this->parse($sql)->tables['test']->columns['col'];
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $column->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
         $this->assertTrue($column->default->resolvable);
         $this->assertNull($column->default->value);
     }
@@ -271,7 +271,7 @@ final class SqlSchemaParserTest extends TestCase
             SQL;
 
         $column = $this->parse($sql)->tables['test']->columns['status'];
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $column->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
         $this->assertTrue($column->default->resolvable);
         $this->assertSame('draft', $column->default->value);
     }
@@ -286,7 +286,7 @@ final class SqlSchemaParserTest extends TestCase
             SQL;
 
         $column = $this->parse($sql)->tables['test']->columns['quantity'];
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $column->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
         $this->assertSame(0, $column->default->value);
     }
 
@@ -300,7 +300,7 @@ final class SqlSchemaParserTest extends TestCase
             SQL;
 
         $column = $this->parse($sql)->tables['test']->columns['name'];
-        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $column->default);
+        $this->assertNotInstanceOf(SchemaColumnDefault::class, $column->default);
     }
 
     #[Test]
@@ -313,7 +313,7 @@ final class SqlSchemaParserTest extends TestCase
             SQL;
 
         $column = $this->parse($sql)->tables['test']->columns['created_at'];
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $column->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
         $this->assertFalse($column->default->resolvable);
     }
 
@@ -333,7 +333,7 @@ final class SqlSchemaParserTest extends TestCase
         $column = $this->parse($sql)->tables['test']->columns['status'];
         $this->assertSame(SchemaColumn::TYPE_ENUM, $column->type);
         $this->assertSame(['draft', 'published', 'archived'], $column->options);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $column->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
         $this->assertSame('draft', $column->default->value);
     }
 
@@ -455,10 +455,10 @@ final class SqlSchemaParserTest extends TestCase
 
         $table = $this->parse($sql)->tables['test'];
         $this->assertSame(SchemaColumn::TYPE_BOOL, $table->columns['active']->type);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['active']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['active']->default);
         $this->assertFalse($table->columns['active']->default->value);
 
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['visible']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['visible']->default);
         $this->assertTrue($table->columns['visible']->default->value);
     }
 
@@ -776,10 +776,10 @@ final class SqlSchemaParserTest extends TestCase
         $table = $this->parse($sql)->tables['test'];
 
         // Quoted defaults are parsed as strings, matching mysqldump output format
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['count']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['count']->default);
         $this->assertSame('0', $table->columns['count']->default->value);
 
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['price']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['price']->default);
         $this->assertSame('0.00', $table->columns['price']->default->value);
     }
 
@@ -797,10 +797,10 @@ final class SqlSchemaParserTest extends TestCase
         $table = $this->parse($sql)->tables['test'];
 
         // Type-cast defaults are not statically resolvable
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['meta']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['meta']->default);
         $this->assertFalse($table->columns['meta']->default->resolvable);
 
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['started_at']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['started_at']->default);
         $this->assertFalse($table->columns['started_at']->default->resolvable);
     }
 
@@ -818,10 +818,10 @@ final class SqlSchemaParserTest extends TestCase
 
         $this->assertSame(SchemaColumn::TYPE_STRING, $table->columns['occurred_at']->type);
         $this->assertFalse($table->columns['occurred_at']->nullable);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['occurred_at']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['occurred_at']->default);
         $this->assertFalse($table->columns['occurred_at']->default->resolvable);
 
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['recorded_at']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['recorded_at']->default);
         $this->assertFalse($table->columns['recorded_at']->default->resolvable);
     }
 
@@ -853,10 +853,10 @@ final class SqlSchemaParserTest extends TestCase
 
         $table = $this->parse($sql)->tables['test'];
 
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['offset']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['offset']->default);
         $this->assertSame(-1, $table->columns['offset']->default->value);
 
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $table->columns['adjustment']->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $table->columns['adjustment']->default);
         $this->assertSame(-3.14, $table->columns['adjustment']->default->value);
     }
 
@@ -902,7 +902,7 @@ final class SqlSchemaParserTest extends TestCase
             SQL;
 
         $column = $this->parse($sql)->tables['test']->columns['rate'];
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $column->default);
+        $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
         $this->assertEqualsWithDelta(3.14, $column->default->value, PHP_FLOAT_EPSILON);
     }
 
@@ -928,6 +928,56 @@ final class SqlSchemaParserTest extends TestCase
         $this->assertArrayHasKey('id', $table->columns);
         $this->assertArrayHasKey('email', $table->columns);
         $this->assertArrayNotHasKey('name', $table->columns);
+    }
+
+    // ──────────────────────────────────────────────────
+    // Malformed SQL resilience
+    // ──────────────────────────────────────────────────
+
+    #[Test]
+    public function it_handles_unbalanced_parentheses_gracefully(): void
+    {
+        // Truncated SQL — opening paren never closed
+        $sql = <<<'SQL'
+            CREATE TABLE `broken` (
+              `id` bigint unsigned NOT NULL,
+              `name` varchar(255) NOT NULL
+            SQL;
+
+        $schema = $this->parse($sql);
+
+        // extractParenBody returns null → table skipped, no crash
+        $this->assertCount(0, $schema->tables);
+    }
+
+    #[Test]
+    public function it_skips_malformed_table_and_continues_parsing(): void
+    {
+        // First table is malformed (unclosed), second is valid
+        $sql = <<<'SQL'
+            CREATE TABLE `broken` (
+              `id` bigint unsigned NOT NULL
+            CREATE TABLE `valid` (
+              `id` bigint unsigned NOT NULL,
+              `name` varchar(255) NOT NULL
+            );
+            SQL;
+
+        $schema = $this->parse($sql);
+
+        // Malformed table skipped, valid table parsed
+        $this->assertArrayHasKey('valid', $schema->tables);
+        $this->assertCount(2, $schema->tables['valid']->columns);
+    }
+
+    #[Test]
+    public function it_handles_completely_empty_create_table(): void
+    {
+        $sql = "CREATE TABLE `empty` ();";
+
+        $schema = $this->parse($sql);
+        $this->assertArrayHasKey('empty', $schema->tables);
+        $this->assertCount(0, $schema->tables['empty']->columns);
     }
 
     // ──────────────────────────────────────────────────
