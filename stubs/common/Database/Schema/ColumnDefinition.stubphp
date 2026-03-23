@@ -1,0 +1,108 @@
+<?php
+
+namespace Illuminate\Database\Schema;
+
+use Illuminate\Contracts\Database\Query\Expression;
+
+/**
+ * Stub for ColumnDefinition fluent methods.
+ *
+ * These methods are defined as @method annotations in Laravel's source and dispatched
+ * via Fluent::__call(). Psalm does not resolve @method annotations through __call magic,
+ * so we declare them explicitly here.
+ *
+ * Parameter types match Laravel's @method annotations exactly — do not narrow them.
+ */
+class ColumnDefinition
+{
+    /** Place the column "after" another column (MySQL). */
+    public function after(string $column): static {}
+
+    /** Used as a modifier for generatedAs() (PostgreSQL). */
+    public function always(bool $value = true): static {}
+
+    /** Set INTEGER columns as auto-increment (primary key). */
+    public function autoIncrement(): static {}
+
+    /** Change the column. */
+    public function change(): static {}
+
+    /** Specify a character set for the column (MySQL). */
+    public function charset(string $charset): static {}
+
+    /** Specify a collation for the column. */
+    public function collation(string $collation): static {}
+
+    /** Add a comment to the column (MySQL/PostgreSQL). */
+    public function comment(string $comment): static {}
+
+    /** Specify a "default" value for the column. */
+    public function default(mixed $value): static {}
+
+    /** Place the column "first" in the table (MySQL). */
+    public function first(): static {}
+
+    /** Set the starting value of an auto-incrementing field (MySQL/PostgreSQL). */
+    public function from(int $startingValue): static {}
+
+    /** Add a fulltext index. */
+    public function fulltext(bool|string $indexName = null): static {}
+
+    /** Create a SQL compliant identity column (PostgreSQL). */
+    public function generatedAs(string|Expression $expression = null): static {}
+
+    /** Add an index. */
+    public function index(bool|string $indexName = null): static {}
+
+    /** Specify that algorithm=instant should be used for the column operation (MySQL). */
+    public function instant(): static {}
+
+    /** Specify that the column should be invisible to "SELECT *" (MySQL). */
+    public function invisible(): static {}
+
+    /**
+     * Specify the DDL lock mode for the column operation (MySQL).
+     *
+     * @param 'none'|'shared'|'default'|'exclusive' $value
+     */
+    public function lock(string $value): static {}
+
+    /** Allow NULL values to be inserted into the column. */
+    public function nullable(bool $value = true): static {}
+
+    /** Mark the computed generated column as persistent (SQL Server). */
+    public function persisted(): static {}
+
+    /** Add a primary index. */
+    public function primary(bool $value = true): static {}
+
+    /** Add a spatial index. */
+    public function spatialIndex(bool|string $indexName = null): static {}
+
+    /** Set the starting value of an auto-incrementing field (MySQL/PostgreSQL). */
+    public function startingValue(int $startingValue): static {}
+
+    /** Create a stored generated column (MySQL/PostgreSQL/SQLite). */
+    public function storedAs(string|Expression $expression): static {}
+
+    /** Specify a type for the column. */
+    public function type(string $type): static {}
+
+    /** Add a unique index. */
+    public function unique(bool|string $indexName = null): static {}
+
+    /** Set the INTEGER column as UNSIGNED (MySQL). */
+    public function unsigned(): static {}
+
+    /** Set the TIMESTAMP column to use CURRENT_TIMESTAMP as default value. */
+    public function useCurrent(): static {}
+
+    /** Set the TIMESTAMP column to use CURRENT_TIMESTAMP when updating (MySQL). */
+    public function useCurrentOnUpdate(): static {}
+
+    /** Add a vector index. */
+    public function vectorIndex(bool|string $indexName = null): static {}
+
+    /** Create a virtual generated column (MySQL/PostgreSQL/SQLite). */
+    public function virtualAs(string|Expression $expression): static {}
+}
