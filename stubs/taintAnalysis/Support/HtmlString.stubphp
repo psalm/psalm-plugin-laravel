@@ -1,0 +1,19 @@
+<?php
+
+namespace Illuminate\Support;
+
+class HtmlString
+{
+    /**
+     * Create a new HTML string instance.
+     *
+     * HtmlString marks content as "safe HTML" that bypasses Blade's {{ }} escaping.
+     * If user input is wrapped in HtmlString, it creates an XSS vulnerability
+     * that is invisible in Blade templates.
+     *
+     * @param  string  $html
+     *
+     * @psalm-taint-sink html $html
+     */
+    public function __construct($html = '') {}
+}
