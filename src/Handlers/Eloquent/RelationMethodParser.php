@@ -104,7 +104,8 @@ final class RelationMethodParser
             $methodStorage = $codebase->methods->getStorage(
                 MethodIdentifier::wrap($methodId),
             );
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+            $codebase->progress->debug("Laravel plugin: could not get method storage for {$methodId}: {$e->getMessage()}\n");
             return null;
         }
 
@@ -115,7 +116,8 @@ final class RelationMethodParser
 
         try {
             $stmts = $codebase->getStatementsForFile($location->file_path);
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+            $codebase->progress->debug("Laravel plugin: could not get statements for {$location->file_path}: {$e->getMessage()}\n");
             return null;
         }
 

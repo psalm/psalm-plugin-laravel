@@ -34,6 +34,9 @@ final class ModelRelationshipPropertyHandler
     /** @var array<string, Union> Cache for getPropertyType() keyed by "class::property" */
     private static array $propertyTypeCache = [];
 
+    /** @var array<string, bool> Cache for hasUserPseudoProperty() keyed by "class::$property" */
+    private static array $pseudoPropertyCache = [];
+
     /**
      * Relation classes that return a collection of models when accessed as a property.
      * All other Relation subclasses return a single nullable model (?TRelatedModel).
@@ -58,9 +61,7 @@ final class ModelRelationshipPropertyHandler
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
 
-        // Defer to user @property PHPDoc
-        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
-        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+        if (self::hasUserPseudoProperty($codebase, $fq_classlike_name, $property_name)) {
             return null;
         }
 
@@ -81,9 +82,7 @@ final class ModelRelationshipPropertyHandler
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
 
-        // Defer to user @property PHPDoc
-        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
-        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+        if (self::hasUserPseudoProperty($codebase, $fq_classlike_name, $property_name)) {
             return null;
         }
 
@@ -106,9 +105,7 @@ final class ModelRelationshipPropertyHandler
         $fq_classlike_name = $event->getFqClasslikeName();
         $property_name = $event->getPropertyName();
 
-        // Defer to user @property PHPDoc
-        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
-        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+        if (self::hasUserPseudoProperty($codebase, $fq_classlike_name, $property_name)) {
             return null;
         }
 
@@ -151,7 +148,8 @@ final class ModelRelationshipPropertyHandler
             $selfClass = $fq_classlike_name;
             try {
                 $methodReturnType = $codebase->getMethodReturnType($methodId, $selfClass);
-            } catch (\InvalidArgumentException) {
+            } catch (\InvalidArgumentException $e) {
+                $codebase->progress->debug("Laravel plugin: could not get return type for {$methodId}: {$e->getMessage()}\n");
                 $methodReturnType = null;
             }
         }
@@ -277,6 +275,27 @@ final class ModelRelationshipPropertyHandler
     }
 
     /**
+     * Check whether the user has declared a @property PHPDoc for this property.
+     * If so, we defer to their declaration instead of providing a relationship type.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function hasUserPseudoProperty(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
+    {
+        $key = $fq_classlike_name . '::$' . $property_name;
+
+        if (\array_key_exists($key, self::$pseudoPropertyCache)) {
+            return self::$pseudoPropertyCache[$key];
+        }
+
+        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
+        $result = isset($classStorage->pseudo_property_get_types['$' . $property_name]);
+        self::$pseudoPropertyCache[$key] = $result;
+
+        return $result;
+    }
+
+    /**
      * Check whether a method on the given class is a relationship method.
      *
      * Accepts both generic (BelongsTo<Vault, Contact>) and non-generic (BelongsTo)
@@ -296,7 +315,8 @@ final class ModelRelationshipPropertyHandler
             $selfClass = $fq_classlike_name;
             try {
                 $return_type = $codebase->getMethodReturnType($key, $selfClass);
-            } catch (\InvalidArgumentException) {
+            } catch (\InvalidArgumentException $e) {
+                $codebase->progress->debug("Laravel plugin: could not get return type for {$key}: {$e->getMessage()}\n");
                 $return_type = null;
             }
 
