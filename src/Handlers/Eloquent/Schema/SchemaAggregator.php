@@ -107,7 +107,7 @@ final class SchemaAggregator
                 && \strtolower($stmt->name->toString()) !== 'down'
                 && \is_array($stmt->stmts)
             ) {
-                $this->addUpMethodStatements($stmt->stmts);
+                $this->addMethodStatements($stmt->stmts);
             }
         }
     }
@@ -115,7 +115,7 @@ final class SchemaAggregator
     /**
      * @param array<array-key, \PhpParser\Node\Stmt> $stmts
      */
-    private function addUpMethodStatements(array $stmts): void
+    private function addMethodStatements(array $stmts): void
     {
         // Flatten nested block structures (if/else, try/catch, foreach, etc.)
         // so Schema calls inside conditionals are not missed.
@@ -383,6 +383,7 @@ final class SchemaAggregator
                         case 'timestamps':
                         case 'timestampstz':
                         case 'nullabletimestamps':
+                        case 'nullabletimestampstz':
                             $table->setColumn(new SchemaColumn('created_at', 'string', true));
                             $table->setColumn(new SchemaColumn('updated_at', 'string', true));
                             break;
@@ -775,7 +776,7 @@ final class SchemaAggregator
             $instance = $reflection->newInstanceWithoutConstructor();
 
             return $instance->getForeignKey();
-        } catch (\Throwable) {
+        } catch (\ReflectionException) {
             return null;
         }
     }
