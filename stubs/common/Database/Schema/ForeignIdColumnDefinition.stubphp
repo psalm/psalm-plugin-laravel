@@ -5,10 +5,9 @@ namespace Illuminate\Database\Schema;
 /**
  * Stub for ForeignIdColumnDefinition.
  *
- * Redeclares commonly-chained fluent methods to return ForeignIdColumnDefinition
- * instead of the parent's `static` return type. This prevents Psalm from creating
- * an intersection type (ColumnDefinition&ForeignIdColumnDefinition) that routes
- * constrained()/references() through ColumnDefinition::__call.
+ * Redeclares commonly-chained fluent methods so their return type stays
+ * ForeignIdColumnDefinition, preserving access to constrained() and references()
+ * after chaining calls like nullable().
  */
 class ForeignIdColumnDefinition extends ColumnDefinition
 {
@@ -27,18 +26,9 @@ class ForeignIdColumnDefinition extends ColumnDefinition
     /** Place the column "after" another column (MySQL). */
     public function after(string $column): ForeignIdColumnDefinition {}
 
-    /**
-     * Create a foreign key constraint on this column referencing the "id" column
-     * of the conventionally related table.
-     *
-     * @return ForeignKeyDefinition
-     */
+    /** Create a foreign key constraint referencing the "id" column of the related table. */
     public function constrained(?string $table = null, ?string $column = null, ?string $indexName = null): ForeignKeyDefinition {}
 
-    /**
-     * Specify which column this foreign ID references on another table.
-     *
-     * @return ForeignKeyDefinition
-     */
+    /** Specify which column this foreign ID references on another table. */
     public function references(string $column, ?string $indexName = null): ForeignKeyDefinition {}
 }

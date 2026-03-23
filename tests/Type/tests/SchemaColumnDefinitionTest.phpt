@@ -47,7 +47,17 @@ Schema::create('posts', function (Blueprint $table) {
     $_foreignId = $table->foreignId('user_id');
     /** @psalm-check-type-exact $_foreignId = ForeignIdColumnDefinition */
 
-    // nullable() on ForeignIdColumnDefinition preserves the type for constrained()
+    // nullable() preserves ForeignIdColumnDefinition type for constrained()
+    $_afterNullable = $table->foreignId('temp_id')->nullable();
+    /** @psalm-check-type-exact $_afterNullable = ForeignIdColumnDefinition */
+
+    $_constrained = $table->foreignId('check_id')->constrained();
+    /** @psalm-check-type-exact $_constrained = ForeignKeyDefinition */
+
+    $_fkFromRef = $table->foreignId('ref_id')->references('id');
+    /** @psalm-check-type-exact $_fkFromRef = ForeignKeyDefinition */
+
+    // Common migration patterns
     $table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();
     $table->foreignId('category_id')->constrained()->cascadeOnDelete();
 });
