@@ -20,11 +20,15 @@ use Psalm\Type\Union;
 
 /**
  * Discovers Eloquent model classes from Psalm's scanned codebase and registers
- * property handlers for each discovered model.
+ * property and method handlers for each discovered model.
  *
  * This replaces directory-based model scanning: instead of pre-scanning directories
  * for model files, we wait until Psalm has populated its codebase with all project
- * classes, then register property handlers for every concrete Model subclass found.
+ * classes, then register handlers for every concrete Model subclass found.
+ *
+ * Registers per-model:
+ * - Method existence, visibility, params, and return types ({@see ModelMethodHandler})
+ * - Property existence, visibility, and types (relationships, accessors, columns)
  *
  * @internal
  */
@@ -73,6 +77,27 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     {
         $className = $storage->name;
         $properties = $codebase->properties;
+        $methods = $codebase->methods;
+
+        // Method existence, visibility, and return types for static __callStatic forwarding.
+        // Registered per-model because Psalm's provider lookup uses exact class names —
+        // a handler for Model::class is not consulted for App\Models\User.
+        $methods->existence_provider->registerClosure(
+            $className,
+            ModelMethodHandler::doesMethodExist(...),
+        );
+        $methods->visibility_provider->registerClosure(
+            $className,
+            ModelMethodHandler::isMethodVisible(...),
+        );
+        $methods->params_provider->registerClosure(
+            $className,
+            ModelMethodHandler::getMethodParams(...),
+        );
+        $methods->return_type_provider->registerClosure(
+            $className,
+            ModelMethodHandler::getReturnTypeForForwardedMethod(...),
+        );
 
         // Registration order matters — the first non-null result wins.
 
