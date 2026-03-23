@@ -127,6 +127,20 @@ final class CollectionTypes
         return $this->getCollection()->put(5, 'five');
     }
 
+    /**
+     * count() returns int<0, max>, not just int.
+     * This prevents false-positive ArgumentTypeCoercion when using count()
+     * in arithmetic expressions passed to offsetGet.
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/499
+     * @psalm-check-type-exact $count = int<0, max>
+     */
+    public function countReturnsNonNegativeInt(): int
+    {
+        $count = $this->getCollection()->count();
+
+        return $count;
+    }
+
     public function isEmpty_assertions_works(): null
     {
         $collection = $this->getCollection();

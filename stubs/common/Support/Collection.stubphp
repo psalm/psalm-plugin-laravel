@@ -98,6 +98,14 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function shift($count = 1) {}
 
     /**
+     * Count the number of items in the collection.
+     *
+     * @psalm-mutation-free
+     * @return int<0, max>
+     */
+    public function count(): int {}
+
+    /**
      * Determine if the collection is empty or not.
      *
      * @psalm-mutation-free

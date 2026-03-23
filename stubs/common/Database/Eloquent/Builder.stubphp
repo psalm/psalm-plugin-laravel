@@ -536,7 +536,7 @@ class Builder implements BuilderContract
 
     /**
      * @param  array  $values
-     * @return int
+     * @return int<0, max>
      */
     public function update(array $values) {}
 
@@ -544,7 +544,7 @@ class Builder implements BuilderContract
      * @param  string  $column
      * @param  float|int  $amount
      * @param  array  $extra
-     * @return int
+     * @return int<0, max>
      */
     public function increment($column, $amount = 1, array $extra = []) {}
 
@@ -552,7 +552,7 @@ class Builder implements BuilderContract
      * @param  string  $column
      * @param  float|int  $amount
      * @param  array  $extra
-     * @return int
+     * @return int<0, max>
      */
     public function decrement($column, $amount = 1, array $extra = []) {}
 
@@ -628,7 +628,7 @@ class Builder implements BuilderContract
 
     /**
      * @param  string  $columns
-     * @return int
+     * @return int<0, max>
      */
     public function count($columns = '*') {}
 }
