@@ -156,33 +156,33 @@ final class ModelRelationshipPropertyHandler
             }
         }
 
-        if (!$methodReturnType instanceof Union) {
-            // No return type at all — try parsing the method body to determine
-            // both the relation type and the related model.
-            $parsed = RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name);
-            if ($parsed === null) {
-                return Type::getMixed();
+        // Tier 1: Try to extract from generic type parameters (existing behavior).
+        // Only possible when the return type is a Union with a TGenericObject.
+        if ($methodReturnType instanceof Union) {
+            $genericResult = self::resolveFromGenericParams($methodReturnType);
+            if ($genericResult instanceof Union) {
+                return $genericResult;
             }
-
-            $modelType = self::relatedModelType($parsed['relatedModel']);
-
-            return self::buildPropertyType($parsed['relationClass'], $modelType);
         }
 
-        // Tier 1: Try to extract from generic type parameters (existing behavior)
-        $genericResult = self::resolveFromGenericParams($methodReturnType);
-        if ($genericResult instanceof Union) {
-            return $genericResult;
+        // Tier 2: Parse the method body AST to find the related model class-string.
+        // This handles both non-generic return types (e.g. plain BelongsTo) and methods
+        // with no return type at all (e.g. public function image() { return $this->morphOne(...); }).
+        $parsed = RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name);
+        if ($parsed !== null) {
+            return self::buildPropertyType(
+                $parsed['relationClass'],
+                self::relatedModelType($parsed['relatedModel']),
+            );
         }
 
-        // Tier 2+3: Non-generic Relation return type — parse method body for the related model,
-        // falling back to the template upper bound (Model) when parsing fails.
-        $relationClassName = self::findRelationClassName($methodReturnType);
-        if ($relationClassName !== null) {
-            $parsed = RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name);
-            $relatedModel = $parsed['relatedModel'] ?? null;
-
-            return self::buildPropertyType($relationClassName, self::relatedModelType($relatedModel));
+        // Tier 3: Fall back using the declared relation class with bounded type (?Model / Collection<int, Model>).
+        // This covers cases where the body couldn't be parsed but the return type is a known Relation.
+        if ($methodReturnType instanceof Union) {
+            $relationClassName = self::findRelationClassName($methodReturnType);
+            if ($relationClassName !== null) {
+                return self::buildPropertyType($relationClassName, self::relatedModelType(null));
+            }
         }
 
         return Type::getMixed();
@@ -294,7 +294,11 @@ final class ModelRelationshipPropertyHandler
             // getMethodReturnType() takes $self_class by reference and may set it to null,
             // so use a disposable copy to protect $fq_classlike_name.
             $selfClass = $fq_classlike_name;
-            $return_type = $codebase->getMethodReturnType($key, $selfClass);
+            try {
+                $return_type = $codebase->getMethodReturnType($key, $selfClass);
+            } catch (\InvalidArgumentException) {
+                $return_type = null;
+            }
 
             // Cache the return type so resolvePropertyType() can reuse it without
             // calling getMethodReturnType() again (avoids redundant alias resolution,
