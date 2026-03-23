@@ -43,6 +43,10 @@ class ForeignKeyDefinition
      */
     public function onUpdate(string $action): static {}
 
-    /** Specify the referenced column(s). */
+    /**
+     * Specify the referenced column(s).
+     *
+     * @param string|string[] $columns
+     */
     public function references(string|array $columns): static {}
 }
