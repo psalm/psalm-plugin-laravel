@@ -86,7 +86,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
     {
         $source = $event->getSource();
 
-        if ($source === null) {
+        if (!$source instanceof \Psalm\StatementsSource) {
             return null;
         }
 
