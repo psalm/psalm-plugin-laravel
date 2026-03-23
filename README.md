@@ -76,7 +76,7 @@ Maintained versions:
 
 | Laravel Psalm Plugin | PHP   | Laravel   | Psalm | Status |
 |----------------------|-------|-----------|-------|--------|
-| 4.x                  | ^8.3  | 12, 13    | 7     | Beta   |
+| 4.x                  | ^8.3  | 12, 13    | 7     | Stable |
 | 3.x                  | ^8.2  | 11, 12    | 6, 7  | Stable |
 | 2.12+                | ^8.0  | 9, 10, 11 | 5, 6  | Legacy |
 
