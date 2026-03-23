@@ -666,12 +666,12 @@ final class SchemaAggregator
                 $stmt instanceof PhpParser\Node\Stmt\If_ => [
                     $stmt->stmts,
                     ...\array_map(static fn(PhpParser\Node\Stmt\ElseIf_ $e): array => $e->stmts, $stmt->elseifs),
-                    ...($stmt->else !== null ? [$stmt->else->stmts] : []),
+                    ...($stmt->else instanceof \PhpParser\Node\Stmt\Else_ ? [$stmt->else->stmts] : []),
                 ],
                 $stmt instanceof PhpParser\Node\Stmt\TryCatch => [
                     $stmt->stmts,
                     ...\array_map(static fn(PhpParser\Node\Stmt\Catch_ $c): array => $c->stmts, $stmt->catches),
-                    ...($stmt->finally !== null ? [$stmt->finally->stmts] : []),
+                    ...($stmt->finally instanceof \PhpParser\Node\Stmt\Finally_ ? [$stmt->finally->stmts] : []),
                 ],
                 $stmt instanceof PhpParser\Node\Stmt\Foreach_,
                 $stmt instanceof PhpParser\Node\Stmt\For_,
