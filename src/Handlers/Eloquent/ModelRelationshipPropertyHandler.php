@@ -149,13 +149,24 @@ final class ModelRelationshipPropertyHandler
             // Fallback: getMethodReturnType() takes $self_class by reference and may set it
             // to null, so use a disposable copy to protect $fq_classlike_name.
             $selfClass = $fq_classlike_name;
-            $methodReturnType = $codebase->getMethodReturnType($methodId, $selfClass);
+            try {
+                $methodReturnType = $codebase->getMethodReturnType($methodId, $selfClass);
+            } catch (\InvalidArgumentException) {
+                $methodReturnType = null;
+            }
         }
 
         if (!$methodReturnType instanceof Union) {
-            // No return type at all — try parsing the method body to determine the relation type
-            return self::resolveFromMethodBody($codebase, $fq_classlike_name, $property_name)
-                ?? Type::getMixed();
+            // No return type at all — try parsing the method body to determine
+            // both the relation type and the related model.
+            $parsed = RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name);
+            if ($parsed === null) {
+                return Type::getMixed();
+            }
+
+            $modelType = self::relatedModelType($parsed['relatedModel']);
+
+            return self::buildPropertyType($parsed['relationClass'], $modelType);
         }
 
         // Tier 1: Try to extract from generic type parameters (existing behavior)
@@ -164,41 +175,31 @@ final class ModelRelationshipPropertyHandler
             return $genericResult;
         }
 
-        // Tier 2: Non-generic Relation return type — parse method body for the related model
+        // Tier 2+3: Non-generic Relation return type — parse method body for the related model,
+        // falling back to the template upper bound (Model) when parsing fails.
         $relationClassName = self::findRelationClassName($methodReturnType);
         if ($relationClassName !== null) {
             $parsed = RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name);
+            $relatedModel = $parsed['relatedModel'] ?? null;
 
-            if ($parsed !== null && $parsed['relatedModel'] !== null) {
-                return self::buildPropertyType($relationClassName, new Union([new TNamedObject($parsed['relatedModel'])]));
-            }
-
-            // Tier 3: Fall back to bounded types using the template upper bound (Model)
-            return self::buildPropertyType($relationClassName, new Union([new TNamedObject(Model::class)]));
+            return self::buildPropertyType($relationClassName, self::relatedModelType($relatedModel));
         }
 
         return Type::getMixed();
     }
 
     /**
-     * Resolve the property type from a method with no declared return type,
-     * by parsing the body to find both the relation type and the related model.
+     * Build a Union for the related model type, falling back to Model when unknown.
+     *
+     * @param ?string $relatedModel FQCN of the related model, or null when:
+     *                              - the relation is polymorphic (morphTo)
+     *                              - the first argument could not be statically resolved
+     *
+     * @psalm-pure
      */
-    private static function resolveFromMethodBody(
-        Codebase $codebase,
-        string $className,
-        string $methodName,
-    ): ?Union {
-        $parsed = RelationMethodParser::parse($codebase, $className, $methodName);
-        if ($parsed === null) {
-            return null;
-        }
-
-        $modelType = $parsed['relatedModel'] !== null
-            ? new Union([new TNamedObject($parsed['relatedModel'])])
-            : new Union([new TNamedObject(Model::class)]);
-
-        return self::buildPropertyType($parsed['relationClass'], $modelType);
+    private static function relatedModelType(?string $relatedModel): Union
+    {
+        return new Union([new TNamedObject($relatedModel ?? Model::class)]);
     }
 
     /**
@@ -211,11 +212,6 @@ final class ModelRelationshipPropertyHandler
      */
     private static function resolveFromGenericParams(Union $methodReturnType): ?Union
     {
-        /** @var Union|null $modelType */
-        $modelType = null;
-        /** @var TGenericObject|null $relationType */
-        $relationType = null;
-
         foreach ($methodReturnType->getAtomicTypes() as $atomicType) {
             if (!$atomicType instanceof TGenericObject) {
                 continue;
@@ -225,26 +221,17 @@ final class ModelRelationshipPropertyHandler
                 continue;
             }
 
-            $relationType = $atomicType;
-
-            // The first type_param is always TRelatedModel in our stubs
-            foreach ($atomicType->type_params as $childNode) {
-                foreach ($childNode->getAtomicTypes() as $childAtomicType) {
-                    if (!$childAtomicType instanceof TNamedObject) {
-                        continue;
-                    }
-
-                    $modelType = $childNode;
-                    break 3;
-                }
+            // The first type_param is always TRelatedModel in our stubs.
+            // Use it directly — it's a Union that may contain a named model type.
+            $modelType = $atomicType->type_params[0] ?? null;
+            if ($modelType instanceof Union && $modelType->hasObjectType()) {
+                return self::buildPropertyType($atomicType->value, $modelType);
             }
+
+            break;
         }
 
-        if ($modelType === null || $relationType === null) {
-            return null;
-        }
-
-        return self::buildPropertyType($relationType->value, $modelType);
+        return null;
     }
 
     /**
@@ -283,11 +270,10 @@ final class ModelRelationshipPropertyHandler
             ]);
         }
 
-        // Single relation — return nullable model type
-        return Type::combineUnionTypes(
-            $modelType,
-            new Union([new TNull()]),
-        );
+        // Single relation — return nullable model type.
+        // Build the union directly instead of using Type::combineUnionTypes() which
+        // dispatches into the heavyweight TypeCombiner for this simple case.
+        return $modelType->getBuilder()->addType(new TNull())->freeze();
     }
 
     /**

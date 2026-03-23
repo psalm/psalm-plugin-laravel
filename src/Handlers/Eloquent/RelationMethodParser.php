@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use PhpParser;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
@@ -40,16 +41,19 @@ final class RelationMethodParser
 {
     /**
      * Parsed result: the relationship factory method and optionally the related model FQCN.
-     * relatedModel is null for morphTo() since the related type is polymorphic.
      *
-     * @var array<string, ?array{relationClass: class-string, relatedModel: ?string}>
+     * relatedModel is null when:
+     * - The relation is polymorphic (morphTo) — the related type is not statically determinable
+     * - The first argument could not be statically resolved (e.g. a variable or method call)
+     *
+     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string}>
      */
     private static array $cache = [];
 
     /**
      * Maps HasRelationships factory method names to their corresponding Relation class FQCNs.
      *
-     * @var array<string, class-string>
+     * @var array<string, class-string<Relation>>
      */
     private const FACTORY_TO_RELATION = [
         'hasone' => HasOne::class,
@@ -68,9 +72,10 @@ final class RelationMethodParser
     /**
      * Parse a relationship method body and extract the relation class and related model.
      *
-     * @return ?array{relationClass: class-string, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
      *         null if the method cannot be parsed as a relationship method.
-     *         relatedModel is null for morphTo() (polymorphic, not statically determinable).
+     *         relatedModel is null when polymorphic (morphTo) or when the first argument
+     *         could not be statically resolved.
      */
     public static function parse(Codebase $codebase, string $className, string $methodName): ?array
     {
@@ -87,7 +92,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @return ?array{relationClass: class-string, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
      */
     private static function doParse(Codebase $codebase, string $className, string $methodName): ?array
     {
@@ -127,7 +132,7 @@ final class RelationMethodParser
      * like $this->belongsTo(Vault::class).
      *
      * @param array<array-key, PhpParser\Node\Stmt> $stmts
-     * @return ?array{relationClass: class-string, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
      */
     private static function parseMethodBody(array $stmts): ?array
     {
@@ -146,7 +151,7 @@ final class RelationMethodParser
      * Recursively search an expression for a relationship factory method call.
      * Handles both direct calls and method chains.
      *
-     * @return ?array{relationClass: class-string, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
      */
     private static function findRelationCallInExpr(PhpParser\Node\Expr $expr): ?array
     {

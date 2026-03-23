@@ -91,6 +91,21 @@ function test_morphToMany_without_generics(Vault $vault): Collection
     return $allTags;
 }
 
+function test_hasOneThrough_without_generics(Vault $vault): ?User
+{
+    /** @psalm-check-type-exact $carOwner = User|null */
+    $carOwner = $vault->carOwner;
+    return $carOwner;
+}
+
+/** @return Collection<int, Post> */
+function test_morphedByMany_without_generics(Vault $vault): Collection
+{
+    /** @psalm-check-type-exact $posts = Collection<int, Post> */
+    $posts = $vault->morphedPosts;
+    return $posts;
+}
+
 // --- MorphTo: ?Model (polymorphic, can't determine specific type) ---
 
 function test_morphTo_without_generics(Vault $vault): ?Model

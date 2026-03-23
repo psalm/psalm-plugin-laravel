@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -81,6 +82,18 @@ final class Vault extends Model
     public function allTags(): MorphToMany
     {
         return $this->morphToMany(Tag::class, 'taggable');
+    }
+
+    /** HasOneThrough without generics */
+    public function carOwner(): HasOneThrough
+    {
+        return $this->hasOneThrough(User::class, Car::class);
+    }
+
+    /** morphedByMany — inverse of morphToMany, same Relation class */
+    public function morphedPosts(): MorphToMany
+    {
+        return $this->morphedByMany(Post::class, 'taggable');
     }
 
     // --- Edge cases ---
