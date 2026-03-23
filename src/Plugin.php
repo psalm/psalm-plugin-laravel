@@ -96,10 +96,18 @@ final class Plugin implements PluginEntryPointInterface
             return [];
         }
 
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+            );
+        } catch (\UnexpectedValueException) {
+            return [];
+        }
+
         $stubs = [];
 
         /** @var \SplFileInfo $file */
-        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS)) as $file) {
+        foreach ($iterator as $file) {
             if ($file->getExtension() !== 'stubphp') {
                 continue;
             }
@@ -211,7 +219,7 @@ final class Plugin implements PluginEntryPointInterface
         // Then parse PHP migrations — they modify the base state established by schema dumps.
         $migrationFilePathnames = [];
         foreach ($this->getMigrationDirectories($app) as $directory) {
-            \array_push($migrationFilePathnames, ...$this->findPhpFilesRecursive($directory));
+            \array_push($migrationFilePathnames, ...$this->findPhpFilesRecursive($directory, $codebase->progress));
         }
 
         foreach ($migrationFilePathnames as $file) {
@@ -254,14 +262,21 @@ final class Plugin implements PluginEntryPointInterface
         $sqlParser = new SqlSchemaParser();
 
         foreach ($sqlFiles as $file) {
-            $sql = \file_get_contents($file);
+            try {
+                $sql = \file_get_contents($file);
 
-            if ($sql === false) {
-                $progress->warning("Laravel plugin: could not read SQL schema dump '{$file}'");
+                if ($sql === false) {
+                    $progress->warning("Laravel plugin: could not read SQL schema dump '{$file}'");
+                    continue;
+                }
+
+                $sqlParser->addToAggregator($sql, $schemaAggregator);
+            } catch (\Throwable $throwable) {
+                $progress->debug(
+                    "Laravel plugin: skipping SQL schema dump '{$file}': {$throwable->getMessage()}\n",
+                );
                 continue;
             }
-
-            $sqlParser->addToAggregator($sql, $schemaAggregator);
         }
     }
 
@@ -320,7 +335,7 @@ final class Plugin implements PluginEntryPointInterface
      * Recursively find all .php files in a directory.
      * @return list<string>
      */
-    private function findPhpFilesRecursive(string $directory): array
+    private function findPhpFilesRecursive(string $directory, \Psalm\Progress\Progress $progress): array
     {
         if (!\is_dir($directory)) {
             return [];
@@ -330,22 +345,28 @@ final class Plugin implements PluginEntryPointInterface
             $iterator = new \RecursiveIteratorIterator(
                 new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
             );
-        } catch (\UnexpectedValueException) {
+        } catch (\UnexpectedValueException $unexpectedValueException) {
+            $progress->warning("Laravel plugin: could not read migration directory '{$directory}': {$unexpectedValueException->getMessage()}");
             return [];
         }
 
         $files = [];
 
-        /** @var \SplFileInfo $file */
-        foreach ($iterator as $file) {
-            if ($file->getExtension() !== 'php') {
-                continue;
-            }
+        try {
+            /** @var \SplFileInfo $file */
+            foreach ($iterator as $file) {
+                if ($file->getExtension() !== 'php') {
+                    continue;
+                }
 
-            $realPath = $file->getRealPath();
-            if (\is_string($realPath)) {
-                $files[] = $realPath;
+                $realPath = $file->getRealPath();
+                if (\is_string($realPath)) {
+                    $files[] = $realPath;
+                }
             }
+        } catch (\UnexpectedValueException $unexpectedValueException) {
+            // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories
+            $progress->warning("Laravel plugin: error scanning migration directory '{$directory}': {$unexpectedValueException->getMessage()}");
         }
 
         return $files;

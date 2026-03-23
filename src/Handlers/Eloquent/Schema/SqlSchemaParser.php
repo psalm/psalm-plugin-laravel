@@ -16,7 +16,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
  * @internal
  * @psalm-external-mutation-free
  */
-final class SqlSchemaParser
+final readonly class SqlSchemaParser
 {
     /**
      * SQL keywords that begin non-column lines inside CREATE TABLE blocks.
@@ -391,8 +391,9 @@ final class SqlSchemaParser
         }
 
         // Quoted string: 'value' (SQL uses single quotes for string literals)
+        // Unescape inline — Psalm disallows self:: calls in @psalm-pure context.
+        // Duplicates unescapeSqlString() logic intentionally.
         if (\preg_match("/^'(.*)'$/s", $value, $strMatch)) {
-            // Unescape SQL string: '' → ' and \' → ' and \\ → \
             $unescaped = \str_replace(["''", "\\'", "\\\\"], ["'", "'", "\\"], $strMatch[1]);
 
             return SchemaColumnDefault::resolved($unescaped);
