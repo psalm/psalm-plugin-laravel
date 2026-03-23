@@ -91,6 +91,12 @@ final class SchemaAggregator
     }
 
     /**
+     * Process all class methods except down() to catch Schema calls in helper methods.
+     *
+     * Migrations often delegate Schema calls to private helper methods called from up().
+     * By processing all methods except down(), we capture these delegated calls.
+     * This matches Larastan's behavior. See https://github.com/psalm/psalm-plugin-laravel/issues/507
+     *
      * @param array<int, PhpParser\Node\Stmt> $stmts
      */
     private function addClassStatements(array $stmts): void
@@ -98,7 +104,7 @@ final class SchemaAggregator
         foreach ($stmts as $stmt) {
             if (
                 $stmt instanceof PhpParser\Node\Stmt\ClassMethod
-                && $stmt->name->name === 'up'
+                && $stmt->name->name !== 'down'
                 && \is_array($stmt->stmts)
             ) {
                 $this->addUpMethodStatements($stmt->stmts);
