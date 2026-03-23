@@ -263,7 +263,7 @@ final class SqlSchemaParser
         if (\preg_match('/^(?:enum|set)\s*\((.+)\)/i', $typeStr, $enumMatch)) {
             // Match SQL string literals, allowing escaped quotes ('') and backslash escapes (\')
             \preg_match_all("/'((?:[^'\\\\]|''|\\\\.)*)'/", $enumMatch[1], $optionMatches);
-            $options = \array_map($this->unescapeSqlString(...), $optionMatches[1]);
+            $options = \array_map(self::unescapeSqlString(...), $optionMatches[1]);
         }
 
         $type = $this->mapSqlType($typeStr, $options !== []);
