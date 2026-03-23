@@ -70,6 +70,12 @@ final class SchemaAggregator
     /** @var array<string, SchemaTable> */
     public array $tables = [];
 
+    /** @psalm-external-mutation-free */
+    public function setTable(string $name, SchemaTable $table): void
+    {
+        $this->tables[$name] = $table;
+    }
+
     /**
      * @param array<int, PhpParser\Node\Stmt> $stmts
      */

@@ -20,6 +20,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\PluckHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
@@ -202,14 +203,15 @@ final class Plugin implements PluginEntryPointInterface
 
         $schemaAggregator = new SchemaAggregator();
 
+        // Parse SQL schema dumps first — they represent the base state from squashed
+        // migrations (created by `php artisan schema:dump`). Laravel stores them in
+        // database/schema/ (e.g. mysql-schema.sql, pgsql-schema.sql).
+        $this->parseSqlSchemaDumps($app, $schemaAggregator, $codebase->progress);
+
+        // Then parse PHP migrations — they modify the base state established by schema dumps.
         $migrationFilePathnames = [];
         foreach ($this->getMigrationDirectories($app) as $directory) {
             \array_push($migrationFilePathnames, ...$this->findPhpFilesRecursive($directory));
-        }
-
-        if ($migrationFilePathnames === []) {
-            SchemaStateProvider::setSchema($schemaAggregator);
-            return;
         }
 
         foreach ($migrationFilePathnames as $file) {
@@ -224,6 +226,80 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         SchemaStateProvider::setSchema($schemaAggregator);
+    }
+
+    /**
+     * Parse SQL schema dump files from the database/schema/ directory.
+     *
+     * Laravel's `php artisan schema:dump` creates these files using mysqldump/pg_dump.
+     * They represent squashed migrations and should be parsed before PHP migrations.
+     */
+    private function parseSqlSchemaDumps(
+        Application $app,
+        SchemaAggregator $schemaAggregator,
+        \Psalm\Progress\Progress $progress,
+    ): void {
+        $schemaDir = $app->databasePath('schema');
+
+        if (!\is_dir($schemaDir)) {
+            return;
+        }
+
+        $sqlFiles = $this->findSqlDumpFiles($schemaDir, $progress);
+
+        if ($sqlFiles === []) {
+            return;
+        }
+
+        $sqlParser = new SqlSchemaParser();
+
+        foreach ($sqlFiles as $file) {
+            $sql = \file_get_contents($file);
+
+            if ($sql === false) {
+                $progress->warning("Laravel plugin: could not read SQL schema dump '{$file}'");
+                continue;
+            }
+
+            $sqlParser->addToAggregator($sql, $schemaAggregator);
+        }
+    }
+
+    /**
+     * Find SQL schema dump files in a directory (non-recursive — schema dumps are flat).
+     *
+     * The .dump extension is supported for backward compatibility with schema dumps
+     * created by older Laravel versions. Both extensions contain plain-text SQL.
+     *
+     * @return list<string>
+     */
+    private function findSqlDumpFiles(string $directory, \Psalm\Progress\Progress $progress): array
+    {
+        try {
+            $iterator = new \DirectoryIterator($directory);
+        } catch (\UnexpectedValueException $unexpectedValueException) {
+            $progress->warning("Laravel plugin: could not read schema directory '{$directory}': {$unexpectedValueException->getMessage()}");
+            return [];
+        }
+
+        $files = [];
+
+        foreach ($iterator as $fileInfo) {
+            if (!$fileInfo->isFile() || !\in_array($fileInfo->getExtension(), ['sql', 'dump'], true)) {
+                continue;
+            }
+
+            $realPath = $fileInfo->getRealPath();
+
+            if (\is_string($realPath)) {
+                $files[] = $realPath;
+            }
+        }
+
+        // Sort for deterministic loading order — later files can overwrite tables from earlier ones
+        \sort($files);
+
+        return $files;
     }
 
     /**
@@ -250,10 +326,18 @@ final class Plugin implements PluginEntryPointInterface
             return [];
         }
 
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+            );
+        } catch (\UnexpectedValueException) {
+            return [];
+        }
+
         $files = [];
 
         /** @var \SplFileInfo $file */
-        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS)) as $file) {
+        foreach ($iterator as $file) {
             if ($file->getExtension() !== 'php') {
                 continue;
             }
