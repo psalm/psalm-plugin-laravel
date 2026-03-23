@@ -111,7 +111,9 @@ final class SchemaAggregator
      */
     private function addUpMethodStatements(array $stmts): void
     {
-        foreach ($stmts as $stmt) {
+        // Flatten nested block structures (if/else, try/catch, foreach, etc.)
+        // so Schema calls inside conditionals are not missed.
+        foreach (self::flattenStatements($stmts) as $stmt) {
             $is_schema_method_call = $stmt instanceof PhpParser\Node\Stmt\Expression
                 && $stmt->expr instanceof PhpParser\Node\Expr\StaticCall
                 && $stmt->expr->class instanceof PhpParser\Node\Name
@@ -124,11 +126,11 @@ final class SchemaAggregator
 
             switch ($stmt->expr->name->name) {
                 case 'create':
-                    $this->alterTable($stmt->expr, true);
+                    $this->alterTable($stmt->expr, creating: true);
                     break;
 
                 case 'table':
-                    $this->alterTable($stmt->expr, false);
+                    $this->alterTable($stmt->expr, creating: false);
                     break;
 
                 case 'drop':
@@ -158,7 +160,11 @@ final class SchemaAggregator
 
         $table_name = $call->args[0]->value->value;
 
-        if ($creating) {
+        // Schema::create() always starts fresh — a second create replaces the table.
+        // Schema::table() may reference a table created in a migration not seen by
+        // the aggregator (e.g., squashed into an SQL dump, published from a package,
+        // or in a different directory), so auto-create if missing.
+        if ($creating || !isset($this->tables[$table_name])) {
             $this->tables[$table_name] = new SchemaTable();
         }
 
@@ -264,6 +270,9 @@ final class SchemaAggregator
         $this->tables[$new_table_name] = $table;
     }
 
+    /**
+     * @param array<array-key, PhpParser\Node\Stmt> $stmts
+     */
     private function processColumnUpdates(string $table_name, string $call_arg_name, array $stmts): void
     {
         if (!isset($this->tables[$table_name])) {
@@ -272,7 +281,9 @@ final class SchemaAggregator
 
         $table = $this->tables[$table_name];
 
-        foreach ($stmts as $stmt) {
+        // Flatten nested block structures so Blueprint calls inside
+        // conditionals (e.g., if (!Schema::hasColumn(...))) are discovered.
+        foreach (self::flattenStatements($stmts) as $stmt) {
             $is_named_method_call = $stmt instanceof PhpParser\Node\Stmt\Expression
                 && $stmt->expr instanceof PhpParser\Node\Expr\MethodCall
                 && $stmt->expr->name instanceof PhpParser\Node\Identifier;
@@ -622,6 +633,55 @@ final class SchemaAggregator
                     // addColumn is handled above the switch via variable remapping
             }
         }
+    }
+
+    /**
+     * Recursively collect all statements from nested block structures
+     * (if/elseif/else, try/catch/finally, foreach, for, while, do-while, switch).
+     *
+     * Does NOT recurse into closures or function bodies — those have their own
+     * scope and are handled separately (e.g., the ->after() closure case).
+     *
+     * @param array<array-key, PhpParser\Node\Stmt> $stmts
+     * @return list<PhpParser\Node\Stmt>
+     * @psalm-mutation-free
+     */
+    private static function flattenStatements(array $stmts): array
+    {
+        $result = [];
+
+        foreach ($stmts as $stmt) {
+            $result[] = $stmt;
+
+            // Recurse into block structures that may contain Schema/Blueprint calls
+            $nested_blocks = match (true) {
+                $stmt instanceof PhpParser\Node\Stmt\If_ => [
+                    $stmt->stmts,
+                    ...\array_map(static fn(PhpParser\Node\Stmt\ElseIf_ $e): array => $e->stmts, $stmt->elseifs),
+                    ...($stmt->else !== null ? [$stmt->else->stmts] : []),
+                ],
+                $stmt instanceof PhpParser\Node\Stmt\TryCatch => [
+                    $stmt->stmts,
+                    ...\array_map(static fn(PhpParser\Node\Stmt\Catch_ $c): array => $c->stmts, $stmt->catches),
+                    ...($stmt->finally !== null ? [$stmt->finally->stmts] : []),
+                ],
+                $stmt instanceof PhpParser\Node\Stmt\Foreach_,
+                $stmt instanceof PhpParser\Node\Stmt\For_,
+                $stmt instanceof PhpParser\Node\Stmt\While_,
+                $stmt instanceof PhpParser\Node\Stmt\Do_ => [$stmt->stmts],
+                $stmt instanceof PhpParser\Node\Stmt\Switch_ => \array_map(
+                    static fn(PhpParser\Node\Stmt\Case_ $c): array => $c->stmts,
+                    $stmt->cases,
+                ),
+                default => [],
+            };
+
+            foreach ($nested_blocks as $block) {
+                \array_push($result, ...self::flattenStatements($block));
+            }
+        }
+
+        return $result;
     }
 
     private function resolveDefaultValue(PhpParser\Node\Expr $expr): SchemaColumnDefault
