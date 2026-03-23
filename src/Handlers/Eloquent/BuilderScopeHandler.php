@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -66,9 +67,13 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Check if the model has a scope for the given method name.
+     *
+     * Public so ModelMethodHandler can reuse this for method existence checks
+     * on static Model calls (e.g., User::active() → scopeActive).
+     *
      * @param class-string<\Illuminate\Database\Eloquent\Model> $modelClass
      */
-    private static function hasScopeMethod(\Psalm\Codebase $codebase, string $modelClass, string $methodName): bool
+    public static function hasScopeMethod(Codebase $codebase, string $modelClass, string $methodName): bool
     {
         $key = $modelClass . '::' . $methodName;
 
@@ -102,7 +107,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface
      * @param class-string<Model> $modelClass
      * @psalm-mutation-free
      */
-    private static function hasScopeAttribute(\Psalm\Codebase $codebase, string $modelClass, string $methodName): bool
+    private static function hasScopeAttribute(Codebase $codebase, string $modelClass, string $methodName): bool
     {
         try {
             $methodStorage = $codebase->methods->getStorage(
