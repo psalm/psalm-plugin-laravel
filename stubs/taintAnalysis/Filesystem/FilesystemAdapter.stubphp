@@ -7,7 +7,7 @@ class FilesystemAdapter
     /**
      * Determine if a file or directory exists.
      *
-     * Not a taint sink: boolean check with minimal security risk.
+     * Not a taint sink: read-only boolean check with minimal security risk.
      * Marking it would cause false positives in common patterns
      * like checking if a user upload exists before serving it.
      *
@@ -175,7 +175,7 @@ class FilesystemAdapter
     public function move($from, $to) {}
 
     /**
-     * {@inheritdoc}
+     * Get a resource to read the file.
      *
      * @param  string  $path
      * @return resource|null
@@ -185,7 +185,7 @@ class FilesystemAdapter
     public function readStream($path) {}
 
     /**
-     * {@inheritdoc}
+     * Write a new file using a stream.
      *
      * @param  string  $path
      * @param  resource  $resource
@@ -217,6 +217,18 @@ class FilesystemAdapter
      * @psalm-taint-sink file $path
      */
     public function temporaryUrl($path, $expiration, array $options = []) {}
+
+    /**
+     * Get a temporary upload URL for the file at the given path.
+     *
+     * @param  string  $path
+     * @param  \DateTimeInterface  $expiration
+     * @param  array  $options
+     * @return array
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function temporaryUploadUrl($path, $expiration, array $options = []) {}
 
     /**
      * Create a directory.
