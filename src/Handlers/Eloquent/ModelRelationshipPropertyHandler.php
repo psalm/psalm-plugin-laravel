@@ -319,7 +319,7 @@ final class ModelRelationshipPropertyHandler
 
             // No return type declared — check method body for relationship factory calls.
             // This handles cases like: public function image() { return $this->morphOne(...); }
-            if ($return_type === null && RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name) !== null) {
+            if (!$return_type instanceof Union && RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name) !== null) {
                 self::$relationExistsCache[$key] = true;
                 return true;
             }
