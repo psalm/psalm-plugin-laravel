@@ -41,8 +41,8 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 
 ### `columnFallback` values
 
-- `migrations` — Parses migration files to infer column names and types (e.g. `$user->email` resolves to `string`).
-- `none` — Disables migration-based column inference. Use this if you declare column types via `@property` annotations, or if your migrations can't be statically parsed (SQL migrations, dynamic schema changes).
+- `migrations` — Parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types (e.g. `$user->email` resolves to `string`).
+- `none` — Disables migration-based column inference. Use this if you declare column types via `@property` annotations, or if your migrations can't be statically parsed (dynamic schema changes).
 
 ## `failOnInternalError`
 
