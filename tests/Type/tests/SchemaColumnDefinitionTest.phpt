@@ -3,6 +3,7 @@
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\ColumnDefinition;
+use Illuminate\Database\Schema\ForeignIdColumnDefinition;
 use Illuminate\Database\Schema\ForeignKeyDefinition;
 use Illuminate\Support\Facades\Schema;
 
@@ -39,6 +40,16 @@ Schema::create('test_table', function (Blueprint $table) {
     $table->timestamp('updated_at')->useCurrentOnUpdate();
     $table->float('embedding', 1536)->vectorIndex();
     $table->string('lock_col')->lock('none');
+});
+
+// ForeignIdColumnDefinition: nullable + constrained chain
+Schema::create('posts', function (Blueprint $table) {
+    $_foreignId = $table->foreignId('user_id');
+    /** @psalm-check-type-exact $_foreignId = ForeignIdColumnDefinition */
+
+    // nullable() on ForeignIdColumnDefinition preserves the type for constrained()
+    $table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();
+    $table->foreignId('category_id')->constrained()->cascadeOnDelete();
 });
 
 // ForeignKeyDefinition fluent methods
