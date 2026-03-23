@@ -522,4 +522,94 @@ final class NestedStatementsTest extends AbstractSchemaAggregatorTestCase
         $this->assertTableHasNotNullableColumnOfType('new_column', 'string', $table);
         $this->assertArrayNotHasKey('old_column', $table->columns);
     }
+
+    #[Test]
+    public function schema_drop_inside_nested_block(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Database\Schema\Blueprint;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    Schema::create('temp', static function (Blueprint $table) {
+                        $table->id();
+                    });
+
+                    if (true) {
+                        Schema::dropIfExists('temp');
+                    }
+                }
+            };
+            PHP);
+
+        $this->assertArrayNotHasKey('temp', $schema->tables);
+    }
+
+    #[Test]
+    public function flattening_does_not_recurse_into_closures(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Database\Schema\Blueprint;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    Schema::create('products', static function (Blueprint $table) {
+                        $table->id();
+                        $table->string('name');
+                        $table->after('name', static function (Blueprint $inner) {
+                            if (true) {
+                                $inner->string('sku');
+                            }
+                        });
+                    });
+                }
+            };
+            PHP);
+
+        $table = $schema->tables['products'];
+        $this->assertTableHasNotNullableColumnOfType('name', 'string', $table);
+        // sku is inside an if block within the ->after() closure — the after()
+        // handler recursively calls processColumnUpdates with the closure's own
+        // parameter name, which then flattens the closure's statements. This
+        // verifies the column is found exactly once with the correct binding.
+        $this->assertTableHasNotNullableColumnOfType('sku', 'string', $table);
+    }
+
+    #[Test]
+    public function schema_table_after_schema_create_does_not_reset(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Database\Schema\Blueprint;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    Schema::create('users', static function (Blueprint $table) {
+                        $table->id();
+                        $table->string('email');
+                    });
+
+                    Schema::table('users', static function (Blueprint $table) {
+                        $table->string('name');
+                    });
+                }
+            };
+            PHP);
+
+        $table = $schema->tables['users'];
+        // Schema::table() must NOT reset the table — both columns should exist
+        $this->assertTableHasNotNullableColumnOfType('email', 'string', $table);
+        $this->assertTableHasNotNullableColumnOfType('name', 'string', $table);
+    }
 }
