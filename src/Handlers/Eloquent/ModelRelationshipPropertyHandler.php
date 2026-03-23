@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
@@ -18,6 +19,8 @@ use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
 
 final class ModelRelationshipPropertyHandler
@@ -25,8 +28,23 @@ final class ModelRelationshipPropertyHandler
     /** @var array<string, bool> Cache for relationExists() keyed by "class::property" */
     private static array $relationExistsCache = [];
 
+    /** @var array<string, ?Union> Return types fetched during relationExists(), reused by resolvePropertyType() */
+    private static array $methodReturnTypeCache = [];
+
     /** @var array<string, Union> Cache for getPropertyType() keyed by "class::property" */
     private static array $propertyTypeCache = [];
+
+    /**
+     * Relation classes that return a collection of models when accessed as a property.
+     * All other Relation subclasses return a single nullable model (?TRelatedModel).
+     */
+    private const COLLECTION_RELATIONS = [
+        BelongsToMany::class,
+        HasMany::class,
+        HasManyThrough::class,
+        MorphMany::class,
+        MorphToMany::class,
+    ];
 
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
@@ -104,13 +122,95 @@ final class ModelRelationshipPropertyHandler
             return self::$propertyTypeCache[$cacheKey];
         }
 
-        $methodReturnType = $codebase->getMethodReturnType($cacheKey, $fq_classlike_name);
-        if (!$methodReturnType instanceof Union) {
-            $result = Type::getMixed();
-            self::$propertyTypeCache[$cacheKey] = $result;
-            return $result;
+        $result = self::resolvePropertyType($codebase, $fq_classlike_name, $property_name, $cacheKey);
+        self::$propertyTypeCache[$cacheKey] = $result;
+
+        return $result;
+    }
+
+    /**
+     * Resolve the property type for a relationship accessor. Uses a three-tier strategy:
+     *
+     * 1. Extract from generic type parameters (when return type has explicit generics)
+     * 2. Parse the method body AST to find the related model class-string argument
+     * 3. Fall back to bounded types: ?Model for single relations, Collection<int, Model> for collection
+     */
+    private static function resolvePropertyType(
+        Codebase $codebase,
+        string $fq_classlike_name,
+        string $property_name,
+        string $methodId,
+    ): Union {
+        // Reuse the return type already fetched by relationExists() to avoid a redundant
+        // getMethodReturnType() call (saves alias resolution + MethodIdentifier allocation).
+        if (\array_key_exists($methodId, self::$methodReturnTypeCache)) {
+            $methodReturnType = self::$methodReturnTypeCache[$methodId];
+        } else {
+            // Fallback: getMethodReturnType() takes $self_class by reference and may set it
+            // to null, so use a disposable copy to protect $fq_classlike_name.
+            $selfClass = $fq_classlike_name;
+            $methodReturnType = $codebase->getMethodReturnType($methodId, $selfClass);
         }
 
+        if (!$methodReturnType instanceof Union) {
+            // No return type at all — try parsing the method body to determine the relation type
+            return self::resolveFromMethodBody($codebase, $fq_classlike_name, $property_name)
+                ?? Type::getMixed();
+        }
+
+        // Tier 1: Try to extract from generic type parameters (existing behavior)
+        $genericResult = self::resolveFromGenericParams($methodReturnType);
+        if ($genericResult instanceof Union) {
+            return $genericResult;
+        }
+
+        // Tier 2: Non-generic Relation return type — parse method body for the related model
+        $relationClassName = self::findRelationClassName($methodReturnType);
+        if ($relationClassName !== null) {
+            $parsed = RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name);
+
+            if ($parsed !== null && $parsed['relatedModel'] !== null) {
+                return self::buildPropertyType($relationClassName, new Union([new TNamedObject($parsed['relatedModel'])]));
+            }
+
+            // Tier 3: Fall back to bounded types using the template upper bound (Model)
+            return self::buildPropertyType($relationClassName, new Union([new TNamedObject(Model::class)]));
+        }
+
+        return Type::getMixed();
+    }
+
+    /**
+     * Resolve the property type from a method with no declared return type,
+     * by parsing the body to find both the relation type and the related model.
+     */
+    private static function resolveFromMethodBody(
+        Codebase $codebase,
+        string $className,
+        string $methodName,
+    ): ?Union {
+        $parsed = RelationMethodParser::parse($codebase, $className, $methodName);
+        if ($parsed === null) {
+            return null;
+        }
+
+        $modelType = $parsed['relatedModel'] !== null
+            ? new Union([new TNamedObject($parsed['relatedModel'])])
+            : new Union([new TNamedObject(Model::class)]);
+
+        return self::buildPropertyType($parsed['relationClass'], $modelType);
+    }
+
+    /**
+     * Tier 1: Extract the related model type from generic parameters on the return type.
+     * Works when the method has explicit @psalm-return or @return with generics.
+     *
+     * e.g. HasOne<Phone, User> → extracts Phone as the model type
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function resolveFromGenericParams(Union $methodReturnType): ?Union
+    {
         /** @var Union|null $modelType */
         $modelType = null;
         /** @var TGenericObject|null $relationType */
@@ -121,11 +221,16 @@ final class ModelRelationshipPropertyHandler
                 continue;
             }
 
+            if (!\is_a($atomicType->value, Relation::class, true)) {
+                continue;
+            }
+
             $relationType = $atomicType;
 
+            // The first type_param is always TRelatedModel in our stubs
             foreach ($atomicType->type_params as $childNode) {
                 foreach ($childNode->getAtomicTypes() as $childAtomicType) {
-                    if (!$childAtomicType instanceof Type\Atomic\TNamedObject) {
+                    if (!$childAtomicType instanceof TNamedObject) {
                         continue;
                     }
 
@@ -135,18 +240,42 @@ final class ModelRelationshipPropertyHandler
             }
         }
 
-        $returnType = $modelType;
+        if ($modelType === null || $relationType === null) {
+            return null;
+        }
 
-        $relationsThatReturnACollection = [
-            BelongsToMany::class,
-            HasMany::class,
-            HasManyThrough::class,
-            MorphMany::class,
-            MorphToMany::class,
-        ];
+        return self::buildPropertyType($relationType->value, $modelType);
+    }
 
-        if ($modelType && $relationType && \in_array($relationType->value, $relationsThatReturnACollection, true)) {
-            $returnType = new Union([
+    /**
+     * Find the Relation subclass name from a (possibly non-generic) return type.
+     * Returns the FQCN of the first atomic type that is a Relation subclass, or null.
+     *
+     * @psalm-mutation-free
+     */
+    private static function findRelationClassName(Union $returnType): ?string
+    {
+        foreach ($returnType->getAtomicTypes() as $type) {
+            if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
+                return $type->value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Build the property type based on the relation class and related model type.
+     *
+     * Single relations (HasOne, BelongsTo, MorphOne, MorphTo, HasOneThrough) → ?RelatedModel
+     * Collection relations (HasMany, BelongsToMany, etc.) → Collection<int, RelatedModel>
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function buildPropertyType(string $relationClassName, Union $modelType): Union
+    {
+        if (\in_array($relationClassName, self::COLLECTION_RELATIONS, true)) {
+            return new Union([
                 new TGenericObject(Collection::class, [
                     new Union([new TInt()]),
                     $modelType,
@@ -154,12 +283,19 @@ final class ModelRelationshipPropertyHandler
             ]);
         }
 
-        $result = $returnType ?: Type::getMixed();
-        self::$propertyTypeCache[$cacheKey] = $result;
-
-        return $result;
+        // Single relation — return nullable model type
+        return Type::combineUnionTypes(
+            $modelType,
+            new Union([new TNull()]),
+        );
     }
 
+    /**
+     * Check whether a method on the given class is a relationship method.
+     *
+     * Accepts both generic (BelongsTo<Vault, Contact>) and non-generic (BelongsTo)
+     * return types, as long as the type is a Relation subclass.
+     */
     private static function relationExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
     {
         $key = $fq_classlike_name . '::' . $property_name;
@@ -169,14 +305,33 @@ final class ModelRelationshipPropertyHandler
         }
 
         if ($codebase->methodExists($key)) {
-            $return_type = $codebase->getMethodReturnType($key, $fq_classlike_name);
+            // getMethodReturnType() takes $self_class by reference and may set it to null,
+            // so use a disposable copy to protect $fq_classlike_name.
+            $selfClass = $fq_classlike_name;
+            $return_type = $codebase->getMethodReturnType($key, $selfClass);
+
+            // Cache the return type so resolvePropertyType() can reuse it without
+            // calling getMethodReturnType() again (avoids redundant alias resolution,
+            // class storage lookups, and MethodIdentifier allocation).
+            self::$methodReturnTypeCache[$key] = $return_type;
+
             if ($return_type instanceof Union) {
                 foreach ($return_type->getAtomicTypes() as $type) {
-                    if ($type instanceof TGenericObject && \is_a($type->value, Relation::class, true)) {
+                    // Accept both TGenericObject (e.g. BelongsTo<Vault, Contact>) and
+                    // TNamedObject (e.g. plain BelongsTo without generics) — both indicate
+                    // a relationship method whose name maps to a magic property accessor.
+                    if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
                         self::$relationExistsCache[$key] = true;
                         return true;
                     }
                 }
+            }
+
+            // No return type declared — check method body for relationship factory calls.
+            // This handles cases like: public function image() { return $this->morphOne(...); }
+            if ($return_type === null && RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name) !== null) {
+                self::$relationExistsCache[$key] = true;
+                return true;
             }
         }
 
