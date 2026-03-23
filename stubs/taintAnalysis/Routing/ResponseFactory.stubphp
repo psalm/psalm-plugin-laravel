@@ -56,4 +56,28 @@ class ResponseFactory
      * @psalm-taint-sink html $data
      */
     public function view($view, $data = [], $status = 200, array $headers = []) {}
+
+    /**
+     * Create a new file download response.
+     *
+     * @param  \SplFileInfo|string  $file
+     * @param  string|null  $name
+     * @param  array  $headers
+     * @param  string|null  $disposition
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     *
+     * @psalm-taint-sink file $file
+     */
+    public function download($file, $name = null, array $headers = [], $disposition = 'attachment') {}
+
+    /**
+     * Return the raw contents of a binary file.
+     *
+     * @param  \SplFileInfo|string  $file
+     * @param  array  $headers
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     *
+     * @psalm-taint-sink file $file
+     */
+    public function file($file, array $headers = []) {}
 }
