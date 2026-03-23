@@ -167,6 +167,6 @@ If you're passionate about Laravel internals and static analysis, consider joini
 
 Areas where help is especially welcome:
  - [ ] Expanding taint analysis coverage (new Laravel security surfaces)
- - [ ] Full support for custom Model Query Builders
+ - [ ] [Full support for custom Model Query Builders](https://github.com/psalm/psalm-plugin-laravel/issues/498)
 
 Contributing a taint stub is one of the highest-impact contributions you can make — each stub protects thousands of Laravel apps.
