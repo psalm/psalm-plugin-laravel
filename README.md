@@ -145,7 +145,7 @@ The plugin emits custom issues beyond Psalm's built-in checks:
 
 Under the hood it reads Laravel's native `@method` annotations on facade classes and generates alias stubs based on `Illuminate\Foundation\AliasLoader` (including aliases from your `config/app.php` and package discovery). It also ships hand-crafted stubs for taint analysis and special cases.
 
-It also parses any database migrations it can find to try to understand property types in your database models.
+It also parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types in your database models.
 
 
 ## psalm-plugin-laravel or Larastan?
