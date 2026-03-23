@@ -95,13 +95,9 @@ final class Plugin implements PluginEntryPointInterface
             return [];
         }
 
-        try {
-            $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-            );
-        } catch (\UnexpectedValueException) {
-            return [];
-        }
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+        );
 
         $stubs = [];
 
@@ -121,7 +117,9 @@ final class Plugin implements PluginEntryPointInterface
                 $stubs[] = $realPath;
             }
         } catch (\UnexpectedValueException) {
-            // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories
+            // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories.
+            // Return whatever stubs were collected before the error — partial results from
+            // readable subdirectories are better than none.
         }
 
         return $stubs;
@@ -274,8 +272,8 @@ final class Plugin implements PluginEntryPointInterface
                 }
 
                 $sqlParser->addToAggregator($sql, $schemaAggregator);
-            } catch (\Throwable $throwable) {
-                $progress->warning("Laravel plugin: skipping SQL schema dump '{$file}': {$throwable->getMessage()}");
+            } catch (\Exception $exception) {
+                $progress->warning("Laravel plugin: skipping SQL schema dump '{$file}': {$exception->getMessage()}");
                 continue;
             }
         }
