@@ -250,11 +250,13 @@ final class Plugin implements PluginEntryPointInterface
             },
         );
 
-        $progress->debug(
-            $cache->wasCacheHit()
-                ? "Laravel plugin: loaded migration schema from cache\n"
-                : "Laravel plugin: parsed migration schema (cached for next run)\n",
-        );
+        if ($cache->wasCacheHit()) {
+            $progress->debug("Laravel plugin: loaded migration schema from cache\n");
+        } elseif ($cache->wasCacheWritten()) {
+            $progress->debug("Laravel plugin: parsed migration schema (cached for next run)\n");
+        } else {
+            $progress->debug("Laravel plugin: parsed migration schema (cache write failed — check directory permissions)\n");
+        }
 
         $schemaAggregator = new SchemaAggregator();
         $schemaAggregator->tables = $tables;
