@@ -152,7 +152,7 @@ It also parses SQL schema dumps (`php artisan schema:dump`) and PHP migration fi
 
 **Use both.** They solve different problems:
 
-- **Larastan** excels at Laravel-specific type rules: `model-property` validation, `view-string` checks, `NoUnnecessaryCollectionCall`, Blade analysis via Bladestan, and 17 custom rules.
+- **Larastan** excels at Laravel-specific type rules: `model-property` validation, `view-string` checks, and 17+ custom rules.
 - **psalm-plugin-laravel** in addition to type checks, it provides taint-based security analysis that PHPStan structurally [cannot offer](https://github.com/phpstan/phpstan/issues/8038), plus deep type support for auth guards, Eloquent attributes, scopes, attributes, etc.
 
 Psalm and PHPStan use almost the same annotation syntax, so they work side by side without conflicts.
@@ -167,6 +167,7 @@ If you're passionate about Laravel internals and static analysis, consider joini
 
 Areas where help is especially welcome:
  - [ ] Expanding taint analysis coverage (new Laravel security surfaces)
- - [ ] [Full support for custom Model Query Builders](https://github.com/psalm/psalm-plugin-laravel/issues/498)
+ - [ ] Enhance type inference for Laravel magic
+ - [ ] Enforce best practices by introducing new checks
 
 Contributing a taint stub is one of the highest-impact contributions you can make — each stub protects thousands of Laravel apps.
