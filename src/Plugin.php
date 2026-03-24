@@ -292,6 +292,12 @@ final class Plugin implements PluginEntryPointInterface
             \array_push($files, ...$this->findPhpFilesRecursive($directory, $progress));
         }
 
+        // Sort by basename to match Laravel's migrator ordering (timestamp prefixes
+        // ensure chronological order). Without sorting, RecursiveIteratorIterator
+        // returns files in filesystem order (not alphabetical on ext4/Linux), causing
+        // Schema::table() to run before the corresponding Schema::create().
+        \usort($files, static fn(string $a, string $b): int => \basename($a) <=> \basename($b));
+
         return $files;
     }
 
