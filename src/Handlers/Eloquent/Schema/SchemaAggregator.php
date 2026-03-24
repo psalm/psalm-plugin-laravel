@@ -797,7 +797,10 @@ final class SchemaAggregator
         // here — same pattern as resolveForeignIdForColumn() using reflection.
         try {
             return \is_a($class_name, Schema::class, true);
-        } catch (\Throwable) {
+        } catch (\Exception) {
+            // is_a() with allow_string=true may trigger autoloading; broken autoloaders
+            // can throw RuntimeException or similar. \Error types (fatal autoloading failures)
+            // are not caught — those indicate a genuinely broken environment.
             return false;
         }
     }
@@ -838,8 +841,11 @@ final class SchemaAggregator
             return null;
         }
 
-        // constant() may trigger autoloading. Catch Throwable (not just Error)
-        // because broken autoloaders can throw RuntimeException or other exceptions.
+        // constant() throws \Error when the class doesn't exist (autoloading fails)
+        // and \ValueError when the constant doesn't exist (PHP 8.0+).
+        // Broken autoloaders may also throw \Exception subclasses.
+        // Unlike is_a() which returns false for missing classes, constant() always
+        // throws on failure — so \Throwable is the correct catch scope here.
         try {
             /** @var scalar|array<array-key, mixed>|null — constant() returns mixed, but class constants are always scalar, array, or null */
             $value = \constant($class_name . '::' . $node->name->name);

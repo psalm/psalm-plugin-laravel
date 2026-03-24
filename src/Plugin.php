@@ -337,7 +337,9 @@ final class Plugin implements PluginEntryPointInterface
                 }
 
                 $sqlParser->addToAggregator($sql, $schemaAggregator);
-            } catch (\Exception $exception) {
+            } catch (\RuntimeException $exception) {
+                // SqlSchemaParser is pure string processing and shouldn't throw.
+                // This catch is a safety net for unexpected runtime issues (e.g. memory).
                 $progress->warning("Laravel plugin: skipping SQL schema dump '{$file}': {$exception->getMessage()}");
             }
         }
