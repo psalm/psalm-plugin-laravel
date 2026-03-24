@@ -3,8 +3,12 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function showSearchResults(\Illuminate\Http\Request $request) {
-    echo $request->query('q');
+/**
+ * UploadedFile::get() returns the raw contents of the uploaded file —
+ * it must be treated as a taint source.
+ */
+function renderUploadedFileContents(\Illuminate\Http\UploadedFile $file): void {
+    echo $file->get();
 }
 ?>
 --EXPECTF--
