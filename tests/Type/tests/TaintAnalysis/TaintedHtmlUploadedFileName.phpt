@@ -12,5 +12,5 @@ function renderUploadedFileName(\Illuminate\Http\UploadedFile $file): void {
 }
 ?>
 --EXPECTF--
-TaintedHtml on line %d: Detected tainted HTML
-TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+%ATaintedHtml on line %d: Detected tainted HTML
+%ATaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

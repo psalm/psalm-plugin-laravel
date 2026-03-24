@@ -154,6 +154,7 @@ final class MigrationCacheTest extends TestCase
         // Corrupt all cache files
         $files = \glob($this->cacheDir . '/psalm_laravel_migrations_*.cache');
         $this->assertNotFalse($files);
+        $this->assertNotEmpty($files, 'Cache file should have been created by remember()');
 
         foreach ($files as $file) {
             \file_put_contents($file, 'corrupted data');
@@ -180,6 +181,7 @@ final class MigrationCacheTest extends TestCase
 
         $files = \glob($this->cacheDir . '/psalm_laravel_migrations_*.cache');
         $this->assertNotFalse($files);
+        $this->assertNotEmpty($files, 'Cache file should have been created by remember()');
 
         foreach ($files as $file) {
             \file_put_contents($file, 'corrupted data');
