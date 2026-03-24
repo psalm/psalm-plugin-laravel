@@ -255,7 +255,9 @@ final class Plugin implements PluginEntryPointInterface
         } elseif ($cache->wasCacheWritten()) {
             $progress->debug("Laravel plugin: parsed migration schema (cached for next run)\n");
         } else {
-            $progress->warning("Laravel plugin: parsed migration schema (cache write failed — check directory permissions)");
+            $writeFailure = $cache->getWriteFailureReason();
+            $detail = $writeFailure !== null ? ": {$writeFailure}" : ' — check directory permissions';
+            $progress->warning("Laravel plugin: parsed migration schema (cache write failed{$detail})");
         }
 
         $readFailure = $cache->getReadFailureReason();

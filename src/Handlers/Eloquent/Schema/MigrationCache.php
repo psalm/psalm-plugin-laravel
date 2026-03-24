@@ -30,6 +30,9 @@ final class MigrationCache
     /** Diagnostic message when cache read fails (corrupt data, permission errors) */
     private ?string $readFailureReason = null;
 
+    /** Diagnostic message when cache write fails (disk full, permission errors) */
+    private ?string $writeFailureReason = null;
+
     /** @psalm-mutation-free */
     public function __construct(
         private readonly string $cacheDirectory,
@@ -172,6 +175,17 @@ final class MigrationCache
     }
 
     /**
+     * Returns a diagnostic message if the cache write failed.
+     * Null means write succeeded or was not attempted (cache hit).
+     *
+     * @psalm-mutation-free
+     */
+    public function getWriteFailureReason(): ?string
+    {
+        return $this->writeFailureReason;
+    }
+
+    /**
      * Write cache data atomically using a temp file + rename.
      *
      * rename() is atomic on POSIX systems, so concurrent Psalm runs
@@ -187,6 +201,11 @@ final class MigrationCache
         $written = @\file_put_contents($tmpPath, \serialize($tables));
 
         if ($written === false) {
+            $error = \error_get_last();
+            $this->writeFailureReason = $error !== null
+                ? "cannot write temp cache file '{$tmpPath}': {$error['message']}"
+                : "cannot write temp cache file '{$tmpPath}'";
+
             return;
         }
 
@@ -194,6 +213,10 @@ final class MigrationCache
         if (@\rename($tmpPath, $cachePath)) {
             $this->cacheWritten = true;
         } else {
+            $error = \error_get_last();
+            $this->writeFailureReason = $error !== null
+                ? "cannot rename cache file to '{$cachePath}': {$error['message']}"
+                : "cannot rename cache file to '{$cachePath}'";
             @\unlink($tmpPath);
         }
     }
