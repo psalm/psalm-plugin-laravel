@@ -53,7 +53,6 @@ final class SchemaAggregator
     private const UNSIGNED_INT_METHODS = [
         'bigincrements',
         'foreignid',
-        'foreignidfor',
         'id',
         'increments',
         'integerincrements',
@@ -415,9 +414,9 @@ final class SchemaAggregator
             } else {
                 // foreignIdFor() with class reference: $table->foreignIdFor(User::class)
                 if ($first_method_name_lc === 'foreignidfor') {
-                    $resolved_column = $this->resolveForeignIdForColumn($first_arg, $second_arg);
-                    if ($resolved_column !== null) {
-                        $table->setColumn(new SchemaColumn($resolved_column, 'int', $nullable, unsigned: true));
+                    $column = $this->resolveForeignIdForColumn($first_arg, $second_arg, $nullable, $default);
+                    if ($column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
+                        $table->setColumn($column);
                     }
 
                     continue;
@@ -474,12 +473,8 @@ final class SchemaAggregator
                     $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, default: $default, unsigned: $is_unsigned));
                     break;
 
-                    /**
-                     * @todo use type and column name based on model's PK.
-                     * Pairs are [id, int] and [uuid, string]
-                     */
                 case 'foreignidfor':
-                    // foreignIdFor with a string column name — already handled above for class refs
+                    // foreignIdFor with a string column name — can't resolve model PK type, default to int
                     $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, default: $default, unsigned: true));
                     break;
 
@@ -739,20 +734,19 @@ final class SchemaAggregator
     }
 
     /**
-     * Resolve the column name for foreignIdFor() when called with a class reference.
+     * Resolve a SchemaColumn for foreignIdFor() when called with a class reference.
      *
-     * foreignIdFor(User::class) should resolve to 'user_id' (based on model's class name),
-     * not the hardcoded 'id' that was used before.
+     * foreignIdFor(User::class) resolves to 'user_id' (based on model's foreign key convention).
+     * The column type is determined by looking up the referenced model's primary key in the
+     * already-parsed schema: if the PK is a string (e.g., uuid/ulid), the FK column is also
+     * a string; otherwise it defaults to unsigned int.
      */
     private function resolveForeignIdForColumn(
         ?PhpParser\Node\Expr $first_arg,
         ?PhpParser\Node\Expr $second_arg,
-    ): ?string {
-        // If a custom column name is provided as the second argument, use it
-        if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
-            return $second_arg->value;
-        }
-
+        bool $nullable,
+        ?SchemaColumnDefault $default,
+    ): ?SchemaColumn {
         if (!$first_arg instanceof PhpParser\Node\Expr\ClassConstFetch) {
             return null;
         }
@@ -774,10 +768,27 @@ final class SchemaAggregator
         try {
             $reflection = new \ReflectionClass($class_name);
             $instance = $reflection->newInstanceWithoutConstructor();
-
-            return $instance->getForeignKey();
         } catch (\ReflectionException) {
             return null;
         }
+
+        // Resolve column name: custom override from second arg, or model's foreign key convention
+        $column_name = $second_arg instanceof PhpParser\Node\Scalar\String_
+            ? $second_arg->value
+            : $instance->getForeignKey();
+
+        // Resolve type from the referenced model's primary key in the parsed schema.
+        // If the PK column is a string (uuid, ulid, etc.), the FK should also be string.
+        $referenced_table = $this->tables[$instance->getTable()] ?? null;
+        $pk_column = $referenced_table?->columns[$instance->getKeyName()] ?? null;
+
+        if ($pk_column !== null && $pk_column->type === 'string') {
+            return new SchemaColumn($column_name, 'string', $nullable, default: $default);
+        }
+
+        // Default: unsigned int — either the PK is actually an int, or the referenced
+        // table hasn't been parsed yet (migration ordering). We can't safely call
+        // getKeyType() because newInstanceWithoutConstructor() skips trait initialization.
+        return new SchemaColumn($column_name, 'int', $nullable, default: $default, unsigned: true);
     }
 }
