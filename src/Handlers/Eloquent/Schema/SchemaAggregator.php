@@ -630,8 +630,8 @@ final class SchemaAggregator
                 case 'index':
                 case 'foreign':
                 case 'dropspatialindex':
-                // Table-level property methods — these don't create columns.
-                // Without this, $table->engine('InnoDB') would register 'InnoDB' as a column.
+                    // Table-level property methods — these don't create columns.
+                    // Without this, $table->engine('InnoDB') would register 'InnoDB' as a column.
                 case 'engine':
                 case 'charset':
                 case 'collation':
