@@ -10,7 +10,7 @@ use Composer\InstalledVersions;
  * Fingerprint-based disk cache for parsed migration schema.
  *
  * Avoids re-parsing all migration files on every Psalm run when they haven't changed.
- * The cache key is a hash of sorted file paths + modification times + file sizes + plugin version,
+ * The cache key is a hash of sorted file paths + modification times + plugin version,
  * so any file change or plugin upgrade automatically invalidates the cache.
  *
  * Inspired by Larastan's MigrationCache (src/Properties/MigrationCache.php).
@@ -61,11 +61,8 @@ final class MigrationCache
 
         $tables = $compute();
 
-        $this->cacheWritten = $this->writeToCache($cachePath, $tables);
-
-        if ($this->cacheWritten) {
-            $this->cleanupOldCacheFiles($fingerprint);
-        }
+        $this->writeToCache($cachePath, $tables);
+        $this->cleanupOldCacheFiles($fingerprint);
 
         return $tables;
     }
@@ -83,7 +80,7 @@ final class MigrationCache
     /**
      * Generate a fingerprint from file metadata and plugin version.
      *
-     * Uses sorted file paths + modification times + file sizes so file discovery order
+     * Uses sorted file paths + modification times so file discovery order
      * does not affect the fingerprint. The plugin version is included so
      * a plugin upgrade (which may change schema parsing logic) automatically
      * invalidates the cache.
@@ -97,14 +94,12 @@ final class MigrationCache
 
         foreach ($migrationFiles as $file) {
             $mtime = @\filemtime($file);
-            $size = @\filesize($file);
-            $entries[] = 'M:' . $file . ':' . ($mtime !== false ? $mtime : '0') . ':' . ($size !== false ? $size : '0');
+            $entries[] = 'M:' . $file . ':' . ($mtime !== false ? $mtime : '0');
         }
 
         foreach ($sqlDumpFiles as $file) {
             $mtime = @\filemtime($file);
-            $size = @\filesize($file);
-            $entries[] = 'S:' . $file . ':' . ($mtime !== false ? $mtime : '0') . ':' . ($size !== false ? $size : '0');
+            $entries[] = 'S:' . $file . ':' . ($mtime !== false ? $mtime : '0');
         }
 
         \sort($entries);
@@ -154,13 +149,6 @@ final class MigrationCache
             return null;
         }
 
-        // Spot-check that values are actually SchemaTable instances —
-        // allowed_classes prevents wrong types, but this catches edge cases
-        // like cache files from incompatible plugin versions
-        if ($data !== [] && !\reset($data) instanceof SchemaTable) {
-            return null;
-        }
-
         /** @var array<string, SchemaTable> $data */
         return $data;
     }
@@ -172,9 +160,8 @@ final class MigrationCache
      * cannot observe a partially written cache file.
      *
      * @param array<string, SchemaTable> $tables
-     * @return bool Whether the cache was successfully written
      */
-    private function writeToCache(string $cachePath, array $tables): bool
+    private function writeToCache(string $cachePath, array $tables): void
     {
         $pid = \getmypid();
         $tmpPath = $cachePath . '.tmp.' . ($pid !== false ? $pid : 'unknown');
@@ -182,17 +169,15 @@ final class MigrationCache
         $written = @\file_put_contents($tmpPath, \serialize($tables));
 
         if ($written === false) {
-            return false;
+            return;
         }
 
         // Atomic replace — if rename fails, clean up the temp file
-        if (!@\rename($tmpPath, $cachePath)) {
+        if (@\rename($tmpPath, $cachePath)) {
+            $this->cacheWritten = true;
+        } else {
             @\unlink($tmpPath);
-
-            return false;
         }
-
-        return true;
     }
 
     /**
