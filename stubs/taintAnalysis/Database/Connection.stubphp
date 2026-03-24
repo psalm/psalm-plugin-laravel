@@ -151,4 +151,15 @@ class Connection
      * @psalm-taint-sink sql $query
      */
     public function selectResultSets($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
+
+    /**
+     * Escape a value for safe SQL embedding.
+     *
+     * @param  string|float|int|bool|null  $value
+     * @param  bool  $binary
+     * @return string
+     *
+     * @psalm-taint-escape sql
+     */
+    public function escape($value, $binary = false) {}
 }
