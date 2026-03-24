@@ -614,16 +614,28 @@ final class SchemaAggregator
                     break;
 
                 case 'dropforeign':
+                case 'dropforeignidfor':
+                case 'dropconstrainedforeignidfor':
+                case 'dropfulltext':
                 case 'dropindex':
                 case 'dropprimary':
                 case 'dropunique':
+                case 'fulltext':
                 case 'unique':
                 case 'spatialindex':
+                case 'vectorindex':
+                case 'rawindex':
                 case 'renameindex':
                 case 'primary':
                 case 'index':
                 case 'foreign':
                 case 'dropspatialindex':
+                // Table-level property methods — these don't create columns.
+                // Without this, $table->engine('InnoDB') would register 'InnoDB' as a column.
+                case 'engine':
+                case 'charset':
+                case 'collation':
+                case 'comment':
                     break;
 
                 case 'dropmorphs':
@@ -696,6 +708,12 @@ final class SchemaAggregator
                     break;
 
                     // addColumn is handled above the switch via variable remapping
+
+                default:
+                    // Unknown Blueprint methods (e.g. custom macros) — register as mixed
+                    // so the column is visible to static analysis with a conservative type
+                    $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable, default: $default));
+                    break;
             }
         }
     }
