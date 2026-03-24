@@ -46,10 +46,10 @@ final class MigrationCache
      */
     public function remember(array $migrationFiles, array $sqlDumpFiles, callable $compute): array
     {
-        $fingerprint = self::generateFingerprint($migrationFiles, $sqlDumpFiles);
+        $fingerprint = $this->generateFingerprint($migrationFiles, $sqlDumpFiles);
         $cachePath = $this->getCachePath($fingerprint);
 
-        $cached = self::readFromCache($cachePath);
+        $cached = $this->readFromCache($cachePath);
 
         if ($cached !== null) {
             $this->cacheHit = true;
@@ -88,7 +88,7 @@ final class MigrationCache
      * @param list<string> $migrationFiles
      * @param list<string> $sqlDumpFiles
      */
-    private static function generateFingerprint(array $migrationFiles, array $sqlDumpFiles): string
+    private function generateFingerprint(array $migrationFiles, array $sqlDumpFiles): string
     {
         $entries = [];
 
@@ -127,7 +127,7 @@ final class MigrationCache
     /**
      * @return array<string, SchemaTable>|null
      */
-    private static function readFromCache(string $cachePath): ?array
+    private function readFromCache(string $cachePath): ?array
     {
         if (!\is_file($cachePath)) {
             return null;
