@@ -474,7 +474,14 @@ final class SchemaAggregator
                     break;
 
                 case 'foreignidfor':
-                    // foreignIdFor with a string column name — can't resolve model PK type, default to int
+                    // foreignIdFor first arg was a string literal. If it looks like a
+                    // class-string (contains a namespace separator) we cannot resolve the
+                    // model's PK type, so skip rather than registering a bogus column.
+                    if (\strpos($column_name, '\\') !== false) {
+                        break;
+                    }
+
+                    // Treat as a regular unsigned integer foreign key column.
                     $table->setColumn(new SchemaColumn($column_name, 'int', $nullable, default: $default, unsigned: true));
                     break;
 
