@@ -19,6 +19,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\PluckHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\MigrationCache;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
@@ -45,11 +46,18 @@ final class Plugin implements PluginEntryPointInterface
         $pluginConfig = PluginConfig::fromXml($config);
         $output = $this->getProgress($registration);
 
+        if (\getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH') !== false) {
+            $output->warning(
+                'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
+                . "The plugin now uses Psalm's cache directory automatically.\n",
+            );
+        }
+
         try {
             ApplicationProvider::bootApp();
 
             if ($pluginConfig->shouldUseMigrations()) {
-                $this->buildSchema();
+                $this->buildSchema($pluginConfig);
             }
 
             $this->generateAliasStubs($pluginConfig);
@@ -199,7 +207,7 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(NoEnvOutsideConfigHandler::class);
     }
 
-    private function buildSchema(): void
+    private function buildSchema(PluginConfig $pluginConfig): void
     {
         $app = ApplicationProvider::getApp();
 
@@ -209,60 +217,102 @@ final class Plugin implements PluginEntryPointInterface
 
         $projectAnalyzer = ProjectAnalyzer::getInstance();
         $codebase = $projectAnalyzer->getCodebase();
+        $progress = $codebase->progress;
+
+        // Discover all files first — needed for cache fingerprinting
+        $sqlDumpFiles = $this->discoverSqlDumpFiles($app, $progress);
+        $migrationFiles = $this->discoverMigrationFiles($app, $progress);
+
+        $cache = new MigrationCache(self::getCacheLocation($pluginConfig));
+
+        $tables = $cache->remember(
+            $migrationFiles,
+            $sqlDumpFiles,
+            function () use ($sqlDumpFiles, $migrationFiles, $codebase, $progress): array {
+                $schemaAggregator = new SchemaAggregator();
+
+                // Parse SQL schema dumps first — they represent the base state from
+                // squashed migrations (php artisan schema:dump)
+                $this->parseSqlDumps($sqlDumpFiles, $schemaAggregator, $progress);
+
+                // Then parse PHP migrations — they modify the base state
+                foreach ($migrationFiles as $file) {
+                    try {
+                        $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
+                    } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+                        $progress->debug(
+                            "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}\n",
+                        );
+                    }
+                }
+
+                return $schemaAggregator->tables;
+            },
+        );
+
+        $progress->debug(
+            $cache->wasCacheHit()
+                ? "Laravel plugin: loaded migration schema from cache\n"
+                : "Laravel plugin: parsed migration schema (cached for next run)\n",
+        );
 
         $schemaAggregator = new SchemaAggregator();
-
-        // Parse SQL schema dumps first — they represent the base state from squashed
-        // migrations (created by `php artisan schema:dump`). Laravel stores them in
-        // database/schema/ (e.g. mysql-schema.sql, pgsql-schema.sql).
-        $this->parseSqlSchemaDumps($app, $schemaAggregator, $codebase->progress);
-
-        // Then parse PHP migrations — they modify the base state established by schema dumps.
-        $migrationFilePathnames = [];
-        foreach ($this->getMigrationDirectories($app) as $directory) {
-            \array_push($migrationFilePathnames, ...$this->findPhpFilesRecursive($directory, $codebase->progress));
-        }
-
-        foreach ($migrationFilePathnames as $file) {
-            try {
-                $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
-            } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-                $codebase->progress->debug(
-                    "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}\n",
-                );
-                continue;
-            }
-        }
-
+        $schemaAggregator->tables = $tables;
         SchemaStateProvider::setSchema($schemaAggregator);
     }
 
     /**
-     * Parse SQL schema dump files from the database/schema/ directory.
+     * Discover SQL schema dump files from the database/schema/ directory.
      *
-     * Laravel's `php artisan schema:dump` creates these files using mysqldump/pg_dump.
-     * They represent squashed migrations and should be parsed before PHP migrations.
+     * @return list<string>
      */
-    private function parseSqlSchemaDumps(
-        Application $app,
-        SchemaAggregator $schemaAggregator,
-        \Psalm\Progress\Progress $progress,
-    ): void {
+    private function discoverSqlDumpFiles(Application $app, \Psalm\Progress\Progress $progress): array
+    {
         $schemaDir = $app->databasePath('schema');
 
         if (!\is_dir($schemaDir)) {
-            return;
+            return [];
         }
 
-        $sqlFiles = $this->findSqlDumpFiles($schemaDir, $progress);
+        return $this->findSqlDumpFiles($schemaDir, $progress);
+    }
 
-        if ($sqlFiles === []) {
+    /**
+     * Discover PHP migration files from all registered migration directories.
+     *
+     * @return list<string>
+     */
+    private function discoverMigrationFiles(Application $app, \Psalm\Progress\Progress $progress): array
+    {
+        $files = [];
+
+        foreach ($this->getMigrationDirectories($app) as $directory) {
+            \array_push($files, ...$this->findPhpFilesRecursive($directory, $progress));
+        }
+
+        return $files;
+    }
+
+    /**
+     * Parse SQL schema dump files into the aggregator.
+     *
+     * Laravel's `php artisan schema:dump` creates these files using mysqldump/pg_dump.
+     * They represent squashed migrations and should be parsed before PHP migrations.
+     *
+     * @param list<string> $sqlDumpFiles
+     */
+    private function parseSqlDumps(
+        array $sqlDumpFiles,
+        SchemaAggregator $schemaAggregator,
+        \Psalm\Progress\Progress $progress,
+    ): void {
+        if ($sqlDumpFiles === []) {
             return;
         }
 
         $sqlParser = new SqlSchemaParser();
 
-        foreach ($sqlFiles as $file) {
+        foreach ($sqlDumpFiles as $file) {
             try {
                 $sql = \file_get_contents($file);
 
@@ -274,7 +324,6 @@ final class Plugin implements PluginEntryPointInterface
                 $sqlParser->addToAggregator($sql, $schemaAggregator);
             } catch (\Exception $exception) {
                 $progress->warning("Laravel plugin: skipping SQL schema dump '{$file}': {$exception->getMessage()}");
-                continue;
             }
         }
     }
@@ -396,8 +445,7 @@ final class Plugin implements PluginEntryPointInterface
         if ($result === false) {
             throw new \RuntimeException(
                 "Failed to write alias stub file to '{$location}'. "
-                . 'Check that the directory exists and is writable. '
-                . 'You can set PSALM_LARAVEL_PLUGIN_CACHE_PATH to specify a custom writable directory.',
+                . 'Check that the directory exists and is writable.',
             );
         }
     }
