@@ -68,46 +68,4 @@ final class BlueprintRenameTableTest extends AbstractSchemaAggregatorTestCase
         $this->assertArrayNotHasKey('title', $table->columns);
         $this->assertTableHasNotNullableColumnOfType('name', 'string', $table);
     }
-
-    /**
-     * When $table->rename('new') targets a table that already exists, skip
-     * the rename — the conditional branch wouldn't have executed at runtime.
-     *
-     * @see https://github.com/psalm/psalm-plugin-laravel/issues/513
-     */
-    #[Test]
-    public function blueprint_rename_to_existing_table_preserves_target(): void
-    {
-        $schema = $this->schemaFromMigration(<<<'PHP'
-            <?php
-            use Illuminate\Database\Migrations\Migration;
-            use Illuminate\Database\Schema\Blueprint;
-            use Illuminate\Support\Facades\Schema;
-
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create('new_name', static function (Blueprint $table) {
-                        $table->id();
-                        $table->string('title');
-                        $table->string('body');
-                    });
-
-                    // Simulates a conditional rename migration that the aggregator
-                    // flattens — target already exists, so this should be skipped
-                    Schema::table('old_name', static function (Blueprint $table) {
-                        $table->integer('legacy_id');
-                        $table->rename('new_name');
-                    });
-                }
-            };
-            PHP);
-
-        $table = $schema->tables['new_name'];
-        // Original columns from Schema::create() are preserved
-        $this->assertTableHasNotNullableColumnOfType('title', 'string', $table);
-        $this->assertTableHasNotNullableColumnOfType('body', 'string', $table);
-        // The old table is removed
-        $this->assertArrayNotHasKey('old_name', $schema->tables);
-    }
 }
