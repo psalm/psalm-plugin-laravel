@@ -119,51 +119,93 @@ final class SchemaAggregator
         // Flatten nested block structures (if/else, try/catch, foreach, etc.)
         // so Schema calls inside conditionals are not missed.
         foreach (self::flattenStatements($stmts) as $stmt) {
-            $is_schema_method_call = $stmt instanceof PhpParser\Node\Stmt\Expression
-                && $stmt->expr instanceof PhpParser\Node\Expr\StaticCall
-                && $stmt->expr->class instanceof PhpParser\Node\Name
-                && $stmt->expr->name instanceof PhpParser\Node\Identifier
-                && \in_array($stmt->expr->class->getAttribute('resolvedName'), [Schema::class, 'Schema'], true);
-
-            if (! $is_schema_method_call) {
+            if (!$stmt instanceof PhpParser\Node\Stmt\Expression) {
                 continue;
             }
 
-            switch ($stmt->expr->name->name) {
+            $schema_call = self::extractSchemaCall($stmt->expr);
+            if ($schema_call === null || !$schema_call->name instanceof PhpParser\Node\Identifier) {
+                continue;
+            }
+
+            switch ($schema_call->name->name) {
                 case 'create':
-                    $this->alterTable($stmt->expr, creating: true);
+                    $this->alterTable($schema_call, creating: true);
                     break;
 
                 case 'table':
-                    $this->alterTable($stmt->expr, creating: false);
+                    $this->alterTable($schema_call, creating: false);
                     break;
 
                 case 'drop':
                 case 'dropIfExists':
-                    $this->dropTable($stmt->expr);
+                    $this->dropTable($schema_call);
                     break;
 
                 case 'dropColumns':
-                    $this->dropColumnsFromTable($stmt->expr);
+                    $this->dropColumnsFromTable($schema_call);
                     break;
 
                 case 'rename':
-                    $this->renameTable($stmt->expr);
+                    $this->renameTable($schema_call);
             }
         }
     }
 
-    private function alterTable(PhpParser\Node\Expr\StaticCall $call, bool $creating): void
+    /**
+     * Extract a Schema facade call from an expression, if present.
+     *
+     * Handles two forms:
+     * - Direct:  Schema::create('users', ...)
+     * - Chained: Schema::connection('mysql')->create('users', ...)
+     *
+     * Only single-level chaining via connection() is detected.
+     * Deeper chains like Schema::connection()->connection()->create() are not supported
+     * because they are invalid at runtime.
+     */
+    private static function extractSchemaCall(
+        PhpParser\Node\Expr $expr,
+    ): PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall|null {
+        // Direct Schema facade call: Schema::create(...), Schema::table(...), etc.
+        if (
+            $expr instanceof PhpParser\Node\Expr\StaticCall
+            && $expr->class instanceof PhpParser\Node\Name
+            && $expr->name instanceof PhpParser\Node\Identifier
+            && self::isSchemaClass($expr->class->getAttribute('resolvedName'))
+        ) {
+            return $expr;
+        }
+
+        // Connection-chained call: Schema::connection('mysql')->create(...), etc.
+        // The outer expression is a MethodCall whose var is a StaticCall on Schema.
+        if (
+            $expr instanceof PhpParser\Node\Expr\MethodCall
+            && $expr->name instanceof PhpParser\Node\Identifier
+            && $expr->var instanceof PhpParser\Node\Expr\StaticCall
+            && $expr->var->class instanceof PhpParser\Node\Name
+            && $expr->var->name instanceof PhpParser\Node\Identifier
+            && $expr->var->name->name === 'connection'
+            && self::isSchemaClass($expr->var->class->getAttribute('resolvedName'))
+        ) {
+            return $expr;
+        }
+
+        return null;
+    }
+
+    private function alterTable(PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall $call, bool $creating): void
     {
         if (
             !isset($call->args[0])
             || !$call->args[0] instanceof PhpParser\Node\Arg
-            || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
         ) {
             return;
         }
 
-        $table_name = $call->args[0]->value->value;
+        $table_name = self::resolveTableName($call->args[0]->value);
+        if ($table_name === null) {
+            return;
+        }
 
         if (
             !isset($call->args[1])
@@ -198,38 +240,40 @@ final class SchemaAggregator
         }
     }
 
-    /** @psalm-external-mutation-free */
-    private function dropTable(PhpParser\Node\Expr\StaticCall $call): void
+    private function dropTable(PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall $call): void
     {
         if (
             !isset($call->args[0])
             || !$call->args[0] instanceof PhpParser\Node\Arg
-            || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
         ) {
             return;
         }
 
-        $table_name = $call->args[0]->value->value;
+        $table_name = self::resolveTableName($call->args[0]->value);
+        if ($table_name === null) {
+            return;
+        }
 
         unset($this->tables[$table_name]);
     }
 
     /**
      * Handle Schema::dropColumns($table, $columns) — drops columns without a closure.
-     * @psalm-external-mutation-free
      */
-    private function dropColumnsFromTable(PhpParser\Node\Expr\StaticCall $call): void
+    private function dropColumnsFromTable(PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall $call): void
     {
         if (
             !isset($call->args[0], $call->args[1])
             || !$call->args[0] instanceof PhpParser\Node\Arg
-            || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
             || !$call->args[1] instanceof PhpParser\Node\Arg
         ) {
             return;
         }
 
-        $table_name = $call->args[0]->value->value;
+        $table_name = self::resolveTableName($call->args[0]->value);
+        if ($table_name === null) {
+            return;
+        }
 
         if (!isset($this->tables[$table_name])) {
             return;
@@ -249,21 +293,21 @@ final class SchemaAggregator
         }
     }
 
-    /** @psalm-external-mutation-free */
-    private function renameTable(PhpParser\Node\Expr\StaticCall $call): void
+    private function renameTable(PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall $call): void
     {
         if (
             !isset($call->args[0], $call->args[1])
             || !$call->args[0] instanceof PhpParser\Node\Arg
-            || !$call->args[0]->value instanceof PhpParser\Node\Scalar\String_
             || !$call->args[1] instanceof PhpParser\Node\Arg
-            || !$call->args[1]->value instanceof PhpParser\Node\Scalar\String_
         ) {
             return;
         }
 
-        $old_table_name = $call->args[0]->value->value;
-        $new_table_name = $call->args[1]->value->value;
+        $old_table_name = self::resolveTableName($call->args[0]->value);
+        $new_table_name = self::resolveTableName($call->args[1]->value);
+        if ($old_table_name === null || $new_table_name === null) {
+            return;
+        }
 
         if (!isset($this->tables[$old_table_name])) {
             return;
@@ -703,6 +747,85 @@ final class SchemaAggregator
         }
 
         return $result;
+    }
+
+    /**
+     * Check if a class name refers to the Schema facade or a subclass of it.
+     * Handles the FQCN, the root-namespace 'Schema' alias, and custom subclasses.
+     *
+     * Note: @psalm-pure is required by Psalm (MissingPureAnnotation).
+     * Psalm considers is_a() pure despite potential autoloading side effects.
+     *
+     * @psalm-pure
+     */
+    private static function isSchemaClass(mixed $class_name): bool
+    {
+        if (!\is_string($class_name)) {
+            return false;
+        }
+
+        // Fast-path for the two common cases: avoids is_a() autoloading overhead
+        // for 99% of migrations that use the standard facade or root-namespace alias.
+        if ($class_name === Schema::class || $class_name === 'Schema') {
+            return true;
+        }
+
+        // Fall back to subclass check for custom Schema facades.
+        // is_a() with allow_string=true may trigger autoloading, which is acceptable
+        // here — same pattern as resolveForeignIdForColumn() using reflection.
+        try {
+            return \is_a($class_name, Schema::class, true);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Resolve a table name from a call argument expression.
+     * Supports string literals ('users') and class constant fetches (User::TABLE).
+     */
+    private static function resolveTableName(PhpParser\Node\Expr $expr): ?string
+    {
+        if ($expr instanceof PhpParser\Node\Scalar\String_) {
+            return $expr->value;
+        }
+
+        if ($expr instanceof PhpParser\Node\Expr\ClassConstFetch) {
+            return self::resolveClassConstantString($expr);
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve a class constant fetch (e.g. User::TABLE) to its string value.
+     * Returns null if the class or constant cannot be resolved or isn't a string.
+     *
+     * Uses constant() which requires the class to be autoloadable — acceptable here
+     * because the Laravel app is booted via Testbench before schema aggregation runs.
+     * Same autoloading pattern as resolveForeignIdForColumn() which uses reflection.
+     */
+    private static function resolveClassConstantString(PhpParser\Node\Expr\ClassConstFetch $node): ?string
+    {
+        if (!$node->class instanceof PhpParser\Node\Name || !$node->name instanceof PhpParser\Node\Identifier) {
+            return null;
+        }
+
+        $class_name = $node->class->getAttribute('resolvedName');
+        if (!\is_string($class_name) || $class_name === '') {
+            return null;
+        }
+
+        // constant() may trigger autoloading. Catch Throwable (not just Error)
+        // because broken autoloaders can throw RuntimeException or other exceptions.
+        try {
+            /** @var mixed $value */
+            $value = \constant($class_name . '::' . $node->name->name);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return \is_string($value) ? $value : null;
     }
 
     private function resolveDefaultValue(PhpParser\Node\Expr $expr): SchemaColumnDefault
