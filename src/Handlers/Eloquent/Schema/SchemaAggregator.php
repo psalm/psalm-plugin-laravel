@@ -269,11 +269,22 @@ final class SchemaAggregator
             return;
         }
 
-        $table = $this->tables[$old_table_name];
+        $source = $this->tables[$old_table_name];
 
         unset($this->tables[$old_table_name]);
 
-        $this->tables[$new_table_name] = $table;
+        // If the target table already exists (e.g., created by an earlier migration under
+        // the new name), merge columns from the source into it instead of replacing.
+        // This happens in real projects when a migration renames a table that was already
+        // created under the new name by a later migration (the static analyzer processes
+        // all conditional branches, so both code paths are visible).
+        if (isset($this->tables[$new_table_name])) {
+            foreach ($source->columns as $column) {
+                $this->tables[$new_table_name]->setColumn($column);
+            }
+        } else {
+            $this->tables[$new_table_name] = $source;
+        }
     }
 
     /**
@@ -614,7 +625,18 @@ final class SchemaAggregator
                     // $table->rename('new_name') - renames the table itself
                     $new_table_name = $column_name;
                     unset($this->tables[$table_name]);
-                    $this->tables[$new_table_name] = $table;
+
+                    // Merge into existing target table if it exists (same logic as renameTable)
+                    if (isset($this->tables[$new_table_name])) {
+                        foreach ($table->columns as $col) {
+                            $this->tables[$new_table_name]->setColumn($col);
+                        }
+
+                        $table = $this->tables[$new_table_name];
+                    } else {
+                        $this->tables[$new_table_name] = $table;
+                    }
+
                     $table_name = $new_table_name;
 
                     break;
