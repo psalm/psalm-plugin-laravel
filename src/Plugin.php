@@ -240,8 +240,8 @@ final class Plugin implements PluginEntryPointInterface
                     try {
                         $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
                     } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-                        $progress->debug(
-                            "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}\n",
+                        $progress->warning(
+                            "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}",
                         );
                     }
                 }
@@ -256,6 +256,11 @@ final class Plugin implements PluginEntryPointInterface
             $progress->debug("Laravel plugin: parsed migration schema (cached for next run)\n");
         } else {
             $progress->warning("Laravel plugin: parsed migration schema (cache write failed — check directory permissions)");
+        }
+
+        $readFailure = $cache->getReadFailureReason();
+        if ($readFailure !== null) {
+            $progress->warning("Laravel plugin: {$readFailure}");
         }
 
         $schemaAggregator = new SchemaAggregator();

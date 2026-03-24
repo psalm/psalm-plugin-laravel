@@ -171,6 +171,51 @@ final class MigrationCacheTest extends TestCase
     }
 
     #[Test]
+    public function corrupted_cache_reports_failure_reason(): void
+    {
+        $cache = new MigrationCache($this->cacheDir);
+
+        // Populate cache, then corrupt it
+        $cache->remember([], [], fn(): array => ['users' => new SchemaTable()]);
+
+        $files = \glob($this->cacheDir . '/psalm_laravel_migrations_*.cache');
+        $this->assertNotFalse($files);
+
+        foreach ($files as $file) {
+            \file_put_contents($file, 'corrupted data');
+        }
+
+        // Read corrupted cache — should set failure reason
+        $cache->remember([], [], fn(): array => []);
+        $reason = $cache->getReadFailureReason();
+        $this->assertNotNull($reason);
+        $this->assertStringContainsString('corrupt or incompatible', $reason);
+    }
+
+    #[Test]
+    public function cache_miss_has_no_failure_reason(): void
+    {
+        $cache = new MigrationCache($this->cacheDir);
+
+        // Fresh cache — no previous data, so it's a genuine miss
+        $cache->remember([], [], fn(): array => []);
+        $this->assertNull($cache->getReadFailureReason());
+    }
+
+    #[Test]
+    public function cache_hit_has_no_failure_reason(): void
+    {
+        $cache = new MigrationCache($this->cacheDir);
+
+        // Populate cache, then hit it
+        $cache->remember([], [], fn(): array => ['users' => new SchemaTable()]);
+        $cache->remember([], [], fn(): array => $this->fail('Should not compute'));
+
+        $this->assertTrue($cache->wasCacheHit());
+        $this->assertNull($cache->getReadFailureReason());
+    }
+
+    #[Test]
     public function old_cache_files_are_cleaned_up(): void
     {
         $cache = new MigrationCache($this->cacheDir);

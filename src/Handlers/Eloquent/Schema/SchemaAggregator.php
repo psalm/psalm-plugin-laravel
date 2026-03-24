@@ -775,9 +775,8 @@ final class SchemaAggregator
      * Check if a class name refers to the Schema facade or a subclass of it.
      * Handles the FQCN, the root-namespace 'Schema' alias, and custom subclasses.
      *
-     * Note: @psalm-pure is required by Psalm (MissingPureAnnotation).
-     * Psalm considers is_a() pure despite potential autoloading side effects.
-     *
+     * Note: is_a() with allow_string=true may trigger autoloading (a side effect),
+     * so this method is not truly pure. Baselined as MissingPureAnnotation instead.
      * @psalm-pure
      */
     private function isSchemaClass(mixed $class_name): bool
