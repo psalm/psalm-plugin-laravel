@@ -11,6 +11,8 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures;
 final class ClassWithTableConstant
 {
     public const TABLE = 'users';
+
     public const POSTS_TABLE = 'posts';
+
     public const NOT_A_STRING = 42;
 }
