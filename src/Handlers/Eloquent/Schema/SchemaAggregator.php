@@ -124,7 +124,7 @@ final class SchemaAggregator
                 continue;
             }
 
-            $schema_call = self::extractSchemaCall($stmt->expr);
+            $schema_call = $this->extractSchemaCall($stmt->expr);
             if ($schema_call === null || !$schema_call->name instanceof PhpParser\Node\Identifier) {
                 continue;
             }
@@ -164,7 +164,7 @@ final class SchemaAggregator
      * Deeper chains like Schema::connection()->connection()->create() are not supported
      * because they are invalid at runtime.
      */
-    private static function extractSchemaCall(
+    private function extractSchemaCall(
         PhpParser\Node\Expr $expr,
     ): PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall|null {
         // Direct Schema facade call: Schema::create(...), Schema::table(...), etc.
@@ -172,7 +172,7 @@ final class SchemaAggregator
             $expr instanceof PhpParser\Node\Expr\StaticCall
             && $expr->class instanceof PhpParser\Node\Name
             && $expr->name instanceof PhpParser\Node\Identifier
-            && self::isSchemaClass($expr->class->getAttribute('resolvedName'))
+            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'))
         ) {
             return $expr;
         }
@@ -186,7 +186,7 @@ final class SchemaAggregator
             && $expr->var->class instanceof PhpParser\Node\Name
             && $expr->var->name instanceof PhpParser\Node\Identifier
             && $expr->var->name->name === 'connection'
-            && self::isSchemaClass($expr->var->class->getAttribute('resolvedName'))
+            && $this->isSchemaClass($expr->var->class->getAttribute('resolvedName'))
         ) {
             return $expr;
         }
@@ -203,7 +203,7 @@ final class SchemaAggregator
             return;
         }
 
-        $table_name = self::resolveTableName($call->args[0]->value);
+        $table_name = $this->resolveTableName($call->args[0]->value);
         if ($table_name === null) {
             return;
         }
@@ -250,7 +250,7 @@ final class SchemaAggregator
             return;
         }
 
-        $table_name = self::resolveTableName($call->args[0]->value);
+        $table_name = $this->resolveTableName($call->args[0]->value);
         if ($table_name === null) {
             return;
         }
@@ -271,7 +271,7 @@ final class SchemaAggregator
             return;
         }
 
-        $table_name = self::resolveTableName($call->args[0]->value);
+        $table_name = $this->resolveTableName($call->args[0]->value);
         if ($table_name === null) {
             return;
         }
@@ -304,8 +304,8 @@ final class SchemaAggregator
             return;
         }
 
-        $old_table_name = self::resolveTableName($call->args[0]->value);
-        $new_table_name = self::resolveTableName($call->args[1]->value);
+        $old_table_name = $this->resolveTableName($call->args[0]->value);
+        $new_table_name = $this->resolveTableName($call->args[1]->value);
         if ($old_table_name === null || $new_table_name === null) {
             return;
         }
@@ -780,7 +780,7 @@ final class SchemaAggregator
      *
      * @psalm-pure
      */
-    private static function isSchemaClass(mixed $class_name): bool
+    private function isSchemaClass(mixed $class_name): bool
     {
         if (!\is_string($class_name)) {
             return false;
@@ -806,14 +806,14 @@ final class SchemaAggregator
      * Resolve a table name from a call argument expression.
      * Supports string literals ('users') and class constant fetches (User::TABLE).
      */
-    private static function resolveTableName(PhpParser\Node\Expr $expr): ?string
+    private function resolveTableName(PhpParser\Node\Expr $expr): ?string
     {
         if ($expr instanceof PhpParser\Node\Scalar\String_) {
             return $expr->value;
         }
 
         if ($expr instanceof PhpParser\Node\Expr\ClassConstFetch) {
-            return self::resolveClassConstantString($expr);
+            return $this->resolveClassConstantString($expr);
         }
 
         return null;
@@ -827,7 +827,7 @@ final class SchemaAggregator
      * because the Laravel app is booted via Testbench before schema aggregation runs.
      * Same autoloading pattern as resolveForeignIdForColumn() which uses reflection.
      */
-    private static function resolveClassConstantString(PhpParser\Node\Expr\ClassConstFetch $node): ?string
+    private function resolveClassConstantString(PhpParser\Node\Expr\ClassConstFetch $node): ?string
     {
         if (!$node->class instanceof PhpParser\Node\Name || !$node->name instanceof PhpParser\Node\Identifier) {
             return null;

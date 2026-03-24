@@ -192,7 +192,7 @@ final class MigrationCacheTest extends TestCase
         $this->assertCount(1, $secondCacheFiles);
 
         // The file should be different from the first
-        $this->assertNotEquals($firstCacheFiles[0], $secondCacheFiles[0]);
+        $this->assertNotSame($firstCacheFiles[0], $secondCacheFiles[0]);
     }
 
     #[Test]
@@ -200,7 +200,7 @@ final class MigrationCacheTest extends TestCase
     {
         $cache = new MigrationCache($this->cacheDir);
 
-        $tables = $cache->remember([], [], function (): array {
+        $cache->remember([], [], function (): array {
             $users = new SchemaTable();
             $users->setColumn(new SchemaColumn('id', 'int', unsigned: true));
             $users->setColumn(new SchemaColumn('email', 'string'));
@@ -248,16 +248,16 @@ final class MigrationCacheTest extends TestCase
 
         $status = $cached['posts']->columns['status'];
         $this->assertSame(['draft', 'published'], $status->options);
-        $this->assertNotNull($status->default);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $status->default);
         $this->assertTrue($status->default->resolvable);
         $this->assertSame('draft', $status->default->value);
 
         $score = $cached['posts']->columns['score'];
-        $this->assertNotNull($score->default);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $score->default);
         $this->assertFalse($score->default->resolvable);
 
         $name = $cached['posts']->columns['name'];
-        $this->assertNull($name->default);
+        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $name->default);
     }
 
     #[Test]

@@ -67,7 +67,7 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
 
     private function createEvent(string $filePath): FunctionReturnTypeProviderEvent
     {
-        $source = $this->createMock(StatementsSource::class);
+        $source = $this->createStub(StatementsSource::class);
         $source->method('getFilePath')->willReturn($filePath);
         $source->method('getFileName')->willReturn(\basename($filePath));
         $source->method('getSuppressedIssues')->willReturn([]);
