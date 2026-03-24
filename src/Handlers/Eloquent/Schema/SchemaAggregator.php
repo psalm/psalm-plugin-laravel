@@ -837,7 +837,7 @@ final class SchemaAggregator
         // constant() may trigger autoloading. Catch Throwable (not just Error)
         // because broken autoloaders can throw RuntimeException or other exceptions.
         try {
-            /** @var mixed $value */
+            /** @var scalar|array<array-key, mixed>|null — constant() returns mixed, but class constants are always scalar, array, or null */
             $value = \constant($class_name . '::' . $node->name->name);
         } catch (\Throwable) {
             return null;
