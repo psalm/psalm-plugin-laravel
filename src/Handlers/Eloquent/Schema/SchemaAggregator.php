@@ -17,6 +17,7 @@ final class SchemaAggregator
      * @see \Illuminate\Database\Schema\Blueprint
      */
     private const METHODS_USE_HARDCODED_COLUMN_NAME = [
+        'datetimes',
         'timestamps',
         'timestampstz',
         'nullabletimestamps',
@@ -40,7 +41,7 @@ final class SchemaAggregator
         'softdeletesdatetime' => 'deleted_at',
         'softdeletestz' => 'deleted_at',
         'uuid' => 'uuid',
-        'ulid' => 'uuid',
+        'ulid' => 'ulid',
         'ipaddress' => 'ip_address',
         'macaddress' => 'mac_address',
     ];
@@ -411,35 +412,38 @@ final class SchemaAggregator
 
             $first_method_name_lc = \strtolower($first_method_call->name->name);
 
-            if ($first_method_call->args === []) {
-                if (\in_array($first_method_name_lc, self::METHODS_USE_HARDCODED_COLUMN_NAME, true)) {
-                    switch ($first_method_name_lc) {
-                        case 'droptimestamps':
-                        case 'droptimestampstz':
-                            $table->dropColumn('created_at');
-                            $table->dropColumn('updated_at');
-                            break;
+            // Handle methods that always produce the same hardcoded column names,
+            // regardless of arguments (args are precision values, not column names).
+            if (\in_array($first_method_name_lc, self::METHODS_USE_HARDCODED_COLUMN_NAME, true)) {
+                switch ($first_method_name_lc) {
+                    case 'droptimestamps':
+                    case 'droptimestampstz':
+                        $table->dropColumn('created_at');
+                        $table->dropColumn('updated_at');
+                        break;
 
-                        case 'remembertoken':
-                            $table->setColumn(new SchemaColumn('remember_token', 'string', $nullable));
-                            break;
+                    case 'remembertoken':
+                        $table->setColumn(new SchemaColumn('remember_token', 'string', $nullable));
+                        break;
 
-                        case 'dropremembertoken':
-                            $table->dropColumn('remember_token');
-                            break;
+                    case 'dropremembertoken':
+                        $table->dropColumn('remember_token');
+                        break;
 
-                        case 'timestamps':
-                        case 'timestampstz':
-                        case 'nullabletimestamps':
-                        case 'nullabletimestampstz':
-                            $table->setColumn(new SchemaColumn('created_at', 'string', true));
-                            $table->setColumn(new SchemaColumn('updated_at', 'string', true));
-                            break;
-                    }
-
-                    continue; // foreach
+                    case 'datetimes':
+                    case 'timestamps':
+                    case 'timestampstz':
+                    case 'nullabletimestamps':
+                    case 'nullabletimestampstz':
+                        $table->setColumn(new SchemaColumn('created_at', 'string', true));
+                        $table->setColumn(new SchemaColumn('updated_at', 'string', true));
+                        break;
                 }
 
+                continue; // foreach
+            }
+
+            if ($first_method_call->args === []) {
                 if (\array_key_exists($first_method_name_lc, self::METHODS_HAVE_DEFAULT_COLUMN_NAME)) {
                     $column_name = self::METHODS_HAVE_DEFAULT_COLUMN_NAME[$first_method_name_lc];
                 } else {
