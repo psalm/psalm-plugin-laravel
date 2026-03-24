@@ -130,7 +130,19 @@ function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain
 // csrf_field: nothing to stub
 // csrf_token: nothing to stub
 // database_path: processed by Psalm handlers
-// decrypt: nothing to stub
+
+/**
+ * Decrypt the given value.
+ *
+ * @param  string  $value
+ * @param  bool  $unserialize
+ * @return mixed
+ *
+ * @psalm-taint-unescape user_secret
+ * @psalm-taint-unescape system_secret
+ * @psalm-flow ($value) -> return
+ */
+function decrypt($value, $unserialize = true) {}
 
 /**
  * Dispatch a job to its appropriate handler.
@@ -151,7 +163,18 @@ function dispatch($job) {}
  */
 function dispatch_sync($job, $handler = null) {}
 
-// encrypt: nothing to stub
+/**
+ * Encrypt the given value.
+ *
+ * @param  mixed  $value
+ * @param  bool  $serialize
+ * @return string
+ *
+ * @psalm-taint-escape user_secret
+ * @psalm-taint-escape system_secret
+ * @psalm-flow ($value) -> return
+ */
+function encrypt($value, $serialize = true): string {}
 
 /**
  * Dispatch an event and call the listeners.
