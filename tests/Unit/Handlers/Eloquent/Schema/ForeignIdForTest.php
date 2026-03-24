@@ -30,4 +30,24 @@ final class ForeignIdForTest extends AbstractSchemaAggregatorTestCase
         // With the fix, the only 'id' column is from $table->id()
         $this->assertSame('id', $table->columns['id']->name);
     }
+
+    #[Test]
+    public function foreign_id_for_with_namespaced_string_is_skipped(): void
+    {
+        $schemaAggregator = $this->instantiateSchemaAggregator(
+            __DIR__ . '/migrations/foreign_id_for_namespaced_string',
+        );
+
+        $this->assertArrayHasKey('reviews', $schemaAggregator->tables);
+        $table = $schemaAggregator->tables['reviews'];
+
+        // foreignIdFor('App\Models\User') passes the FQCN as a string literal —
+        // the plugin cannot resolve this statically and must skip it rather than
+        // registering a bogus column named 'App\Models\User'
+        $this->assertArrayNotHasKey('App\Models\User', $table->columns);
+
+        // The other columns should still be present
+        self::assertTableHasColumn('id', $table);
+        self::assertTableHasColumn('body', $table);
+    }
 }

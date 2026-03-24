@@ -66,9 +66,19 @@ With `failOnInternalError`, the Psalm run fails immediately, so you know the plu
 
 The plugin stores generated files (alias stubs) and cached migration schemas in this directory. By default, it uses a subdirectory inside Psalm's own cache, so `--clear-cache` removes plugin caches along with Psalm's.
 
+### Migration schema cache
+
+When `columnFallback="migrations"` is active, the plugin caches the parsed migration schema to disk so subsequent Psalm runs skip re-parsing unchanged migrations.
+
+The cache key is a fingerprint of sorted migration and SQL dump file paths, their modification times, and the plugin version. Any file change or plugin upgrade automatically invalidates the cache.
+
+**Cache invalidation**: run `--clear-cache` to remove all plugin caches (including migration schema). The plugin also cleans up stale cache files automatically on each cache miss.
+
+**Diagnostics**: if the plugin detects a corrupt or unreadable cache file, it logs a warning and falls back to a full parse. Run with `--debug` to see cache hit/miss messages.
+
 ### env `PSALM_LARAVEL_PLUGIN_CACHE_PATH` (deprecated)
 
-> **Deprecated** in v4 and will be removed in v5. The plugin now uses Psalm's cache directory automatically.
+> **Deprecated** in v4.3 and will be removed in v5. The plugin now uses Psalm's cache directory automatically.
 
 Environment variable to override the cache location.
 

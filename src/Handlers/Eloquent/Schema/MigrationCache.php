@@ -27,6 +27,9 @@ final class MigrationCache
 
     private bool $cacheWritten = false;
 
+    /** Diagnostic message when cache read fails (corrupt data, permission errors) */
+    private ?string $readFailureReason = null;
+
     /** @psalm-mutation-free */
     public function __construct(
         private readonly string $cacheDirectory,
@@ -136,6 +139,8 @@ final class MigrationCache
         $contents = @\file_get_contents($cachePath);
 
         if ($contents === false) {
+            $this->readFailureReason = "cannot read cache file '{$cachePath}' — check file permissions";
+
             return null;
         }
 
@@ -146,11 +151,24 @@ final class MigrationCache
         ]);
 
         if (!\is_array($data)) {
+            $this->readFailureReason = "corrupt or incompatible cache file '{$cachePath}' — delete it or run with --clear-cache";
+
             return null;
         }
 
         /** @var array<string, SchemaTable> $data */
         return $data;
+    }
+
+    /**
+     * Returns a diagnostic message if the cache read failed for a reason
+     * other than a simple miss (file not found). Null means cache miss or hit.
+     *
+     * @psalm-mutation-free
+     */
+    public function getReadFailureReason(): ?string
+    {
+        return $this->readFailureReason;
     }
 
     /**
@@ -183,7 +201,7 @@ final class MigrationCache
     /**
      * Remove stale cache files that don't match the current fingerprint.
      *
-     * Runs after every successful write to prevent unbounded accumulation
+     * Runs after every cache miss to prevent unbounded accumulation
      * of old cache files as migrations change over time.
      */
     private function cleanupOldCacheFiles(string $currentFingerprint): void

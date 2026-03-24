@@ -10,4 +10,4 @@ function loginRedirect(\Illuminate\Http\Request $request) {
 ?>
 --EXPECTF--
 %ATaintedSSRF on line %d: Detected tainted network request
-TaintedHeader on line %d: Detected tainted header
+%ATaintedHeader on line %d: Detected tainted header
