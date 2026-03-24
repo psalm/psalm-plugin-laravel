@@ -32,6 +32,18 @@ class Builder
     public function raw($value) {}
 
     /**
+     * Set the columns to be selected.
+     *
+     * Accepts an array of columns or variadic string arguments via func_get_args().
+     *
+     * @param  array<array-key, \Illuminate\Contracts\Database\Query\Expression|string>|\Illuminate\Contracts\Database\Query\Expression|string  $columns
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function select($columns = ['*']) {}
+
+    /**
      * Add a new "raw" select expression to the query.
      *
      * @param  string  $expression

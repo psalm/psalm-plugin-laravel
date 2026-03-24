@@ -1,0 +1,19 @@
+<?php
+
+namespace Illuminate\Http;
+
+trait ResponseTrait
+{
+    /**
+     * Add a cookie to the response.
+     *
+     * Accepts a Cookie object directly, or variadic string arguments forwarded to the cookie()
+     * helper via func_get_args(): cookie($name, $value, $minutes, $path, $domain, $secure, ...).
+     *
+     * @param  \Symfony\Component\HttpFoundation\Cookie|string  $cookie
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function cookie($cookie) {}
+}

@@ -25,6 +25,31 @@ class Collection extends BaseCollection implements QueueableCollection
     public function find($key, $default = null) {}
 
     /**
+     * Run a map over each of the items.
+     *
+     * Laravel returns static (Eloquent\Collection) when all mapped values are Model instances,
+     * and falls back to Support\Collection (via toBase()) otherwise. The conditional return type
+     * mirrors this runtime behavior.
+     *
+     * @template TMapValue
+     *
+     * @param  callable(TModel, TKey): TMapValue  $callback
+     * @psalm-return (TMapValue is \Illuminate\Database\Eloquent\Model ? static<TKey, TMapValue> : \Illuminate\Support\Collection<TKey, TMapValue>)
+     */
+    public function map(callable $callback) {}
+
+    /**
+     * Run an associative map over each of the items.
+     *
+     * @template TMapWithKeysKey of array-key
+     * @template TMapWithKeysValue
+     *
+     * @param  callable(TModel, TKey): array<TMapWithKeysKey, TMapWithKeysValue>  $callback
+     * @psalm-return (TMapWithKeysValue is \Illuminate\Database\Eloquent\Model ? static<TMapWithKeysKey, TMapWithKeysValue> : \Illuminate\Support\Collection<TMapWithKeysKey, TMapWithKeysValue>)
+     */
+    public function mapWithKeys(callable $callback) {}
+
+    /**
      * Load a set of relationships onto the collection if they are not already eager loaded.
      *
      * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
