@@ -269,21 +269,15 @@ final class SchemaAggregator
             return;
         }
 
-        $source = $this->tables[$old_table_name];
+        $table = $this->tables[$old_table_name];
 
         unset($this->tables[$old_table_name]);
 
-        // If the target table already exists (e.g., created by an earlier migration under
-        // the new name), merge columns from the source into it instead of replacing.
-        // This happens in real projects when a migration renames a table that was already
-        // created under the new name by a later migration (the static analyzer processes
-        // all conditional branches, so both code paths are visible).
-        if (isset($this->tables[$new_table_name])) {
-            foreach ($source->columns as $column) {
-                $this->tables[$new_table_name]->setColumn($column);
-            }
-        } else {
-            $this->tables[$new_table_name] = $source;
+        // Skip if the target already exists — the rename is inside a conditional
+        // (e.g., `if (Schema::hasTable('old'))`) that wouldn't have executed when
+        // the table was already created under the new name.
+        if (!isset($this->tables[$new_table_name])) {
+            $this->tables[$new_table_name] = $table;
         }
     }
 
@@ -626,15 +620,11 @@ final class SchemaAggregator
                     $new_table_name = $column_name;
                     unset($this->tables[$table_name]);
 
-                    // Merge into existing target table if it exists (same logic as renameTable)
-                    if (isset($this->tables[$new_table_name])) {
-                        foreach ($table->columns as $col) {
-                            $this->tables[$new_table_name]->setColumn($col);
-                        }
-
-                        $table = $this->tables[$new_table_name];
-                    } else {
+                    // Skip if target already exists (same logic as renameTable)
+                    if (!isset($this->tables[$new_table_name])) {
                         $this->tables[$new_table_name] = $table;
+                    } else {
+                        $table = $this->tables[$new_table_name];
                     }
 
                     $table_name = $new_table_name;

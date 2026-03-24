@@ -67,7 +67,6 @@ final class ModelPropertyHandler
             return true;
         }
 
-
         return null;
     }
 
