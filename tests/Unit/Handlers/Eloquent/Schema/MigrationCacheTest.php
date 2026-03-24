@@ -53,6 +53,7 @@ final class MigrationCacheTest extends TestCase
 
         $this->assertTrue($called);
         $this->assertFalse($cache->wasCacheHit());
+        $this->assertTrue($cache->wasCacheWritten());
         $this->assertArrayHasKey('users', $tables);
         $this->assertArrayHasKey('id', $tables['users']->columns);
     }
@@ -273,7 +274,35 @@ final class MigrationCacheTest extends TestCase
 
         $this->assertSame(1, $callCount);
         $this->assertFalse($cache->wasCacheHit());
+        $this->assertFalse($cache->wasCacheWritten());
         $this->assertArrayHasKey('users', $tables);
+    }
+
+    #[Test]
+    public function cache_invalidates_when_file_removed(): void
+    {
+        $file1 = $this->cacheDir . '/migration1.php';
+        $file2 = $this->cacheDir . '/migration2.php';
+        \file_put_contents($file1, '<?php // 1');
+        \file_put_contents($file2, '<?php // 2');
+
+        $cache = new MigrationCache($this->cacheDir);
+        $callCount = 0;
+
+        $compute = function () use (&$callCount): array {
+            $callCount++;
+
+            return [];
+        };
+
+        // First call with two files
+        $cache->remember([$file1, $file2], [], $compute);
+        $this->assertSame(1, $callCount);
+
+        // Remove second file (e.g. after migrate:squash) — different fingerprint → miss
+        \unlink($file2);
+        $cache->remember([$file1], [], $compute);
+        $this->assertSame(2, $callCount);
     }
 
     #[Test]

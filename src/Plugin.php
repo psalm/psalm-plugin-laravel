@@ -49,7 +49,7 @@ final class Plugin implements PluginEntryPointInterface
         if (\getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH') !== false) {
             $output->warning(
                 'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
-                . "The plugin now uses Psalm's cache directory automatically.\n",
+                . "The plugin now uses Psalm's cache directory automatically.",
             );
         }
 
@@ -255,7 +255,7 @@ final class Plugin implements PluginEntryPointInterface
         } elseif ($cache->wasCacheWritten()) {
             $progress->debug("Laravel plugin: parsed migration schema (cached for next run)\n");
         } else {
-            $progress->debug("Laravel plugin: parsed migration schema (cache write failed — check directory permissions)\n");
+            $progress->warning("Laravel plugin: parsed migration schema (cache write failed — check directory permissions)");
         }
 
         $schemaAggregator = new SchemaAggregator();

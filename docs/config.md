@@ -62,7 +62,7 @@ With `failOnInternalError`, the Psalm run fails immediately, so you know the plu
 
 ## Cache directory
 
-**default**: Psalm's project cache directory + `/plugin-laravel` (e.g. `~/.cache/psalm/<project-hash>/plugin-laravel`)
+**default**: `<psalm-cache-dir>/plugin-laravel` (inside Psalm's project-specific cache directory)
 
 The plugin stores generated files (alias stubs) and cached migration schemas in this directory. By default, it uses a subdirectory inside Psalm's own cache, so `--clear-cache` removes plugin caches along with Psalm's.
 
