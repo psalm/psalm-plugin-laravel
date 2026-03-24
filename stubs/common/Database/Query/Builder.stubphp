@@ -36,7 +36,7 @@ class Builder
      *
      * Accepts an array of columns or variadic string arguments via func_get_args().
      *
-     * @param  array<array-key, \Illuminate\Contracts\Database\Query\Expression|string>|\Illuminate\Contracts\Database\Query\Expression|string  $columns
+     * @param  array<array-key, \Closure|\Illuminate\Contracts\Database\Query\Expression|\Illuminate\Database\Query\Builder|string>|\Illuminate\Contracts\Database\Query\Expression|string  $columns
      * @return $this
      *
      * @psalm-variadic
