@@ -273,7 +273,12 @@ final class SchemaAggregator
 
         unset($this->tables[$old_table_name]);
 
-        $this->tables[$new_table_name] = $table;
+        // Skip if the target already exists — the rename is inside a conditional
+        // (e.g., `if (Schema::hasTable('old'))`) that wouldn't have executed when
+        // the table was already created under the new name.
+        if (!isset($this->tables[$new_table_name])) {
+            $this->tables[$new_table_name] = $table;
+        }
     }
 
     /**
@@ -614,7 +619,14 @@ final class SchemaAggregator
                     // $table->rename('new_name') - renames the table itself
                     $new_table_name = $column_name;
                     unset($this->tables[$table_name]);
-                    $this->tables[$new_table_name] = $table;
+
+                    // Skip if target already exists (same logic as renameTable)
+                    if (!isset($this->tables[$new_table_name])) {
+                        $this->tables[$new_table_name] = $table;
+                    } else {
+                        $table = $this->tables[$new_table_name];
+                    }
+
                     $table_name = $new_table_name;
 
                     break;
