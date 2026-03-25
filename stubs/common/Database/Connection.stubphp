@@ -160,6 +160,7 @@ class Connection
      * @return string
      *
      * @psalm-taint-escape sql
+     * @psalm-flow ($value) -> return
      */
     public function escape($value, $binary = false) {}
 }

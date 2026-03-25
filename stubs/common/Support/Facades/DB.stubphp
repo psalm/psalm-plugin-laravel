@@ -173,6 +173,7 @@ class DB extends Facade
      * @return string
      *
      * @psalm-taint-escape sql
+     * @psalm-flow ($value) -> return
      */
     public static function escape($value, $binary = false) {}
 }
