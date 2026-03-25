@@ -95,6 +95,24 @@ function test_collection_load_with_callback(Collection $collection): Collection
     }]);
 }
 
+/** @param Collection<int, User> $collection */
+function test_collection_load_missing_variadic(Collection $collection): Collection
+{
+    return $collection->loadMissing('posts', 'comments');
+}
+
+/** @return Builder<User> */
+function test_builder_without_variadic(): Builder
+{
+    return User::query()->without('posts', 'comments');
+}
+
+/** @return Builder<User> */
+function test_builder_with_count_variadic(): Builder
+{
+    return User::query()->withCount('posts', 'comments');
+}
+
 /** @return Builder<User> */
 function test_builder_with_callback(): Builder
 {
