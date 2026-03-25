@@ -61,7 +61,7 @@ function e($value, $doubleEncode = true) {}
 
 The same rule applies to `@psalm-taint-unescape` -- always pair it with `@psalm-flow`.
 
-Psalm's own stubs follow this pattern -- see `htmlspecialchars()` in `vendor/vimeo/psalm/stubs/Php74.phpstub` and `urlencode()`/`strip_tags()` in `vendor/vimeo/psalm/stubs/CoreGenericFunctions.phpstub`.
+Psalm's own stubs follow this pattern -- see `urlencode()`/`strip_tags()` in `vendor/vimeo/psalm/stubs/CoreGenericFunctions.phpstub`.
 
 ### When `@psalm-flow` is NOT needed
 
@@ -126,6 +126,7 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 | `system_secret` | `SYSTEM_SECRET`     | System secrets (API keys, encryption keys)                 |
 | `input`         | `ALL_INPUT`         | Alias: all input-related kinds combined (excludes secrets) |
 | `tainted`       | `ALL_INPUT`         | Alias: same as `input`                                     |
+| `input_except_sleep` | `ALL_INPUT & ~INPUT_SLEEP` | All input kinds except `sleep` (used by `filter_var()`) |
 
 ## Stub patterns by annotation type
 
@@ -222,7 +223,7 @@ cat > /tmp/taint-test/psalm.xml << 'XMLEOF'
 XMLEOF
 
 # Write test PHP in /tmp/taint-test/app/Test.php, then:
-cd /tmp/taint-test && /path/to/vendor/bin/psalm --taint-analysis --no-cache
+cd /tmp/taint-test && /path/to/vendor/bin/psalm --no-cache
 ```
 
 **Tip**: Use `--dump-taint-graph=taints.dot` to visualize taint flow and debug unexpected results. See [Debugging the taint graph](https://psalm.dev/docs/security_analysis/#debugging-the-taint-graph).
