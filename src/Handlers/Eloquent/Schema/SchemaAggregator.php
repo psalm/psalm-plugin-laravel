@@ -582,6 +582,10 @@ final class SchemaAggregator
                 case 'geography':
                 case 'geometry':
                 case 'computed':
+                    // addColumn is handled above the switch via variable remapping
+                default:
+                    // Unknown Blueprint methods (e.g. custom macros) — register as mixed
+                    // so the column is visible to static analysis with a conservative type
                     $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable, default: $default));
                     break;
 
@@ -710,14 +714,7 @@ final class SchemaAggregator
                 case 'softdeletes':
                     $table->setColumn(new SchemaColumn($column_name, 'string', true, default: $default));
                     break;
-
                     // addColumn is handled above the switch via variable remapping
-
-                default:
-                    // Unknown Blueprint methods (e.g. custom macros) — register as mixed
-                    // so the column is visible to static analysis with a conservative type
-                    $table->setColumn(new SchemaColumn($column_name, 'mixed', $nullable, default: $default));
-                    break;
             }
         }
     }
