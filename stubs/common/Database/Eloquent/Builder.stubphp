@@ -587,11 +587,12 @@ class Builder implements BuilderContract
 
     /**
      * @param  mixed  $relations
+     * @param  \Closure|string|null  $callback
      * @return self<TModel>
      *
      * @psalm-variadic
      */
-    public function with($relations) {}
+    public function with($relations, $callback = null) {}
 
     /**
      * @param  mixed  $relations
