@@ -1,0 +1,20 @@
+<?php
+
+/**
+ * Taint stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Support/helpers.php}
+ */
+
+/**
+ * Encode HTML special characters in a string.
+ *
+ * Wraps htmlspecialchars() with ENT_QUOTES — escapes both HTML entities and quotes,
+ * used by Blade's {{ }} output to prevent XSS.
+ *
+ * @param  \Illuminate\Contracts\Support\DeferringDisplayableValue|\Illuminate\Contracts\Support\Htmlable|\BackedEnum|string|int|float|null  $value
+ * @param  bool  $doubleEncode
+ * @return string
+ *
+ * @psalm-taint-escape html
+ * @psalm-taint-escape has_quotes
+ */
+function e($value, $doubleEncode = true) {}
