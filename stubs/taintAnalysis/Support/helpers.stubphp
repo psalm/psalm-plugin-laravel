@@ -16,5 +16,6 @@
  *
  * @psalm-taint-escape html
  * @psalm-taint-escape has_quotes
+ * @psalm-flow ($value) -> return
  */
 function e($value, $doubleEncode = true) {}
