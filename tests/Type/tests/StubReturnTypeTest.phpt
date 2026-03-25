@@ -87,6 +87,14 @@ function test_collection_load_variadic(Collection $collection): Collection
     return $collection->load('posts', 'comments');
 }
 
+/** @param Collection<int, User> $collection */
+function test_collection_load_with_callback(Collection $collection): Collection
+{
+    return $collection->load(['posts' => function (\Illuminate\Database\Eloquent\Relations\Relation $query) {
+        $query->getBaseQuery();
+    }]);
+}
+
 /** @return Builder<User> */
 function test_builder_with_callback(): Builder
 {
@@ -95,4 +103,4 @@ function test_builder_with_callback(): Builder
     });
 }
 ?>
---EXPECTF--
+--EXPECT--
