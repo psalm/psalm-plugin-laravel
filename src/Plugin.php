@@ -89,6 +89,18 @@ final class Plugin implements PluginEntryPointInterface
 
     /**
      * Recursively find all .stubphp files in a directory.
+     *
+     * Results are sorted to ensure deterministic stub registration order.
+     * RecursiveDirectoryIterator returns files in filesystem order, which
+     * varies across OSes (alphabetical on APFS/HFS+, inode order on ext4).
+     *
+     * Stub loading order matters because when multiple stubs declare the same
+     * method, Psalm reuses the existing MethodStorage and re-applies docblock
+     * parsing. Type annotations (`@return`, `@param`) use direct assignment
+     * so the last-loaded stub wins, while taint annotations (`@psalm-taint-*`)
+     * use bitwise OR and accumulate from all stubs. Without sorting, moving
+     * or renaming stub files can silently change which types Psalm sees.
+     *
      * @return list<string>
      */
     private function findStubFiles(string $directory): array
@@ -123,6 +135,8 @@ final class Plugin implements PluginEntryPointInterface
             // Return whatever stubs were collected before the error — partial results from
             // readable subdirectories are better than none.
         }
+
+        \sort($stubs);
 
         return $stubs;
     }
