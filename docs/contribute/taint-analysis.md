@@ -19,35 +19,20 @@ For Psalm's upstream taint analysis documentation, see:
 
 ## Stub location
 
-Taint stubs live in `stubs/taintAnalysis/`, organized by Laravel namespace:
-
-```
-stubs/taintAnalysis/
-  Console/          # Artisan kernel
-  Database/         # Connection (SQL sinks)
-  Encryption/       # Encrypter (secret escapes/unescapes)
-  Filesystem/       # File operations (file sinks)
-  Hashing/          # HashManager (secret escapes)
-  Http/             # Request sources, Response sinks, HTTP client (SSRF sinks)
-  Process/          # PendingProcess (shell sinks)
-  Routing/          # ResponseFactory (HTML sinks), Redirector
-  Support/          # helpers like e() (HTML escapes)
-```
-
-They are loaded separately from `stubs/common/` to avoid redeclaration conflicts.
+Taint annotations live in `stubs/common/` alongside type stubs, organized by Laravel namespace. Psalm 7 runs taint analysis by default (`$run_taint_analysis = true`), so there is no need for a separate directory.
 
 ## Annotations quick reference
 
 There are six taint-related annotations. The first four are the ones you'll use most in stubs:
 
-| Annotation | Purpose | Needs `@psalm-flow`? |
-|---|---|---|
-| `@psalm-taint-source <kind>` | Marks return value as producing tainted data | No -- sources create new taint |
-| `@psalm-taint-sink <kind> <$param>` | Marks a parameter as dangerous if tainted | No -- sinks are endpoints |
-| `@psalm-taint-escape <kind>` | Removes a specific taint kind from the return value | **Yes** -- see [critical rule](#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow) below |
-| `@psalm-flow (<$params>) -> return` | Declares that taint propagates from params to return | N/A -- this IS the flow declaration |
-| `@psalm-taint-unescape <kind>` | Re-adds a taint kind (reverses an earlier escape) | Yes -- same pattern as escape |
-| `@psalm-taint-specialize` | Tracks taints per call-site instead of globally | No |
+| Annotation                          | Purpose                                              | Needs `@psalm-flow`?                                                                                |
+|-------------------------------------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| `@psalm-taint-source <kind>`        | Marks return value as producing tainted data         | No -- sources create new taint                                                                      |
+| `@psalm-taint-sink <kind> <$param>` | Marks a parameter as dangerous if tainted            | No -- sinks are endpoints                                                                           |
+| `@psalm-taint-escape <kind>`        | Removes a specific taint kind from the return value  | **Yes** -- see [critical rule](#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow) below |
+| `@psalm-flow (<$params>) -> return` | Declares that taint propagates from params to return | N/A -- this IS the flow declaration                                                                 |
+| `@psalm-taint-unescape <kind>`      | Re-adds a taint kind (reverses an earlier escape)    | Yes -- same pattern as escape                                                                       |
+| `@psalm-taint-specialize`           | Tracks taints per call-site instead of globally      | No                                                                                                  |
 
 ## Critical rule: always pair `@psalm-taint-escape` with `@psalm-flow`
 
@@ -106,41 +91,41 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 
 ### Common kinds used in stubs
 
-| Kind | Attack vector | Example sink | Example escape |
-|---|---|---|---|
-| `html` | XSS via HTML injection | `echo`, `Response::make()` | `e()`, `htmlspecialchars()` |
-| `has_quotes` | Attribute injection via unquoted strings | `echo` inside HTML attributes | `e()`, `urlencode()` |
-| `sql` | SQL injection | `Connection::unprepared()` | `Connection::escape()`, parameterized queries |
-| `shell` | Command injection | `Process::run()` | `escapeshellarg()` |
-| `ssrf` | Server-side request forgery | `Http::get($url)` | -- |
-| `file` | Path traversal | `Filesystem::get()`, `response()->download()` | -- |
-| `user_secret` | Password/token exposure in logs or output | `echo`, log sinks | `Hash::make()`, `Encrypter::encrypt()` |
-| `system_secret` | Internal secret exposure | `echo`, log sinks | `Encrypter::encrypt()` |
+| Kind            | Attack vector                             | Example sink                                  | Example escape                                |
+|-----------------|-------------------------------------------|-----------------------------------------------|-----------------------------------------------|
+| `html`          | XSS via HTML injection                    | `echo`, `Response::make()`                    | `e()`, `htmlspecialchars()`                   |
+| `has_quotes`    | Attribute injection via unquoted strings  | `echo` inside HTML attributes                 | `e()`, `urlencode()`                          |
+| `sql`           | SQL injection                             | `Connection::unprepared()`                    | `Connection::escape()`, parameterized queries |
+| `shell`         | Command injection                         | `Process::run()`                              | `escapeshellarg()`                            |
+| `ssrf`          | Server-side request forgery               | `Http::get($url)`                             | --                                            |
+| `file`          | Path traversal                            | `Filesystem::get()`, `response()->download()` | --                                            |
+| `user_secret`   | Password/token exposure in logs or output | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
+| `system_secret` | Internal secret exposure                  | `echo`, log sinks                             | `Encrypter::encrypt()`                        |
 
 ### All available kinds
 
-| Kind | Constant | Description |
-|---|---|---|
-| `callable` | `INPUT_CALLABLE` | User-controlled callable strings |
-| `unserialize` | `INPUT_UNSERIALIZE` | Strings passed to `unserialize()` |
-| `include` | `INPUT_INCLUDE` | Paths passed to `include`/`require` |
-| `eval` | `INPUT_EVAL` | Strings passed to `eval()` |
-| `ldap` | `INPUT_LDAP` | LDAP DN or filter strings |
-| `sql` | `INPUT_SQL` | SQL query strings |
-| `html` | `INPUT_HTML` | Strings that could contain HTML/JS |
-| `has_quotes` | `INPUT_HAS_QUOTES` | Strings with unescaped quotes |
-| `shell` | `INPUT_SHELL` | Shell command strings |
-| `ssrf` | `INPUT_SSRF` | URLs passed to HTTP clients |
-| `file` | `INPUT_FILE` | Filesystem paths |
-| `cookie` | `INPUT_COOKIE` | HTTP cookie values |
-| `header` | `INPUT_HEADER` | HTTP header values |
-| `xpath` | `INPUT_XPATH` | XPath query strings |
-| `sleep` | `INPUT_SLEEP` | Values passed to `sleep()` (DoS) |
-| `extract` | `INPUT_EXTRACT` | Values passed to `extract()` |
-| `user_secret` | `USER_SECRET` | User-supplied secrets (passwords, tokens) |
-| `system_secret` | `SYSTEM_SECRET` | System secrets (API keys, encryption keys) |
-| `input` | `ALL_INPUT` | Alias: all input-related kinds combined (excludes secrets) |
-| `tainted` | `ALL_INPUT` | Alias: same as `input` |
+| Kind            | Constant            | Description                                                |
+|-----------------|---------------------|------------------------------------------------------------|
+| `callable`      | `INPUT_CALLABLE`    | User-controlled callable strings                           |
+| `unserialize`   | `INPUT_UNSERIALIZE` | Strings passed to `unserialize()`                          |
+| `include`       | `INPUT_INCLUDE`     | Paths passed to `include`/`require`                        |
+| `eval`          | `INPUT_EVAL`        | Strings passed to `eval()`                                 |
+| `ldap`          | `INPUT_LDAP`        | LDAP DN or filter strings                                  |
+| `sql`           | `INPUT_SQL`         | SQL query strings                                          |
+| `html`          | `INPUT_HTML`        | Strings that could contain HTML/JS                         |
+| `has_quotes`    | `INPUT_HAS_QUOTES`  | Strings with unescaped quotes                              |
+| `shell`         | `INPUT_SHELL`       | Shell command strings                                      |
+| `ssrf`          | `INPUT_SSRF`        | URLs passed to HTTP clients                                |
+| `file`          | `INPUT_FILE`        | Filesystem paths                                           |
+| `cookie`        | `INPUT_COOKIE`      | HTTP cookie values                                         |
+| `header`        | `INPUT_HEADER`      | HTTP header values                                         |
+| `xpath`         | `INPUT_XPATH`       | XPath query strings                                        |
+| `sleep`         | `INPUT_SLEEP`       | Values passed to `sleep()` (DoS)                           |
+| `extract`       | `INPUT_EXTRACT`     | Values passed to `extract()`                               |
+| `user_secret`   | `USER_SECRET`       | User-supplied secrets (passwords, tokens)                  |
+| `system_secret` | `SYSTEM_SECRET`     | System secrets (API keys, encryption keys)                 |
+| `input`         | `ALL_INPUT`         | Alias: all input-related kinds combined (excludes secrets) |
+| `tainted`       | `ALL_INPUT`         | Alias: same as `input`                                     |
 
 ## Stub patterns by annotation type
 
@@ -219,8 +204,7 @@ function inputOutputHandler(string $value, string ...$items): string {}
 2. **Choose the correct annotation type**: source, sink, escape, or flow
 3. **If using `@psalm-taint-escape` or `@psalm-taint-unescape`**: always add `@psalm-flow` to preserve other taint kinds (unless the return value's other taints are truly irrelevant)
 4. **Match parameter types exactly** to Laravel's signatures -- do not narrow types
-5. **Place in `stubs/taintAnalysis/`** if the class already has a stub in `stubs/common/`
-6. **Add a cross-reference comment** in the common stub pointing to the taint stub
+5. **Place in `stubs/common/`** under a path matching the Laravel namespace
 
 ## Testing taint stubs
 

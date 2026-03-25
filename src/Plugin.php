@@ -80,12 +80,6 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /** @return list<string> */
-    private function getTaintAnalysisStubs(): array
-    {
-        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/taintAnalysis');
-    }
-
-    /** @return list<string> */
     private function getStubsForLaravelVersion(string $version): array
     {
         [$majorVersion] = \explode('.', $version);
@@ -138,7 +132,6 @@ final class Plugin implements PluginEntryPointInterface
         $stubs = \array_merge(
             $this->getCommonStubs(),
             $this->getStubsForLaravelVersion(Application::VERSION),
-            $this->getTaintAnalysisStubs(),
         );
 
         foreach ($stubs as $stubFilePath) {

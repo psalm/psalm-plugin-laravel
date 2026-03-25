@@ -36,9 +36,8 @@ flowchart TD
     "]
 
     F --- stubs["
-        stubs/common/
+        stubs/common/ (types + taint annotations)
         stubs/12/, stubs/13/ (version-specific)
-        stubs/taintAnalysis/
         aliases.stubphp (generated)
     "]
 
@@ -89,13 +88,13 @@ composer rector # run rector refactoring
 
 Stubs override Laravel's type signatures. Place them in:
 
-- `stubs/common/` — shared across Laravel versions
+- `stubs/common/` — shared across Laravel versions (includes both type stubs and taint annotations)
 - `stubs/12/`, `stubs/13/` — version-specific overrides
-- `stubs/taintAnalysis/` — security taint annotations (sources, sinks, escapes)
 
 Rules:
 - Verify signatures against actual Laravel code (not against Laravel PHPDoc or method signatures)
 - Add a type test in `tests/Type/tests/` to prevent regression
+- For taint annotations, see [Taint Analysis Stubs](taint-analysis.md)
 
 ## How to add a handler
 
