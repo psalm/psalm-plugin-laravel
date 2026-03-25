@@ -80,4 +80,46 @@ class ResponseFactory
      * @psalm-taint-sink file $file
      */
     public function file($file, array $headers = []) {}
+
+    /**
+     * Create a new redirect response to the given path.
+     *
+     * @param  string  $path
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  bool|null  $secure
+     * @return \Illuminate\Http\RedirectResponse
+     *
+     * @psalm-taint-sink ssrf $path
+     * @psalm-taint-sink header $path
+     */
+    public function redirectTo($path, $status = 302, $headers = [], $secure = null) {}
+
+    /**
+     * Create a new redirect response, while putting the current URL in the session.
+     *
+     * @param  string  $path
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  bool|null  $secure
+     * @return \Illuminate\Http\RedirectResponse
+     *
+     * @psalm-taint-sink ssrf $path
+     * @psalm-taint-sink header $path
+     */
+    public function redirectGuest($path, $status = 302, $headers = [], $secure = null) {}
+
+    /**
+     * Create a new redirect response to the previously intended location.
+     *
+     * @param  string  $default
+     * @param  int  $status
+     * @param  array  $headers
+     * @param  bool|null  $secure
+     * @return \Illuminate\Http\RedirectResponse
+     *
+     * @psalm-taint-sink ssrf $default
+     * @psalm-taint-sink header $default
+     */
+    public function redirectToIntended($default = '/', $status = 302, $headers = [], $secure = null) {}
 }
