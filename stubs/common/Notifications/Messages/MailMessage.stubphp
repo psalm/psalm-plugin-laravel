@@ -17,22 +17,102 @@ class MailMessage
     public $bcc = [];
 
     /**
-     * Set the cc address for the mail message.
-     * @param string|list<string>|array<string, string> $address
-     * @param string|null $name
+     * Set the from address for the mail message.
+     *
+     * @param  string  $address
+     * @param  string|null  $name
      * @return $this
+     *
+     * @psalm-taint-sink header $address
+     * @psalm-taint-sink header $name
      */
-    public function cc($address, $name = null)
-    {
-    }
+    public function from($address, $name = null) {}
+
+    /**
+     * Set the "reply to" address of the message.
+     *
+     * @param  array|string  $address
+     * @param  string|null  $name
+     * @return $this
+     *
+     * @psalm-taint-sink header $address
+     * @psalm-taint-sink header $name
+     */
+    public function replyTo($address, $name = null) {}
+
+    /**
+     * Set the cc address for the mail message.
+     *
+     * @param  string|list<string>|array<string, string>  $address
+     * @param  string|null  $name
+     * @return $this
+     *
+     * @psalm-taint-sink header $address
+     * @psalm-taint-sink header $name
+     */
+    public function cc($address, $name = null) {}
 
     /**
      * Set the bcc address for the mail message.
-     * @param string|list<string>|array<string, string> $address
-     * @param string|null $name
+     *
+     * @param  string|list<string>|array<string, string>  $address
+     * @param  string|null  $name
      * @return $this
+     *
+     * @psalm-taint-sink header $address
+     * @psalm-taint-sink header $name
      */
-    public function bcc($address, $name = null)
-    {
-    }
+    public function bcc($address, $name = null) {}
+
+    /**
+     * Set the subject of the notification.
+     *
+     * @param  string  $subject
+     * @return $this
+     *
+     * @psalm-taint-sink header $subject
+     */
+    public function subject($subject) {}
+
+    /**
+     * Set the greeting of the notification.
+     *
+     * @param  string  $greeting
+     * @return $this
+     *
+     * @psalm-taint-sink html $greeting
+     */
+    public function greeting($greeting) {}
+
+    /**
+     * Set the salutation of the notification.
+     *
+     * @param  string  $salutation
+     * @return $this
+     *
+     * @psalm-taint-sink html $salutation
+     */
+    public function salutation($salutation) {}
+
+    /**
+     * Add a line of text to the notification.
+     *
+     * @param  mixed  $line
+     * @return $this
+     *
+     * @psalm-taint-sink html $line
+     */
+    public function line($line) {}
+
+    /**
+     * Configure the "call to action" button.
+     *
+     * @param  string  $text
+     * @param  string  $url
+     * @return $this
+     *
+     * @psalm-taint-sink html $text
+     * @psalm-taint-sink html $url
+     */
+    public function action($text, $url) {}
 }
