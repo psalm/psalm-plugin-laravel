@@ -714,7 +714,6 @@ final class SchemaAggregator
                 case 'softdeletes':
                     $table->setColumn(new SchemaColumn($column_name, 'string', true, default: $default));
                     break;
-                    // addColumn is handled above the switch via variable remapping
             }
         }
     }
