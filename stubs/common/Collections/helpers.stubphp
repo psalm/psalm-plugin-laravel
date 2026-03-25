@@ -19,7 +19,20 @@
  */
 function data_fill(&$target, $key, $value) {}
 
-// data_get: nothing to stub
+/**
+ * Get an item from an array or object using "dot" notation.
+ *
+ * When $key is null, the $target is returned as-is (identity function).
+ * For non-null keys, dot-notation traversal result type can't be determined statically.
+ *
+ * @template TTarget
+ *
+ * @param  TTarget  $target
+ * @param  string|array|int|null  $key
+ * @param  mixed  $default
+ * @return ($key is null ? TTarget : mixed)
+ */
+function data_get($target, $key, $default = null) {}
 
 /**
  * Set an item on an array or object using dot notation.
