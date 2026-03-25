@@ -588,12 +588,16 @@ class Builder implements BuilderContract
     /**
      * @param  mixed  $relations
      * @return self<TModel>
+     *
+     * @psalm-variadic
      */
     public function with($relations) {}
 
     /**
      * @param  mixed  $relations
      * @return self<TModel>
+     *
+     * @psalm-variadic
      */
     public function without($relations) {}
 

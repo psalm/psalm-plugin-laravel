@@ -104,6 +104,16 @@ class BelongsToMany extends Relation
     public function createMany(iterable $records, array $joinings = []) {}
 
     /**
+     * Set the columns on the pivot table to retrieve.
+     *
+     * @param  array<array-key, string>|string  $columns
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function withPivot($columns) {}
+
+    /**
      * @return \Traversable<int, TRelatedModel>
      */
     public function getResults() {}

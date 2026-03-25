@@ -57,6 +57,8 @@ trait QueriesRelationships
      *
      * @param  mixed  $relations
      * @return $this
+     *
+     * @psalm-variadic
      */
     public function withCount($relations) {}
 

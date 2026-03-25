@@ -9,6 +9,8 @@ class Route
      *
      * @param string[]|string|null $middleware
      * @return ($middleware is null ? string[] : $this)
+     *
+     * @psalm-variadic
      */
     public function middleware($middleware = null) {}
 
