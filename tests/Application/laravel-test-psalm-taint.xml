@@ -1,0 +1,27 @@
+<psalm
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    errorLevel="1"
+    findUnusedCode="false"
+    resolveFromConfigFile="false"
+    xsi:schemaLocation="https://getpsalm.org/schema/config ../../vendor/vimeo/psalm/config.xsd"
+>
+    <projectFiles>
+        <directory name="app/Ai"/>
+        <ignoreFiles>
+            <directory name="vendor"/>
+        </ignoreFiles>
+    </projectFiles>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <failOnInternalError value="true" />
+        </pluginClass>
+    </plugins>
+
+    <issueHandlers>
+        <MissingReturnType errorLevel="suppress" />
+        <UnusedClass errorLevel="suppress" />
+        <MissingPureAnnotation errorLevel="suppress" />
+        <MissingOverrideAttribute errorLevel="suppress" />
+    </issueHandlers>
+</psalm>
