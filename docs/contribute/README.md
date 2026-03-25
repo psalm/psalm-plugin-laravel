@@ -96,6 +96,19 @@ Rules:
 - Add a type test in `tests/Type/tests/` to prevent regression
 - For taint annotations, see [Taint Analysis Stubs](taint-analysis.md)
 
+### Stub merging: how Psalm combines annotations
+
+When **multiple stub files declare the same method on the same class**, Psalm reuses a single MethodStorage object and re-applies docblock parsing. The merging rules differ by annotation kind:
+
+- **Type annotations** (`@return`, `@param`): last-loaded file wins (direct assignment `=`)
+- **Taint annotations** (`@psalm-taint-*`): all files accumulate (bitwise OR `|=`)
+
+This means splitting type and taint annotations for the same method across two stub files is fragile -- the type that "wins" depends on file loading order. Always put both in the same file.
+
+When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects -- one per class/trait. There is no cross-merging: if `Connection.stubphp` overrides a method defined in `ManagesTransactions.stubphp`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
+
+Stub files are loaded in alphabetical order (sorted by full path) to ensure deterministic results across OSes.
+
 ## How to add a handler
 
 Handlers implement Psalm event interfaces to override type inference.

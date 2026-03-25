@@ -206,6 +206,7 @@ function inputOutputHandler(string $value, string ...$items): string {}
 3. **If using `@psalm-taint-escape` or `@psalm-taint-unescape`**: always add `@psalm-flow` to preserve other taint kinds (unless the return value's other taints are truly irrelevant)
 4. **Match parameter types exactly** to Laravel's signatures -- do not narrow types
 5. **Place in `stubs/common/`** under a path matching the Laravel namespace
+6. **Keep taint and type annotations together** -- if a method already has type stubs, add taint annotations to the same file (see [Stub merging](README.md#stub-merging-keep-type-and-taint-annotations-together))
 
 ## Testing taint stubs
 
