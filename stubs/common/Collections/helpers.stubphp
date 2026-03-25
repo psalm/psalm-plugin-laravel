@@ -47,8 +47,6 @@ function data_get($target, $key, $default = null) {}
  */
 function data_set(&$target, $key, $value, $overwrite = true) {}
 
-// data_set: nothing to stub
-
 /**
  * Get the first element of an array. Useful for method chaining.
  *
