@@ -8,6 +8,8 @@ namespace Illuminate\Database\Eloquent\Casts;
  */
 class Attribute
 {
+    public function __construct(?callable $get = null, ?callable $set = null) {}
+
     /**
      * Laravel calls getter/setter with ($value, $attributes), but PHP allows closures to
      * ignore trailing arguments, so 0, 1, or 2 params are all valid in practice.
