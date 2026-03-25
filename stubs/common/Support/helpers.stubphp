@@ -55,7 +55,7 @@ function class_basename($class) {}
  */
 function class_uses_recursive($class) {}
 
-// e: nothing to stub (taint analysis only)
+// e: see stubs/taintAnalysis/Support/helpers.stubphp
 // env: nothing to stub
 
 /**
