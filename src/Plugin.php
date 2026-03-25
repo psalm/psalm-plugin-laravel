@@ -94,12 +94,12 @@ final class Plugin implements PluginEntryPointInterface
      * RecursiveDirectoryIterator returns files in filesystem order, which
      * varies across OSes (alphabetical on APFS/HFS+, inode order on ext4).
      *
-     * Stub loading order matters because when multiple stubs declare the same
-     * method, Psalm reuses the existing MethodStorage and re-applies docblock
-     * parsing. Type annotations (`@return`, `@param`) use direct assignment
-     * so the last-loaded stub wins, while taint annotations (`@psalm-taint-*`)
-     * use bitwise OR and accumulate from all stubs. Without sorting, moving
-     * or renaming stub files can silently change which types Psalm sees.
+     * Stub loading order matters: when multiple stubs declare the same method
+     * on the same class, Psalm reuses the MethodStorage and re-applies docblock
+     * parsing. Type annotations (`@return`, `@param`) use `=` so the last-loaded
+     * stub wins; taint annotations (`@psalm-taint-*`) use `|=` and accumulate.
+     * Without sorting, moving or renaming stub files can silently change types.
+     * See docs/contribute/README.md "Stub merging" for details.
      *
      * @return list<string>
      */
