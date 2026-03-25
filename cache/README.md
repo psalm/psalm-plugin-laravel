@@ -1,1 +1,0 @@
-This is for generated PHP stub files
