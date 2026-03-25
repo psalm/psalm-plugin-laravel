@@ -6,7 +6,6 @@ use Rector\CodingStyle\Rector\Encapsed\EncapsedStringsToSprintfRector;
 use Rector\CodingStyle\Rector\If_\NullableCompareToNullRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPrivateMethodRector;
-use Rector\DeadCode\Rector\Switch_\RemoveDuplicatedCaseInSwitchRector;
 use Rector\Php55\Rector\String_\StringClassNameToClassConstantRector;
 use Rector\PHPUnit\Set\PHPUnitSetList;
 use Rector\ValueObject\PhpVersion;
@@ -24,8 +23,4 @@ return RectorConfig::configure()
         EncapsedStringsToSprintfRector::class,
         SplitDoubleAssignRector::class,
         StringClassNameToClassConstantRector::class, // analyzed classes are not always auto-loaded
-        // The switch in SchemaAggregator intentionally has cases before `default:` that share
-        // the same body — the `default:` must remain at the bottom to catch unknown Blueprint methods
-        // without making subsequent cases (float, drop, etc.) unreachable
-        RemoveDuplicatedCaseInSwitchRector::class => ['src/Handlers/Eloquent/Schema/SchemaAggregator.php'],
     ]);
