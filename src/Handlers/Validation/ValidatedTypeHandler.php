@@ -6,17 +6,13 @@ namespace Psalm\LaravelPlugin\Handlers\Validation;
 
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
-use Psalm\Type;
 use Psalm\Type\Atomic\TKeyedArray;
-use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
- * Narrows return types of validation methods based on the declared rules:
+ * Narrows return types of FormRequest::validated() based on declared validation rules.
  *
  * @see \Illuminate\Foundation\Http\FormRequest::validated()
- * @see \Illuminate\Foundation\Http\FormRequest::safe()
- * @see \Illuminate\Http\Request::validate()  (via ValidatesRequests trait / @method annotation)
  *
  * Architecture follows {@see \Psalm\LaravelPlugin\Handlers\Console\CommandArgumentHandler}.
  */
@@ -38,17 +34,11 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        $methodName = $event->getMethodNameLowercase();
-
-        if ($methodName === 'validated') {
-            return self::resolveValidated($event);
+        if ($event->getMethodNameLowercase() !== 'validated') {
+            return null;
         }
 
-        if ($methodName === 'safe') {
-            return self::resolveSafe($event);
-        }
-
-        return null;
+        return self::resolveValidated($event);
     }
 
     private static function resolveValidated(MethodReturnTypeProviderEvent $event): ?Union
@@ -84,23 +74,6 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             }
         }
 
-        return null;
-    }
-
-    /** @psalm-mutation-free */
-    private static function resolveSafe(MethodReturnTypeProviderEvent $event): ?Union
-    {
-        $callArgs = $event->getCallArgs();
-
-        // safe() without args returns ValidatedInput — return it for better method chaining
-        if ($callArgs === []) {
-            return new Union([
-                new TNamedObject(\Illuminate\Support\ValidatedInput::class),
-            ]);
-        }
-
-        // safe(['key1', 'key2']) returns array — could narrow to partial shape
-        // For now, fall through to stub default
         return null;
     }
 

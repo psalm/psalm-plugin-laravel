@@ -72,7 +72,7 @@ function testWildcardRules(WildcardRequest $request): void
 function testSafeReturnsValidatedInput(StoreUserRequest $request): void
 {
     $_safe = $request->safe();
-    /** @psalm-check-type-exact $_safe = \Illuminate\Support\ValidatedInput */
+    /** @psalm-check-type-exact $_safe = \Illuminate\Support\ValidatedInput|array<string, mixed> */
 }
 ?>
 --EXPECT--

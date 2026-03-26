@@ -322,19 +322,21 @@ final class ValidationRuleAnalyzer
 
         // Build list types from wildcards
         foreach ($wildcardDirect as $parent => $elementRule) {
+            $parentRule = $topLevel[$parent] ?? null;
+
             $listType = new Union([
                 Type::getListAtomic($elementRule->type),
             ]);
 
-            if (isset($topLevel[$parent]) && $topLevel[$parent]->nullable) {
+            if ($parentRule?->nullable) {
                 $listType = Type::combineUnionTypes($listType, Type::getNull());
             }
 
             $topLevel[$parent] = new ResolvedRule(
                 $listType,
                 $elementRule->removedTaints,
-                $topLevel[$parent]->nullable ?? false,
-                $topLevel[$parent]->sometimes ?? false,
+                $parentRule?->nullable ?? false,
+                $parentRule?->sometimes ?? false,
             );
         }
 
@@ -343,6 +345,8 @@ final class ValidationRuleAnalyzer
             if ($children === []) {
                 continue;
             }
+
+            $parentRule = $topLevel[$parent] ?? null;
 
             /** @var non-empty-array<string, Union> $properties */
             $properties = [];
@@ -362,17 +366,15 @@ final class ValidationRuleAnalyzer
                 Type::getListAtomic(new Union([$shape])),
             ]);
 
-            $parentNullable = isset($topLevel[$parent]) && $topLevel[$parent]->nullable;
-
-            if ($parentNullable) {
+            if ($parentRule?->nullable) {
                 $listType = Type::combineUnionTypes($listType, Type::getNull());
             }
 
             $topLevel[$parent] = new ResolvedRule(
                 $listType,
                 0, // Taint removal applies per-element, not to the list container
-                $parentNullable,
-                isset($topLevel[$parent]) && $topLevel[$parent]->sometimes,
+                $parentRule?->nullable ?? false,
+                $parentRule?->sometimes ?? false,
             );
         }
 
