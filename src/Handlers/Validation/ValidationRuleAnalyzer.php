@@ -60,7 +60,6 @@ final class ValidationRuleAnalyzer
      *
      * @param list<Node\Arg> $args
      * @return array<string, ResolvedRule>|null
-     * @psalm-api will be used by ValidatedTypeHandler for inline Request::validate() support
      */
     public static function getRulesFromValidateArgs(array $args): ?array
     {
@@ -223,8 +222,9 @@ final class ValidationRuleAnalyzer
      *
      * Accepts: true, false, 0, 1, '0', '1'. TLiteralString requires Psalm Config,
      * so we fall back to bool|int when running outside analysis context (unit tests).
+     *
+     * @psalm-external-mutation-free
      */
-    /** @psalm-external-mutation-free */
     private static function booleanRuleType(): Union
     {
         try {
