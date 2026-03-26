@@ -117,7 +117,9 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
     }
 
     /**
-     * Create a taint sink for each data flow node in the type's parent_nodes.
+     * Create a single taint sink for an operand and connect all its data flow
+     * parent nodes to it. One sink per operand side avoids duplicate reports
+     * and keeps the taint graph compact.
      *
      * The sink matches USER_SECRET | SYSTEM_SECRET, so only secret-tainted
      * data triggers an issue — ordinary input taint is not affected.
@@ -135,18 +137,19 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
             return;
         }
 
+        $sinkId = $sinkLabel . '-' . $locationId;
+
+        $sink = DataFlowNode::make(
+            $sinkId,
+            $sinkLabel,
+            $codeLocation,
+            null,
+            self::SECRET_TAINTS,
+        );
+
+        $graph->addSink($sink);
+
         foreach ($type->parent_nodes as $parentNode) {
-            $sinkId = $sinkLabel . '-' . $locationId . '-' . $parentNode->id;
-
-            $sink = DataFlowNode::make(
-                $sinkId,
-                $sinkLabel,
-                $codeLocation,
-                null,
-                self::SECRET_TAINTS,
-            );
-
-            $graph->addSink($sink);
             $graph->addPath($parentNode, $sink, 'timing-comparison');
         }
     }
