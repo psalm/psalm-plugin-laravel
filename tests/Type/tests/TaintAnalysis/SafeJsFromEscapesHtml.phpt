@@ -11,7 +11,7 @@
 function renderJsFrom(\Illuminate\Http\Request $request): void {
     /** @var string $name */
     $name = $request->input('name');
-    echo \Illuminate\Support\Js::from($name);
+    echo \Illuminate\Support\Js::from($name)->toHtml();
 }
 ?>
 --EXPECTF--

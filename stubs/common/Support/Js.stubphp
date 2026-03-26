@@ -26,8 +26,9 @@ class Js
     /**
      * Encode the given data as JSON.
      *
-     * Always applies HTML-safe JSON flags (JSON_HEX_TAG | JSON_HEX_APOS |
-     * JSON_HEX_AMP | JSON_HEX_QUOT) regardless of the $flags argument.
+     * Ensures HTML-safe JSON flags (JSON_HEX_TAG | JSON_HEX_APOS |
+     * JSON_HEX_AMP | JSON_HEX_QUOT) are always applied in addition to
+     * any flags specified in the $flags argument.
      *
      * @param  mixed  $data
      * @param  int  $flags
