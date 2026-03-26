@@ -1,0 +1,215 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Tests\Unit\Handlers\Validation;
+
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Validation\ResolvedRule;
+use Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer;
+use Psalm\Type\TaintKind;
+
+/**
+ * Tests for the rule parsing and type/taint resolution logic in ValidationRuleAnalyzer.
+ *
+ * Note: AST extraction (reading rules() from FormRequest classes) requires a running
+ * Psalm analysis context. These tests verify the parsing/mapping layer via resolveRuleSegments().
+ */
+#[CoversClass(ValidationRuleAnalyzer::class)]
+#[CoversClass(ResolvedRule::class)]
+final class ValidationRuleAnalyzerTest extends TestCase
+{
+    private function resolve(string $ruleString): ResolvedRule
+    {
+        return ValidationRuleAnalyzer::resolveRuleSegments(\explode('|', $ruleString));
+    }
+
+    // --- Type resolution ---
+
+    #[Test]
+    public function string_rule_returns_string_type(): void
+    {
+        $rule = $this->resolve('required|string');
+
+        $this->assertSame('string', $rule->type->getId());
+        $this->assertFalse($rule->nullable);
+        $this->assertFalse($rule->sometimes);
+    }
+
+    #[Test]
+    public function integer_rule_returns_int_or_numeric_string(): void
+    {
+        $rule = $this->resolve('required|integer');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function numeric_rule_returns_float_int_or_numeric_string(): void
+    {
+        $rule = $this->resolve('numeric');
+
+        $this->assertSame('float|int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function boolean_rule_returns_bool_type(): void
+    {
+        $rule = $this->resolve('boolean');
+
+        $this->assertTrue($rule->type->hasType('bool'));
+    }
+
+    #[Test]
+    public function array_rule_returns_array_type(): void
+    {
+        $rule = $this->resolve('array');
+
+        $this->assertTrue($rule->type->hasType('array'));
+    }
+
+    #[Test]
+    public function uuid_rule_returns_string(): void
+    {
+        $rule = $this->resolve('uuid');
+
+        $this->assertSame('string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function file_rule_returns_uploaded_file(): void
+    {
+        $rule = $this->resolve('file');
+
+        $this->assertTrue($rule->type->hasType('Illuminate\\Http\\UploadedFile'));
+    }
+
+    #[Test]
+    public function in_rule_returns_string_type(): void
+    {
+        // Without Psalm Config initialized, TLiteralString falls back to plain string.
+        // In real analysis context, this would return 'admin'|'user'|'guest' literal union.
+        $rule = $this->resolve('in:admin,user,guest');
+
+        $this->assertTrue($rule->type->hasType('string'));
+    }
+
+    #[Test]
+    public function unknown_rule_returns_mixed(): void
+    {
+        $rule = $this->resolve('required|max:255');
+
+        $this->assertTrue($rule->type->isMixed());
+    }
+
+    // --- Modifier tests ---
+
+    #[Test]
+    public function nullable_modifier_adds_null(): void
+    {
+        $rule = $this->resolve('nullable|integer');
+
+        $this->assertTrue($rule->type->hasType('null'));
+        $this->assertTrue($rule->type->hasType('int'));
+        $this->assertTrue($rule->nullable);
+    }
+
+    #[Test]
+    public function sometimes_modifier_sets_flag(): void
+    {
+        $rule = $this->resolve('sometimes|string');
+
+        $this->assertTrue($rule->sometimes);
+        $this->assertSame('string', $rule->type->getId());
+    }
+
+    // --- Taint resolution ---
+
+    #[Test]
+    public function integer_rule_removes_all_taint(): void
+    {
+        $rule = $this->resolve('integer');
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function string_rule_keeps_all_taint(): void
+    {
+        $rule = $this->resolve('string');
+
+        $this->assertSame(0, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function uuid_rule_removes_all_taint(): void
+    {
+        $rule = $this->resolve('uuid');
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function url_rule_removes_taint_except_ssrf(): void
+    {
+        $rule = $this->resolve('url');
+
+        $this->assertSame(TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF, $rule->removedTaints);
+        // SSRF taint should still be present (not removed)
+        $this->assertSame(0, $rule->removedTaints & TaintKind::INPUT_SSRF);
+    }
+
+    #[Test]
+    public function ip_rule_removes_taint_except_ssrf(): void
+    {
+        $rule = $this->resolve('ip');
+
+        $this->assertSame(TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function email_rule_keeps_all_taint(): void
+    {
+        $rule = $this->resolve('email');
+
+        $this->assertSame(0, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function in_rule_removes_all_taint(): void
+    {
+        $rule = $this->resolve('in:a,b,c');
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function date_rule_removes_all_taint(): void
+    {
+        $rule = $this->resolve('date');
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function alpha_num_rule_removes_all_taint(): void
+    {
+        $rule = $this->resolve('alpha_num');
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    // --- Array rule format ---
+
+    #[Test]
+    public function array_format_rules_resolve_correctly(): void
+    {
+        // Simulates ['required', 'integer', 'max:100']
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'integer', 'max:100']);
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+}

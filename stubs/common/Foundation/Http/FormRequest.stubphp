@@ -1,0 +1,27 @@
+<?php
+
+namespace Illuminate\Foundation\Http;
+
+class FormRequest extends \Illuminate\Http\Request
+{
+    /**
+     * Get the validated data from the request.
+     *
+     * @param  array|int|string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function validated($key = null, $default = null) {}
+
+    /**
+     * Get a validated input container for the validated input.
+     *
+     * @param  array|null  $keys
+     * @return \Illuminate\Support\ValidatedInput|array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function safe(?array $keys = null) {}
+}
