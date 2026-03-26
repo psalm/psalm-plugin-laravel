@@ -26,6 +26,7 @@ use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
+use Psalm\LaravelPlugin\Handlers\Rules\TimingUnsafeComparisonHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
@@ -212,6 +213,9 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(NoEnvOutsideConfigHandler::class);
+
+        require_once __DIR__ . '/Handlers/Rules/TimingUnsafeComparisonHandler.php';
+        $registration->registerHooksFromClass(TimingUnsafeComparisonHandler::class);
     }
 
     private function buildSchema(PluginConfig $pluginConfig): void
