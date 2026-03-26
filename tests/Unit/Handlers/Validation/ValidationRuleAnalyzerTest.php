@@ -199,6 +199,57 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
     }
 
+    #[Test]
+    public function decimal_rule_returns_numeric_string(): void
+    {
+        $rule = $this->resolve('decimal:2');
+
+        $this->assertSame('numeric-string', $rule->type->getId());
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function digits_rule_returns_numeric_string(): void
+    {
+        $rule = $this->resolve('digits:4');
+
+        $this->assertSame('numeric-string', $rule->type->getId());
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function accepted_rule_removes_all_taint(): void
+    {
+        $rule = $this->resolve('accepted');
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function declined_rule_removes_all_taint(): void
+    {
+        $rule = $this->resolve('declined');
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function before_rule_returns_string_and_removes_taint(): void
+    {
+        $rule = $this->resolve('before:2025-01-01');
+
+        $this->assertSame('string', $rule->type->getId());
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function date_equals_rule_removes_all_taint(): void
+    {
+        $rule = $this->resolve('date_equals:today');
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
     // --- Array rule format ---
 
     #[Test]
