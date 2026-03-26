@@ -156,22 +156,24 @@ trait InteractsWithInput
     /**
      * Retrieve input as an integer value.
      *
+     * Not a taint source: (int) cast cannot produce an injection payload.
+     * e.g. (int) "1; DROP TABLE users" → 1
+     *
      * @param  string  $key
      * @param  int  $default
      * @return int
-     *
-     * @psalm-taint-source input
      */
     public function integer($key, $default = 0) {}
 
     /**
      * Retrieve input as a float value.
      *
+     * Not a taint source: (float) cast cannot produce an injection payload.
+     * e.g. (float) "<script>alert(1)</script>" → 0.0
+     *
      * @param  string  $key
      * @param  float  $default
      * @return float
-     *
-     * @psalm-taint-source input
      */
     public function float($key, $default = 0.0) {}
 
