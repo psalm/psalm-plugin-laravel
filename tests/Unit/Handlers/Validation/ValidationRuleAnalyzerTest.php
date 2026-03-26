@@ -152,21 +152,19 @@ final class ValidationRuleAnalyzerTest extends TestCase
     }
 
     #[Test]
-    public function url_rule_removes_taint_except_ssrf(): void
+    public function url_rule_keeps_all_taint(): void
     {
         $rule = $this->resolve('url');
 
-        $this->assertSame(TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF, $rule->removedTaints);
-        // SSRF taint should still be present (not removed)
-        $this->assertSame(0, $rule->removedTaints & TaintKind::INPUT_SSRF);
+        $this->assertSame(0, $rule->removedTaints);
     }
 
     #[Test]
-    public function ip_rule_removes_taint_except_ssrf(): void
+    public function ip_rule_keeps_all_taint(): void
     {
         $rule = $this->resolve('ip');
 
-        $this->assertSame(TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF, $rule->removedTaints);
+        $this->assertSame(0, $rule->removedTaints);
     }
 
     #[Test]
