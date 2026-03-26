@@ -15,22 +15,16 @@ use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
- * Manages taint for validated data from FormRequest subclasses.
+ * Manages taint for validated data from FormRequest and Request.
  *
- * When a MethodReturnTypeProvider overrides the return type of validated(),
- * Psalm skips the stub's @psalm-taint-source annotation. This handler
- * compensates by explicitly adding taint (via AddTaintsInterface) and then
- * selectively removing it for fields with safe rules (via RemoveTaintsInterface).
+ * When a MethodReturnTypeProvider overrides the return type of validated() or validate(),
+ * Psalm skips the stub's @psalm-taint-source annotation. This handler compensates by
+ * explicitly adding taint (via AddTaintsInterface) and then selectively removing it
+ * for fields with safe rules (via RemoveTaintsInterface).
  *
- * For $request->validated('age') with 'integer' rule:
- *   addTaints()    → ALL_INPUT  (mark as user input)
- *   removeTaints() → ALL_INPUT  (integer rule makes it safe)
- *   net taint      → 0          (clean)
- *
- * For $request->validated('name') with 'string' rule:
- *   addTaints()    → ALL_INPUT  (mark as user input)
- *   removeTaints() → 0          (string rule doesn't sanitize)
- *   net taint      → ALL_INPUT  (tainted)
+ * Handles:
+ *   $request->validated('field')    — FormRequest, per-field add+remove
+ *   $request->validate([...])       — Request, add taint to return value
  *
  * Architecture follows {@see \Psalm\Internal\Provider\AddRemoveTaints\HtmlFunctionTainter}.
  *
@@ -40,36 +34,40 @@ use Psalm\Type\Union;
 final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsInterface
 {
     /**
-     * Add taint to validated() calls on FormRequest subclasses.
+     * Add taint to validated()/validate() calls.
      *
-     * This replaces the @psalm-taint-source annotation from the stub, which
+     * This replaces the @psalm-taint-source annotation from stubs, which
      * gets skipped when ValidatedTypeHandler provides a return type.
      */
     #[\Override]
     public static function addTaints(AddRemoveTaintsEvent $event): int
     {
-        if (!self::isFormRequestValidatedCall($event)) {
-            return 0;
+        if (self::isValidationMethodCall($event) !== null) {
+            return TaintKind::ALL_INPUT;
         }
 
-        return TaintKind::ALL_INPUT;
+        return 0;
     }
 
     /**
      * Remove taint from validated('field') calls where the field's validation
      * rules guarantee safe content (e.g. integer, uuid, alpha_num).
+     *
+     * Only applies to FormRequest::validated('field') with a literal key —
+     * validate() returns a full array where per-field taint removal is not possible.
      */
     #[\Override]
     public static function removeTaints(AddRemoveTaintsEvent $event): int
     {
-        if (!self::isFormRequestValidatedCall($event)) {
+        $method = self::isValidationMethodCall($event);
+
+        // Per-field removal only works for validated('field') with a literal key
+        if ($method !== 'validated') {
             return 0;
         }
 
         /** @var MethodCall $expr */
         $expr = $event->getExpr();
-
-        // Must have a literal string first argument (the field key)
         $args = $expr->getArgs();
 
         if ($args === []) {
@@ -106,33 +104,65 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
     }
 
     /**
-     * Check if the expression is a validated() call on a FormRequest subclass.
+     * Check if the expression is a validated() or validate() call on Request/FormRequest.
+     *
+     * @return 'validated'|'validate'|null  The matched method name, or null
      */
-    private static function isFormRequestValidatedCall(AddRemoveTaintsEvent $event): bool
+    private static function isValidationMethodCall(AddRemoveTaintsEvent $event): ?string
     {
         $expr = $event->getExpr();
 
         if (!$expr instanceof MethodCall) {
-            return false;
+            return null;
         }
 
         if (!$expr->name instanceof Identifier) {
-            return false;
+            return null;
         }
 
         $methodName = \strtolower($expr->name->toString());
 
-        if ($methodName !== 'validated') {
-            return false;
+        if ($methodName !== 'validated' && $methodName !== 'validate') {
+            return null;
         }
 
         $statementsAnalyzer = $event->getStatementsSource();
 
         if (!$statementsAnalyzer instanceof StatementsAnalyzer) {
-            return false;
+            return null;
         }
 
-        return self::resolveFormRequestClass($expr, $statementsAnalyzer, $event) !== null;
+        $callerType = $statementsAnalyzer->node_data->getType($expr->var);
+
+        if (!$callerType instanceof Union) {
+            return null;
+        }
+
+        $codebase = $event->getCodebase();
+
+        foreach ($callerType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                continue;
+            }
+
+            /** @var class-string $className */
+            $className = $atomic->value;
+
+            try {
+                // validate() is on Request (parent), validated() is on FormRequest
+                $isRequest = $className === \Illuminate\Http\Request::class
+                    || $className === \Illuminate\Foundation\Http\FormRequest::class
+                    || $codebase->classExtends($className, \Illuminate\Http\Request::class);
+            } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
+                continue;
+            }
+
+            if ($isRequest) {
+                return $methodName;
+            }
+        }
+
+        return null;
     }
 
     /**
