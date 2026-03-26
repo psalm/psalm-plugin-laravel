@@ -1,0 +1,564 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Handlers\Validation;
+
+use PhpParser\Node;
+use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\Type;
+use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TFloat;
+use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TLiteralInt;
+use Psalm\Type\Atomic\TLiteralString;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNumericString;
+use Psalm\Type\TaintKind;
+use Psalm\Type\Union;
+
+/**
+ * Reads validation rules from FormRequest classes or inline validate() calls,
+ * parses rule strings, and resolves them to Psalm types and taint escape bitmasks.
+ *
+ * Mirrors the architecture of {@see \Psalm\LaravelPlugin\Handlers\Console\CommandDefinitionAnalyzer}:
+ * reads AST from source files, walks class hierarchy, caches results.
+ */
+final class ValidationRuleAnalyzer
+{
+    /** @var array<string, array<string, ResolvedRule>|null> */
+    private static array $cache = [];
+
+    /**
+     * Get resolved rules for a FormRequest subclass by reading its rules() method from AST.
+     *
+     * @param class-string $formRequestClass
+     * @return array<string, ResolvedRule>|null  field => ResolvedRule, null if unresolvable
+     */
+    public static function getRulesForFormRequest(string $formRequestClass): ?array
+    {
+        $cacheKey = \strtolower($formRequestClass);
+
+        if (\array_key_exists($cacheKey, self::$cache)) {
+            return self::$cache[$cacheKey];
+        }
+
+        $rawRules = self::extractRulesFromClass($formRequestClass);
+
+        if ($rawRules === null) {
+            return self::$cache[$cacheKey] = null;
+        }
+
+        return self::$cache[$cacheKey] = self::resolveRules($rawRules);
+    }
+
+    /**
+     * Parse rules from an inline validate() call's first argument.
+     *
+     * Expects the first argument to be an array literal with string keys.
+     *
+     * @param list<Node\Arg> $args
+     * @return array<string, ResolvedRule>|null
+     * @psalm-api will be used by ValidatedTypeHandler for inline Request::validate() support
+     */
+    public static function getRulesFromValidateArgs(array $args): ?array
+    {
+        if ($args === []) {
+            return null;
+        }
+
+        $rulesExpr = $args[0]->value;
+
+        if (!$rulesExpr instanceof Node\Expr\Array_) {
+            return null;
+        }
+
+        $rawRules = self::extractRulePairsFromArrayNode($rulesExpr);
+
+        if ($rawRules === null) {
+            return null;
+        }
+
+        return self::resolveRules($rawRules);
+    }
+
+    /**
+     * Parse a single rule string into a ResolvedRule.
+     *
+     * Handles both pipe-delimited strings ('required|integer|nullable')
+     * and arrays of strings (['required', 'integer', 'nullable']).
+     *
+     * @param list<string> $segments
+     */
+    public static function resolveRuleSegments(array $segments): ResolvedRule
+    {
+        $type = null;
+        $removedTaints = 0;
+        $nullable = false;
+        $sometimes = false;
+
+        foreach ($segments as $segment) {
+            $segment = \trim($segment);
+
+            if ($segment === '') {
+                continue;
+            }
+
+            [$ruleName, $ruleParam] = self::splitRule($segment);
+
+            // Modifiers
+            if ($ruleName === 'nullable') {
+                $nullable = true;
+
+                continue;
+            }
+
+            if ($ruleName === 'sometimes') {
+                $sometimes = true;
+
+                continue;
+            }
+
+            // Type-bearing rules (first one wins for type, all accumulate taint)
+            $ruleType = self::ruleToType($ruleName, $ruleParam);
+
+            if ($ruleType !== null && $type === null) {
+                $type = $ruleType;
+            }
+
+            $removedTaints |= self::ruleToRemovedTaints($ruleName);
+        }
+
+        // Default: if no type rule matched, return mixed (don't narrow)
+        $type ??= Type::getMixed();
+
+        // nullable modifier: add null to type union
+        if ($nullable) {
+            $type = Type::combineUnionTypes($type, Type::getNull());
+        }
+
+        return new ResolvedRule($type, $removedTaints, $nullable, $sometimes);
+    }
+
+    /**
+     * Map a validation rule name to a Psalm type.
+     *
+     * Adding a new rule = adding one line to this match.
+     */
+    private static function ruleToType(string $rule, ?string $param): ?Union
+    {
+        return match ($rule) {
+            'string'                           => Type::getString(),
+            'integer'                          => new Union([new TInt(), new TNumericString()]),
+            'numeric'                          => new Union([new TInt(), new TFloat(), new TNumericString()]),
+            // Laravel's boolean rule accepts: true, false, 0, 1, '0', '1'
+            'boolean'                          => Type::combineUnionTypes(
+                Type::getBool(),
+                new Union([new TLiteralInt(0), new TLiteralInt(1)]),
+            ),
+            'array'                            => new Union([
+                new TArray([Type::getArrayKey(), Type::getMixed()]),
+            ]),
+            'file', 'image'                    => new Union([
+                new TNamedObject(\Illuminate\Http\UploadedFile::class),
+            ]),
+            'in'                               => self::inRuleToLiteralUnion($param),
+            'uuid', 'ulid',
+            'alpha', 'alpha_num', 'alpha_dash',
+            'date', 'date_format',
+            'email', 'url', 'active_url',
+            'ip', 'ipv4', 'ipv6',
+            'json'                             => Type::getString(),
+            default                            => null,
+        };
+    }
+
+    /**
+     * Map a validation rule name to a taint-escape bitmask.
+     *
+     * Returns the set of taint kinds that this rule makes safe.
+     * Adding a new rule = adding one line to this match.
+     *
+     * @psalm-pure
+     */
+    private static function ruleToRemovedTaints(string $rule): int
+    {
+        return match ($rule) {
+            'integer', 'numeric', 'boolean',
+            'uuid', 'ulid',
+            'alpha', 'alpha_num', 'alpha_dash',
+            'date', 'date_format',
+            'in',
+            'file', 'image'                         => TaintKind::ALL_INPUT,
+            'url', 'active_url',
+            'ip', 'ipv4', 'ipv6'                    => TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF,
+            // string, email, json, regex, required, max, min, etc. → keep all taint
+            default                                 => 0,
+        };
+    }
+
+    /**
+     * Convert an 'in:a,b,c' parameter to a literal string union type.
+     */
+    private static function inRuleToLiteralUnion(?string $param): Union
+    {
+        if ($param === null || $param === '') {
+            return Type::getString();
+        }
+
+        try {
+            $values = \explode(',', $param);
+            $atomics = \array_map(
+                static fn(string $v): TLiteralString => TLiteralString::make(\trim($v)),
+                $values,
+            );
+
+            return new Union($atomics);
+        } catch (\UnexpectedValueException) {
+            // TLiteralString::make() requires Psalm Config to be initialized.
+            // When called outside of Psalm analysis context (e.g. unit tests),
+            // fall back to a plain string type.
+            return Type::getString();
+        }
+    }
+
+    /**
+     * Split a rule segment into name and optional parameter.
+     *
+     * 'in:a,b,c' → ['in', 'a,b,c']
+     * 'required' → ['required', null]
+     * 'max:255'  → ['max', '255']
+     *
+     * @return array{string, string|null}
+     * @psalm-pure
+     */
+    private static function splitRule(string $segment): array
+    {
+        $colonPos = \strpos($segment, ':');
+
+        if ($colonPos === false) {
+            return [\strtolower($segment), null];
+        }
+
+        return [
+            \strtolower(\substr($segment, 0, $colonPos)),
+            \substr($segment, $colonPos + 1),
+        ];
+    }
+
+    /**
+     * Convert a flat rule map (which may contain wildcards) into resolved rules.
+     *
+     * Handles single-level wildcards:
+     *   'items.*' → wraps in list<T>
+     *   'items.*.name' → builds list<array{name: T}>
+     *
+     * @param array<string, list<string>> $rawRules  field => rule segments
+     * @return array<string, ResolvedRule>
+     */
+    private static function resolveRules(array $rawRules): array
+    {
+        // Separate top-level fields from wildcard paths
+        $topLevel = [];
+        // Keyed by parent field name → list of [childField, resolvedRule]
+        /** @var array<string, array<string, ResolvedRule>> $wildcardChildren */
+        $wildcardChildren = [];
+        /** @var array<string, ResolvedRule> $wildcardDirect */
+        $wildcardDirect = [];
+
+        foreach ($rawRules as $field => $segments) {
+            // 'items.*.name' pattern
+            if (\str_contains($field, '.*.')) {
+                $dotStarPos = \strpos($field, '.*.');
+
+                \assert($dotStarPos !== false);
+
+                $parent = \substr($field, 0, $dotStarPos);
+                $child = \substr($field, $dotStarPos + 3);
+
+                // Skip deeper nesting for now (items.*.tags.*.name)
+                if (\str_contains($child, '.*')) {
+                    continue;
+                }
+
+                $wildcardChildren[$parent][$child] = self::resolveRuleSegments($segments);
+
+                continue;
+            }
+
+            // 'items.*' pattern (direct wildcard element)
+            if (\str_ends_with($field, '.*')) {
+                $parent = \substr($field, 0, -2);
+                $wildcardDirect[$parent] = self::resolveRuleSegments($segments);
+
+                continue;
+            }
+
+            // Regular top-level field
+            $topLevel[$field] = self::resolveRuleSegments($segments);
+        }
+
+        // Build list types from wildcards
+        foreach ($wildcardDirect as $parent => $elementRule) {
+            $listType = new Union([
+                Type::getListAtomic($elementRule->type),
+            ]);
+
+            if (isset($topLevel[$parent]) && $topLevel[$parent]->nullable) {
+                $listType = Type::combineUnionTypes($listType, Type::getNull());
+            }
+
+            $topLevel[$parent] = new ResolvedRule(
+                $listType,
+                $elementRule->removedTaints,
+                $topLevel[$parent]->nullable ?? false,
+                $topLevel[$parent]->sometimes ?? false,
+            );
+        }
+
+        // Build list<array{...}> types from wildcard children
+        foreach ($wildcardChildren as $parent => $children) {
+            if ($children === []) {
+                continue;
+            }
+
+            /** @var non-empty-array<string, Union> $properties */
+            $properties = [];
+
+            foreach ($children as $childField => $childRule) {
+                $childType = $childRule->type;
+
+                if ($childRule->sometimes) {
+                    $childType = $childType->setPossiblyUndefined(true);
+                }
+
+                $properties[$childField] = $childType;
+            }
+
+            $shape = TKeyedArray::make($properties);
+            $listType = new Union([
+                Type::getListAtomic(new Union([$shape])),
+            ]);
+
+            $parentNullable = isset($topLevel[$parent]) && $topLevel[$parent]->nullable;
+
+            if ($parentNullable) {
+                $listType = Type::combineUnionTypes($listType, Type::getNull());
+            }
+
+            $topLevel[$parent] = new ResolvedRule(
+                $listType,
+                0, // Taint removal applies per-element, not to the list container
+                $parentNullable,
+                isset($topLevel[$parent]) && $topLevel[$parent]->sometimes,
+            );
+        }
+
+        return $topLevel;
+    }
+
+    /**
+     * Extract the rules() method's return array from a FormRequest class AST.
+     * Walks the class hierarchy (child → parent) to find the first declaration.
+     *
+     * @param class-string $formRequestClass
+     * @return array<string, list<string>>|null  field => rule segments
+     */
+    private static function extractRulesFromClass(string $formRequestClass): ?array
+    {
+        try {
+            $codebase = ProjectAnalyzer::getInstance()->getCodebase();
+        } catch (\RuntimeException|\Error) {
+            return null;
+        }
+
+        $currentClass = \strtolower($formRequestClass);
+
+        while ($currentClass !== '') {
+            try {
+                $storage = $codebase->classlike_storage_provider->get($currentClass);
+            } catch (\InvalidArgumentException) {
+                break;
+            }
+
+            $filePath = $storage->location?->file_path;
+
+            if (isset($storage->methods['rules']) && $filePath !== null) {
+                try {
+                    $statements = $codebase->getStatementsForFile($filePath);
+                    $arrayNode = self::findRulesMethodReturn($statements, $storage->name);
+
+                    if ($arrayNode !== null) {
+                        return self::extractRulePairsFromArrayNode($arrayNode);
+                    }
+                } catch (\InvalidArgumentException|\UnexpectedValueException) {
+                    // File unreadable — fall through to parent
+                }
+            }
+
+            $currentClass = \strtolower($storage->parent_class ?? '');
+        }
+
+        return null;
+    }
+
+    /**
+     * Walk AST statements to find the rules() method's return array in the given class.
+     *
+     * @param list<Node\Stmt> $statements
+     * @psalm-mutation-free
+     */
+    private static function findRulesMethodReturn(array $statements, string $className): ?Node\Expr\Array_
+    {
+        foreach ($statements as $stmt) {
+            if ($stmt instanceof Node\Stmt\Namespace_) {
+                $result = self::findRulesInNamespace($stmt, $className);
+
+                if ($result !== null) {
+                    return $result;
+                }
+
+                continue;
+            }
+
+            if (!$stmt instanceof Node\Stmt\Class_) {
+                continue;
+            }
+
+            if (!self::classNameMatches($stmt, $className, '')) {
+                continue;
+            }
+
+            return self::findRulesReturnInClass($stmt);
+        }
+
+        return null;
+    }
+
+    /** @psalm-mutation-free */
+    private static function findRulesInNamespace(Node\Stmt\Namespace_ $namespace, string $className): ?Node\Expr\Array_
+    {
+        $namespaceName = $namespace->name?->toString() ?? '';
+
+        foreach ($namespace->stmts as $stmt) {
+            if (!$stmt instanceof Node\Stmt\Class_) {
+                continue;
+            }
+
+            if (!self::classNameMatches($stmt, $className, $namespaceName)) {
+                continue;
+            }
+
+            return self::findRulesReturnInClass($stmt);
+        }
+
+        return null;
+    }
+
+    /** @psalm-mutation-free */
+    private static function classNameMatches(Node\Stmt\Class_ $class, string $expectedFqcn, string $namespace): bool
+    {
+        $shortName = $class->name?->toString() ?? '';
+        $fqcn = $namespace !== '' ? $namespace . '\\' . $shortName : $shortName;
+
+        return \strtolower($fqcn) === \strtolower($expectedFqcn);
+    }
+
+    /**
+     * Find the rules() method in a class and extract the returned array expression.
+     * Only handles simple cases: a method with a single return statement returning an array literal.
+     *
+     * @psalm-mutation-free
+     */
+    private static function findRulesReturnInClass(Node\Stmt\Class_ $class): ?Node\Expr\Array_
+    {
+        foreach ($class->stmts as $classStmt) {
+            if (!$classStmt instanceof Node\Stmt\ClassMethod) {
+                continue;
+            }
+
+            if ($classStmt->name->toString() !== 'rules') {
+                continue;
+            }
+
+            // Walk method body looking for a return statement with an array
+            if ($classStmt->stmts === null) {
+                return null;
+            }
+
+            foreach ($classStmt->stmts as $methodStmt) {
+                if ($methodStmt instanceof Node\Stmt\Return_
+                    && $methodStmt->expr instanceof Node\Expr\Array_
+                ) {
+                    return $methodStmt->expr;
+                }
+            }
+
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Convert a PhpParser array expression to field → rule segments pairs.
+     *
+     * Handles both formats:
+     *   'field' => 'required|string'       → ['field' => ['required', 'string']]
+     *   'field' => ['required', 'string']  → ['field' => ['required', 'string']]
+     *
+     * @return array<string, list<string>>|null
+     * @psalm-mutation-free
+     */
+    private static function extractRulePairsFromArrayNode(Node\Expr\Array_ $array): ?array
+    {
+        $rules = [];
+
+        foreach ($array->items as $item) {
+            if ($item === null) {
+                continue;
+            }
+
+            // Key must be a string literal (field name)
+            if (!$item->key instanceof Node\Scalar\String_) {
+                continue;
+            }
+
+            $fieldName = $item->key->value;
+
+            // Value: string literal → pipe-delimited rules
+            if ($item->value instanceof Node\Scalar\String_) {
+                $rules[$fieldName] = \explode('|', $item->value->value);
+
+                continue;
+            }
+
+            // Value: array of strings → rule segments
+            if ($item->value instanceof Node\Expr\Array_) {
+                $segments = [];
+
+                foreach ($item->value->items as $ruleItem) {
+                    if ($ruleItem === null) {
+                        continue;
+                    }
+
+                    // Only handle string literal rule segments (skip Rule objects)
+                    if ($ruleItem->value instanceof Node\Scalar\String_) {
+                        $segments[] = $ruleItem->value->value;
+                    }
+                }
+
+                if ($segments !== []) {
+                    $rules[$fieldName] = $segments;
+                }
+
+                continue;
+            }
+
+            // Value is a variable, function call, or Rule object — cannot resolve statically
+        }
+
+        return $rules !== [] ? $rules : null;
+    }
+}

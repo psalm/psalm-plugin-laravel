@@ -27,6 +27,8 @@ use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
+use Psalm\LaravelPlugin\Handlers\Validation\ValidatedTypeHandler;
+use Psalm\LaravelPlugin\Handlers\Validation\ValidationTaintHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
@@ -199,6 +201,11 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(CommandArgumentHandler::class);
+
+        require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
+        $registration->registerHooksFromClass(ValidatedTypeHandler::class);
+        require_once __DIR__ . '/Handlers/Validation/ValidationTaintHandler.php';
+        $registration->registerHooksFromClass(ValidationTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Helpers/CacheHandler.php';
         $registration->registerHooksFromClass(CacheHandler::class);

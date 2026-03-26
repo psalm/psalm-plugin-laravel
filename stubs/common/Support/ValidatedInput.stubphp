@@ -1,0 +1,113 @@
+<?php
+
+namespace Illuminate\Support;
+
+class ValidatedInput
+{
+    /**
+     * @param  mixed  $keys
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function all($keys = null) {}
+
+    /**
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function input($key = null, $default = null) {}
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function toArray() {}
+
+    /**
+     * @param  array<int, string>|string  $keys
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function only($keys) {}
+
+    /**
+     * @param  array<int, string>|string  $keys
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function except($keys) {}
+
+    /**
+     * @param  string|null  $key
+     * @return \Illuminate\Support\Collection
+     *
+     * @psalm-taint-source input
+     */
+    public function collect($key = null) {}
+
+    /**
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return \Illuminate\Support\Stringable
+     *
+     * @psalm-taint-source input
+     */
+    public function str($key, $default = null) {}
+
+    /**
+     * @param  string  $key
+     * @param  mixed  $default
+     * @return \Illuminate\Support\Stringable
+     *
+     * @psalm-taint-source input
+     */
+    public function string($key, $default = null) {}
+
+    // Type-safe casts — NOT taint sources.
+    // These methods cast to specific PHP types, making injection impossible:
+    // (int)"<script>" → 0, filter_var("yes", FILTER_VALIDATE_BOOLEAN) → true, etc.
+
+    /**
+     * @param  string  $key
+     * @param  int  $default
+     * @return int
+     */
+    public function integer($key, $default = 0) {}
+
+    /**
+     * @param  string  $key
+     * @param  float  $default
+     * @return float
+     */
+    public function float($key, $default = 0.0) {}
+
+    /**
+     * @param  string|null  $key
+     * @param  bool  $default
+     * @return bool
+     */
+    public function boolean($key = null, $default = false) {}
+
+    /**
+     * @param  string  $key
+     * @param  string|null  $format
+     * @param  string|null  $tz
+     * @return \Carbon\Carbon|null
+     */
+    public function date($key, $format = null, $tz = null) {}
+
+    /**
+     * @template TEnum of \BackedEnum
+     * @param  string  $key
+     * @param  class-string<TEnum>  $enumClass
+     * @return TEnum|null
+     */
+    public function enum($key, $enumClass, $default = null) {}
+}
