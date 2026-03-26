@@ -153,10 +153,7 @@ final class ValidationRuleAnalyzer
             'integer'                          => new Union([new TInt(), new TNumericString()]),
             'numeric'                          => new Union([new TInt(), new TFloat(), new TNumericString()]),
             // Laravel's boolean rule accepts: true, false, 0, 1, '0', '1'
-            'boolean'                          => Type::combineUnionTypes(
-                Type::getBool(),
-                new Union([new TLiteralInt(0), new TLiteralInt(1)]),
-            ),
+            'boolean'                          => self::booleanRuleType(),
             'array'                            => new Union([
                 new TArray([Type::getArrayKey(), Type::getMixed()]),
             ]),
@@ -191,9 +188,7 @@ final class ValidationRuleAnalyzer
             'date', 'date_format',
             'in',
             'file', 'image'                         => TaintKind::ALL_INPUT,
-            'url', 'active_url',
-            'ip', 'ipv4', 'ipv6'                    => TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF,
-            // string, email, json, regex, required, max, min, etc. → keep all taint
+            // string, email, url, ip, json, regex, required, max, min, etc. → keep all taint
             default                                 => 0,
         };
     }
@@ -220,6 +215,32 @@ final class ValidationRuleAnalyzer
             // When called outside of Psalm analysis context (e.g. unit tests),
             // fall back to a plain string type.
             return Type::getString();
+        }
+    }
+
+    /**
+     * Build the type for Laravel's boolean validation rule.
+     *
+     * Accepts: true, false, 0, 1, '0', '1'. TLiteralString requires Psalm Config,
+     * so we fall back to bool|int when running outside analysis context (unit tests).
+     */
+    /** @psalm-external-mutation-free */
+    private static function booleanRuleType(): Union
+    {
+        try {
+            return new Union([
+                new \Psalm\Type\Atomic\TTrue(),
+                new \Psalm\Type\Atomic\TFalse(),
+                new TLiteralInt(0),
+                new TLiteralInt(1),
+                TLiteralString::make('0'),
+                TLiteralString::make('1'),
+            ]);
+        } catch (\UnexpectedValueException) {
+            return Type::combineUnionTypes(
+                Type::getBool(),
+                new Union([new TLiteralInt(0), new TLiteralInt(1)]),
+            );
         }
     }
 
@@ -478,7 +499,7 @@ final class ValidationRuleAnalyzer
                 continue;
             }
 
-            if ($classStmt->name->toString() !== 'rules') {
+            if (\strtolower($classStmt->name->toString()) !== 'rules') {
                 continue;
             }
 
