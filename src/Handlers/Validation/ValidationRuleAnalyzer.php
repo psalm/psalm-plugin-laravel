@@ -151,18 +151,33 @@ final class ValidationRuleAnalyzer
             'string'                           => Type::getString(),
             'integer'                          => new Union([new TInt(), new TNumericString()]),
             'numeric'                          => new Union([new TInt(), new TFloat(), new TNumericString()]),
+            'decimal',
+            'digits', 'digits_between'         => new Union([new TNumericString()]),
             // Laravel's boolean rule accepts: true, false, 0, 1, '0', '1'
             'boolean'                          => self::booleanRuleType(),
+            // Laravel's accepted rule accepts: 'yes', 'on', 1, '1', true
+            'accepted', 'accepted_if'          => self::acceptedRuleType(),
+            // Laravel's declined rule accepts: 'no', 'off', 0, '0', false
+            'declined', 'declined_if'          => self::declinedRuleType(),
             'array'                            => new Union([
                 new TArray([Type::getArrayKey(), Type::getMixed()]),
             ]),
-            'file', 'image'                    => new Union([
+            'list'                             => new Union([
+                Type::getListAtomic(Type::getMixed()),
+            ]),
+            'file', 'image',
+            'mimes', 'mimetypes'               => new Union([
                 new TNamedObject(\Illuminate\Http\UploadedFile::class),
             ]),
             'in'                               => self::inRuleToLiteralUnion($param),
             'uuid', 'ulid',
             'alpha', 'alpha_num', 'alpha_dash',
+            'hex_color', 'mac_address',
             'date', 'date_format',
+            'before', 'before_or_equal',
+            'after', 'after_or_equal',
+            'date_equals',
+            'timezone',
             'email', 'url', 'active_url',
             'ip', 'ipv4', 'ipv6',
             'json'                             => Type::getString(),
@@ -182,11 +197,20 @@ final class ValidationRuleAnalyzer
     {
         return match ($rule) {
             'integer', 'numeric', 'boolean',
+            'decimal', 'digits', 'digits_between',
+            'accepted', 'accepted_if',
+            'declined', 'declined_if',
             'uuid', 'ulid',
             'alpha', 'alpha_num', 'alpha_dash',
+            'hex_color', 'mac_address',
             'date', 'date_format',
+            'before', 'before_or_equal',
+            'after', 'after_or_equal',
+            'date_equals',
+            'timezone',
             'in',
-            'file', 'image'                         => TaintKind::ALL_INPUT,
+            'file', 'image',
+            'mimes', 'mimetypes'                    => TaintKind::ALL_INPUT,
             // string, email, url, ip, json, regex, required, max, min, etc. → keep all taint
             default                                 => 0,
         };
@@ -241,6 +265,56 @@ final class ValidationRuleAnalyzer
             return Type::combineUnionTypes(
                 Type::getBool(),
                 new Union([new TLiteralInt(0), new TLiteralInt(1)]),
+            );
+        }
+    }
+
+    /**
+     * Build the type for Laravel's accepted validation rule.
+     *
+     * Accepts: 'yes', 'on', 1, '1', true.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function acceptedRuleType(): Union
+    {
+        try {
+            return new Union([
+                new \Psalm\Type\Atomic\TTrue(),
+                new TLiteralInt(1),
+                TLiteralString::make('yes'),
+                TLiteralString::make('on'),
+                TLiteralString::make('1'),
+            ]);
+        } catch (\UnexpectedValueException) {
+            return Type::combineUnionTypes(
+                Type::getTrue(),
+                new Union([new TLiteralInt(1)]),
+            );
+        }
+    }
+
+    /**
+     * Build the type for Laravel's declined validation rule.
+     *
+     * Accepts: 'no', 'off', 0, '0', false.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function declinedRuleType(): Union
+    {
+        try {
+            return new Union([
+                new \Psalm\Type\Atomic\TFalse(),
+                new TLiteralInt(0),
+                TLiteralString::make('no'),
+                TLiteralString::make('off'),
+                TLiteralString::make('0'),
+            ]);
+        } catch (\UnexpectedValueException) {
+            return Type::combineUnionTypes(
+                Type::getFalse(),
+                new Union([new TLiteralInt(0)]),
             );
         }
     }
