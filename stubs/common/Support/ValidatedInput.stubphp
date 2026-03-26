@@ -105,11 +105,11 @@ class ValidatedInput
 
     /**
      * @template TEnum of \BackedEnum
-     * @template TDefault
+     * @template TDefault of TEnum|null
      * @param  string  $key
      * @param  class-string<TEnum>  $enumClass
-     * @param  TDefault|null  $default
-     * @return TEnum|TDefault|null
+     * @param  TDefault  $default
+     * @return TEnum|TDefault
      */
     public function enum($key, $enumClass, $default = null) {}
 }
