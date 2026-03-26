@@ -37,6 +37,9 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
     /** Taint mask for secrets that require constant-time comparison */
     private const SECRET_TAINTS = TaintKind::USER_SECRET | TaintKind::SYSTEM_SECRET;
 
+    /** Functions that compare strings in a timing-unsafe manner */
+    private const TIMING_UNSAFE_FUNCTIONS = ['strcmp', 'strcasecmp'];
+
     /** @inheritDoc */
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
@@ -74,7 +77,7 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
         // character-by-character and the return value reveals partial ordering
         if ($expr instanceof FuncCall
             && $expr->name instanceof Name
-            && self::isTimingUnsafeFunction($expr->name->toLowerString())
+            && \in_array($expr->name->toLowerString(), self::TIMING_UNSAFE_FUNCTIONS, true)
             && \count($expr->args) >= 2
             && $expr->args[0] instanceof Arg
             && $expr->args[1] instanceof Arg
@@ -154,9 +157,4 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
         }
     }
 
-    /** @psalm-pure */
-    private static function isTimingUnsafeFunction(string $functionName): bool
-    {
-        return $functionName === 'strcmp' || $functionName === 'strcasecmp';
-    }
 }
