@@ -66,11 +66,12 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
     #[\Override]
     public static function removeTaints(AddRemoveTaintsEvent $event): int
     {
-        $expr = $event->getExpr();
-
-        if (!$expr instanceof MethodCall) {
+        if (!self::isFormRequestValidatedCall($event)) {
             return 0;
         }
+
+        /** @var MethodCall $expr */
+        $expr = $event->getExpr();
 
         // Must have a literal string first argument (the field key)
         $args = $expr->getArgs();
