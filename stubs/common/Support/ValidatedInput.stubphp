@@ -45,7 +45,7 @@ class ValidatedInput
     public function except($keys) {}
 
     /**
-     * @param  string|null  $key
+     * @param  array|string|null  $key
      * @return \Illuminate\Support\Collection
      *
      * @psalm-taint-source input
@@ -98,8 +98,8 @@ class ValidatedInput
     /**
      * @param  string  $key
      * @param  string|null  $format
-     * @param  string|null  $tz
-     * @return \Carbon\Carbon|null
+     * @param  \UnitEnum|string|null  $tz
+     * @return \Illuminate\Support\Carbon|null
      */
     public function date($key, $format = null, $tz = null) {}
 

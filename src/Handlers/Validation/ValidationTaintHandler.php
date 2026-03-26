@@ -39,10 +39,6 @@ use Psalm\Type\Union;
  */
 final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsInterface
 {
-    private const INTERCEPTED_METHODS = [
-        'validated' => true,
-    ];
-
     /**
      * Add taint to validated() calls on FormRequest subclasses.
      *
@@ -126,7 +122,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
 
         $methodName = \strtolower($expr->name->toString());
 
-        if (!isset(self::INTERCEPTED_METHODS[$methodName])) {
+        if ($methodName !== 'validated') {
             return false;
         }
 
