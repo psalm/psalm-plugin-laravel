@@ -1,0 +1,43 @@
+<?php
+
+namespace Illuminate\Support;
+
+class Js
+{
+    /**
+     * Create a new JavaScript string from the given data.
+     *
+     * Js::from() encodes data with mandatory HTML-safe JSON flags
+     * (JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT),
+     * making the output safe for embedding in HTML/JS contexts.
+     * The Blade @js() directive compiles to Js::from($expression)->toHtml().
+     *
+     * @param  mixed  $data
+     * @param  int  $flags
+     * @param  int  $depth
+     * @return static
+     *
+     * @psalm-taint-escape html
+     * @psalm-taint-escape has_quotes
+     * @psalm-flow ($data) -> return
+     */
+    public static function from($data, $flags = 0, $depth = 512) {}
+
+    /**
+     * Encode the given data as JSON.
+     *
+     * Ensures HTML-safe JSON flags (JSON_HEX_TAG | JSON_HEX_APOS |
+     * JSON_HEX_AMP | JSON_HEX_QUOT) are always applied in addition to
+     * any flags specified in the $flags argument.
+     *
+     * @param  mixed  $data
+     * @param  int  $flags
+     * @param  int  $depth
+     * @return string
+     *
+     * @psalm-taint-escape html
+     * @psalm-taint-escape has_quotes
+     * @psalm-flow ($data) -> return
+     */
+    public static function encode($data, $flags = 0, $depth = 512) {}
+}
