@@ -74,5 +74,32 @@ function testSafeReturnsValidatedInput(StoreUserRequest $request): void
     $_safe = $request->safe();
     /** @psalm-check-type-exact $_safe = \Illuminate\Support\ValidatedInput|array<string, mixed> */
 }
+
+function testSafeWithKeys(StoreUserRequest $request): void
+{
+    // safe(['key1', 'key2']) → partial array shape with only those fields
+    $_partial = $request->safe(['name', 'age']);
+    /** @psalm-check-type-exact $_partial = array{name: string, age: int|numeric-string} */
+}
+
+function testInlineValidate(\Illuminate\Http\Request $request): void
+{
+    // $request->validate([...]) → array shape from inline rules
+    $_data = $request->validate([
+        'count' => 'required|integer',
+        'label' => 'required|string',
+    ]);
+    /** @psalm-check-type-exact $_data = array{count: int|numeric-string, label: string} */
+}
+
+function testInlineValidateArrayFormat(\Illuminate\Http\Request $request): void
+{
+    // Array format rules
+    $_data = $request->validate([
+        'id' => ['required', 'uuid'],
+        'active' => ['boolean'],
+    ]);
+    /** @psalm-check-type-exact $_data = array{active: '0'|'1'|0|1|bool, id: string} */
+}
 ?>
 --EXPECT--
