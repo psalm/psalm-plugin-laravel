@@ -228,14 +228,15 @@ final class ValidationRuleAnalyzer
     private static function booleanRuleType(): Union
     {
         try {
-            return new Union([
-                new \Psalm\Type\Atomic\TTrue(),
-                new \Psalm\Type\Atomic\TFalse(),
-                new TLiteralInt(0),
-                new TLiteralInt(1),
-                TLiteralString::make('0'),
-                TLiteralString::make('1'),
-            ]);
+            return Type::combineUnionTypes(
+                Type::getBool(),
+                new Union([
+                    new TLiteralInt(0),
+                    new TLiteralInt(1),
+                    TLiteralString::make('0'),
+                    TLiteralString::make('1'),
+                ]),
+            );
         } catch (\UnexpectedValueException) {
             return Type::combineUnionTypes(
                 Type::getBool(),
