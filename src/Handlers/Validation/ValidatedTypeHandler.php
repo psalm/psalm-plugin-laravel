@@ -174,7 +174,9 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     {
         $methodName = $event->getMethodNameLowercase();
 
-        // Only narrow methods that take a field key as first argument
+        // Only narrow methods that take a field key as first argument.
+        // Keep in sync with ValidatedInput.stubphp field-accessor methods.
+        // __get and offsetGet are excluded — magic accessors can't resolve literal keys.
         if (!\in_array($methodName, ['input', 'str', 'string', 'collect'], true)) {
             return null;
         }

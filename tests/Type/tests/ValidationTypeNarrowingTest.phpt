@@ -43,6 +43,16 @@ function testValidatedSingleField(StoreUserRequest $request): void
     /** @psalm-check-type-exact $_bio = null|string */
 }
 
+function testValidatedWithDefault(StoreUserRequest $request): void
+{
+    // validated('field', default) → union of rule type and default type
+    $_nameWithDefault = $request->validated('name', 'anonymous');
+    /** @psalm-check-type-exact $_nameWithDefault = string */
+
+    $_ageWithDefault = $request->validated('age', 0);
+    /** @psalm-check-type-exact $_ageWithDefault = 0|int|numeric-string */
+}
+
 function testValidatedFullShape(StoreUserRequest $request): void
 {
     $_all = $request->validated();
@@ -91,6 +101,13 @@ function testSafeInputNarrowsType(StoreUserRequest $request): void
 
     $_age = $safe->input('age');
     /** @psalm-check-type-exact $_age = int|numeric-string */
+
+    // str() and string() also narrow via the TRequest template
+    $_nameStr = $safe->str('name');
+    /** @psalm-check-type-exact $_nameStr = string */
+
+    $_nameString = $safe->string('name');
+    /** @psalm-check-type-exact $_nameString = string */
 }
 
 function testInlineValidate(\Illuminate\Http\Request $request): void
