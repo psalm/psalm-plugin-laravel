@@ -98,7 +98,7 @@ class ValidatedInput
     /**
      * @param  string  $key
      * @param  string|null  $format
-     * @param  string|null  $tz
+     * @param  \UnitEnum|string|null  $tz
      * @return \Illuminate\Support\Carbon|null
      */
     public function date($key, $format = null, $tz = null) {}
