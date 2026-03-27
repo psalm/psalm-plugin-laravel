@@ -15,12 +15,12 @@ class Collection extends BaseCollection implements QueueableCollection
     /**
      * Find a model in the collection by key.
      *
-     * @template TKey
+     * @template TFindKey
      * @template TFindDefault
      *
-     * @param  TKey  $key
+     * @param  TFindKey  $key
      * @param  TFindDefault  $default
-     * @psalm-return (TKey is \Illuminate\Database\Eloquent\Model ? TModel|TFindDefault : (TKey is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? static<TKey, TModel> : TModel|TFindDefault))
+     * @psalm-return (TFindKey is \Illuminate\Database\Eloquent\Model ? TModel|TFindDefault : (TFindKey is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? static<TKey, TModel> : TModel|TFindDefault))
      */
     public function find($key, $default = null) {}
 
