@@ -30,7 +30,7 @@ abstract class HasOneOrManyThrough extends Relation
     /**
      * @template T
      * @param  T  $id
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @psalm-return (T is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel|null)
      */
     public function find($id, $columns = ['*']) {}
@@ -38,7 +38,7 @@ abstract class HasOneOrManyThrough extends Relation
     /**
      * @template T
      * @param  T  $id
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @psalm-return (T is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -47,7 +47,7 @@ abstract class HasOneOrManyThrough extends Relation
 
     /**
      * @param  int|null  $perPage
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, TRelatedModel>
@@ -56,7 +56,7 @@ abstract class HasOneOrManyThrough extends Relation
 
     /**
      * @param  int|null  $perPage
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @return \Illuminate\Contracts\Pagination\Paginator<int, TRelatedModel>
@@ -65,7 +65,7 @@ abstract class HasOneOrManyThrough extends Relation
 
     /**
      * @param  int|null  $perPage
-     * @param  array  $columns
+     * @param  list<non-empty-string>  $columns
      * @param  string  $cursorName
      * @param  string|null  $cursor
      * @return \Illuminate\Contracts\Pagination\CursorPaginator<int, TRelatedModel>

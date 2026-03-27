@@ -130,7 +130,7 @@ abstract class Relation
     /**
      * Execute the query and get the first result if it's the sole matching record.
      *
-     * @param  array|string  $columns
+     * @param  list<non-empty-string>  $columns
      * @return TRelatedModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
