@@ -381,4 +381,37 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $this->assertSame('int|numeric-string', $rule->type->getId());
         $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
     }
+
+    // --- Edge cases ---
+
+    #[Test]
+    public function sometimes_required_field_is_sometimes_and_required(): void
+    {
+        // sometimes|required|string — field may be absent, but when present must exist
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['sometimes', 'required', 'string']);
+
+        $this->assertTrue($rule->sometimes);
+        $this->assertTrue($rule->required);
+        $this->assertSame('string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function rule_order_does_not_affect_taint(): void
+    {
+        // Taint removal accumulates regardless of order
+        $ruleA = ValidationRuleAnalyzer::resolveRuleSegments(['string', 'integer']);
+        $ruleB = ValidationRuleAnalyzer::resolveRuleSegments(['integer', 'string']);
+
+        $this->assertSame($ruleA->removedTaints, $ruleB->removedTaints);
+        $this->assertSame(TaintKind::ALL_INPUT, $ruleA->removedTaints);
+    }
+
+    #[Test]
+    public function first_type_bearing_rule_wins(): void
+    {
+        // First type-bearing rule determines the type (string before integer)
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['string', 'integer']);
+
+        $this->assertSame('string', $rule->type->getId());
+    }
 }
