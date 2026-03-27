@@ -5,6 +5,10 @@ namespace Illuminate\View;
 class View implements \Illuminate\Contracts\View\View, \Stringable
 {
     /**
+     * @param  array|string  $key
+     * @param  mixed  $value
+     * @return $this
+     *
      * @psalm-taint-sink html $key
      * @psalm-taint-sink html $value
      */
