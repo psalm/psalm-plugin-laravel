@@ -102,12 +102,12 @@ function testSafeInputNarrowsType(StoreUserRequest $request): void
     $_age = $safe->input('age');
     /** @psalm-check-type-exact $_age = int|numeric-string */
 
-    // str() and string() also narrow via the TRequest template
+    // str()/string() always return Stringable regardless of rule — fall through to stub
     $_nameStr = $safe->str('name');
-    /** @psalm-check-type-exact $_nameStr = string */
+    /** @psalm-check-type-exact $_nameStr = \Illuminate\Support\Stringable */
 
     $_nameString = $safe->string('name');
-    /** @psalm-check-type-exact $_nameString = string */
+    /** @psalm-check-type-exact $_nameString = \Illuminate\Support\Stringable */
 }
 
 class AcceptDeclineRequest extends FormRequest
