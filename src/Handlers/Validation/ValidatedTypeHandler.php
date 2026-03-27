@@ -171,13 +171,27 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
         array $callArgs,
         MethodReturnTypeProviderEvent $event,
     ): ?Union {
-        $firstArgType = $event->getSource()->getNodeTypeProvider()->getType($callArgs[0]->value);
+        $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
+        $firstArgType = $nodeTypeProvider->getType($callArgs[0]->value);
 
         if ($firstArgType instanceof Union && $firstArgType->isSingleStringLiteral()) {
             $key = $firstArgType->getSingleStringLiteral()->value;
 
             if (isset($rules[$key])) {
-                return $rules[$key]->type;
+                $fieldType = $rules[$key]->type;
+
+                // If a default value is provided — validated($key, $default) —
+                // the return type can be either the validated rule type or
+                // the type of the default expression.
+                if (isset($callArgs[1])) {
+                    $defaultType = $nodeTypeProvider->getType($callArgs[1]->value);
+
+                    if ($defaultType instanceof Union) {
+                        $fieldType = \Psalm\Type::combineUnionTypes($fieldType, $defaultType);
+                    }
+                }
+
+                return $fieldType;
             }
         }
 

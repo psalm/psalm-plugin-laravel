@@ -106,7 +106,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
     /**
      * Check if the expression is a validated() or validate() call on Request/FormRequest.
      *
-     * @return 'validated'|'validate'|null  The matched method name, or null
+     * @return 'validated'|'validate'|'safe'|null  The matched method name, or null
      */
     private static function isValidationMethodCall(AddRemoveTaintsEvent $event): ?string
     {
@@ -122,7 +122,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
 
         $methodName = \strtolower($expr->name->toString());
 
-        if ($methodName !== 'validated' && $methodName !== 'validate') {
+        if ($methodName !== 'validated' && $methodName !== 'validate' && $methodName !== 'safe') {
             return null;
         }
 
@@ -149,15 +149,20 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             $className = $atomic->value;
 
             try {
-                // validate() is on Request (parent), validated() is on FormRequest
-                $isRequest = $className === \Illuminate\Http\Request::class
-                    || $className === \Illuminate\Foundation\Http\FormRequest::class
-                    || $codebase->classExtends($className, \Illuminate\Http\Request::class);
+                // validated() and safe() are FormRequest methods
+                if ($methodName === 'validated' || $methodName === 'safe') {
+                    $isMatch = $className === \Illuminate\Foundation\Http\FormRequest::class
+                        || $codebase->classExtends($className, \Illuminate\Foundation\Http\FormRequest::class);
+                } else {
+                    // validate() is on Request (via ValidatesRequests trait / @method)
+                    $isMatch = $className === \Illuminate\Http\Request::class
+                        || $codebase->classExtends($className, \Illuminate\Http\Request::class);
+                }
             } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
                 continue;
             }
 
-            if ($isRequest) {
+            if ($isMatch) {
                 return $methodName;
             }
         }

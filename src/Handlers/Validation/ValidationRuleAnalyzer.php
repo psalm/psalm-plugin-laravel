@@ -208,9 +208,8 @@ final class ValidationRuleAnalyzer
             'after', 'after_or_equal',
             'date_equals',
             'timezone',
-            'in',
-            'file', 'image',
-            'mimes', 'mimetypes'                    => TaintKind::ALL_INPUT,
+            'in'                                    => TaintKind::ALL_INPUT,
+            // file, image, mimes, mimetypes → keep taint (file names/paths/contents are user-controlled)
             // string, email, url, ip, json, regex, required, max, min, etc. → keep all taint
             default                                 => 0,
         };
