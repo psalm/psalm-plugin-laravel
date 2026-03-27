@@ -1,0 +1,52 @@
+<?php
+
+namespace Illuminate\View;
+
+class Factory
+{
+    /**
+     * @psalm-taint-sink html $data
+     * @psalm-taint-sink html $mergeData
+     */
+    public function make($view, $data = [], $mergeData = []) {}
+
+    /**
+     * @psalm-taint-sink file $path
+     * @psalm-taint-sink include $path
+     * @psalm-taint-sink html $data
+     * @psalm-taint-sink html $mergeData
+     */
+    public function file($path, $data = [], $mergeData = []) {}
+
+    /**
+     * @psalm-taint-sink html $data
+     * @psalm-taint-sink html $mergeData
+     */
+    public function first(array $views, $data = [], $mergeData = []) {}
+
+    /**
+     * @psalm-taint-sink html $data
+     * @psalm-taint-sink html $mergeData
+     */
+    public function renderWhen($condition, $view, $data = [], $mergeData = []) {}
+
+    /**
+     * @psalm-taint-sink html $data
+     * @psalm-taint-sink html $mergeData
+     */
+    public function renderUnless($condition, $view, $data = [], $mergeData = []) {}
+
+    /**
+     * @psalm-taint-sink html $data
+     */
+    public function renderEach($view, $data, $iterator, $empty = 'raw|') {}
+
+    // $key is marked as a sink for the array form: share(['name' => $tainted]).
+    // For the string form share('name', $tainted), only $value carries data,
+    // but Psalm cannot distinguish the two calling conventions.
+    /**
+     * @psalm-taint-sink html $key
+     * @psalm-taint-sink html $value
+     */
+    public function share($key, $value = null) {}
+}

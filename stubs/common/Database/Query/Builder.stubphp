@@ -250,6 +250,7 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $query
+     * @psalm-taint-sink sql $as
      */
     public function selectSub($query, $as) {}
 
@@ -261,6 +262,7 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $expression
+     * @psalm-taint-sink sql $as
      */
     public function selectExpression($expression, $as) {}
 
@@ -272,6 +274,7 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $query
+     * @psalm-taint-sink sql $as
      */
     public function fromSub($query, $as) {}
 
@@ -288,6 +291,7 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $query
+     * @psalm-taint-sink sql $as
      */
     public function joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false) {}
 
@@ -302,6 +306,7 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $query
+     * @psalm-taint-sink sql $as
      */
     public function leftJoinSub($query, $as, $first, $operator = null, $second = null) {}
 
@@ -316,6 +321,7 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $query
+     * @psalm-taint-sink sql $as
      */
     public function rightJoinSub($query, $as, $first, $operator = null, $second = null) {}
 
@@ -327,6 +333,7 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $query
+     * @psalm-taint-sink sql $as
      */
     public function crossJoinSub($query, $as) {}
 
@@ -341,6 +348,7 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $query
+     * @psalm-taint-sink sql $as
      */
     public function straightJoinSub($query, $as, $first, $operator = null, $second = null) {}
 
@@ -353,6 +361,7 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $query
+     * @psalm-taint-sink sql $as
      */
     public function joinLateral($query, string $as, string $type = 'inner') {}
 
@@ -364,8 +373,131 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $query
+     * @psalm-taint-sink sql $as
      */
     public function leftJoinLateral($query, string $as) {}
+
+    /**
+     * Set the table which the query is targeting.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Contracts\Database\Query\Expression|string  $table
+     * @param  string|null  $as
+     * @return $this
+     *
+     * @psalm-taint-sink sql $table
+     * @psalm-taint-sink sql $as
+     */
+    public function from($table, $as = null) {}
+
+    /**
+     * Add an "order by" clause to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  string  $direction
+     * @return $this
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function orderBy($column, $direction = 'asc') {}
+
+    /**
+     * Insert new records into the table using a subquery.
+     *
+     * @param  array  $columns
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @return int
+     *
+     * @psalm-taint-sink sql $columns
+     * @psalm-taint-sink sql $query
+     */
+    public function insertUsing(array $columns, $query) {}
+
+    /**
+     * Insert new records into the table using a subquery while ignoring errors.
+     *
+     * @param  array  $columns
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @return int
+     *
+     * @psalm-taint-sink sql $columns
+     * @psalm-taint-sink sql $query
+     */
+    public function insertOrIgnoreUsing(array $columns, $query) {}
+
+    /**
+     * Add a "where" clause to the query for multiple columns with "and" conditions between them.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression[]|\Closure[]|string[]  $columns
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function whereAll($columns, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * Add a "where" clause to the query for multiple columns with "or" conditions between them.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression[]|\Closure[]|string[]  $columns
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function whereAny($columns, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * Add a "where not" clause to the query for multiple columns where none of the conditions should be true.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression[]|\Closure[]|string[]  $columns
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function whereNone($columns, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * Add an "or where" clause to the query for multiple columns with "and" conditions between them.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression[]|\Closure[]|string[]  $columns
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function orWhereAll($columns, $operator = null, $value = null) {}
+
+    /**
+     * Add an "or where" clause to the query for multiple columns with "or" conditions between them.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression[]|\Closure[]|string[]  $columns
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function orWhereAny($columns, $operator = null, $value = null) {}
+
+    /**
+     * Add an "or where not" clause to the query for multiple columns where none of the conditions should be true.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression[]|\Closure[]|string[]  $columns
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink sql $columns
+     */
+    public function orWhereNone($columns, $operator = null, $value = null) {}
 
     /**
      * Retrieve the sum of the values of a given column.
