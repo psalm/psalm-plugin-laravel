@@ -118,11 +118,6 @@ info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSIO
 composer create-project --quiet --prefer-dist laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
 cd "$APP_INSTALLATION_PATH"
 
-info "Installing first-party Laravel packages for realistic analysis coverage"
-composer require --quiet laravel/sanctum laravel/scout laravel/pennant laravel/socialite laravel/jetstream laravel/cashier
-./artisan jetstream:install livewire --teams
-./artisan pennant:feature ExampleFeature
-
 info "Making different types of classes for Laravel to analyze them using Psalm"
 ./artisan make:cast ExampleCast
 ./artisan make:channel ExampleChannel
