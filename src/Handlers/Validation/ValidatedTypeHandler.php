@@ -220,6 +220,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     {
         foreach ($union->getAtomicTypes() as $atomic) {
             if ($atomic instanceof TNamedObject) {
+                /** @var class-string */
                 return $atomic->value;
             }
         }
