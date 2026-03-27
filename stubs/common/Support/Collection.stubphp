@@ -69,9 +69,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * @psalm-mutation-free
      *
-     * @param  TKey  $number
      * @param  (callable(TValue): int)|int|null  $number
-     * @return (TKey is null ? TValue : static<int, TValue>)
+     * @return ($number is null ? TValue : static<int, TValue>)
      *
      * @throws \InvalidArgumentException
      */
