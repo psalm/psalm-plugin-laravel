@@ -271,7 +271,7 @@ final class ValidationRuleAnalyzer
     /**
      * Build the type for Laravel's accepted validation rule.
      *
-     * Accepts: 'yes', 'on', 1, '1', true.
+     * Accepts: 'yes', 'on', 1, '1', true, 'true'.
      *
      * @psalm-external-mutation-free
      */
@@ -284,6 +284,7 @@ final class ValidationRuleAnalyzer
                 TLiteralString::make('yes'),
                 TLiteralString::make('on'),
                 TLiteralString::make('1'),
+                TLiteralString::make('true'),
             ]);
         } catch (\UnexpectedValueException) {
             return Type::combineUnionTypes(
@@ -296,7 +297,7 @@ final class ValidationRuleAnalyzer
     /**
      * Build the type for Laravel's declined validation rule.
      *
-     * Accepts: 'no', 'off', 0, '0', false.
+     * Accepts: 'no', 'off', 0, '0', false, 'false'.
      *
      * @psalm-external-mutation-free
      */
@@ -309,6 +310,7 @@ final class ValidationRuleAnalyzer
                 TLiteralString::make('no'),
                 TLiteralString::make('off'),
                 TLiteralString::make('0'),
+                TLiteralString::make('false'),
             ]);
         } catch (\UnexpectedValueException) {
             return Type::combineUnionTypes(
