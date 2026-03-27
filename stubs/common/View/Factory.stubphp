@@ -11,6 +11,7 @@ class Factory
     public function make($view, $data = [], $mergeData = []) {}
 
     /**
+     * @psalm-taint-sink file $path
      * @psalm-taint-sink include $path
      * @psalm-taint-sink html $data
      * @psalm-taint-sink html $mergeData
