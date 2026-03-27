@@ -212,7 +212,6 @@ function logs($driver = null) {}
 // method_field: nothing to stub
 // mix: nothing to stub
 // now: nothing to stub
-// old: nothing to stub
 // policy: nothing to stub
 
 /**

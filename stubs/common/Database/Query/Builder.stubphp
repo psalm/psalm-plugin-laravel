@@ -568,27 +568,27 @@ class Builder
      * Update records in the database.
      *
      * @param  array  $values
-     * @return int
+     * @return int<0, max>
      */
     public function update(array $values) {}
 
     /**
      * Increment a column's value by a given amount.
      *
-     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  string  $column
      * @param  float|int  $amount
      * @param  array  $extra
-     * @return int
+     * @return int<0, max>
      */
     public function increment($column, $amount = 1, array $extra = []) {}
 
     /**
      * Decrement a column's value by a given amount.
      *
-     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  string  $column
      * @param  float|int  $amount
      * @param  array  $extra
-     * @return int
+     * @return int<0, max>
      */
     public function decrement($column, $amount = 1, array $extra = []) {}
 
