@@ -11,7 +11,7 @@ use Psalm\Type\Union;
  *
  * @psalm-immutable
  */
-final class ResolvedRule
+final readonly class ResolvedRule
 {
     /**
      * @param Union $type              The inferred Psalm type for the validated value
@@ -21,10 +21,10 @@ final class ResolvedRule
      * @param bool  $required          Whether 'required' (or similar presence rule) was present
      */
     public function __construct(
-        public readonly Union $type,
-        public readonly int $removedTaints,
-        public readonly bool $nullable,
-        public readonly bool $sometimes,
-        public readonly bool $required = false,
+        public Union $type,
+        public int $removedTaints,
+        public bool $nullable,
+        public bool $sometimes,
+        public bool $required = false,
     ) {}
 }

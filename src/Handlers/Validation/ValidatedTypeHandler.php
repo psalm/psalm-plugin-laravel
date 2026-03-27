@@ -8,6 +8,7 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -53,8 +54,8 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     {
         // ValidatedInput methods — resolve via generic TRequest parameter.
         // Use getFqClasslikeName() (declaring class) instead of getCalledFqClasslikeName()
-        // because input()/str()/etc. are inherited from the InteractsWithData trait —
-        // getCalledFqClasslikeName() may be null on the first dispatch.
+        // because the declaring class is always ValidatedInput, while the called class
+        // may not resolve to ValidatedInput when called through template/generic types.
         if ($event->getFqClasslikeName() === \Illuminate\Support\ValidatedInput::class) {
             return self::resolveValidatedInputMethod($event);
         }
@@ -121,7 +122,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             if ($atomic instanceof TKeyedArray) {
                 foreach ($atomic->properties as $property) {
                     foreach ($property->getAtomicTypes() as $keyAtomic) {
-                        if ($keyAtomic instanceof \Psalm\Type\Atomic\TLiteralString) {
+                        if ($keyAtomic instanceof TLiteralString) {
                             $keys[] = $keyAtomic->value;
                         }
                     }

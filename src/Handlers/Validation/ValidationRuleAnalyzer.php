@@ -8,6 +8,7 @@ use PhpParser\Node;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\Type;
 use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TFalse;
 use Psalm\Type\Atomic\TFloat;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TKeyedArray;
@@ -15,6 +16,7 @@ use Psalm\Type\Atomic\TLiteralInt;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNumericString;
+use Psalm\Type\Atomic\TTrue;
 use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
@@ -83,10 +85,8 @@ final class ValidationRuleAnalyzer
     }
 
     /**
-     * Parse a single rule string into a ResolvedRule.
-     *
-     * Handles both pipe-delimited strings ('required|integer|nullable')
-     * and arrays of strings (['required', 'integer', 'nullable']).
+     * Resolves a list of rule segments (already split from pipe-delimited or array format)
+     * into a ResolvedRule with inferred type, taint escape bitmask, and modifier flags.
      *
      * @param list<string> $segments
      */
@@ -132,7 +132,7 @@ final class ValidationRuleAnalyzer
             // Type-bearing rules (first one wins for type, all accumulate taint)
             $ruleType = self::ruleToType($ruleName, $ruleParam);
 
-            if ($ruleType instanceof Union && !$type instanceof Union) {
+            if ($ruleType !== null && $type === null) {
                 $type = $ruleType;
             }
 
@@ -289,7 +289,7 @@ final class ValidationRuleAnalyzer
     {
         try {
             return new Union([
-                new \Psalm\Type\Atomic\TTrue(),
+                new TTrue(),
                 new TLiteralInt(1),
                 TLiteralString::make('yes'),
                 TLiteralString::make('on'),
@@ -315,7 +315,7 @@ final class ValidationRuleAnalyzer
     {
         try {
             return new Union([
-                new \Psalm\Type\Atomic\TFalse(),
+                new TFalse(),
                 new TLiteralInt(0),
                 TLiteralString::make('no'),
                 TLiteralString::make('off'),
@@ -378,9 +378,7 @@ final class ValidationRuleAnalyzer
             // 'items.*.name' pattern
             if (\str_contains($field, '.*.')) {
                 $dotStarPos = \strpos($field, '.*.');
-
                 \assert($dotStarPos !== false);
-
                 $parent = \substr($field, 0, $dotStarPos);
                 $child = \substr($field, $dotStarPos + 3);
 
