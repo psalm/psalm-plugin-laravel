@@ -124,7 +124,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
 
         $methodName = \strtolower($expr->name->toString());
 
-        if (!in_array($methodName, ['validated', 'validate', 'safe'], true)) {
+        if (!\in_array($methodName, ['validated', 'validate', 'safe'], true)) {
             return null;
         }
 

@@ -174,10 +174,10 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     {
         $methodName = $event->getMethodNameLowercase();
 
-        // Only narrow methods that take a field key as first argument.
-        // Keep in sync with ValidatedInput.stubphp field-accessor methods.
-        // __get and offsetGet are excluded — magic accessors can't resolve literal keys.
-        if (!\in_array($methodName, ['input', 'str', 'string', 'collect'], true)) {
+        // Only narrow input() — it returns the raw value, so the validation rule type applies.
+        // str()/string() always return Stringable, collect() always returns Collection,
+        // regardless of the validation rule — let those fall through to the stub return type.
+        if ($methodName !== 'input') {
             return null;
         }
 
