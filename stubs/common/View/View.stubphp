@@ -1,0 +1,12 @@
+<?php
+
+namespace Illuminate\View;
+
+class View implements \Illuminate\Contracts\View\View, \Stringable
+{
+    /**
+     * @psalm-taint-sink html $key
+     * @psalm-taint-sink html $value
+     */
+    public function with($key, $value = null) {}
+}
