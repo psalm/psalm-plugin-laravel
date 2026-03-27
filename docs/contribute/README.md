@@ -27,11 +27,13 @@ flowchart TD
     E --- handlers["
         Application — ContainerHandler, OffsetHandler
         Auth — AuthHandler, GuardHandler, RequestHandler
+        Collections — CollectionPluckHandler, CollectionFilterHandler
+        Console — CommandArgumentHandler
         Eloquent — ModelRegistrationHandler, RelationsMethodHandler,
         ModelMethodHandler, BuilderScopeHandler
-        Console — CommandArgumentHandler
         Helpers — CacheHandler, PathHandler, TransHandler
         Rules — NoEnvOutsideConfigHandler
+        Validation — ValidatedTypeHandler, ValidationTaintHandler
         SuppressHandler
     "]
 
@@ -167,7 +169,10 @@ flowchart LR
         CommandArgumentHandler
         RelationsMethodHandler
         ModelMethodHandler
-        BuilderScopeHandler, PathHandler"]
+        BuilderScopeHandler, PathHandler
+        CollectionPluckHandler
+        CollectionFilterHandler
+        ValidatedTypeHandler"]
 
         A3["MethodParamsProvider
         before type-checking args
