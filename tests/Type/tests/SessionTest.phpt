@@ -26,8 +26,12 @@ function test_session_store_types(Store $session): void
     $_except = $session->except(['key1']);
     /** @psalm-check-type-exact $_except = array */
 
+    // getOldInput() with key → mixed, without key → array
     $_oldInput = $session->getOldInput('email');
     /** @psalm-check-type-exact $_oldInput = mixed */
+
+    $_allOldInput = $session->getOldInput();
+    /** @psalm-check-type-exact $_allOldInput = array<string, mixed> */
 
     $_remember = $session->remember('key', fn () => 'value');
     /** @psalm-check-type-exact $_remember = mixed */
