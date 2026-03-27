@@ -12,8 +12,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * Psalm skips the stub's @psalm-taint-source. Taint is lost through
  * variable assignment. Per "silence over false positives" principle,
  * this is acceptable — we don't report issues we're not certain about.
- * TODO: if Psalm's MethodCallReturnTypeFetcher is fixed to call taintMethodCallResult()
- * even when a type provider returns a type, this test should expect TaintedHtml.
+ * TODO: if https://github.com/vimeo/psalm/issues/11765 is fixed, this test should expect TaintedHtml.
  *
  * Direct usage (echo $request->validated('body')) IS detected.
  * @see TaintedHtmlValidatedString.phpt

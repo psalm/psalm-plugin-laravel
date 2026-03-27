@@ -27,6 +27,7 @@ use Psalm\Type\Union;
  * @psalm-taint-source annotation for variable assignments. This means taint is lost
  * when validated data is assigned to a variable before reaching a sink.
  * Per project principle "silence over false positives", this is acceptable.
+ * Upstream: https://github.com/vimeo/psalm/issues/11765
  *
  * Architecture follows {@see \Psalm\LaravelPlugin\Handlers\Console\CommandArgumentHandler}.
  */

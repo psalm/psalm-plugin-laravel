@@ -12,8 +12,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * The ValidatedTypeHandler provides a return type for input(), which causes
  * Psalm to skip the stub's @psalm-taint-source annotation on ValidatedInput::input().
  * Same root cause as the validated() variable assignment limitation.
- * TODO: if Psalm's MethodCallReturnTypeFetcher is fixed to call taintMethodCallResult()
- * even when a type provider returns a type, this test should expect TaintedHtml.
+ * TODO: if https://github.com/vimeo/psalm/issues/11765 is fixed, this test should expect TaintedHtml.
  */
 class SafeRequest extends FormRequest
 {
