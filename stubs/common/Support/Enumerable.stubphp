@@ -7,5 +7,6 @@ namespace Illuminate\Support;
  * @template TValue
  *
  * @extends \IteratorAggregate<TKey, TValue>
+ * @extends \Illuminate\Contracts\Support\Arrayable<TKey, TValue>
  */
-interface Enumerable extends \Countable, \IteratorAggregate, \JsonSerializable {}
+interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Countable, \IteratorAggregate, \JsonSerializable {}

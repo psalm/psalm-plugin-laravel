@@ -212,4 +212,25 @@ function trait_uses_recursive($trait) {}
 function transform($value, callable $callback, $default = null) {}
 
 // windows_os: nothing to stub
-// with: nothing to stub
+
+/**
+ * Return the given value, optionally passed through the given callback.
+ *
+ * @template TValue
+ * @template TReturn
+ *
+ * @param  TValue  $value
+ * @param  (callable(TValue): TReturn)|null  $callback
+ * @return ($callback is null ? TValue : TReturn)
+ */
+function with($value, ?callable $callback = null) {}
+
+/**
+ * Ensures a callable is only called once, and returns the result on subsequent calls.
+ *
+ * @template TReturnType
+ *
+ * @param  callable(): TReturnType  $callback
+ * @return TReturnType
+ */
+function once(callable $callback) {}

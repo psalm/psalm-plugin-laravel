@@ -33,9 +33,10 @@ abstract class HasOneOrMany extends Relation
     public function make(array $attributes = []) {}
 
     /**
-     * @param  mixed  $id
+     * @template T
+     * @param  T  $id
      * @param  list<non-empty-string>  $columns
-     * @return TRelatedModel
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
      */
     public function findOrNew($id, $columns = ['*']) {}
 
@@ -71,4 +72,13 @@ abstract class HasOneOrMany extends Relation
      * @return TRelatedModel
      */
     public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}
+
+    /**
+     * Attempt to create the record. If a unique constraint violation occurs, find the matching record.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
+     * @return TRelatedModel
+     */
+    public function createOrFirst(array $attributes = [], array $values = []) {}
 }
