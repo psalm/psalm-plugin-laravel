@@ -90,8 +90,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
 
         $fieldKey = $firstArgType->getSingleStringLiteral()->value;
 
-        // Resolve FormRequest class — single pass (no duplicate classExtends)
-        $className = self::resolveFormRequestClass($expr, $statementsAnalyzer, $event);
+        $className = self::resolveCallerClass($event, \Illuminate\Foundation\Http\FormRequest::class);
 
         if ($className === null) {
             return 0;
@@ -129,6 +128,37 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return null;
         }
 
+        // validated() and safe() are FormRequest methods, validate() is on Request
+        $baseClass = ($methodName === 'validated' || $methodName === 'safe')
+            ? \Illuminate\Foundation\Http\FormRequest::class
+            : \Illuminate\Http\Request::class;
+
+        if (self::resolveCallerClass($event, $baseClass) !== null) {
+            return $methodName;
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve a class from the method call's caller type that matches or extends the given base class.
+     *
+     * Shared by addTaints (via isValidationMethodCall) and removeTaints to avoid
+     * duplicating the classExtends resolution logic.
+     *
+     * @param class-string $baseClass
+     * @return class-string|null
+     */
+    private static function resolveCallerClass(
+        AddRemoveTaintsEvent $event,
+        string $baseClass,
+    ): ?string {
+        $expr = $event->getExpr();
+
+        if (!$expr instanceof MethodCall) {
+            return null;
+        }
+
         $statementsAnalyzer = $event->getStatementsSource();
 
         if (!$statementsAnalyzer instanceof StatementsAnalyzer) {
@@ -152,62 +182,11 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             $className = $atomic->value;
 
             try {
-                // validated() and safe() are FormRequest methods
-                if ($methodName === 'validated' || $methodName === 'safe') {
-                    $isMatch = $className === \Illuminate\Foundation\Http\FormRequest::class
-                        || $codebase->classExtends($className, \Illuminate\Foundation\Http\FormRequest::class);
-                } else {
-                    // validate() is on Request (via ValidatesRequests trait / @method)
-                    $isMatch = $className === \Illuminate\Http\Request::class
-                        || $codebase->classExtends($className, \Illuminate\Http\Request::class);
+                if ($className === $baseClass || $codebase->classExtends($className, $baseClass)) {
+                    return $className;
                 }
             } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
                 continue;
-            }
-
-            if ($isMatch) {
-                return $methodName;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Resolve the FormRequest class from a method call's caller type.
-     *
-     * @return class-string|null
-     */
-    private static function resolveFormRequestClass(
-        MethodCall $expr,
-        StatementsAnalyzer $statementsAnalyzer,
-        AddRemoveTaintsEvent $event,
-    ): ?string {
-        $callerType = $statementsAnalyzer->node_data->getType($expr->var);
-
-        if (!$callerType instanceof Union) {
-            return null;
-        }
-
-        $codebase = $event->getCodebase();
-
-        foreach ($callerType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
-                continue;
-            }
-
-            /** @var class-string $className */
-            $className = $atomic->value;
-
-            try {
-                $isFormRequest = $className === \Illuminate\Foundation\Http\FormRequest::class
-                    || $codebase->classExtends($className, \Illuminate\Foundation\Http\FormRequest::class);
-            } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
-                continue;
-            }
-
-            if ($isFormRequest) {
-                return $className;
             }
         }
 

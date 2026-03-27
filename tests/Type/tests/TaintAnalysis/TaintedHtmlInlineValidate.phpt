@@ -8,6 +8,8 @@
  * assignment. Same root cause as the FormRequest validated() limitation —
  * the type provider overrides the return type, suppressing taint annotation.
  * Per "silence over false positives" principle, this is acceptable.
+ * TODO: if Psalm's MethodCallReturnTypeFetcher is fixed to call taintMethodCallResult()
+ * even when a type provider returns a type, this test should expect TaintedHtml.
  */
 function renderValidated(\Illuminate\Http\Request $request): void {
     $data = $request->validate(['body' => 'required|string']);
