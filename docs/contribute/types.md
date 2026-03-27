@@ -226,11 +226,16 @@ All of the above also accept a `@psalm-` prefix (e.g. `@psalm-param`) for advanc
 
 ### Assertions
 
-| Annotation                           | When it applies           |
-|--------------------------------------|---------------------------|
-| `@psalm-assert Type $param`          | Function returns normally |
-| `@psalm-assert-if-true Type $param`  | Function returns `true`   |
-| `@psalm-assert-if-false Type $param` | Function returns `false`  |
+| Annotation                            | When it applies           |
+|---------------------------------------|---------------------------|
+| `@psalm-assert Type $param`           | Function returns normally |
+| `@psalm-assert !Type $param`          | Function returns normally |
+| `@psalm-assert-if-true Type $param`   | Function returns `true`   |
+| `@psalm-assert-if-true !Type $param`  | Function returns `true`   |
+| `@psalm-assert-if-false Type $param`  | Function returns `false`  |
+| `@psalm-assert-if-false !Type $param` | Function returns `false`  |
+
+Negated assertions (`!Type`) assert the param is **not** of the given type. Common examples: `!null`, `!false`, `!string`.
 
 ### Output Type Narrowing
 
