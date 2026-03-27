@@ -339,6 +339,22 @@ final class ValidationRuleAnalyzerTest extends TestCase
     }
 
     #[Test]
+    public function mimes_rule_returns_uploaded_file(): void
+    {
+        $rule = $this->resolve('mimes:jpg,png');
+
+        $this->assertTrue($rule->type->hasType('Illuminate\\Http\\UploadedFile'));
+    }
+
+    #[Test]
+    public function mimetypes_rule_returns_uploaded_file(): void
+    {
+        $rule = $this->resolve('mimetypes:image/jpeg');
+
+        $this->assertTrue($rule->type->hasType('Illuminate\\Http\\UploadedFile'));
+    }
+
+    #[Test]
     public function json_rule_keeps_all_taint(): void
     {
         $rule = $this->resolve('json');
