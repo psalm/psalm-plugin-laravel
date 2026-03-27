@@ -16,6 +16,13 @@ use Psalm\Type\Union;
  * - FormRequest::safe([...])  → partial array shape for specified keys
  * - Request::validate([...])  → array shape from inline rules argument
  *
+ * Disabled during taint analysis: when a MethodReturnTypeProvider overrides a method's
+ * return type, Psalm skips the stub's @psalm-taint-source annotation. This causes taint
+ * to be lost when the return value is assigned to a variable. Returning null during taint
+ * analysis lets the stub handle taint propagation correctly. The tradeoff: fields with
+ * safe rules (integer, uuid, etc.) remain tainted through variable assignment, which is
+ * conservative (false positives) but sound (no missed vulnerabilities).
+ *
  * Architecture follows {@see \Psalm\LaravelPlugin\Handlers\Console\CommandArgumentHandler}.
  */
 final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
