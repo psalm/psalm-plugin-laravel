@@ -32,7 +32,7 @@ class ValidatedInput
     public function toArray() {}
 
     /**
-     * @param  array<int, string>|string  $keys
+     * @param  mixed  $keys
      * @return array<string, mixed>
      *
      * @psalm-taint-source input
@@ -40,7 +40,7 @@ class ValidatedInput
     public function only($keys) {}
 
     /**
-     * @param  array<int, string>|string  $keys
+     * @param  mixed  $keys
      * @return array<string, mixed>
      *
      * @psalm-taint-source input
@@ -82,7 +82,7 @@ class ValidatedInput
     public function __get($name) {}
 
     /**
-     * @param  string  $key
+     * @param  mixed  $key
      * @return mixed
      *
      * @psalm-taint-source input

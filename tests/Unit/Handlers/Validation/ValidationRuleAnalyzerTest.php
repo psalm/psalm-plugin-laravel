@@ -125,6 +125,38 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $this->assertSame('string', $rule->type->getId());
     }
 
+    #[Test]
+    public function required_rule_sets_required_flag(): void
+    {
+        $rule = $this->resolve('required|string');
+
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function present_rule_sets_required_flag(): void
+    {
+        $rule = $this->resolve('present|string');
+
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function conditional_required_does_not_set_required(): void
+    {
+        $rule = $this->resolve('required_if:role,admin|string');
+
+        $this->assertFalse($rule->required);
+    }
+
+    #[Test]
+    public function field_without_presence_rule_is_not_required(): void
+    {
+        $rule = $this->resolve('string|max:255');
+
+        $this->assertFalse($rule->required);
+    }
+
     // --- Taint resolution ---
 
     #[Test]
