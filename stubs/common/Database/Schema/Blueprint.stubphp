@@ -1,0 +1,17 @@
+<?php
+
+namespace Illuminate\Database\Schema;
+
+class Blueprint
+{
+    /**
+     * Specify a raw index for the table.
+     *
+     * @param  string  $expression
+     * @param  string  $name
+     * @return \Illuminate\Database\Schema\IndexDefinition
+     *
+     * @psalm-taint-sink sql $expression
+     */
+    public function rawIndex($expression, $name) {}
+}
