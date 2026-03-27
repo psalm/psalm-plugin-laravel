@@ -110,6 +110,26 @@ function testSafeInputNarrowsType(StoreUserRequest $request): void
     /** @psalm-check-type-exact $_nameString = string */
 }
 
+class AcceptDeclineRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'terms' => 'accepted',
+            'opt_out' => 'declined',
+        ];
+    }
+}
+
+function testAcceptedDeclinedTypes(AcceptDeclineRequest $request): void
+{
+    $_terms = $request->validated('terms');
+    /** @psalm-check-type-exact $_terms = '1'|'on'|'true'|'yes'|1|true */
+
+    $_optOut = $request->validated('opt_out');
+    /** @psalm-check-type-exact $_optOut = '0'|'false'|'no'|'off'|0|false */
+}
+
 function testInlineValidate(\Illuminate\Http\Request $request): void
 {
     // $request->validate([...]) → array shape from inline rules
