@@ -5,7 +5,7 @@
 
 function unsafeConnectionTable(\Illuminate\Http\Request $request): void {
     /** @var \Illuminate\Database\Connection $connection */
-    $connection = new \Illuminate\Database\Connection(new \PDO('sqlite::memory:'));
+    $connection = app()->make(\Illuminate\Database\Connection::class);
     $table = $request->input('table');
 
     $connection->table($table);
