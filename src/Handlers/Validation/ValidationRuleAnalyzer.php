@@ -124,8 +124,7 @@ final class ValidationRuleAnalyzer
             // Conditional variants (required_if, present_with, accepted_if, etc.) depend on
             // runtime conditions we cannot evaluate statically — they don't guarantee presence.
             // Keep in sync with Laravel's validation rules in Illuminate\Validation\Concerns\ValidatesAttributes.
-            if ($ruleName === 'required' || $ruleName === 'present'
-                || $ruleName === 'accepted' || $ruleName === 'declined'
+            if (\in_array($ruleName, ['required', 'present', 'accepted', 'declined'], true)
             ) {
                 $required = true;
             }
@@ -133,7 +132,7 @@ final class ValidationRuleAnalyzer
             // Type-bearing rules (first one wins for type, all accumulate taint)
             $ruleType = self::ruleToType($ruleName, $ruleParam);
 
-            if ($ruleType !== null && $type === null) {
+            if ($ruleType instanceof \Psalm\Type\Union && !$type instanceof \Psalm\Type\Union) {
                 $type = $ruleType;
             }
 
@@ -509,7 +508,7 @@ final class ValidationRuleAnalyzer
                     $statements = $codebase->getStatementsForFile($filePath);
                     $arrayNode = self::findRulesMethodReturn($statements, $storage->name);
 
-                    if ($arrayNode !== null) {
+                    if ($arrayNode instanceof \PhpParser\Node\Expr\Array_) {
                         return self::extractRulePairsFromArrayNode($arrayNode);
                     }
                 } catch (\InvalidArgumentException|\UnexpectedValueException) {
@@ -535,7 +534,7 @@ final class ValidationRuleAnalyzer
             if ($stmt instanceof Node\Stmt\Namespace_) {
                 $result = self::findRulesInNamespace($stmt, $className);
 
-                if ($result !== null) {
+                if ($result instanceof \PhpParser\Node\Expr\Array_) {
                     return $result;
                 }
 
