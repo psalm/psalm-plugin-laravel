@@ -6,27 +6,27 @@ namespace Psalm\LaravelPlugin\Handlers\Validation;
 
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Type;
 use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
  * Narrows return types of validation methods based on declared rules:
  *
- * - FormRequest::validated()  → array shape or single field type from rules()
- * - FormRequest::safe([...])  → partial array shape for specified keys
- * - Request::validate([...])  → array shape from inline rules argument
+ * - FormRequest::validated()         → array shape or single field type from rules()
+ * - FormRequest::safe([...])         → partial array shape for specified keys
+ * - Request::validate([...])         → array shape from inline rules argument
+ * - ValidatedInput::input('field')   → single field type (via generic TRequest parameter)
+ *
+ * ValidatedInput is generic: ValidatedInput<TRequest of FormRequest>. When safe() returns
+ * ValidatedInput<static>, the template parameter carries the concrete FormRequest class,
+ * enabling type narrowing on ValidatedInput accessor methods.
  *
  * Known limitation: when this handler provides a return type, Psalm skips the stub's
  * @psalm-taint-source annotation for variable assignments. This means taint is lost
- * when validated data is assigned to a variable before reaching a sink:
- *
- *   echo $request->validated('body');         // TaintedHtml reported ✓
- *   $body = $request->validated('body');
- *   echo $body;                               // No taint reported (false negative)
- *
- * Per project principle "silence over false positives", this is acceptable: we only
- * report issues we're certain about. The ValidationTaintHandler handles taint for
- * direct usage patterns where the MethodCall expression is visible to the event.
+ * when validated data is assigned to a variable before reaching a sink.
+ * Per project principle "silence over false positives", this is acceptable.
  *
  * Architecture follows {@see \Psalm\LaravelPlugin\Handlers\Console\CommandArgumentHandler}.
  */
@@ -42,6 +42,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
         return [
             \Illuminate\Foundation\Http\FormRequest::class,
             \Illuminate\Http\Request::class,
+            \Illuminate\Support\ValidatedInput::class,
         ];
     }
 
@@ -49,6 +50,14 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
+        // ValidatedInput methods — resolve via generic TRequest parameter.
+        // Use getFqClasslikeName() (declaring class) instead of getCalledFqClasslikeName()
+        // because input()/str()/etc. are inherited from the InteractsWithData trait —
+        // getCalledFqClasslikeName() may be null on the first dispatch.
+        if ($event->getFqClasslikeName() === \Illuminate\Support\ValidatedInput::class) {
+            return self::resolveValidatedInputMethod($event);
+        }
+
         return match ($event->getMethodNameLowercase()) {
             'validated' => self::resolveValidated($event),
             'safe' => self::resolveSafe($event),
@@ -82,14 +91,14 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     /**
      * FormRequest::safe(['key1', 'key2']) → partial array shape for specified keys.
      *
-     * safe() without args falls through to the stub return type (ValidatedInput|array).
+     * safe() without args falls through to the stub return type (ValidatedInput<static>|array).
      */
     private static function resolveSafe(MethodReturnTypeProviderEvent $event): ?Union
     {
         $callArgs = $event->getCallArgs();
 
         if ($callArgs === []) {
-            return null; // Fall through to stub — returns ValidatedInput
+            return null; // Fall through to stub — returns ValidatedInput<static>
         }
 
         $rules = self::getRulesForCalledClass($event);
@@ -156,6 +165,68 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
+     * ValidatedInput::input('field'), ::str('field'), etc. → resolve via TRequest template.
+     *
+     * When safe() returns ValidatedInput<StoreUserRequest>, Psalm carries the template
+     * parameter. We extract it here to look up the FormRequest's rules.
+     */
+    private static function resolveValidatedInputMethod(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $methodName = $event->getMethodNameLowercase();
+
+        // Only narrow methods that take a field key as first argument
+        if (!\in_array($methodName, ['input', 'str', 'string', 'collect'], true)) {
+            return null;
+        }
+
+        $callArgs = $event->getCallArgs();
+
+        if ($callArgs === []) {
+            return null;
+        }
+
+        // Extract the FormRequest class from the generic TRequest parameter
+        $templateParams = $event->getTemplateTypeParameters();
+
+        if ($templateParams === null || !isset($templateParams[0])) {
+            return null;
+        }
+
+        $formRequestClass = self::extractClassFromUnion($templateParams[0]);
+
+        if ($formRequestClass === null) {
+            return null;
+        }
+
+        $rules = ValidationRuleAnalyzer::getRulesForFormRequest($formRequestClass);
+
+        if ($rules === null) {
+            return null;
+        }
+
+        return self::resolveFieldType($rules, $callArgs, $event);
+    }
+
+    /**
+     * Extract a class-string from a Union type (e.g., from a template parameter).
+     *
+     * @return class-string|null
+     *
+     * @psalm-mutation-free
+     */
+    private static function extractClassFromUnion(Union $union): ?string
+    {
+        foreach ($union->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNamedObject) {
+                /** @var class-string */
+                return $atomic->value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Resolve rules for the concrete FormRequest subclass being analyzed.
      *
      * @return array<string, ResolvedRule>|null
@@ -199,7 +270,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
                     $defaultType = $nodeTypeProvider->getType($callArgs[1]->value);
 
                     if ($defaultType instanceof Union) {
-                        $fieldType = \Psalm\Type::combineUnionTypes($fieldType, $defaultType);
+                        $fieldType = Type::combineUnionTypes($fieldType, $defaultType);
                     }
                 }
 

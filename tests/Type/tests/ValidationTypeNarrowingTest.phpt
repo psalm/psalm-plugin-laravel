@@ -72,7 +72,7 @@ function testWildcardRules(WildcardRequest $request): void
 function testSafeReturnsValidatedInput(StoreUserRequest $request): void
 {
     $_safe = $request->safe();
-    /** @psalm-check-type-exact $_safe = \Illuminate\Support\ValidatedInput|array<string, mixed> */
+    /** @psalm-check-type-exact $_safe = \Illuminate\Support\ValidatedInput<StoreUserRequest&static> */
 }
 
 function testSafeWithKeys(StoreUserRequest $request): void
@@ -80,6 +80,17 @@ function testSafeWithKeys(StoreUserRequest $request): void
     // safe(['key1', 'key2']) → partial array shape with only those fields
     $_partial = $request->safe(['name', 'age']);
     /** @psalm-check-type-exact $_partial = array{name: string, age: int|numeric-string} */
+}
+
+function testSafeInputNarrowsType(StoreUserRequest $request): void
+{
+    // safe() returns ValidatedInput<StoreUserRequest>, so input('field') is narrowed
+    $safe = $request->safe();
+    $_name = $safe->input('name');
+    /** @psalm-check-type-exact $_name = string */
+
+    $_age = $safe->input('age');
+    /** @psalm-check-type-exact $_age = int|numeric-string */
 }
 
 function testInlineValidate(\Illuminate\Http\Request $request): void
