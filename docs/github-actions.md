@@ -129,7 +129,7 @@ jobs:
 
 **Psalm cache:** The `git-restore-mtime-action` is essential -- without it, `git checkout` sets all file mtimes to "now", invalidating the entire cache on every run. The cache key includes `psalm.xml`, baseline, and `composer.lock` so it refreshes when config or dependencies change.
 
-**Path filters:** The `paths` filter avoids running Psalm on documentation-only or asset-only changes. The `types` filter on `pull_request` skips draft PRs.
+**Path filters:** The `paths` filter avoids running Psalm on documentation-only or asset-only changes. The `types` filter on `pull_request` limits which PR events trigger the workflow (e.g., skips `labeled`, `assigned` events).
 
 
 ## Setting up a baseline

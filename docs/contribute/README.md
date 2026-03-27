@@ -189,6 +189,13 @@ flowchart LR
         ----
         Model property handlers
         (registered via closures)"]
+
+        A5["AddTaints / RemoveTaints
+        on each expression with data flow
+        ----
+        expression, node type info
+        ----
+        ValidationTaintHandler"]
     end
 
     scanning --> populated --> analysis
