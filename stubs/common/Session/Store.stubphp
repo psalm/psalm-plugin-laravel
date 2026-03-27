@@ -2,7 +2,7 @@
 
 namespace Illuminate\Session;
 
-class Store
+class Store implements \Illuminate\Contracts\Session\Session
 {
     /**
      * Get an item from the session.
