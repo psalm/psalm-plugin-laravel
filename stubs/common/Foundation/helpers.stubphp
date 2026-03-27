@@ -360,3 +360,30 @@ function validator(array $data = [], array $rules = [], array $messages = [], ar
  * @psalm-taint-sink html $mergeData
  */
 function view($view = null, $data = [], $mergeData = []) {}
+
+/**
+ * Retrieve an old input item.
+ *
+ * @param  string|null  $key
+ * @param  \Illuminate\Database\Eloquent\Model|string|array|null  $default
+ * @return string|array|null
+ *
+ * @psalm-taint-source input
+ */
+function old($key = null, $default = null) {}
+
+/**
+ * Get / set the specified context value.
+ *
+ * @param  array|string|null  $key
+ * @param  mixed  $default
+ * @return ($key is string ? mixed : \Illuminate\Log\Context\Repository)
+ */
+function context($key = null, $default = null) {}
+
+/**
+ * Defer execution of the given callback.
+ *
+ * @return ($callback is null ? \Illuminate\Support\Defer\DeferredCallbackCollection : \Illuminate\Support\Defer\DeferredCallback)
+ */
+function defer(?callable $callback = null, ?string $name = null, bool $always = false) {}

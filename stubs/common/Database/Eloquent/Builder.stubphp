@@ -314,9 +314,10 @@ class Builder implements BuilderContract
     public function findOrFail($id, $columns = ['*']) {}
 
     /**
-     * @param  mixed  $id
+     * @template T
+     * @param  T  $id
      * @param  list<non-empty-string>  $columns
-     * @return TModel
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel)
      */
     public function findOrNew($id, $columns = ['*']) {}
 
@@ -334,9 +335,11 @@ class Builder implements BuilderContract
     public function firstOrFail($columns = ['*']) {}
 
     /**
+     * @template TValue
+     *
      * @param  \Closure|array  $columns
-     * @param  \Closure|null  $callback
-     * @return TModel|mixed
+     * @param  (\Closure(): TValue)|null  $callback
+     * @return TModel|TValue
      */
     public function firstOr($columns = ['*'], \Closure $callback = null) {}
 
@@ -636,4 +639,57 @@ class Builder implements BuilderContract
      * @return int<0, max>
      */
     public function count($columns = '*') {}
+
+    /**
+     * Add a basic "where not" clause to the query.
+     *
+     * @param  (\Closure(static): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return self<TModel>
+     */
+    public function whereNot($column, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * Add an "or where not" clause to the query.
+     *
+     * @param  (\Closure(static): mixed)|array|string|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return self<TModel>
+     */
+    public function orWhereNot($column, $operator = null, $value = null) {}
+
+    /**
+     * Attempt to create the record. If a unique constraint violation occurs, find the matching record.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  (\Closure(): array)|array  $values
+     * @return TModel
+     */
+    public function createOrFirst(array $attributes = [], \Closure|array $values = []) {}
+
+    /**
+     * Find a sole model by its primary key.
+     *
+     * @param  mixed  $id
+     * @param  array|string  $columns
+     * @return TModel
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     * @throws \Illuminate\Database\MultipleRecordsFoundException
+     */
+    public function findSole($id, $columns = ['*']) {}
+
+    /**
+     * Run a map over each item while chunking.
+     *
+     * @template TReturn
+     *
+     * @param  callable(TModel): TReturn  $callback
+     * @param  int  $count
+     * @return \Illuminate\Support\Collection<int, TReturn>
+     */
+    public function chunkMap(callable $callback, $count = 1000) {}
 }

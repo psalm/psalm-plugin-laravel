@@ -503,7 +503,100 @@ class Builder
      * Retrieve the sum of the values of a given column.
      *
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
-     * @return int|float
+     * @return numeric-string|int|float
      */
     public function sum($column) {}
+
+    /**
+     * Retrieve the average of the values of a given column.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return numeric-string|int|float|null
+     */
+    public function avg($column) {}
+
+    /**
+     * Alias for the "avg" method.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return numeric-string|int|float|null
+     */
+    public function average($column) {}
+
+    /**
+     * Retrieve the "count" result of the query.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $columns
+     * @return int<0, max>
+     */
+    public function count($columns = '*') {}
+
+    /**
+     * Execute the query as a "select" statement.
+     *
+     * @param  array|string  $columns
+     * @return \Illuminate\Support\Collection<int, \stdClass>
+     */
+    public function get($columns = ['*']) {}
+
+    /**
+     * Get a lazy collection for the given query.
+     *
+     * @return \Illuminate\Support\LazyCollection<int, \stdClass>
+     */
+    public function cursor() {}
+
+    /**
+     * Get a collection instance containing the values of a given column.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  string|null  $key
+     * @return \Illuminate\Support\Collection<array-key, mixed>
+     */
+    public function pluck($column, $key = null) {}
+
+    /**
+     * Insert a new record and get the value of the primary key.
+     *
+     * @param  array  $values
+     * @param  string|null  $sequence
+     * @return int
+     */
+    public function insertGetId(array $values, $sequence = null) {}
+
+    /**
+     * Update records in the database.
+     *
+     * @param  array  $values
+     * @return int
+     */
+    public function update(array $values) {}
+
+    /**
+     * Increment a column's value by a given amount.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  float|int  $amount
+     * @param  array  $extra
+     * @return int
+     */
+    public function increment($column, $amount = 1, array $extra = []) {}
+
+    /**
+     * Decrement a column's value by a given amount.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  float|int  $amount
+     * @param  array  $extra
+     * @return int
+     */
+    public function decrement($column, $amount = 1, array $extra = []) {}
+
+    /**
+     * Get the count of the total records for the paginator.
+     *
+     * @param  array  $columns
+     * @return int<0, max>
+     */
+    public function getCountForPagination($columns = ['*']) {}
 }
