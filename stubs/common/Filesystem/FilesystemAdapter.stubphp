@@ -202,7 +202,6 @@ class FilesystemAdapter
      * @param  string  $path
      * @return string
      *
-     * @psalm-taint-sink file $path
      */
     public function url($path) {}
 
@@ -213,8 +212,6 @@ class FilesystemAdapter
      * @param  \DateTimeInterface  $expiration
      * @param  array  $options
      * @return string
-     *
-     * @psalm-taint-sink file $path
      */
     public function temporaryUrl($path, $expiration, array $options = []) {}
 
