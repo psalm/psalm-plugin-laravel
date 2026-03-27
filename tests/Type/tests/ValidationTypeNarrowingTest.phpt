@@ -46,7 +46,7 @@ function testValidatedSingleField(StoreUserRequest $request): void
 function testValidatedFullShape(StoreUserRequest $request): void
 {
     $_all = $request->validated();
-    /** @psalm-check-type-exact $_all = array{name: string, age: int|numeric-string, score: float|int|numeric-string, role: 'admin'|'guest'|'user', bio: null|string, nickname?: string} */
+    /** @psalm-check-type-exact $_all = array{age: int|numeric-string, bio?: null|string, name: string, nickname?: string, role?: 'admin'|'guest'|'user', score: float|int|numeric-string} */
 }
 
 class WildcardRequest extends FormRequest
@@ -110,7 +110,7 @@ function testInlineValidateArrayFormat(\Illuminate\Http\Request $request): void
         'id' => ['required', 'uuid'],
         'active' => ['boolean'],
     ]);
-    /** @psalm-check-type-exact $_data = array{active: '0'|'1'|0|1|bool, id: string} */
+    /** @psalm-check-type-exact $_data = array{active?: '0'|'1'|0|1|bool, id: string} */
 }
 ?>
 --EXPECT--

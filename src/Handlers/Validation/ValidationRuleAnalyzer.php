@@ -96,6 +96,7 @@ final class ValidationRuleAnalyzer
         $removedTaints = 0;
         $nullable = false;
         $sometimes = false;
+        $required = false;
 
         foreach ($segments as $segment) {
             $segment = \trim($segment);
@@ -119,6 +120,20 @@ final class ValidationRuleAnalyzer
                 continue;
             }
 
+            // Presence rules — field is guaranteed to exist in validated() output
+            if (\in_array($ruleName, [
+                'required', 'required_if', 'required_unless',
+                'required_with', 'required_with_all',
+                'required_without', 'required_without_all',
+                'required_if_accepted', 'required_if_declined',
+                'present', 'present_if', 'present_unless',
+                'present_with', 'present_with_all',
+                'accepted', 'accepted_if',
+                'declined', 'declined_if',
+            ], true)) {
+                $required = true;
+            }
+
             // Type-bearing rules (first one wins for type, all accumulate taint)
             $ruleType = self::ruleToType($ruleName, $ruleParam);
 
@@ -137,7 +152,7 @@ final class ValidationRuleAnalyzer
             $type = Type::combineUnionTypes($type, Type::getNull());
         }
 
-        return new ResolvedRule($type, $removedTaints, $nullable, $sometimes);
+        return new ResolvedRule($type, $removedTaints, $nullable, $sometimes, $required);
     }
 
     /**
@@ -413,6 +428,7 @@ final class ValidationRuleAnalyzer
                 $elementRule->removedTaints,
                 $parentRule?->nullable ?? false,
                 $parentRule?->sometimes ?? false,
+                $parentRule?->required ?? false,
             );
         }
 
@@ -446,11 +462,20 @@ final class ValidationRuleAnalyzer
                 $listType = Type::combineUnionTypes($listType, Type::getNull());
             }
 
+            // Aggregate child taint removal — if ALL children remove all taint,
+            // the list container is also safe. Otherwise keep tainted.
+            $aggregatedTaint = TaintKind::ALL_INPUT;
+
+            foreach ($children as $childRule) {
+                $aggregatedTaint &= $childRule->removedTaints;
+            }
+
             $topLevel[$parent] = new ResolvedRule(
                 $listType,
-                0, // Taint removal applies per-element, not to the list container
+                $aggregatedTaint,
                 $parentRule?->nullable ?? false,
                 $parentRule?->sometimes ?? false,
+                $parentRule?->required ?? false,
             );
         }
 
