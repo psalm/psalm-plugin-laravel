@@ -123,6 +123,7 @@ final class ValidationRuleAnalyzer
             // Unconditional presence rules — field is guaranteed to exist in validated() output.
             // Conditional variants (required_if, present_with, accepted_if, etc.) depend on
             // runtime conditions we cannot evaluate statically — they don't guarantee presence.
+            // Keep in sync with Laravel's validation rules in Illuminate\Validation\Concerns\ValidatesAttributes.
             if ($ruleName === 'required' || $ruleName === 'present'
                 || $ruleName === 'accepted' || $ruleName === 'declined'
             ) {

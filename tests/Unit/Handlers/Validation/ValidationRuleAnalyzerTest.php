@@ -282,6 +282,78 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
     }
 
+    #[Test]
+    public function list_rule_returns_list_type(): void
+    {
+        $rule = $this->resolve('list');
+
+        $this->assertSame('list<mixed>', $rule->type->getId());
+    }
+
+    #[Test]
+    public function image_rule_returns_uploaded_file(): void
+    {
+        $rule = $this->resolve('image');
+
+        $this->assertTrue($rule->type->hasType('Illuminate\\Http\\UploadedFile'));
+    }
+
+    #[Test]
+    public function file_rule_keeps_all_taint(): void
+    {
+        $rule = $this->resolve('file');
+
+        $this->assertSame(0, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function image_rule_keeps_all_taint(): void
+    {
+        $rule = $this->resolve('image');
+
+        $this->assertSame(0, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function accepted_rule_sets_required_flag(): void
+    {
+        $rule = $this->resolve('accepted');
+
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function declined_rule_sets_required_flag(): void
+    {
+        $rule = $this->resolve('declined');
+
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function accepted_if_does_not_set_required(): void
+    {
+        $rule = $this->resolve('accepted_if:role,admin');
+
+        $this->assertFalse($rule->required);
+    }
+
+    #[Test]
+    public function json_rule_keeps_all_taint(): void
+    {
+        $rule = $this->resolve('json');
+
+        $this->assertSame(0, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function boolean_rule_removes_all_taint(): void
+    {
+        $rule = $this->resolve('boolean');
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
     // --- Array rule format ---
 
     #[Test]
