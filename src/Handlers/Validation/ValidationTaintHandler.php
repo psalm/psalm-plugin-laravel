@@ -22,6 +22,9 @@ use Psalm\Type\Union;
  * explicitly adding taint (via AddTaintsInterface) and then selectively removing it
  * for fields with safe rules (via RemoveTaintsInterface).
  *
+ * Upstream workaround: https://github.com/vimeo/psalm/issues/11765
+ * Remove this handler when Psalm calls taintMethodCallResult() even with a type provider.
+ *
  * Handles:
  *   $request->validated('field')    — FormRequest, per-field add+remove
  *   $request->safe()                — FormRequest, add taint
