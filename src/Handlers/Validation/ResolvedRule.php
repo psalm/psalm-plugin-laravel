@@ -18,11 +18,13 @@ final class ResolvedRule
      * @param int   $removedTaints     Bitmask of TaintKind flags that this rule escapes
      * @param bool  $nullable          Whether the 'nullable' modifier was present
      * @param bool  $sometimes         Whether the field may be absent from validated output
+     * @param bool  $required          Whether 'required' (or similar presence rule) was present
      */
     public function __construct(
         public readonly Union $type,
         public readonly int $removedTaints,
         public readonly bool $nullable,
         public readonly bool $sometimes,
+        public readonly bool $required = false,
     ) {}
 }

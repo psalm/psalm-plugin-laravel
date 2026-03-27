@@ -9,7 +9,7 @@ class FormRequest extends \Illuminate\Http\Request
      *
      * @param  array|int|string|null  $key
      * @param  mixed  $default
-     * @return mixed
+     * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
      */
