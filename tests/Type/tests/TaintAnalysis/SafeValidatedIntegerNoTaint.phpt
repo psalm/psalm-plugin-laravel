@@ -21,4 +21,3 @@ function renderAge(AgeRequest $request): void {
 }
 ?>
 --EXPECTF--
-%AMixedArgument on line %d: %s

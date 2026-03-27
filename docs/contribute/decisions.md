@@ -10,6 +10,25 @@ Decisions made during development of the plugin. Contributors should follow thes
 
 ---
 
+## Principles
+
+1. Silence over false positives — never report an issue the plugin isn't certain about
+2. Cover the 80% — Laravel offers many ways to do the same thing; support the common patterns, not every edge case
+3. Complexity is fine when it's well isolated
+4. Stubs vs. handlers: prefer stubs when they cover 95% of cases (incl. using [conditional types](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/conditional_types.md))
+
+## Static Inference vs Runtime Reflection
+
+### Static inference over runtime reflection
+
+**Decision:** Prefer deriving types from Psalm's `ClassLikeStorage` and source code analysis. Use runtime reflection (booting the Laravel app via Testbench) only when the needed information is unavailable statically.
+
+**Currently runtime:** Model table names (`getTable()`), model casts (`getCasts()`), container bindings, facade alias resolution.
+
+**Currently static:** Relationships, accessors, migration schema parsing, stub overrides.
+
+**Why:** Runtime reflection requires booting a real Laravel app, which adds startup cost, can fail in misconfigured projects, and couples the plugin to the user's environment. Static inference is faster, more predictable, and works in CI without a running app. But some Laravel conventions (dynamic table names, programmatic casts, container bindings) are only knowable at runtime.
+
 ## Eloquent Model
 
 ### `@property` PHPDoc takes priority over plugin inference

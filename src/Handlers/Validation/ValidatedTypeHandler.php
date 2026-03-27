@@ -16,12 +16,17 @@ use Psalm\Type\Union;
  * - FormRequest::safe([...])  → partial array shape for specified keys
  * - Request::validate([...])  → array shape from inline rules argument
  *
- * Disabled during taint analysis: when a MethodReturnTypeProvider overrides a method's
- * return type, Psalm skips the stub's @psalm-taint-source annotation. This causes taint
- * to be lost when the return value is assigned to a variable. Returning null during taint
- * analysis lets the stub handle taint propagation correctly. The tradeoff: fields with
- * safe rules (integer, uuid, etc.) remain tainted through variable assignment, which is
- * conservative (false positives) but sound (no missed vulnerabilities).
+ * Known limitation: when this handler provides a return type, Psalm skips the stub's
+ * @psalm-taint-source annotation for variable assignments. This means taint is lost
+ * when validated data is assigned to a variable before reaching a sink:
+ *
+ *   echo $request->validated('body');         // TaintedHtml reported ✓
+ *   $body = $request->validated('body');
+ *   echo $body;                               // No taint reported (false negative)
+ *
+ * Per project principle "silence over false positives", this is acceptable: we only
+ * report issues we're certain about. The ValidationTaintHandler handles taint for
+ * direct usage patterns where the MethodCall expression is visible to the event.
  *
  * Architecture follows {@see \Psalm\LaravelPlugin\Handlers\Console\CommandArgumentHandler}.
  */
@@ -44,14 +49,6 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        // During taint analysis, returning a custom type suppresses the stub's
-        // @psalm-taint-source annotation. Fall through to the stub so taint
-        // propagates correctly through variable assignments and data flow.
-        // The ValidationTaintHandler handles taint add/remove via its own hooks.
-        if ($event->getSource()->getCodebase()->taint_flow_graph !== null) {
-            return null;
-        }
-
         return match ($event->getMethodNameLowercase()) {
             'validated' => self::resolveValidated($event),
             'safe' => self::resolveSafe($event),
