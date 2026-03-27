@@ -166,6 +166,18 @@ class DB extends Facade
     public static function selectResultSets($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 
     /**
+     * Begin a fluent query against a database table.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Contracts\Database\Query\Expression|\UnitEnum|string  $table
+     * @param  string|null  $as
+     * @return \Illuminate\Database\Query\Builder
+     *
+     * @psalm-taint-sink sql $table
+     * @psalm-taint-sink sql $as
+     */
+    public static function table($table, $as = null) {}
+
+    /**
      * Escape a value for safe SQL embedding.
      *
      * @param  string|float|int|bool|null  $value
