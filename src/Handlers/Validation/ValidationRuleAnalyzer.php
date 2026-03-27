@@ -120,17 +120,12 @@ final class ValidationRuleAnalyzer
                 continue;
             }
 
-            // Presence rules — field is guaranteed to exist in validated() output
-            if (\in_array($ruleName, [
-                'required', 'required_if', 'required_unless',
-                'required_with', 'required_with_all',
-                'required_without', 'required_without_all',
-                'required_if_accepted', 'required_if_declined',
-                'present', 'present_if', 'present_unless',
-                'present_with', 'present_with_all',
-                'accepted', 'accepted_if',
-                'declined', 'declined_if',
-            ], true)) {
+            // Unconditional presence rules — field is guaranteed to exist in validated() output.
+            // Conditional variants (required_if, present_with, accepted_if, etc.) depend on
+            // runtime conditions we cannot evaluate statically — they don't guarantee presence.
+            if ($ruleName === 'required' || $ruleName === 'present'
+                || $ruleName === 'accepted' || $ruleName === 'declined'
+            ) {
                 $required = true;
             }
 
@@ -247,7 +242,7 @@ final class ValidationRuleAnalyzer
             );
 
             return new Union($atomics);
-        } catch (\UnexpectedValueException) {
+        } catch (\UnexpectedValueException|\InvalidArgumentException) {
             // TLiteralString::make() requires Psalm Config to be initialized.
             // When called outside of Psalm analysis context (e.g. unit tests),
             // fall back to a plain string type.
@@ -275,7 +270,7 @@ final class ValidationRuleAnalyzer
                     TLiteralString::make('1'),
                 ]),
             );
-        } catch (\UnexpectedValueException) {
+        } catch (\UnexpectedValueException|\InvalidArgumentException) {
             return Type::combineUnionTypes(
                 Type::getBool(),
                 new Union([new TLiteralInt(0), new TLiteralInt(1)]),
@@ -301,7 +296,7 @@ final class ValidationRuleAnalyzer
                 TLiteralString::make('1'),
                 TLiteralString::make('true'),
             ]);
-        } catch (\UnexpectedValueException) {
+        } catch (\UnexpectedValueException|\InvalidArgumentException) {
             return Type::combineUnionTypes(
                 Type::getTrue(),
                 new Union([new TLiteralInt(1)]),
@@ -327,7 +322,7 @@ final class ValidationRuleAnalyzer
                 TLiteralString::make('0'),
                 TLiteralString::make('false'),
             ]);
-        } catch (\UnexpectedValueException) {
+        } catch (\UnexpectedValueException|\InvalidArgumentException) {
             return Type::combineUnionTypes(
                 Type::getFalse(),
                 new Union([new TLiteralInt(0)]),
