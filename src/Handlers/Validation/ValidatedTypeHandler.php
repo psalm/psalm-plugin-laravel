@@ -37,6 +37,14 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
+        // During taint analysis, returning a custom type suppresses the stub's
+        // @psalm-taint-source annotation. Fall through to the stub so taint
+        // propagates correctly through variable assignments and data flow.
+        // The ValidationTaintHandler handles taint add/remove via its own hooks.
+        if ($event->getSource()->getCodebase()->taint_flow_graph !== null) {
+            return null;
+        }
+
         return match ($event->getMethodNameLowercase()) {
             'validated' => self::resolveValidated($event),
             'safe' => self::resolveSafe($event),
