@@ -2,7 +2,7 @@
 
 namespace Illuminate\View;
 
-class Factory
+class Factory implements \Illuminate\Contracts\View\Factory
 {
     /**
      * @psalm-taint-sink html $data

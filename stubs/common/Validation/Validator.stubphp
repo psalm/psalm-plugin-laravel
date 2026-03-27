@@ -2,7 +2,7 @@
 
 namespace Illuminate\Validation;
 
-class Validator
+class Validator implements \Illuminate\Contracts\Validation\Validator
 {
     /**
      * Run the validator's rules against its data and return validated data.
