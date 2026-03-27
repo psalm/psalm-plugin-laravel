@@ -77,8 +77,8 @@ abstract class HasOneOrMany extends Relation
      * Attempt to create the record. If a unique constraint violation occurs, find the matching record.
      *
      * @param  array<string, mixed>  $attributes
-     * @param  array<string, mixed>  $values
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
      * @return TRelatedModel
      */
-    public function createOrFirst(array $attributes = [], array $values = []) {}
+    public function createOrFirst(array $attributes = [], \Closure|array $values = []) {}
 }

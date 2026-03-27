@@ -648,6 +648,8 @@ class Builder implements BuilderContract
      * @param  mixed  $value
      * @param  string  $boolean
      * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
      */
     public function whereNot($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -658,6 +660,8 @@ class Builder implements BuilderContract
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return self<TModel>
+     *
+     * @psalm-taint-sink sql $column
      */
     public function orWhereNot($column, $operator = null, $value = null) {}
 
