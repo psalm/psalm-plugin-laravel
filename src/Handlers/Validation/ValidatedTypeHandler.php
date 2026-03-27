@@ -299,7 +299,9 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
         foreach ($rules as $field => $resolvedRule) {
             $fieldType = $resolvedRule->type;
 
-            if ($resolvedRule->sometimes) {
+            // Fields without a presence rule (required, present, accepted, etc.)
+            // may be absent from validated() output when not provided in the request.
+            if (!$resolvedRule->required) {
                 $fieldType = $fieldType->setPossiblyUndefined(true);
             }
 
