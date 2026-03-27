@@ -441,7 +441,7 @@ final class ValidationRuleAnalyzer
             foreach ($children as $childField => $childRule) {
                 $childType = $childRule->type;
 
-                if ($childRule->sometimes) {
+                if ($childRule->sometimes || !$childRule->required) {
                     $childType = $childType->setPossiblyUndefined(true);
                 }
 
