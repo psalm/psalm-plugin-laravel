@@ -168,11 +168,11 @@ class BelongsToMany extends Relation
     public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
 
     /**
-     * @template TValue
      * @template T
+     * @template TValue
      *
      * @param  T  $id
-     * @param  \Closure|array  $columns
+     * @param  list<non-empty-string>|\Closure  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|TValue : TRelatedModel|TValue)
      */
