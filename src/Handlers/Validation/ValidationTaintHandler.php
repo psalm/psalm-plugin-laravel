@@ -24,6 +24,7 @@ use Psalm\Type\Union;
  *
  * Handles:
  *   $request->validated('field')    — FormRequest, per-field add+remove
+ *   $request->safe()                — FormRequest, add taint
  *   $request->validate([...])       — Request, add taint to return value
  *
  * Architecture follows {@see \Psalm\Internal\Provider\AddRemoveTaints\HtmlFunctionTainter}.
@@ -34,7 +35,7 @@ use Psalm\Type\Union;
 final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsInterface
 {
     /**
-     * Add taint to validated()/validate() calls.
+     * Add taint to validated()/validate()/safe() calls.
      *
      * This replaces the @psalm-taint-source annotation from stubs, which
      * gets skipped when ValidatedTypeHandler provides a return type.
@@ -54,20 +55,21 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      * rules guarantee safe content (e.g. integer, uuid, alpha_num).
      *
      * Only applies to FormRequest::validated('field') with a literal key —
-     * validate() returns a full array where per-field taint removal is not possible.
+     * validate()/safe() return full arrays where per-field taint removal is not possible.
      */
     #[\Override]
     public static function removeTaints(AddRemoveTaintsEvent $event): int
     {
-        $method = self::isValidationMethodCall($event);
+        $expr = $event->getExpr();
 
-        // Per-field removal only works for validated('field') with a literal key
-        if ($method !== 'validated') {
+        if (!$expr instanceof MethodCall || !$expr->name instanceof Identifier) {
             return 0;
         }
 
-        /** @var MethodCall $expr */
-        $expr = $event->getExpr();
+        if (\strtolower($expr->name->toString()) !== 'validated') {
+            return 0;
+        }
+
         $args = $expr->getArgs();
 
         if ($args === []) {
@@ -88,6 +90,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
 
         $fieldKey = $firstArgType->getSingleStringLiteral()->value;
 
+        // Resolve FormRequest class — single pass (no duplicate classExtends)
         $className = self::resolveFormRequestClass($expr, $statementsAnalyzer, $event);
 
         if ($className === null) {
@@ -104,7 +107,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
     }
 
     /**
-     * Check if the expression is a validated() or validate() call on Request/FormRequest.
+     * Check if the expression is a validated()/validate()/safe() call on Request/FormRequest.
      *
      * @return 'validated'|'validate'|'safe'|null  The matched method name, or null
      */
