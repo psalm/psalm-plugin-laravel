@@ -9,7 +9,7 @@ trait InteractsWithInput
      *
      * @param  string|null  $key
      * @param  mixed  $default
-     * @return mixed
+     * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
      * @psalm-mutation-free
@@ -41,7 +41,7 @@ trait InteractsWithInput
      *
      * @param  string|null  $key
      * @param  mixed  $default
-     * @return mixed
+     * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
      */
@@ -52,7 +52,7 @@ trait InteractsWithInput
      *
      * @param  string|null  $key
      * @param  mixed  $default
-     * @return mixed
+     * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
      */
@@ -63,7 +63,7 @@ trait InteractsWithInput
      *
      * @param  string|null  $key
      * @param  mixed  $default
-     * @return mixed
+     * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
      */
@@ -74,7 +74,7 @@ trait InteractsWithInput
      *
      * @param  string|null  $key
      * @param  mixed  $default
-     * @return mixed
+     * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
      */
@@ -85,7 +85,7 @@ trait InteractsWithInput
      *
      * @param  string|null  $key
      * @param  mixed  $default
-     * @return mixed
+     * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
      */
@@ -240,7 +240,7 @@ trait InteractsWithInput
      *
      * @param  string|null  $key
      * @param  mixed  $default
-     * @return mixed
+     * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
      */
