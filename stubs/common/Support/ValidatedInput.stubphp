@@ -2,6 +2,9 @@
 
 namespace Illuminate\Support;
 
+/**
+ * @template TRequest of \Illuminate\Foundation\Http\FormRequest
+ */
 class ValidatedInput
 {
     /**
@@ -69,6 +72,22 @@ class ValidatedInput
      * @psalm-taint-source input
      */
     public function string($key, $default = null) {}
+
+    /**
+     * @param  string  $name
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function __get($name) {}
+
+    /**
+     * @param  string  $key
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function offsetGet($key) {}
 
     // Type-safe casts — NOT taint sources.
     // These methods cast to specific PHP types, making injection impossible:
