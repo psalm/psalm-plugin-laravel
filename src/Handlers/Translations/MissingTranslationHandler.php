@@ -182,29 +182,38 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
         }
 
         try {
-            if (!self::$translator->has($translationKey)) {
-                self::$resolvedKeys[$translationKey] = null;
-
-                return null;
-            }
-
-            $value = self::$translator->get($translationKey);
-
-            $type = \is_array($value)
-                ? Type::getArray()
-                : Type::getString();
-
-            self::$resolvedKeys[$translationKey] = $type;
-
-            return $type;
-        } catch (\Throwable) {
+            $exists = self::$translator->has($translationKey);
+        } catch (\Exception) {
             // Malformed language files (PHP syntax errors, invalid JSON) can cause
-            // Translator to throw. Return string|array to avoid false positives,
-            // matching the fallback behavior of TransHandler.
+            // Translator::has() to throw. Return string|array to avoid emitting
+            // a false MissingTranslation for a key that may actually exist.
             $fallback = Type::combineUnionTypes(Type::getString(), Type::getArray());
-            self::$resolvedKeys[$translationKey] = $fallback;
 
-            return $fallback;
+            return self::$resolvedKeys[$translationKey] = $fallback;
         }
+
+        if (!$exists) {
+            self::$resolvedKeys[$translationKey] = null;
+
+            return null;
+        }
+
+        try {
+            $value = self::$translator->get($translationKey);
+        } catch (\Exception) {
+            // Key exists but value cannot be retrieved — return string|array
+            // to avoid false positives, matching TransHandler's fallback.
+            $fallback = Type::combineUnionTypes(Type::getString(), Type::getArray());
+
+            return self::$resolvedKeys[$translationKey] = $fallback;
+        }
+
+        $type = \is_array($value)
+            ? Type::getArray()
+            : Type::getString();
+
+        self::$resolvedKeys[$translationKey] = $type;
+
+        return $type;
     }
 }

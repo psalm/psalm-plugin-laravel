@@ -122,10 +122,11 @@ final class MissingTranslationHandlerTest extends TestCase
 
     /**
      * When Translator::has() throws (e.g. malformed language file), the handler
-     * should return string|array to avoid false positives and crashes.
+     * should return string|array to avoid emitting a false MissingTranslation
+     * for a key that may actually exist.
      */
     #[Test]
-    public function returns_string_or_array_when_translator_throws(): void
+    public function returns_string_or_array_when_has_throws(): void
     {
         $translator = $this->createStub(Translator::class);
         $translator->method('has')->willThrowException(new \RuntimeException('Invalid language file'));
@@ -133,6 +134,30 @@ final class MissingTranslationHandlerTest extends TestCase
         MissingTranslationHandler::init($translator);
 
         $event = $this->createEvent('broken.key');
+        $result = MissingTranslationHandler::getFunctionReturnType($event);
+
+        $this->assertInstanceOf(Union::class, $result);
+        $this->assertTrue($result->hasString(), 'Expected string in union type');
+        $this->assertTrue($result->hasArray(), 'Expected array in union type');
+
+        // Re-init with working translator for other tests
+        $this->setUp();
+    }
+
+    /**
+     * When Translator::has() succeeds but get() throws, the handler should
+     * return string|array as a safe fallback since we know the key exists.
+     */
+    #[Test]
+    public function returns_string_or_array_when_get_throws(): void
+    {
+        $translator = $this->createStub(Translator::class);
+        $translator->method('has')->willReturn(true);
+        $translator->method('get')->willThrowException(new \RuntimeException('Cannot read value'));
+
+        MissingTranslationHandler::init($translator);
+
+        $event = $this->createEvent('broken.value');
         $result = MissingTranslationHandler::getFunctionReturnType($event);
 
         $this->assertInstanceOf(Union::class, $result);
