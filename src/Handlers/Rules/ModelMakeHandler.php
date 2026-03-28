@@ -24,6 +24,10 @@ use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
  *
  * @see https://github.com/larastan/larastan/blob/2.x/src/Rules/NoModelMakeRule.php
  */
+// This handler uses AfterExpressionAnalysisInterface which fires per-expression.
+// The instanceof StaticCall check (line 35) rejects ~95% of expressions immediately.
+// An alternative would be emitting from ModelMethodHandler's __callStatic path, but
+// that would couple rule enforcement with type resolution. Kept separate for clarity.
 final class ModelMakeHandler implements AfterExpressionAnalysisInterface
 {
     /** @inheritDoc */
