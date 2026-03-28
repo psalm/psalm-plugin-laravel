@@ -22,6 +22,7 @@ Full config example:
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
         <modelProperties columnFallback="none" />
         <failOnInternalError value="true" />
+        <findMissingTranslations value="true" />
         <findMissingViews value="true" />
     </pluginClass>
 </plugins>
@@ -59,6 +60,24 @@ With `failOnInternalError`, the Psalm run fails immediately, so you know the plu
 
 ```xml
 <failOnInternalError value="true" />
+```
+
+## `findMissingTranslations`
+
+**default**: `false`
+
+When enabled, the plugin checks that `__()` and `trans()` calls reference translation keys that exist in the application's language files.
+Uses Laravel's `Translator::has()` from the booted app, which handles PHP array files, JSON files, and fallback locales automatically.
+
+Only string literal keys are checked -- dynamic or concatenated keys are skipped.
+Namespaced package keys (e.g., `vendor::file.key`) are also skipped.
+
+See [MissingTranslation](issues/MissingTranslation.md) for details.
+
+### Example
+
+```xml
+<findMissingTranslations value="true" />
 ```
 
 ## `findMissingViews`

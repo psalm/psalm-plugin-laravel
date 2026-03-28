@@ -140,6 +140,7 @@ The plugin emits custom issues beyond Psalm's built-in checks:
 - [InvalidConsoleArgumentName](docs/issues/InvalidConsoleArgumentName.md) — `argument()` references undefined command argument
 - [InvalidConsoleOptionName](docs/issues/InvalidConsoleOptionName.md) — `option()` references undefined command option
 - [MissingView](docs/issues/MissingView.md) — `view()` references a non-existent Blade template (opt-in)
+- [MissingTranslation](docs/issues/MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
 
 
 ## How it works
