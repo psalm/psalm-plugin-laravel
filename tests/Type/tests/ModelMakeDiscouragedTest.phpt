@@ -16,6 +16,9 @@ function model_make_is_discouraged(): void
     // No arguments — should still emit
     Article::make();
 
+    // Case-insensitive — PHP method names are case-insensitive
+    Article::Make(['status' => 'draft']);
+
     // Base Model class should also be flagged
     Model::make(['key' => 'value']);
 
@@ -24,6 +27,7 @@ function model_make_is_discouraged(): void
 }
 ?>
 --EXPECTF--
+ModelMakeDiscouraged on line %d: Use new Article(...) instead of Article::make(...). The constructor is clearer and avoids magic method indirection.
 ModelMakeDiscouraged on line %d: Use new Article(...) instead of Article::make(...). The constructor is clearer and avoids magic method indirection.
 ModelMakeDiscouraged on line %d: Use new Article(...) instead of Article::make(...). The constructor is clearer and avoids magic method indirection.
 ModelMakeDiscouraged on line %d: Use new Model(...) instead of Model::make(...). The constructor is clearer and avoids magic method indirection.
