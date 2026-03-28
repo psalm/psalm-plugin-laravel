@@ -4,7 +4,12 @@
 <?php declare(strict_types=1);
 
 function showData(\Illuminate\Http\Request $request): void {
-    echo $request->array('items')[0];
+    $items = $request->array('items');
+
+    foreach ($items as $item) {
+        echo $item;
+        break;
+    }
 }
 ?>
 --EXPECTF--
