@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function showCleanUrl(\Illuminate\Http\Request $request): void {
+function showUrlWithoutQuery(\Illuminate\Http\Request $request): void {
     echo $request->fullUrlWithoutQuery(['token']);
 }
 ?>
