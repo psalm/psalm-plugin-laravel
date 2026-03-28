@@ -34,7 +34,8 @@ final class TransHandler implements FunctionReturnTypeProviderInterface
             }
         }
 
-        // Fall back to the stub's conditional return type (e.g. __() returns null when key is null)
+        // Fall back to the stub/source conditional return type
+        // (e.g. __() returns null when key is null, trans() returns Translator)
         return null;
     }
 }
