@@ -132,12 +132,13 @@ trait HasRelationships
      * @param  string  $relatedPivotKey
      * @param  string  $parentKey
      * @param  string  $relatedKey
+     * @param  string  $relation
      * @param  bool  $inverse
      * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, $this>
      */
     public function morphToMany($related, $name, $table = null, $foreignPivotKey = null,
                                 $relatedPivotKey = null, $parentKey = null,
-                                $relatedKey = null, $inverse = false) {}
+                                $relatedKey = null, $relation = null, $inverse = false) {}
 
     /**
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
@@ -150,8 +151,10 @@ trait HasRelationships
      * @param  string  $relatedPivotKey
      * @param  string  $parentKey
      * @param  string  $relatedKey
+     * @param  string  $relation
      * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, $this>
      */
     public function morphedByMany($related, $name, $table = null, $foreignPivotKey = null,
-                                  $relatedPivotKey = null, $parentKey = null, $relatedKey = null) {}
+                                  $relatedPivotKey = null, $parentKey = null,
+                                  $relatedKey = null, $relation = null) {}
 }
