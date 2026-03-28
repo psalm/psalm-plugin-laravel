@@ -20,6 +20,7 @@ final readonly class PluginConfig
     private function __construct(
         public ColumnFallback $columnFallback,
         public bool $failOnInternalError,
+        public bool $findMissingTranslations,
         public bool $findMissingViews,
         public string $cachePath,
     ) {}
@@ -50,6 +51,16 @@ final readonly class PluginConfig
 
         $failOnInternalError = $failOnInternalErrorValue === 'true';
 
+        $findMissingTranslationsValue = (string) ($config?->findMissingTranslations['value'] ?? 'false');
+
+        if (!\in_array($findMissingTranslationsValue, ['true', 'false'], true)) {
+            throw new \InvalidArgumentException(
+                "Invalid findMissingTranslations value '{$findMissingTranslationsValue}'. Valid values: 'true', 'false'.",
+            );
+        }
+
+        $findMissingTranslations = $findMissingTranslationsValue === 'true';
+
         $findMissingViewsValue = (string) ($config?->findMissingViews['value'] ?? 'false');
 
         if (!\in_array($findMissingViewsValue, ['true', 'false'], true)) {
@@ -63,6 +74,7 @@ final readonly class PluginConfig
         return new self(
             columnFallback: $columnFallback,
             failOnInternalError: $failOnInternalError,
+            findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             cachePath: self::resolveCachePath(),
         );
