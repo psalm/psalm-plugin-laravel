@@ -132,6 +132,7 @@ final class MissingViewHandlerTest extends TestCase
     public function skips_when_not_enabled(): void
     {
         $enabled = new \ReflectionProperty(MissingViewHandler::class, 'enabled');
+        $enabled->setAccessible(true);
         $enabled->setValue(null, false);
 
         $event = $this->createFunctionEvent('nonexistent');
