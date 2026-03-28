@@ -99,6 +99,26 @@ final class MissingTranslationHandlerTest extends TestCase
         $this->assertNotInstanceOf(Union::class, MissingTranslationHandler::getFunctionReturnType($event));
     }
 
+    /**
+     * When Translator::has() throws (e.g. malformed language file), the handler
+     * should treat the key as existing to avoid false positives and crashes.
+     */
+    #[Test]
+    public function treats_key_as_existing_when_translator_throws(): void
+    {
+        $translator = $this->createStub(Translator::class);
+        $translator->method('has')->willThrowException(new \RuntimeException('Invalid language file'));
+
+        MissingTranslationHandler::init($translator);
+
+        $event = $this->createEvent('broken.key');
+
+        $this->assertNotInstanceOf(Union::class, MissingTranslationHandler::getFunctionReturnType($event));
+
+        // Re-init with working translator for other tests
+        $this->setUp();
+    }
+
     #[Test]
     public function skips_when_not_enabled(): void
     {
