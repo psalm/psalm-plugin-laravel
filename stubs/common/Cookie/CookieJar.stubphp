@@ -75,6 +75,8 @@ class CookieJar
      * @return void
      *
      * @psalm-taint-sink header $name
+     * @psalm-taint-sink header $path
+     * @psalm-taint-sink header $domain
      */
     public function expire($name, $path = null, $domain = null) {}
 
@@ -87,6 +89,8 @@ class CookieJar
      * @return Cookie
      *
      * @psalm-taint-sink header $name
+     * @psalm-taint-sink header $path
+     * @psalm-taint-sink header $domain
      */
     public function forget($name, $path = null, $domain = null) {}
 }
