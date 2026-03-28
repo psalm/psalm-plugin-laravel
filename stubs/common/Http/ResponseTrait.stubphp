@@ -5,6 +5,29 @@ namespace Illuminate\Http;
 trait ResponseTrait
 {
     /**
+     * Set a header on the Response.
+     *
+     * @param  string  $key
+     * @param  array|string  $values
+     * @param  bool  $replace
+     * @return $this
+     *
+     * @psalm-taint-sink header $key
+     * @psalm-taint-sink header $values
+     */
+    public function header($key, $values, $replace = true) {}
+
+    /**
+     * Add an array of headers to the response.
+     *
+     * @param  \Symfony\Component\HttpFoundation\HeaderBag|array  $headers
+     * @return $this
+     *
+     * @psalm-taint-sink header $headers
+     */
+    public function withHeaders($headers) {}
+
+    /**
      * Add a cookie to the response.
      *
      * Accepts a Cookie object directly, or variadic string arguments forwarded to the cookie()
