@@ -73,6 +73,7 @@ jobs:
       - name: Install dependencies from composer.json
         run: |
           composer require "illuminate/support:${{ matrix.laravel }}" --no-update
+          composer require "vimeo/psalm:^6.16.1" --no-update
           composer update --no-interaction --no-progress --prefer-dist --prefer-stable ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }}
 
       - name: Run Psalm/Type tests
