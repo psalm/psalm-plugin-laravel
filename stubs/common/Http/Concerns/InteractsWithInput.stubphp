@@ -154,6 +154,17 @@ trait InteractsWithInput
     public function string($key, $default = null) {}
 
     /**
+     * Retrieve input from the request as a Fluent object instance.
+     *
+     * @param  array|string|null  $key
+     * @param  array  $default
+     * @return \Illuminate\Support\Fluent
+     *
+     * @psalm-taint-source input
+     */
+    public function fluent($key = null, array $default = []) {}
+
+    /**
      * Retrieve input as an integer value.
      *
      * Not a taint source: (int) cast cannot produce an injection payload.
@@ -206,14 +217,19 @@ trait InteractsWithInput
     /**
      * Retrieve input from the request as an enum.
      *
-     * Not a taint source: BackedEnum::tryFrom() is a strict whitelist.
-     * The return value can only be one of the developer-defined enum cases.
+     * Not a taint source: BackedEnum::tryFrom() is a strict whitelist —
+     * the return value can only be one of the developer-defined enum cases
+     * (or the $default).
+     *
+     * @template TEnum of \BackedEnum
+     * @template TDefault of TEnum|null
      *
      * @param  string  $key
-     * @param  class-string  $enumClass
-     * @return \BackedEnum|null
+     * @param  class-string<TEnum>  $enumClass
+     * @param  TDefault  $default
+     * @return TEnum|TDefault
      */
-    public function enum($key, $enumClass) {}
+    public function enum($key, $enumClass, $default = null) {}
 
     /**
      * Get a subset containing the provided keys with values from the input data.
