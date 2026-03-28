@@ -9,8 +9,8 @@ class CookieJar
     /**
      * Create a new cookie instance.
      *
-     * Cookie names and values are emitted in Set-Cookie headers — user-controlled
-     * input here enables HTTP header injection (OWASP A03:2021).
+     * Cookie names, values, paths, and domains are emitted in Set-Cookie headers.
+     * User-controlled input enables HTTP header injection.
      *
      * @param  string  $name
      * @param  string  $value
@@ -25,6 +25,8 @@ class CookieJar
      *
      * @psalm-taint-sink header $name
      * @psalm-taint-sink header $value
+     * @psalm-taint-sink header $path
+     * @psalm-taint-sink header $domain
      */
     public function make($name, $value, $minutes = 0, $path = null, $domain = null, $secure = null, $httpOnly = true, $raw = false, $sameSite = null) {}
 
@@ -43,6 +45,8 @@ class CookieJar
      *
      * @psalm-taint-sink header $name
      * @psalm-taint-sink header $value
+     * @psalm-taint-sink header $path
+     * @psalm-taint-sink header $domain
      */
     public function forever($name, $value, $path = null, $domain = null, $secure = null, $httpOnly = true, $raw = false, $sameSite = null) {}
 
@@ -58,6 +62,21 @@ class CookieJar
      * @psalm-taint-sink header $parameters
      */
     public function queue(mixed ...$parameters) {}
+
+    /**
+     * Queue a cookie to expire with the next response.
+     *
+     * Delegates to queue(forget($name, $path, $domain)). Since stub bodies are
+     * empty, Psalm cannot trace that delegation — the sink must be explicit.
+     *
+     * @param  string  $name
+     * @param  string|null  $path
+     * @param  string|null  $domain
+     * @return void
+     *
+     * @psalm-taint-sink header $name
+     */
+    public function expire($name, $path = null, $domain = null) {}
 
     /**
      * Expire the given cookie.

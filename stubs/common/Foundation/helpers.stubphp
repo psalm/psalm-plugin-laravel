@@ -127,6 +127,8 @@ function config($key = null, $default = null) {}
  *
  * @psalm-taint-sink header $name
  * @psalm-taint-sink header $value
+ * @psalm-taint-sink header $path
+ * @psalm-taint-sink header $domain
  */
 function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain = null, $secure = null, $httpOnly = true, $raw = false, $sameSite = null) {}
 
