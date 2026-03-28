@@ -72,11 +72,11 @@ final class Plugin implements PluginEntryPointInterface
             );
 
             if ($pluginConfig->findMissingTranslations) {
-                $this->initMissingTranslationHandler();
+                $this->initMissingTranslationHandler($output);
             }
 
             if ($pluginConfig->findMissingViews) {
-                $this->initMissingViewHandler();
+                $this->initMissingViewHandler($output);
             }
 
             $this->registerHandlers($registration, $pluginConfig);
@@ -254,17 +254,27 @@ final class Plugin implements PluginEntryPointInterface
      * Uses Laravel's Translator::has() for key resolution, which handles PHP array files,
      * JSON files, vendor/package namespaces, and fallback locales automatically.
      */
-    private function initMissingTranslationHandler(): void
+    private function initMissingTranslationHandler(\Psalm\Progress\Progress $output): void
     {
         $app = ApplicationProvider::getApp();
 
         if (!$app->bound('translator')) {
+            $output->warning(
+                'Laravel plugin: findMissingTranslations is enabled but the translator service is not bound. '
+                . 'The MissingTranslation check will be skipped.',
+            );
+
             return;
         }
 
         $translator = $app->make('translator');
 
         if (!$translator instanceof \Illuminate\Translation\Translator) {
+            $output->warning(
+                'Laravel plugin: findMissingTranslations is enabled but the translator is not an instance of '
+                . 'Illuminate\Translation\Translator. The MissingTranslation check will be skipped.',
+            );
+
             return;
         }
 
@@ -277,7 +287,7 @@ final class Plugin implements PluginEntryPointInterface
      * Uses the app's FileViewFinder which reflects config('view.paths') plus
      * any paths added by service providers during bootstrap.
      */
-    private function initMissingViewHandler(): void
+    private function initMissingViewHandler(\Psalm\Progress\Progress $output): void
     {
         $app = ApplicationProvider::getApp();
 
@@ -291,10 +301,20 @@ final class Plugin implements PluginEntryPointInterface
             $factory = $app->make('view');
             $finder = $factory->getFinder();
         } else {
+            $output->warning(
+                'Laravel plugin: findMissingViews is enabled but the view finder service is not bound. '
+                . 'The MissingView check will be skipped.',
+            );
+
             return;
         }
 
         if (!$finder instanceof \Illuminate\View\FileViewFinder) {
+            $output->warning(
+                'Laravel plugin: findMissingViews is enabled but the view finder is not an instance of '
+                . 'Illuminate\View\FileViewFinder. The MissingView check will be skipped.',
+            );
+
             return;
         }
 

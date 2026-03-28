@@ -156,7 +156,13 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
             return true;
         }
 
-        return self::$resolvedKeys[$translationKey]
-            ??= self::$translator->has($translationKey);
+        try {
+            return self::$resolvedKeys[$translationKey]
+                ??= self::$translator->has($translationKey);
+        } catch (\Throwable) {
+            // Malformed language files (PHP syntax errors, invalid JSON) can cause
+            // Translator::has() to throw. Assume the key exists to avoid false positives.
+            return self::$resolvedKeys[$translationKey] = true;
+        }
     }
 }
