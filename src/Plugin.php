@@ -25,6 +25,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
+use Psalm\LaravelPlugin\Handlers\Rules\ModelMakeHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Handlers\Validation\ValidatedTypeHandler;
@@ -217,6 +218,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(SuppressHandler::class);
 
+        require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
+        $registration->registerHooksFromClass(ModelMakeHandler::class);
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(NoEnvOutsideConfigHandler::class);
     }
