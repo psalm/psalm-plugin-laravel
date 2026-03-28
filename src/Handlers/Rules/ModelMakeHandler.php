@@ -37,7 +37,8 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         }
 
         // Only handle named method calls (not dynamic ::$method())
-        if (!$expr->name instanceof Identifier || $expr->name->name !== 'make') {
+        // PHP method names are case-insensitive, so normalize before comparing
+        if (!$expr->name instanceof Identifier || \strtolower($expr->name->name) !== 'make') {
             return null;
         }
 
@@ -59,7 +60,7 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
 
         IssueBuffer::accepts(
             new ModelMakeDiscouraged(
-                "Use new {$shortName}() instead of {$shortName}::make(). "
+                "Use new {$shortName}(...) instead of {$shortName}::make(...). "
                     . 'The constructor is clearer and avoids __callStatic indirection.',
                 new CodeLocation($event->getStatementsSource(), $expr),
             ),
