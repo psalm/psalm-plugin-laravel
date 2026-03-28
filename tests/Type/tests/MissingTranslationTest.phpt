@@ -10,10 +10,18 @@ __('auth.nonexistent');
 // Missing translations via trans() — should emit MissingTranslation
 trans('messages.missing');
 
-// Existing translations — should not emit
-__('auth.failed');
-trans('auth.password');
-__('auth.throttle');
+// Existing translations — should return narrowed string type
+$failed = __('auth.failed');
+/** @psalm-check-type-exact $failed = string */
+echo $failed;
+
+$password = trans('auth.password');
+/** @psalm-check-type-exact $password = string */
+echo $password;
+
+$throttle = __('auth.throttle');
+/** @psalm-check-type-exact $throttle = string */
+echo $throttle;
 
 // No arguments — should not emit
 __();
