@@ -1,0 +1,53 @@
+<?php
+
+namespace Illuminate\Validation;
+
+class Validator implements \Illuminate\Contracts\Validation\Validator
+{
+    /**
+     * Run the validator's rules against its data and return validated data.
+     *
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function validate() {}
+
+    /**
+     * Get the attributes and values that were validated.
+     *
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function validated() {}
+
+    /**
+     * Get a validated input container for the validated input.
+     *
+     * @param  array|null  $keys
+     * @return ($keys is null ? \Illuminate\Support\ValidatedInput : array<string, mixed>)
+     *
+     * @psalm-taint-source input
+     */
+    public function safe(?array $keys = null) {}
+
+    /**
+     * Get the data under validation.
+     *
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function getData() {}
+
+    /**
+     * Get the value of a given attribute.
+     *
+     * @param  string  $attribute
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function getValue($attribute) {}
+}

@@ -1,0 +1,136 @@
+<?php
+
+namespace Illuminate\Redis\Connections;
+
+/**
+ * Common Redis commands proxied via __call to the underlying client.
+ *
+ * Only the most commonly used commands are listed here to suppress
+ * UndefinedMagicMethod false positives. Return types are intentionally
+ * mixed since the actual types depend on the underlying Redis driver.
+ */
+abstract class Connection
+{
+    /**
+     * @return mixed
+     */
+    public function multi() {}
+
+    /**
+     * @return mixed
+     */
+    public function exec() {}
+
+    /**
+     * @param string $key
+     * @param mixed ...$dictionary Score/member pairs or options array
+     * @return int|false
+     */
+    public function zAdd(string $key, mixed ...$dictionary) {}
+
+    /**
+     * @param string $key
+     * @param string|mixed ...$members
+     * @return int
+     */
+    public function zRem(string $key, mixed ...$members) {}
+
+    /**
+     * @param string $key
+     * @param string $member
+     * @return int|false
+     */
+    public function zRevRank(string $key, string $member) {}
+
+    /**
+     * @param string $key
+     * @param string $min
+     * @param string $max
+     * @return int
+     */
+    public function zCount(string $key, string $min, string $max) {}
+
+    /**
+     * @param string $key
+     * @param int $start
+     * @param int $end
+     * @param mixed ...$options
+     * @return array
+     */
+    public function zRevRange(string $key, int $start, int $end, mixed ...$options) {}
+
+    /**
+     * @param string $key
+     * @param int $start
+     * @param int $end
+     * @param mixed ...$options
+     * @return array
+     */
+    public function zRange(string $key, int $start, int $end, mixed ...$options) {}
+
+    /**
+     * @param string $key
+     * @param string $member
+     * @return int|false
+     */
+    public function zRank(string $key, string $member) {}
+
+    /**
+     * @param string $key
+     * @param string $member
+     * @return float|false
+     */
+    public function zScore(string $key, string $member) {}
+
+    /**
+     * @param string $key
+     * @return int
+     */
+    public function zCard(string $key) {}
+
+    /**
+     * @param string $key
+     * @param mixed $value
+     * @return bool
+     */
+    public function set(string $key, mixed $value) {}
+
+    /**
+     * @param string $key
+     * @return string|false
+     */
+    public function get(string $key) {}
+
+    /**
+     * @param string $key
+     * @return int
+     */
+    public function del(string $key) {}
+
+    /**
+     * @param string $key
+     * @return bool
+     */
+    public function exists(string $key) {}
+
+    /**
+     * @param string $key
+     * @param int $seconds
+     * @return bool
+     */
+    public function expire(string $key, int $seconds) {}
+
+    /**
+     * @param string $key
+     * @param int $value
+     * @return int
+     */
+    public function incrBy(string $key, int $value) {}
+
+    /**
+     * @param string $key
+     * @param int $value
+     * @return int
+     */
+    public function decrBy(string $key, int $value) {}
+}

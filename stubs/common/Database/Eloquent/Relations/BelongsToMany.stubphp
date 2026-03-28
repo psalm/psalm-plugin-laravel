@@ -3,10 +3,11 @@
 namespace Illuminate\Database\Eloquent\Relations;
 
 /**
-* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
-* @template-extends Relation<TRelatedModel>
-* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
-*/
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template-extends Relation<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
 class BelongsToMany extends Relation
 {
     use Concerns\InteractsWithPivotTable;
@@ -16,31 +17,30 @@ class BelongsToMany extends Relation
      * @psalm-param T $id
      * @param  int|non-empty-string|array<int|non-empty-string>|\Illuminate\Contracts\Support\Arrayable<int|non-empty-string>  $id
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Model
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Support\Collection<int, TRelatedModel>|TRelatedModel
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Support\Collection<int, TRelatedModel> : TRelatedModel)
      */
     public function findOrNew($id, $columns = ['*']) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @return \Illuminate\Database\Eloquent\Model
-     * @psalm-return TRelatedModel
+     * @param  array<string, mixed>  $values
+     * @return TRelatedModel
      */
-    public function firstOrNew(array $attributes) {}
+    public function firstOrNew(array $attributes = [], array $values = []) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $joining
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @param  array<string, mixed>  $joining
      * @param  bool   $touch
-     * @return \Illuminate\Database\Eloquent\Model
-     * @psalm-return TRelatedModel
+     * @return TRelatedModel
      */
-    public function firstOrCreate(array $attributes, array $joining = [], $touch = true) {}
+    public function firstOrCreate(array $attributes = [], \Closure|array $values = [], array $joining = [], $touch = true) {}
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $values
-     * @param  array  $joining
+     * @param  array<string, mixed>  $values
+     * @param  array<string, mixed>  $joining
      * @param  bool   $touch
      * @return TRelatedModel
      */
@@ -51,7 +51,6 @@ class BelongsToMany extends Relation
      * @psalm-param T $id
      * @param  mixed  $id
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection|null
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
      */
     public function find($id, $columns = ['*']) {}
@@ -59,8 +58,7 @@ class BelongsToMany extends Relation
     /**
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<array-key, int|string>  $ids
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Collection
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function findMany($ids, $columns = ['*']) {}
 
@@ -68,8 +66,7 @@ class BelongsToMany extends Relation
      * @template T
      * @psalm-param T $id
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
@@ -77,8 +74,7 @@ class BelongsToMany extends Relation
 
     /**
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Model|null
-     * @psalm-return TRelatedModel|null
+     * @return TRelatedModel|null
      */
     public function first($columns = ['*']) {}
 
@@ -86,8 +82,7 @@ class BelongsToMany extends Relation
      * Execute the query and get the first result or throw an exception.
      *
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Model
-     * @psalm-return TRelatedModel
+     * @return TRelatedModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
@@ -95,18 +90,28 @@ class BelongsToMany extends Relation
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @param  array  $joining
+     * @param  array<string, mixed>  $joining
      * @param  bool   $touch
      * @return TRelatedModel
      */
     public function create(array $attributes = [], array $joining = [], $touch = true) {}
 
     /**
-     * @param  array  $records
-     * @param  array  $joinings
+     * @param  iterable<array<string, mixed>>  $records
+     * @param  array<array-key, array<string, mixed>>  $joinings
      * @return list<TRelatedModel>
      */
-    public function createMany(array $records, array $joinings = []) {}
+    public function createMany(iterable $records, array $joinings = []) {}
+
+    /**
+     * Set the columns on the pivot table to retrieve.
+     *
+     * @param  array<array-key, string>|string  $columns
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function withPivot($columns) {}
 
     /**
      * @return \Traversable<int, TRelatedModel>
@@ -118,7 +123,7 @@ class BelongsToMany extends Relation
      * @param  array<int, mixed>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Pagination\LengthAwarePaginator<TRelatedModel>
+     * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel>
      */
     public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -129,7 +134,7 @@ class BelongsToMany extends Relation
      * @param  array<int, mixed>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Pagination\Paginator<TRelatedModel>
+     * @return \Illuminate\Pagination\Paginator<int, TRelatedModel>
      */
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -140,7 +145,102 @@ class BelongsToMany extends Relation
      * @param  array<int, mixed>  $columns
      * @param  string  $cursorName
      * @param  string|null  $cursor
-     * @return \Illuminate\Pagination\CursorPaginator<TRelatedModel>
+     * @return \Illuminate\Pagination\CursorPaginator<int, TRelatedModel>
      */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
+
+    /**
+     * @template TValue
+     *
+     * @param  \Closure|array  $columns
+     * @param  (\Closure(): TValue)|null  $callback
+     * @return TRelatedModel|TValue
+     */
+    public function firstOr($columns = ['*'], \Closure $callback = null) {}
+
+    /**
+     * @param  (\Closure(static): void)|(\Closure(static): static)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return TRelatedModel|null
+     */
+    public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * @template T
+     * @template TValue
+     *
+     * @param  T  $id
+     * @param  list<non-empty-string>|\Closure  $columns
+     * @param  (\Closure(): TValue)|null  $callback
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|TValue : TRelatedModel|TValue)
+     */
+    public function findOr($id, $columns = ['*'], \Closure $callback = null) {}
+
+    /**
+     * Attempt to create the record. If a unique constraint violation occurs, find the matching record.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @param  array<string, mixed>  $joining
+     * @param  bool  $touch
+     * @return TRelatedModel
+     */
+    public function createOrFirst(array $attributes = [], \Closure|array $values = [], array $joining = [], $touch = true) {}
+
+    /**
+     * Attach a model instance to the parent model.
+     *
+     * @param  TRelatedModel  $model
+     * @param  array<string, mixed>  $pivotAttributes
+     * @param  bool  $touch
+     * @return TRelatedModel
+     */
+    public function save(\Illuminate\Database\Eloquent\Model $model, array $pivotAttributes = [], $touch = true) {}
+
+    /**
+     * Attach a model instance to the parent model without raising any events.
+     *
+     * @param  TRelatedModel  $model
+     * @param  array<string, mixed>  $pivotAttributes
+     * @param  bool  $touch
+     * @return TRelatedModel
+     */
+    public function saveQuietly(\Illuminate\Database\Eloquent\Model $model, array $pivotAttributes = [], $touch = true) {}
+
+    /**
+     * Get a lazy collection for the given query.
+     *
+     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel>
+     */
+    public function cursor() {}
+
+    /**
+     * Query lazily, by chunks of the given size.
+     *
+     * @param  int  $chunkSize
+     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel>
+     */
+    public function lazy($chunkSize = 1000) {}
+
+    /**
+     * Query lazily, by chunking the results of a query by comparing IDs.
+     *
+     * @param  int  $chunkSize
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel>
+     */
+    public function lazyById($chunkSize = 1000, $column = null, $alias = null) {}
+
+    /**
+     * Query lazily, by chunking the results of a query by comparing IDs in descending order.
+     *
+     * @param  int  $chunkSize
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel>
+     */
+    public function lazyByIdDesc($chunkSize = 1000, $column = null, $alias = null) {}
 }

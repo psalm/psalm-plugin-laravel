@@ -10,16 +10,19 @@ use Psalm\Type;
 
 final class TransHandler implements FunctionReturnTypeProviderInterface
 {
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getFunctionIds(): array
     {
-        return ['trans'];
+        return ['trans', '__'];
     }
 
     /** @inheritDoc */
     #[\Override]
-    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Type\Union
     {
         $call_args = $event->getCallArgs();
 
@@ -31,6 +34,8 @@ final class TransHandler implements FunctionReturnTypeProviderInterface
             }
         }
 
-        return Type::getMixed();
+        // Fall back to the stub/source conditional return type
+        // (e.g. __() returns null when key is null, trans() returns Translator)
+        return null;
     }
 }

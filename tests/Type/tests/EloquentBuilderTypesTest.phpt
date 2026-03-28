@@ -5,7 +5,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use App\Models\User;
 
-final class UserRepository
+final class EloquentBuilderUserRepository
 {
     /** @return Builder<User> */
     public function getNewQuery(): Builder
@@ -61,7 +61,19 @@ final class UserRepository
             });
     }
 
-    /** @return \Illuminate\Pagination\CursorPaginator<User> */
+    /** @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, User> */
+    public function testPaginate(): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    {
+        return User::query()->paginate();
+    }
+
+    /** @return \Illuminate\Contracts\Pagination\Paginator<int, User> */
+    public function testSimplePaginate(): \Illuminate\Contracts\Pagination\Paginator
+    {
+        return User::query()->simplePaginate();
+    }
+
+    /** @return \Illuminate\Pagination\CursorPaginator<int, User> */
     public function testCursorPaginate(Builder $builder): \Illuminate\Pagination\CursorPaginator
     {
         return User::query()->cursorPaginate();

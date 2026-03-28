@@ -55,7 +55,22 @@ function class_basename($class) {}
  */
 function class_uses_recursive($class) {}
 
-// e: nothing to stub (taint analysis only)
+/**
+ * Encode HTML special characters in a string.
+ *
+ * Wraps htmlspecialchars() with ENT_QUOTES — escapes both HTML entities and quotes,
+ * used by Blade's {{ }} output to prevent XSS.
+ *
+ * @param  \Illuminate\Contracts\Support\DeferringDisplayableValue|\Illuminate\Contracts\Support\Htmlable|\BackedEnum|string|int|float|null  $value
+ * @param  bool  $doubleEncode
+ * @return string
+ *
+ * @psalm-taint-escape html
+ * @psalm-taint-escape has_quotes
+ * @psalm-flow ($value) -> return
+ */
+function e($value, $doubleEncode = true) {}
+
 // env: nothing to stub
 
 /**
@@ -106,13 +121,13 @@ function optional($value = null, callable $callback = null) {}
  * @template TValue
  * @param int|list<int> $times
  * @param callable(int): TValue $callback
- * @param int $sleep
- * @param null|callable(\Exception): bool $when
+ * @param int|\Closure(int, \Throwable): int $sleepMilliseconds
+ * @param null|callable(\Throwable): bool $when
  * @psalm-return TValue
  *
- * @throws \Exception
+ * @throws \Throwable
  */
-function retry($times, callable $callback, $sleep = 0, $when = null) {}
+function retry($times, callable $callback, $sleepMilliseconds = 0, $when = null) {}
 
 /**
  * Get a new stringable object from the given string.
@@ -197,4 +212,25 @@ function trait_uses_recursive($trait) {}
 function transform($value, callable $callback, $default = null) {}
 
 // windows_os: nothing to stub
-// with: nothing to stub
+
+/**
+ * Return the given value, optionally passed through the given callback.
+ *
+ * @template TValue
+ * @template TReturn
+ *
+ * @param  TValue  $value
+ * @param  (callable(TValue): TReturn)|null  $callback
+ * @return ($callback is null ? TValue : TReturn)
+ */
+function with($value, ?callable $callback = null) {}
+
+/**
+ * Ensures a callable is only called once, and returns the result on subsequent calls.
+ *
+ * @template TReturnType
+ *
+ * @param  callable(): TReturnType  $callback
+ * @return TReturnType
+ */
+function once(callable $callback) {}

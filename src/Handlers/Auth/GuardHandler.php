@@ -15,9 +15,6 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 
-use function in_array;
-use function is_string;
-
 /**
  * Handles cases (only non-static method calls):
  * @see \Illuminate\Contracts\Auth\Guard::user() returns Authenticatable|null
@@ -28,7 +25,10 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
 {
     use ExtractsGuardNameFromCallLike;
 
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -41,7 +41,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
     {
         $method_name_lowercase = $event->getMethodNameLowercase();
 
-        if (! in_array($method_name_lowercase, ['user', 'loginusingid', 'onceusingid'], true)) {
+        if (! \in_array($method_name_lowercase, ['user', 'loginusingid', 'onceusingid'], true)) {
             return null;
         }
 
@@ -66,13 +66,13 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
 
         $guard = self::findGuardNameInCallChain($statement);
 
-        $is_guard_known = is_string($guard);
+        $is_guard_known = \is_string($guard);
         if (! $is_guard_known) {
             return $default_return_type;
         }
 
         $authenticatable_fqcn = AuthConfigAnalyzer::instance()->getAuthenticatableFQCN($guard);
-        if (! is_string($authenticatable_fqcn)) {
+        if (! \is_string($authenticatable_fqcn)) {
             return $default_return_type;
         }
 
@@ -130,7 +130,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
         }
 
         $default_guard = AuthConfigAnalyzer::instance()->getDefaultGuard();
-        if (! is_string($default_guard)) {
+        if (! \is_string($default_guard)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 

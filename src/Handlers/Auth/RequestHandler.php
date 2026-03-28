@@ -9,8 +9,6 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 
-use function is_string;
-
 /**
  * Handles cases:
  * @see \Illuminate\Http\Request::user()
@@ -20,7 +18,10 @@ final class RequestHandler implements MethodReturnTypeProviderInterface
 {
     use ExtractsGuardNameFromCallLike;
 
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -36,17 +37,17 @@ final class RequestHandler implements MethodReturnTypeProviderInterface
         }
 
         $default_guard = AuthConfigAnalyzer::instance()->getDefaultGuard();
-        if (! is_string($default_guard)) {
+        if (! \is_string($default_guard)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
         $guard = self::getGuardNameFromFirstArgument($event->getStmt(), $default_guard);
-        if (! is_string($guard)) {
+        if (! \is_string($guard)) {
             return null;
         }
 
         $authenticatable_fqcn = AuthConfigAnalyzer::instance()->getAuthenticatableFQCN($guard);
-        if (! is_string($authenticatable_fqcn)) {
+        if (! \is_string($authenticatable_fqcn)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
