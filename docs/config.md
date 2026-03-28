@@ -22,6 +22,7 @@ Full config example:
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
         <modelProperties columnFallback="none" />
         <failOnInternalError value="true" />
+        <detectMissingViews value="true" />
     </pluginClass>
 </plugins>
 ```
@@ -58,6 +59,21 @@ With `failOnInternalError`, the Psalm run fails immediately, so you know the plu
 
 ```xml
 <failOnInternalError value="true" />
+```
+
+## `detectMissingViews`
+
+**default**: `false`
+
+When enabled, the plugin checks that `view()` and `View::make()` calls reference Blade templates that exist on disk.
+Only string literal view names are validated — dynamic names and namespaced views (e.g., `mail::html.header`) are skipped.
+
+See [MissingView](issues/MissingView.md) for details.
+
+### Example
+
+```xml
+<detectMissingViews value="true" />
 ```
 
 ## Cache directory
