@@ -141,6 +141,31 @@ Document every workaround with a comment linking to the upstream issue.
 
 **See:** `docs/contribute/taint-analysis.md` for the full authoring guide.
 
+### No taint-source on internal persistence reads
+
+**Decision:** Do not mark reads from internal storage (cache, session, queue, filesystem reads of app-generated content) as `@psalm-taint-source input`.
+Only mark reads from genuinely external/untrusted sources (HTTP request input, external HTTP responses, route parameters).
+
+**Why:** Psalm tracks taint within a single analysis pass. It cannot follow data across requests (write in request A, read in request B). Marking `Cache::get()` or `Session::get()` as taint sources is a workaround for this limitation, but in practice 95%+ of cache/session reads contain trusted data (config, computed values, framework state).
+The false positive rate is high enough to cause alert fatigue, which leads developers to either suppress taint issues globally or disable taint analysis — losing coverage on the real vulnerabilities.
+
+**What to do instead:** Use `@psalm-flow` annotations on methods like `Cache::remember()` / `Session::put()` that pass data through callbacks or accept input.
+This catches the most dangerous pattern (user input flowing through storage in the same analysis pass) without false positives.
+
+**Applies to:** Cache\Repository, Session\Store, Queue job payloads, and similar internal persistence layers.
+Does NOT apply to genuinely external data — `Http\Client\Response` (external API responses) and `Request::input()` (user input) remain legitimate taint sources.
+
+### No taint-sink on low-severity internal writes
+
+**Decision:** Do not mark internal write operations as taint sinks when the write itself is not the vulnerability.
+Logging (`Log::info()`), broadcasting (`event->broadcast()`), and cache writes (`Cache::put()`) are internal operations — the vulnerability happens when tainted data eventually reaches a dangerous output (HTML, SQL, shell), not when it enters an internal store.
+
+**Why:** Marking `Log::info($message)` as a taint sink (for log injection) or broadcast payloads as HTML sinks fires on extremely common patterns — every app logs request data for debugging/auditing.
+The signal-to-noise ratio is too low for a general-purpose plugin.
+Dedicated security scanners (Snyk, Semgrep) with configurable severity thresholds are better suited for these low-severity findings.
+
+**Exception:** Sinks for high-severity, targeted operations remain valid — e.g., `Redis::eval($script)` (Lua injection) or `DB::unprepared($sql)` (SQL injection), because user input reaching this is almost always a real vulnerability.
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in
