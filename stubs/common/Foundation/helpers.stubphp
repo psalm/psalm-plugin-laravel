@@ -124,6 +124,9 @@ function config($key = null, $default = null) {}
  * @param  bool  $raw
  * @param  string|null  $sameSite
  * @return ($name is null ? \Illuminate\Cookie\CookieJar : \Symfony\Component\HttpFoundation\Cookie)
+ *
+ * @psalm-taint-sink header $name
+ * @psalm-taint-sink header $value
  */
 function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain = null, $secure = null, $httpOnly = true, $raw = false, $sameSite = null) {}
 
