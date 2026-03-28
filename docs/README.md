@@ -29,4 +29,6 @@ Each one links to detailed documentation with examples and fix guidance.
 - [NoEnvOutsideConfig](issues/NoEnvOutsideConfig.md)
 - [InvalidConsoleArgumentName](issues/InvalidConsoleArgumentName.md)
 - [InvalidConsoleOptionName](issues/InvalidConsoleOptionName.md)
+- [MissingTranslation](issues/MissingTranslation.md)
+- [MissingView](issues/MissingView.md)
 - [ModelMakeDiscouraged](issues/ModelMakeDiscouraged.md)
