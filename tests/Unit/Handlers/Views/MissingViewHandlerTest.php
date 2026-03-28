@@ -20,6 +20,7 @@ use Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\StatementsSource;
+use Psalm\Type\Union;
 
 #[CoversClass(MissingViewHandler::class)]
 final class MissingViewHandlerTest extends TestCase
@@ -94,7 +95,7 @@ final class MissingViewHandlerTest extends TestCase
     {
         $event = $this->createFunctionEvent($viewName);
 
-        $this->assertNull(MissingViewHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getFunctionReturnType($event));
     }
 
     /**
@@ -115,7 +116,7 @@ final class MissingViewHandlerTest extends TestCase
     {
         $event = $this->createFunctionEvent($viewName);
 
-        $this->assertNull(MissingViewHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -125,7 +126,7 @@ final class MissingViewHandlerTest extends TestCase
 
         $event = $this->createFunctionEvent('welcome');
 
-        $this->assertNull(MissingViewHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -137,7 +138,7 @@ final class MissingViewHandlerTest extends TestCase
 
         $event = $this->createFunctionEvent('nonexistent');
 
-        $this->assertNull(MissingViewHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getFunctionReturnType($event));
 
         // Re-enable for other tests
         MissingViewHandler::init([self::$fixtureDir]);
@@ -163,7 +164,7 @@ final class MissingViewHandlerTest extends TestCase
             new CodeLocation($source, $funcCall),
         );
 
-        $this->assertNull(MissingViewHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -186,7 +187,7 @@ final class MissingViewHandlerTest extends TestCase
             new CodeLocation($source, $funcCall),
         );
 
-        $this->assertNull(MissingViewHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getFunctionReturnType($event));
     }
 
     // --- View::make() (MethodReturnTypeProvider) tests ---
@@ -197,7 +198,7 @@ final class MissingViewHandlerTest extends TestCase
     {
         $event = $this->createMethodEvent('make', $viewName);
 
-        $this->assertNull(MissingViewHandler::getMethodReturnType($event));
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
     }
 
     #[Test]
@@ -206,7 +207,7 @@ final class MissingViewHandlerTest extends TestCase
     {
         $event = $this->createMethodEvent('make', $viewName);
 
-        $this->assertNull(MissingViewHandler::getMethodReturnType($event));
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
     }
 
     #[Test]
@@ -214,7 +215,7 @@ final class MissingViewHandlerTest extends TestCase
     {
         $event = $this->createMethodEvent('exists', 'nonexistent');
 
-        $this->assertNull(MissingViewHandler::getMethodReturnType($event));
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
     }
 
     private function createFunctionEvent(string $viewName): FunctionReturnTypeProviderEvent
