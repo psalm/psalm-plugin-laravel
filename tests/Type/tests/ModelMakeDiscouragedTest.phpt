@@ -21,5 +21,5 @@ function test(): void
 }
 ?>
 --EXPECTF--
-ModelMakeDiscouraged on line %d: Use new Article() instead of Article::make(). The constructor is clearer and avoids __callStatic indirection.
-ModelMakeDiscouraged on line %d: Use new Article() instead of Article::make(). The constructor is clearer and avoids __callStatic indirection.
+ModelMakeDiscouraged on line %d: Use new Article(...) instead of Article::make(...). The constructor is clearer and avoids __callStatic indirection.
+ModelMakeDiscouraged on line %d: Use new Article(...) instead of Article::make(...). The constructor is clearer and avoids __callStatic indirection.
