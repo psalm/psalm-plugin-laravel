@@ -11,7 +11,10 @@ enum Status: string {
 /** enums() returns BackedEnum[] via tryFrom() — strict whitelist, not a taint source. */
 function useEnumsInput(\Illuminate\Http\Request $request): void {
     $statuses = $request->enums('statuses', Status::class);
-    echo $statuses[0]->value;
+
+    foreach ($statuses as $status) {
+        echo $status->value;
+    }
 }
 ?>
 --EXPECTF--
