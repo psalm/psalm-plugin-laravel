@@ -20,6 +20,7 @@ final readonly class PluginConfig
     private function __construct(
         public ColumnFallback $columnFallback,
         public bool $failOnInternalError,
+        public bool $detectMissingViews,
         public string $cachePath,
     ) {}
 
@@ -49,9 +50,20 @@ final readonly class PluginConfig
 
         $failOnInternalError = $failOnInternalErrorValue === 'true';
 
+        $detectMissingViewsValue = (string) ($config?->detectMissingViews['value'] ?? 'false');
+
+        if (!\in_array($detectMissingViewsValue, ['true', 'false'], true)) {
+            throw new \InvalidArgumentException(
+                "Invalid detectMissingViews value '{$detectMissingViewsValue}'. Valid values: 'true', 'false'.",
+            );
+        }
+
+        $detectMissingViews = $detectMissingViewsValue === 'true';
+
         return new self(
             columnFallback: $columnFallback,
             failOnInternalError: $failOnInternalError,
+            detectMissingViews: $detectMissingViews,
             cachePath: self::resolveCachePath(),
         );
     }
