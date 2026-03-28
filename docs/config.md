@@ -65,7 +65,7 @@ With `failOnInternalError`, the Psalm run fails immediately, so you know the plu
 
 **default**: `false`
 
-When enabled, the plugin checks that `view()` and `View::make()` calls reference Blade templates that exist on disk.
+When enabled, the plugin checks that `view()` and `Factory::make()` calls reference Blade templates that exist on disk.
 Only string literal view names are validated — dynamic names and namespaced views (e.g., `mail::html.header`) are skipped.
 
 See [MissingView](issues/MissingView.md) for details.
