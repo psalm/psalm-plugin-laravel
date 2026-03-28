@@ -41,35 +41,9 @@ final readonly class PluginConfig
             );
         }
 
-        $failOnInternalErrorValue = (string) ($config?->failOnInternalError['value'] ?? 'false');
-
-        if (!\in_array($failOnInternalErrorValue, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException(
-                "Invalid failOnInternalError value '{$failOnInternalErrorValue}'. Valid values: 'true', 'false'.",
-            );
-        }
-
-        $failOnInternalError = $failOnInternalErrorValue === 'true';
-
-        $findMissingTranslationsValue = (string) ($config?->findMissingTranslations['value'] ?? 'false');
-
-        if (!\in_array($findMissingTranslationsValue, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException(
-                "Invalid findMissingTranslations value '{$findMissingTranslationsValue}'. Valid values: 'true', 'false'.",
-            );
-        }
-
-        $findMissingTranslations = $findMissingTranslationsValue === 'true';
-
-        $findMissingViewsValue = (string) ($config?->findMissingViews['value'] ?? 'false');
-
-        if (!\in_array($findMissingViewsValue, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException(
-                "Invalid findMissingViews value '{$findMissingViewsValue}'. Valid values: 'true', 'false'.",
-            );
-        }
-
-        $findMissingViews = $findMissingViewsValue === 'true';
+        $failOnInternalError = self::parseBool($config, 'failOnInternalError');
+        $findMissingTranslations = self::parseBool($config, 'findMissingTranslations');
+        $findMissingViews = self::parseBool($config, 'findMissingViews');
 
         return new self(
             columnFallback: $columnFallback,
@@ -83,6 +57,26 @@ final readonly class PluginConfig
     public function shouldUseMigrations(): bool
     {
         return $this->columnFallback === ColumnFallback::Migrations;
+    }
+
+    /**
+     * Parse a boolean XML config option with validation.
+     *
+     * Expects `<optionName value="true" />` or `<optionName value="false" />`.
+     * Defaults to false when the option is absent.
+     */
+    /** @psalm-pure */
+    private static function parseBool(?\SimpleXMLElement $config, string $name): bool
+    {
+        $value = (string) ($config?->{$name}['value'] ?? 'false');
+
+        if (!\in_array($value, ['true', 'false'], true)) {
+            throw new \InvalidArgumentException(
+                "Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.",
+            );
+        }
+
+        return $value === 'true';
     }
 
     private static function resolveCachePath(): string
