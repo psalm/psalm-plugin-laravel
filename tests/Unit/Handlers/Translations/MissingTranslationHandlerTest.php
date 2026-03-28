@@ -19,21 +19,29 @@ use Psalm\Context;
 use Psalm\LaravelPlugin\Handlers\Translations\MissingTranslationHandler;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\StatementsSource;
+use Psalm\Type;
 use Psalm\Type\Union;
 
 #[CoversClass(MissingTranslationHandler::class)]
 final class MissingTranslationHandlerTest extends TestCase
 {
+    /** @var array<string, string|array<string, string>> Translation values used by the stub translator */
+    private const TRANSLATIONS = [
+        'auth.failed' => 'These credentials do not match our records.',
+        'auth.password' => 'The provided password is incorrect.',
+        'auth.throttle' => 'Too many login attempts.',
+        'messages.welcome' => 'Welcome!',
+        'validation.accepted' => ['rule' => 'The :attribute must be accepted.', 'values' => ':values'],
+    ];
+
     protected function setUp(): void
     {
         $translator = $this->createStub(Translator::class);
         $translator->method('has')->willReturnCallback(
-            static fn(string $key): bool => \in_array($key, [
-                'auth.failed',
-                'auth.password',
-                'auth.throttle',
-                'messages.welcome',
-            ], true),
+            static fn(string $key): bool => \array_key_exists($key, self::TRANSLATIONS),
+        );
+        $translator->method('get')->willReturnCallback(
+            static fn(string $key): string|array => self::TRANSLATIONS[$key] ?? $key,
         );
 
         MissingTranslationHandler::init($translator);
@@ -48,7 +56,7 @@ final class MissingTranslationHandlerTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function existingKeyProvider(): iterable
+    public static function existingStringKeyProvider(): iterable
     {
         yield 'auth.failed' => ['auth.failed'];
         yield 'auth.password' => ['auth.password'];
@@ -57,17 +65,30 @@ final class MissingTranslationHandlerTest extends TestCase
     }
 
     /**
-     * Translation keys that exist should not trigger the issue.
-     * If the handler incorrectly tried to emit an issue, it would throw
-     * because no Psalm runtime is initialized in unit tests.
+     * Translation keys that resolve to a string should return string type.
      */
     #[Test]
-    #[DataProvider('existingKeyProvider')]
-    public function skips_existing_translation_keys(string $translationKey): void
+    #[DataProvider('existingStringKeyProvider')]
+    public function returns_string_type_for_existing_string_translation(string $translationKey): void
     {
         $event = $this->createEvent($translationKey);
+        $result = MissingTranslationHandler::getFunctionReturnType($event);
 
-        $this->assertNotInstanceOf(Union::class, MissingTranslationHandler::getFunctionReturnType($event));
+        $this->assertInstanceOf(Union::class, $result);
+        $this->assertTrue($result->isString(), "Expected string type for key '{$translationKey}'");
+    }
+
+    /**
+     * Translation keys that resolve to an array should return array type.
+     */
+    #[Test]
+    public function returns_array_type_for_existing_array_translation(): void
+    {
+        $event = $this->createEvent('validation.accepted');
+        $result = MissingTranslationHandler::getFunctionReturnType($event);
+
+        $this->assertInstanceOf(Union::class, $result);
+        $this->assertTrue($result->hasArray(), "Expected array type for key 'validation.accepted'");
     }
 
     /**
@@ -101,10 +122,11 @@ final class MissingTranslationHandlerTest extends TestCase
 
     /**
      * When Translator::has() throws (e.g. malformed language file), the handler
-     * should treat the key as existing to avoid false positives and crashes.
+     * should return string|array to avoid emitting a false MissingTranslation
+     * for a key that may actually exist.
      */
     #[Test]
-    public function treats_key_as_existing_when_translator_throws(): void
+    public function returns_string_or_array_when_has_throws(): void
     {
         $translator = $this->createStub(Translator::class);
         $translator->method('has')->willThrowException(new \RuntimeException('Invalid language file'));
@@ -112,8 +134,35 @@ final class MissingTranslationHandlerTest extends TestCase
         MissingTranslationHandler::init($translator);
 
         $event = $this->createEvent('broken.key');
+        $result = MissingTranslationHandler::getFunctionReturnType($event);
 
-        $this->assertNotInstanceOf(Union::class, MissingTranslationHandler::getFunctionReturnType($event));
+        $this->assertInstanceOf(Union::class, $result);
+        $this->assertTrue($result->hasString(), 'Expected string in union type');
+        $this->assertTrue($result->hasArray(), 'Expected array in union type');
+
+        // Re-init with working translator for other tests
+        $this->setUp();
+    }
+
+    /**
+     * When Translator::has() succeeds but get() throws, the handler should
+     * return string|array as a safe fallback since we know the key exists.
+     */
+    #[Test]
+    public function returns_string_or_array_when_get_throws(): void
+    {
+        $translator = $this->createStub(Translator::class);
+        $translator->method('has')->willReturn(true);
+        $translator->method('get')->willThrowException(new \RuntimeException('Cannot read value'));
+
+        MissingTranslationHandler::init($translator);
+
+        $event = $this->createEvent('broken.value');
+        $result = MissingTranslationHandler::getFunctionReturnType($event);
+
+        $this->assertInstanceOf(Union::class, $result);
+        $this->assertTrue($result->hasString(), 'Expected string in union type');
+        $this->assertTrue($result->hasArray(), 'Expected array in union type');
 
         // Re-init with working translator for other tests
         $this->setUp();

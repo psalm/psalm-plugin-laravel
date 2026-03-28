@@ -12,6 +12,7 @@ use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\MissingTranslation;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
+use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
@@ -27,9 +28,12 @@ use Psalm\Type\Union;
  * are skipped to avoid false positives.
  *
  * Must be registered before TransHandler in Plugin.php — Psalm stops
- * iterating handlers once one returns a non-null type. This handler
- * always returns null (issue-only), so TransHandler can still provide
- * the return type afterward.
+ * iterating handlers once one returns a non-null type. When enabled,
+ * this handler returns a precise type (string or array) for keys that
+ * exist, preventing TransHandler from running (which would return
+ * the less precise string|array union). For missing, dynamic, or
+ * namespaced keys, it returns null so TransHandler can still provide
+ * a fallback type.
  *
  * @see https://laravel.com/docs/localization
  */
@@ -39,7 +43,14 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
 
     private static bool $enabled = false;
 
-    /** @var array<string, bool> Cached translation existence results to avoid repeated Translator::has() calls */
+    /**
+     * Cached translation resolution results.
+     *
+     * - null value means the key does not exist (missing translation)
+     * - Union value means the key exists and has been resolved to a precise type
+     *
+     * @var array<string, ?Union>
+     */
     private static array $resolvedKeys = [];
 
     /** @psalm-external-mutation-free */
@@ -76,13 +87,11 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
             return null;
         }
 
-        self::checkTranslationExists(
+        return self::resolveTranslationType(
             $translationKey,
             $event->getCodeLocation(),
             $event->getStatementsSource()->getSuppressedIssues(),
         );
-
-        return null;
     }
 
     /**
@@ -105,36 +114,43 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
     }
 
     /**
-     * Check whether the given translation key exists in the application's language files.
+     * Resolve the return type for a translation key, emitting MissingTranslation
+     * when the key does not exist.
      *
      * Skips namespaced keys (containing '::') since those belong to packages
      * whose translations may not be published to the app's lang/ directory.
      *
+     * For existing keys, uses Translator::get() to determine whether the
+     * resolved value is a string or an array, returning a precise type.
+     *
      * @param array<array-key, string> $suppressedIssues
      */
-    private static function checkTranslationExists(
+    private static function resolveTranslationType(
         string $translationKey,
         CodeLocation $codeLocation,
         array $suppressedIssues,
-    ): void {
+    ): ?Union {
         if (!self::$enabled || self::$translator === null) {
-            return;
+            return null;
         }
 
         // Skip namespaced package keys (e.g., 'pagination::pages.next') — packages
         // may not have their translations published to the app's lang/ directory
         if (\str_contains($translationKey, '::')) {
-            return;
+            return null;
         }
 
         if ($translationKey === '') {
-            return;
+            return null;
         }
 
-        if (self::translationExists($translationKey)) {
-            return;
+        $resolvedType = self::resolveKey($translationKey);
+
+        if ($resolvedType !== null) {
+            return $resolvedType;
         }
 
+        // Key does not exist — emit the issue and fall through to TransHandler
         IssueBuffer::accepts(
             new MissingTranslation(
                 "Translation key '{$translationKey}' not found in language files",
@@ -142,27 +158,62 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
             ),
             $suppressedIssues,
         );
+
+        return null;
     }
 
     /**
-     * Check if a translation key exists, caching the result.
+     * Resolve a translation key to a precise Psalm type, caching the result.
      *
-     * Translator::has() involves parseKey(), group loading, and array lookups.
-     * Caching avoids this overhead for repeated keys (common in large codebases).
+     * Uses Translator::has() to check existence, then Translator::get() to
+     * determine whether the value is a string or an array.
+     *
+     * Returns null when the key does not exist. The null sentinel is stored
+     * in the cache too, so missing keys are only looked up once.
      */
-    private static function translationExists(string $translationKey): bool
+    private static function resolveKey(string $translationKey): ?Union
     {
         if (self::$translator === null) {
-            return true;
+            return null;
+        }
+
+        if (\array_key_exists($translationKey, self::$resolvedKeys)) {
+            return self::$resolvedKeys[$translationKey];
         }
 
         try {
-            return self::$resolvedKeys[$translationKey]
-                ??= self::$translator->has($translationKey);
-        } catch (\Throwable) {
+            $exists = self::$translator->has($translationKey);
+        } catch (\Exception) {
             // Malformed language files (PHP syntax errors, invalid JSON) can cause
-            // Translator::has() to throw. Assume the key exists to avoid false positives.
-            return self::$resolvedKeys[$translationKey] = true;
+            // Translator::has() to throw. Return string|array to avoid emitting
+            // a false MissingTranslation for a key that may actually exist.
+            $fallback = Type::combineUnionTypes(Type::getString(), Type::getArray());
+
+            return self::$resolvedKeys[$translationKey] = $fallback;
         }
+
+        if (!$exists) {
+            self::$resolvedKeys[$translationKey] = null;
+
+            return null;
+        }
+
+        try {
+            $value = self::$translator->get($translationKey);
+        } catch (\Exception) {
+            // Key exists but value cannot be retrieved — return string|array
+            // to avoid false positives, matching TransHandler's fallback.
+            $fallback = Type::combineUnionTypes(Type::getString(), Type::getArray());
+
+            return self::$resolvedKeys[$translationKey] = $fallback;
+        }
+
+        $type = \is_array($value)
+            ? Type::getArray()
+            : Type::getString();
+
+        self::$resolvedKeys[$translationKey] = $type;
+
+        return $type;
     }
 }
