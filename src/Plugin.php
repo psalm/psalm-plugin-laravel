@@ -69,7 +69,7 @@ final class Plugin implements PluginEntryPointInterface
                 ApplicationProvider::getApp()->configPath(),
             );
 
-            if ($pluginConfig->detectMissingViews) {
+            if ($pluginConfig->findMissingViews) {
                 $this->initMissingViewHandler();
             }
 
@@ -225,7 +225,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(NoEnvOutsideConfigHandler::class);
 
-        if ($pluginConfig->detectMissingViews) {
+        if ($pluginConfig->findMissingViews) {
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(MissingViewHandler::class);
         }
