@@ -23,6 +23,11 @@ $throttle = __('auth.throttle');
 /** @psalm-check-type-exact $throttle = string */
 echo $throttle;
 
+// Existing translations — array type (validation.between is an array in Laravel)
+$between = __('validation.between');
+/** @psalm-check-type-exact $between = array<array-key, mixed> */
+print_r($between);
+
 // No arguments — should not emit
 __();
 

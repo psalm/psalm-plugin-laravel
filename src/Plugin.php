@@ -224,8 +224,10 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(PathHandler::class);
         // MissingTranslationHandler must be registered before TransHandler because
         // Psalm stops iterating handlers once one returns a non-null type.
-        // MissingTranslationHandler always returns null (it only emits issues),
-        // so TransHandler still provides the return type afterward.
+        // For existing keys, MissingTranslationHandler returns a precise type
+        // (string or array), preempting TransHandler's less precise string|array.
+        // For missing, dynamic, or namespaced keys, it returns null so
+        // TransHandler can still provide a fallback type.
         if ($pluginConfig->findMissingTranslations) {
             require_once __DIR__ . '/Handlers/Translations/MissingTranslationHandler.php';
             $registration->registerHooksFromClass(MissingTranslationHandler::class);
