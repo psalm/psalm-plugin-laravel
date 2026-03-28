@@ -92,9 +92,23 @@ final class ModelMakeHandlerTest extends TestCase
         $this->assertNull(ModelMakeHandler::afterExpressionAnalysis($event));
     }
 
-    /**
-     * @param \PhpParser\Node\Expr $expr
-     */
+    #[Test]
+    public function matches_case_insensitive_method_name(): void
+    {
+        $name = new Name('User');
+        // No resolvedName — handler bails at the is_string check, but the
+        // Identifier name passes the strtolower guard proving case-insensitivity
+        $staticCall = new StaticCall($name, new Identifier('Make'));
+        $staticCall->setAttribute('startFilePos', 0);
+        $staticCall->setAttribute('endFilePos', 10);
+
+        $event = $this->createEvent($staticCall);
+
+        // Returns null (not rejected by the method name check) — the handler
+        // proceeds past the case-insensitive guard but bails at resolvedName
+        $this->assertNull(ModelMakeHandler::afterExpressionAnalysis($event));
+    }
+
     private function createEvent(\PhpParser\Node\Expr $expr): AfterExpressionAnalysisEvent
     {
         $source = $this->createStub(StatementsSource::class);
