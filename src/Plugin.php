@@ -241,6 +241,10 @@ final class Plugin implements PluginEntryPointInterface
     {
         $app = ApplicationProvider::getApp();
 
+        if (!$app->bound('view.finder')) {
+            return;
+        }
+
         /** @var \Illuminate\View\FileViewFinder $finder */
         $finder = $app->make('view.finder');
 
