@@ -22,7 +22,7 @@ Full config example:
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
         <modelProperties columnFallback="none" />
         <failOnInternalError value="true" />
-        <detectMissingViews value="true" />
+        <findMissingViews value="true" />
     </pluginClass>
 </plugins>
 ```
@@ -61,7 +61,7 @@ With `failOnInternalError`, the Psalm run fails immediately, so you know the plu
 <failOnInternalError value="true" />
 ```
 
-## `detectMissingViews`
+## `findMissingViews`
 
 **default**: `false`
 
@@ -73,7 +73,7 @@ See [MissingView](issues/MissingView.md) for details.
 ### Example
 
 ```xml
-<detectMissingViews value="true" />
+<findMissingViews value="true" />
 ```
 
 ## Cache directory
