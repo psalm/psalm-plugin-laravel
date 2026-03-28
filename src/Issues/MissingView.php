@@ -7,7 +7,7 @@ namespace Psalm\LaravelPlugin\Issues;
 use Psalm\Issue\PluginIssue;
 
 /**
- * Reported when view() or View::make() references a Blade template
+ * Reported when view() or Factory::make() references a Blade template
  * that does not exist on disk.
  */
 final class MissingView extends PluginIssue

@@ -6,7 +6,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Views;
 
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\FuncCall;
-use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
@@ -244,21 +244,21 @@ final class MissingViewHandlerTest extends TestCase
         $source->method('getFileName')->willReturn('TestController.php');
         $source->method('getSuppressedIssues')->willReturn([]);
 
-        $staticCall = new StaticCall(
-            new Name(\Illuminate\View\Factory::class),
+        $methodCall = new MethodCall(
+            new Variable('factory'),
             $methodName,
         );
-        $staticCall->setAttribute('startFilePos', 0);
-        $staticCall->setAttribute('endFilePos', 10);
-        $staticCall->args = [new Arg(new String_($viewName))];
+        $methodCall->setAttribute('startFilePos', 0);
+        $methodCall->setAttribute('endFilePos', 10);
+        $methodCall->args = [new Arg(new String_($viewName))];
 
         return new MethodReturnTypeProviderEvent(
             $source,
             \Illuminate\View\Factory::class,
             $methodName,
-            $staticCall,
+            $methodCall,
             new Context(),
-            new CodeLocation($source, $staticCall),
+            new CodeLocation($source, $methodCall),
         );
     }
 }
