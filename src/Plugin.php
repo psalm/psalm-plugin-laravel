@@ -28,6 +28,7 @@ use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\ModelMakeHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
+use Psalm\LaravelPlugin\Handlers\Translations\MissingTranslationHandler;
 use Psalm\LaravelPlugin\Handlers\Validation\ValidatedTypeHandler;
 use Psalm\LaravelPlugin\Handlers\Validation\ValidationTaintHandler;
 use Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler;
@@ -69,6 +70,10 @@ final class Plugin implements PluginEntryPointInterface
             NoEnvOutsideConfigHandler::init(
                 ApplicationProvider::getApp()->configPath(),
             );
+
+            if ($pluginConfig->findMissingTranslations) {
+                $this->initMissingTranslationHandler();
+            }
 
             if ($pluginConfig->findMissingViews) {
                 $this->initMissingViewHandler();
@@ -217,6 +222,15 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(CacheHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(PathHandler::class);
+        // MissingTranslationHandler must be registered before TransHandler because
+        // Psalm stops iterating handlers once one returns a non-null type.
+        // MissingTranslationHandler always returns null (it only emits issues),
+        // so TransHandler still provides the return type afterward.
+        if ($pluginConfig->findMissingTranslations) {
+            require_once __DIR__ . '/Handlers/Translations/MissingTranslationHandler.php';
+            $registration->registerHooksFromClass(MissingTranslationHandler::class);
+        }
+
         require_once __DIR__ . '/Handlers/Helpers/TransHandler.php';
         $registration->registerHooksFromClass(TransHandler::class);
 
@@ -232,6 +246,29 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(MissingViewHandler::class);
         }
+    }
+
+    /**
+     * Get the Translator instance from the booted Laravel app and pass it to the handler.
+     *
+     * Uses Laravel's Translator::has() for key resolution, which handles PHP array files,
+     * JSON files, vendor/package namespaces, and fallback locales automatically.
+     */
+    private function initMissingTranslationHandler(): void
+    {
+        $app = ApplicationProvider::getApp();
+
+        if (!$app->bound('translator')) {
+            return;
+        }
+
+        $translator = $app->make('translator');
+
+        if (!$translator instanceof \Illuminate\Translation\Translator) {
+            return;
+        }
+
+        MissingTranslationHandler::init($translator);
     }
 
     /**

@@ -40,6 +40,7 @@ final class PluginConfigTest extends TestCase
 
         $this->assertSame(ColumnFallback::Migrations, $config->columnFallback);
         $this->assertFalse($config->failOnInternalError);
+        $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
     }
 
@@ -101,6 +102,37 @@ final class PluginConfigTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("Invalid failOnInternalError value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function find_missing_translations_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingTranslations value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findMissingTranslations);
+    }
+
+    #[Test]
+    public function find_missing_translations_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingTranslations value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findMissingTranslations);
+    }
+
+    #[Test]
+    public function invalid_find_missing_translations_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingTranslations value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findMissingTranslations value 'yes'");
 
         PluginConfig::fromXml($xml);
     }
@@ -209,6 +241,7 @@ final class PluginConfigTest extends TestCase
             '<pluginClass>'
             . '<modelProperties columnFallback="none" />'
             . '<failOnInternalError value="true" />'
+            . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
             . '</pluginClass>',
         );
@@ -217,6 +250,7 @@ final class PluginConfigTest extends TestCase
 
         $this->assertSame(ColumnFallback::None, $config->columnFallback);
         $this->assertTrue($config->failOnInternalError);
+        $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
     }
