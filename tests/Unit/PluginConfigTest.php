@@ -106,7 +106,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function detect_missing_views_true(): void
+    public function find_missing_views_true(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findMissingViews value="true" /></pluginClass>');
 
@@ -116,7 +116,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function detect_missing_views_false(): void
+    public function find_missing_views_false(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findMissingViews value="false" /></pluginClass>');
 
@@ -126,7 +126,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function invalid_detect_missing_views_throws(): void
+    public function invalid_find_missing_views_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findMissingViews value="yes" /></pluginClass>');
 
