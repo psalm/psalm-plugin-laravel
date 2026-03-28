@@ -17,11 +17,13 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Union;
 
 /**
- * Detects calls to view() and View::make() with a view name that does not
- * correspond to an existing Blade template file.
+ * Detects calls to the view() helper and Factory::make() with a view name
+ * that does not correspond to an existing Blade template file.
  *
  * Only string literal view names are checked — dynamic names and namespaced
  * views (e.g., 'mail::html.header') are skipped to avoid false positives.
+ *
+ * @todo Support View facade calls — see https://github.com/psalm/psalm-plugin-laravel/issues/591
  *
  * @see https://laravel.com/docs/views
  */

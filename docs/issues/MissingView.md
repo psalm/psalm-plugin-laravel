@@ -6,7 +6,7 @@ nav_order: 4
 
 # MissingView
 
-Emitted when `view()` or `View::make()` references a Blade template that does not exist on disk.
+Emitted when `view()` references a Blade template that does not exist on disk.
 
 ## Why this is a problem
 
@@ -25,10 +25,10 @@ view('emails.welcome');
 
 ```php
 // Bad — referencing a deleted template
-View::make('admin.old-dashboard'); // MissingView
+view('admin.old-dashboard'); // MissingView
 
 // Good
-View::make('admin.dashboard');
+view('admin.dashboard');
 ```
 
 ## How to fix
