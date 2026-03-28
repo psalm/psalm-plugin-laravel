@@ -1,0 +1,41 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Casts;
+
+/**
+ * @template TGet
+ * @template TSet
+ */
+class Attribute
+{
+    public function __construct(?callable $get = null, ?callable $set = null) {}
+
+    /**
+     * Laravel calls getter/setter with ($value, $attributes), but PHP allows closures to
+     * ignore trailing arguments, so 0, 1, or 2 params are all valid in practice.
+     *
+     * Method-level @template is required because Psalm 7 cannot resolve class-level
+     * templates referenced inside callable parameter types.
+     *
+     * @template TGetResult
+     * @template TSetParam
+     * @param (callable(mixed=, array<string, mixed>=): TGetResult)|null $get
+     * @param (callable(TSetParam=, array<string, mixed>=): mixed)|null $set
+     * @return self<TGetResult, TSetParam>
+     */
+    public static function make(?callable $get = null, ?callable $set = null) {}
+
+    /**
+     * @template TGetResult
+     * @param callable(mixed=, array<string, mixed>=): TGetResult $get
+     * @return self<TGetResult, never>
+     */
+    public static function get(callable $get) {}
+
+    /**
+     * @template TSetParam
+     * @param callable(TSetParam=, array<string, mixed>=): mixed $set
+     * @return self<never, TSetParam>
+     */
+    public static function set(callable $set) {}
+}

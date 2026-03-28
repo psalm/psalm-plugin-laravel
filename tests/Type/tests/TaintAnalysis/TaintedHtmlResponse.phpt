@@ -9,4 +9,4 @@ function showAuthor(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-TaintedHtml on line %d: Detected tainted HTML
+%ATaintedHtml on line %d: Detected tainted HTML

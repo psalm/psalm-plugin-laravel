@@ -17,6 +17,8 @@ final class SchemaColumn
 
     public const TYPE_ENUM = 'enum';
 
+    public const TYPE_ARRAY = 'array';
+
     public const TYPE_MIXED = 'mixed';
 
     /**
@@ -30,6 +32,7 @@ final class SchemaColumn
 
     /**
      * @param array<int, string> $options Allowed enum values (see {@see $options})
+     * @psalm-mutation-free
      */
     public function __construct(
         public string $name,

@@ -1,0 +1,32 @@
+<?php
+
+namespace Illuminate\Contracts\Console;
+
+// Taint annotations for the contract interface.
+// Psalm does not inherit taint annotations from an interface to its implementing class,
+// so the concrete Foundation\Console\Kernel is annotated separately in Foundation/Console/Kernel.stubphp.
+interface Kernel
+{
+    /**
+     * Run an Artisan console command by name.
+     *
+     * @param  string  $command
+     * @param  array  $parameters
+     * @param  \Symfony\Component\Console\Output\OutputInterface|null  $outputBuffer
+     * @return int
+     *
+     * @psalm-taint-sink shell $command
+     */
+    public function call($command, array $parameters = [], $outputBuffer = null);
+
+    /**
+     * Queue an Artisan console command by name.
+     *
+     * @param  string  $command
+     * @param  array  $parameters
+     * @return \Illuminate\Foundation\Bus\PendingDispatch
+     *
+     * @psalm-taint-sink shell $command
+     */
+    public function queue($command, array $parameters = []);
+}

@@ -7,14 +7,11 @@ namespace Psalm\LaravelPlugin\Handlers\Auth;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Psalm\LaravelPlugin\Providers\ConfigRepositoryProvider;
 
-use function is_array;
-use function is_string;
-use function array_keys;
-
 final class AuthConfigAnalyzer
 {
     private static ?AuthConfigAnalyzer $instance = null;
 
+    /** @psalm-mutation-free */
     private function __construct(private readonly ConfigRepository $config) {}
 
     public static function instance(): self
@@ -34,14 +31,14 @@ final class AuthConfigAnalyzer
         if ($guard === null) {
             $guard = $this->getDefaultGuard();
 
-            if (! is_string($guard)) {
+            if (! \is_string($guard)) {
                 return null;
             }
         }
 
         $provider = $this->config->get("auth.guards.{$guard}.provider");
 
-        if (! is_string($provider)) {
+        if (! \is_string($provider)) {
             return null;
         }
 
@@ -49,11 +46,10 @@ final class AuthConfigAnalyzer
             return \Illuminate\Auth\GenericUser::class;
         }
 
-        /** @var string|null $model */
+        /** @var class-string<\Illuminate\Contracts\Auth\Authenticatable>|null $model */
         $model = $this->config->get("auth.providers.{$provider}.model");
 
-        /** @var class-string<\Illuminate\Contracts\Auth\Authenticatable>|null */
-        return is_string($model) ? $model : null;
+        return \is_string($model) ? $model : null;
     }
 
     public function getDefaultGuard(): ?string
@@ -61,7 +57,7 @@ final class AuthConfigAnalyzer
         /** @var string|null $guard */
         $guard = $this->config->get('auth.defaults.guard');
 
-        return is_string($guard) ? $guard : null;
+        return \is_string($guard) ? $guard : null;
     }
 
     /** @return list<class-string<\Illuminate\Contracts\Auth\Authenticatable>> */
@@ -69,13 +65,13 @@ final class AuthConfigAnalyzer
     {
         $all_authenticatables = [];
 
+        /** @var array<string, mixed>|null $authGuards */
         $authGuards = $this->config->get('auth.guards');
-        /** @var list<string> $guards */
-        $guards = is_array($authGuards) ? array_keys($authGuards) : [];
+        $guards = \is_array($authGuards) ? \array_keys($authGuards) : [];
 
         foreach ($guards as $guard) {
             $authenticatable_fqcn = $this->getAuthenticatableFQCN($guard);
-            if (is_string($authenticatable_fqcn)) {
+            if (\is_string($authenticatable_fqcn)) {
                 $all_authenticatables[] = $authenticatable_fqcn;
             }
         }

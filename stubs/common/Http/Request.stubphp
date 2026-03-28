@@ -116,6 +116,35 @@ class Request extends SymfonyRequest
     public function fullUrl() {}
 
     /**
+     * Get the full URL for the request with the added query string parameters.
+     *
+     * @param  array  $query
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function fullUrlWithQuery(array $query) {}
+
+    /**
+     * Get the full URL for the request without the given query string parameters.
+     *
+     * @param  array|string  $keys
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function fullUrlWithoutQuery($keys) {}
+
+    /**
+     * Get the scheme and HTTP host.
+     *
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function schemeAndHttpHost() {}
+
+    /**
      * Get the host name.
      *
      * @return string

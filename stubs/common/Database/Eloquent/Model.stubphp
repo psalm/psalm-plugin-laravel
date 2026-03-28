@@ -48,6 +48,8 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
     /**
      * @param  array|mixed  $columns
      * @return \Illuminate\Database\Eloquent\Collection<int, static>
+     *
+     * @psalm-variadic
      */
     public static function all($columns = ['*']) {}
 
@@ -101,4 +103,89 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
     public function newEloquentBuilder($query) {}
+
+    /**
+     * Get the value of the model's primary key.
+     *
+     * @return int|string
+     */
+    public function getKey() {}
+
+    /**
+     * Get the attributes that have been changed since the last sync.
+     *
+     * @return array<string, mixed>
+     */
+    public function getDirty() {}
+
+    /**
+     * Get the attributes that were changed when the model was last saved.
+     *
+     * @return array<string, mixed>
+     */
+    public function getChanges() {}
+
+    /**
+     * Convert the model instance to an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray() {}
+
+    /**
+     * Get all of the current attributes on the model.
+     *
+     * @return array<string, mixed>
+     */
+    public function getAttributes() {}
+
+    /**
+     * Eager load relations on the model.
+     *
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function load($relations) {}
+
+    /**
+     * Eager load relations on the model if they are not already eager loaded.
+     *
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function loadMissing($relations) {}
+
+    /**
+     * Eager load relation counts on the model.
+     *
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function loadCount($relations) {}
+
+    /**
+     * Make the given, typically hidden, attributes visible.
+     *
+     * @param  array<string>|string  $attributes
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function makeVisible($attributes) {}
+
+    /**
+     * Make the given, typically visible, attributes hidden.
+     *
+     * @param  array<string>|string  $attributes
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function makeHidden($attributes) {}
 }
