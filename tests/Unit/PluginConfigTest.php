@@ -40,7 +40,7 @@ final class PluginConfigTest extends TestCase
 
         $this->assertSame(ColumnFallback::Migrations, $config->columnFallback);
         $this->assertFalse($config->failOnInternalError);
-        $this->assertFalse($config->detectMissingViews);
+        $this->assertFalse($config->findMissingViews);
     }
 
     #[Test]
@@ -108,30 +108,30 @@ final class PluginConfigTest extends TestCase
     #[Test]
     public function detect_missing_views_true(): void
     {
-        $xml = new \SimpleXMLElement('<pluginClass><detectMissingViews value="true" /></pluginClass>');
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingViews value="true" /></pluginClass>');
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertTrue($config->detectMissingViews);
+        $this->assertTrue($config->findMissingViews);
     }
 
     #[Test]
     public function detect_missing_views_false(): void
     {
-        $xml = new \SimpleXMLElement('<pluginClass><detectMissingViews value="false" /></pluginClass>');
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingViews value="false" /></pluginClass>');
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertFalse($config->detectMissingViews);
+        $this->assertFalse($config->findMissingViews);
     }
 
     #[Test]
     public function invalid_detect_missing_views_throws(): void
     {
-        $xml = new \SimpleXMLElement('<pluginClass><detectMissingViews value="yes" /></pluginClass>');
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingViews value="yes" /></pluginClass>');
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("Invalid detectMissingViews value 'yes'");
+        $this->expectExceptionMessage("Invalid findMissingViews value 'yes'");
 
         PluginConfig::fromXml($xml);
     }
@@ -209,7 +209,7 @@ final class PluginConfigTest extends TestCase
             '<pluginClass>'
             . '<modelProperties columnFallback="none" />'
             . '<failOnInternalError value="true" />'
-            . '<detectMissingViews value="true" />'
+            . '<findMissingViews value="true" />'
             . '</pluginClass>',
         );
 
@@ -217,7 +217,7 @@ final class PluginConfigTest extends TestCase
 
         $this->assertSame(ColumnFallback::None, $config->columnFallback);
         $this->assertTrue($config->failOnInternalError);
-        $this->assertTrue($config->detectMissingViews);
+        $this->assertTrue($config->findMissingViews);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
     }
 }

@@ -44,7 +44,7 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 ```xml
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <detectMissingViews value="true" />
+        <findMissingViews value="true" />
     </pluginClass>
 </plugins>
 ```
