@@ -61,6 +61,15 @@ trait HasRelationships
     public function belongsTo($related, $foreignKey = null, $ownerKey = null, $relation = null) {}
 
     /**
+     * The related model type cannot be determined statically for polymorphic relations,
+     * so TRelatedModel defaults to Model.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\MorphTo
+     * @psalm-return \Illuminate\Database\Eloquent\Relations\MorphTo<\Illuminate\Database\Eloquent\Model, static>
+     */
+    public function morphTo($name = null, $type = null, $id = null, $ownerKey = null) {}
+
+    /**
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      * @psalm-param class-string<TRelatedModel> $related
      *
@@ -128,13 +137,14 @@ trait HasRelationships
      * @param  string  $relatedPivotKey
      * @param  string  $parentKey
      * @param  string  $relatedKey
+     * @param  string  $relation
      * @param  bool  $inverse
      * @return \Illuminate\Database\Eloquent\Relations\MorphToMany
      * @psalm-return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel>
      */
     public function morphToMany($related, $name, $table = null, $foreignPivotKey = null,
                                 $relatedPivotKey = null, $parentKey = null,
-                                $relatedKey = null, $inverse = false) {}
+                                $relatedKey = null, $relation = null, $inverse = false) {}
 
     /**
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
@@ -147,22 +157,11 @@ trait HasRelationships
      * @param  string  $relatedPivotKey
      * @param  string  $parentKey
      * @param  string  $relatedKey
+     * @param  string  $relation
      * @return \Illuminate\Database\Eloquent\Relations\MorphToMany
      * @psalm-return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel>
      */
     public function morphedByMany($related, $name, $table = null, $foreignPivotKey = null,
-                                  $relatedPivotKey = null, $parentKey = null, $relatedKey = null)
-    {
-        $foreignPivotKey = $foreignPivotKey ?: $this->getForeignKey();
-
-        // For the inverse of the polymorphic many-to-many relations, we will change
-        // the way we determine the foreign and other keys, as it is the opposite
-        // of the morph-to-many method since we're figuring out these inverses.
-        $relatedPivotKey = $relatedPivotKey ?: $name.'_id';
-
-        return $this->morphToMany(
-            $related, $name, $table, $foreignPivotKey,
-            $relatedPivotKey, $parentKey, $relatedKey, true
-        );
-    }
+                                  $relatedPivotKey = null, $parentKey = null,
+                                  $relatedKey = null, $relation = null) {}
 }
