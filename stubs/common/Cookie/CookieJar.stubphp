@@ -52,7 +52,7 @@ class CookieJar
      * Accepts a Cookie object directly, or the same positional arguments as make():
      * queue($name, $value, $minutes, $path, $domain, $secure, $httpOnly, $raw, $sameSite).
      *
-     * @param  \Symfony\Component\HttpFoundation\Cookie|string  ...$parameters
+     * @param  mixed  ...$parameters
      * @return void
      *
      * @psalm-taint-sink header $parameters
