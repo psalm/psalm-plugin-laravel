@@ -40,6 +40,7 @@ final class PluginConfigTest extends TestCase
 
         $this->assertSame(ColumnFallback::Migrations, $config->columnFallback);
         $this->assertFalse($config->failOnInternalError);
+        $this->assertFalse($config->detectMissingViews);
     }
 
     #[Test]
@@ -100,6 +101,37 @@ final class PluginConfigTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("Invalid failOnInternalError value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function detect_missing_views_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><detectMissingViews value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->detectMissingViews);
+    }
+
+    #[Test]
+    public function detect_missing_views_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><detectMissingViews value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->detectMissingViews);
+    }
+
+    #[Test]
+    public function invalid_detect_missing_views_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><detectMissingViews value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid detectMissingViews value 'yes'");
 
         PluginConfig::fromXml($xml);
     }
@@ -177,6 +209,7 @@ final class PluginConfigTest extends TestCase
             '<pluginClass>'
             . '<modelProperties columnFallback="none" />'
             . '<failOnInternalError value="true" />'
+            . '<detectMissingViews value="true" />'
             . '</pluginClass>',
         );
 
@@ -184,6 +217,7 @@ final class PluginConfigTest extends TestCase
 
         $this->assertSame(ColumnFallback::None, $config->columnFallback);
         $this->assertTrue($config->failOnInternalError);
+        $this->assertTrue($config->detectMissingViews);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
     }
 }

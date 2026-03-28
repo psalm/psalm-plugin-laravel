@@ -29,6 +29,7 @@ use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Handlers\Validation\ValidatedTypeHandler;
 use Psalm\LaravelPlugin\Handlers\Validation\ValidationTaintHandler;
+use Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
@@ -67,6 +68,10 @@ final class Plugin implements PluginEntryPointInterface
             NoEnvOutsideConfigHandler::init(
                 ApplicationProvider::getApp()->configPath(),
             );
+
+            if ($pluginConfig->detectMissingViews) {
+                $this->initMissingViewHandler();
+            }
 
             $this->registerHandlers($registration, $pluginConfig);
             $this->registerStubs($registration, $pluginConfig);
@@ -219,6 +224,30 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(NoEnvOutsideConfigHandler::class);
+
+        if ($pluginConfig->detectMissingViews) {
+            require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
+            $registration->registerHooksFromClass(MissingViewHandler::class);
+        }
+    }
+
+    /**
+     * Read view paths from the booted Laravel app and pass them to the handler.
+     *
+     * Uses the app's FileViewFinder which reflects config('view.paths') plus
+     * any paths added by service providers during bootstrap.
+     */
+    private function initMissingViewHandler(): void
+    {
+        $app = ApplicationProvider::getApp();
+
+        /** @var \Illuminate\View\FileViewFinder $finder */
+        $finder = $app->make('view.finder');
+
+        /** @var list<string> $paths */
+        $paths = $finder->getPaths();
+
+        MissingViewHandler::init($paths);
     }
 
     private function buildSchema(PluginConfig $pluginConfig): void

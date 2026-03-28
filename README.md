@@ -139,6 +139,7 @@ The plugin emits custom issues beyond Psalm's built-in checks:
 - [NoEnvOutsideConfig](docs/issues/NoEnvOutsideConfig.md) — `env()` called outside `config/` directory
 - [InvalidConsoleArgumentName](docs/issues/InvalidConsoleArgumentName.md) — `argument()` references undefined command argument
 - [InvalidConsoleOptionName](docs/issues/InvalidConsoleOptionName.md) — `option()` references undefined command option
+- [MissingView](docs/issues/MissingView.md) — `view()` or `View::make()` references a non-existent Blade template (opt-in)
 
 
 ## How it works
