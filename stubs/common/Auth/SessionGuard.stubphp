@@ -1,0 +1,20 @@
+<?php
+
+namespace Illuminate\Auth;
+
+class SessionGuard
+{
+    /**
+     * Create a HMAC of the password hash for storage in cookies.
+     *
+     * The HMAC digest is not the original hash, so user_secret taint is
+     * removed. Other taint kinds are preserved via @psalm-flow.
+     *
+     * @param  string  $passwordHash
+     * @return string
+     *
+     * @psalm-taint-escape user_secret
+     * @psalm-flow ($passwordHash) -> return
+     */
+    public function hashPasswordForCookie($passwordHash) {}
+}

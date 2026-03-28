@@ -1,0 +1,18 @@
+<?php
+
+namespace Illuminate\Auth;
+
+class TokenGuard
+{
+    /**
+     * Get the token for the current request.
+     *
+     * Reads from query string, request body, Bearer header, and HTTP basic
+     * password — all user-controlled input.
+     *
+     * @return string|null
+     *
+     * @psalm-taint-source input
+     */
+    public function getTokenForRequest() {}
+}
