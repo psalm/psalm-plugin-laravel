@@ -8,7 +8,7 @@ use Psalm\Issue\PluginIssue;
 
 /**
  * Reported when Model::make() is used instead of new Model().
- * The constructor is clearer and avoids __callStatic indirection.
+ * The constructor is clearer and avoids magic method indirection.
  */
 final class ModelMakeDiscouraged extends PluginIssue
 {
