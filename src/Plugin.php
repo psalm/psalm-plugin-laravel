@@ -244,12 +244,22 @@ final class Plugin implements PluginEntryPointInterface
     {
         $app = ApplicationProvider::getApp();
 
-        if (!$app->bound('view.finder')) {
+        // Prefer the dedicated view.finder binding; fall back to the Factory's finder
+        // (ApplicationProvider may bind 'view' without registering 'view.finder')
+        if ($app->bound('view.finder')) {
+            /** @var \Illuminate\View\FileViewFinder $finder */
+            $finder = $app->make('view.finder');
+        } elseif ($app->bound('view')) {
+            /** @var \Illuminate\View\Factory $factory */
+            $factory = $app->make('view');
+            $finder = $factory->getFinder();
+        } else {
             return;
         }
 
-        /** @var \Illuminate\View\FileViewFinder $finder */
-        $finder = $app->make('view.finder');
+        if (!$finder instanceof \Illuminate\View\FileViewFinder) {
+            return;
+        }
 
         /** @var list<string> $paths */
         $paths = $finder->getPaths();
