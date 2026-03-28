@@ -8,7 +8,7 @@ use Illuminate\Support\Collection;
 
 class Article extends Model {}
 
-function test(): void
+function model_make_is_discouraged(): void
 {
     // Should emit ModelMakeDiscouraged — use new Article() instead
     Article::make(['title' => 'Hello']);
