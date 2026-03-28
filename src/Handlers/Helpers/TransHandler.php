@@ -17,12 +17,12 @@ final class TransHandler implements FunctionReturnTypeProviderInterface
     #[\Override]
     public static function getFunctionIds(): array
     {
-        return ['trans'];
+        return ['trans', '__'];
     }
 
     /** @inheritDoc */
     #[\Override]
-    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
+    public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Type\Union
     {
         $call_args = $event->getCallArgs();
 
@@ -34,6 +34,7 @@ final class TransHandler implements FunctionReturnTypeProviderInterface
             }
         }
 
-        return Type::getMixed();
+        // Fall back to the stub's conditional return type (e.g. __() returns null when key is null)
+        return null;
     }
 }
