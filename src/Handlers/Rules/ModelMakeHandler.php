@@ -17,10 +17,10 @@ use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 /**
  * Flags Model::make() calls and suggests using new Model() instead.
  *
- * Model::make() is forwarded through __callStatic to Builder::make(), which
- * just creates a new instance via newModelInstance(). Using the constructor
- * directly is clearer, avoids the indirection, and makes the code easier
- * to understand for static analysis tools and developers alike.
+ * Model::make() is forwarded through magic methods (__callStatic -> __call ->
+ * forwardCallTo) to Builder::make(), which just creates a new instance via
+ * newModelInstance(). Using the constructor directly is clearer and avoids
+ * the indirection.
  *
  * @see https://github.com/larastan/larastan/blob/2.x/src/Rules/NoModelMakeRule.php
  */
@@ -61,7 +61,7 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         IssueBuffer::accepts(
             new ModelMakeDiscouraged(
                 "Use new {$shortName}(...) instead of {$shortName}::make(...). "
-                    . 'The constructor is clearer and avoids __callStatic indirection.',
+                    . 'The constructor is clearer and avoids magic method indirection.',
                 new CodeLocation($event->getStatementsSource(), $expr),
             ),
             $event->getStatementsSource()->getSuppressedIssues(),
@@ -83,16 +83,14 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
             return false;
         }
 
-        return $codebase->classExtendsOrImplements($className, Model::class);
+        return $codebase->classExtends($className, Model::class);
     }
 
-    /**
-     * @psalm-pure
-     */
+    /** @psalm-pure */
     private static function shortClassName(string $fqcn): string
     {
-        $parts = \explode('\\', $fqcn);
+        $pos = \strrpos($fqcn, '\\');
 
-        return \end($parts);
+        return $pos !== false ? \substr($fqcn, $pos + 1) : $fqcn;
     }
 }
