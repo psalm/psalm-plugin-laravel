@@ -132,7 +132,7 @@ final class ValidationRuleAnalyzer
             // Type-bearing rules (first one wins for type, all accumulate taint)
             $ruleType = self::ruleToType($ruleName, $ruleParam);
 
-            if ($ruleType !== null && $type === null) {
+            if ($ruleType instanceof Union && !$type instanceof Union) {
                 $type = $ruleType;
             }
 
