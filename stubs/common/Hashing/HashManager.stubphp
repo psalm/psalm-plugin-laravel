@@ -12,6 +12,7 @@ class HashManager
      * @return string
      *
      * @psalm-taint-escape user_secret
+     * @psalm-taint-escape system_secret
      */
     public function make($value, array $options = []) {}
 }
