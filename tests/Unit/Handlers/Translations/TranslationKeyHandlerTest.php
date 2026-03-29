@@ -16,13 +16,13 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation;
 use Psalm\Context;
-use Psalm\LaravelPlugin\Handlers\Translations\MissingTranslationHandler;
+use Psalm\LaravelPlugin\Handlers\Translations\TranslationKeyHandler;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\StatementsSource;
 use Psalm\Type\Union;
 
-#[CoversClass(MissingTranslationHandler::class)]
-final class MissingTranslationHandlerTest extends TestCase
+#[CoversClass(TranslationKeyHandler::class)]
+final class TranslationKeyHandlerTest extends TestCase
 {
     /** @var array<string, string|array<string, string>> Translation values used by the stub translator */
     private const TRANSLATIONS = [
@@ -62,13 +62,13 @@ final class MissingTranslationHandlerTest extends TestCase
             static fn(string $key): string|array => self::TRANSLATIONS[$key] ?? $key,
         );
 
-        MissingTranslationHandler::init($translator);
+        TranslationKeyHandler::init($translator, reportMissing: true);
     }
 
     #[Test]
     public function returns_trans_and_double_underscore_function_ids(): void
     {
-        $this->assertSame(['__', 'trans'], MissingTranslationHandler::getFunctionIds());
+        $this->assertSame(['__', 'trans'], TranslationKeyHandler::getFunctionIds());
     }
 
     /**
@@ -90,7 +90,7 @@ final class MissingTranslationHandlerTest extends TestCase
     public function returns_string_type_for_existing_string_translation(string $translationKey): void
     {
         $event = $this->createEvent($translationKey);
-        $result = MissingTranslationHandler::getFunctionReturnType($event);
+        $result = TranslationKeyHandler::getFunctionReturnType($event);
 
         $this->assertInstanceOf(Union::class, $result);
         $this->assertTrue($result->isString(), "Expected string type for key '{$translationKey}'");
@@ -103,7 +103,7 @@ final class MissingTranslationHandlerTest extends TestCase
     public function returns_array_type_for_existing_array_translation(): void
     {
         $event = $this->createEvent('validation.accepted');
-        $result = MissingTranslationHandler::getFunctionReturnType($event);
+        $result = TranslationKeyHandler::getFunctionReturnType($event);
 
         $this->assertInstanceOf(Union::class, $result);
         $this->assertTrue($result->hasArray(), "Expected array type for key 'validation.accepted'");
@@ -127,7 +127,7 @@ final class MissingTranslationHandlerTest extends TestCase
     {
         $event = $this->createEvent($translationKey);
 
-        $this->assertNotInstanceOf(Union::class, MissingTranslationHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, TranslationKeyHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -135,7 +135,7 @@ final class MissingTranslationHandlerTest extends TestCase
     {
         $event = $this->createEvent('');
 
-        $this->assertNotInstanceOf(Union::class, MissingTranslationHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, TranslationKeyHandler::getFunctionReturnType($event));
     }
 
     /**
@@ -162,10 +162,10 @@ final class MissingTranslationHandlerTest extends TestCase
         $translator = $this->createStub(Translator::class);
         $translator->method('has')->willThrowException($exception);
 
-        MissingTranslationHandler::init($translator);
+        TranslationKeyHandler::init($translator, reportMissing: true);
 
         $event = $this->createEvent('broken.key');
-        $result = MissingTranslationHandler::getFunctionReturnType($event);
+        $result = TranslationKeyHandler::getFunctionReturnType($event);
 
         $this->assertInstanceOf(Union::class, $result);
         $this->assertTrue($result->hasString(), 'Expected string in union type');
@@ -184,10 +184,10 @@ final class MissingTranslationHandlerTest extends TestCase
         $translator->method('has')->willReturn(true);
         $translator->method('get')->willThrowException($exception);
 
-        MissingTranslationHandler::init($translator);
+        TranslationKeyHandler::init($translator, reportMissing: true);
 
         $event = $this->createEvent('broken.value');
-        $result = MissingTranslationHandler::getFunctionReturnType($event);
+        $result = TranslationKeyHandler::getFunctionReturnType($event);
 
         $this->assertInstanceOf(Union::class, $result);
         $this->assertTrue($result->hasString(), 'Expected string in union type');
@@ -195,15 +195,56 @@ final class MissingTranslationHandlerTest extends TestCase
     }
 
     #[Test]
-    public function skips_when_not_enabled(): void
+    public function returns_null_when_translator_not_initialized(): void
     {
-        $enabled = new \ReflectionProperty(MissingTranslationHandler::class, 'enabled');
-        $enabled->setAccessible(true);
-        $enabled->setValue(null, false);
+        $translator = new \ReflectionProperty(TranslationKeyHandler::class, 'translator');
+        $translator->setAccessible(true);
+        $translator->setValue(null, null);
+
+        $event = $this->createEvent('auth.failed');
+
+        $this->assertNull(TranslationKeyHandler::getFunctionReturnType($event));
+    }
+
+    /**
+     * When reportMissing is false, existing keys should still return precise types —
+     * the config only controls issue emission, not type narrowing.
+     */
+    #[Test]
+    public function resolves_precise_type_when_report_missing_is_false(): void
+    {
+        $translator = $this->createStub(Translator::class);
+        $translator->method('has')->willReturnCallback(
+            static fn(string $key): bool => \array_key_exists($key, self::TRANSLATIONS),
+        );
+        $translator->method('get')->willReturnCallback(
+            static fn(string $key): string|array => self::TRANSLATIONS[$key] ?? $key,
+        );
+
+        TranslationKeyHandler::init($translator, reportMissing: false);
+
+        $event = $this->createEvent('auth.failed');
+        $result = TranslationKeyHandler::getFunctionReturnType($event);
+
+        $this->assertInstanceOf(Union::class, $result);
+        $this->assertTrue($result->isString(), "Expected string type for existing key even with reportMissing=false");
+    }
+
+    /**
+     * When reportMissing is false, missing keys should return null (falling through
+     * to TransHandler) without emitting a MissingTranslation issue.
+     */
+    #[Test]
+    public function returns_null_for_missing_key_when_report_missing_is_false(): void
+    {
+        $translator = $this->createStub(Translator::class);
+        $translator->method('has')->willReturn(false);
+
+        TranslationKeyHandler::init($translator, reportMissing: false);
 
         $event = $this->createEvent('nonexistent.key');
 
-        $this->assertNotInstanceOf(Union::class, MissingTranslationHandler::getFunctionReturnType($event));
+        $this->assertNull(TranslationKeyHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -226,7 +267,7 @@ final class MissingTranslationHandlerTest extends TestCase
             new CodeLocation($source, $funcCall),
         );
 
-        $this->assertNotInstanceOf(Union::class, MissingTranslationHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, TranslationKeyHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -249,7 +290,7 @@ final class MissingTranslationHandlerTest extends TestCase
             new CodeLocation($source, $funcCall),
         );
 
-        $this->assertNotInstanceOf(Union::class, MissingTranslationHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, TranslationKeyHandler::getFunctionReturnType($event));
     }
 
     private function createEvent(string $translationKey): FunctionReturnTypeProviderEvent
