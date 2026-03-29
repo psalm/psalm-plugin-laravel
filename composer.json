@@ -106,6 +106,6 @@
             "Composer\\Config::disableProcessTimeout",
             "phpunit --testsuite=type"
         ],
-        "test:unit": "phpunit --testsuite=unit --display-notices --display-phpunit-notices"
+        "test:unit": "phpunit --testsuite=unit --display-notices"
     }
 }
