@@ -19,7 +19,6 @@ use Psalm\Context;
 use Psalm\LaravelPlugin\Handlers\Translations\TranslationKeyHandler;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\StatementsSource;
-use Psalm\Type;
 use Psalm\Type\Union;
 
 #[CoversClass(TranslationKeyHandler::class)]
@@ -35,6 +34,25 @@ final class TranslationKeyHandlerTest extends TestCase
     ];
 
     protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->initWorkingTranslator();
+    }
+
+    /**
+     * Restore the handler to a known-good state with a working translator.
+     * Called from setUp() and also used by tests that swap in a broken
+     * translator — tearDown() ensures the next test always starts clean.
+     */
+    protected function tearDown(): void
+    {
+        $this->initWorkingTranslator();
+
+        parent::tearDown();
+    }
+
+    private function initWorkingTranslator(): void
     {
         $translator = $this->createStub(Translator::class);
         $translator->method('has')->willReturnCallback(
@@ -121,15 +139,28 @@ final class TranslationKeyHandlerTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{\Throwable}>
+     */
+    public static function throwableProvider(): iterable
+    {
+        yield 'RuntimeException' => [new \RuntimeException('Invalid language file')];
+        yield 'ParseError from malformed PHP' => [new \ParseError('syntax error')];
+    }
+
+    /**
      * When Translator::has() throws (e.g. malformed language file), the handler
      * should return string|array to avoid emitting a false MissingTranslation
      * for a key that may actually exist.
+     *
+     * Tests both \Exception and \Error subclasses — PHP lang files with syntax
+     * errors throw \ParseError (\Error), while invalid JSON throws \RuntimeException.
      */
     #[Test]
-    public function returns_string_or_array_when_has_throws(): void
+    #[DataProvider('throwableProvider')]
+    public function returns_string_or_array_when_has_throws(\Throwable $exception): void
     {
         $translator = $this->createStub(Translator::class);
-        $translator->method('has')->willThrowException(new \RuntimeException('Invalid language file'));
+        $translator->method('has')->willThrowException($exception);
 
         TranslationKeyHandler::init($translator, reportMissing: true);
 
@@ -139,9 +170,6 @@ final class TranslationKeyHandlerTest extends TestCase
         $this->assertInstanceOf(Union::class, $result);
         $this->assertTrue($result->hasString(), 'Expected string in union type');
         $this->assertTrue($result->hasArray(), 'Expected array in union type');
-
-        // Re-init with working translator for other tests
-        $this->setUp();
     }
 
     /**
@@ -149,11 +177,12 @@ final class TranslationKeyHandlerTest extends TestCase
      * return string|array as a safe fallback since we know the key exists.
      */
     #[Test]
-    public function returns_string_or_array_when_get_throws(): void
+    #[DataProvider('throwableProvider')]
+    public function returns_string_or_array_when_get_throws(\Throwable $exception): void
     {
         $translator = $this->createStub(Translator::class);
         $translator->method('has')->willReturn(true);
-        $translator->method('get')->willThrowException(new \RuntimeException('Cannot read value'));
+        $translator->method('get')->willThrowException($exception);
 
         TranslationKeyHandler::init($translator, reportMissing: true);
 
@@ -163,9 +192,6 @@ final class TranslationKeyHandlerTest extends TestCase
         $this->assertInstanceOf(Union::class, $result);
         $this->assertTrue($result->hasString(), 'Expected string in union type');
         $this->assertTrue($result->hasArray(), 'Expected array in union type');
-
-        // Re-init with working translator for other tests
-        $this->setUp();
     }
 
     #[Test]
@@ -178,9 +204,6 @@ final class TranslationKeyHandlerTest extends TestCase
         $event = $this->createEvent('auth.failed');
 
         $this->assertNull(TranslationKeyHandler::getFunctionReturnType($event));
-
-        // Re-init for other tests
-        $this->setUp();
     }
 
     /**
@@ -205,9 +228,6 @@ final class TranslationKeyHandlerTest extends TestCase
 
         $this->assertInstanceOf(Union::class, $result);
         $this->assertTrue($result->isString(), "Expected string type for existing key even with reportMissing=false");
-
-        // Re-init for other tests
-        $this->setUp();
     }
 
     /**
@@ -225,9 +245,6 @@ final class TranslationKeyHandlerTest extends TestCase
         $event = $this->createEvent('nonexistent.key');
 
         $this->assertNull(TranslationKeyHandler::getFunctionReturnType($event));
-
-        // Re-init for other tests
-        $this->setUp();
     }
 
     #[Test]
