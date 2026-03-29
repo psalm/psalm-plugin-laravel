@@ -249,6 +249,14 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
 
         /** @var lowercase-string $methodName */
 
+        // Methods defined directly on the Model class (e.g., newQuery, newModelQuery)
+        // should be resolved by Psalm normally using the stub/source return types.
+        // Don't intercept them — otherwise Query\Builder methods with the same name
+        // (like Query\Builder::newQuery()) would shadow the Model's own definition.
+        if ($codebase->methodExists(new MethodIdentifier(Model::class, $methodName))) {
+            return self::$unresolvedCache[$key] = false;
+        }
+
         // Methods on Eloquent\Builder (e.g., where, get, first) are resolved by Psalm
         // via Model's @mixin Builder<static>. Don't interfere — let the mixin handle it.
         if ($codebase->methodExists(new MethodIdentifier(Builder::class, $methodName))) {
