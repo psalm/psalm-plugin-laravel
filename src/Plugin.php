@@ -28,7 +28,7 @@ use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\ModelMakeHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
-use Psalm\LaravelPlugin\Handlers\Translations\MissingTranslationHandler;
+use Psalm\LaravelPlugin\Handlers\Translations\TranslationKeyHandler;
 use Psalm\LaravelPlugin\Handlers\Validation\ValidatedTypeHandler;
 use Psalm\LaravelPlugin\Handlers\Validation\ValidationTaintHandler;
 use Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler;
@@ -71,9 +71,7 @@ final class Plugin implements PluginEntryPointInterface
                 ApplicationProvider::getApp()->configPath(),
             );
 
-            if ($pluginConfig->findMissingTranslations) {
-                $this->initMissingTranslationHandler($output);
-            }
+            $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations);
 
             if ($pluginConfig->findMissingViews) {
                 $this->initMissingViewHandler($output);
@@ -222,16 +220,14 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(CacheHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(PathHandler::class);
-        // MissingTranslationHandler must be registered before TransHandler because
+        // TranslationKeyHandler must be registered before TransHandler because
         // Psalm stops iterating handlers once one returns a non-null type.
-        // For existing keys, MissingTranslationHandler returns a precise type
+        // For existing keys, TranslationKeyHandler returns a precise type
         // (string or array), preempting TransHandler's less precise string|array.
         // For missing, dynamic, or namespaced keys, it returns null so
         // TransHandler can still provide a fallback type.
-        if ($pluginConfig->findMissingTranslations) {
-            require_once __DIR__ . '/Handlers/Translations/MissingTranslationHandler.php';
-            $registration->registerHooksFromClass(MissingTranslationHandler::class);
-        }
+        require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
+        $registration->registerHooksFromClass(TranslationKeyHandler::class);
 
         require_once __DIR__ . '/Handlers/Helpers/TransHandler.php';
         $registration->registerHooksFromClass(TransHandler::class);
@@ -255,16 +251,24 @@ final class Plugin implements PluginEntryPointInterface
      *
      * Uses Laravel's Translator::has() for key resolution, which handles PHP array files,
      * JSON files, vendor/package namespaces, and fallback locales automatically.
+     *
+     * Always called to enable precise type narrowing (string vs array) for translation
+     * keys. The $reportMissing flag controls only whether MissingTranslation issues
+     * are emitted for keys that don't exist.
      */
-    private function initMissingTranslationHandler(\Psalm\Progress\Progress $output): void
+    private function initTranslationKeyHandler(\Psalm\Progress\Progress $output, bool $reportMissing): void
     {
         $app = ApplicationProvider::getApp();
 
         if (!$app->bound('translator')) {
-            $output->warning(
-                'Laravel plugin: findMissingTranslations is enabled but the translator service is not bound. '
-                . 'The MissingTranslation check will be skipped.',
-            );
+            // Only warn when the user explicitly opted into missing translation detection —
+            // without it, they just lose the bonus type narrowing, which isn't worth a warning
+            if ($reportMissing) {
+                $output->warning(
+                    'Laravel plugin: findMissingTranslations is enabled but the translator service is not bound. '
+                    . 'The MissingTranslation check will be skipped.',
+                );
+            }
 
             return;
         }
@@ -272,15 +276,17 @@ final class Plugin implements PluginEntryPointInterface
         $translator = $app->make('translator');
 
         if (!$translator instanceof \Illuminate\Translation\Translator) {
-            $output->warning(
-                'Laravel plugin: findMissingTranslations is enabled but the translator is not an instance of '
-                . 'Illuminate\Translation\Translator. The MissingTranslation check will be skipped.',
-            );
+            if ($reportMissing) {
+                $output->warning(
+                    'Laravel plugin: findMissingTranslations is enabled but the translator is not an instance of '
+                    . 'Illuminate\Translation\Translator. The MissingTranslation check will be skipped.',
+                );
+            }
 
             return;
         }
 
-        MissingTranslationHandler::init($translator);
+        TranslationKeyHandler::init($translator, $reportMissing);
     }
 
     /**
