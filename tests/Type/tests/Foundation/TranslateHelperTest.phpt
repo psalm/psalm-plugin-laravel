@@ -1,7 +1,13 @@
 --FILE--
 <?php declare(strict_types=1);
 
-// __() with a string literal key returns string|array (not mixed)
+// __() with a string literal key that exists in the app's language files
+// returns a precise string type (MissingTranslationHandler narrows it)
+$_existing = __('auth.failed');
+/** @psalm-check-type-exact $_existing = string */
+
+// __() with a string literal key that does NOT exist in the app's language
+// files falls through to TransHandler's string|array union
 $_translated = __('messages.welcome');
 /** @psalm-check-type-exact $_translated = array|string */
 
