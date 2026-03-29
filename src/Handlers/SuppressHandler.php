@@ -35,6 +35,13 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         'PropertyNotSetInConstructor' => [
             'Illuminate\Queue\InteractsWithQueue',
         ],
+        // HasFactory has @template TFactory, but many Laravel models omit the
+        // annotation — the framework resolves the factory class via naming
+        // convention at runtime. Suppress the noise. Users who want type-safe
+        // factory() calls can add @use HasFactory<ConcreteFactory>.
+        'MissingTemplateParam' => [
+            'Illuminate\Database\Eloquent\Factories\HasFactory',
+        ],
     ];
 
     /**
