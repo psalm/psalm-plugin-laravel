@@ -18,7 +18,7 @@ use Psalm\Type\Union;
 
 /**
  * Detects calls to the view() helper and Factory::make() with a view name
- * that does not correspond to an existing Blade template file.
+ * that does not correspond to an existing template file.
  *
  * Only string literal view names are checked — dynamic names and namespaced
  * views (e.g., 'mail::html.header') are skipped to avoid false positives.
