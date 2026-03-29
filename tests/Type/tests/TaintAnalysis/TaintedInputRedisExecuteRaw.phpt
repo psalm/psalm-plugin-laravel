@@ -12,4 +12,3 @@ function runRawCommand(\Illuminate\Http\Request $request): void {
 ?>
 --EXPECTF--
 %ATaintedEval on line %d: Detected tainted code passed to eval or similar
-%A

@@ -34,7 +34,7 @@ class PhpRedisConnection extends Connection
      * @param  array  $parameters
      * @return mixed
      *
-     * @psalm-taint-sink input $parameters
+     * @psalm-taint-sink eval $parameters
      */
     public function executeRaw(array $parameters) {}
 }

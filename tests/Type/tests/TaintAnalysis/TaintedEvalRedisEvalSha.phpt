@@ -6,8 +6,8 @@
 function runUserScript(\Illuminate\Http\Request $request): void {
     /** @var \Illuminate\Redis\Connections\PhpRedisConnection $redis */
     $redis = app(\Illuminate\Redis\Connections\PhpRedisConnection::class);
-    $script = $request->input('script');
-    $redis->evalsha($script, 0);
+    $scriptSha = $request->input('script');
+    $redis->evalsha($scriptSha, 0);
 }
 ?>
 --EXPECTF--
