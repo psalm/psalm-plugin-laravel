@@ -11,7 +11,7 @@ function single_arg_to_get_cookie(): \Symfony\Component\HttpFoundation\Cookie
     return cookie('some.key');
 }
 
-function no_args(): \Illuminate\Cookie\CookieJar
+function cookie_no_args(): \Illuminate\Cookie\CookieJar
 {
     return cookie();
 }

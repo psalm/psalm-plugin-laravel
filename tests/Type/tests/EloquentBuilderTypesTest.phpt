@@ -5,7 +5,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use App\Models\User;
 
-final class UserRepository
+final class EloquentBuilderUserRepository
 {
     /** @return Builder<User> */
     public function getNewQuery(): Builder
