@@ -26,6 +26,7 @@ NC='\033[0m' # No Color
 UPDATE_BASELINE=false
 VERBOSE=false
 REMOVE=false
+PSALM_PASSED=false
 
 # Function to display script usage
 show_help() {
@@ -67,8 +68,13 @@ debug() {
 # Cleanup function
 cleanup() {
     if [ -d "$APP_INSTALLATION_PATH" ]; then
-        info "Removing the installation directory..."
-        rm -rf "$APP_INSTALLATION_PATH"
+        if [ "$PSALM_PASSED" = true ] || [ "$REMOVE" = true ]; then
+            rm -rf "$APP_INSTALLATION_PATH"
+            debug "Test Laravel app has been removed"
+        else
+            info "Test Laravel application preserved at $APP_INSTALLATION_PATH"
+            info "Run with --remove flag or delete manually: rm -rf $APP_INSTALLATION_PATH"
+        fi
     fi
 }
 
@@ -97,14 +103,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ "$REMOVE" = true ]; then
-    # Set up trap to clean up on script exit
-    trap cleanup EXIT
-fi
-
 # Get absolute path of script directory
 CURRENT_SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
-APP_INSTALLATION_PATH="$(dirname "$(dirname "$CURRENT_SCRIPT_PATH")")/tests-app/laravel-example"
+PROJECT_ROOT="$(dirname "$(dirname "$CURRENT_SCRIPT_PATH")")"
+APP_INSTALLATION_PATH="$PROJECT_ROOT/tests-app/laravel-example"
+
+trap cleanup EXIT
 
 if [ -d "$APP_INSTALLATION_PATH" ]; then
     info "Removing previous installation..."
@@ -112,7 +116,9 @@ if [ -d "$APP_INSTALLATION_PATH" ]; then
     info "Removed."
 fi
 
-info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} ..."
+RELATIVE_PATH="${APP_INSTALLATION_PATH#"$PROJECT_ROOT"/}"
+info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} at ${RELATIVE_PATH} ..."
+info "Tip: set LARAVEL_INSTALLER_VERSION to test against a different Laravel version"
 composer create-project --quiet --prefer-dist laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
 cd "$APP_INSTALLATION_PATH"
 
@@ -163,12 +169,11 @@ if [ "$UPDATE_BASELINE" = true ]; then
     info "Baseline file $PSALM_BASELINE is updated, please check the changes and commit them."
 else
     info "Running Psalm analysis"
+    # set -e ensures script exits on failure, so cleanup below only runs on success
     ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE"
 fi
 
 echo
 
-if [ "$REMOVE" = false ]; then
-    info "A sample Laravel application installed at the $APP_INSTALLATION_PATH directory."
-    info "Feel free to remove it."
-fi
+# Psalm succeeded — mark for cleanup by the EXIT trap
+PSALM_PASSED=true
