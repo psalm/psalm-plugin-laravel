@@ -32,6 +32,9 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     /** @var list<string> Absolute paths to view directories */
     private static array $viewPaths = [];
 
+    /** @var list<string> File extensions to check (from FileViewFinder::getExtensions()) */
+    private static array $extensions = ['blade.php', 'php'];
+
     private static bool $enabled = false;
 
     /** @var array<string, bool> Cached view existence results to avoid repeated filesystem checks */
@@ -39,14 +42,16 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
 
     /**
      * @param list<string> $viewPaths Absolute paths to view directories (from config('view.paths'))
+     * @param list<string> $extensions File extensions without leading dot (from FileViewFinder::getExtensions())
      * @psalm-external-mutation-free
      */
-    public static function init(array $viewPaths): void
+    public static function init(array $viewPaths, array $extensions = ['blade.php', 'php']): void
     {
         self::$viewPaths = \array_map(
             static fn(string $path): string => \rtrim($path, \DIRECTORY_SEPARATOR),
             $viewPaths,
         );
+        self::$extensions = $extensions;
         self::$enabled = true;
         self::$resolvedViews = [];
     }
@@ -198,8 +203,8 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
         $relativePath = \str_replace('.', \DIRECTORY_SEPARATOR, $viewName);
 
         foreach (self::$viewPaths as $basePath) {
-            foreach (['.blade.php', '.php'] as $extension) {
-                if (\file_exists($basePath . \DIRECTORY_SEPARATOR . $relativePath . $extension)) {
+            foreach (self::$extensions as $extension) {
+                if (\file_exists($basePath . \DIRECTORY_SEPARATOR . $relativePath . '.' . $extension)) {
                     self::$resolvedViews[$viewName] = true;
 
                     return true;

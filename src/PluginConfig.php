@@ -64,8 +64,9 @@ final readonly class PluginConfig
      *
      * Expects `<optionName value="true" />` or `<optionName value="false" />`.
      * Defaults to false when the option is absent.
+     *
+     * @psalm-pure
      */
-    /** @psalm-pure */
     private static function parseBool(?\SimpleXMLElement $config, string $name): bool
     {
         $value = (string) ($config?->{$name}['value'] ?? 'false');

@@ -34,6 +34,7 @@ final class MissingViewHandlerTest extends TestCase
         \file_put_contents(self::$fixtureDir . '/welcome.blade.php', '');
         \file_put_contents(self::$fixtureDir . '/emails/invite.blade.php', '');
         \file_put_contents(self::$fixtureDir . '/legacy.php', '');
+        \file_put_contents(self::$fixtureDir . '/plain.html', '');
     }
 
     public static function tearDownAfterClass(): void
@@ -56,7 +57,7 @@ final class MissingViewHandlerTest extends TestCase
 
     protected function setUp(): void
     {
-        MissingViewHandler::init([self::$fixtureDir]);
+        MissingViewHandler::init([self::$fixtureDir], ['blade.php', 'php', 'css', 'html']);
     }
 
     #[Test]
@@ -82,6 +83,7 @@ final class MissingViewHandlerTest extends TestCase
         yield 'blade template in root' => ['welcome'];
         yield 'blade template in subdirectory' => ['emails.invite'];
         yield 'php template' => ['legacy'];
+        yield 'html template' => ['plain'];
     }
 
     /**
@@ -122,7 +124,7 @@ final class MissingViewHandlerTest extends TestCase
     #[Test]
     public function normalizes_trailing_separator_in_view_paths(): void
     {
-        MissingViewHandler::init([self::$fixtureDir . '/']);
+        MissingViewHandler::init([self::$fixtureDir . '/'], ['blade.php', 'php', 'css', 'html']);
 
         $event = $this->createFunctionEvent('welcome');
 
@@ -141,7 +143,7 @@ final class MissingViewHandlerTest extends TestCase
         $this->assertNotInstanceOf(Union::class, MissingViewHandler::getFunctionReturnType($event));
 
         // Re-enable for other tests
-        MissingViewHandler::init([self::$fixtureDir]);
+        MissingViewHandler::init([self::$fixtureDir], ['blade.php', 'php', 'css', 'html']);
     }
 
     #[Test]
@@ -214,6 +216,60 @@ final class MissingViewHandlerTest extends TestCase
     public function method_skips_non_make_methods(): void
     {
         $event = $this->createMethodEvent('exists', 'nonexistent');
+
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
+    }
+
+    #[Test]
+    public function method_skips_no_arguments(): void
+    {
+        $source = $this->createStub(StatementsSource::class);
+        $source->method('getFilePath')->willReturn('/app/Http/Controllers/TestController.php');
+        $source->method('getFileName')->willReturn('TestController.php');
+
+        $methodCall = new MethodCall(
+            new Variable('factory'),
+            'make',
+        );
+        $methodCall->setAttribute('startFilePos', 0);
+        $methodCall->setAttribute('endFilePos', 10);
+        $methodCall->args = [];
+
+        $event = new MethodReturnTypeProviderEvent(
+            $source,
+            \Illuminate\View\Factory::class,
+            'make',
+            $methodCall,
+            new Context(),
+            new CodeLocation($source, $methodCall),
+        );
+
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
+    }
+
+    #[Test]
+    public function method_skips_dynamic_variable_argument(): void
+    {
+        $source = $this->createStub(StatementsSource::class);
+        $source->method('getFilePath')->willReturn('/app/Http/Controllers/TestController.php');
+        $source->method('getFileName')->willReturn('TestController.php');
+
+        $methodCall = new MethodCall(
+            new Variable('factory'),
+            'make',
+        );
+        $methodCall->setAttribute('startFilePos', 0);
+        $methodCall->setAttribute('endFilePos', 10);
+        $methodCall->args = [new Arg(new Variable('viewName'))];
+
+        $event = new MethodReturnTypeProviderEvent(
+            $source,
+            \Illuminate\View\Factory::class,
+            'make',
+            $methodCall,
+            new Context(),
+            new CodeLocation($source, $methodCall),
+        );
 
         $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
     }

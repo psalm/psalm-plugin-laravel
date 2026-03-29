@@ -71,6 +71,8 @@ final class Plugin implements PluginEntryPointInterface
                 ApplicationProvider::getApp()->configPath(),
             );
 
+            // Always called — provides type narrowing (string vs array) regardless
+            // of whether findMissingTranslations is enabled
             $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations);
 
             if ($pluginConfig->findMissingViews) {
@@ -240,6 +242,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(NoEnvOutsideConfigHandler::class);
 
+        // Unlike TranslationKeyHandler (which always runs for type narrowing),
+        // MissingViewHandler provides no type information — skip entirely when disabled
         if ($pluginConfig->findMissingViews) {
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(MissingViewHandler::class);
@@ -305,8 +309,17 @@ final class Plugin implements PluginEntryPointInterface
             /** @var \Illuminate\View\FileViewFinder $finder */
             $finder = $app->make('view.finder');
         } elseif ($app->bound('view')) {
-            /** @var \Illuminate\View\Factory $factory */
             $factory = $app->make('view');
+
+            if (!$factory instanceof \Illuminate\View\Factory) {
+                $output->warning(
+                    'Laravel plugin: findMissingViews is enabled but the view factory is not a standard instance. '
+                    . 'The MissingView check will be skipped.',
+                );
+
+                return;
+            }
+
             $finder = $factory->getFinder();
         } else {
             $output->warning(
@@ -329,7 +342,10 @@ final class Plugin implements PluginEntryPointInterface
         /** @var list<string> $paths */
         $paths = $finder->getPaths();
 
-        MissingViewHandler::init($paths);
+        /** @var list<string> $extensions */
+        $extensions = $finder->getExtensions();
+
+        MissingViewHandler::init($paths, $extensions);
     }
 
     private function buildSchema(PluginConfig $pluginConfig): void
