@@ -32,7 +32,9 @@ flowchart TD
         Eloquent — ModelRegistrationHandler, RelationsMethodHandler,
         ModelMethodHandler, BuilderScopeHandler
         Helpers — CacheHandler, PathHandler, TransHandler
-        Rules — NoEnvOutsideConfigHandler
+        Translations — TranslationKeyHandler
+        Views — MissingViewHandler
+        Rules — NoEnvOutsideConfigHandler, ModelMakeHandler
         Validation — ValidatedTypeHandler, ValidationTaintHandler
         SuppressHandler
     "]
@@ -156,7 +158,8 @@ flowchart LR
         args, call location, file path
         ----
         CacheHandler, PathHandler
-        TransHandler
+        TranslationKeyHandler, TransHandler
+        MissingViewHandler
         NoEnvOutsideConfigHandler"]
 
         A2["MethodReturnTypeProvider
@@ -172,6 +175,7 @@ flowchart LR
         BuilderScopeHandler, PathHandler
         CollectionPluckHandler
         CollectionFilterHandler
+        MissingViewHandler
         ValidatedTypeHandler"]
 
         A3["MethodParamsProvider
@@ -196,6 +200,13 @@ flowchart LR
         expression, node type info
         ----
         ValidationTaintHandler"]
+
+        A6["AfterExpressionAnalysis
+        on each expression
+        ----
+        expression AST, codebase
+        ----
+        ModelMakeHandler"]
     end
 
     scanning --> populated --> analysis

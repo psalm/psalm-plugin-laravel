@@ -192,7 +192,7 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Decision:** When a new feature has a strictness spectrum (e.g. sealed properties, migration inference), the default should be the least disruptive option. Stricter modes are opt-in via config.
 
-**Example:** `sealAllProperties="false"` by default. `columnFallback="none"` (no migration inference) by default.
+**Example:** `sealAllProperties="false"` by default. `columnFallback="migrations"` (migration inference) by default.
 
 **Why:** Users who install or upgrade the plugin should not be greeted with a wall of new errors. The plugin should improve analysis incrementally. Users who want stricter checking can enable it when they're ready.
 

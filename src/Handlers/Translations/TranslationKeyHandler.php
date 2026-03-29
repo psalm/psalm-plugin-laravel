@@ -151,7 +151,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         $resolvedType = self::resolveKey($translationKey);
 
-        if ($resolvedType instanceof \Psalm\Type\Union) {
+        if ($resolvedType !== null) {
             return $resolvedType;
         }
 
@@ -181,20 +181,20 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
      */
     private static function resolveKey(string $translationKey): ?Union
     {
-        if (!self::$translator instanceof \Illuminate\Translation\Translator) {
-            return null;
-        }
-
         if (\array_key_exists($translationKey, self::$resolvedKeys)) {
             return self::$resolvedKeys[$translationKey];
         }
 
+        // Caller (resolveTranslationType) guarantees $translator is set
+        \assert(self::$translator instanceof Translator);
+
         try {
             $exists = self::$translator->has($translationKey);
-        } catch (\Throwable) {
+        } catch (\Exception|\ParseError) {
             // Malformed language files can cause Translator::has() to throw:
             // - PHP syntax errors → \ParseError (subclass of \Error, not \Exception)
             // - Invalid JSON → \RuntimeException
+            // - Custom loaders → other \Exception subclasses
             // Return string|array to avoid emitting a false MissingTranslation
             // for a key that may actually exist.
             $fallback = Type::combineUnionTypes(Type::getString(), Type::getArray());
@@ -210,7 +210,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         try {
             $value = self::$translator->get($translationKey);
-        } catch (\Throwable) {
+        } catch (\Exception|\ParseError) {
             // Key exists but value cannot be retrieved. Same failure modes as
             // has() above (\ParseError for PHP files, \RuntimeException for JSON).
             // Return string|array to avoid false positives, matching TransHandler's fallback.
