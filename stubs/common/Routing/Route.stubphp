@@ -21,4 +21,53 @@ class Route
      * @return ($key is null ? array : mixed)
      */
     public function getAction($key = null) {}
+
+    /**
+     * Get a given parameter from the route.
+     *
+     * @param  string  $name
+     * @param  string|object|null  $default
+     * @return string|object|null
+     *
+     * @psalm-taint-source input
+     */
+    public function parameter($name, $default = null) {}
+
+    /**
+     * Get the key / value list of parameters for the route.
+     *
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function parameters() {}
+
+    /**
+     * Get the key / value list of parameters without null values.
+     *
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function parametersWithoutNulls() {}
+
+    /**
+     * Get original value of a given parameter from the route.
+     *
+     * @param  string  $name
+     * @param  string|null  $default
+     * @return string|null
+     *
+     * @psalm-taint-source input
+     */
+    public function originalParameter($name, $default = null) {}
+
+    /**
+     * Get the key / value list of original parameters for the route.
+     *
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function originalParameters() {}
 }
