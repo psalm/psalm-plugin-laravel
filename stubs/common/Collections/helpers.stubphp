@@ -4,7 +4,18 @@
  * Stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Collections/helpers.php}
  */
 
-// collect: nothing to stub
+/**
+ * Create a collection from the given value.
+ *
+ * Without this stub, `collect()` with no args infers `Collection<never, never>` from the `[]` default.
+ *
+ * @template TKey of array-key
+ * @template TValue
+ *
+ * @param  \Illuminate\Contracts\Support\Arrayable<TKey, TValue>|iterable<TKey, TValue>|null  $value
+ * @psalm-return (func_num_args() is 0 ? \Illuminate\Support\Collection<array-key, mixed> : \Illuminate\Support\Collection<TKey, TValue>)
+ */
+function collect($value = []) {}
 
 /**
  * Fill in data where it's missing.
@@ -19,7 +30,20 @@
  */
 function data_fill(&$target, $key, $value) {}
 
-// data_get: nothing to stub
+/**
+ * Get an item from an array or object using "dot" notation.
+ *
+ * When $key is null, the $target is returned as-is (identity function).
+ * For non-null keys, dot-notation traversal result type can't be determined statically.
+ *
+ * @template TTarget
+ *
+ * @param  TTarget  $target
+ * @param  string|array|int|null  $key
+ * @param  mixed  $default
+ * @return ($key is null ? TTarget : mixed)
+ */
+function data_get($target, $key, $default = null) {}
 
 /**
  * Set an item on an array or object using dot notation.
@@ -33,8 +57,6 @@ function data_fill(&$target, $key, $value) {}
  * @psalm-return TTarget is array ? array : TTarget
  */
 function data_set(&$target, $key, $value, $overwrite = true) {}
-
-// data_set: nothing to stub
 
 /**
  * Get the first element of an array. Useful for method chaining.

@@ -32,6 +32,41 @@ class Builder
     public function raw($value) {}
 
     /**
+     * Set the columns to be selected.
+     *
+     * Accepts an array of columns or variadic string arguments via func_get_args().
+     *
+     * @param  array<array-key, \Closure|\Illuminate\Contracts\Database\Query\Expression|\Illuminate\Database\Query\Builder|string>|\Illuminate\Contracts\Database\Query\Expression|string  $columns
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function select($columns = ['*']) {}
+
+    /**
+     * Add a new select column to the query.
+     *
+     * Accepts an array of columns or variadic string arguments via func_get_args().
+     *
+     * @param  array<array-key, \Closure|\Illuminate\Contracts\Database\Query\Expression|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation|string>|\Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function addSelect($column) {}
+
+    /**
+     * Force the query to only return distinct results.
+     *
+     * Accepts variadic column names via func_get_args(), or a boolean to toggle distinct on/off.
+     *
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function distinct() {}
+
+    /**
      * Add a new "raw" select expression to the query.
      *
      * @param  string  $expression
