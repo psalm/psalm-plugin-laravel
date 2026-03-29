@@ -135,7 +135,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         CodeLocation $codeLocation,
         array $suppressedIssues,
     ): ?Union {
-        if (self::$translator === null) {
+        if (!self::$translator instanceof \Illuminate\Translation\Translator) {
             return null;
         }
 
@@ -151,7 +151,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         $resolvedType = self::resolveKey($translationKey);
 
-        if ($resolvedType !== null) {
+        if ($resolvedType instanceof \Psalm\Type\Union) {
             return $resolvedType;
         }
 
@@ -181,7 +181,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
      */
     private static function resolveKey(string $translationKey): ?Union
     {
-        if (self::$translator === null) {
+        if (!self::$translator instanceof \Illuminate\Translation\Translator) {
             return null;
         }
 
