@@ -11,7 +11,7 @@ function array_arg_to_set_session(): null
     return session(['some-key' => 42]);
 }
 
-function no_args(): \Illuminate\Session\SessionManager
+function session_no_args(): \Illuminate\Session\SessionManager
 {
     return session();
 }
