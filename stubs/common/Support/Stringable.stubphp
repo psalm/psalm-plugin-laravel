@@ -1,0 +1,49 @@
+<?php
+
+namespace Illuminate\Support;
+
+/**
+ * Taint flow stubs for Illuminate\Support\Stringable.
+ *
+ * Methods that accept additional string parameters (append, prepend, replace, etc.)
+ * can inject tainted data into the chain. The @psalm-flow annotations below ensure
+ * taint from those parameters reaches the return value.
+ *
+ * Note: taint propagation from $this through chains (e.g. Str::of($tainted)->trim())
+ * is a Psalm limitation — @psalm-flow does not support $this as a source.
+ */
+class Stringable
+{
+    /** @psalm-flow ($values) -> return */
+    public function append(...$values) {}
+
+    /** @psalm-flow ($values) -> return */
+    public function prepend(...$values) {}
+
+    /** @psalm-flow ($before, $after) -> return */
+    public function wrap($before, $after = null) {}
+
+    /** @psalm-flow ($replace) -> return */
+    public function replace($search, $replace, $caseSensitive = true) {}
+
+    /** @psalm-flow ($replace) -> return */
+    public function replaceArray($search, $replace) {}
+
+    /** @psalm-flow ($replace) -> return */
+    public function replaceFirst($search, $replace) {}
+
+    /** @psalm-flow ($replace) -> return */
+    public function replaceStart($search, $replace) {}
+
+    /** @psalm-flow ($replace) -> return */
+    public function replaceLast($search, $replace) {}
+
+    /** @psalm-flow ($replace) -> return */
+    public function replaceEnd($search, $replace) {}
+
+    /** @psalm-flow ($replace) -> return */
+    public function replaceMatches($pattern, $replace, $limit = -1) {}
+
+    /** @psalm-flow ($replace) -> return */
+    public function substrReplace($replace, $offset = 0, $length = null) {}
+}
