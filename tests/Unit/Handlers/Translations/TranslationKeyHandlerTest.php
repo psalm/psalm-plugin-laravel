@@ -203,7 +203,7 @@ final class TranslationKeyHandlerTest extends TestCase
 
         $event = $this->createEvent('auth.failed');
 
-        $this->assertNull(TranslationKeyHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, TranslationKeyHandler::getFunctionReturnType($event));
     }
 
     /**
@@ -244,7 +244,7 @@ final class TranslationKeyHandlerTest extends TestCase
 
         $event = $this->createEvent('nonexistent.key');
 
-        $this->assertNull(TranslationKeyHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, TranslationKeyHandler::getFunctionReturnType($event));
     }
 
     #[Test]
