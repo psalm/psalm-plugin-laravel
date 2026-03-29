@@ -16,12 +16,6 @@
         }
     ],
     "homepage": "https://github.com/psalm/psalm-plugin-laravel",
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/alies-dev/psalm-tester"
-        }
-    ],
     "require": {
         "php": "^8.2",
         "ext-simplexml": "*",
@@ -50,6 +44,12 @@
         "rector/rector": "^2.3",
         "symfony/http-foundation": "^7.1"
     },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/alies-dev/psalm-tester"
+        }
+    ],
     "minimum-stability": "dev",
     "prefer-stable": true,
     "autoload": {
@@ -91,13 +91,21 @@
             "@cs:check",
             "@psalm",
             "@test:unit",
-            "@test:type"
+            "@test:type",
+            "echo '\n\nThese tests do not include testing on a real Laravel app. You can run that via `composer test:app`'"
+        ],
+        "test:all": [
+            "@cs:check",
+            "@psalm",
+            "@test:unit",
+            "@test:type",
+            "@test:app"
         ],
         "test:app": "./tests/Application/laravel-test.sh",
         "test:type": [
             "Composer\\Config::disableProcessTimeout",
             "phpunit --testsuite=type"
         ],
-        "test:unit": "phpunit --testsuite=unit"
+        "test:unit": "phpunit --testsuite=unit --display-notices --display-phpunit-notices"
     }
 }

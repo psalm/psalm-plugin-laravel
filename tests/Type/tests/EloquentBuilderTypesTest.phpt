@@ -10,13 +10,17 @@ final class UserRepository
     /** @return Builder<User> */
     public function getNewQuery(): Builder
     {
-        return User::query();
+        $query = (new User())->newQuery();
+        /** @psalm-check-type-exact $query = Builder<User&static> */
+        return $query;
     }
 
     /** @return Builder<User> */
     public function getNewModelQuery(): Builder
     {
-        return (new User())->newModelQuery();
+        $query = (new User())->newModelQuery();
+        /** @psalm-check-type-exact $query = Builder<User&static> */
+        return $query;
     }
 
     /** @param Builder<User> $builder */
