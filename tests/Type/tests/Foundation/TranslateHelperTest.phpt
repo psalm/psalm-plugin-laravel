@@ -2,7 +2,7 @@
 <?php declare(strict_types=1);
 
 // __() with a string literal key that exists in the app's language files
-// returns a precise string type (MissingTranslationHandler narrows it)
+// returns a precise string type (TranslationKeyHandler narrows it)
 $_existing = __('auth.failed');
 /** @psalm-check-type-exact $_existing = string */
 
