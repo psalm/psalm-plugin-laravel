@@ -85,6 +85,7 @@ function back($status = 302, $headers = [], $fallback = false) {}
  * @return non-empty-string
  *
  * @psalm-taint-escape user_secret
+ * @psalm-taint-escape system_secret
  */
 function bcrypt($value, $options = []) {}
 

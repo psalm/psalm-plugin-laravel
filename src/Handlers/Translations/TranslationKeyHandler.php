@@ -16,8 +16,9 @@ use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
- * Detects calls to __() and trans() with a translation key that does not
- * exist in the application's language files.
+ * Resolves precise return types for __() and trans() by checking whether
+ * translation keys exist in the application's language files, and
+ * optionally reports missing keys as MissingTranslation issues.
  *
  * Uses Laravel's Translator::has() from the booted application, which
  * handles PHP array files, JSON files, vendor/package namespaces, and
@@ -27,21 +28,25 @@ use Psalm\Type\Union;
  * concatenation) and namespaced package keys (e.g., 'package::file.key')
  * are skipped to avoid false positives.
  *
- * Must be registered before TransHandler in Plugin.php — Psalm stops
- * iterating handlers once one returns a non-null type. When enabled,
- * this handler returns a precise type (string or array) for keys that
- * exist, preventing TransHandler from running (which would return
- * the less precise string|array union). For missing, dynamic, or
- * namespaced keys, it returns null so TransHandler can still provide
- * a fallback type.
+ * Always registered before TransHandler in Plugin.php — Psalm stops
+ * iterating handlers once one returns a non-null type. For existing
+ * keys, this handler returns a precise type (string or array),
+ * preempting TransHandler's less precise string|array union. For
+ * missing, dynamic, or namespaced keys, it returns null so TransHandler
+ * can still provide a fallback type.
+ *
+ * The findMissingTranslations config option controls only whether
+ * MissingTranslation issues are emitted — type narrowing is always
+ * active when the translator is available.
  *
  * @see https://laravel.com/docs/localization
  */
-final class MissingTranslationHandler implements FunctionReturnTypeProviderInterface
+final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 {
     private static ?Translator $translator = null;
 
-    private static bool $enabled = false;
+    /** Whether to emit MissingTranslation issues for keys not found in language files */
+    private static bool $reportMissing = false;
 
     /**
      * Cached translation resolution results.
@@ -54,10 +59,10 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
     private static array $resolvedKeys = [];
 
     /** @psalm-external-mutation-free */
-    public static function init(Translator $translator): void
+    public static function init(Translator $translator, bool $reportMissing): void
     {
         self::$translator = $translator;
-        self::$enabled = true;
+        self::$reportMissing = $reportMissing;
         self::$resolvedKeys = [];
     }
 
@@ -114,8 +119,8 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
     }
 
     /**
-     * Resolve the return type for a translation key, emitting MissingTranslation
-     * when the key does not exist.
+     * Resolve the return type for a translation key, optionally emitting
+     * MissingTranslation when the key does not exist and reporting is enabled.
      *
      * Skips namespaced keys (containing '::') since those belong to packages
      * whose translations may not be published to the app's lang/ directory.
@@ -130,7 +135,7 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
         CodeLocation $codeLocation,
         array $suppressedIssues,
     ): ?Union {
-        if (!self::$enabled || self::$translator === null) {
+        if (self::$translator === null) {
             return null;
         }
 
@@ -150,14 +155,17 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
             return $resolvedType;
         }
 
-        // Key does not exist — emit the issue and fall through to TransHandler
-        IssueBuffer::accepts(
-            new MissingTranslation(
-                "Translation key '{$translationKey}' not found in language files",
-                $codeLocation,
-            ),
-            $suppressedIssues,
-        );
+        // Key does not exist — emit the issue only when findMissingTranslations
+        // is enabled, then fall through to TransHandler for the fallback type
+        if (self::$reportMissing) {
+            IssueBuffer::accepts(
+                new MissingTranslation(
+                    "Translation key '{$translationKey}' not found in language files",
+                    $codeLocation,
+                ),
+                $suppressedIssues,
+            );
+        }
 
         return null;
     }
