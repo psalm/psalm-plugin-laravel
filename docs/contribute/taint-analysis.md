@@ -100,7 +100,7 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 | `ssrf`          | Server-side request forgery               | `Http::get($url)`                             | --                                            |
 | `file`          | Path traversal                            | `Filesystem::get()`, `response()->download()` | --                                            |
 | `user_secret`   | Password/token exposure in logs or output | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
-| `system_secret` | Internal secret exposure                  | `echo`, log sinks                             | `Encrypter::encrypt()`                        |
+| `system_secret` | Internal secret exposure                  | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
 
 ### All available kinds
 
@@ -198,6 +198,38 @@ When a function passes taint through without escaping or sinking, use `@psalm-fl
  */
 function inputOutputHandler(string $value, string ...$items): string {}
 ```
+
+## Known limitations of `@psalm-flow`
+
+### `$this` is not supported as a flow source
+
+`@psalm-flow ($this) -> return` **does not work**. Psalm's flow parser only matches named method parameters — `$this` is never in that list. The annotation is silently ignored with no error.
+
+This means you cannot declare taint flow from an object instance to a method's return value via stubs. For fluent/builder classes like `Stringable`, taint entering via `Str::of($tainted)` will not automatically propagate through chained methods like `->trim()->lower()->toString()`.
+
+**Workarounds:**
+- Annotate the **entry point** (`Str::of()`, `str()`) with `@psalm-flow ($param) -> return` so the returned object carries taint
+- Annotate methods that accept **additional tainted parameters** (like `append($values)`) with `@psalm-flow ($values) -> return`
+- For full `$this` → return propagation, a handler using `AfterMethodCallAnalysisInterface` is needed (not yet implemented)
+
+### Flow-through factories need `@psalm-taint-specialize`
+
+When a function has `@psalm-flow ($param) -> return` without `@psalm-taint-specialize`, Psalm merges taint from **all call sites globally**. This means one tainted call site poisons all others:
+
+```php
+// WITHOUT @psalm-taint-specialize:
+// Str::of($request->input('name')) at line 10 taints ALL Str::of() calls,
+// so Str::of('safe literal') at line 20 is falsely reported as tainted.
+
+// CORRECT: pair both annotations on pure flow-through factories
+/**
+ * @psalm-taint-specialize
+ * @psalm-flow ($string) -> return
+ */
+public static function of($string) {}
+```
+
+This differs from **escape functions** like `e()`, where `@psalm-taint-specialize` is not needed because the escape annotation removes the dangerous taint kind regardless of call site. Pure flow-through functions (no escape/unescape) must always pair `@psalm-taint-specialize` with `@psalm-flow`.
 
 ## Stub authoring checklist
 
