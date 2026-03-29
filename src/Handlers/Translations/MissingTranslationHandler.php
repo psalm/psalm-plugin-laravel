@@ -183,10 +183,12 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
 
         try {
             $exists = self::$translator->has($translationKey);
-        } catch (\Exception) {
-            // Malformed language files (PHP syntax errors, invalid JSON) can cause
-            // Translator::has() to throw. Return string|array to avoid emitting
-            // a false MissingTranslation for a key that may actually exist.
+        } catch (\Throwable) {
+            // Malformed language files can cause Translator::has() to throw:
+            // - PHP syntax errors → \ParseError (subclass of \Error, not \Exception)
+            // - Invalid JSON → \RuntimeException
+            // Return string|array to avoid emitting a false MissingTranslation
+            // for a key that may actually exist.
             $fallback = Type::combineUnionTypes(Type::getString(), Type::getArray());
 
             return self::$resolvedKeys[$translationKey] = $fallback;
@@ -200,9 +202,10 @@ final class MissingTranslationHandler implements FunctionReturnTypeProviderInter
 
         try {
             $value = self::$translator->get($translationKey);
-        } catch (\Exception) {
-            // Key exists but value cannot be retrieved — return string|array
-            // to avoid false positives, matching TransHandler's fallback.
+        } catch (\Throwable) {
+            // Key exists but value cannot be retrieved. Same failure modes as
+            // has() above (\ParseError for PHP files, \RuntimeException for JSON).
+            // Return string|array to avoid false positives, matching TransHandler's fallback.
             $fallback = Type::combineUnionTypes(Type::getString(), Type::getArray());
 
             return self::$resolvedKeys[$translationKey] = $fallback;
