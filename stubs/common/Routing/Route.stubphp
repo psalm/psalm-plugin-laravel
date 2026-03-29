@@ -25,9 +25,11 @@ class Route
     /**
      * Get a given parameter from the route.
      *
+     * @template TDefault
+     *
      * @param  string  $name
-     * @param  string|object|null  $default
-     * @return string|object|null
+     * @param  TDefault  $default
+     * @return string|object|TDefault|null
      *
      * @psalm-taint-source input
      */
@@ -54,9 +56,11 @@ class Route
     /**
      * Get original value of a given parameter from the route.
      *
+     * @template TDefault
+     *
      * @param  string  $name
-     * @param  string|null  $default
-     * @return string|null
+     * @param  TDefault  $default
+     * @return string|TDefault|null
      *
      * @psalm-taint-source input
      */
