@@ -137,6 +137,9 @@ function retry($times, callable $callback, $sleepMilliseconds = 0, $when = null)
  *  ? (stringable-object&\Illuminate\Support\Str)
  *  : \Illuminate\Support\Stringable
  * )
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($string) -> return
  */
 function str($string = null) {}
 
