@@ -18,7 +18,7 @@ class CustomMakeModel extends Model {
     }
 }
 
-/** Model inheriting a custom make() from a non-Model parent — should NOT be flagged */
+/** Model inheriting a custom make() from a non-base Model subclass — should NOT be flagged */
 class ChildOfCustom extends CustomMakeModel {}
 
 trait HasCustomMake {
