@@ -2,7 +2,9 @@
 
 namespace Illuminate\Filesystem;
 
-class FilesystemAdapter
+use Illuminate\Contracts\Filesystem\Cloud as CloudFilesystemContract;
+
+class FilesystemAdapter implements CloudFilesystemContract
 {
     /**
      * Determine if a file or directory exists.

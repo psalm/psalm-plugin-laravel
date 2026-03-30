@@ -2,7 +2,10 @@
 
 namespace Illuminate\Auth;
 
-class SessionGuard
+use Illuminate\Contracts\Auth\StatefulGuard;
+use Illuminate\Contracts\Auth\SupportsBasicAuth;
+
+class SessionGuard implements StatefulGuard, SupportsBasicAuth
 {
     /**
      * Create a HMAC of the password hash for storage in cookies.

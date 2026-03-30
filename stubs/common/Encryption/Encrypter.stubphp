@@ -2,7 +2,10 @@
 
 namespace Illuminate\Encryption;
 
-class Encrypter
+use Illuminate\Contracts\Encryption\Encrypter as EncrypterContract;
+use Illuminate\Contracts\Encryption\StringEncrypter;
+
+class Encrypter implements EncrypterContract, StringEncrypter
 {
     /**
      * Encrypt the given value.

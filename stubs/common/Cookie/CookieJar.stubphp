@@ -2,9 +2,10 @@
 
 namespace Illuminate\Cookie;
 
+use Illuminate\Contracts\Cookie\QueueingFactory;
 use Symfony\Component\HttpFoundation\Cookie;
 
-class CookieJar
+class CookieJar implements QueueingFactory
 {
     /**
      * Create a new cookie instance.

@@ -2,7 +2,9 @@
 
 namespace Illuminate\Support\Testing\Fakes;
 
-class EventFake
+use Illuminate\Contracts\Events\Dispatcher;
+
+class EventFake implements Dispatcher, Fake
 {
     /**
      * Assert if an event has a listener attached to it.
