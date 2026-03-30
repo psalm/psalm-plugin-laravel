@@ -19,7 +19,8 @@ For Psalm's upstream taint analysis documentation, see:
 
 ## Stub location
 
-Taint annotations live in `stubs/common/` alongside type stubs, organized by Laravel namespace. Psalm 7 runs taint analysis by default (`$run_taint_analysis = true`), so there is no need for a separate directory.
+Taint annotations live in `stubs/common/` alongside type stubs, organized by Laravel namespace.
+Psalm 7 runs taint analysis by default (`$run_taint_analysis = true`), so there is no need for a separate directory.
 
 ## Annotations quick reference
 
