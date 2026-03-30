@@ -2,7 +2,9 @@
 
 namespace Illuminate\Auth;
 
-class TokenGuard
+use Illuminate\Contracts\Auth\Guard;
+
+class TokenGuard implements Guard
 {
     /**
      * Get the token for the current request.

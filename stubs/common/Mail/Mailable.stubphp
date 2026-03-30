@@ -2,7 +2,10 @@
 
 namespace Illuminate\Mail;
 
-class Mailable
+use Illuminate\Contracts\Mail\Mailable as MailableContract;
+use Illuminate\Contracts\Support\Renderable;
+
+class Mailable implements MailableContract, Renderable
 {
     /**
      * Set the sender of the message.
