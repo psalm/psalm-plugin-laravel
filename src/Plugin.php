@@ -24,7 +24,6 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
 use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
-use Psalm\LaravelPlugin\Handlers\Helpers\TransHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\ModelMakeHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\LaravelPlugin\Handlers\SuppressHandler;
@@ -222,17 +221,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(CacheHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(PathHandler::class);
-        // TranslationKeyHandler must be registered before TransHandler because
-        // Psalm stops iterating handlers once one returns a non-null type.
-        // For existing keys, TranslationKeyHandler returns a precise type
-        // (string or array), preempting TransHandler's less precise string|array.
-        // For missing, dynamic, or namespaced keys, it returns null so
-        // TransHandler can still provide a fallback type.
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         $registration->registerHooksFromClass(TranslationKeyHandler::class);
-
-        require_once __DIR__ . '/Handlers/Helpers/TransHandler.php';
-        $registration->registerHooksFromClass(TransHandler::class);
 
         require_once __DIR__ . '/Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(SuppressHandler::class);

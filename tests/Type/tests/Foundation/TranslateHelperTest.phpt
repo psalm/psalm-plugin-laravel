@@ -2,14 +2,14 @@
 <?php declare(strict_types=1);
 
 // __() with a string literal key that exists in the app's language files
-// returns a precise string type (TranslationKeyHandler narrows it)
+// returns a precise non-empty-string type (TranslationKeyHandler narrows it)
 $_existing = __('auth.failed');
-/** @psalm-check-type-exact $_existing = string */
+/** @psalm-check-type-exact $_existing = non-empty-string */
 
 // __() with a string literal key that does NOT exist in the app's language
-// files falls through to TransHandler's string|array union
+// files falls through to TransHandler which returns string (dynamic fallback)
 $_translated = __('messages.welcome');
-/** @psalm-check-type-exact $_translated = array|string */
+/** @psalm-check-type-exact $_translated = string */
 
 // __() with no args returns null
 $_null = __();
@@ -19,20 +19,20 @@ $_null = __();
 $_nullKey = __(null);
 /** @psalm-check-type-exact $_nullKey = null */
 
-// trans() with a string literal key returns string|array
+// trans() with a string literal key returns string (dynamic fallback)
 $_trans = trans('messages.welcome');
-/** @psalm-check-type-exact $_trans = array|string */
+/** @psalm-check-type-exact $_trans = string */
 
-// __() with a string variable key returns string|array
+// __() with a string variable key returns string (dynamic fallback)
 $key = 'messages.welcome';
 $_dynamicTrans = __($key);
-/** @psalm-check-type-exact $_dynamicTrans = array|string */
+/** @psalm-check-type-exact $_dynamicTrans = string */
 
-// __() with nullable key returns string|array|null
+// __() with nullable key returns string|null
 /** @var string|null $maybeKey */
 $maybeKey = rand(0, 1) ? 'key' : null;
 $_nullable = __($maybeKey);
-/** @psalm-check-type-exact $_nullable = array|string|null */
+/** @psalm-check-type-exact $_nullable = null|string */
 
 // trans() with no args returns the Translator instance
 $_translator = trans();

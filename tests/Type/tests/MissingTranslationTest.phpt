@@ -12,20 +12,20 @@ trans('messages.missing');
 
 // Existing translations — should return narrowed string type
 $failed = __('auth.failed');
-/** @psalm-check-type-exact $failed = string */
+/** @psalm-check-type-exact $failed = non-empty-string */
 echo $failed;
 
 $password = trans('auth.password');
-/** @psalm-check-type-exact $password = string */
+/** @psalm-check-type-exact $password = non-empty-string */
 echo $password;
 
 $throttle = __('auth.throttle');
-/** @psalm-check-type-exact $throttle = string */
+/** @psalm-check-type-exact $throttle = non-empty-string */
 echo $throttle;
 
 // Existing translations — array type (validation.between is an array in Laravel)
 $between = __('validation.between');
-/** @psalm-check-type-exact $between = array<array-key, mixed> */
+/** @psalm-check-type-exact $between = non-empty-array<array-key, mixed> */
 print_r($between);
 
 // No arguments — should not emit

@@ -13,27 +13,26 @@ use Psalm\LaravelPlugin\Issues\MissingTranslation;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
+use Psalm\Type\Atomic\TNonEmptyArray;
 use Psalm\Type\Union;
 
 /**
- * Resolves precise return types for __() and trans() by checking whether
- * translation keys exist in the application's language files, and
- * optionally reports missing keys as MissingTranslation issues.
+ * Resolves return types for __() and trans() translation helpers.
  *
- * Uses Laravel's Translator::has() from the booted application, which
- * handles PHP array files, JSON files, vendor/package namespaces, and
- * fallback locales automatically.
+ * For literal string keys, uses Laravel's Translator to determine
+ * whether the key exists and returns a precise type (non-empty-string,
+ * non-empty-array, or string for missing keys). Optionally emits
+ * MissingTranslation issues for keys not found in language files.
  *
- * Only string literal keys are checked — dynamic keys (variables,
- * concatenation) and namespaced package keys (e.g., 'package::file.key')
- * are skipped to avoid false positives.
+ * For dynamic keys (variables, sprintf, concatenation), returns string
+ * as a safe fallback — avoids the string|array union that causes
+ * widespread PossiblyInvalidCast noise in real projects.
  *
- * Always registered before TransHandler in Plugin.php — Psalm stops
- * iterating handlers once one returns a non-null type. For existing
- * keys, this handler returns a precise type (string or array),
- * preempting TransHandler's less precise string|array union. For
- * missing, dynamic, or namespaced keys, it returns null so TransHandler
- * can still provide a fallback type.
+ * Namespaced package keys (e.g., 'package::file.key') are skipped
+ * since packages may not have their translations published.
+ *
+ * Falls back to the stub conditional return type for edge cases
+ * like __() with no args (null) or trans() with no args (Translator).
  *
  * The findMissingTranslations config option controls only whether
  * MissingTranslation issues are emitted — type narrowing is always
@@ -83,20 +82,41 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         $callArgs = $event->getCallArgs();
 
         if ($callArgs === []) {
+            // __() returns null, trans() returns Translator — handled by stubs
             return null;
         }
 
+        // Try to resolve literal string keys precisely via the Translator
         $translationKey = self::extractLiteralStringArg($callArgs[0]);
 
-        if ($translationKey === null) {
-            return null;
+        if ($translationKey !== null) {
+            $resolved = self::resolveTranslationType(
+                $translationKey,
+                $event->getCodeLocation(),
+                $event->getStatementsSource()->getSuppressedIssues(),
+            );
+
+            if ($resolved !== null) {
+                return $resolved;
+            }
         }
 
-        return self::resolveTranslationType(
-            $translationKey,
-            $event->getCodeLocation(),
-            $event->getStatementsSource()->getSuppressedIssues(),
-        );
+        // Dynamic keys (variables, sprintf, concatenation) or missing literal keys:
+        // return string to avoid PossiblyInvalidCast noise from string|array union
+        $firstArgType = $event->getStatementsSource()->getNodeTypeProvider()->getType($callArgs[0]->value);
+
+        if ($firstArgType !== null) {
+            if ($firstArgType->isString()) {
+                return Type::getString();
+            }
+
+            if ($firstArgType->isNullable() && $firstArgType->hasString()) {
+                return Type::combineUnionTypes(Type::getString(), Type::getNull());
+            }
+        }
+
+        // Non-string args (e.g. __(null)) — handled by stubs
+        return null;
     }
 
     /**
@@ -151,7 +171,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         $resolvedType = self::resolveKey($translationKey);
 
-        if ($resolvedType !== null) {
+        if ($resolvedType instanceof \Psalm\Type\Union) {
             return $resolvedType;
         }
 
@@ -219,9 +239,15 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
             return self::$resolvedKeys[$translationKey] = $fallback;
         }
 
-        $type = \is_array($value)
-            ? Type::getArray()
-            : Type::getString();
+        if (\is_array($value)) {
+            $type = $value !== []
+                ? new Union([new TNonEmptyArray([Type::getArrayKey(), Type::getMixed()])])
+                : Type::getArray();
+        } else {
+            $type = $value !== ''
+                ? Type::getNonEmptyString()
+                : Type::getString();
+        }
 
         self::$resolvedKeys[$translationKey] = $type;
 

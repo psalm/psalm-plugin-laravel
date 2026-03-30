@@ -329,8 +329,6 @@ function to_route($route, $parameters = [], $status = 302, $headers = []) {}
  * @param  array<string, scalar>  $replace
  * @param  string|null  $locale
  * @return ($key is null ? null : string|array)
- * @psalm-return ($key is null ? null : mixed) To reduce the number of PossiblyInvalidCast and RedundantCast issues
- *
  */
 function __($key = null, $replace = [], $locale = null) {}
 
