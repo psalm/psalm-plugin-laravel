@@ -3,13 +3,16 @@
 
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Contracts\Auth\StatefulGuard;
+use Illuminate\Contracts\Auth\SupportsBasicAuth;
 use Illuminate\Contracts\Console\Kernel as KernelContract;
 use Illuminate\Contracts\Database\Query\Builder as BuilderContract;
 use Illuminate\Contracts\Encryption\Encrypter as EncrypterContract;
+use Illuminate\Contracts\Encryption\StringEncrypter;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Filesystem\Cloud as CloudFilesystemContract;
 use Illuminate\Contracts\Mail\Mailable as MailableContract;
 use Illuminate\Contracts\Routing\ResponseFactory as FactoryContract;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\Support\ValidatedData;
 use Illuminate\Database\ConnectionInterface;
 
@@ -20,6 +23,11 @@ use Illuminate\Database\ConnectionInterface;
 final class StubInterfaceTest
 {
     public function encrypterImplementsContract(\Illuminate\Encryption\Encrypter $e): EncrypterContract
+    {
+        return $e;
+    }
+
+    public function encrypterImplementsStringEncrypter(\Illuminate\Encryption\Encrypter $e): StringEncrypter
     {
         return $e;
     }
@@ -35,6 +43,11 @@ final class StubInterfaceTest
     }
 
     public function sessionGuardImplementsStatefulGuard(\Illuminate\Auth\SessionGuard $g): StatefulGuard
+    {
+        return $g;
+    }
+
+    public function sessionGuardImplementsSupportsBasicAuth(\Illuminate\Auth\SessionGuard $g): SupportsBasicAuth
     {
         return $g;
     }
@@ -72,6 +85,42 @@ final class StubInterfaceTest
     public function eventFakeImplementsDispatcher(\Illuminate\Support\Testing\Fakes\EventFake $f): Dispatcher
     {
         return $f;
+    }
+
+    public function htmlStringImplementsHtmlable(\Illuminate\Support\HtmlString $h): Htmlable
+    {
+        return $h;
+    }
+
+    public function htmlStringImplementsStringable(\Illuminate\Support\HtmlString $h): \Stringable
+    {
+        return $h;
+    }
+
+    public function jsImplementsHtmlable(\Illuminate\Support\Js $j): Htmlable
+    {
+        return $j;
+    }
+
+    public function jsImplementsStringable(\Illuminate\Support\Js $j): \Stringable
+    {
+        return $j;
+    }
+
+    public function stringableImplementsJsonSerializable(\Illuminate\Support\Stringable $s): \JsonSerializable
+    {
+        return $s;
+    }
+
+    /** @param \Illuminate\Support\Stringable $s */
+    public function stringableImplementsArrayAccess($s): \ArrayAccess
+    {
+        return $s;
+    }
+
+    public function stringableImplementsBaseStringable(\Illuminate\Support\Stringable $s): \Stringable
+    {
+        return $s;
     }
 }
 ?>
