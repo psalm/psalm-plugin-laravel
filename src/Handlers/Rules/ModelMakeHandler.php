@@ -60,6 +60,12 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
             return null;
         }
 
+        // If the class (or a non-Model ancestor) declares its own make() method,
+        // the call is not magic indirection — it's a legitimate custom method.
+        if (self::hasCustomMakeMethod($className, $event)) {
+            return null;
+        }
+
         $shortName = self::shortClassName($className);
 
         IssueBuffer::accepts(
@@ -88,6 +94,33 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         }
 
         return $codebase->classExtends($className, Model::class);
+    }
+
+    /**
+     * Checks whether the class (or a non-Model ancestor) declares its own make() method.
+     * When a custom make() exists, the call bypasses __callStatic magic entirely.
+     *
+     * @psalm-mutation-free
+     */
+    private static function hasCustomMakeMethod(string $className, AfterExpressionAnalysisEvent $event): bool
+    {
+        $codebase = $event->getCodebase();
+
+        try {
+            $classStorage = $codebase->classlike_storage_provider->get(\strtolower($className));
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        $declaringId = $classStorage->declaring_method_ids['make'] ?? null;
+
+        if ($declaringId === null) {
+            return false;
+        }
+
+        // If make() is declared on a class other than the base Model,
+        // it's a custom method — not magic indirection
+        return $declaringId->fq_class_name !== Model::class;
     }
 
     /** @psalm-pure */
