@@ -22,7 +22,7 @@ class Request extends SymfonyRequest
     /**
      * Get the route handling the request.
      *
-     * @template TDefault
+     * @template TDefault of object
      *
      * @param string|null $param
      * @param TDefault $default
