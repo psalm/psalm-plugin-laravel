@@ -19,7 +19,7 @@ use Psalm\Type\Union;
 /**
  * Narrows Collection::flatten() return type when the depth argument is a known literal.
  *
- * Laravel's flatten() docblock returns `static<int, mixed>`, which erases generic info.
+ * Laravel's flatten() docblock currently returns `static<int, mixed>`, which erases generic info.
  * This handler recovers TValue for the most common cases:
  *
  * - flatten(1) on Collection<K, Collection<K2, V>> or Collection<K, array<K2, V>> → Collection<int, V>
@@ -41,9 +41,9 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        // EloquentCollection is excluded: its TValue is constrained to Model, so nested
-        // collections (Collection<K, Collection<K2, V>>) can't occur. The handler would
-        // always bail out via extractInnerValue() returning null.
+        // EloquentCollection is excluded: its flatten()/collapse() call $this->toBase(),
+        // returning Support\Collection (not static), so the handler's is_static: true would
+        // be wrong. Also, TValue is constrained to Model, so nested collections can't occur.
         return [Collection::class, LazyCollection::class];
     }
 
@@ -94,7 +94,6 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
 
         $depthArg = $args[0]->value;
 
-        // Direct literal: flatten(1)
         if ($depthArg instanceof LNumber) {
             return $depthArg->value;
         }
