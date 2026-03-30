@@ -8,6 +8,33 @@ use Illuminate\Support\Collection;
 
 class Article extends Model {}
 
+/** Model with a custom make() method — should NOT be flagged */
+class CustomMakeModel extends Model {
+    /** @param array<string, mixed> $attributes */
+    public static function make(array $attributes = []): self
+    {
+        // Custom factory logic
+        return new self($attributes);
+    }
+}
+
+/** Model inheriting a custom make() from a non-base Model subclass — should NOT be flagged */
+class ChildOfCustom extends CustomMakeModel {}
+
+trait HasCustomMake {
+    /** @param array<string, mixed> $attributes */
+    public static function make(array $attributes = []): self
+    {
+        /** @var self */
+        return new self($attributes);
+    }
+}
+
+/** Model using a trait that provides make() — should NOT be flagged */
+class TraitMakeModel extends Model {
+    use HasCustomMake;
+}
+
 function model_make_is_discouraged(): void
 {
     // Should emit ModelMakeDiscouraged — use new Article() instead
@@ -24,6 +51,15 @@ function model_make_is_discouraged(): void
 
     // Non-Model classes must NOT trigger the issue
     Collection::make([1, 2, 3]);
+
+    // Custom make() method on model — should NOT trigger the issue
+    CustomMakeModel::make(['title' => 'Hello']);
+
+    // Inherited custom make() — should NOT trigger the issue
+    ChildOfCustom::make(['title' => 'Hello']);
+
+    // Trait-provided make() — should NOT trigger the issue
+    TraitMakeModel::make(['title' => 'Hello']);
 }
 ?>
 --EXPECTF--
