@@ -2,11 +2,12 @@
 
 namespace Illuminate\Database\Query;
 
+use Illuminate\Contracts\Database\Query\Builder as BuilderContract;
 use Illuminate\Database\Concerns\BuildsQueries;
 use Illuminate\Support\Traits\ForwardsCalls;
 use Illuminate\Support\Traits\Macroable;
 
-class Builder
+class Builder implements BuilderContract
 {
     use BuildsQueries, ForwardsCalls, Macroable {
         __call as macroCall;

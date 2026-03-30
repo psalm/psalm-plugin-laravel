@@ -2,10 +2,12 @@
 
 namespace Illuminate\Support;
 
+use Illuminate\Contracts\Support\ValidatedData;
+
 /**
  * @template TRequest of \Illuminate\Foundation\Http\FormRequest
  */
-class ValidatedInput
+class ValidatedInput implements ValidatedData
 {
     /**
      * @param  mixed  $keys

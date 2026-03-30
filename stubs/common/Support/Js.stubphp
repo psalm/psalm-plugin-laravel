@@ -2,7 +2,10 @@
 
 namespace Illuminate\Support;
 
-class Js
+use Illuminate\Contracts\Support\Htmlable;
+use Stringable;
+
+class Js implements Htmlable, Stringable
 {
     /**
      * Create a new JavaScript string from the given data.

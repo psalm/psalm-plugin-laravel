@@ -2,7 +2,7 @@
 
 namespace Illuminate\Database;
 
-class Connection
+class Connection implements ConnectionInterface
 {
     /**
      * Run a select statement against the database.

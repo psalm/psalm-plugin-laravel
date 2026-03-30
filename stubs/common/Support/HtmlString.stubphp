@@ -2,7 +2,10 @@
 
 namespace Illuminate\Support;
 
-class HtmlString
+use Illuminate\Contracts\Support\Htmlable;
+use Stringable;
+
+class HtmlString implements Htmlable, Stringable
 {
     /**
      * Create a new HTML string instance.
