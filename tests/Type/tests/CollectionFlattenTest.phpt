@@ -95,6 +95,30 @@ final class CollectionFlattenTest
         /** @psalm-check-type-exact $_result = Collection<int, int>&static */
     }
 
+    /** @param LazyCollection<int, Collection<int, string>> $collection */
+    public function lazyCollectionCollapse(LazyCollection $collection): void
+    {
+        $_result = $collection->collapse();
+        /** @psalm-check-type-exact $_result = LazyCollection<int, string>&static */
+    }
+
+    /** @param Collection<int, array{name: string, age: int}> $collection */
+    public function flattenOneKeyedArray(Collection $collection): void
+    {
+        $_result = $collection->flatten(1);
+        /** @psalm-check-type-exact $_result = Collection<int, int|string>&static */
+    }
+
+    /**
+     * Union TValue defers to default — too complex to narrow.
+     * @param Collection<int, Collection<int, string>|array<int, string>> $collection
+     */
+    public function flattenOneUnionTValueDefersToDefault(Collection $collection): void
+    {
+        $_result = $collection->flatten(1);
+        /** @psalm-check-type-exact $_result = Collection<int, mixed>&static */
+    }
+
     /**
      * The issue's original use case: map-then-flatten(1).
      * @param Collection<int, array{category: string, items: list<string>}> $groups
