@@ -181,9 +181,20 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
             }
 
             foreach ($firstArg->type->getAtomicTypes() as $type) {
-                if ($type instanceof TLiteralClassString) {
-                    /** @var class-string */
-                    return $type->value;
+                if (!$type instanceof TLiteralClassString) {
+                    continue;
+                }
+
+                // Validate that the class is a Collection subclass via Psalm's
+                // class hierarchy — avoids narrowing to a non-collection class
+                // if the user passes an invalid class to #[CollectedBy].
+                try {
+                    if ($codebase->classExtends($type->value, EloquentCollection::class)) {
+                        /** @var class-string */
+                        return $type->value;
+                    }
+                } catch (\InvalidArgumentException) {
+                    // Class not known to Psalm; fall through to null
                 }
             }
 
@@ -227,12 +238,19 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         }
 
         foreach ($returnType->getAtomicTypes() as $type) {
-            if (
-                $type instanceof TNamedObject
-                && $type->value !== EloquentCollection::class
-                && \is_a($type->value, EloquentCollection::class, true)
-            ) {
-                return $type->value;
+            if (!$type instanceof TNamedObject || $type->value === EloquentCollection::class) {
+                continue;
+            }
+
+            // Use Psalm's class hierarchy instead of is_a() to avoid triggering
+            // PHP's autoloader for classes that may only exist in the analyzed codebase.
+            try {
+                if ($codebase->classExtends($type->value, EloquentCollection::class)) {
+                    /** @var class-string */
+                    return $type->value;
+                }
+            } catch (\InvalidArgumentException) {
+                // Class not known to Psalm; skip
             }
         }
 
