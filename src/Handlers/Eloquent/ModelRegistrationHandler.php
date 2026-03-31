@@ -98,6 +98,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             $className,
             ModelMethodHandler::getReturnTypeForForwardedMethod(...),
         );
+        // Custom collection: narrows Model::all() return type for models using
+        // #[CollectedBy] or overriding newCollection() with a concrete subclass.
+        $methods->return_type_provider->registerClosure(
+            $className,
+            CustomCollectionHandler::getModelMethodReturnType(...),
+        );
 
         // Registration order matters — the first non-null result wins.
 
