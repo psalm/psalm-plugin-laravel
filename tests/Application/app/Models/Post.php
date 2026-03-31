@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Builders\PostBuilder;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
@@ -20,6 +21,18 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 final class Post extends Model
 {
     protected $table = 'posts';
+
+    /**
+     * Legacy scope: called as Post::query()->featured() or Post::featured().
+     * Exercises the scope + custom builder return type path.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeFeatured($query)
+    {
+        return $query->where('featured', true);
+    }
 
     /**
      * @psalm-return HasMany<Comment>

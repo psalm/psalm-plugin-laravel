@@ -96,6 +96,27 @@ function test_query_builder_method_via_static_call(): void
     /** @psalm-check-type-exact $_result = PostBuilder<Post>&static */
 }
 
+/** Custom method with parameters — exercises the getMethodParams provider path. */
+function test_custom_method_with_params(): void
+{
+    $_result = Post::query()->whereAuthor(42);
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Custom method with params via static call. */
+function test_custom_method_with_params_static(): void
+{
+    $_result = Post::whereAuthor(42);
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Legacy scope on model with custom builder returns PostBuilder<Post>. */
+function test_scope_on_custom_builder_model(): void
+{
+    $_result = Post::featured();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
 /** Negative test: nonexistent methods must still be reported. */
 function test_nonexistent_method_on_custom_builder_model(): void
 {

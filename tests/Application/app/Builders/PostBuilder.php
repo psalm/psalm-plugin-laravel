@@ -33,4 +33,14 @@ class PostBuilder extends Builder
     {
         return $this->whereNull('published_at');
     }
+
+    /**
+     * Custom method with parameters — exercises the getMethodParams provider path.
+     *
+     * @return self<TModel>
+     */
+    public function whereAuthor(int $authorId): self
+    {
+        return $this->where('author_id', $authorId);
+    }
 }
