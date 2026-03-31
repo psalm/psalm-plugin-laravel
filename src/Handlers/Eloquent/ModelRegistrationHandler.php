@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -78,6 +80,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $className = $storage->name;
         $properties = $codebase->properties;
         $methods = $codebase->methods;
+
+        // Detect custom builder class via #[UseEloquentBuilder] attribute (Laravel 12+).
+        // The class is already loaded by the autoloader check above, so reflection works.
+        self::detectCustomBuilder($className);
 
         // Method existence, visibility, and return types for static __callStatic forwarding.
         // Registered per-model because Psalm's provider lookup uses exact class names —
@@ -159,6 +165,31 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         // Register write types for accessor and relationship properties
         self::registerWriteTypesForMethods($codebase, $storage);
+    }
+
+    /**
+     * Detect #[UseEloquentBuilder] attribute on a model and register the custom builder.
+     */
+    private static function detectCustomBuilder(string $className): void
+    {
+        try {
+            /** @var class-string $className */
+            $reflection = new \ReflectionClass($className);
+        } catch (\ReflectionException) {
+            return;
+        }
+
+        $attributes = $reflection->getAttributes(UseEloquentBuilder::class);
+        if ($attributes === []) {
+            return;
+        }
+
+        $builderClass = $attributes[0]->newInstance()->builderClass;
+
+        if (\is_subclass_of($builderClass, Builder::class, true)) {
+            /** @var class-string<Builder> $builderClass */
+            ModelMethodHandler::registerCustomBuilder($className, $builderClass);
+        }
     }
 
     /**
