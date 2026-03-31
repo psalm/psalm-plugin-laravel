@@ -22,6 +22,6 @@ class PostCollection extends Collection
      */
     public function published(): static
     {
-        return $this->filter(fn($post) => $post->published);
+        return $this->filter(fn(\App\Models\Post $post): bool => (bool) $post->getAttribute('published'));
     }
 }

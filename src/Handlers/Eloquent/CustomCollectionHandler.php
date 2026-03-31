@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -193,7 +194,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
                         /** @var class-string */
                         return $type->value;
                     }
-                } catch (\InvalidArgumentException) {
+                } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
                     // Class not known to Psalm; fall through to null
                 }
             }
@@ -205,10 +206,11 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Check if the model overrides `newCollection()` with a narrowed return type.
+     * Check if the model (or a parent/trait) overrides `newCollection()` with a narrowed return type.
      *
-     * If the model (not a parent) declares newCollection() and its return type
-     * is a concrete subclass of Eloquent\Collection, use that as the custom collection.
+     * Accepts inherited overrides: if a base model defines newCollection() returning
+     * a custom collection, child models inherit that narrowing. The classExtends check
+     * below ensures only actual Collection subclasses are accepted.
      *
      * @return class-string|null
      * @psalm-mutation-free
@@ -220,9 +222,8 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // Only consider newCollection() if declared directly on this model (not inherited)
         $methodId = $storage->declaring_method_ids['newcollection'] ?? null;
-        if ($methodId === null || \strtolower($methodId->fq_class_name) !== \strtolower($modelClass)) {
+        if ($methodId === null) {
             return null;
         }
 
@@ -249,7 +250,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
                     /** @var class-string */
                     return $type->value;
                 }
-            } catch (\InvalidArgumentException) {
+            } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
                 // Class not known to Psalm; skip
             }
         }
