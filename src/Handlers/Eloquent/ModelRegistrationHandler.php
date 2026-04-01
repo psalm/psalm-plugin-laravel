@@ -81,8 +81,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $properties = $codebase->properties;
         $methods = $codebase->methods;
 
-        // Detect custom builder class via #[UseEloquentBuilder] attribute (Laravel 12+).
-        // The class is already loaded by the autoloader check above, so reflection works.
+        // Detect custom builder class via #[UseEloquentBuilder] attribute or
+        // newEloquentBuilder() override. Class is already loaded by autoloader above.
+        /** @var class-string<Model> $className — verified by parent_classes check in caller */
         self::detectCustomBuilder($codebase, $className);
 
         // Method existence, visibility, and return types for static __callStatic forwarding.
@@ -168,12 +169,17 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     }
 
     /**
-     * Detect #[UseEloquentBuilder] attribute on a model and register the custom builder.
+     * Detect a custom Eloquent builder for a model and register it.
+     *
+     * Checks two patterns (in priority order):
+     * 1. #[UseEloquentBuilder(CustomBuilder::class)] attribute (Laravel 12+)
+     * 2. newEloquentBuilder() override with a native return type (any Laravel version)
+     *
+     * @param class-string<Model> $className
      */
     private static function detectCustomBuilder(Codebase $codebase, string $className): void
     {
         try {
-            /** @var class-string $className */
             $reflection = new \ReflectionClass($className);
         } catch (\ReflectionException $reflectionException) {
             $codebase->progress->debug(
@@ -183,22 +189,72 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             return;
         }
 
-        $attributes = $reflection->getAttributes(UseEloquentBuilder::class);
-        if ($attributes === []) {
-            return;
+        // 1. #[UseEloquentBuilder] attribute (Laravel 12+) takes priority.
+        $builderClass = self::resolveBuilderFromAttribute($reflection);
+
+        // 2. Fall back to newEloquentBuilder() return type override.
+        if ($builderClass === null) {
+            $builderClass = self::resolveBuilderFromMethodOverride($reflection);
         }
 
-        $builderClass = $attributes[0]->newInstance()->builderClass;
+        if ($builderClass === null) {
+            return;
+        }
 
         if (\is_subclass_of($builderClass, Builder::class, true)) {
             /** @var class-string<Builder> $builderClass */
             ModelMethodHandler::registerCustomBuilder($className, $builderClass);
         } else {
             $codebase->progress->debug(
-                "Laravel plugin: model '{$className}' has #[UseEloquentBuilder({$builderClass})] "
-                . "but '{$builderClass}' does not extend " . Builder::class . " — ignoring\n",
+                "Laravel plugin: model '{$className}' declares custom builder '{$builderClass}' "
+                . "but it does not extend " . Builder::class . " — ignoring\n",
             );
         }
+    }
+
+    /**
+     * Resolve custom builder from #[UseEloquentBuilder] attribute.
+     *
+     * @return class-string|null
+     */
+    private static function resolveBuilderFromAttribute(\ReflectionClass $reflection): ?string
+    {
+        $attributes = $reflection->getAttributes(UseEloquentBuilder::class);
+        if ($attributes === []) {
+            return null;
+        }
+
+        return $attributes[0]->newInstance()->builderClass;
+    }
+
+    /**
+     * Resolve custom builder from a newEloquentBuilder() override with a native return type.
+     *
+     * Detects any override whose declaring class is not Illuminate\Database\Eloquent\Model
+     * (including overrides in an intermediate base model) with a PHP native return type.
+     *
+     * @return class-string|null
+     * @psalm-mutation-free
+     */
+    private static function resolveBuilderFromMethodOverride(\ReflectionClass $reflection): ?string
+    {
+        try {
+            $method = $reflection->getMethod('newEloquentBuilder');
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        // Only consider overrides declared on the model, not the base Model method.
+        if ($method->getDeclaringClass()->getName() === Model::class) {
+            return null;
+        }
+
+        $returnType = $method->getReturnType();
+        if (!$returnType instanceof \ReflectionNamedType || $returnType->isBuiltin()) {
+            return null;
+        }
+
+        return $returnType->getName();
     }
 
     /**

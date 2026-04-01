@@ -1,14 +1,20 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Builders\CarBuilder;
 use App\Builders\PostBuilder;
+use App\Models\Car;
 use App\Models\Post;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * Tests that models using #[UseEloquentBuilder] attribute (Laravel 12+)
- * return the custom builder type instead of base Eloquent\Builder.
+ * Tests that models with custom query builders return the correct builder type
+ * instead of base Eloquent\Builder.
+ *
+ * Two detection patterns are tested:
+ * 1. #[UseEloquentBuilder] attribute (Laravel 12+) — Post model
+ * 2. newEloquentBuilder() override with native return type — Car model
  *
  * @see https://laravel-news.com/defining-a-dedicated-query-builder-in-laravel-12-with-php-attributes
  */
@@ -128,6 +134,39 @@ function test_scope_on_custom_builder_model(): void
 // BuilderScopeHandler is registered for Builder, not for custom builder subclasses.
 // Scopes work correctly through static calls (Post::featured()) but not yet through
 // builder instances (Post::query()->featured()) when using a custom builder.
+
+// -----------------------------------------------------------------------
+// newEloquentBuilder() override pattern (pre-Laravel 12)
+// Car model overrides newEloquentBuilder() with a native return type.
+// -----------------------------------------------------------------------
+
+/** Car::query() returns the custom builder via newEloquentBuilder() override. */
+function test_new_eloquent_builder_query(): void
+{
+    $_result = Car::query();
+    /** @psalm-check-type-exact $_result = CarBuilder<Car> */
+}
+
+/** Custom builder methods work via query() on newEloquentBuilder model. */
+function test_new_eloquent_builder_custom_method(): void
+{
+    $_result = Car::query()->whereElectric();
+    /** @psalm-check-type-exact $_result = CarBuilder<Car> */
+}
+
+/** Custom builder methods work via static call on newEloquentBuilder model. */
+function test_new_eloquent_builder_static_call(): void
+{
+    $_result = Car::whereElectric();
+    /** @psalm-check-type-exact $_result = CarBuilder<Car> */
+}
+
+/** Terminal method through newEloquentBuilder custom builder. */
+function test_new_eloquent_builder_terminal(): void
+{
+    $_result = Car::query()->whereElectric()->get();
+    /** @psalm-check-type-exact $_result = Collection<int, Car> */
+}
 
 /** Negative test: nonexistent methods must still be reported. */
 function test_nonexistent_method_on_custom_builder_model(): void

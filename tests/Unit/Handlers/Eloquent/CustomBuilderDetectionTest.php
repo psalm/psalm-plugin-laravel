@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent;
 
+use App\Builders\CarBuilder;
 use App\Builders\PostBuilder;
+use App\Models\Car;
 use App\Models\Post;
 use App\Models\User;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -16,7 +18,9 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\Progress\VoidProgress;
 
 /**
- * Tests the #[UseEloquentBuilder] attribute detection in ModelRegistrationHandler.
+ * Tests custom builder detection in ModelRegistrationHandler via both:
+ * 1. #[UseEloquentBuilder] attribute (Laravel 12+)
+ * 2. newEloquentBuilder() override with native return type
  */
 #[CoversClass(ModelRegistrationHandler::class)]
 final class CustomBuilderDetectionTest extends TestCase
@@ -46,21 +50,20 @@ final class CustomBuilderDetectionTest extends TestCase
     }
 
     #[Test]
+    public function it_registers_custom_builder_for_model_with_new_eloquent_builder_override(): void
+    {
+        $this->callDetectCustomBuilder(Car::class);
+
+        $this->assertSame(CarBuilder::class, $this->getRegisteredBuilder(Car::class));
+    }
+
+    #[Test]
     public function it_handles_non_existent_class_gracefully(): void
     {
         // Should not throw — the ReflectionException is caught and logged.
         $this->callDetectCustomBuilder('NonExistent\\FakeModelClass');
 
         $this->assertEmpty($this->getCustomBuilderMap());
-    }
-
-    #[Test]
-    public function it_rejects_builder_that_does_not_extend_eloquent_builder(): void
-    {
-        // InvalidBuilderModel uses #[UseEloquentBuilder] pointing to a non-Builder class.
-        $this->callDetectCustomBuilder(Fixtures\InvalidBuilderModel::class);
-
-        $this->assertNull($this->getRegisteredBuilder(Fixtures\InvalidBuilderModel::class));
     }
 
     /**

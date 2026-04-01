@@ -59,17 +59,19 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
     /**
      * Maps model FQCN → custom Eloquent builder FQCN.
      *
-     * Populated by {@see ModelRegistrationHandler} when a model uses the
-     * #[UseEloquentBuilder] attribute (Laravel 12+) to declare a dedicated builder.
+     * Populated by {@see ModelRegistrationHandler} when a model declares a dedicated builder
+     * via #[UseEloquentBuilder] attribute (Laravel 12+) or newEloquentBuilder() override.
      * Used to return the correct builder type from query(), __callStatic, and scope methods.
      *
-     * @var array<string, string>
+     * @var array<class-string<Model>, class-string<Builder>>
      */
     private static array $customBuilderMap = [];
 
     /**
      * Register a custom Eloquent builder class for a model.
      *
+     * @param class-string<Model> $modelClass
+     * @param class-string<Builder> $builderClass
      * @psalm-external-mutation-free
      */
     public static function registerCustomBuilder(string $modelClass, string $builderClass): void
