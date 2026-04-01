@@ -96,7 +96,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
                 $event->getStatementsSource()->getSuppressedIssues(),
             );
 
-            if ($resolved !== null) {
+            if ($resolved instanceof \Psalm\Type\Union) {
                 return $resolved;
             }
         }
@@ -105,7 +105,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         // return string to avoid PossiblyInvalidCast noise from string|array union
         $firstArgType = $event->getStatementsSource()->getNodeTypeProvider()->getType($callArgs[0]->value);
 
-        if ($firstArgType !== null) {
+        if ($firstArgType instanceof \Psalm\Type\Union) {
             if ($firstArgType->isString()) {
                 return Type::getString();
             }
