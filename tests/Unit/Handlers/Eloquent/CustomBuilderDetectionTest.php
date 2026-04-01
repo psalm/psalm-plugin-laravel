@@ -67,6 +67,39 @@ final class CustomBuilderDetectionTest extends TestCase
         $this->assertEmpty($this->getCustomBuilderMap());
     }
 
+    #[Test]
+    public function it_ignores_new_eloquent_builder_without_return_type(): void
+    {
+        // Secret model has no newEloquentBuilder override and no attribute.
+        $this->callDetectCustomBuilder(\App\Models\Secret::class);
+
+        $this->assertNull($this->getRegisteredBuilder(\App\Models\Secret::class));
+    }
+
+    /**
+     * resolveBuilderFromMethodOverride skips methods that return builtin types or
+     * non-Builder subclasses — tested here via the method's defensive guards.
+     */
+    #[Test]
+    public function it_ignores_new_eloquent_builder_with_no_native_return_type(): void
+    {
+        $result = $this->callResolveBuilderFromMethodOverride(\App\Models\User::class);
+
+        // User inherits newEloquentBuilder from Model — not an override.
+        $this->assertNull($result);
+    }
+
+    /**
+     * Call resolveBuilderFromMethodOverride directly via reflection.
+     */
+    private function callResolveBuilderFromMethodOverride(string $className): ?string
+    {
+        $reflection = new \ReflectionClass($className);
+        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveBuilderFromMethodOverride');
+
+        return $method->invoke(null, $reflection);
+    }
+
     /**
      * Call the private detectCustomBuilder method via reflection.
      */

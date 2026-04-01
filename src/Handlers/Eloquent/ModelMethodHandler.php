@@ -90,6 +90,20 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
     }
 
     /**
+     * Build the Psalm type for Builder<Model> (or CustomBuilder<Model>).
+     *
+     * Centralizes the TGenericObject construction used in return types and fake-call proxies.
+     *
+     * @psalm-pure
+     */
+    private static function builderType(string $builderClass, string $modelClass): Type\Atomic\TGenericObject
+    {
+        return new Type\Atomic\TGenericObject($builderClass, [
+            new Union([new Type\Atomic\TNamedObject($modelClass)]),
+        ]);
+    }
+
+    /**
      * @return list<string>
      * @psalm-pure
      */
@@ -254,11 +268,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         // is resolved via Builder's __call magic which may fail in a fake call context.
         /** @var class-string<Model> $modelClass */
         if (BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
-            return new Union([
-                new Type\Atomic\TGenericObject($builderClass, [
-                    new Union([new Type\Atomic\TNamedObject($calledClass)]),
-                ]),
-            ]);
+            return new Union([self::builderType($builderClass, $calledClass)]);
         }
 
         // Query\Builder methods: proxy the call through Builder<Model> to resolve
@@ -270,11 +280,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             $event->getCallArgs(),
         );
 
-        $fakeProxy = new Type\Atomic\TGenericObject($builderClass, [
-            new Union([
-                new Type\Atomic\TNamedObject($calledClass),
-            ]),
-        ]);
+        $fakeProxy = self::builderType($builderClass, $calledClass);
 
         return ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $fakeProxy);
     }
@@ -352,13 +358,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         if ($event->getMethodNameLowercase() === 'query') {
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
-            return new Union([
-                new Type\Atomic\TGenericObject($builderClass, [
-                    new Union([
-                        new Type\Atomic\TNamedObject($called_fq_classlike_name),
-                    ]),
-                ]),
-            ]);
+            return new Union([self::builderType($builderClass, $called_fq_classlike_name)]);
         }
 
         // proxy to builder object
@@ -378,11 +378,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
                 $event->getCallArgs(),
             );
 
-            $fakeProxy = new Type\Atomic\TGenericObject($builderClass, [
-                new Union([
-                    new Type\Atomic\TNamedObject($called_fq_classlike_name),
-                ]),
-            ]);
+            $fakeProxy = self::builderType($builderClass, $called_fq_classlike_name);
 
             return ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $fakeProxy);
         }
