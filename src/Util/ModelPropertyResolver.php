@@ -16,7 +16,7 @@ use Psalm\Type\Union;
 /**
  * Shared utilities for resolving model property types from @property annotations.
  *
- * Used by PluckHandler and CollectionPluckHandler to avoid duplicating the
+ * Used by BuilderPluckHandler and CollectionPluckHandler to avoid duplicating the
  * property lookup and argument extraction logic.
  *
  * @internal
