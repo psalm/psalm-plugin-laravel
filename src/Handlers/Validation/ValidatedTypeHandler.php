@@ -289,7 +289,6 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
      * Build a TKeyedArray shape from resolved rules.
      *
      * @param array<string, ResolvedRule> $rules
-     * @psalm-mutation-free
      */
     private static function buildArrayShape(array $rules): ?Union
     {
@@ -310,12 +309,16 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     /**
      * Insert a resolved rule into a nested tree structure based on dot-notation segments.
      *
-     * @param array<string, mixed> $tree
+     * @param array<array-key, mixed> $tree
      * @param list<string> $segments
      */
     private static function insertIntoTree(array &$tree, array $segments, ResolvedRule $resolvedRule): void
     {
         $key = array_shift($segments);
+
+        if ($key === null) {
+            return;
+        }
 
         if ($segments === []) {
             if (!isset($tree[$key]) || !is_array($tree[$key])) {
@@ -345,7 +348,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
      * Recursively convert a nested tree into TKeyedArray Union types.
      *
      * @psalm-mutation-free
-     * @param array<string, mixed> $tree
+     * @param array<array-key, mixed> $tree
      */
     private static function buildUnionFromTree(array $tree): ?Union
     {
@@ -398,6 +401,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        /** @var non-empty-array<string, Union> $properties */
         return new Union([TKeyedArray::make($properties)]);
     }
 }
