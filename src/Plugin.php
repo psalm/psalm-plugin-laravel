@@ -112,7 +112,7 @@ final class Plugin implements PluginEntryPointInterface
      * parsing. Type annotations (`@return`, `@param`) use `=` so the last-loaded
      * stub wins; taint annotations (`@psalm-taint-*`) use `|=` and accumulate.
      * Without sorting, moving or renaming stub files can silently change types.
-     * See docs/contribute/README.md "Stub merging" for details.
+     * See docs/contributing/README.md "Stub merging" for details.
      *
      * @return list<string>
      */

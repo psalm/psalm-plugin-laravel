@@ -139,7 +139,7 @@ Document every workaround with a comment linking to the upstream issue.
 
 **Why:** A wrong `@psalm-taint-escape` can silently drop all taint kinds, making users believe their code is safe when it isn't. A wrong `@psalm-taint-source` generates noise that erodes trust. Taint annotations are security-critical and harder to validate than type annotations.
 
-**See:** `docs/contribute/taint-analysis.md` for the full authoring guide.
+**See:** `docs/contributing/taint-analysis.md` for the full authoring guide.
 
 ### No taint-source on internal persistence reads
 

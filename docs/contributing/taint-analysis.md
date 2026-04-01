@@ -105,29 +105,29 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 
 ### All available kinds
 
-| Kind            | Constant            | Description                                                |
-|-----------------|---------------------|------------------------------------------------------------|
-| `callable`      | `INPUT_CALLABLE`    | User-controlled callable strings                           |
-| `unserialize`   | `INPUT_UNSERIALIZE` | Strings passed to `unserialize()`                          |
-| `include`       | `INPUT_INCLUDE`     | Paths passed to `include`/`require`                        |
-| `eval`          | `INPUT_EVAL`        | Strings passed to `eval()`                                 |
-| `ldap`          | `INPUT_LDAP`        | LDAP DN or filter strings                                  |
-| `sql`           | `INPUT_SQL`         | SQL query strings                                          |
-| `html`          | `INPUT_HTML`        | Strings that could contain HTML/JS                         |
-| `has_quotes`    | `INPUT_HAS_QUOTES`  | Strings with unescaped quotes                              |
-| `shell`         | `INPUT_SHELL`       | Shell command strings                                      |
-| `ssrf`          | `INPUT_SSRF`        | URLs passed to HTTP clients                                |
-| `file`          | `INPUT_FILE`        | Filesystem paths                                           |
-| `cookie`        | `INPUT_COOKIE`      | HTTP cookie values                                         |
-| `header`        | `INPUT_HEADER`      | HTTP header values                                         |
-| `xpath`         | `INPUT_XPATH`       | XPath query strings                                        |
-| `sleep`         | `INPUT_SLEEP`       | Values passed to `sleep()` (DoS)                           |
-| `extract`       | `INPUT_EXTRACT`     | Values passed to `extract()`                               |
-| `user_secret`   | `USER_SECRET`       | User-supplied secrets (passwords, tokens)                  |
-| `system_secret` | `SYSTEM_SECRET`     | System secrets (API keys, encryption keys)                 |
-| `input`         | `ALL_INPUT`         | Alias: all input-related kinds combined (excludes secrets) |
-| `tainted`       | `ALL_INPUT`         | Alias: same as `input`                                     |
-| `input_except_sleep` | `ALL_INPUT & ~INPUT_SLEEP` | All input kinds except `sleep` (used by `filter_var()`) |
+| Kind                 | Constant                   | Description                                                |
+|----------------------|----------------------------|------------------------------------------------------------|
+| `callable`           | `INPUT_CALLABLE`           | User-controlled callable strings                           |
+| `unserialize`        | `INPUT_UNSERIALIZE`        | Strings passed to `unserialize()`                          |
+| `include`            | `INPUT_INCLUDE`            | Paths passed to `include`/`require`                        |
+| `eval`               | `INPUT_EVAL`               | Strings passed to `eval()`                                 |
+| `ldap`               | `INPUT_LDAP`               | LDAP DN or filter strings                                  |
+| `sql`                | `INPUT_SQL`                | SQL query strings                                          |
+| `html`               | `INPUT_HTML`               | Strings that could contain HTML/JS                         |
+| `has_quotes`         | `INPUT_HAS_QUOTES`         | Strings with unescaped quotes                              |
+| `shell`              | `INPUT_SHELL`              | Shell command strings                                      |
+| `ssrf`               | `INPUT_SSRF`               | URLs passed to HTTP clients                                |
+| `file`               | `INPUT_FILE`               | Filesystem paths                                           |
+| `cookie`             | `INPUT_COOKIE`             | HTTP cookie values                                         |
+| `header`             | `INPUT_HEADER`             | HTTP header values                                         |
+| `xpath`              | `INPUT_XPATH`              | XPath query strings                                        |
+| `sleep`              | `INPUT_SLEEP`              | Values passed to `sleep()` (DoS)                           |
+| `extract`            | `INPUT_EXTRACT`            | Values passed to `extract()`                               |
+| `user_secret`        | `USER_SECRET`              | User-supplied secrets (passwords, tokens)                  |
+| `system_secret`      | `SYSTEM_SECRET`            | System secrets (API keys, encryption keys)                 |
+| `input`              | `ALL_INPUT`                | Alias: all input-related kinds combined (excludes secrets) |
+| `tainted`            | `ALL_INPUT`                | Alias: same as `input`                                     |
+| `input_except_sleep` | `ALL_INPUT & ~INPUT_SLEEP` | All input kinds except `sleep` (used by `filter_var()`)    |
 
 ## Stub patterns by annotation type
 
