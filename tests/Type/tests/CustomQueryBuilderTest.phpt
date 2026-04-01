@@ -89,7 +89,14 @@ function test_find_via_custom_builder(): void
     /** @psalm-check-type-exact $_result = Post|null */
 }
 
-/** Query\Builder-only method (whereIn) works via static call on custom builder model. */
+/**
+ * Query\Builder-only method (whereIn) works via static call on custom builder model.
+ *
+ * Returns PostBuilder<Post>&static (with &static) because this goes through the
+ * __callStatic → executeFakeCall proxy path, which preserves the static intersection.
+ * Custom builder methods (wherePublished) go through getReturnTypeForForwardedMethod
+ * which returns PostBuilder<Post> without &static.
+ */
 function test_query_builder_method_via_static_call(): void
 {
     $_result = Post::whereIn('id', [1, 2, 3]);
@@ -110,12 +117,17 @@ function test_custom_method_with_params_static(): void
     /** @psalm-check-type-exact $_result = PostBuilder<Post> */
 }
 
-/** Legacy scope on model with custom builder returns PostBuilder<Post>. */
+/** Legacy scope on model with custom builder returns PostBuilder<Post> via static call. */
 function test_scope_on_custom_builder_model(): void
 {
     $_result = Post::featured();
     /** @psalm-check-type-exact $_result = PostBuilder<Post> */
 }
+
+// Note: Post::query()->featured() (scope via builder instance) is not tested because
+// BuilderScopeHandler is registered for Builder, not for custom builder subclasses.
+// Scopes work correctly through static calls (Post::featured()) but not yet through
+// builder instances (Post::query()->featured()) when using a custom builder.
 
 /** Negative test: nonexistent methods must still be reported. */
 function test_nonexistent_method_on_custom_builder_model(): void

@@ -83,7 +83,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         // Detect custom builder class via #[UseEloquentBuilder] attribute (Laravel 12+).
         // The class is already loaded by the autoloader check above, so reflection works.
-        self::detectCustomBuilder($className);
+        self::detectCustomBuilder($codebase, $className);
 
         // Method existence, visibility, and return types for static __callStatic forwarding.
         // Registered per-model because Psalm's provider lookup uses exact class names —
@@ -170,12 +170,16 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     /**
      * Detect #[UseEloquentBuilder] attribute on a model and register the custom builder.
      */
-    private static function detectCustomBuilder(string $className): void
+    private static function detectCustomBuilder(Codebase $codebase, string $className): void
     {
         try {
             /** @var class-string $className */
             $reflection = new \ReflectionClass($className);
-        } catch (\ReflectionException) {
+        } catch (\ReflectionException $e) {
+            $codebase->progress->debug(
+                "Laravel plugin: could not reflect model '{$className}' for custom builder detection: {$e->getMessage()}\n",
+            );
+
             return;
         }
 
@@ -189,6 +193,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         if (\is_subclass_of($builderClass, Builder::class, true)) {
             /** @var class-string<Builder> $builderClass */
             ModelMethodHandler::registerCustomBuilder($className, $builderClass);
+        } else {
+            $codebase->progress->debug(
+                "Laravel plugin: model '{$className}' has #[UseEloquentBuilder({$builderClass})] "
+                . "but '{$builderClass}' does not extend " . Builder::class . " — ignoring\n",
+            );
         }
     }
 
