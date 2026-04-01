@@ -178,8 +178,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Util/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderScopeHandler::class);
-        require_once __DIR__ . '/Handlers/Eloquent/PluckHandler.php';
-        $registration->registerHooksFromClass(Handlers\Eloquent\PluckHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderPluckHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderPluckHandler::class);
 
         require_once __DIR__ . '/Handlers/Collections/CollectionFilterHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionFilterHandler::class);
