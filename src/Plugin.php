@@ -6,32 +6,8 @@ namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
-use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
-use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
-use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
-use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
-use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
-use Psalm\LaravelPlugin\Handlers\Collections\CollectionFilterHandler;
-use Psalm\LaravelPlugin\Handlers\Collections\CollectionFlattenHandler;
-use Psalm\LaravelPlugin\Handlers\Collections\CollectionPluckHandler;
-use Psalm\LaravelPlugin\Handlers\Console\CommandArgumentHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\PluckHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\RelationsMethodHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\MigrationCache;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
-use Psalm\LaravelPlugin\Handlers\Helpers\CacheHandler;
-use Psalm\LaravelPlugin\Handlers\Helpers\PathHandler;
-use Psalm\LaravelPlugin\Handlers\Rules\ModelMakeHandler;
-use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
-use Psalm\LaravelPlugin\Handlers\SuppressHandler;
-use Psalm\LaravelPlugin\Handlers\Translations\TranslationKeyHandler;
-use Psalm\LaravelPlugin\Handlers\Validation\ValidatedTypeHandler;
-use Psalm\LaravelPlugin\Handlers\Validation\ValidationTaintHandler;
-use Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
@@ -67,7 +43,7 @@ final class Plugin implements PluginEntryPointInterface
 
             $this->generateAliasStubs($pluginConfig);
 
-            NoEnvOutsideConfigHandler::init(
+            Handlers\Rules\NoEnvOutsideConfigHandler::init(
                 ApplicationProvider::getApp()->configPath(),
             );
 
@@ -112,7 +88,7 @@ final class Plugin implements PluginEntryPointInterface
      * parsing. Type annotations (`@return`, `@param`) use `=` so the last-loaded
      * stub wins; taint annotations (`@psalm-taint-*`) use `|=` and accumulate.
      * Without sorting, moving or renaming stub files can silently change types.
-     * See docs/contribute/README.md "Stub merging" for details.
+     * See docs/contributing/README.md "Stub merging" for details.
      *
      * @return list<string>
      */
@@ -171,16 +147,16 @@ final class Plugin implements PluginEntryPointInterface
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
     {
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
-        $registration->registerHooksFromClass(ContainerHandler::class);
+        $registration->registerHooksFromClass(Handlers\Application\ContainerHandler::class);
         require_once __DIR__ . '/Handlers/Application/OffsetHandler.php';
-        $registration->registerHooksFromClass(OffsetHandler::class);
+        $registration->registerHooksFromClass(Handlers\Application\OffsetHandler::class);
 
         require_once __DIR__ . '/Handlers/Auth/AuthHandler.php';
-        $registration->registerHooksFromClass(AuthHandler::class);
+        $registration->registerHooksFromClass(Handlers\Auth\AuthHandler::class);
         require_once __DIR__ . '/Handlers/Auth/GuardHandler.php';
-        $registration->registerHooksFromClass(GuardHandler::class);
+        $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
-        $registration->registerHooksFromClass(RequestHandler::class);
+        $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
 
         // Model property handlers are registered dynamically by ModelRegistrationHandler
         // after Psalm populates its codebase (AfterCodebasePopulated event).
@@ -190,56 +166,56 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         if ($pluginConfig->shouldUseMigrations()) {
             require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
-            ModelRegistrationHandler::enableMigrations();
+            Handlers\Eloquent\ModelRegistrationHandler::enableMigrations();
         }
 
-        $registration->registerHooksFromClass(ModelRegistrationHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
 
         require_once __DIR__ . '/Handlers/Eloquent/RelationsMethodHandler.php';
-        $registration->registerHooksFromClass(RelationsMethodHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\RelationsMethodHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
-        $registration->registerHooksFromClass(ModelMethodHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelMethodHandler::class);
         require_once __DIR__ . '/Util/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
-        $registration->registerHooksFromClass(BuilderScopeHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderScopeHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/PluckHandler.php';
-        $registration->registerHooksFromClass(PluckHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\PluckHandler::class);
 
         require_once __DIR__ . '/Handlers/Collections/CollectionFilterHandler.php';
-        $registration->registerHooksFromClass(CollectionFilterHandler::class);
+        $registration->registerHooksFromClass(Handlers\Collections\CollectionFilterHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionFlattenHandler.php';
-        $registration->registerHooksFromClass(CollectionFlattenHandler::class);
+        $registration->registerHooksFromClass(Handlers\Collections\CollectionFlattenHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
-        $registration->registerHooksFromClass(CollectionPluckHandler::class);
+        $registration->registerHooksFromClass(Handlers\Collections\CollectionPluckHandler::class);
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
-        $registration->registerHooksFromClass(CommandArgumentHandler::class);
+        $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
-        $registration->registerHooksFromClass(ValidatedTypeHandler::class);
+        $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
         require_once __DIR__ . '/Handlers/Validation/ValidationTaintHandler.php';
-        $registration->registerHooksFromClass(ValidationTaintHandler::class);
+        $registration->registerHooksFromClass(Handlers\Validation\ValidationTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Helpers/CacheHandler.php';
-        $registration->registerHooksFromClass(CacheHandler::class);
+        $registration->registerHooksFromClass(Handlers\Helpers\CacheHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
-        $registration->registerHooksFromClass(PathHandler::class);
+        $registration->registerHooksFromClass(Handlers\Helpers\PathHandler::class);
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
-        $registration->registerHooksFromClass(TranslationKeyHandler::class);
+        $registration->registerHooksFromClass(Handlers\Translations\TranslationKeyHandler::class);
 
         require_once __DIR__ . '/Handlers/SuppressHandler.php';
-        $registration->registerHooksFromClass(SuppressHandler::class);
+        $registration->registerHooksFromClass(Handlers\SuppressHandler::class);
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
-        $registration->registerHooksFromClass(ModelMakeHandler::class);
+        $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
-        $registration->registerHooksFromClass(NoEnvOutsideConfigHandler::class);
+        $registration->registerHooksFromClass(Handlers\Rules\NoEnvOutsideConfigHandler::class);
 
         // Unlike TranslationKeyHandler (which always runs for type narrowing),
         // MissingViewHandler provides no type information — skip entirely when disabled
         if ($pluginConfig->findMissingViews) {
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
-            $registration->registerHooksFromClass(MissingViewHandler::class);
+            $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
         }
     }
 
@@ -283,7 +259,7 @@ final class Plugin implements PluginEntryPointInterface
             return;
         }
 
-        TranslationKeyHandler::init($translator, $reportMissing);
+        Handlers\Translations\TranslationKeyHandler::init($translator, $reportMissing);
     }
 
     /**
@@ -338,7 +314,7 @@ final class Plugin implements PluginEntryPointInterface
         /** @var list<string> $extensions */
         $extensions = $finder->getExtensions();
 
-        MissingViewHandler::init($paths, $extensions);
+        Handlers\Views\MissingViewHandler::init($paths, $extensions);
     }
 
     private function buildSchema(PluginConfig $pluginConfig): void
@@ -357,13 +333,13 @@ final class Plugin implements PluginEntryPointInterface
         $sqlDumpFiles = $this->discoverSqlDumpFiles($app, $progress);
         $migrationFiles = $this->discoverMigrationFiles($app, $progress);
 
-        $cache = new MigrationCache(self::getCacheLocation($pluginConfig));
+        $cache = new Handlers\Eloquent\Schema\MigrationCache(self::getCacheLocation($pluginConfig));
 
         $tables = $cache->remember(
             $migrationFiles,
             $sqlDumpFiles,
             function () use ($sqlDumpFiles, $migrationFiles, $codebase, $progress): array {
-                $schemaAggregator = new SchemaAggregator();
+                $schemaAggregator = new Handlers\Eloquent\Schema\SchemaAggregator();
 
                 // Parse SQL schema dumps first — they represent the base state from
                 // squashed migrations (php artisan schema:dump)
@@ -399,7 +375,7 @@ final class Plugin implements PluginEntryPointInterface
             $progress->warning("Laravel plugin: {$readFailure}");
         }
 
-        $schemaAggregator = new SchemaAggregator();
+        $schemaAggregator = new Handlers\Eloquent\Schema\SchemaAggregator();
         $schemaAggregator->tables = $tables;
         SchemaStateProvider::setSchema($schemaAggregator);
     }
@@ -422,7 +398,6 @@ final class Plugin implements PluginEntryPointInterface
 
     /**
      * Discover PHP migration files from all registered migration directories.
-     *
      * @return list<string>
      */
     private function discoverMigrationFiles(Application $app, \Psalm\Progress\Progress $progress): array

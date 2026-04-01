@@ -1,7 +1,10 @@
-## What does this PR do?
-<!-- Brief description. Reference related issues with "Fixes #123" or "Closes #123". -->
+## Issue to Solve
+<!-- Brief description of the problem this PR solves -->
 
-## How was it tested?
+## Related
+<!-- Reference related issues with "Fixes #123" or "Closes #123". -->
+
+## Solution Description
 <!-- How did you verify the change works? e.g. new type test, unit test, manual testing -->
 
 ## Checklist
