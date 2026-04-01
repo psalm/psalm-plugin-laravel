@@ -171,9 +171,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     /**
      * Detect a custom Eloquent builder for a model and register it.
      *
-     * Checks two patterns (in priority order):
+     * Checks three patterns (in priority order):
      * 1. #[UseEloquentBuilder(CustomBuilder::class)] attribute (Laravel 12+)
      * 2. newEloquentBuilder() override with a native return type (any Laravel version)
+     * 3. protected static string $builder property override (Laravel 13+)
      *
      * @param class-string<Model> $className
      */
@@ -195,6 +196,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // 2. Fall back to newEloquentBuilder() return type override.
         if ($builderClass === null) {
             $builderClass = self::resolveBuilderFromMethodOverride($reflection);
+        }
+
+        // 3. Fall back to static $builder property override (Laravel 13+).
+        if ($builderClass === null) {
+            $builderClass = self::resolveBuilderFromStaticProperty($reflection);
         }
 
         if ($builderClass === null) {
@@ -274,6 +280,34 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
 
         return $returnType->getName();
+    }
+
+    /**
+     * Resolve custom builder from a static $builder property override (Laravel 13+).
+     *
+     * Detects when a model overrides the protected static string $builder property
+     * with a custom builder class name.
+     *
+     * @return class-string|null
+     */
+    private static function resolveBuilderFromStaticProperty(\ReflectionClass $reflection): ?string
+    {
+        try {
+            $property = $reflection->getProperty('builder');
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        // Only consider overrides, not the base Model::$builder = Builder::class.
+        if ($property->getDeclaringClass()->getName() === Model::class) {
+            return null;
+        }
+
+        /** @var mixed $value */
+        $value = $property->getValue();
+
+        /** @var class-string|null */
+        return \is_string($value) ? $value : null;
     }
 
     /**

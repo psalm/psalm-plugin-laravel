@@ -2,8 +2,10 @@
 <?php declare(strict_types=1);
 
 use App\Builders\CarBuilder;
+use App\Builders\MechanicBuilder;
 use App\Builders\PostBuilder;
 use App\Models\Car;
+use App\Models\Mechanic;
 use App\Models\Post;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -12,9 +14,10 @@ use Illuminate\Database\Eloquent\Collection;
  * Tests that models with custom query builders return the correct builder type
  * instead of base Eloquent\Builder.
  *
- * Two detection patterns are tested:
+ * Three detection patterns are tested:
  * 1. #[UseEloquentBuilder] attribute (Laravel 12+) — Post model
  * 2. newEloquentBuilder() override with native return type — Car model
+ * 3. protected static string $builder property override (Laravel 13+) — Mechanic model
  *
  * @see https://laravel-news.com/defining-a-dedicated-query-builder-in-laravel-12-with-php-attributes
  */
@@ -166,6 +169,32 @@ function test_new_eloquent_builder_terminal(): void
 {
     $_result = Car::query()->whereElectric()->get();
     /** @psalm-check-type-exact $_result = Collection<int, Car> */
+}
+
+// -----------------------------------------------------------------------
+// static $builder property pattern (Laravel 13+)
+// Mechanic model sets protected static string $builder = MechanicBuilder::class.
+// -----------------------------------------------------------------------
+
+/** Mechanic::query() returns the custom builder via static $builder property. */
+function test_static_builder_property_query(): void
+{
+    $_result = Mechanic::query();
+    /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
+}
+
+/** Custom builder methods work via query() on static $builder model. */
+function test_static_builder_property_custom_method(): void
+{
+    $_result = Mechanic::query()->whereCertified();
+    /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
+}
+
+/** Custom builder methods work via static call on static $builder model. */
+function test_static_builder_property_static_call(): void
+{
+    $_result = Mechanic::whereCertified();
+    /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
 }
 
 /** Negative test: nonexistent methods must still be reported. */

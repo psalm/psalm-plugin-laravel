@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent;
 
 use App\Builders\CarBuilder;
+use App\Builders\MechanicBuilder;
 use App\Builders\PostBuilder;
 use App\Models\Car;
+use App\Models\Mechanic;
 use App\Models\Post;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -18,9 +22,10 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\Progress\VoidProgress;
 
 /**
- * Tests custom builder detection in ModelRegistrationHandler via both:
+ * Tests custom builder detection in ModelRegistrationHandler via:
  * 1. #[UseEloquentBuilder] attribute (Laravel 12+)
  * 2. newEloquentBuilder() override with native return type
+ * 3. protected static string $builder property override (Laravel 13+)
  */
 #[CoversClass(ModelRegistrationHandler::class)]
 final class CustomBuilderDetectionTest extends TestCase
@@ -56,6 +61,14 @@ final class CustomBuilderDetectionTest extends TestCase
         $this->callDetectCustomBuilder(Car::class);
 
         $this->assertSame(CarBuilder::class, $this->getRegisteredBuilder(Car::class));
+    }
+
+    #[Test]
+    public function it_registers_custom_builder_for_model_with_static_builder_property(): void
+    {
+        $this->callDetectCustomBuilder(Mechanic::class);
+
+        $this->assertSame(MechanicBuilder::class, $this->getRegisteredBuilder(Mechanic::class));
     }
 
     #[Test]
@@ -117,7 +130,7 @@ final class CustomBuilderDetectionTest extends TestCase
     /**
      * Read the private $customBuilderMap via reflection.
      *
-     * @return array<string, string>
+     * @return array<class-string<Model>, class-string<Builder>>
      */
     private function getCustomBuilderMap(): array
     {
