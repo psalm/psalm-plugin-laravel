@@ -245,7 +245,9 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
 
         $calledClass = $event->getCalledFqClasslikeName() ?? $modelClass;
 
-        $builderClass = self::getBuilderClassForModel($calledClass);
+        // Use $modelClass for builder lookup — matches the registration key in $customBuilderMap.
+        // $calledClass is used only for the template parameter (TNamedObject) in the return type.
+        $builderClass = self::getBuilderClassForModel($modelClass);
 
         // Scope methods: return Builder<Model> directly.
         // Using executeFakeCall for scopes doesn't work reliably because the scope

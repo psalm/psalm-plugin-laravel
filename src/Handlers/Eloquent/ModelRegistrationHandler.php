@@ -190,7 +190,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
 
         // 1. #[UseEloquentBuilder] attribute (Laravel 12+) takes priority.
-        $builderClass = self::resolveBuilderFromAttribute($reflection);
+        $builderClass = self::resolveBuilderFromAttribute($reflection, $codebase);
 
         // 2. Fall back to newEloquentBuilder() return type override.
         if ($builderClass === null) {
@@ -228,7 +228,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      *
      * @return class-string|null
      */
-    private static function resolveBuilderFromAttribute(\ReflectionClass $reflection): ?string
+    private static function resolveBuilderFromAttribute(\ReflectionClass $reflection, Codebase $codebase): ?string
     {
         $attributes = $reflection->getAttributes(UseEloquentBuilder::class);
         if ($attributes === []) {
@@ -237,8 +237,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         try {
             return $attributes[0]->newInstance()->builderClass;
-        } catch (\Error) {
-            // Attribute class failed to autoload or instantiate — skip silently.
+        } catch (\Error $error) {
+            $codebase->progress->debug(
+                "Laravel plugin: #[UseEloquentBuilder] on '{$reflection->getName()}' failed to instantiate: {$error->getMessage()}\n",
+            );
+
             return null;
         }
     }
