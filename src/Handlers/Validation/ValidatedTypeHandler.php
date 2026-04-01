@@ -297,19 +297,105 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        $tree = [];
+
+        foreach ($rules as $field => $resolvedRule) {
+            $segments = explode('.', $field);
+            self::insertIntoTree($tree, $segments, $resolvedRule);
+        }
+
+        return self::buildUnionFromTree($tree);
+    }
+
+    /**
+     * Insert a resolved rule into a nested tree structure based on dot-notation segments.
+     *
+     * @param array<string, mixed> $tree
+     * @param list<string> $segments
+     */
+    private static function insertIntoTree(array &$tree, array $segments, ResolvedRule $resolvedRule): void
+    {
+        $key = array_shift($segments);
+
+        if ($segments === []) {
+            if (!isset($tree[$key]) || !is_array($tree[$key])) {
+                $tree[$key] = $resolvedRule;
+            }
+            return;
+        }
+
+        if ($segments[0] === '*' || $key === '*') {
+            if ($key === '*') {
+                if (!isset($tree['*']) || !is_array($tree['*'])) {
+                    $tree['*'] = [];
+                }
+                self::insertIntoTree($tree['*'], $segments, $resolvedRule);
+                return;
+            }
+        }
+
+        if (!isset($tree[$key]) || !is_array($tree[$key])) {
+            $tree[$key] = [];
+        }
+
+        self::insertIntoTree($tree[$key], $segments, $resolvedRule);
+    }
+
+    /**
+     * Recursively convert a nested tree into TKeyedArray Union types.
+     *
+     * @psalm-mutation-free
+     * @param array<string, mixed> $tree
+     */
+    private static function buildUnionFromTree(array $tree): ?Union
+    {
+        if ($tree === []) {
+            return null;
+        }
+
         /** @var non-empty-array<string, Union> $properties */
         $properties = [];
 
-        foreach ($rules as $field => $resolvedRule) {
-            $fieldType = $resolvedRule->type;
-
-            // Fields without a presence rule (required, present, accepted, etc.)
-            // may be absent from validated() output when not provided in the request.
-            if (!$resolvedRule->required) {
-                $fieldType = $fieldType->setPossiblyUndefined(true);
+        foreach ($tree as $key => $value) {
+            if ($value instanceof ResolvedRule) {
+                $fieldType = $value->type;
+                if (!$value->required) {
+                    $fieldType = $fieldType->setPossiblyUndefined(true);
+                }
+                $properties[$key] = $fieldType;
+                continue;
             }
 
-            $properties[$field] = $fieldType;
+            if (!is_array($value)) {
+                continue;
+            }
+
+            if ($key === '*') {
+                continue;
+            }
+
+            if (isset($value['*']) && is_array($value['*'])) {
+                $itemShape = self::buildUnionFromTree($value['*']);
+
+                if ($itemShape !== null) {
+                    $properties[$key] = new Union([
+                        Type::getListAtomic($itemShape),
+                    ]);
+                } else {
+                    $properties[$key] = Type::getListAtomic(Type::getMixed());
+                }
+                continue;
+            }
+
+            $nested = self::buildUnionFromTree($value);
+
+            if ($nested !== null) {
+                $properties[$key] = $nested;
+            }
+        }
+
+        if ($properties === []) {
+            return null;
         }
 
         return new Union([TKeyedArray::make($properties)]);
