@@ -42,7 +42,7 @@ jobs:
 
       - name: Commit PHP code-style fixes (if any)
         if: ${{ steps.lint_php.outcome == 'failure' }}
-        uses: EndBug/add-and-commit@v9
+        uses: EndBug/add-and-commit@v10
         with:
           message: "Fix PHP coding style issues 🪄"
           author_name: GitHub Actions
