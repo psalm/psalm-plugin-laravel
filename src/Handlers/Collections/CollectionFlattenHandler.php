@@ -68,7 +68,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
 
         $tValue = $templateTypeParameters[1];
         $innerValue = self::extractInnerValue($tValue);
-        if ($innerValue === null) {
+        if (!$innerValue instanceof \Psalm\Type\Union) {
             return null;
         }
 
@@ -116,10 +116,8 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
         $atomic = $tValue->getSingleAtomic();
 
         // Collection<K, V>, LazyCollection<K, V>, or any Enumerable — extract V (index 1)
-        if ($atomic instanceof TGenericObject && \count($atomic->type_params) >= 2) {
-            if (\is_a($atomic->value, Enumerable::class, allow_string: true)) {
-                return $atomic->type_params[1];
-            }
+        if ($atomic instanceof TGenericObject && \count($atomic->type_params) >= 2 && \is_a($atomic->value, Enumerable::class, allow_string: true)) {
+            return $atomic->type_params[1];
         }
 
         // array<K, V> — extract V (index 1)

@@ -175,9 +175,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         try {
             /** @var class-string $className */
             $reflection = new \ReflectionClass($className);
-        } catch (\ReflectionException $e) {
+        } catch (\ReflectionException $reflectionException) {
             $codebase->progress->debug(
-                "Laravel plugin: could not reflect model '{$className}' for custom builder detection: {$e->getMessage()}\n",
+                "Laravel plugin: could not reflect model '{$className}' for custom builder detection: {$reflectionException->getMessage()}\n",
             );
 
             return;
