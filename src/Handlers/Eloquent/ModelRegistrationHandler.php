@@ -201,7 +201,18 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             return;
         }
 
-        if (\is_subclass_of($builderClass, Builder::class, true)) {
+        // is_subclass_of() may trigger autoloading which can throw \Error for broken classes.
+        try {
+            $isValid = \is_subclass_of($builderClass, Builder::class, true);
+        } catch (\Error $error) {
+            $codebase->progress->debug(
+                "Laravel plugin: model '{$className}' builder '{$builderClass}' failed autoloading: {$error->getMessage()}\n",
+            );
+
+            return;
+        }
+
+        if ($isValid) {
             /** @var class-string<Builder> $builderClass */
             ModelMethodHandler::registerCustomBuilder($className, $builderClass);
         } else {
@@ -224,7 +235,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             return null;
         }
 
-        return $attributes[0]->newInstance()->builderClass;
+        try {
+            return $attributes[0]->newInstance()->builderClass;
+        } catch (\Error) {
+            // Attribute class failed to autoload or instantiate — skip silently.
+            return null;
+        }
     }
 
     /**
