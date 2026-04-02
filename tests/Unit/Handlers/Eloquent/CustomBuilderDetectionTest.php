@@ -36,8 +36,10 @@ final class CustomBuilderDetectionTest extends TestCase
     protected function tearDown(): void
     {
         // Reset static state to prevent leaking between tests.
-        // Both caches must be cleared together — $unresolvedCache entries depend on $customBuilderMap.
+        // All maps and caches must be cleared together — they are interdependent.
         (new \ReflectionProperty(ModelMethodHandler::class, 'customBuilderMap'))->setValue(null, []);
+        (new \ReflectionProperty(ModelMethodHandler::class, 'builderToModelMap'))->setValue(null, []);
+        (new \ReflectionProperty(ModelMethodHandler::class, 'traitBuilderMethods'))->setValue(null, []);
         (new \ReflectionProperty(ModelMethodHandler::class, 'unresolvedCache'))->setValue(null, []);
     }
 

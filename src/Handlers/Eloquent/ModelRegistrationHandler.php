@@ -14,6 +14,7 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
@@ -84,7 +85,14 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // Detect custom builder class via attribute, method override, or $builder property.
         // Class is already loaded by autoloader above.
         /** @var class-string<Model> $className — verified by parent_classes check in caller */
-        self::detectCustomBuilder($codebase, $className);
+        $customBuilder = self::detectCustomBuilder($codebase, $className);
+
+        // For models with custom builders: handle @method static annotations from traits
+        // (e.g., SoftDeletes::withTrashed) that return Builder<static>. These are builder
+        // macros at runtime — remap them to return the custom builder type.
+        if ($customBuilder !== null) {
+            self::handleTraitBuilderMethods($codebase, $storage, $className, $customBuilder);
+        }
 
         // Method existence, visibility, and return types for static __callStatic forwarding.
         // Registered per-model because Psalm's provider lookup uses exact class names —
@@ -178,8 +186,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      * 3. protected static string $builder property — fallback in the base newEloquentBuilder()
      *
      * @param class-string<Model> $className
+     * @return class-string<Builder>|null The custom builder class, or null if using base Builder.
      */
-    private static function detectCustomBuilder(Codebase $codebase, string $className): void
+    private static function detectCustomBuilder(Codebase $codebase, string $className): ?string
     {
         try {
             $reflection = new \ReflectionClass($className);
@@ -188,7 +197,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 "Laravel plugin: could not reflect model '{$className}' for custom builder detection: {$reflectionException->getMessage()}\n",
             );
 
-            return;
+            return null;
         }
 
         // 1. newEloquentBuilder() override — bypasses attribute and property when present.
@@ -205,7 +214,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
 
         if ($builderClass === null) {
-            return;
+            return null;
         }
 
         // is_subclass_of() may trigger autoloading which can throw \Error for broken classes.
@@ -216,18 +225,110 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 "Laravel plugin: model '{$className}' builder '{$builderClass}' failed autoloading: {$error->getMessage()}\n",
             );
 
-            return;
+            return null;
         }
 
         if ($isValid) {
             /** @var class-string<Builder> $builderClass */
             ModelMethodHandler::registerCustomBuilder($className, $builderClass);
-        } else {
-            $codebase->progress->debug(
-                "Laravel plugin: model '{$className}' declares custom builder '{$builderClass}' "
-                . "but it does not extend " . Builder::class . " — ignoring\n",
-            );
+
+            return $builderClass;
         }
+
+        $codebase->progress->debug(
+            "Laravel plugin: model '{$className}' declares custom builder '{$builderClass}' "
+            . "but it does not extend " . Builder::class . " — ignoring\n",
+        );
+
+        return null;
+    }
+
+    /**
+     * For models with custom builders, detect @method static annotations from traits
+     * that return Builder<static> (e.g., SoftDeletes::withTrashed). Remove them from
+     * the model's pseudo_static_methods so our handler provides the correct custom builder
+     * return type, and register method handlers on the custom builder class so builder
+     * instance calls also resolve.
+     *
+     * This is generic: any trait following Laravel's convention of declaring builder
+     * methods via @method static returning Builder<static> is handled automatically.
+     *
+     * @param class-string<Model> $modelClass
+     * @param class-string<Builder> $builderClass
+     */
+    private static function handleTraitBuilderMethods(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        string $modelClass,
+        string $builderClass,
+    ): void {
+        $traitMethods = self::extractBuilderReturningMethods($storage);
+        if ($traitMethods === []) {
+            return;
+        }
+
+        // Remove from model's pseudo_static_methods so Psalm doesn't resolve them
+        // natively with Builder<Post> return type — our handler provides PostBuilder<Post>.
+        foreach (\array_keys($traitMethods) as $methodName) {
+            unset($storage->pseudo_static_methods[$methodName]);
+        }
+
+        ModelMethodHandler::registerTraitBuilderMethods($modelClass, $traitMethods);
+
+        // Register method handlers on the custom builder class so builder instance
+        // calls like Post::query()->withTrashed() also resolve correctly.
+        $methods = $codebase->methods;
+        $methods->existence_provider->registerClosure(
+            $builderClass,
+            ModelMethodHandler::doesTraitMethodExistOnBuilder(...),
+        );
+        $methods->visibility_provider->registerClosure(
+            $builderClass,
+            ModelMethodHandler::isTraitMethodVisibleOnBuilder(...),
+        );
+        $methods->params_provider->registerClosure(
+            $builderClass,
+            ModelMethodHandler::getTraitMethodParamsOnBuilder(...),
+        );
+        $methods->return_type_provider->registerClosure(
+            $builderClass,
+            ModelMethodHandler::getTraitMethodReturnTypeOnBuilder(...),
+        );
+    }
+
+    /**
+     * Extract @method static declarations that return Builder<static> from
+     * a model's pseudo_static_methods. These typically originate from traits
+     * like SoftDeletes (which register builder macros via global scopes), but
+     * may also include model-level @method annotations; this is acceptable as
+     * we only act on methods whose return type is a generic Builder.
+     *
+     * @return array<lowercase-string, list<FunctionLikeParameter>>
+     * @psalm-mutation-free
+     */
+    private static function extractBuilderReturningMethods(ClassLikeStorage $storage): array
+    {
+        $builderClassLower = \strtolower(Builder::class);
+        $result = [];
+
+        foreach ($storage->pseudo_static_methods as $methodName => $methodStorage) {
+            $returnType = $methodStorage->return_type;
+            if ($returnType === null) {
+                continue;
+            }
+
+            foreach ($returnType->getAtomicTypes() as $type) {
+                if (
+                    $type instanceof TGenericObject
+                    && \strtolower($type->value) === $builderClassLower
+                ) {
+                    $result[$methodName] = $methodStorage->params;
+                    break;
+                }
+            }
+        }
+
+        return $result;
     }
 
     /**

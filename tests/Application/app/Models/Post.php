@@ -11,15 +11,20 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Post model with a custom query builder via #[UseEloquentBuilder] attribute (Laravel 12+).
+ * Also uses SoftDeletes to test trait-declared builder methods on custom builders.
  *
  * @see https://laravel-news.com/defining-a-dedicated-query-builder-in-laravel-12-with-php-attributes
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/631
  */
 #[UseEloquentBuilder(PostBuilder::class)]
 final class Post extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'posts';
 
     /**
