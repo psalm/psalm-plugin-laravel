@@ -75,7 +75,7 @@ function test_scope_attribute_via_builder(): Builder
 }
 
 /**
- * Known limitation: #[Scope] methods work at runtime via __callStatic → callNamedScope,
+ * Known limitation: #[Scope] methods work at runtime via __callStatic → query() → Builder,
  * but Psalm sees them as real instance methods and reports InvalidStaticInvocation.
  */
 function test_scope_attribute_static_is_invalid(): void

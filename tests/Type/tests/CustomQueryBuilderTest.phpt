@@ -162,7 +162,7 @@ function test_scope_attribute_on_custom_builder_via_query(): void
 }
 
 /**
- * Known limitation: #[Scope] methods work at runtime via __callStatic → callNamedScope,
+ * Known limitation: #[Scope] methods work at runtime via __callStatic → query() → Builder,
  * but Psalm sees them as real instance methods and reports InvalidStaticInvocation.
  * Same behavior as User::verified() in ModelStaticBuilderMethodsTest.
  */
