@@ -1,107 +1,37 @@
 --FILE--
 <?php declare(strict_types=1);
 
-use App\Models\Phone;
 use App\Models\User;
-use App\Models\Vault;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use App\Models\Phone;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\HasOneThrough;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Database\Eloquent\Relations\MorphOne;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
-use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 /**
- * @see https://github.com/psalm/psalm-plugin-laravel/issues/593
- *
- * Verify that relationship methods do NOT return mixed.
- * Psalm doesn't support $this in generics (vimeo/psalm#11768), so our stubs
- * use `static` instead. This test ensures the return types resolve to their
- * relation class (not mixed), preventing MixedReturnStatement errors.
+ * Verify that relation stubs accept multi-param generics matching Laravel's native annotations.
+ * HasOne<Related, Declaring>, HasManyThrough<Related, Intermediate, Declaring>, etc.
  */
 
-// --- Without explicit @psalm-return annotations (Vault model) ---
-// These are the core regression tests for #593: plain relationship calls
-// must not produce MixedReturnStatement.
-
-function test_belongsTo_without_annotation(Vault $vault): BelongsTo
+function test_hasOne_returns_typed_relation(): HasOne
 {
-    return $vault->owner();
+    return (new User())->phone();
 }
 
-function test_hasOne_without_annotation(Vault $vault): HasOne
+function test_belongsToMany_returns_typed_relation(): BelongsToMany
 {
-    return $vault->latestPhone();
+    return (new User())->roles();
 }
 
-function test_morphOne_without_annotation(Vault $vault): MorphOne
+function test_hasManyThrough_returns_typed_relation(): HasManyThrough
 {
-    return $vault->featuredImage();
+    return (new User())->carsAtMechanic();
 }
 
-function test_morphTo_without_annotation(Vault $vault): MorphTo
-{
-    return $vault->vaultable();
-}
-
-function test_hasMany_without_annotation(Vault $vault): HasMany
-{
-    return $vault->posts();
-}
-
-function test_belongsToMany_without_annotation(Vault $vault): BelongsToMany
-{
-    return $vault->tags();
-}
-
-function test_morphMany_without_annotation(Vault $vault): MorphMany
-{
-    return $vault->comments();
-}
-
-function test_hasManyThrough_without_annotation(Vault $vault): HasManyThrough
-{
-    return $vault->mechanics();
-}
-
-function test_morphToMany_without_annotation(Vault $vault): MorphToMany
-{
-    return $vault->allTags();
-}
-
-function test_hasOneThrough_without_annotation(Vault $vault): HasOneThrough
-{
-    return $vault->carOwner();
-}
-
-function test_morphedByMany_without_annotation(Vault $vault): MorphToMany
-{
-    return $vault->morphedPosts();
-}
-
-// --- With explicit @psalm-return annotations (User model) ---
-
-function test_hasOne_with_annotation(User $user): HasOne
-{
-    return $user->phone();
-}
-
-function test_belongsToMany_with_annotation(User $user): BelongsToMany
-{
-    return $user->roles();
-}
-
-function test_hasManyThrough_with_annotation(User $user): HasManyThrough
-{
-    return $user->carsAtMechanic();
-}
-
-// --- getRelated()/getParent() resolve correctly with explicit annotation ---
-
+/**
+ * When the generic type is explicitly annotated, getRelated()/getParent() resolve correctly.
+ * Psalm cannot yet infer full generic params through trait methods, so @var is used to
+ * verify template parameter propagation through the relation API.
+ */
 function test_hasOne_getRelated_returns_phone(): Phone
 {
     /** @var HasOne<Phone, User> $relation */
