@@ -298,8 +298,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
     /**
      * Extract @method static declarations that return Builder<static> from
-     * a model's pseudo_static_methods. These come from traits like SoftDeletes
-     * and represent builder macros registered via global scopes at runtime.
+     * a model's pseudo_static_methods. These typically originate from traits
+     * like SoftDeletes (which register builder macros via global scopes), but
+     * may also include model-level @method annotations; this is acceptable as
+     * we only act on methods whose return type is a generic Builder.
      *
      * @return array<lowercase-string, list<FunctionLikeParameter>>
      * @psalm-mutation-free
