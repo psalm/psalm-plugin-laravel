@@ -66,7 +66,7 @@ final readonly class PluginConfig
      */
     private static function xmlStringAttr(?\SimpleXMLElement $element, string $attribute, string $default): string
     {
-        if ($element === null) {
+        if (!$element instanceof \SimpleXMLElement) {
             return $default;
         }
 
@@ -81,7 +81,7 @@ final readonly class PluginConfig
      */
     private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name): bool
     {
-        if ($element === null) {
+        if (!$element instanceof \SimpleXMLElement) {
             return false;
         }
 
