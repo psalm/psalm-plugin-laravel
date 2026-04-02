@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Builders\PostBuilder;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -37,6 +38,30 @@ final class Post extends Model
     public function scopeFeatured($query)
     {
         return $query->where('featured', true);
+    }
+
+    /**
+     * Legacy scope with parameter: exercises the getScopeParams path
+     * which strips the $query parameter and passes remaining params.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeByCategory($query, string $category)
+    {
+        return $query->where('category', $category);
+    }
+
+    /**
+     * Modern #[Scope] attribute scope: called as Post::query()->popular().
+     * Exercises the #[Scope] + custom builder return type path.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    public function popular(Builder $query): void
+    {
+        $query->where('views', '>', 100);
     }
 
     /**
