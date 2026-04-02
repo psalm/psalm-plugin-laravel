@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
@@ -115,6 +117,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             );
         }
 
+        // Detect custom collection class via #[CollectedBy] attribute or newCollection() override.
+        // Class is already loaded by autoloader above, so runtime reflection works.
+        self::detectCustomCollection($codebase, $className);
+
         // Method existence, visibility, and return types for static __callStatic forwarding.
         // Registered per-model because Psalm's provider lookup uses exact class names —
         // a handler for Model::class is not consulted for App\Models\User.
@@ -133,6 +139,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $methods->return_type_provider->registerClosure(
             $className,
             ModelMethodHandler::getReturnTypeForForwardedMethod(...),
+        );
+        // Custom collection: narrows Model::all() return type for models using
+        // #[CollectedBy] or overriding newCollection() with a concrete subclass.
+        $methods->return_type_provider->registerClosure(
+            $className,
+            CustomCollectionHandler::getModelMethodReturnType(...),
         );
 
         // Registration order matters — the first non-null result wins.
@@ -422,6 +434,178 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
 
         // Only consider overrides, not the base Model::$builder = Builder::class.
+        if ($property->getDeclaringClass()->getName() === Model::class) {
+            return null;
+        }
+
+        /** @psalm-var class-string|null $value */
+        $value = $property->getValue();
+
+        return $value;
+    }
+
+    /**
+     * Detect a custom Eloquent collection for a model and register it.
+     *
+     * Matches Laravel's own resolution priority in HasCollection::newCollection():
+     * 1. newCollection() override — if the model overrides this method, it bypasses
+     *    the attribute and property checks entirely (Laravel calls the override directly)
+     * 2. #[CollectedBy] attribute — checked first inside the base newCollection()
+     * 3. protected static string $collectionClass property — fallback in the base newCollection()
+     *
+     * Uses runtime reflection (consistent with custom builder detection) since the model
+     * class is already loaded by the autoloader in the caller.
+     *
+     * @param class-string<Model> $className
+     */
+    private static function detectCustomCollection(Codebase $codebase, string $className): void
+    {
+        try {
+            $reflection = new \ReflectionClass($className);
+        } catch (\ReflectionException $reflectionException) {
+            $codebase->progress->debug(
+                "Laravel plugin: could not reflect model '{$className}' for custom collection detection: {$reflectionException->getMessage()}\n",
+            );
+
+            return;
+        }
+
+        // 1. newCollection() override — bypasses attribute and property when present.
+        $collectionClass = self::resolveCollectionFromMethodOverride($reflection);
+
+        // 2. #[CollectedBy] attribute — checked first in the base newCollection().
+        if ($collectionClass === null) {
+            $collectionClass = self::resolveCollectionFromAttribute($reflection, $codebase);
+        }
+
+        // 3. Fall back to static $collectionClass property.
+        if ($collectionClass === null) {
+            $collectionClass = self::resolveCollectionFromStaticProperty($reflection);
+        }
+
+        if ($collectionClass === null) {
+            return;
+        }
+
+        // Validate that the class is a Collection subclass.
+        // is_subclass_of() may trigger autoloading which can throw \Error for broken classes.
+        try {
+            $isValid = \is_subclass_of($collectionClass, EloquentCollection::class, true);
+        } catch (\Error $error) {
+            $codebase->progress->debug(
+                "Laravel plugin: model '{$className}' collection '{$collectionClass}' failed autoloading: {$error->getMessage()}\n",
+            );
+
+            return;
+        }
+
+        if ($isValid) {
+            /** @var class-string<EloquentCollection> $collectionClass */
+            CustomCollectionHandler::registerCustomCollection($className, $collectionClass);
+
+            return;
+        }
+
+        $codebase->progress->debug(
+            "Laravel plugin: model '{$className}' declares custom collection '{$collectionClass}' "
+            . "but it does not extend " . EloquentCollection::class . " — ignoring\n",
+        );
+    }
+
+    /**
+     * Resolve custom collection from #[CollectedBy] attribute.
+     *
+     * Walks up the parent class chain for grandchild models, matching Laravel's
+     * HasCollection::resolveCollectionFromAttribute() behavior: if a base model
+     * declares #[CollectedBy], child models inherit the custom collection.
+     *
+     * @return class-string|null
+     */
+    private static function resolveCollectionFromAttribute(\ReflectionClass $reflection, Codebase $codebase): ?string
+    {
+        $attributes = $reflection->getAttributes(CollectedBy::class);
+        if ($attributes !== []) {
+            try {
+                /** @var class-string */
+                return $attributes[0]->newInstance()->collectionClass;
+            } catch (\Error $error) {
+                $codebase->progress->debug(
+                    "Laravel plugin: #[CollectedBy] on '{$reflection->getName()}' failed to instantiate: {$error->getMessage()}\n",
+                );
+
+                return null;
+            }
+        }
+
+        // Walk up to parent model (grandchild inheritance), matching Laravel's behavior.
+        // A model whose direct parent is Model itself has no intermediate base to inherit from.
+        $parentClass = $reflection->getParentClass();
+        if (
+            $parentClass !== false
+            && $parentClass->getName() !== Model::class
+            && $parentClass->isSubclassOf(Model::class)
+        ) {
+            return self::resolveCollectionFromAttribute($parentClass, $codebase);
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve custom collection from a newCollection() override with a native return type.
+     *
+     * Detects any override whose declaring class is not Illuminate\Database\Eloquent\Model
+     * (including overrides in an intermediate base model) with a PHP native return type
+     * that is a concrete class (not EloquentCollection itself).
+     *
+     * @return class-string|null
+     * @psalm-mutation-free
+     */
+    private static function resolveCollectionFromMethodOverride(\ReflectionClass $reflection): ?string
+    {
+        try {
+            $method = $reflection->getMethod('newCollection');
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        // Only consider overrides declared on the model, not the base Model method.
+        if ($method->getDeclaringClass()->getName() === Model::class) {
+            return null;
+        }
+
+        $returnType = $method->getReturnType();
+        if (!$returnType instanceof \ReflectionNamedType || $returnType->isBuiltin()) {
+            return null;
+        }
+
+        $typeName = $returnType->getName();
+
+        // Skip if it just returns the base EloquentCollection — not a custom collection.
+        if ($typeName === EloquentCollection::class) {
+            return null;
+        }
+
+        return $typeName;
+    }
+
+    /**
+     * Resolve custom collection from a static $collectionClass property override (all Laravel versions).
+     *
+     * Detects when a model overrides the protected static string $collectionClass property
+     * with a custom collection class name.
+     *
+     * @return class-string|null
+     */
+    private static function resolveCollectionFromStaticProperty(\ReflectionClass $reflection): ?string
+    {
+        try {
+            $property = $reflection->getProperty('collectionClass');
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        // Only consider overrides, not the base Model::$collectionClass = Collection::class.
         if ($property->getDeclaringClass()->getName() === Model::class) {
             return null;
         }
