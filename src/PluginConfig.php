@@ -27,7 +27,7 @@ final readonly class PluginConfig
 
     public static function fromXml(?\SimpleXMLElement $config): self
     {
-        $columnFallbackValue = (string) ($config?->modelProperties['columnFallback'] ?? 'migrations');
+        $columnFallbackValue = self::xmlStringAttr($config?->modelProperties, 'columnFallback', 'migrations');
         $columnFallback = ColumnFallback::tryFrom($columnFallbackValue);
 
         if ($columnFallback === null) {
@@ -41,9 +41,9 @@ final readonly class PluginConfig
             );
         }
 
-        $failOnInternalError = self::parseBool($config, 'failOnInternalError');
-        $findMissingTranslations = self::parseBool($config, 'findMissingTranslations');
-        $findMissingViews = self::parseBool($config, 'findMissingViews');
+        $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
+        $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
+        $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
 
         return new self(
             columnFallback: $columnFallback,
@@ -60,16 +60,32 @@ final readonly class PluginConfig
     }
 
     /**
-     * Parse a boolean XML config option with validation.
-     *
-     * Expects `<optionName value="true" />` or `<optionName value="false" />`.
-     * Defaults to false when the option is absent.
-     *
+     * Read a named attribute of an XML element as a string.
+     * Returns $default when the element is absent or the attribute is missing.
      * @psalm-pure
      */
-    private static function parseBool(?\SimpleXMLElement $config, string $name): bool
+    private static function xmlStringAttr(?\SimpleXMLElement $element, string $attribute, string $default): string
     {
-        $value = (string) ($config?->{$name}['value'] ?? 'false');
+        if (!$element instanceof \SimpleXMLElement) {
+            return $default;
+        }
+
+        return (string) ($element[$attribute] ?? $default);
+    }
+
+    /**
+     * Read the `value` attribute of an XML element as a boolean.
+     * Expects `<element value="true" />` or `<element value="false" />`.
+     * Returns false when the element is absent.
+     * @psalm-pure
+     */
+    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name): bool
+    {
+        if (!$element instanceof \SimpleXMLElement) {
+            return false;
+        }
+
+        $value = (string) ($element['value'] ?? 'false');
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException(

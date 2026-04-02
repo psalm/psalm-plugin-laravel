@@ -23,7 +23,7 @@ use Psalm\Type\Union;
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/486
  * @internal
  */
-final class PluckHandler implements MethodReturnTypeProviderInterface
+final class BuilderPluckHandler implements MethodReturnTypeProviderInterface
 {
     /**
      * @return list<string>

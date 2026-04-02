@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -78,6 +80,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $className = $storage->name;
         $properties = $codebase->properties;
         $methods = $codebase->methods;
+
+        // Detect custom builder class via attribute, method override, or $builder property.
+        // Class is already loaded by autoloader above.
+        /** @var class-string<Model> $className — verified by parent_classes check in caller */
+        self::detectCustomBuilder($codebase, $className);
 
         // Method existence, visibility, and return types for static __callStatic forwarding.
         // Registered per-model because Psalm's provider lookup uses exact class names —
@@ -159,6 +166,148 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         // Register write types for accessor and relationship properties
         self::registerWriteTypesForMethods($codebase, $storage);
+    }
+
+    /**
+     * Detect a custom Eloquent builder for a model and register it.
+     *
+     * Matches Laravel's own resolution priority in Model::newEloquentBuilder():
+     * 1. newEloquentBuilder() override — if the model overrides this method, it bypasses
+     *    the attribute and property checks entirely (Laravel calls the override directly)
+     * 2. #[UseEloquentBuilder] attribute — checked first inside the base newEloquentBuilder()
+     * 3. protected static string $builder property — fallback in the base newEloquentBuilder()
+     *
+     * @param class-string<Model> $className
+     */
+    private static function detectCustomBuilder(Codebase $codebase, string $className): void
+    {
+        try {
+            $reflection = new \ReflectionClass($className);
+        } catch (\ReflectionException $reflectionException) {
+            $codebase->progress->debug(
+                "Laravel plugin: could not reflect model '{$className}' for custom builder detection: {$reflectionException->getMessage()}\n",
+            );
+
+            return;
+        }
+
+        // 1. newEloquentBuilder() override — bypasses attribute and property when present.
+        $builderClass = self::resolveBuilderFromMethodOverride($reflection);
+
+        // 2. #[UseEloquentBuilder] attribute — checked first in the base newEloquentBuilder().
+        if ($builderClass === null) {
+            $builderClass = self::resolveBuilderFromAttribute($reflection, $codebase);
+        }
+
+        // 3. Fall back to static $builder property.
+        if ($builderClass === null) {
+            $builderClass = self::resolveBuilderFromStaticProperty($reflection);
+        }
+
+        if ($builderClass === null) {
+            return;
+        }
+
+        // is_subclass_of() may trigger autoloading which can throw \Error for broken classes.
+        try {
+            $isValid = \is_subclass_of($builderClass, Builder::class, true);
+        } catch (\Error $error) {
+            $codebase->progress->debug(
+                "Laravel plugin: model '{$className}' builder '{$builderClass}' failed autoloading: {$error->getMessage()}\n",
+            );
+
+            return;
+        }
+
+        if ($isValid) {
+            /** @var class-string<Builder> $builderClass */
+            ModelMethodHandler::registerCustomBuilder($className, $builderClass);
+        } else {
+            $codebase->progress->debug(
+                "Laravel plugin: model '{$className}' declares custom builder '{$builderClass}' "
+                . "but it does not extend " . Builder::class . " — ignoring\n",
+            );
+        }
+    }
+
+    /**
+     * Resolve custom builder from #[UseEloquentBuilder] attribute.
+     *
+     * @return class-string|null
+     */
+    private static function resolveBuilderFromAttribute(\ReflectionClass $reflection, Codebase $codebase): ?string
+    {
+        $attributes = $reflection->getAttributes(UseEloquentBuilder::class);
+        if ($attributes === []) {
+            return null;
+        }
+
+        try {
+            return $attributes[0]->newInstance()->builderClass;
+        } catch (\Error $error) {
+            $codebase->progress->debug(
+                "Laravel plugin: #[UseEloquentBuilder] on '{$reflection->getName()}' failed to instantiate: {$error->getMessage()}\n",
+            );
+
+            return null;
+        }
+    }
+
+    /**
+     * Resolve custom builder from a newEloquentBuilder() override with a native return type.
+     *
+     * Detects any override whose declaring class is not Illuminate\Database\Eloquent\Model
+     * (including overrides in an intermediate base model) with a PHP native return type.
+     *
+     * @return class-string|null
+     * @psalm-mutation-free
+     */
+    private static function resolveBuilderFromMethodOverride(\ReflectionClass $reflection): ?string
+    {
+        try {
+            $method = $reflection->getMethod('newEloquentBuilder');
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        // Only consider overrides declared on the model, not the base Model method.
+        if ($method->getDeclaringClass()->getName() === Model::class) {
+            return null;
+        }
+
+        $returnType = $method->getReturnType();
+        if (!$returnType instanceof \ReflectionNamedType || $returnType->isBuiltin()) {
+            return null;
+        }
+
+        return $returnType->getName();
+    }
+
+    /**
+     * Resolve custom builder from a static $builder property override (all Laravel versions).
+     *
+     * Detects when a model overrides the protected static string $builder property
+     * with a custom builder class name.
+     *
+     * @return class-string|null
+     */
+    private static function resolveBuilderFromStaticProperty(\ReflectionClass $reflection): ?string
+    {
+        try {
+            $property = $reflection->getProperty('builder');
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        // Only consider overrides, not the base Model::$builder = Builder::class.
+        if ($property->getDeclaringClass()->getName() === Model::class) {
+            return null;
+        }
+
+        /** @psalm-var class-string|null $value */
+        $value = $property->getValue();
+
+        return $value;
     }
 
     /**
