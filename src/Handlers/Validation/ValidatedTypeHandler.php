@@ -327,16 +327,6 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return;
         }
 
-        if ($segments[0] === '*' || $key === '*') {
-            if ($key === '*') {
-                if (!isset($tree['*']) || !is_array($tree['*'])) {
-                    $tree['*'] = [];
-                }
-                self::insertIntoTree($tree['*'], $segments, $resolvedRule);
-                return;
-            }
-        }
-
         if (!isset($tree[$key]) || !is_array($tree[$key])) {
             $tree[$key] = [];
         }
@@ -385,7 +375,9 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
                         Type::getListAtomic($itemShape),
                     ]);
                 } else {
-                    $properties[$key] = Type::getListAtomic(Type::getMixed());
+                    $properties[$key] = new Union([
+                        Type::getListAtomic(Type::getMixed())
+                    ]);
                 }
                 continue;
             }
