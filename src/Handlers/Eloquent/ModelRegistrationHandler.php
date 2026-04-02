@@ -304,11 +304,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             return null;
         }
 
-        /** @psalm-var mixed */
+        /** @psalm-var class-string|null $value */
         $value = $property->getValue();
 
-        /** @psalm-var class-string|null */
-        return \is_string($value) ? $value : null;
+        return $value;
     }
 
     /**
