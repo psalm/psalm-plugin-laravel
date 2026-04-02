@@ -81,8 +81,8 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $properties = $codebase->properties;
         $methods = $codebase->methods;
 
-        // Detect custom builder class via #[UseEloquentBuilder] attribute or
-        // newEloquentBuilder() override. Class is already loaded by autoloader above.
+        // Detect custom builder class via attribute, method override, or $builder property.
+        // Class is already loaded by autoloader above.
         /** @var class-string<Model> $className — verified by parent_classes check in caller */
         self::detectCustomBuilder($codebase, $className);
 
@@ -303,8 +303,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             return null;
         }
 
+        /** @var mixed $value */
         $value = $property->getValue();
 
+        /** @var class-string|null */
         return \is_string($value) ? $value : null;
     }
 
