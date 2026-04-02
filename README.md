@@ -163,14 +163,13 @@ Psalm and PHPStan use almost the same annotation syntax, so they work side by si
 **Larastan checks your types. We check your security. Use both.**
 
 
-## Looking for contributors
+## Contributing
 
-This package is maintained by [@alies-dev](https://github.com/sponsors/alies-dev) and is open to new contributors.
-If you're passionate about Laravel internals and static analysis, consider joining the effort.
+Maintained by [@alies-dev](https://github.com/sponsors/alies-dev).
+PRs and issues welcome — first-time contributors too.
+There are [contributing docs](docs/contributing/README.md) that may help you (and your agents) with contributions.
 
-Areas where help is especially welcome:
- - [ ] Expanding taint analysis coverage (new Laravel security surfaces)
- - [ ] Enhance type inference for Laravel magic
- - [ ] Enforce best practices by introducing new checks
-
-Contributing a taint stub is one of the highest-impact contributions you can make — each stub protects thousands of Laravel apps.
+Areas where help is especially needed:
+- **Taint analysis coverage** — adding a stub is 5–15 lines of annotations and protects thousands of apps. See the [authoring guide](docs/contributing/taint-analysis.md).
+- **Type inference** for Laravel magic (Eloquent, Facades, Collections)
+- **New checks** that enforce Laravel best practices

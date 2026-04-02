@@ -80,6 +80,27 @@ function test_scope_attribute_static_is_invalid(): void
     $_result = User::verified();
 }
 
+// -----------------------------------------------------------------------
+// SoftDeletes on standard builder (no custom builder).
+// Regression: User uses SoftDeletes with base Builder — trait @method static
+// must continue to resolve via Psalm's native pseudo_static_methods.
+// See https://github.com/psalm/psalm-plugin-laravel/issues/631
+// -----------------------------------------------------------------------
+
+/** SoftDeletes withTrashed on standard builder returns Builder<User&static>. */
+function test_soft_deletes_with_trashed_standard_builder(): void
+{
+    $_result = User::withTrashed();
+    /** @psalm-check-type-exact $_result = Builder<User&static> */
+}
+
+/** SoftDeletes onlyTrashed on standard builder returns Builder<User&static>. */
+function test_soft_deletes_only_trashed_standard_builder(): void
+{
+    $_result = User::onlyTrashed();
+    /** @psalm-check-type-exact $_result = Builder<User&static> */
+}
+
 /** Negative test: non-existent methods must still be reported. */
 function test_nonexistent_method(): void
 {

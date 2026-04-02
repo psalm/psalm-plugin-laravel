@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -12,6 +14,7 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
@@ -78,6 +81,18 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $className = $storage->name;
         $properties = $codebase->properties;
         $methods = $codebase->methods;
+
+        // Detect custom builder class via attribute, method override, or $builder property.
+        // Class is already loaded by autoloader above.
+        /** @var class-string<Model> $className — verified by parent_classes check in caller */
+        $customBuilder = self::detectCustomBuilder($codebase, $className);
+
+        // For models with custom builders: handle @method static annotations from traits
+        // (e.g., SoftDeletes::withTrashed) that return Builder<static>. These are builder
+        // macros at runtime — remap them to return the custom builder type.
+        if ($customBuilder !== null) {
+            self::handleTraitBuilderMethods($codebase, $storage, $className, $customBuilder);
+        }
 
         // Method existence, visibility, and return types for static __callStatic forwarding.
         // Registered per-model because Psalm's provider lookup uses exact class names —
@@ -165,6 +180,241 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         // Register write types for accessor and relationship properties
         self::registerWriteTypesForMethods($codebase, $storage);
+    }
+
+    /**
+     * Detect a custom Eloquent builder for a model and register it.
+     *
+     * Matches Laravel's own resolution priority in Model::newEloquentBuilder():
+     * 1. newEloquentBuilder() override — if the model overrides this method, it bypasses
+     *    the attribute and property checks entirely (Laravel calls the override directly)
+     * 2. #[UseEloquentBuilder] attribute — checked first inside the base newEloquentBuilder()
+     * 3. protected static string $builder property — fallback in the base newEloquentBuilder()
+     *
+     * @param class-string<Model> $className
+     * @return class-string<Builder>|null The custom builder class, or null if using base Builder.
+     */
+    private static function detectCustomBuilder(Codebase $codebase, string $className): ?string
+    {
+        try {
+            $reflection = new \ReflectionClass($className);
+        } catch (\ReflectionException $reflectionException) {
+            $codebase->progress->debug(
+                "Laravel plugin: could not reflect model '{$className}' for custom builder detection: {$reflectionException->getMessage()}\n",
+            );
+
+            return null;
+        }
+
+        // 1. newEloquentBuilder() override — bypasses attribute and property when present.
+        $builderClass = self::resolveBuilderFromMethodOverride($reflection);
+
+        // 2. #[UseEloquentBuilder] attribute — checked first in the base newEloquentBuilder().
+        if ($builderClass === null) {
+            $builderClass = self::resolveBuilderFromAttribute($reflection, $codebase);
+        }
+
+        // 3. Fall back to static $builder property.
+        if ($builderClass === null) {
+            $builderClass = self::resolveBuilderFromStaticProperty($reflection);
+        }
+
+        if ($builderClass === null) {
+            return null;
+        }
+
+        // is_subclass_of() may trigger autoloading which can throw \Error for broken classes.
+        try {
+            $isValid = \is_subclass_of($builderClass, Builder::class, true);
+        } catch (\Error $error) {
+            $codebase->progress->debug(
+                "Laravel plugin: model '{$className}' builder '{$builderClass}' failed autoloading: {$error->getMessage()}\n",
+            );
+
+            return null;
+        }
+
+        if ($isValid) {
+            /** @var class-string<Builder> $builderClass */
+            ModelMethodHandler::registerCustomBuilder($className, $builderClass);
+
+            return $builderClass;
+        }
+
+        $codebase->progress->debug(
+            "Laravel plugin: model '{$className}' declares custom builder '{$builderClass}' "
+            . "but it does not extend " . Builder::class . " — ignoring\n",
+        );
+
+        return null;
+    }
+
+    /**
+     * For models with custom builders, detect @method static annotations from traits
+     * that return Builder<static> (e.g., SoftDeletes::withTrashed). Remove them from
+     * the model's pseudo_static_methods so our handler provides the correct custom builder
+     * return type, and register method handlers on the custom builder class so builder
+     * instance calls also resolve.
+     *
+     * This is generic: any trait following Laravel's convention of declaring builder
+     * methods via @method static returning Builder<static> is handled automatically.
+     *
+     * @param class-string<Model> $modelClass
+     * @param class-string<Builder> $builderClass
+     */
+    private static function handleTraitBuilderMethods(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        string $modelClass,
+        string $builderClass,
+    ): void {
+        $traitMethods = self::extractBuilderReturningMethods($storage);
+        if ($traitMethods === []) {
+            return;
+        }
+
+        // Remove from model's pseudo_static_methods so Psalm doesn't resolve them
+        // natively with Builder<Post> return type — our handler provides PostBuilder<Post>.
+        foreach (\array_keys($traitMethods) as $methodName) {
+            unset($storage->pseudo_static_methods[$methodName]);
+        }
+
+        ModelMethodHandler::registerTraitBuilderMethods($modelClass, $traitMethods);
+
+        // Register method handlers on the custom builder class so builder instance
+        // calls like Post::query()->withTrashed() also resolve correctly.
+        $methods = $codebase->methods;
+        $methods->existence_provider->registerClosure(
+            $builderClass,
+            ModelMethodHandler::doesTraitMethodExistOnBuilder(...),
+        );
+        $methods->visibility_provider->registerClosure(
+            $builderClass,
+            ModelMethodHandler::isTraitMethodVisibleOnBuilder(...),
+        );
+        $methods->params_provider->registerClosure(
+            $builderClass,
+            ModelMethodHandler::getTraitMethodParamsOnBuilder(...),
+        );
+        $methods->return_type_provider->registerClosure(
+            $builderClass,
+            ModelMethodHandler::getTraitMethodReturnTypeOnBuilder(...),
+        );
+    }
+
+    /**
+     * Extract @method static declarations that return Builder<static> from
+     * a model's pseudo_static_methods. These typically originate from traits
+     * like SoftDeletes (which register builder macros via global scopes), but
+     * may also include model-level @method annotations; this is acceptable as
+     * we only act on methods whose return type is a generic Builder.
+     *
+     * @return array<lowercase-string, list<FunctionLikeParameter>>
+     * @psalm-mutation-free
+     */
+    private static function extractBuilderReturningMethods(ClassLikeStorage $storage): array
+    {
+        $builderClassLower = \strtolower(Builder::class);
+        $result = [];
+
+        foreach ($storage->pseudo_static_methods as $methodName => $methodStorage) {
+            $returnType = $methodStorage->return_type;
+            if ($returnType === null) {
+                continue;
+            }
+
+            foreach ($returnType->getAtomicTypes() as $type) {
+                if (
+                    $type instanceof TGenericObject
+                    && \strtolower($type->value) === $builderClassLower
+                ) {
+                    $result[$methodName] = $methodStorage->params;
+                    break;
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Resolve custom builder from #[UseEloquentBuilder] attribute.
+     *
+     * @return class-string|null
+     */
+    private static function resolveBuilderFromAttribute(\ReflectionClass $reflection, Codebase $codebase): ?string
+    {
+        $attributes = $reflection->getAttributes(UseEloquentBuilder::class);
+        if ($attributes === []) {
+            return null;
+        }
+
+        try {
+            return $attributes[0]->newInstance()->builderClass;
+        } catch (\Error $error) {
+            $codebase->progress->debug(
+                "Laravel plugin: #[UseEloquentBuilder] on '{$reflection->getName()}' failed to instantiate: {$error->getMessage()}\n",
+            );
+
+            return null;
+        }
+    }
+
+    /**
+     * Resolve custom builder from a newEloquentBuilder() override with a native return type.
+     *
+     * Detects any override whose declaring class is not Illuminate\Database\Eloquent\Model
+     * (including overrides in an intermediate base model) with a PHP native return type.
+     *
+     * @return class-string|null
+     * @psalm-mutation-free
+     */
+    private static function resolveBuilderFromMethodOverride(\ReflectionClass $reflection): ?string
+    {
+        try {
+            $method = $reflection->getMethod('newEloquentBuilder');
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        // Only consider overrides declared on the model, not the base Model method.
+        if ($method->getDeclaringClass()->getName() === Model::class) {
+            return null;
+        }
+
+        $returnType = $method->getReturnType();
+        if (!$returnType instanceof \ReflectionNamedType || $returnType->isBuiltin()) {
+            return null;
+        }
+
+        return $returnType->getName();
+    }
+
+    /**
+     * Resolve custom builder from a static $builder property override (all Laravel versions).
+     *
+     * Detects when a model overrides the protected static string $builder property
+     * with a custom builder class name.
+     *
+     * @return class-string|null
+     */
+    private static function resolveBuilderFromStaticProperty(\ReflectionClass $reflection): ?string
+    {
+        try {
+            $property = $reflection->getProperty('builder');
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        // Only consider overrides, not the base Model::$builder = Builder::class.
+        if ($property->getDeclaringClass()->getName() === Model::class) {
+            return null;
+        }
+
+        /** @psalm-var class-string|null $value */
+        $value = $property->getValue();
+
+        return $value;
     }
 
     /**
