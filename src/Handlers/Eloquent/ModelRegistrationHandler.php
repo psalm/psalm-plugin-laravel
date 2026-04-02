@@ -94,6 +94,27 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // macros at runtime — remap them to return the custom builder type.
         if ($customBuilder !== null) {
             self::handleTraitBuilderMethods($codebase, $storage, $className, $customBuilder);
+
+            // Register scope handlers for the custom builder class so that builder
+            // instance calls like Post::query()->featured() resolve correctly.
+            // BuilderScopeHandler only covers base Builder — custom subclasses need
+            // explicit registration. See https://github.com/psalm/psalm-plugin-laravel/issues/630
+            $methods->existence_provider->registerClosure(
+                $customBuilder,
+                ModelMethodHandler::doesScopeMethodExistOnBuilder(...),
+            );
+            $methods->visibility_provider->registerClosure(
+                $customBuilder,
+                ModelMethodHandler::isScopeMethodVisibleOnBuilder(...),
+            );
+            $methods->params_provider->registerClosure(
+                $customBuilder,
+                ModelMethodHandler::getScopeMethodParamsOnBuilder(...),
+            );
+            $methods->return_type_provider->registerClosure(
+                $customBuilder,
+                ModelMethodHandler::getScopeMethodReturnTypeOnBuilder(...),
+            );
         }
 
         // Detect custom collection class via #[CollectedBy] attribute or newCollection() override.

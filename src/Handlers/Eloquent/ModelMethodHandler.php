@@ -270,30 +270,8 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         }
 
         // Scope method — params from the scope definition minus the first $query param.
-        // Use string-based methodExists (like BuilderScopeHandler) so Psalm handles
-        // case normalization. Then create MethodIdentifier with lowercase for getMethodParams.
-
-        // Legacy: scopeActive(Builder $query, ...) → active(...)
-        $legacyScopeMethod = $modelClass . '::scope' . \ucfirst($methodName);
-        if ($codebase->methodExists($legacyScopeMethod)) {
-            /** @var lowercase-string $legacyScopeLower */
-            $legacyScopeLower = 'scope' . $methodName;
-            return \array_slice(
-                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $legacyScopeLower)),
-                1,
-            );
-        }
-
-        // Modern #[Scope]: active(Builder $query, ...) → active(...)
-        $directMethod = $modelClass . '::' . $methodName;
-        if ($codebase->methodExists($directMethod)) {
-            return \array_slice(
-                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $methodName)),
-                1,
-            );
-        }
-
-        return null;
+        /** @var class-string<Model> $modelClass */
+        return self::getScopeParams($codebase, $modelClass, $methodName);
     }
 
     /**
@@ -553,6 +531,149 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
 
         /** @var lowercase-string $methodName */
         return $modelClass !== null && isset(self::$traitBuilderMethods[$modelClass][$methodName]);
+    }
+
+    // -----------------------------------------------------------------------
+    // Builder-level handlers for scope methods on custom builders.
+    // Registered per custom builder class by ModelRegistrationHandler so that
+    // builder instance calls like Post::query()->featured() resolve correctly.
+    // See https://github.com/psalm/psalm-plugin-laravel/issues/630
+    // -----------------------------------------------------------------------
+
+    /**
+     * Confirm scope methods exist on custom builder instances.
+     *
+     * When Post::query() returns PostBuilder<Post>, calling ->featured() triggers
+     * a lookup on PostBuilder. This handler confirms the method exists by checking
+     * if the associated model has a matching scope (legacy scopeXxx or #[Scope]).
+     */
+    public static function doesScopeMethodExistOnBuilder(MethodExistenceProviderEvent $event): ?bool
+    {
+        $source = $event->getSource();
+        if (!$source instanceof StatementsSource) {
+            return null;
+        }
+
+        return self::hasScopeOnBuilder($source->getCodebase(), $event->getFqClasslikeName(), $event->getMethodNameLowercase())
+            ? true
+            : null;
+    }
+
+    /**
+     * Scope methods on custom builders are effectively public (invoked via __call magic).
+     */
+    public static function isScopeMethodVisibleOnBuilder(MethodVisibilityProviderEvent $event): ?bool
+    {
+        return self::hasScopeOnBuilder($event->getSource()->getCodebase(), $event->getFqClasslikeName(), $event->getMethodNameLowercase())
+            ? true
+            : null;
+    }
+
+    /**
+     * Provide params for scope methods on custom builder instances.
+     *
+     * @return list<FunctionLikeParameter>|null
+     */
+    public static function getScopeMethodParamsOnBuilder(MethodParamsProviderEvent $event): ?array
+    {
+        $source = $event->getStatementsSource();
+        if (!$source instanceof StatementsSource) {
+            return null;
+        }
+
+        /** @var class-string<Builder> $builderClass */
+        $builderClass = $event->getFqClasslikeName();
+        $modelClass = self::$builderToModelMap[$builderClass] ?? null;
+        if ($modelClass === null) {
+            return null;
+        }
+
+        // getScopeParams returns null for non-scope methods, so no hasScopeMethod guard needed.
+        // This avoids redundant methodExists calls (hasScopeMethod probes the same methods).
+        return self::getScopeParams($source->getCodebase(), $modelClass, $event->getMethodNameLowercase());
+    }
+
+    /**
+     * Provide return type for scope methods on custom builder instances.
+     *
+     * Returns CustomBuilder<Model> (e.g., PostBuilder<Post>) instead of the base
+     * Builder<Model> that BuilderScopeHandler would return.
+     */
+    public static function getScopeMethodReturnTypeOnBuilder(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $source = $event->getSource();
+        if (!$source instanceof StatementsAnalyzer) {
+            return null;
+        }
+
+        /** @var class-string<Builder> $builderClass */
+        $builderClass = $event->getFqClasslikeName();
+        $modelClass = self::$builderToModelMap[$builderClass] ?? null;
+        if ($modelClass === null) {
+            return null;
+        }
+
+        $codebase = $source->getCodebase();
+        if (!BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $event->getMethodNameLowercase())) {
+            return null;
+        }
+
+        return new Union([self::builderType($builderClass, $modelClass, $codebase)]);
+    }
+
+    /**
+     * Check if a scope method exists for the given custom builder class.
+     *
+     * Looks up the model associated with the builder, then delegates to
+     * BuilderScopeHandler for scope detection.
+     */
+    private static function hasScopeOnBuilder(Codebase $codebase, string $builderClass, string $methodName): bool
+    {
+        /** @var class-string<Builder> $builderClass */
+        $modelClass = self::$builderToModelMap[$builderClass] ?? null;
+        if ($modelClass === null) {
+            return false;
+        }
+
+        /** @var class-string<Model> $modelClass */
+        return BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName);
+    }
+
+    /**
+     * Get params for a scope method on a model, minus the $query parameter.
+     *
+     * Handles both legacy scopeXxx() methods and modern #[Scope] attribute methods.
+     * Used by both the static model call handler ({@see getMethodParams}) and the
+     * custom builder instance handler ({@see getScopeMethodParamsOnBuilder}).
+     *
+     * @param class-string<Model> $modelClass
+     * @return list<FunctionLikeParameter>|null
+     */
+    private static function getScopeParams(Codebase $codebase, string $modelClass, string $methodName): ?array
+    {
+        // Legacy: scopeActive(Builder $query, ...) → active(...)
+        $legacyScopeMethod = $modelClass . '::scope' . \ucfirst($methodName);
+        if ($codebase->methodExists($legacyScopeMethod)) {
+            /** @var lowercase-string $legacyScopeLower */
+            $legacyScopeLower = 'scope' . $methodName;
+
+            return \array_slice(
+                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $legacyScopeLower)),
+                1,
+            );
+        }
+
+        // Modern #[Scope]: active(Builder $query, ...) → active(...)
+        $directMethod = $modelClass . '::' . $methodName;
+        if ($codebase->methodExists($directMethod)) {
+            /** @var lowercase-string $methodName */
+            return \array_slice(
+                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $methodName)),
+                1,
+            );
+        }
+
+        return null;
     }
 
     /** @inheritDoc */
