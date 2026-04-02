@@ -320,6 +320,13 @@ function test_static_builder_property_static_call(): void
     /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
 }
 
+/** Scope on static $builder property model via builder instance. */
+function test_scope_on_static_builder_property_via_query(): void
+{
+    $_result = Mechanic::query()->experienced();
+    /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
+}
+
 /** Negative test: nonexistent methods must still be reported. */
 function test_nonexistent_method_on_custom_builder_model(): void
 {
