@@ -22,10 +22,12 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\Progress\VoidProgress;
 
 /**
- * Tests custom builder detection in ModelRegistrationHandler via:
- * 1. #[UseEloquentBuilder] attribute (Laravel 12+)
- * 2. newEloquentBuilder() override with native return type
- * 3. protected static string $builder property override (all Laravel versions)
+ * Tests custom builder detection in ModelRegistrationHandler.
+ *
+ * Priority matches Laravel's Model::newEloquentBuilder():
+ * 1. newEloquentBuilder() override (bypasses everything when present)
+ * 2. #[UseEloquentBuilder] attribute (checked first in base method)
+ * 3. protected static string $builder property (fallback)
  */
 #[CoversClass(ModelRegistrationHandler::class)]
 final class CustomBuilderDetectionTest extends TestCase

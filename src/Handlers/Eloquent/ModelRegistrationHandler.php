@@ -171,10 +171,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     /**
      * Detect a custom Eloquent builder for a model and register it.
      *
-     * Checks three patterns (in priority order):
-     * 1. #[UseEloquentBuilder(CustomBuilder::class)] attribute (Laravel 12+)
-     * 2. newEloquentBuilder() override with a native return type (any Laravel version)
-     * 3. protected static string $builder property override (all Laravel versions)
+     * Matches Laravel's own resolution priority in Model::newEloquentBuilder():
+     * 1. newEloquentBuilder() override — if the model overrides this method, it bypasses
+     *    the attribute and property checks entirely (Laravel calls the override directly)
+     * 2. #[UseEloquentBuilder] attribute — checked first inside the base newEloquentBuilder()
+     * 3. protected static string $builder property — fallback in the base newEloquentBuilder()
      *
      * @param class-string<Model> $className
      */
@@ -190,15 +191,15 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             return;
         }
 
-        // 1. #[UseEloquentBuilder] attribute (Laravel 12+) takes priority.
-        $builderClass = self::resolveBuilderFromAttribute($reflection, $codebase);
+        // 1. newEloquentBuilder() override — bypasses attribute and property when present.
+        $builderClass = self::resolveBuilderFromMethodOverride($reflection);
 
-        // 2. Fall back to newEloquentBuilder() return type override.
+        // 2. #[UseEloquentBuilder] attribute — checked first in the base newEloquentBuilder().
         if ($builderClass === null) {
-            $builderClass = self::resolveBuilderFromMethodOverride($reflection);
+            $builderClass = self::resolveBuilderFromAttribute($reflection, $codebase);
         }
 
-        // 3. Fall back to static $builder property override (all Laravel versions).
+        // 3. Fall back to static $builder property.
         if ($builderClass === null) {
             $builderClass = self::resolveBuilderFromStaticProperty($reflection);
         }
