@@ -95,6 +95,8 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
      * If the custom builder has template parameters, returns TGenericObject (e.g. PostBuilder<Post>).
      * If the builder has no template params (e.g. `final class MemberBuilder extends Builder<Member>`),
      * returns a plain TNamedObject (just MemberBuilder) to avoid "too many template params" errors.
+     *
+     * @psalm-mutation-free
      */
     private static function builderType(string $builderClass, string $modelClass, Codebase $codebase): Type\Atomic\TNamedObject
     {
