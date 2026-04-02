@@ -5,6 +5,6 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     assignees: [alies-dev]
-    labels: [dependencies]
+    labels: [dependencies, release:internal]
     schedule:
       interval: monthly
