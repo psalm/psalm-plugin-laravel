@@ -162,7 +162,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
     private static function resolveFromAttribute(Codebase $codebase, string $modelClass): ?string
     {
         $storage = self::getClassStorage($codebase, $modelClass);
-        if ($storage === null) {
+        if (!$storage instanceof \Psalm\Storage\ClassLikeStorage) {
             return null;
         }
 
@@ -191,7 +191,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
                 // if the user passes an invalid class to #[CollectedBy].
                 try {
                     if ($codebase->classExtends($type->value, EloquentCollection::class)) {
-                        /** @var class-string */
                         return $type->value;
                     }
                 } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
@@ -218,7 +217,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
     private static function resolveFromNewCollectionReturnType(Codebase $codebase, string $modelClass): ?string
     {
         $storage = self::getClassStorage($codebase, $modelClass);
-        if ($storage === null) {
+        if (!$storage instanceof \Psalm\Storage\ClassLikeStorage) {
             return null;
         }
 
@@ -247,7 +246,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
             // PHP's autoloader for classes that may only exist in the analyzed codebase.
             try {
                 if ($codebase->classExtends($type->value, EloquentCollection::class)) {
-                    /** @var class-string */
                     return $type->value;
                 }
             } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {

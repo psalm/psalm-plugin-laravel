@@ -17,8 +17,6 @@ class PostCollection extends Collection
 {
     /**
      * Get only published posts.
-     *
-     * @return static
      */
     public function published(): static
     {
