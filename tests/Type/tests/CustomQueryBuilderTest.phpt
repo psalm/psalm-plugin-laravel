@@ -195,6 +195,23 @@ function test_soft_deletes_chain_to_get(): void
     /** @psalm-check-type-exact $_result = Collection<int, Post> */
 }
 
+/**
+ * restoreOrCreate returns the model type (static), not the builder — must NOT be remapped.
+ * The &static intersection comes from Psalm's native @method static resolution.
+ */
+function test_soft_deletes_restore_or_create_returns_model(): void
+{
+    $_result = Post::restoreOrCreate(['slug' => 'test']);
+    /** @psalm-check-type-exact $_result = Post&static */
+}
+
+/** createOrRestore also returns the model type, not the builder. */
+function test_soft_deletes_create_or_restore_returns_model(): void
+{
+    $_result = Post::createOrRestore(['slug' => 'test']);
+    /** @psalm-check-type-exact $_result = Post&static */
+}
+
 // -----------------------------------------------------------------------
 // newEloquentBuilder() override pattern (pre-Laravel 12)
 // Car model overrides newEloquentBuilder() with a native return type.
