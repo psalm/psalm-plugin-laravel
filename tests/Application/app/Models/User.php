@@ -27,7 +27,7 @@ class User extends Authenticatable
     protected $table = 'users';
 
     /**
-     * @psalm-return HasOne<Phone, static>
+     * @psalm-return HasOne<Phone, $this>
      */
     public function phone(): HasOne
     {
@@ -35,7 +35,7 @@ class User extends Authenticatable
     }
 
     /**
-     * @psalm-return BelongsToMany<Role, static>
+     * @psalm-return BelongsToMany<Role, $this>
      */
     public function roles(): BelongsToMany
     {
@@ -43,7 +43,7 @@ class User extends Authenticatable
     }
 
     /**
-     * @psalm-return HasManyThrough<Mechanic, Car, static>
+     * @psalm-return HasManyThrough<Mechanic, Car, $this>
      */
     public function carsAtMechanic(): HasManyThrough
     {
