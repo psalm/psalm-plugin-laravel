@@ -74,7 +74,10 @@ function test_scope_attribute_via_builder(): Builder
     return User::query()->verified();
 }
 
-/** #[Scope] methods are real instance methods — static calls are correctly rejected. */
+/**
+ * Known limitation: #[Scope] methods work at runtime via __callStatic → callNamedScope,
+ * but Psalm sees them as real instance methods and reports InvalidStaticInvocation.
+ */
 function test_scope_attribute_static_is_invalid(): void
 {
     $_result = User::verified();
