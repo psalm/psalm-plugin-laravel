@@ -494,24 +494,40 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     /**
      * Resolve custom collection from #[CollectedBy] attribute.
      *
+     * Walks up the parent class chain for grandchild models, matching Laravel's
+     * HasCollection::resolveCollectionFromAttribute() behavior: if a base model
+     * declares #[CollectedBy], child models inherit the custom collection.
+     *
      * @return class-string|null
      */
     private static function resolveCollectionFromAttribute(\ReflectionClass $reflection, Codebase $codebase): ?string
     {
         $attributes = $reflection->getAttributes(CollectedBy::class);
-        if ($attributes === []) {
-            return null;
+        if ($attributes !== []) {
+            try {
+                /** @var class-string */
+                return $attributes[0]->newInstance()->collectionClass;
+            } catch (\Error $error) {
+                $codebase->progress->debug(
+                    "Laravel plugin: #[CollectedBy] on '{$reflection->getName()}' failed to instantiate: {$error->getMessage()}\n",
+                );
+
+                return null;
+            }
         }
 
-        try {
-            return $attributes[0]->newInstance()->collectionClass;
-        } catch (\Error $error) {
-            $codebase->progress->debug(
-                "Laravel plugin: #[CollectedBy] on '{$reflection->getName()}' failed to instantiate: {$error->getMessage()}\n",
-            );
-
-            return null;
+        // Walk up to parent model (grandchild inheritance), matching Laravel's behavior.
+        // A model whose direct parent is Model itself has no intermediate base to inherit from.
+        $parentClass = $reflection->getParentClass();
+        if (
+            $parentClass !== false
+            && $parentClass->getName() !== Model::class
+            && $parentClass->isSubclassOf(Model::class)
+        ) {
+            return self::resolveCollectionFromAttribute($parentClass, $codebase);
         }
+
+        return null;
     }
 
     /**
