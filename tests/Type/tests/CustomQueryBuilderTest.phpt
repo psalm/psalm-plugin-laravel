@@ -161,7 +161,11 @@ function test_scope_attribute_on_custom_builder_via_query(): void
     /** @psalm-check-type-exact $_result = PostBuilder<Post> */
 }
 
-/** #[Scope] methods are real instance methods — static calls are correctly rejected. */
+/**
+ * Known limitation: #[Scope] methods work at runtime via __callStatic → callNamedScope,
+ * but Psalm sees them as real instance methods and reports InvalidStaticInvocation.
+ * Same behavior as User::verified() in ModelStaticBuilderMethodsTest.
+ */
 function test_scope_attribute_static_is_invalid_on_custom_builder(): void
 {
     $_result = Post::popular();
