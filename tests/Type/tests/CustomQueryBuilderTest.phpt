@@ -139,6 +139,63 @@ function test_scope_on_custom_builder_model(): void
 // See https://github.com/psalm/psalm-plugin-laravel/issues/630
 
 // -----------------------------------------------------------------------
+// SoftDeletes trait methods on custom builder
+// Post uses both #[UseEloquentBuilder(PostBuilder::class)] and SoftDeletes.
+// The @method static annotations on SoftDeletes (withTrashed, onlyTrashed,
+// withoutTrashed) must return PostBuilder<Post>, not base Builder<Post>.
+// See https://github.com/psalm/psalm-plugin-laravel/issues/631
+// -----------------------------------------------------------------------
+
+/** Static call: trait-declared builder method returns custom builder. */
+function test_soft_deletes_with_trashed_static(): void
+{
+    $_result = Post::withTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Static call: onlyTrashed also returns custom builder. */
+function test_soft_deletes_only_trashed_static(): void
+{
+    $_result = Post::onlyTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Static call: withoutTrashed also returns custom builder. */
+function test_soft_deletes_without_trashed_static(): void
+{
+    $_result = Post::withoutTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Builder instance call: withTrashed on custom builder. */
+function test_soft_deletes_with_trashed_via_query(): void
+{
+    $_result = Post::query()->withTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Builder instance call: onlyTrashed on custom builder. */
+function test_soft_deletes_only_trashed_via_query(): void
+{
+    $_result = Post::query()->onlyTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Builder instance call: chaining trait method with custom builder method. */
+function test_soft_deletes_chain_with_custom_method(): void
+{
+    $_result = Post::query()->withTrashed()->wherePublished();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Builder instance call: chaining trait method to terminal get(). */
+function test_soft_deletes_chain_to_get(): void
+{
+    $_result = Post::query()->withTrashed()->get();
+    /** @psalm-check-type-exact $_result = Collection<int, Post> */
+}
+
+// -----------------------------------------------------------------------
 // newEloquentBuilder() override pattern (pre-Laravel 12)
 // Car model overrides newEloquentBuilder() with a native return type.
 // -----------------------------------------------------------------------
