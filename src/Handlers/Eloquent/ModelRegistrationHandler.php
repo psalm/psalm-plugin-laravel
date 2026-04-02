@@ -504,7 +504,6 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
 
         try {
-            /** @var class-string */
             return $attributes[0]->newInstance()->collectionClass;
         } catch (\Error $error) {
             $codebase->progress->debug(
