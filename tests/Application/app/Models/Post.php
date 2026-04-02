@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 final class Post extends Model
 {
     use SoftDeletes;
+
     protected $table = 'posts';
 
     /**
