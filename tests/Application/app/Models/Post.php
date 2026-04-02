@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Builders\PostBuilder;
+use App\Collections\PostCollection;
+use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,10 +19,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * Post model with a custom query builder via #[UseEloquentBuilder] attribute (Laravel 12+).
  * Also uses SoftDeletes to test trait-declared builder methods on custom builders.
+ * Uses #[CollectedBy] to return PostCollection from collection methods.
  *
  * @see https://laravel-news.com/defining-a-dedicated-query-builder-in-laravel-12-with-php-attributes
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/631
  */
+#[CollectedBy(PostCollection::class)]
 #[UseEloquentBuilder(PostBuilder::class)]
 final class Post extends Model
 {

@@ -4,6 +4,7 @@
 use App\Builders\CarBuilder;
 use App\Builders\MechanicBuilder;
 use App\Builders\PostBuilder;
+use App\Collections\PostCollection;
 use App\Models\Car;
 use App\Models\Mechanic;
 use App\Models\Post;
@@ -40,7 +41,7 @@ function test_custom_method_via_query(): void
 function test_custom_method_chain_to_get(): void
 {
     $_result = Post::query()->wherePublished()->get();
-    /** @psalm-check-type-exact $_result = Collection<int, Post> */
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
 }
 
 /** Multiple custom builder methods can be chained. */
@@ -74,14 +75,14 @@ function test_custom_method_via_static_call(): void
 function test_static_custom_method_chain_to_get(): void
 {
     $_result = Post::wherePublished()->get();
-    /** @psalm-check-type-exact $_result = Collection<int, Post> */
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
 }
 
 /** Regression: standard query methods still work via static call. */
 function test_static_where_still_works(): void
 {
     $_result = Post::where('title', 'Hello')->get();
-    /** @psalm-check-type-exact $_result = Collection<int, Post> */
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
 }
 
 /** Terminal method first() preserves model type through custom builder. */
@@ -151,7 +152,7 @@ function test_scope_chain_with_custom_method(): void
 function test_scope_chain_to_get(): void
 {
     $_result = Post::query()->featured()->get();
-    /** @psalm-check-type-exact $_result = Collection<int, Post> */
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
 }
 
 /** Modern #[Scope] attribute on model with custom builder via builder instance. */
@@ -238,7 +239,7 @@ function test_soft_deletes_chain_with_custom_method(): void
 function test_soft_deletes_chain_to_get(): void
 {
     $_result = Post::query()->withTrashed()->get();
-    /** @psalm-check-type-exact $_result = Collection<int, Post> */
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
 }
 
 /**
