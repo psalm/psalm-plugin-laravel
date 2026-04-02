@@ -10,6 +10,7 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\LaravelPlugin\Util\TreeNode;
 use Psalm\Type\Union;
 
 /**
@@ -296,23 +297,22 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $tree = [];
+        $root = new TreeNode();
 
         foreach ($rules as $field => $resolvedRule) {
             $segments = explode('.', $field);
-            self::insertIntoTree($tree, $segments, $resolvedRule);
+            self::insertIntoTree($root, $segments, $resolvedRule);
         }
 
-        return self::buildUnionFromTree($tree);
+        return self::buildUnionFromTree($root);
     }
 
     /**
      * Insert a resolved rule into a nested tree structure based on dot-notation segments.
      *
-     * @param array<array-key, mixed> $tree
      * @param list<string> $segments
      */
-    private static function insertIntoTree(array &$tree, array $segments, ResolvedRule $resolvedRule): void
+    private static function insertIntoTree(TreeNode $node, array $segments, ResolvedRule $resolvedRule): void
     {
         $key = array_shift($segments);
 
@@ -320,71 +320,71 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return;
         }
 
+        $node->children[$key] ??= new TreeNode();
+
         if ($segments === []) {
-            if (!isset($tree[$key]) || !is_array($tree[$key])) {
-                $tree[$key] = $resolvedRule;
-            }
-            return;
+            $node->children[$key]->self = $resolvedRule;
+        } else {
+            self::insertIntoTree($node->children[$key], $segments, $resolvedRule);
         }
-
-        if (!isset($tree[$key]) || !is_array($tree[$key])) {
-            $tree[$key] = [];
-        }
-
-        self::insertIntoTree($tree[$key], $segments, $resolvedRule);
     }
 
     /**
      * Recursively convert a nested tree into TKeyedArray Union types.
      *
      * @psalm-mutation-free
-     * @param array<array-key, mixed> $tree
      */
-    private static function buildUnionFromTree(array $tree): ?Union
+    private static function buildUnionFromTree(TreeNode $node): ?Union
     {
-        if ($tree === []) {
+        if ($node->children === []) {
             return null;
         }
 
         /** @var non-empty-array<string, Union> $properties */
         $properties = [];
 
-        foreach ($tree as $key => $value) {
-            if ($value instanceof ResolvedRule) {
-                $fieldType = $value->type;
-                if (!$value->required) {
-                    $fieldType = $fieldType->setPossiblyUndefined(true);
-                }
-                $properties[$key] = $fieldType;
-                continue;
-            }
-
-            if (!is_array($value)) {
-                continue;
-            }
-
+        foreach ($node->children as $key => $child) {
             if ($key === '*') {
                 continue;
             }
 
-            if (isset($value['*']) && is_array($value['*'])) {
-                $itemShape = self::buildUnionFromTree($value['*']);
+            if ($child->children === []) {
+                if ($child->self === null) {
+                    continue;
+                }
 
-                if ($itemShape !== null) {
+                $fieldType = $child->self->type;
+                if (!$child->self->required) {
+                    $fieldType = $fieldType->setPossiblyUndefined(true);
+                }
+
+                $properties[$key] = $fieldType;
+                continue;
+            }
+
+            if (isset($child->children['*']) && $child->children['*']->children !== []) {
+                $itemShape = self::buildUnionFromTree($child->children['*']);
+
+                if ($itemShape instanceof Union) {
                     $properties[$key] = new Union([
                         Type::getListAtomic($itemShape),
                     ]);
                 } else {
                     $properties[$key] = new Union([
-                        Type::getListAtomic(Type::getMixed())
+                        Type::getListAtomic(Type::getMixed()),
                     ]);
                 }
+
                 continue;
             }
 
-            $nested = self::buildUnionFromTree($value);
+            $nested = self::buildUnionFromTree($child);
 
-            if ($nested !== null) {
+            if ($nested instanceof Union) {
+                if ($child->self !== null && !$child->self->required) {
+                    $nested = $nested->setPossiblyUndefined(true);
+                }
+
                 $properties[$key] = $nested;
             }
         }
