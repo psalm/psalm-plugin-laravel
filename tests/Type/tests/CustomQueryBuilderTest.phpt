@@ -133,10 +133,10 @@ function test_scope_on_custom_builder_model(): void
     /** @psalm-check-type-exact $_result = PostBuilder<Post> */
 }
 
-// Note: Post::query()->featured() (scope via builder instance) is not tested because
-// BuilderScopeHandler is registered for Builder, not for custom builder subclasses.
-// Scopes work correctly through static calls (Post::featured()) but not yet through
-// builder instances (Post::query()->featured()) when using a custom builder.
+// Known limitation: Post::query()->featured() (scope via builder instance) is not
+// supported because BuilderScopeHandler is registered for Builder, not custom
+// builder subclasses. Static calls (Post::featured()) work correctly.
+// See https://github.com/psalm/psalm-plugin-laravel/issues/630
 
 // -----------------------------------------------------------------------
 // newEloquentBuilder() override pattern (pre-Laravel 12)
