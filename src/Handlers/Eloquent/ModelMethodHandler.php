@@ -588,9 +588,17 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             return null;
         }
 
-        // getScopeParams returns null for non-scope methods, so no hasScopeMethod guard needed.
-        // This avoids redundant methodExists calls (hasScopeMethod probes the same methods).
-        return self::getScopeParams($source->getCodebase(), $modelClass, $event->getMethodNameLowercase());
+        $codebase = $source->getCodebase();
+        $methodName = $event->getMethodNameLowercase();
+
+        // Guard required: getScopeParams matches any model method in its #[Scope] branch
+        // (it checks methodExists but not the attribute). Without this, non-scope model methods
+        // like __construct would be matched, causing TooManyArguments on custom builder constructors.
+        if (!BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
+            return null;
+        }
+
+        return self::getScopeParams($codebase, $modelClass, $methodName);
     }
 
     /**
