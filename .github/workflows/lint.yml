@@ -42,7 +42,7 @@ jobs:
         run: composer cs
 
       - name: Commit fixes
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: 'style: auto-fix (rector + php-cs-fixer)'
           commit_author: 'GitHub Actions <actions@github.com>'
