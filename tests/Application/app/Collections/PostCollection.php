@@ -17,6 +17,8 @@ class PostCollection extends Collection
 {
     /**
      * Get only published posts.
+     *
+     * @psalm-return static
      */
     public function published(): static
     {

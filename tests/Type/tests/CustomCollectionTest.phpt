@@ -3,15 +3,22 @@
 
 use App\Collections\PostCollection;
 use App\Collections\SecretCollection;
+use App\Collections\TagCollection;
 use App\Models\Post;
 use App\Models\Secret;
+use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * Models with #[CollectedBy] or newCollection() override should return
- * the custom collection type from Builder methods and Model::all().
+ * Models with custom collections should return the custom collection type
+ * from Builder methods and Model::all().
+ *
+ * Three detection patterns are tested:
+ * 1. #[CollectedBy] attribute (Post model)
+ * 2. newCollection() override with native return type (Secret model)
+ * 3. protected static string $collectionClass property (Tag model)
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/622
  */
@@ -101,6 +108,23 @@ function test_newCollection_model_all(): SecretCollection
 {
     /** @psalm-check-type-exact $result = SecretCollection<int, Secret> */
     $result = Secret::all();
+    return $result;
+}
+
+// === $collectionClass property (Tag model) ===
+
+/** @param Builder<Tag> $builder */
+function test_collectionClass_builder_get(Builder $builder): TagCollection
+{
+    /** @psalm-check-type-exact $result = TagCollection<int, Tag> */
+    $result = $builder->get();
+    return $result;
+}
+
+function test_collectionClass_model_all(): TagCollection
+{
+    /** @psalm-check-type-exact $result = TagCollection<int, Tag> */
+    $result = Tag::all();
     return $result;
 }
 

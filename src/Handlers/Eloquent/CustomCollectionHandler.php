@@ -4,33 +4,29 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
-use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
-use Psalm\Codebase;
-use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
-use Psalm\Storage\AttributeArg;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
-use Psalm\Type\Atomic\TLiteralClassString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
  * Narrows collection return types for models using custom Eloquent collections.
  *
- * When a model declares a custom collection via `#[CollectedBy(UserCollection::class)]`
- * or overrides `newCollection()` with a narrowed return type, Builder methods like
- * `get()`, `findMany()`, and `Model::all()` should return the custom collection type
- * instead of `Illuminate\Database\Eloquent\Collection`.
+ * When a model declares a custom collection via `#[CollectedBy(UserCollection::class)]`,
+ * overriding `newCollection()` with a narrowed return type, or setting the
+ * `$collectionClass` property, Builder methods like `get()`, `findMany()`, and
+ * `Model::all()` should return the custom collection type instead of
+ * `Illuminate\Database\Eloquent\Collection`.
  *
- * Detection order (first match wins):
- * 1. `#[CollectedBy]` attribute on the model class (preferred, modern approach)
- * 2. `newCollection()` return type narrowed to a concrete Collection subclass
+ * Detection is performed eagerly by {@see ModelRegistrationHandler} at codebase
+ * population time, using runtime reflection (consistent with custom builder detection).
+ * This handler only consumes the pre-registered mapping.
  *
  * @see https://laravel.com/docs/master/eloquent-collections#custom-collections
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/622
@@ -39,11 +35,11 @@ use Psalm\Type\Union;
 final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
 {
     /**
-     * Cache: model FQCN → custom collection FQCN (or null if none).
+     * Model FQCN → custom collection FQCN. Populated by {@see ModelRegistrationHandler}.
      *
-     * @var array<string, class-string|null>
+     * @var array<string, string>
      */
-    private static array $cache = [];
+    private static array $modelToCollectionMap = [];
 
     /**
      * Builder methods that return `Eloquent\Collection<int, TModel>` and should
@@ -59,6 +55,19 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
     ];
 
     /**
+     * Register a custom collection for a model. Called by {@see ModelRegistrationHandler}
+     * during codebase population, after detecting #[CollectedBy] or newCollection() override.
+     *
+     * @param class-string<Model> $modelClass
+     * @param class-string<EloquentCollection> $collectionClass
+     * @psalm-external-mutation-free
+     */
+    public static function registerCustomCollection(string $modelClass, string $collectionClass): void
+    {
+        self::$modelToCollectionMap[$modelClass] = $collectionClass;
+    }
+
+    /**
      * @return list<string>
      * @psalm-pure
      */
@@ -68,6 +77,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         return [Builder::class];
     }
 
+    /** @psalm-external-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -83,9 +93,11 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $codebase = $event->getSource()->getCodebase();
+        $collectionClass = self::getCollectionClassForModel($modelClass);
 
-        return self::buildCustomCollectionType($codebase, $modelClass);
+        return $collectionClass !== null
+            ? self::collectionType($collectionClass, $modelClass)
+            : null;
     }
 
     /**
@@ -93,6 +105,8 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      *
      * Registered per-model by {@see ModelRegistrationHandler} because Psalm's
      * provider lookup requires exact class name matching.
+     *
+     * @psalm-external-mutation-free
      */
     public static function getModelMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -101,168 +115,36 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         }
 
         $calledClass = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
-        $codebase = $event->getSource()->getCodebase();
+        $collectionClass = self::getCollectionClassForModel($calledClass);
 
         /** @var class-string<Model> $calledClass */
-        return self::buildCustomCollectionType($codebase, $calledClass);
+        return $collectionClass !== null
+            ? self::collectionType($collectionClass, $calledClass)
+            : null;
     }
 
     /**
-     * Build the custom collection type for a model, or null if no custom collection.
+     * Look up the custom collection class for a model, or null if using default.
      *
-     * @param class-string<Model> $modelClass
-     * @return Union|null CustomCollection<int, TModel> or null to use default
      * @psalm-external-mutation-free
      */
-    private static function buildCustomCollectionType(Codebase $codebase, string $modelClass): ?Union
+    private static function getCollectionClassForModel(string $modelClass): ?string
     {
-        $customCollection = self::resolveCustomCollection($codebase, $modelClass);
-        if ($customCollection === null) {
-            return null;
-        }
+        return self::$modelToCollectionMap[$modelClass] ?? null;
+    }
 
+    /**
+     * Build a generic type like `CustomCollection<int, TModel>`.
+     *
+     * @psalm-pure
+     */
+    private static function collectionType(string $collectionClass, string $modelClass): Union
+    {
         return new Union([
-            new TGenericObject($customCollection, [
+            new TGenericObject($collectionClass, [
                 Type::getInt(),
                 new Union([new TNamedObject($modelClass)]),
             ]),
         ]);
-    }
-
-    /**
-     * Resolve the custom collection class for a model, if any.
-     *
-     * Results are cached per model class for the duration of the analysis run.
-     *
-     * @param class-string<Model> $modelClass
-     * @return class-string|null
-     * @psalm-external-mutation-free
-     */
-    public static function resolveCustomCollection(Codebase $codebase, string $modelClass): ?string
-    {
-        if (\array_key_exists($modelClass, self::$cache)) {
-            return self::$cache[$modelClass];
-        }
-
-        $result = self::resolveFromAttribute($codebase, $modelClass)
-            ?? self::resolveFromNewCollectionReturnType($codebase, $modelClass);
-
-        return self::$cache[$modelClass] = $result;
-    }
-
-    /**
-     * Check for `#[CollectedBy(SomeCollection::class)]` attribute on the model class.
-     *
-     * Uses Psalm's ClassLikeStorage attributes (populated during scanning) rather than
-     * runtime reflection — no class loading overhead.
-     *
-     * @return class-string|null
-     * @psalm-mutation-free
-     */
-    private static function resolveFromAttribute(Codebase $codebase, string $modelClass): ?string
-    {
-        $storage = self::getClassStorage($codebase, $modelClass);
-        if (!$storage instanceof \Psalm\Storage\ClassLikeStorage) {
-            return null;
-        }
-
-        foreach ($storage->attributes as $attribute) {
-            if ($attribute->fq_class_name !== CollectedBy::class) {
-                continue;
-            }
-
-            // First argument is the collection class: #[CollectedBy(UserCollection::class)]
-            $firstArg = $attribute->args[0] ?? null;
-            if (!$firstArg instanceof AttributeArg) {
-                return null;
-            }
-
-            if (!$firstArg->type instanceof Union) {
-                return null;
-            }
-
-            foreach ($firstArg->type->getAtomicTypes() as $type) {
-                if (!$type instanceof TLiteralClassString) {
-                    continue;
-                }
-
-                // Validate that the class is a Collection subclass via Psalm's
-                // class hierarchy — avoids narrowing to a non-collection class
-                // if the user passes an invalid class to #[CollectedBy].
-                try {
-                    if ($codebase->classExtends($type->value, EloquentCollection::class)) {
-                        return $type->value;
-                    }
-                } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-                    // Class not known to Psalm; fall through to null
-                }
-            }
-
-            return null;
-        }
-
-        return null;
-    }
-
-    /**
-     * Check if the model (or a parent/trait) overrides `newCollection()` with a narrowed return type.
-     *
-     * Accepts inherited overrides: if a base model defines newCollection() returning
-     * a custom collection, child models inherit that narrowing. The classExtends check
-     * below ensures only actual Collection subclasses are accepted.
-     *
-     * @return class-string|null
-     * @psalm-mutation-free
-     */
-    private static function resolveFromNewCollectionReturnType(Codebase $codebase, string $modelClass): ?string
-    {
-        $storage = self::getClassStorage($codebase, $modelClass);
-        if (!$storage instanceof \Psalm\Storage\ClassLikeStorage) {
-            return null;
-        }
-
-        $methodId = $storage->declaring_method_ids['newcollection'] ?? null;
-        if ($methodId === null) {
-            return null;
-        }
-
-        try {
-            $methodStorage = $codebase->methods->getStorage($methodId);
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
-            return null;
-        }
-
-        $returnType = $methodStorage->return_type;
-        if (!$returnType instanceof Union) {
-            return null;
-        }
-
-        foreach ($returnType->getAtomicTypes() as $type) {
-            if (!$type instanceof TNamedObject || $type->value === EloquentCollection::class) {
-                continue;
-            }
-
-            // Use Psalm's class hierarchy instead of is_a() to avoid triggering
-            // PHP's autoloader for classes that may only exist in the analyzed codebase.
-            try {
-                if ($codebase->classExtends($type->value, EloquentCollection::class)) {
-                    return $type->value;
-                }
-            } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-                // Class not known to Psalm; skip
-            }
-        }
-
-        return null;
-    }
-
-    /** @psalm-mutation-free */
-    private static function getClassStorage(Codebase $codebase, string $modelClass): ?\Psalm\Storage\ClassLikeStorage
-    {
-        try {
-            return $codebase->classlike_storage_provider->get($modelClass);
-        } catch (\InvalidArgumentException) {
-            return null;
-        }
     }
 }
