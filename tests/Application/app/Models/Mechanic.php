@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 /**
- * Mechanic model with a custom query builder via static $builder property (Laravel 13+).
+ * Mechanic model with a custom query builder via static $builder property (all Laravel versions).
  */
 final class Mechanic extends Model
 {

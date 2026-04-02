@@ -25,7 +25,7 @@ use Psalm\Progress\VoidProgress;
  * Tests custom builder detection in ModelRegistrationHandler via:
  * 1. #[UseEloquentBuilder] attribute (Laravel 12+)
  * 2. newEloquentBuilder() override with native return type
- * 3. protected static string $builder property override (Laravel 13+)
+ * 3. protected static string $builder property override (all Laravel versions)
  */
 #[CoversClass(ModelRegistrationHandler::class)]
 final class CustomBuilderDetectionTest extends TestCase
@@ -81,24 +81,28 @@ final class CustomBuilderDetectionTest extends TestCase
     }
 
     #[Test]
-    public function it_ignores_new_eloquent_builder_without_return_type(): void
+    public function it_returns_null_for_inherited_new_eloquent_builder(): void
     {
-        // Secret model has no newEloquentBuilder override and no attribute.
-        $this->callDetectCustomBuilder(\App\Models\Secret::class);
+        // User inherits newEloquentBuilder from Model — not an override, so no custom builder.
+        $result = $this->callResolveBuilderFromMethodOverride(User::class);
 
-        $this->assertNull($this->getRegisteredBuilder(\App\Models\Secret::class));
+        $this->assertNull($result);
     }
 
-    /**
-     * resolveBuilderFromMethodOverride skips methods that return builtin types or
-     * non-Builder subclasses — tested here via the method's defensive guards.
-     */
     #[Test]
-    public function it_ignores_new_eloquent_builder_with_no_native_return_type(): void
+    public function it_resolves_builder_from_static_property_directly(): void
     {
-        $result = $this->callResolveBuilderFromMethodOverride(\App\Models\User::class);
+        $result = $this->callResolveBuilderFromStaticProperty(Mechanic::class);
 
-        // User inherits newEloquentBuilder from Model — not an override.
+        $this->assertSame(MechanicBuilder::class, $result);
+    }
+
+    #[Test]
+    public function it_returns_null_for_inherited_static_builder_property(): void
+    {
+        // User inherits $builder from Model — not an override.
+        $result = $this->callResolveBuilderFromStaticProperty(User::class);
+
         $this->assertNull($result);
     }
 
@@ -109,6 +113,17 @@ final class CustomBuilderDetectionTest extends TestCase
     {
         $reflection = new \ReflectionClass($className);
         $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveBuilderFromMethodOverride');
+
+        return $method->invoke(null, $reflection);
+    }
+
+    /**
+     * Call resolveBuilderFromStaticProperty directly via reflection.
+     */
+    private function callResolveBuilderFromStaticProperty(string $className): ?string
+    {
+        $reflection = new \ReflectionClass($className);
+        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveBuilderFromStaticProperty');
 
         return $method->invoke(null, $reflection);
     }

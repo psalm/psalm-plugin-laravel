@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Collection;
  * Three detection patterns are tested:
  * 1. #[UseEloquentBuilder] attribute (Laravel 12+) — Post model
  * 2. newEloquentBuilder() override with native return type — Car model
- * 3. protected static string $builder property override (Laravel 13+) — Mechanic model
+ * 3. protected static string $builder property override (all Laravel versions) — Mechanic model
  *
  * @see https://laravel-news.com/defining-a-dedicated-query-builder-in-laravel-12-with-php-attributes
  */
@@ -172,7 +172,7 @@ function test_new_eloquent_builder_terminal(): void
 }
 
 // -----------------------------------------------------------------------
-// static $builder property pattern (Laravel 13+)
+// static $builder property pattern (all Laravel versions)
 // Mechanic model sets protected static string $builder = MechanicBuilder::class.
 // -----------------------------------------------------------------------
 

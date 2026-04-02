@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Custom query builder for Mechanic model.
  *
- * Demonstrates the Laravel 13 pattern of custom builders via static $builder property.
+ * Demonstrates the pattern of custom builders via static $builder property.
  *
  * @template TModel of Model
  * @extends Builder<TModel>

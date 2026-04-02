@@ -174,7 +174,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      * Checks three patterns (in priority order):
      * 1. #[UseEloquentBuilder(CustomBuilder::class)] attribute (Laravel 12+)
      * 2. newEloquentBuilder() override with a native return type (any Laravel version)
-     * 3. protected static string $builder property override (Laravel 13+)
+     * 3. protected static string $builder property override (all Laravel versions)
      *
      * @param class-string<Model> $className
      */
@@ -198,7 +198,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             $builderClass = self::resolveBuilderFromMethodOverride($reflection);
         }
 
-        // 3. Fall back to static $builder property override (Laravel 13+).
+        // 3. Fall back to static $builder property override (all Laravel versions).
         if ($builderClass === null) {
             $builderClass = self::resolveBuilderFromStaticProperty($reflection);
         }
@@ -283,7 +283,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     }
 
     /**
-     * Resolve custom builder from a static $builder property override (Laravel 13+).
+     * Resolve custom builder from a static $builder property override (all Laravel versions).
      *
      * Detects when a model overrides the protected static string $builder property
      * with a custom builder class name.
