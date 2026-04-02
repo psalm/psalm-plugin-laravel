@@ -4,6 +4,7 @@
 use App\Builders\CarBuilder;
 use App\Builders\MechanicBuilder;
 use App\Builders\PostBuilder;
+use App\Collections\PostCollection;
 use App\Models\Car;
 use App\Models\Mechanic;
 use App\Models\Post;
@@ -40,7 +41,7 @@ function test_custom_method_via_query(): void
 function test_custom_method_chain_to_get(): void
 {
     $_result = Post::query()->wherePublished()->get();
-    /** @psalm-check-type-exact $_result = Collection<int, Post> */
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
 }
 
 /** Multiple custom builder methods can be chained. */
@@ -74,14 +75,14 @@ function test_custom_method_via_static_call(): void
 function test_static_custom_method_chain_to_get(): void
 {
     $_result = Post::wherePublished()->get();
-    /** @psalm-check-type-exact $_result = Collection<int, Post> */
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
 }
 
 /** Regression: standard query methods still work via static call. */
 function test_static_where_still_works(): void
 {
     $_result = Post::where('title', 'Hello')->get();
-    /** @psalm-check-type-exact $_result = Collection<int, Post> */
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
 }
 
 /** Terminal method first() preserves model type through custom builder. */
@@ -133,10 +134,130 @@ function test_scope_on_custom_builder_model(): void
     /** @psalm-check-type-exact $_result = PostBuilder<Post> */
 }
 
-// Known limitation: Post::query()->featured() (scope via builder instance) is not
-// supported because BuilderScopeHandler is registered for Builder, not custom
-// builder subclasses. Static calls (Post::featured()) work correctly.
-// See https://github.com/psalm/psalm-plugin-laravel/issues/630
+/** Legacy scope on model with custom builder via builder instance. */
+function test_scope_on_custom_builder_via_query(): void
+{
+    $_result = Post::query()->featured();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Scope chained with a custom builder method. */
+function test_scope_chain_with_custom_method(): void
+{
+    $_result = Post::query()->featured()->wherePublished();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Scope chained to terminal get(). */
+function test_scope_chain_to_get(): void
+{
+    $_result = Post::query()->featured()->get();
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
+}
+
+/** Modern #[Scope] attribute on model with custom builder via builder instance. */
+function test_scope_attribute_on_custom_builder_via_query(): void
+{
+    $_result = Post::query()->popular();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/**
+ * Known limitation: #[Scope] methods work at runtime via __callStatic → query() → Builder,
+ * but Psalm sees them as real instance methods and reports InvalidStaticInvocation.
+ * Same behavior as User::verified() in ModelStaticBuilderMethodsTest.
+ */
+function test_scope_attribute_static_is_invalid_on_custom_builder(): void
+{
+    $_result = Post::popular();
+}
+
+/** Scope with parameters via builder instance — exercises getScopeParams path. */
+function test_scope_with_params_on_custom_builder_via_query(): void
+{
+    $_result = Post::query()->byCategory('tech');
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Negative test: nonexistent methods on builder instance must still be reported. */
+function test_nonexistent_method_on_custom_builder_instance(): void
+{
+    $_result = Post::query()->completelyFakeMethod();
+}
+
+// -----------------------------------------------------------------------
+// SoftDeletes trait methods on custom builder
+// Post uses both #[UseEloquentBuilder(PostBuilder::class)] and SoftDeletes.
+// The @method static annotations on SoftDeletes (withTrashed, onlyTrashed,
+// withoutTrashed) must return PostBuilder<Post>, not base Builder<Post>.
+// See https://github.com/psalm/psalm-plugin-laravel/issues/631
+// -----------------------------------------------------------------------
+
+/** Static call: trait-declared builder method returns custom builder. */
+function test_soft_deletes_with_trashed_static(): void
+{
+    $_result = Post::withTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Static call: onlyTrashed also returns custom builder. */
+function test_soft_deletes_only_trashed_static(): void
+{
+    $_result = Post::onlyTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Static call: withoutTrashed also returns custom builder. */
+function test_soft_deletes_without_trashed_static(): void
+{
+    $_result = Post::withoutTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Builder instance call: withTrashed on custom builder. */
+function test_soft_deletes_with_trashed_via_query(): void
+{
+    $_result = Post::query()->withTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Builder instance call: onlyTrashed on custom builder. */
+function test_soft_deletes_only_trashed_via_query(): void
+{
+    $_result = Post::query()->onlyTrashed();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Builder instance call: chaining trait method with custom builder method. */
+function test_soft_deletes_chain_with_custom_method(): void
+{
+    $_result = Post::query()->withTrashed()->wherePublished();
+    /** @psalm-check-type-exact $_result = PostBuilder<Post> */
+}
+
+/** Builder instance call: chaining trait method to terminal get(). */
+function test_soft_deletes_chain_to_get(): void
+{
+    $_result = Post::query()->withTrashed()->get();
+    /** @psalm-check-type-exact $_result = PostCollection<int, Post> */
+}
+
+/**
+ * restoreOrCreate returns the model type (static), not the builder — must NOT be remapped.
+ * The &static intersection comes from Psalm's native @method static resolution.
+ */
+function test_soft_deletes_restore_or_create_returns_model(): void
+{
+    $_result = Post::restoreOrCreate(['slug' => 'test']);
+    /** @psalm-check-type-exact $_result = Post&static */
+}
+
+/** createOrRestore also returns the model type, not the builder. */
+function test_soft_deletes_create_or_restore_returns_model(): void
+{
+    $_result = Post::createOrRestore(['slug' => 'test']);
+    /** @psalm-check-type-exact $_result = Post&static */
+}
 
 // -----------------------------------------------------------------------
 // newEloquentBuilder() override pattern (pre-Laravel 12)
@@ -171,6 +292,13 @@ function test_new_eloquent_builder_terminal(): void
     /** @psalm-check-type-exact $_result = Collection<int, Car> */
 }
 
+/** Scope on newEloquentBuilder model via builder instance. */
+function test_scope_on_new_eloquent_builder_via_query(): void
+{
+    $_result = Car::query()->available();
+    /** @psalm-check-type-exact $_result = CarBuilder<Car> */
+}
+
 // -----------------------------------------------------------------------
 // static $builder property pattern (all Laravel versions)
 // Mechanic model sets protected static string $builder = MechanicBuilder::class.
@@ -197,6 +325,13 @@ function test_static_builder_property_static_call(): void
     /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
 }
 
+/** Scope on static $builder property model via builder instance. */
+function test_scope_on_static_builder_property_via_query(): void
+{
+    $_result = Mechanic::query()->experienced();
+    /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
+}
+
 /** Negative test: nonexistent methods must still be reported. */
 function test_nonexistent_method_on_custom_builder_model(): void
 {
@@ -204,4 +339,6 @@ function test_nonexistent_method_on_custom_builder_model(): void
 }
 ?>
 --EXPECTF--
+InvalidStaticInvocation on line %d: Method App\Models\Post::popular is not static, but is called statically
+UndefinedMagicMethod on line %d: Magic method App\Builders\PostBuilder::completelyfakemethod does not exist
 UndefinedMagicMethod on line %d: Magic method App\Models\Post::completelyfakemethod does not exist
