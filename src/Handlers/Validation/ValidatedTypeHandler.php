@@ -348,7 +348,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        /** @var non-empty-array<string, Union> $properties */
+        /** @var array<string, Union> $properties */
         $properties = [];
 
         foreach ($node->children as $key => $child) {
