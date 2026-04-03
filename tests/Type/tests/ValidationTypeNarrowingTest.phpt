@@ -156,7 +156,7 @@ class NestedAddressRequest extends FormRequest
     {
         return [
             'address.city' => 'required|string',
-            'address.zip'  => 'required|string',
+            'address.zip' => 'required|string',
         ];
     }
 }
@@ -172,8 +172,8 @@ class MixedFlatAndNestedRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name'           => 'required|string',
-            'address.city'   => 'required|string',
+            'name' => 'required|string',
+            'address.city' => 'required|string',
             'address.street' => 'required|string',
         ];
     }
@@ -190,7 +190,7 @@ class DeepNestedRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'billing.address.city'   => 'required|string',
+            'billing.address.city' => 'required|string',
             'billing.address.street' => 'required|string',
         ];
     }
@@ -225,7 +225,7 @@ class NullableNestedFieldRequest extends FormRequest
     {
         return [
             'user.name' => 'required|string',
-            'user.bio'  => 'nullable|string',
+            'user.bio' => 'nullable|string',
         ];
     }
 }
@@ -246,10 +246,70 @@ function testNestedDotNotationSingleField(NestedAddressRequest $request): void
 function testInlineValidateDotNotation(\Illuminate\Http\Request $request): void
 {
     $_data = $request->validate([
-        'user.name'  => 'required|string',
+        'user.name' => 'required|string',
         'user.email' => 'required|email',
     ]);
     /** @psalm-check-type-exact $_data = array{user: array{email: string, name: string}} */
+}
+
+// --- Edge cases: dot-notation combined with wildcards ---
+
+class NestedWithWildcardRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'meta.tags' => 'required|array',
+            'meta.tags.*' => 'string',
+            'meta.description' => 'required|string',
+        ];
+    }
+}
+
+function testNestedDotNotationWithWildcardSibling(NestedWithWildcardRequest $request): void
+{
+    // Wildcard (tags.*) resolved to list<string> by resolveRules(),
+    // then dot-notation nesting groups tags and description under meta.
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{meta: array{description: string, tags: list<string>}} */
+}
+
+// --- Edge case: parent key with own rule alongside nested children ---
+
+class ParentWithOwnRuleRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'user' => 'required|array',
+            'user.name' => 'required|string',
+            'user.email' => 'required|string',
+        ];
+    }
+}
+
+function testParentWithOwnRuleAndChildren(ParentWithOwnRuleRequest $request): void
+{
+    // Parent 'user' has its own 'array' rule, but children provide the precise shape.
+    // The nested shape takes precedence over the parent's generic array type.
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{user: array{email: string, name: string}} */
+}
+
+// --- Edge case: safe() with nested dot-notation keys ---
+
+function testSafeWithNestedDotNotationKeys(NestedAddressRequest $request): void
+{
+    // safe() with dot-notation keys filters by exact flat key,
+    // then buildArrayShape() nests the result.
+    $_partial = $request->safe(['address.city']);
+    /** @psalm-check-type-exact $_partial = array{address: array{city: string}} */
+}
+
+function testSafeWithAllNestedDotNotationKeys(NestedAddressRequest $request): void
+{
+    $_all = $request->safe(['address.city', 'address.zip']);
+    /** @psalm-check-type-exact $_all = array{address: array{city: string, zip: string}} */
 }
 ?>
 --EXPECT--
