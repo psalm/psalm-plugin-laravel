@@ -10,6 +10,7 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\LaravelPlugin\Util\TreeNode;
 use Psalm\Type\Union;
 
 /**
@@ -289,7 +290,6 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
      * Build a TKeyedArray shape from resolved rules.
      *
      * @param array<string, ResolvedRule> $rules
-     * @psalm-mutation-free
      */
     private static function buildArrayShape(array $rules): ?Union
     {
@@ -297,21 +297,103 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        $root = new TreeNode();
+
+        foreach ($rules as $field => $resolvedRule) {
+            $segments = explode('.', $field);
+            self::insertIntoTree($root, $segments, $resolvedRule);
+        }
+
+        return self::buildUnionFromTree($root);
+    }
+
+    /**
+     * Insert a resolved rule into a nested tree structure based on dot-notation segments.
+     *
+     * @param list<string> $segments
+     */
+    private static function insertIntoTree(TreeNode $node, array $segments, ResolvedRule $resolvedRule): void
+    {
+        $key = array_shift($segments);
+
+        if ($key === null) {
+            return;
+        }
+
+        $node->children[$key] ??= new TreeNode();
+
+        if ($segments === []) {
+            $node->children[$key]->self = $resolvedRule;
+        } else {
+            self::insertIntoTree($node->children[$key], $segments, $resolvedRule);
+        }
+    }
+
+    /**
+     * Recursively convert a nested tree into TKeyedArray Union types.
+     *
+     * @psalm-mutation-free
+     */
+    private static function buildUnionFromTree(TreeNode $node): ?Union
+    {
+        if ($node->children === []) {
+            return null;
+        }
+
         /** @var non-empty-array<string, Union> $properties */
         $properties = [];
 
-        foreach ($rules as $field => $resolvedRule) {
-            $fieldType = $resolvedRule->type;
-
-            // Fields without a presence rule (required, present, accepted, etc.)
-            // may be absent from validated() output when not provided in the request.
-            if (!$resolvedRule->required) {
-                $fieldType = $fieldType->setPossiblyUndefined(true);
+        foreach ($node->children as $key => $child) {
+            if ($key === '*') {
+                continue;
             }
 
-            $properties[$field] = $fieldType;
+            if ($child->children === []) {
+                if ($child->self === null) {
+                    continue;
+                }
+
+                $fieldType = $child->self->type;
+                if (!$child->self->required) {
+                    $fieldType = $fieldType->setPossiblyUndefined(true);
+                }
+
+                $properties[$key] = $fieldType;
+                continue;
+            }
+
+            if (isset($child->children['*']) && $child->children['*']->children !== []) {
+                $itemShape = self::buildUnionFromTree($child->children['*']);
+
+                if ($itemShape instanceof Union) {
+                    $properties[$key] = new Union([
+                        Type::getListAtomic($itemShape),
+                    ]);
+                } else {
+                    $properties[$key] = new Union([
+                        Type::getListAtomic(Type::getMixed()),
+                    ]);
+                }
+
+                continue;
+            }
+
+            $nested = self::buildUnionFromTree($child);
+
+            if ($nested instanceof Union) {
+                if ($child->self !== null && !$child->self->required) {
+                    $nested = $nested->setPossiblyUndefined(true);
+                }
+
+                $properties[$key] = $nested;
+            }
         }
 
+        if ($properties === []) {
+            return null;
+        }
+
+        /** @var non-empty-array<string, Union> $properties */
         return new Union([TKeyedArray::make($properties)]);
     }
 }
