@@ -81,6 +81,10 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function getAiStubs(): array
     {
+        if (!InstalledVersions::isInstalled('laravel/ai')) {
+            return [];
+        }
+
         $version = InstalledVersions::getPrettyVersion('laravel/ai');
 
         if ($version === null) {
