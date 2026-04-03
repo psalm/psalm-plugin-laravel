@@ -15,7 +15,6 @@ use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\MorphOneOrMany;
-use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -105,7 +104,8 @@ final class LaravelForwardingConfig
             // Builder::where() returns Builder<TModel> → treated as "self-returning".
             // Query\Builder methods that return Query\Builder are NOT self-returning —
             // methods like toBase()/getQuery() intentionally drop to the lower layer.
-            selfReturnIndicators: [Builder::class, 'static'],
+            // is_static return types ($this/static) are detected automatically.
+            selfReturnIndicators: [Builder::class],
             // Psalm requires exact class name matching for provider dispatch.
             // List all concrete Relation subclasses so the handler fires for each.
             additionalSourceClasses: [
@@ -121,7 +121,6 @@ final class LaravelForwardingConfig
                 MorphOneOrMany::class,
                 MorphTo::class,
                 MorphToMany::class,
-                MorphPivot::class,
             ],
             // Register this handler for the @mixin target classes (Builder, QueryBuilder)
             // in addition to the Relation source classes. When Psalm resolves a method

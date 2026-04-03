@@ -22,7 +22,6 @@ use Psalm\Type\Union;
  * Caches "does method X return self?" results in a static map, since the answer depends
  * only on the method's declared return type (immutable during a Psalm run).
  */
-/** @psalm-external-mutation-free */
 final class ReturnTypeResolver
 {
     /** @var array<string, bool> Cache: "TargetClass::method" → returns self? */
@@ -198,6 +197,12 @@ final class ReturnTypeResolver
 
             foreach ($returnType->getAtomicTypes() as $atomicType) {
                 if ($atomicType instanceof TNamedObject) {
+                    // @return static / @return $this: Psalm stores these with is_static=true
+                    // and $value set to the declaring class (not the literal 'static').
+                    if ($atomicType->is_static) {
+                        return true;
+                    }
+
                     $fqcn = \strtolower($atomicType->value);
                     if (\in_array($fqcn, $indicatorsLower, true)) {
                         return true;

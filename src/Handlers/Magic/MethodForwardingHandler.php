@@ -63,7 +63,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
+        if (self::$registry === null) {
             return [];
         }
 
@@ -96,7 +96,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
-        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
+        if (self::$registry === null) {
             return null;
         }
 
@@ -131,11 +131,10 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
         return null;
     }
 
-    /** @psalm-external-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
+        if (self::$registry === null) {
             return null;
         }
 
@@ -157,7 +156,6 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
         //    the calling expression's type via node_data/context
         $directRules = self::$registry->getRulesFor($fqClassName);
         if ($directRules !== []) {
-            /** @psalm-suppress ImpureMethodCall node type provider access is read-only */
             $templateParams = $event->getTemplateTypeParameters()
                 ?? self::extractTemplateParamsFromCaller($source, $event, $fqClassName);
 
@@ -179,7 +177,6 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
         // Path 2: Mixin interception — the method was resolved via @mixin and
         // the provider fired for the mixin target class (e.g., Builder).
         // Check if the ORIGINAL caller was a forwarding source (e.g., a Relation).
-        /** @psalm-suppress ImpureMethodCall node type provider access is read-only */
         return self::handleMixinInterception($source, $event, $fqClassName, $methodName);
     }
 

@@ -10,4 +10,10 @@
       <code><![CDATA[$description]]></code>
     </PossiblyUnusedProperty>
   </file>
+  <file src="src/Handlers/Magic/MethodForwardingHandler.php">
+    <ImpureMethodCall>
+      <code><![CDATA[getTemplateTypeParameters]]></code>
+      <code><![CDATA[handleMixinInterception]]></code>
+    </ImpureMethodCall>
+  </file>
 </files>
