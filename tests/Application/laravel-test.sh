@@ -232,7 +232,7 @@ final class UnsafePromptInjection
         return 'You are a helpful assistant.';
     }
 
-    /** User input sent directly as LLM prompt — must trigger taint issue */
+    /** User input sent directly as LLM prompt — must trigger TaintedLlmPrompt */
     public function handle(Request $request): void
     {
         /** @var string $question */
@@ -310,6 +310,12 @@ if echo "$TAINT_OUTPUT" | grep -q "UnsafeToolArgsToSql.*TaintedSql\|TaintedSql.*
     info "OK: UnsafeToolArgsToSql → TaintedSql"
 else
     error "UnsafeToolArgsToSql did not trigger TaintedSql"
+fi
+
+if echo "$TAINT_OUTPUT" | grep -q "UnsafePromptInjection.*TaintedLlmPrompt\|TaintedLlmPrompt.*UnsafePromptInjection"; then
+    info "OK: UnsafePromptInjection → TaintedLlmPrompt"
+else
+    error "UnsafePromptInjection did not trigger TaintedLlmPrompt"
 fi
 
 # Verify safe usage does NOT trigger issues

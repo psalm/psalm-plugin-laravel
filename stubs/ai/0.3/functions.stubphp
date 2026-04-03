@@ -6,11 +6,7 @@ namespace Laravel\Ai;
  * Create an anonymous AI agent with the given instructions.
  *
  * The $instructions parameter flows directly into the LLM system prompt.
- * User input here is a prompt injection vulnerability.
- *
- * Using `html` as proxy taint type until Psalm adds native `llm_prompt` support.
- * TODO: Replace `@psalm-taint-sink html` with `@psalm-taint-sink llm_prompt`
- *       once vimeo/psalm#11746 is merged for precise TaintedLlmPrompt issues.
+ * User input here is a prompt injection vulnerability (TaintedLlmPrompt).
  *
  * @param string $instructions
  * @param iterable $messages
@@ -18,6 +14,6 @@ namespace Laravel\Ai;
  * @param \Closure|null $schema
  * @return \Laravel\Ai\Contracts\Agent
  *
- * @psalm-taint-sink html $instructions
+ * @psalm-taint-sink llm_prompt $instructions
  */
 function agent(string $instructions = '', iterable $messages = [], iterable $tools = [], ?\Closure $schema = null): \Laravel\Ai\Contracts\Agent {}
