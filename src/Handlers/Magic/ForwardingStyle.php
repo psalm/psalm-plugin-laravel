@@ -18,8 +18,6 @@ namespace Psalm\LaravelPlugin\Handlers\Magic;
  *
  * - Passthrough: Model's __call returns whatever forwardCallTo returns. The raw
  *   result from the target (Builder) is passed through to the caller.
- *
- * @see .alies/docs/laravel-magic-call-patterns.md for the full forwarding chain documentation
  */
 enum ForwardingStyle: string
 {

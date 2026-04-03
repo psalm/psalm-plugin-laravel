@@ -33,7 +33,8 @@ use Psalm\Type\Union;
  * This approach is clean because:
  * - @mixin stays intact (Psalm handles method existence, params, visibility)
  * - We only override the return type (the one thing @mixin gets wrong)
- * - No need for existence/visibility/params providers
+ * - No need for existence/visibility providers (Psalm handles these via @mixin)
+ * - We provide method params for forwarded calls via the __call path
  * - Template params are available from the calling expression's type
  */
 final class MethodForwardingHandler implements MethodParamsProviderInterface, MethodReturnTypeProviderInterface

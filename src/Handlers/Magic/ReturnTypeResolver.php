@@ -169,7 +169,8 @@ final class ReturnTypeResolver
         ForwardingRule $rule,
         string $methodNameLowercase,
     ): bool {
-        $cacheKey = \implode('|', $rule->searchClasses) . '::' . $methodNameLowercase;
+        $cacheKey = \implode('|', $rule->searchClasses) . '::' . $methodNameLowercase
+            . '::' . \implode('|', $rule->selfReturnIndicators);
 
         if (\array_key_exists($cacheKey, self::$selfReturnCache)) {
             return self::$selfReturnCache[$cacheKey];

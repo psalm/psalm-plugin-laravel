@@ -49,22 +49,20 @@ final class ForwardingRule
      *     for. Psalm's provider lookup requires exact class name matching — a handler for
      *     Relation::class is not consulted for HasMany. List concrete subclasses here.
      *
-     * @param bool $interceptMixin When true, the handler strips @mixin annotations from
-     *     the source class's ClassLikeStorage during scanning. This forces methods that
-     *     would normally resolve via @mixin to fall through to the __call path, where
-     *     the handler intercepts them and provides existence, params, and return types.
+     * @param bool $interceptMixin When true, the handler also registers for the mixin
+     *     target classes (searchClasses) in getClassLikeNames(). When Psalm resolves a
+     *     method via @mixin on a target class (e.g., Builder), the return type provider
+     *     fires for that target. The handler inspects the calling expression's type to
+     *     detect if it originated from a forwarding source (e.g., a Relation), then
+     *     applies the ForwardingStyle to return the correct type.
+     *
+     *     The @mixin annotation stays intact — Psalm handles method existence and
+     *     visibility via @mixin. The handler overrides only the return type (and
+     *     provides method params for the source class's __call path).
      *
      *     Without this, methods like Relation::where() resolve via @mixin Builder,
-     *     and the return type provider fires for Builder (not Relation) — our handler
-     *     never sees the call. With interceptMixin=true, where() falls to __call,
-     *     Psalm checks our MethodReturnTypeProvider for HasMany, and we return
-     *     HasMany<Comment, Post> instead of Builder<TRelatedModel>.
-     *
-     *     When enabled, the handler takes full responsibility:
-     *     - MethodExistence: confirms method exists on search classes
-     *     - MethodVisibility: confirms it's public (forwarded via __call)
-     *     - MethodParams: provides parameter types from the search class
-     *     - MethodReturnType: applies ForwardingStyle (existing logic)
+     *     and the return type is Builder<TRelatedModel>. With interceptMixin=true,
+     *     the handler intercepts that resolution and returns HasMany<Comment, Post>.
      *
      * @param string|null $description Human-readable description of this forwarding rule,
      *     useful for debugging and documentation.

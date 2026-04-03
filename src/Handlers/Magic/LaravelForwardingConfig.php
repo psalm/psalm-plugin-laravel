@@ -28,8 +28,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  * chains are modeled for static analysis. Adding support for a new forwarding pattern
  * means adding a new ForwardingRule entry here — no new handler class required.
  *
- * The configuration mirrors the runtime forwarding chain documented in
- * .alies/docs/laravel-magic-call-patterns.md:
+ * The configuration mirrors the runtime forwarding chain:
  *
  *     Relation::__call → forwardDecoratedCallTo → Builder
  *     Builder::__call  → forwardCallTo → QueryBuilder; return $this
@@ -107,6 +106,13 @@ final class LaravelForwardingConfig
             // Query\Builder methods that return Query\Builder are NOT self-returning —
             // methods like toBase()/getQuery() intentionally drop to the lower layer.
             selfReturnIndicators: [Builder::class, 'static'],
+            // Register this handler for the @mixin target classes (Builder, QueryBuilder)
+            // in addition to the Relation source classes. When Psalm resolves a method
+            // like where() via @mixin Builder, the return type provider fires for Builder.
+            // The handler detects that the caller is a Relation, and applies the
+            // Decorated forwarding style — returning HasMany<Comment, Post> instead of
+            // Builder<TRelatedModel>.
+            interceptMixin: true,
             // Psalm requires exact class name matching for provider dispatch.
             // List all concrete Relation subclasses so the handler fires for each.
             additionalSourceClasses: [
