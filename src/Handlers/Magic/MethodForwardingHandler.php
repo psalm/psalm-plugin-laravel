@@ -62,7 +62,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        if (self::$registry === null) {
+        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
             return [];
         }
 
@@ -95,7 +95,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
-        if (self::$registry === null) {
+        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
             return null;
         }
 
@@ -134,7 +134,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        if (self::$registry === null) {
+        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
             return null;
         }
 
@@ -169,7 +169,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
                     methodNameLowercase: $methodName,
                 );
 
-                if ($result !== null) {
+                if ($result instanceof \Psalm\Type\Union) {
                     return $result;
                 }
             }
@@ -207,7 +207,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
         // Strategy 1: Get from node type provider (works for chained calls where
         // the previous call's return type has been stored on the MethodCall node).
         $varType = $source->getNodeTypeProvider()->getType($stmt->var);
-        if ($varType !== null) {
+        if ($varType instanceof \Psalm\Type\Union) {
             foreach ($varType->getAtomicTypes() as $atomicType) {
                 if (
                     $atomicType instanceof TGenericObject
@@ -257,7 +257,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
         // Get the type of the expression the method was called on.
         // For $relation->where(), this is the type of $relation (e.g., HasOne<Phone, User>).
         $callerType = $source->getNodeTypeProvider()->getType($stmt->var);
-        if ($callerType === null) {
+        if (!$callerType instanceof \Psalm\Type\Union) {
             return null;
         }
 

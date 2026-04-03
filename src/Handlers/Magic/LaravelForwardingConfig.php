@@ -107,12 +107,6 @@ final class LaravelForwardingConfig
             // Query\Builder methods that return Query\Builder are NOT self-returning —
             // methods like toBase()/getQuery() intentionally drop to the lower layer.
             selfReturnIndicators: [Builder::class, 'static'],
-            // Strip @mixin Builder<TRelatedModel> from Relation's ClassLikeStorage.
-            // Without this, methods like where() resolve via @mixin and the handler
-            // fires for Builder (not Relation) — losing the Relation type.
-            // With this, ALL Builder methods fall through to __call and the handler
-            // returns HasMany<Comment, Post> instead of Builder<TRelatedModel>.
-            interceptMixin: true,
             // Psalm requires exact class name matching for provider dispatch.
             // List all concrete Relation subclasses so the handler fires for each.
             additionalSourceClasses: [
@@ -130,6 +124,12 @@ final class LaravelForwardingConfig
                 MorphToMany::class,
                 MorphPivot::class,
             ],
+            // Strip @mixin Builder<TRelatedModel> from Relation's ClassLikeStorage.
+            // Without this, methods like where() resolve via @mixin and the handler
+            // fires for Builder (not Relation) — losing the Relation type.
+            // With this, ALL Builder methods fall through to __call and the handler
+            // returns HasMany<Comment, Post> instead of Builder<TRelatedModel>.
+            interceptMixin: true,
             description: 'Relation → Builder (forwardDecoratedCallTo)',
         );
     }

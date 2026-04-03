@@ -145,7 +145,7 @@ final class ReturnTypeResolver
     ): ?Union {
         foreach ($rule->searchClasses as $targetClass) {
             $returnType = self::getDeclaredReturnType($codebase, $targetClass, $methodNameLowercase);
-            if ($returnType !== null) {
+            if ($returnType instanceof \Psalm\Type\Union) {
                 return $returnType;
             }
         }
@@ -190,7 +190,7 @@ final class ReturnTypeResolver
 
         foreach ($rule->searchClasses as $targetClass) {
             $returnType = self::getDeclaredReturnType($codebase, $targetClass, $methodNameLowercase);
-            if ($returnType === null) {
+            if (!$returnType instanceof \Psalm\Type\Union) {
                 continue;
             }
 
