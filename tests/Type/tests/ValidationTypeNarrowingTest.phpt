@@ -311,5 +311,34 @@ function testSafeWithAllNestedDotNotationKeys(NestedAddressRequest $request): vo
     $_all = $request->safe(['address.city', 'address.zip']);
     /** @psalm-check-type-exact $_all = array{address: array{city: string, zip: string}} */
 }
+
+function testSafeInputWithDotNotationKey(NestedAddressRequest $request): void
+{
+    // ValidatedInput::input() resolves via template parameter extraction,
+    // then does a flat key lookup — same as validated('address.city').
+    $safe = $request->safe();
+    $_city = $safe->input('address.city');
+    /** @psalm-check-type-exact $_city = string */
+}
+
+// --- Edge case: optional parent group with sometimes|array ---
+
+class OptionalParentGroupRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'settings' => 'sometimes|array',
+            'settings.theme' => 'required|string',
+        ];
+    }
+}
+
+function testOptionalParentGroupWithChildren(OptionalParentGroupRequest $request): void
+{
+    // Parent 'settings' is sometimes|array, so the nested group is possibly undefined.
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{settings?: array{theme: string}} */
+}
 ?>
 --EXPECT--
