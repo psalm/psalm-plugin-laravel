@@ -10,7 +10,6 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\LaravelPlugin\Util\TreeNode;
 use Psalm\Type\Union;
 
 /**
@@ -297,10 +296,10 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $root = new TreeNode();
+        $root = new ValidationRuleNode();
 
         foreach ($rules as $field => $resolvedRule) {
-            $segments = explode('.', $field);
+            $segments = \explode('.', $field);
             self::insertIntoTree($root, $segments, $resolvedRule);
         }
 
@@ -312,18 +311,18 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
      *
      * @param list<string> $segments
      */
-    private static function insertIntoTree(TreeNode $node, array $segments, ResolvedRule $resolvedRule): void
+    private static function insertIntoTree(ValidationRuleNode $node, array $segments, ResolvedRule $resolvedRule): void
     {
-        $key = array_shift($segments);
+        $key = \array_shift($segments);
 
         if ($key === null) {
             return;
         }
 
-        $node->children[$key] ??= new TreeNode();
+        $node->children[$key] ??= new ValidationRuleNode();
 
         if ($segments === []) {
-            $node->children[$key]->self = $resolvedRule;
+            $node->children[$key]->rule = $resolvedRule;
         } else {
             self::insertIntoTree($node->children[$key], $segments, $resolvedRule);
         }
@@ -332,9 +331,18 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     /**
      * Recursively convert a nested tree into TKeyedArray Union types.
      *
+     * Wildcard patterns (tags.*, items.*.id) are already resolved by
+     * ValidationRuleAnalyzer::resolveRules() before reaching this method,
+     * so this method only handles plain dot-notation nesting.
+     *
+     * Known limitation: when all descendants of an intermediate node are optional
+     * (sometimes/no required), the parent group could be absent from validated() output,
+     * but we don't mark it as possibly_undefined. Fixing this would require checking
+     * all descendants recursively — deferred for simplicity.
+     *
      * @psalm-mutation-free
      */
-    private static function buildUnionFromTree(TreeNode $node): ?Union
+    private static function buildUnionFromTree(ValidationRuleNode $node): ?Union
     {
         if ($node->children === []) {
             return null;
@@ -348,13 +356,14 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
                 continue;
             }
 
+            // Leaf node — has a rule but no nested children.
             if ($child->children === []) {
-                if ($child->self === null) {
+                if ($child->rule === null) {
                     continue;
                 }
 
-                $fieldType = $child->self->type;
-                if (!$child->self->required) {
+                $fieldType = $child->rule->type;
+                if (!$child->rule->required) {
                     $fieldType = $fieldType->setPossiblyUndefined(true);
                 }
 
@@ -362,26 +371,11 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
                 continue;
             }
 
-            if (isset($child->children['*']) && $child->children['*']->children !== []) {
-                $itemShape = self::buildUnionFromTree($child->children['*']);
-
-                if ($itemShape instanceof Union) {
-                    $properties[$key] = new Union([
-                        Type::getListAtomic($itemShape),
-                    ]);
-                } else {
-                    $properties[$key] = new Union([
-                        Type::getListAtomic(Type::getMixed()),
-                    ]);
-                }
-
-                continue;
-            }
-
+            // Branch node — recurse into nested children.
             $nested = self::buildUnionFromTree($child);
 
             if ($nested instanceof Union) {
-                if ($child->self !== null && !$child->self->required) {
+                if ($child->rule !== null && !$child->rule->required) {
                     $nested = $nested->setPossiblyUndefined(true);
                 }
 
