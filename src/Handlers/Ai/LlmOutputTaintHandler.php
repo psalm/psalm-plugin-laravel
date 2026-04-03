@@ -60,7 +60,7 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
         $codebase = $event->getCodebase();
 
         // This handler only adds taint sources; skip entirely when taint analysis is off
-        if ($codebase->taint_flow_graph === null) {
+        if (!$codebase->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
             return null;
         }
 
@@ -84,7 +84,7 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
         // Check if the object being accessed is a TextResponse (or subclass)
         $varType = $nodeTypeProvider->getType($expr->var);
 
-        if ($varType === null) {
+        if (!$varType instanceof \Psalm\Type\Union) {
             return null;
         }
 
