@@ -130,12 +130,6 @@ final class LaravelForwardingConfig
             // Decorated forwarding style — returning HasMany<Comment, Post> instead of
             // Builder<TRelatedModel>.
             interceptMixin: true,
-            // Strip @mixin Builder<TRelatedModel> from Relation's ClassLikeStorage.
-            // Without this, methods like where() resolve via @mixin and the handler
-            // fires for Builder (not Relation) — losing the Relation type.
-            // With this, ALL Builder methods fall through to __call and the handler
-            // returns HasMany<Comment, Post> instead of Builder<TRelatedModel>.
-            interceptMixin: true,
             description: 'Relation → Builder (forwardDecoratedCallTo)',
         );
     }

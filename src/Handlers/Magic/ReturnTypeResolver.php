@@ -19,7 +19,8 @@ use Psalm\Type\Union;
  * - AlwaysSelf: unconditionally return source's type
  * - Passthrough: return target's type as-is
  *
- * All methods are stateless — caching is handled by the caller (MethodForwardingHandler).
+ * Caches "does method X return self?" results in a static map, since the answer depends
+ * only on the method's declared return type (immutable during a Psalm run).
  */
 /** @psalm-external-mutation-free */
 final class ReturnTypeResolver
