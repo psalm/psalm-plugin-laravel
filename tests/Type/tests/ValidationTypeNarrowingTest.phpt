@@ -149,5 +149,196 @@ function testInlineValidateArrayFormat(\Illuminate\Http\Request $request): void
     ]);
     /** @psalm-check-type-exact $_data = array{active?: '0'|'1'|0|1|bool, id: string} */
 }
+
+class NestedAddressRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'address.city' => 'required|string',
+            'address.zip' => 'required|string',
+        ];
+    }
+}
+
+function testNestedDotNotationShape(NestedAddressRequest $request): void
+{
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{address: array{city: string, zip: string}} */
+}
+
+class MixedFlatAndNestedRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'name' => 'required|string',
+            'address.city' => 'required|string',
+            'address.street' => 'required|string',
+        ];
+    }
+}
+
+function testMixedFlatAndNestedShape(MixedFlatAndNestedRequest $request): void
+{
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{address: array{city: string, street: string}, name: string} */
+}
+
+class DeepNestedRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'billing.address.city' => 'required|string',
+            'billing.address.street' => 'required|string',
+        ];
+    }
+}
+
+function testDeepNestingShape(DeepNestedRequest $request): void
+{
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{billing: array{address: array{city: string, street: string}}} */
+}
+
+class OptionalNestedFieldRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'contact.email' => 'required|string',
+            'contact.phone' => 'sometimes|string',
+        ];
+    }
+}
+
+function testOptionalNestedField(OptionalNestedFieldRequest $request): void
+{
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{contact: array{email: string, phone?: string}} */
+}
+
+class NullableNestedFieldRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'user.name' => 'required|string',
+            'user.bio' => 'nullable|string',
+        ];
+    }
+}
+
+function testNullableNestedField(NullableNestedFieldRequest $request): void
+{
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{user: array{bio?: null|string, name: string}} */
+}
+
+function testNestedDotNotationSingleField(NestedAddressRequest $request): void
+{
+    // validated('field') still works with dot-notation keys
+    $_city = $request->validated('address.city');
+    /** @psalm-check-type-exact $_city = string */
+}
+
+function testInlineValidateDotNotation(\Illuminate\Http\Request $request): void
+{
+    $_data = $request->validate([
+        'user.name' => 'required|string',
+        'user.email' => 'required|email',
+    ]);
+    /** @psalm-check-type-exact $_data = array{user: array{email: string, name: string}} */
+}
+
+// --- Edge cases: dot-notation combined with wildcards ---
+
+class NestedWithWildcardRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'meta.tags' => 'required|array',
+            'meta.tags.*' => 'string',
+            'meta.description' => 'required|string',
+        ];
+    }
+}
+
+function testNestedDotNotationWithWildcardSibling(NestedWithWildcardRequest $request): void
+{
+    // Wildcard (tags.*) resolved to list<string> by resolveRules(),
+    // then dot-notation nesting groups tags and description under meta.
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{meta: array{description: string, tags: list<string>}} */
+}
+
+// --- Edge case: parent key with own rule alongside nested children ---
+
+class ParentWithOwnRuleRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'user' => 'required|array',
+            'user.name' => 'required|string',
+            'user.email' => 'required|string',
+        ];
+    }
+}
+
+function testParentWithOwnRuleAndChildren(ParentWithOwnRuleRequest $request): void
+{
+    // Parent 'user' has its own 'array' rule, but children provide the precise shape.
+    // The nested shape takes precedence over the parent's generic array type.
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{user: array{email: string, name: string}} */
+}
+
+// --- Edge case: safe() with nested dot-notation keys ---
+
+function testSafeWithNestedDotNotationKeys(NestedAddressRequest $request): void
+{
+    // safe() with dot-notation keys filters by exact flat key,
+    // then buildArrayShape() nests the result.
+    $_partial = $request->safe(['address.city']);
+    /** @psalm-check-type-exact $_partial = array{address: array{city: string}} */
+}
+
+function testSafeWithAllNestedDotNotationKeys(NestedAddressRequest $request): void
+{
+    $_all = $request->safe(['address.city', 'address.zip']);
+    /** @psalm-check-type-exact $_all = array{address: array{city: string, zip: string}} */
+}
+
+function testSafeInputWithDotNotationKey(NestedAddressRequest $request): void
+{
+    // ValidatedInput::input() resolves via template parameter extraction,
+    // then does a flat key lookup — same as validated('address.city').
+    $safe = $request->safe();
+    $_city = $safe->input('address.city');
+    /** @psalm-check-type-exact $_city = string */
+}
+
+// --- Edge case: optional parent group with sometimes|array ---
+
+class OptionalParentGroupRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'settings' => 'sometimes|array',
+            'settings.theme' => 'required|string',
+        ];
+    }
+}
+
+function testOptionalParentGroupWithChildren(OptionalParentGroupRequest $request): void
+{
+    // Parent 'settings' is sometimes|array, so the nested group is possibly undefined.
+    $_all = $request->validated();
+    /** @psalm-check-type-exact $_all = array{settings?: array{theme: string}} */
+}
 ?>
 --EXPECT--

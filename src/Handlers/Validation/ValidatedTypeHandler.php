@@ -289,7 +289,6 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
      * Build a TKeyedArray shape from resolved rules.
      *
      * @param array<string, ResolvedRule> $rules
-     * @psalm-mutation-free
      */
     private static function buildArrayShape(array $rules): ?Union
     {
@@ -297,21 +296,98 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        /** @var non-empty-array<string, Union> $properties */
-        $properties = [];
+        $root = new ValidationRuleNode();
 
         foreach ($rules as $field => $resolvedRule) {
-            $fieldType = $resolvedRule->type;
-
-            // Fields without a presence rule (required, present, accepted, etc.)
-            // may be absent from validated() output when not provided in the request.
-            if (!$resolvedRule->required) {
-                $fieldType = $fieldType->setPossiblyUndefined(true);
-            }
-
-            $properties[$field] = $fieldType;
+            $segments = \explode('.', $field);
+            self::insertIntoTree($root, $segments, $resolvedRule);
         }
 
+        return self::buildUnionFromTree($root);
+    }
+
+    /**
+     * Insert a resolved rule into a nested tree structure based on dot-notation segments.
+     *
+     * @param list<string> $segments
+     */
+    private static function insertIntoTree(ValidationRuleNode $node, array $segments, ResolvedRule $resolvedRule): void
+    {
+        $key = \array_shift($segments);
+
+        if ($key === null) {
+            return;
+        }
+
+        $node->children[$key] ??= new ValidationRuleNode();
+
+        if ($segments === []) {
+            $node->children[$key]->rule = $resolvedRule;
+        } else {
+            self::insertIntoTree($node->children[$key], $segments, $resolvedRule);
+        }
+    }
+
+    /**
+     * Recursively convert a nested tree into TKeyedArray Union types.
+     *
+     * Wildcard patterns (tags.*, items.*.id) are already resolved by
+     * ValidationRuleAnalyzer::resolveRules() before reaching this method,
+     * so this method only handles plain dot-notation nesting.
+     *
+     * Known limitation: when all descendants of an intermediate node are optional
+     * (sometimes/no required), the parent group could be absent from validated() output,
+     * but we don't mark it as possibly_undefined. Fixing this would require checking
+     * all descendants recursively — deferred for simplicity.
+     *
+     * @psalm-mutation-free
+     */
+    private static function buildUnionFromTree(ValidationRuleNode $node): ?Union
+    {
+        if ($node->children === []) {
+            return null;
+        }
+
+        /** @var array<string, Union> $properties */
+        $properties = [];
+
+        foreach ($node->children as $key => $child) {
+            if ($key === '*') {
+                continue;
+            }
+
+            // Leaf node — has a rule but no nested children.
+            if ($child->children === []) {
+                if ($child->rule === null) {
+                    continue;
+                }
+
+                $fieldType = $child->rule->type;
+                if ($child->rule->sometimes || !$child->rule->required) {
+                    $fieldType = $fieldType->setPossiblyUndefined(true);
+                }
+
+                $properties[$key] = $fieldType;
+                continue;
+            }
+
+            // Branch node — recurse into nested children.
+            $nested = self::buildUnionFromTree($child);
+
+            if ($nested instanceof Union) {
+                if ($child->rule !== null && ($child->rule->sometimes || !$child->rule->required)) {
+                    $nested = $nested->setPossiblyUndefined(true);
+                }
+
+                $properties[$key] = $nested;
+            }
+        }
+
+        if ($properties === []) {
+            return null;
+        }
+
+        /** @var non-empty-array<string, Union> $properties */
         return new Union([TKeyedArray::make($properties)]);
     }
 }
