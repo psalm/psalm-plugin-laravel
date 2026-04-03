@@ -363,7 +363,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
                 }
 
                 $fieldType = $child->rule->type;
-                if (!$child->rule->required) {
+                if ($child->rule->sometimes || !$child->rule->required) {
                     $fieldType = $fieldType->setPossiblyUndefined(true);
                 }
 
@@ -375,7 +375,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             $nested = self::buildUnionFromTree($child);
 
             if ($nested instanceof Union) {
-                if ($child->rule !== null && !$child->rule->required) {
+                if ($child->rule !== null && ($child->rule->sometimes || !$child->rule->required)) {
                     $nested = $nested->setPossiblyUndefined(true);
                 }
 
