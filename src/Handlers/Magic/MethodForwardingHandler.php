@@ -63,7 +63,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        if (self::$registry === null) {
+        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
             return [];
         }
 
@@ -96,7 +96,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
-        if (self::$registry === null) {
+        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
             return null;
         }
 
@@ -134,7 +134,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        if (self::$registry === null) {
+        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
             return null;
         }
 
