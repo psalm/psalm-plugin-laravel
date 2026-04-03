@@ -1,2 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="7.0.0-beta16@491dd740b8862db7d4fe8c1f6c161055c32ad651"/>
+<files psalm-version="7.0.0-beta16@491dd740b8862db7d4fe8c1f6c161055c32ad651">
+  <file src="src/Handlers/Eloquent/RelationsMethodHandler.php">
+    <UnusedClass>
+      <code><![CDATA[RelationsMethodHandler]]></code>
+    </UnusedClass>
+  </file>
+  <file src="src/Handlers/Magic/ForwardingRule.php">
+    <PossiblyUnusedProperty>
+      <code><![CDATA[$description]]></code>
+    </PossiblyUnusedProperty>
+  </file>
+</files>
