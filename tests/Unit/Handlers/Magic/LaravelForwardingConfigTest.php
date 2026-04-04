@@ -95,4 +95,12 @@ final class LaravelForwardingConfigTest extends TestCase
         $rules = $this->registry->getRulesFor(\Illuminate\Database\Eloquent\Relations\MorphPivot::class);
         $this->assertSame([], $rules);
     }
+
+    // === Registry totals ===
+
+    #[Test]
+    public function registry_has_expected_rule_count(): void
+    {
+        $this->assertCount(1, $this->registry->getAllRules());
+    }
 }

@@ -48,6 +48,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     public static function init(ForwardingChainRegistry $registry): void
     {
         self::$registry = $registry;
+        ReturnTypeResolver::resetCache();
     }
 
     /**
@@ -155,7 +156,21 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
         $codebase = $source->getCodebase();
         $methodName = $event->getMethodNameLowercase();
 
-        // Path 1: Direct rules — the handler is registered for the source class.
+        // Path 1: Mixin interception — check FIRST because a class can be both
+        // a direct source (e.g., Builder has its own Builder→QueryBuilder rule) and
+        // a mixin target (e.g., Relation→Builder interception). If we checked direct
+        // rules first, Builder→QueryBuilder AlwaysSelf would short-circuit and the
+        // Relation type would be lost.
+        //
+        // When $relation->where() resolves via @mixin Builder, the provider fires
+        // for Builder. We check if the ORIGINAL caller was a Relation and apply
+        // the Relation→Builder Decorated style instead of Builder's own rules.
+        $mixinResult = self::handleMixinInterception($source, $event, $fqClassName, $methodName);
+        if ($mixinResult instanceof \Psalm\Type\Union) {
+            return $mixinResult;
+        }
+
+        // Path 2: Direct rules — the handler is registered for the source class.
         // Handles two cases:
         // a) Methods declared in stubs on the source class (e.g., Relation::latest)
         //    — template params come from the event (normal method resolution)
@@ -182,15 +197,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
             }
         }
 
-        // Path 2: Mixin interception — the method was resolved via @mixin and
-        // the provider fired for the mixin target class (e.g., Builder).
-        // Check if the ORIGINAL caller was a forwarding source (e.g., a Relation).
-        //
-        // LIMITATION: If a class is both a direct source (Path 1) and a mixin target
-        // (Path 2), Path 1 runs first and may short-circuit. When adding the
-        // Builder→QueryBuilder rule, this ordering must be revisited — mixin
-        // interception should take precedence for calls originating from Relations.
-        return self::handleMixinInterception($source, $event, $fqClassName, $methodName);
+        return null;
     }
 
     /**

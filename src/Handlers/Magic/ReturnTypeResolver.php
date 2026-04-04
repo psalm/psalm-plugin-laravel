@@ -28,6 +28,17 @@ final class ReturnTypeResolver
     private static array $selfReturnCache = [];
 
     /**
+     * Reset the self-return cache.
+     *
+     * Must be called between Psalm runs in long-lived processes (language server,
+     * daemon mode) to prevent stale results when stubs or vendor code changes.
+     */
+    public static function resetCache(): void
+    {
+        self::$selfReturnCache = [];
+    }
+
+    /**
      * Resolve the return type for a forwarded method call.
      *
      * @param ForwardingRule $rule The forwarding rule being applied

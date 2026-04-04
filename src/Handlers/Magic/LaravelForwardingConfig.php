@@ -70,7 +70,7 @@ final class LaravelForwardingConfig
         $registry->register(
             self::relationToBuilder(),
             // Future rules can be added here:
-            // self::builderToQueryBuilder(),
+            // self::builderToQueryBuilder(),  // see method docblock for why disabled
             // self::modelToBuilder(),
             // self::collectionMacros(),
         );
@@ -135,20 +135,23 @@ final class LaravelForwardingConfig
         );
     }
 
-    // -----------------------------------------------------------------------
-    // Future forwarding rules (commented out — to be implemented incrementally)
-    // -----------------------------------------------------------------------
-
     // /**
     //  * Builder → QueryBuilder: always-self forwarding.
     //  *
     //  * Builder::__call() forwards to Query\Builder via forwardCallTo(),
     //  * then unconditionally returns $this. The Query\Builder result is discarded.
     //  *
-    //  * Currently handled via @mixin + ModelMethodHandler. Adding this rule would
-    //  * let the unified handler cover the Builder → QueryBuilder hop too.
+    //  * BLOCKED: AlwaysSelf is too coarse — Builder::__call is selective.
+    //  * "Passthru" methods (count, exists, min, max, etc.) call toBase()->method()
+    //  * and return the result directly. Methods declared on Builder (get, first, etc.)
+    //  * bypass __call entirely. AlwaysSelf would override all of these, breaking
+    //  * terminal methods like get() which should return Collection, not Builder.
+    //  *
+    //  * Enabling this requires a "SelectiveSelf" style that checks whether the
+    //  * method is in Builder's passthru list or declared directly on Builder.
     //  *
     //  * @see \Illuminate\Database\Eloquent\Builder::__call()
+    //  * @see \Illuminate\Database\Eloquent\Builder::$passthru
     //  */
     // private static function builderToQueryBuilder(): ForwardingRule
     // {
@@ -156,9 +159,14 @@ final class LaravelForwardingConfig
     //         sourceClass: Builder::class,
     //         searchClasses: [QueryBuilder::class],
     //         style: ForwardingStyle::AlwaysSelf,
+    //         interceptMixin: true,
     //         description: 'Builder → QueryBuilder (forwardCallTo + return $this)',
     //     );
     // }
+
+    // -----------------------------------------------------------------------
+    // Future forwarding rules (commented out — to be implemented incrementally)
+    // -----------------------------------------------------------------------
 
     // /**
     //  * Model → Builder: passthrough static forwarding.
