@@ -168,11 +168,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
             return null;
         }
 
-        // getFqClasslikeName() returns the DECLARING class (e.g., Relation where
-        // orderByDesc is defined). getCalledFqClasslikeName() returns the CONCRETE
-        // class (e.g., HasMany). We need the concrete class to preserve the specific
-        // Relation subclass type in the return value.
-        $fqClassName = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
+        $fqClassName = $event->getFqClasslikeName();
         $codebase = $source->getCodebase();
         $methodName = $event->getMethodNameLowercase();
 
@@ -190,13 +186,22 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
             return $mixinResult;
         }
 
-        // Path 2: Direct rules — the handler is registered for the source class.
-        // Handles two cases:
-        // a) Methods declared in stubs on the source class (e.g., Relation::latest)
-        //    — template params come from the event (normal method resolution)
-        // b) Methods that fall to __call because they're only on QueryBuilder
-        //    (e.g., orderBy, limit) — template params must be extracted from
-        //    the calling expression's type via node_data/context
+        // If the method is declared directly on the source class (via stubs), let
+        // Psalm use the stub's return type (e.g., @return $this). The handler only
+        // needs to intervene for methods resolved via @mixin (Path 1 above) or
+        // via __call (where the method is NOT on the source class).
+        try {
+            $sourceStorage = $codebase->classlike_storage_provider->get(\strtolower($fqClassName));
+            if (isset($sourceStorage->declaring_method_ids[$methodName])) {
+                return null;
+            }
+        } catch (\InvalidArgumentException) {
+            // Class not in storage — continue
+        }
+
+        // Path 2: Direct rules — methods that fall to __call because they're only
+        // on a search class (e.g., QueryBuilder-only methods like orderBy, limit).
+        // Template params must be extracted from the calling expression's type.
         $directRules = self::$registry->getRulesFor($fqClassName);
         if ($directRules !== []) {
             $templateParams = $event->getTemplateTypeParameters()
