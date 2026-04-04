@@ -80,8 +80,12 @@ abstract class Relation
     // Fluent builder methods declared here so Psalm finds them in declaring_method_ids
     // (step 1) instead of falling through to @mixin Builder. The stub's @return $this
     // resolves to the concrete Relation subclass, preserving the fluent chain type.
-    // Note: select() is intentionally omitted — its variadic usage (select('id', 'title'))
-    // conflicts with the single-param signature. It resolves correctly via @mixin.
+    /**
+     * @psalm-variadic
+     * @param  string|array|\Illuminate\Database\Query\Expression  $columns
+     * @return $this
+     */
+    public function select($columns = ['*']) {}
 
     /**
      * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|\Illuminate\Database\Query\Expression|\Illuminate\Contracts\Database\Query\ConditionExpression  $column
