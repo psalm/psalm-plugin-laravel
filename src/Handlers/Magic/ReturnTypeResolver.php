@@ -150,8 +150,11 @@ final class ReturnTypeResolver
      * are NOT resolved here — they depend on how the target was parameterized,
      * which requires the caller to set up a fake call context.
      *
-     * For the PoC, this returns the raw declared type. A production version would
-     * use ProxyMethodReturnTypeProvider::executeFakeCall() for proper template resolution.
+     * For the PoC, this returns the raw declared type. A production implementation
+     * should prefer a storage/context-based approach that propagates template params
+     * without executing fake calls. ProxyMethodReturnTypeProvider::executeFakeCall()
+     * may resolve templates, but it is extremely memory-expensive on large codebases
+     * and should not be treated as the default solution here.
      *
      * @psalm-mutation-free
      */
@@ -234,9 +237,10 @@ final class ReturnTypeResolver
     /**
      * Check if a method exists on any of the search classes.
      *
-     * Looks up declaring_method_ids in ClassLikeStorage directly (not via
-     * Codebase::methodExists) to avoid resolving through __call, which
-     * would return __call's storage instead of the actual method.
+     * Looks up declaring_method_ids in ClassLikeStorage directly so this
+     * existence check uses the same notion of "real declared method" as
+     * getDeclaredReturnType(), and avoids ambiguity from higher-level
+     * existence checks when we specifically need a concrete declaration.
      *
      * @param list<string> $searchClasses
      * @psalm-mutation-free
