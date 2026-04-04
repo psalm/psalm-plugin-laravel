@@ -125,7 +125,7 @@ $post->comments()->where('approved', true)
        Result: HasMany (not Builder)
 ```
 
-**Psalm challenge:** Psalm resolves `where()` via `@mixin Builder` on Relation. The resolved method returns `Builder`, not the Relation. To preserve the Relation type, these methods need to be declared directly on Relation so Psalm finds them before falling through to the mixin.
+**Psalm challenge:** Psalm resolves `where()` via `@mixin Builder` on Relation. The resolved method returns `Builder`, not the Relation. The plugin solves this with `MethodForwardingHandler` using `interceptMixin=true`: the handler registers for Builder (the mixin target), detects when the original caller was a Relation, and returns the concrete Relation type with template params instead. For methods declared in Relation stubs, Psalm finds them in `declaring_method_ids` before reaching the mixin.
 
 
 ### 2. Eloquent Builder → Query Builder
@@ -277,7 +277,7 @@ public function __get($key)
 // Model::__callStatic()
 public static function __callStatic($method, $parameters)
 {
-    // Laravel 11+: check for #[Scope] attribute first
+    // Laravel 12+: check for #[Scope] attribute first
     if (static::isScopeMethodWithAttribute($method)) {
         return static::query()->$method(...$parameters);
     }
@@ -493,7 +493,7 @@ Both are in the `ForwardsCalls` trait. The critical difference:
 
 | Method                    | Returns `$this` when proxy returns itself?                    | Used by                                                    |
 |---------------------------|---------------------------------------------------------------|------------------------------------------------------------|
-| `forwardCallTo`           | No, returns raw result                                        | Model::__call (passes through result), Eloquent\Builder (ignores result, returns `$this` manually) |
+| `forwardCallTo`           | No, returns raw result                                        | Model::__call (returns result as-is), Eloquent\Builder (discards result, returns `$this` manually) |
 | `forwardDecoratedCallTo`  | **Yes** — swaps proxy's `$this` for caller's `$this`          | Relation                                                   |
 
 Note: Eloquent\Builder uses `forwardCallTo` but discards the return value and unconditionally returns `$this`. Relation uses `forwardDecoratedCallTo` which does the `$result === $object ? $this : $result` swap. Both achieve the same effect (fluent chain returns the caller) but through different mechanisms.
@@ -626,7 +626,7 @@ Once the method is found, Psalm determines its return type. **First non-null win
 ```php
 // Method Resolution: found in Relation's declaring_method_ids (via stub) — not via @mixin
 // Return Type Resolution: MethodReturnTypeProvider fires for Relation class
-//   → RelationsMethodHandler checks: does Builder::where() return Builder/static?
+//   → MethodForwardingHandler checks: does Builder::where() return Builder/static?
 //   → Yes → returns HasMany<Comment, Post> (the concrete relation type)
 // Result: HasMany<Comment, Post>
 ```
@@ -772,7 +772,7 @@ but the handler ensures template params propagate correctly.
 
 | Pattern                    | Psalm mechanism                                              | Known limitations                                                    |
 |----------------------------|--------------------------------------------------------------|----------------------------------------------------------------------|
-| Relation → Builder fluent  | Stub declares methods on Relation + `RelationsMethodHandler` | Methods not in stub fall through to `@mixin` and lose Relation type  |
+| Relation → Builder fluent  | Stub declares methods on Relation + `MethodForwardingHandler` | Methods not in stub fall through to `@mixin` and lose Relation type  |
 | Builder → Query\Builder    | `@mixin Query\Builder` on Eloquent\Builder                   | Same mixin issue, but less impactful                                 |
 | Facade → Service           | Generated alias stubs                                        | Taint annotations lost through `__callStatic`                        |
 | Model → Builder static     | `ModelMethodHandler`                                         | Scopes need `@mixin` or scope handler                                |
