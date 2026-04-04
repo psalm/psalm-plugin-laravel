@@ -172,8 +172,7 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
 
-        // PoC: Unified magic method forwarding handler replaces RelationsMethodHandler.
-        // Instead of a per-pattern handler class, forwarding rules are declared in
+        // Unified magic method forwarding handler. Forwarding rules are declared in
         // LaravelForwardingConfig and resolved by a single MethodForwardingHandler.
         require_once __DIR__ . '/Handlers/Magic/ForwardingStyle.php';
         require_once __DIR__ . '/Handlers/Magic/ForwardingRule.php';

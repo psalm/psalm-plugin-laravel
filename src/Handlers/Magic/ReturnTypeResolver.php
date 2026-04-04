@@ -150,11 +150,10 @@ final class ReturnTypeResolver
      * are NOT resolved here — they depend on how the target was parameterized,
      * which requires the caller to set up a fake call context.
      *
-     * For the PoC, this returns the raw declared type. A production implementation
-     * should prefer a storage/context-based approach that propagates template params
-     * without executing fake calls. ProxyMethodReturnTypeProvider::executeFakeCall()
-     * may resolve templates, but it is extremely memory-expensive on large codebases
-     * and should not be treated as the default solution here.
+     * Currently returns the raw declared type. A future improvement could use a
+     * storage/context-based approach to propagate template params without executing
+     * fake calls. ProxyMethodReturnTypeProvider::executeFakeCall() may resolve
+     * templates, but it is extremely memory-expensive on large codebases.
      *
      * @psalm-mutation-free
      */
