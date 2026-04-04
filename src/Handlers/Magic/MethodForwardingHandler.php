@@ -45,7 +45,6 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
      * Initialize the handler with a registry of forwarding rules.
      * Must be called before Psalm analysis starts (during plugin initialization).
      *
-     * @psalm-external-mutation-free
      */
     public static function init(ForwardingChainRegistry $registry): void
     {
@@ -58,7 +57,6 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
      * - Search classes (Builder, QueryBuilder) — for methods resolved via @mixin
      *
      * @return list<string>
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array

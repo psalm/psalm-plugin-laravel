@@ -63,8 +63,8 @@ final class LaravelForwardingConfigTest extends TestCase
 
         // Builder is a self-return indicator (where() returns Builder → Relation returns itself)
         $this->assertContains(Builder::class, $indicators);
-        // 'static' is a self-return indicator (methods declared as @return static)
-        $this->assertContains('static', $indicators);
+        // 'static' is detected via TNamedObject::$is_static, not via selfReturnIndicators
+        $this->assertNotContains('static', $indicators);
     }
 
     #[Test]
