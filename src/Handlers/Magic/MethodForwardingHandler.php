@@ -60,7 +60,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
+        if (self::$registry === null) {
             return [];
         }
 
@@ -93,7 +93,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
-        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
+        if (self::$registry === null) {
             return null;
         }
 
@@ -137,7 +137,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        if (!self::$registry instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingChainRegistry) {
+        if (self::$registry === null) {
             return null;
         }
 
@@ -269,6 +269,9 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
 
         $codebase = $source->getCodebase();
 
+        /** @var ForwardingChainRegistry $registry — null-checked in caller */
+        $registry = self::$registry;
+
         // Check each atomic type in the caller's union for a matching forwarding source.
         foreach ($callerType->getAtomicTypes() as $atomicType) {
             if (!$atomicType instanceof TGenericObject) {
@@ -276,46 +279,26 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
             }
 
             $callerClass = $atomicType->value;
-            $callerClassLower = \strtolower($callerClass);
 
-            // Find interceptMixin rules where:
-            // 1. The caller is a registered source class
-            // 2. The mixin target is one of the rule's search classes
-            /** @var ForwardingChainRegistry $registry — null-checked in caller */
-            $registry = self::$registry;
-            foreach ($registry->getAllRules() as $rule) {
+            // Fast path: use the registry's O(1) index to find rules for this caller.
+            // This avoids iterating all rules for every Builder/QueryBuilder call.
+            $rules = $registry->getRulesFor($callerClass);
+            if ($rules === []) {
+                // Caller is not a registered source — skip expensive subclass check
+                // unless we have interceptMixin rules that might match via inheritance.
+                continue;
+            }
+
+            foreach ($rules as $rule) {
                 if (!$rule->interceptMixin) {
                     continue;
                 }
 
-                // Check if the caller matches a source class for this rule
-                $isSourceClass = false;
-                foreach ($rule->allSourceClasses() as $sourceClass) {
-                    if (\strtolower($sourceClass) === $callerClassLower) {
-                        $isSourceClass = true;
-                        break;
-                    }
-                }
-
-                if (!$isSourceClass) {
-                    // Also check if the caller is a subclass of a source class.
-                    // This handles relation subclasses not explicitly listed.
-                    foreach ($rule->allSourceClasses() as $sourceClass) {
-                        if ($codebase->classExtendsOrImplements($callerClass, $sourceClass)) {
-                            $isSourceClass = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!$isSourceClass) {
-                    continue;
-                }
-
-                // Check if the mixin target is one of this rule's search classes
+                // Verify the mixin target is one of this rule's search classes
+                $mixinTargetLower = \strtolower($mixinTargetClass);
                 $isMixinTarget = false;
                 foreach ($rule->searchClasses as $searchClass) {
-                    if (\strtolower($searchClass) === \strtolower($mixinTargetClass)) {
+                    if (\strtolower($searchClass) === $mixinTargetLower) {
                         $isMixinTarget = true;
                         break;
                     }
@@ -326,12 +309,10 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
                 }
 
                 // Match! Apply the forwarding rule with the caller's template params.
-                $templateParams = $atomicType->type_params;
-
                 return ReturnTypeResolver::resolve(
                     rule: $rule,
                     sourceClass: $callerClass,
-                    sourceTemplateParams: $templateParams,
+                    sourceTemplateParams: $atomicType->type_params,
                     codebase: $codebase,
                     methodNameLowercase: $methodName,
                 );
