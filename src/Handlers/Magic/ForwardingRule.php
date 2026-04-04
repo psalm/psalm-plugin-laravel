@@ -83,7 +83,6 @@ final class ForwardingRule
         /** @psalm-api used for debugging/introspection */
         public readonly ?string $description = null,
     ) {
-        /** @var list<lowercase-string> */
         $this->searchClassesLower = \array_map('\strtolower', $this->searchClasses);
     }
 
