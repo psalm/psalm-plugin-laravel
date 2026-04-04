@@ -21,6 +21,8 @@ use Psalm\Type\Union;
  *
  * Caches "does method X return self?" results in a static map, since the answer depends
  * only on the method's declared return type (immutable during a Psalm run).
+ *
+ * @psalm-external-mutation-free
  */
 final class ReturnTypeResolver
 {
@@ -32,6 +34,8 @@ final class ReturnTypeResolver
      *
      * Must be called between Psalm runs in long-lived processes (language server,
      * daemon mode) to prevent stale results when stubs or vendor code changes.
+     *
+     * @psalm-external-mutation-free
      */
     public static function resetCache(): void
     {
@@ -47,6 +51,8 @@ final class ReturnTypeResolver
      * @param Codebase $codebase Psalm's codebase for method storage lookups
      * @param string $methodNameLowercase The method being called (e.g., 'where')
      * @return Union|null The resolved return type, or null to let Psalm resolve naturally
+     *
+     * @psalm-external-mutation-free
      */
     public static function resolve(
         ForwardingRule $rule,
@@ -89,6 +95,8 @@ final class ReturnTypeResolver
      * letting Psalm resolve the target's actual return type via @mixin.
      *
      * @param list<Union>|null $sourceTemplateParams
+     *
+     * @psalm-external-mutation-free
      */
     private static function resolveDecorated(
         ForwardingRule $rule,
@@ -171,6 +179,7 @@ final class ReturnTypeResolver
      * Results are cached because this is called per method call during analysis,
      * but the answer only depends on the method declaration (static during a run).
      *
+     * @psalm-external-mutation-free
      */
     private static function targetMethodReturnsSelf(
         Codebase $codebase,
