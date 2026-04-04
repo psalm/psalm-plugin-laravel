@@ -109,7 +109,21 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
         }
 
         $codebase = $source->getCodebase();
+        /** @var lowercase-string $methodName */
         $methodName = $event->getMethodNameLowercase();
+
+        // If the method is declared directly on the source class (e.g., latest() on
+        // Relation via stubs), don't override its params — Psalm already has them.
+        // We only provide params for methods that arrive via __call forwarding.
+        $sourceClass = $event->getFqClasslikeName();
+        try {
+            $sourceStorage = $codebase->classlike_storage_provider->get(\strtolower($sourceClass));
+            if (isset($sourceStorage->declaring_method_ids[$methodName])) {
+                return null;
+            }
+        } catch (\InvalidArgumentException) {
+            // Source class not in storage — continue to provide params
+        }
 
         // Find the method on the first matching search class and return its params.
         // Uses declaring_method_ids (same as ReturnTypeResolver) to avoid __call resolution.
@@ -118,7 +132,6 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
                 continue;
             }
 
-            /** @var lowercase-string $methodName */
             foreach ($rule->searchClasses as $targetClass) {
                 try {
                     $classStorage = $codebase->classlike_storage_provider->get(\strtolower($targetClass));
