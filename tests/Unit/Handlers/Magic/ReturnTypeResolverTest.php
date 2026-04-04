@@ -62,7 +62,7 @@ final class ReturnTypeResolverTest extends TestCase
         $generic = \array_values($result->getAtomicTypes())[0];
         $this->assertInstanceOf(TGenericObject::class, $generic);
         $this->assertSame('Test\\HasOne', $generic->value);
-        $this->assertCount(1, $generic->type_params);
+        $this->assertCount(2, $generic->type_params);
     }
 
     #[Test]
@@ -201,7 +201,10 @@ final class ReturnTypeResolverTest extends TestCase
      */
     private function phoneTemplateParams(): array
     {
-        return [new Union([new TNamedObject('Test\\Phone')])];
+        return [
+            new Union([new TNamedObject('Test\\Phone')]),
+            new Union([new TNamedObject('Test\\User')]),
+        ];
     }
 
     /**

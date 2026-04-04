@@ -160,13 +160,13 @@ abstract class Relation
     public function orderByDesc($column) {}
 
     /**
-     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  string|\Illuminate\Database\Query\Expression|null  $column
      * @return $this
      */
     public function latest($column = null) {}
 
     /**
-     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  string|\Illuminate\Database\Query\Expression|null  $column
      * @return $this
      */
     public function oldest($column = null) {}
@@ -210,7 +210,7 @@ abstract class Relation
     public function when($value, $callback, $default = null) {}
 
     /**
-     * @param  string  $column
+     * @param  string|\Illuminate\Database\Query\Expression|null  $column
      * @param  string  $direction
      * @return $this
      */
