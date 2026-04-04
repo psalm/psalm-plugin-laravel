@@ -1,7 +1,8 @@
 <?php
 
-/** @see https://github.com/laravel/laravel/blob/master/config/auth.php */
+declare(strict_types=1);
 
+/** @see https://github.com/laravel/laravel/blob/master/config/auth.php */
 return [
 
     'defaults' => [
