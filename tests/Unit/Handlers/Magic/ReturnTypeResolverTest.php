@@ -58,7 +58,7 @@ final class ReturnTypeResolverTest extends TestCase
         $rule = $this->decoratedRule(['Test\\Builder']);
         $result = $this->resolve($rule, 'Test\\HasOne', $this->phoneTemplateParams(), 'where');
 
-        $this->assertNotNull($result);
+        $this->assertInstanceOf(\Psalm\Type\Union::class, $result);
         $generic = \array_values($result->getAtomicTypes())[0];
         $this->assertInstanceOf(TGenericObject::class, $generic);
         $this->assertSame('Test\\HasOne', $generic->value);
@@ -81,7 +81,7 @@ final class ReturnTypeResolverTest extends TestCase
 
         $result = $this->resolve($rule, 'Test\\HasOne', $this->phoneTemplateParams(), 'where');
 
-        $this->assertNotNull($result, 'is_static=true should be detected as self-returning');
+        $this->assertInstanceOf(\Psalm\Type\Union::class, $result, 'is_static=true should be detected as self-returning');
     }
 
     #[Test]
@@ -92,7 +92,7 @@ final class ReturnTypeResolverTest extends TestCase
         $rule = $this->decoratedRule(['Test\\Builder']);
         $result = $this->resolve($rule, 'Test\\HasOne', $this->phoneTemplateParams(), 'first');
 
-        $this->assertNull($result);
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
     }
 
     #[Test]
@@ -102,8 +102,8 @@ final class ReturnTypeResolverTest extends TestCase
 
         $rule = $this->decoratedRule(['Test\\Builder']);
 
-        $this->assertNull($this->resolve($rule, 'Test\\HasOne', [], 'where'));
-        $this->assertNull($this->resolve($rule, 'Test\\HasOne', null, 'where'));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $this->resolve($rule, 'Test\\HasOne', [], 'where'));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $this->resolve($rule, 'Test\\HasOne', null, 'where'));
     }
 
     // === AlwaysSelf style ===
@@ -122,7 +122,7 @@ final class ReturnTypeResolverTest extends TestCase
         $templateParams = [new Union([new TNamedObject('Test\\User')])];
         $result = $this->resolve($rule, 'Test\\Builder', $templateParams, 'lockforupdate');
 
-        $this->assertNotNull($result);
+        $this->assertInstanceOf(\Psalm\Type\Union::class, $result);
         $generic = \array_values($result->getAtomicTypes())[0];
         $this->assertInstanceOf(TGenericObject::class, $generic);
         $this->assertSame('Test\\Builder', $generic->value);
@@ -139,8 +139,8 @@ final class ReturnTypeResolverTest extends TestCase
             style: ForwardingStyle::AlwaysSelf,
         );
 
-        $this->assertNull($this->resolve($rule, 'Test\\Builder', [], 'lock'));
-        $this->assertNull($this->resolve($rule, 'Test\\Builder', null, 'lock'));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $this->resolve($rule, 'Test\\Builder', [], 'lock'));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $this->resolve($rule, 'Test\\Builder', null, 'lock'));
     }
 
     // === Passthrough style ===
@@ -161,7 +161,7 @@ final class ReturnTypeResolverTest extends TestCase
 
         $result = $this->resolve($rule, 'Test\\Model', null, 'where');
 
-        $this->assertNotNull($result);
+        $this->assertInstanceOf(\Psalm\Type\Union::class, $result);
         $this->assertSame($targetReturn->getId(), $result->getId());
     }
 
@@ -174,7 +174,7 @@ final class ReturnTypeResolverTest extends TestCase
 
         $rule = $this->decoratedRule(['Test\\Builder']);
 
-        $this->assertNull($this->resolve($rule, 'Test\\HasOne', $this->phoneTemplateParams(), 'nonexistent'));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $this->resolve($rule, 'Test\\HasOne', $this->phoneTemplateParams(), 'nonexistent'));
     }
 
     // === Cache behavior ===
@@ -186,7 +186,7 @@ final class ReturnTypeResolverTest extends TestCase
 
         $rule = $this->decoratedRule(['Test\\Builder']);
 
-        $this->assertNotNull($this->resolve($rule, 'Test\\HasOne', $this->phoneTemplateParams(), 'where'));
+        $this->assertInstanceOf(\Psalm\Type\Union::class, $this->resolve($rule, 'Test\\HasOne', $this->phoneTemplateParams(), 'where'));
 
         ReturnTypeResolver::resetCache();
 
