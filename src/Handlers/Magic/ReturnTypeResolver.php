@@ -73,7 +73,7 @@ final class ReturnTypeResolver
      *   return $result === $target ? $this : $result;
      *
      * In type terms: if the target's declared return type contains any of the
-     * selfReturnIndicators (e.g., Builder or 'static'), we return the source's
+     * selfReturnIndicators (e.g., Builder) or is static/$this, we return the source's
      * generic type (e.g., HasMany<Comment, Post>). Otherwise we return null,
      * letting Psalm resolve the target's actual return type via @mixin.
      *
@@ -155,7 +155,7 @@ final class ReturnTypeResolver
      * Check if a target method's return type indicates it returns itself.
      *
      * Looks at the declared return type and checks if any atomic type matches
-     * the rule's selfReturnIndicators (class names or 'static').
+     * the rule's selfReturnIndicators or has is_static=true ($this/static).
      *
      * Results are cached because this is called per method call during analysis,
      * but the answer only depends on the method declaration (static during a run).
