@@ -103,7 +103,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
         }
 
         $source = $event->getStatementsSource();
-        if ($source === null) {
+        if (!$source instanceof \Psalm\StatementsSource) {
             return null;
         }
 
