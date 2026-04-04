@@ -6,8 +6,8 @@ use App\Models\Phone;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
- * Verify that the unified MethodForwardingHandler with interceptMixin=true
- * correctly resolves return types for Relation→Builder (Decorated forwarding).
+ * Verify that the unified MethodForwardingHandler correctly resolves return
+ * types for Relation→Builder (Decorated) forwarding.
  */
 
 // Builder method preserves Relation type via mixin interception.
@@ -22,6 +22,20 @@ function test_latest(): HasOne
 {
     /** @var HasOne<Phone, User> $relation */
     return $relation->latest();
+}
+
+// first() returns TRelatedModel|null — NOT self-returning.
+function test_first(): ?Phone
+{
+    /** @var HasOne<Phone, User> $relation */
+    return $relation->first();
+}
+
+// first() after fluent chain preserves the model type.
+function test_chain_then_first(): ?Phone
+{
+    /** @var HasOne<Phone, User> $relation */
+    return $relation->where('active', true)->orderBy('name')->first();
 }
 
 // Non-fluent methods: get() returns Collection, not Relation.

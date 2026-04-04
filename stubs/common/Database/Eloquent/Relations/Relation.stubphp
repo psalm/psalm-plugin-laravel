@@ -217,6 +217,20 @@ abstract class Relation
     public function reorder($column = null, $direction = 'asc') {}
 
     /**
+     * @param  list<non-empty-string>  $columns
+     * @return TRelatedModel|null
+     */
+    public function first($columns = ['*']) {}
+
+    /**
+     * @param  list<non-empty-string>  $columns
+     * @return TRelatedModel
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     */
+    public function firstOrFail($columns = ['*']) {}
+
+    /**
      * Get the underlying query for the relation.
      *
      * @return \Illuminate\Database\Eloquent\Builder<TRelatedModel>
