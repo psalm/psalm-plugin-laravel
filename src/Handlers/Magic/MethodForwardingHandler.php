@@ -6,7 +6,6 @@ namespace Psalm\LaravelPlugin\Handlers\Magic;
 
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
-use Psalm\Internal\MethodIdentifier;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -103,25 +102,31 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
             return null;
         }
 
-        $source = $event->getStatementsSource();
-        if (!$source instanceof \Psalm\StatementsSource) {
-            return null;
-        }
-
-        $codebase = $source->getCodebase();
+        $codebase = $event->getStatementsSource()->getCodebase();
         $methodName = $event->getMethodNameLowercase();
 
         // Find the method on the first matching search class and return its params.
+        // Uses declaring_method_ids (same as ReturnTypeResolver) to avoid __call resolution.
         foreach ($rules as $rule) {
             if (!$rule->interceptMixin) {
                 continue;
             }
 
+            /** @var lowercase-string $methodName */
             foreach ($rule->searchClasses as $targetClass) {
-                /** @var lowercase-string $methodName */
-                $methodId = new MethodIdentifier($targetClass, $methodName);
-                if ($codebase->methodExists($methodId)) {
-                    return $codebase->methods->getMethodParams($methodId);
+                try {
+                    $classStorage = $codebase->classlike_storage_provider->get(\strtolower($targetClass));
+                } catch (\InvalidArgumentException) {
+                    continue;
+                }
+
+                $declaringId = $classStorage->declaring_method_ids[$methodName] ?? null;
+                if ($declaringId !== null) {
+                    try {
+                        return $codebase->methods->getMethodParams($declaringId);
+                    } catch (\UnexpectedValueException) {
+                        continue;
+                    }
                 }
             }
         }
@@ -175,6 +180,11 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
         // Path 2: Mixin interception — the method was resolved via @mixin and
         // the provider fired for the mixin target class (e.g., Builder).
         // Check if the ORIGINAL caller was a forwarding source (e.g., a Relation).
+        //
+        // LIMITATION: If a class is both a direct source (Path 1) and a mixin target
+        // (Path 2), Path 1 runs first and may short-circuit. When adding the
+        // Builder→QueryBuilder rule, this ordering must be revisited — mixin
+        // interception should take precedence for calls originating from Relations.
         return self::handleMixinInterception($source, $event, $fqClassName, $methodName);
     }
 

@@ -18,7 +18,7 @@ namespace Psalm\LaravelPlugin\Handlers\Magic;
  *         sourceClass: Relation::class,
  *         searchClasses: [Builder::class, QueryBuilder::class],
  *         style: ForwardingStyle::Decorated,
- *         selfReturnIndicators: [Builder::class, 'static'],
+ *         selfReturnIndicators: [Builder::class],
  *         additionalSourceClasses: [HasMany::class, BelongsTo::class, ...],
  *     )
  *
@@ -32,18 +32,20 @@ final class ForwardingRule
      * @param string $sourceClass The class whose method calls we intercept.
      *     The handler is registered for this class (and additionalSourceClasses).
      *
-     * @param list<string> $searchClasses Classes to search for the method declaration,
+     * @param non-empty-list<string> $searchClasses Classes to search for the method declaration,
      *     in priority order. First match wins. For Relation→Builder, this is
      *     [Builder::class, QueryBuilder::class] because Builder methods take priority.
      *
      * @param ForwardingStyle $style How to transform the return type.
      *
      * @param list<string> $selfReturnIndicators For Decorated style only: class names
-     *     or keywords (like 'static') that indicate a "self-returning" method. When the
-     *     target method's return type contains any of these, the source's own generic
-     *     type is returned instead. Ignored for AlwaysSelf and Passthrough styles.
-     *     Example: [Builder::class, 'static'] — if Builder::where() returns
-     *     Builder<TModel> or static, the Relation returns itself.
+     *     that indicate a "self-returning" method. When the target method's return type
+     *     contains any of these, the source's own generic type is returned instead.
+     *     Note: static/$this return types are detected automatically via
+     *     TNamedObject::$is_static and don't need to be listed here.
+     *     Ignored for AlwaysSelf and Passthrough styles.
+     *     Example: [Builder::class] — if Builder::where() returns Builder<TModel>,
+     *     the Relation returns itself.
      *
      * @param list<string> $additionalSourceClasses Extra classes to register the handler
      *     for. Psalm's provider lookup requires exact class name matching — a handler for
