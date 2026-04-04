@@ -77,11 +77,140 @@ abstract class Relation
         return $this->query->get($columns);
     }
 
-    // Fluent builder methods (where, orderBy, limit, etc.) are NOT declared here.
-    // They resolve via @mixin Builder, and the MethodForwardingHandler with
-    // interceptMixin=true intercepts those calls to preserve the Relation type.
-    // Declaring them here would override Builder's param types (causing
-    // TooManyArguments for select(), wrong Closure types for where(), etc.).
+    // Fluent builder methods declared here so Psalm finds them in declaring_method_ids
+    // (step 1) instead of falling through to @mixin Builder. The stub's @return $this
+    // resolves to the concrete Relation subclass, preserving the fluent chain type.
+    // Note: select() is intentionally omitted — its variadic usage (select('id', 'title'))
+    // conflicts with the single-param signature. It resolves correctly via @mixin.
+
+    /**
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|\Illuminate\Database\Query\Expression|\Illuminate\Contracts\Database\Query\ConditionExpression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function where($column, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|\Illuminate\Database\Query\Expression|\Illuminate\Contracts\Database\Query\ConditionExpression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereNot($column, $operator = null, $value = null, $boolean = 'and') {}
+
+    /**
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  mixed  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return $this
+     */
+    public function whereIn($column, $values, $boolean = 'and', $not = false) {}
+
+    /**
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  mixed  $values
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereNotIn($column, $values, $boolean = 'and') {}
+
+    /**
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return $this
+     */
+    public function whereNull($column, $boolean = 'and', $not = false) {}
+
+    /**
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereNotNull($column, $boolean = 'and') {}
+
+    /**
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  array  $values
+     * @param  string  $boolean
+     * @param  bool  $not
+     * @return $this
+     */
+    public function whereBetween($column, $values, $boolean = 'and', $not = false) {}
+
+    /**
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  string  $direction
+     * @return $this
+     */
+    public function orderBy($column, $direction = 'asc') {}
+
+    /**
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @return $this
+     */
+    public function orderByDesc($column) {}
+
+    /**
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @return $this
+     */
+    public function latest($column = null) {}
+
+    /**
+     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @return $this
+     */
+    public function oldest($column = null) {}
+
+    /**
+     * @param  int  $value
+     * @return $this
+     */
+    public function limit($value) {}
+
+    /**
+     * @param  int  $value
+     * @return $this
+     */
+    public function take($value) {}
+
+    /**
+     * @param  int  $value
+     * @return $this
+     */
+    public function offset($value) {}
+
+    /**
+     * @param  int  $value
+     * @return $this
+     */
+    public function skip($value) {}
+
+    /**
+     * @param  array|mixed  $relations
+     * @return $this
+     */
+    public function with($relations) {}
+
+    /**
+     * @param  mixed  $value
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return $this
+     */
+    public function when($value, $callback, $default = null) {}
+
+    /**
+     * @param  string  $column
+     * @param  string  $direction
+     * @return $this
+     */
+    public function reorder($column = null, $direction = 'asc') {}
 
     /**
      * Get the underlying query for the relation.
