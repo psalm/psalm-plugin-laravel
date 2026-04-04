@@ -168,7 +168,11 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
             return null;
         }
 
-        $fqClassName = $event->getFqClasslikeName();
+        // getFqClasslikeName() returns the DECLARING class (e.g., Relation where
+        // orderByDesc is defined). getCalledFqClasslikeName() returns the CONCRETE
+        // class (e.g., HasMany). We need the concrete class to preserve the specific
+        // Relation subclass type in the return value.
+        $fqClassName = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
         $codebase = $source->getCodebase();
         $methodName = $event->getMethodNameLowercase();
 
