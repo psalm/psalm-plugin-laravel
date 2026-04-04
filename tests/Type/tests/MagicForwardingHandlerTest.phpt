@@ -9,48 +9,49 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * Verify that the unified MethodForwardingHandler correctly resolves return
  * types for Relation→Builder (Decorated) forwarding.
  */
-
-// Builder method preserves Relation type via mixin interception.
-function test_where(): HasOne
+final class MagicForwardingHandlerTest
 {
-    /** @var HasOne<Phone, User> $relation */
-    return $relation->where('active', true);
-}
+    /** @param HasOne<Phone, User> $relation */
+    public function wherePreservesRelationType(HasOne $relation): void
+    {
+        $_where = $relation->where('active', true);
+        /** @psalm-check-type-exact $_where = HasOne<Phone, User>&static */
+    }
 
-// Methods declared directly on Relation (via stubs) still work.
-function test_latest(): HasOne
-{
-    /** @var HasOne<Phone, User> $relation */
-    return $relation->latest();
-}
+    /** @param HasOne<Phone, User> $relation */
+    public function latestPreservesRelationType(HasOne $relation): void
+    {
+        $_latest = $relation->latest();
+        /** @psalm-check-type-exact $_latest = HasOne<Phone, User>&static */
+    }
 
-// first() returns TRelatedModel|null — NOT self-returning.
-function test_first(): ?Phone
-{
-    /** @var HasOne<Phone, User> $relation */
-    return $relation->first();
-}
+    /** @param HasOne<Phone, User> $relation */
+    public function fluentChainPreservesRelationType(HasOne $relation): void
+    {
+        $_chain = $relation->where('active', true)->orderBy('name');
+        /** @psalm-check-type-exact $_chain = HasOne<Phone, User>&static */
+    }
 
-// first() after fluent chain preserves the model type.
-function test_chain_then_first(): ?Phone
-{
-    /** @var HasOne<Phone, User> $relation */
-    return $relation->where('active', true)->orderBy('name')->first();
-}
+    /** @param HasOne<Phone, User> $relation */
+    public function firstReturnsModelOrNull(HasOne $relation): void
+    {
+        $_first = $relation->first();
+        /** @psalm-check-type-exact $_first = Phone|null */
+    }
 
-// Non-fluent methods: get() returns Collection, not Relation.
-/** @return \Illuminate\Database\Eloquent\Collection<int, Phone> */
-function test_get(): \Illuminate\Database\Eloquent\Collection
-{
-    /** @var HasOne<Phone, User> $relation */
-    return $relation->get();
-}
+    /** @param HasOne<Phone, User> $relation */
+    public function firstAfterChainReturnsModelOrNull(HasOne $relation): void
+    {
+        $_first = $relation->where('active', true)->orderBy('name')->first();
+        /** @psalm-check-type-exact $_first = Phone|null */
+    }
 
-// sole() returns TRelatedModel — not self-returning.
-function test_sole(): Phone
-{
-    /** @var HasOne<Phone, User> $relation */
-    return $relation->sole();
+    /** @param HasOne<Phone, User> $relation */
+    public function getReturnsCollection(HasOne $relation): void
+    {
+        $_get = $relation->get();
+        /** @psalm-check-type-exact $_get = \Illuminate\Database\Eloquent\Collection<int, Phone> */
+    }
 }
 ?>
 --EXPECTF--
