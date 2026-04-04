@@ -32,6 +32,19 @@ final class MagicForwardingHandlerTest
         /** @psalm-check-type-exact $_chain = HasOne<Phone, User>&static */
     }
 
+    /**
+     * Test mixin interception path: withoutGlobalScopes() is NOT declared on
+     * Relation stubs — it resolves via @mixin Builder. The handler intercepts
+     * the mixin resolution and returns the concrete Relation type.
+     *
+     * @param HasOne<Phone, User> $relation
+     */
+    public function mixinMethodPreservesRelationType(HasOne $relation): void
+    {
+        $_withoutScopes = $relation->withoutGlobalScopes();
+        /** @psalm-check-type-exact $_withoutScopes = HasOne<Phone, User>&static */
+    }
+
     /** @param HasOne<Phone, User> $relation */
     public function firstReturnsModelOrNull(HasOne $relation): void
     {

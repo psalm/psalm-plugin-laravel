@@ -110,9 +110,12 @@ final class ReturnTypeResolver
         }
 
         if (self::targetMethodReturnsSelf($codebase, $rule, $methodNameLowercase)) {
-            return new Union([
-                new TGenericObject($sourceClass, $sourceTemplateParams),
-            ]);
+            // Mark as static to preserve late-static-binding (&static), matching
+            // the runtime behavior of forwardDecoratedCallTo returning $this.
+            $generic = new TGenericObject($sourceClass, $sourceTemplateParams);
+            $generic = $generic->setIsStatic(true);
+
+            return new Union([$generic]);
         }
 
         // Non-self-returning methods (e.g., first(), count()): let Psalm resolve naturally.
@@ -135,9 +138,10 @@ final class ReturnTypeResolver
             return null;
         }
 
-        return new Union([
-            new TGenericObject($sourceClass, $sourceTemplateParams),
-        ]);
+        $generic = new TGenericObject($sourceClass, $sourceTemplateParams);
+        $generic = $generic->setIsStatic(true);
+
+        return new Union([$generic]);
     }
 
     /**
