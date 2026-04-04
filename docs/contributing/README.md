@@ -29,8 +29,8 @@ flowchart TD
         Auth — AuthHandler, GuardHandler, RequestHandler
         Collections — CollectionPluckHandler, CollectionFilterHandler
         Console — CommandArgumentHandler
-        Eloquent — ModelRegistrationHandler, RelationsMethodHandler,
-        ModelMethodHandler, BuilderScopeHandler
+        Eloquent — ModelRegistrationHandler, ModelMethodHandler, BuilderScopeHandler
+        Magic — MethodForwardingHandler
         Helpers — CacheHandler, PathHandler, TransHandler
         Translations — TranslationKeyHandler
         Views — MissingViewHandler
@@ -170,7 +170,7 @@ flowchart LR
         AuthHandler, GuardHandler
         RequestHandler, ContainerHandler
         CommandArgumentHandler
-        RelationsMethodHandler
+        MethodForwardingHandler
         ModelMethodHandler
         BuilderScopeHandler, PathHandler
         CollectionPluckHandler
