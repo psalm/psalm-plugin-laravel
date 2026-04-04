@@ -77,4 +77,22 @@ final class LaravelForwardingConfigTest extends TestCase
         // return Query\Builder intentionally (dropping to the lower layer).
         $this->assertNotContains(QueryBuilder::class, $indicators);
     }
+
+    #[Test]
+    public function relation_rule_has_intercept_mixin_enabled(): void
+    {
+        $rules = $this->registry->getRulesFor(Relation::class);
+
+        // interceptMixin=true is required for the handler to register for Builder
+        // and intercept @mixin-resolved calls from Relation callers.
+        $this->assertTrue($rules[0]->interceptMixin);
+    }
+
+    #[Test]
+    public function relation_rule_does_not_include_non_relation_classes(): void
+    {
+        // MorphPivot is in the Relations namespace but extends Model, not Relation.
+        $rules = $this->registry->getRulesFor(\Illuminate\Database\Eloquent\Relations\MorphPivot::class);
+        $this->assertSame([], $rules);
+    }
 }

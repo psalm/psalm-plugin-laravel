@@ -12,49 +12,64 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  */
 
 // Builder method (in Builder stub) preserves Relation type via mixin interception.
-function test_where_preserves_relation_type(HasOne $relation): HasOne
+function test_where_preserves_relation_type(): void
 {
     /** @var HasOne<Phone, User> $relation */
-    return $relation->where('active', true);
+    $result = $relation->where('active', true);
+    /** @psalm-check-type-exact $result = HasOne<Phone, User> */
 }
 
 // QueryBuilder method (NOT in Builder stub) also preserves Relation type.
 // orderBy is on QueryBuilder only — falls to __call on HasOne.
 // The handler extracts template params from the calling expression.
-function test_orderby_preserves_relation_type(HasOne $relation): HasOne
+function test_orderby_preserves_relation_type(): void
 {
     /** @var HasOne<Phone, User> $relation */
-    return $relation->orderBy('name');
+    $result = $relation->orderBy('name');
+    /** @psalm-check-type-exact $result = HasOne<Phone, User> */
 }
 
 // Chained: Builder method → QueryBuilder method
-function test_chained_builder_and_querybuilder(HasOne $relation): HasOne
+function test_chained_builder_and_querybuilder(): void
 {
     /** @var HasOne<Phone, User> $relation */
     $step1 = $relation->where('x', 1);
-    return $step1->orderBy('y');
+    /** @psalm-check-type-exact $step1 = HasOne<Phone, User> */
+    $step2 = $step1->orderBy('y');
+    /** @psalm-check-type-exact $step2 = HasOne<Phone, User> */
 }
 
 // Methods declared directly on Relation (via stubs) still work.
-function test_latest_preserves_relation_type(HasOne $relation): HasOne
+function test_latest_preserves_relation_type(): void
 {
     /** @var HasOne<Phone, User> $relation */
-    return $relation->latest();
+    $result = $relation->latest();
+    /** @psalm-check-type-exact $result = HasOne<Phone, User> */
+}
+
+// first() returns TRelatedModel|null — NOT self-returning.
+// The Decorated style must return null here, letting Psalm resolve via @mixin.
+function test_first_returns_model_or_null(): void
+{
+    /** @var HasOne<Phone, User> $relation */
+    $result = $relation->first();
+    /** @psalm-check-type-exact $result = Phone|null */
 }
 
 // Non-fluent methods: get() returns Collection, not Relation.
-/** @return \Illuminate\Database\Eloquent\Collection<int, Phone> */
-function test_get_returns_collection(HasOne $relation): \Illuminate\Database\Eloquent\Collection
+function test_get_returns_collection(): void
 {
     /** @var HasOne<Phone, User> $relation */
-    return $relation->get();
+    $result = $relation->get();
+    /** @psalm-check-type-exact $result = \Illuminate\Database\Eloquent\Collection<int, Phone> */
 }
 
 // sole() returns TRelatedModel — not self-returning.
-function test_sole_returns_model(HasOne $relation): Phone
+function test_sole_returns_model(): void
 {
     /** @var HasOne<Phone, User> $relation */
-    return $relation->sole();
+    $result = $relation->sole();
+    /** @psalm-check-type-exact $result = Phone */
 }
 ?>
 --EXPECTF--

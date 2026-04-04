@@ -102,7 +102,12 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
             return null;
         }
 
-        $codebase = $event->getStatementsSource()->getCodebase();
+        $source = $event->getStatementsSource();
+        if ($source === null) {
+            return null;
+        }
+
+        $codebase = $source->getCodebase();
         $methodName = $event->getMethodNameLowercase();
 
         // Find the method on the first matching search class and return its params.
@@ -271,6 +276,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
 
         /** @var ForwardingChainRegistry $registry — null-checked in caller */
         $registry = self::$registry;
+        $mixinTargetLower = \strtolower($mixinTargetClass);
 
         // Check each atomic type in the caller's union for a matching forwarding source.
         foreach ($callerType->getAtomicTypes() as $atomicType) {
@@ -284,8 +290,9 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
             // This avoids iterating all rules for every Builder/QueryBuilder call.
             $rules = $registry->getRulesFor($callerClass);
             if ($rules === []) {
-                // Caller is not a registered source — skip expensive subclass check
-                // unless we have interceptMixin rules that might match via inheritance.
+                // Caller is not a registered source class. Custom relation subclasses
+                // not listed in additionalSourceClasses fall back to Psalm's @mixin
+                // resolution (returning Builder<TModel> instead of the concrete Relation).
                 continue;
             }
 
@@ -295,7 +302,6 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
                 }
 
                 // Verify the mixin target is one of this rule's search classes
-                $mixinTargetLower = \strtolower($mixinTargetClass);
                 $isMixinTarget = false;
                 foreach ($rule->searchClasses as $searchClass) {
                     if (\strtolower($searchClass) === $mixinTargetLower) {
