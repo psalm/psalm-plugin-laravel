@@ -334,7 +334,7 @@ final class MethodForwardingHandler implements MethodParamsProviderInterface, Me
                 }
 
                 // Verify the mixin target is one of this rule's search classes
-                if (!\in_array($mixinTargetLower, \array_map('\strtolower', $rule->searchClasses), true)) {
+                if (!\in_array($mixinTargetLower, $rule->searchClassesLower, true)) {
                     continue;
                 }
 

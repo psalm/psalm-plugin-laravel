@@ -38,6 +38,7 @@ final class ReturnTypeResolverTest extends TestCase
     protected function setUp(): void
     {
         ReturnTypeResolver::resetCache();
+        $this->registeredClasses = [];
         $this->storageProvider = new ClassLikeStorageProvider();
     }
 

@@ -28,6 +28,9 @@ namespace Psalm\LaravelPlugin\Handlers\Magic;
  */
 final class ForwardingRule
 {
+    /** @var list<lowercase-string> Precomputed lowercase searchClasses for hot-path comparisons */
+    public readonly array $searchClassesLower;
+
     /**
      * @param string $sourceClass The class whose method calls we intercept.
      *     The handler is registered for this class (and additionalSourceClasses).
@@ -79,7 +82,10 @@ final class ForwardingRule
         public readonly bool $interceptMixin = false,
         /** @psalm-api used for debugging/introspection */
         public readonly ?string $description = null,
-    ) {}
+    ) {
+        /** @var list<lowercase-string> */
+        $this->searchClassesLower = \array_map('\strtolower', $this->searchClasses);
+    }
 
     /**
      * All classes that the handler should be registered for.
