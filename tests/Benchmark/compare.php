@@ -128,9 +128,6 @@ $timeRegression = $timePct > $timeThreshold;
 $memRegression = $memPct > $memoryThreshold;
 $failed = $timeRegression || $memRegression;
 
-$statusEmoji = $failed ? '🔴' : '🟢';
-$status = $failed ? 'FAIL' : 'PASS';
-
 // Build report
 echo "## Benchmark Results\n\n";
 
@@ -188,6 +185,9 @@ echo sprintf(
     count($baseTiming['times']),
 );
 
-echo "\n**Status:** {$statusEmoji} {$status} (thresholds: time <{$timeThreshold}%, memory <{$memoryThreshold}%)\n";
+$message = $failed
+ ? "**Status:** 🔴 FAIL (thresholds: time <{$timeThreshold}%, memory <{$memoryThreshold}%)"
+ : "**Status:** 🟢 PASS";
+echo "\n{$message}\n";
 
 exit($failed ? 1 : 0);
