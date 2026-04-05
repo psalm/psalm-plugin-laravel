@@ -176,6 +176,8 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write  # needed for gh-pages auto-push (benchmark history)
     steps:
 
       - name: Checkout plugin
@@ -220,3 +222,26 @@ jobs:
           name: benchmark-baseline-${{ github.sha }}
           path: /tmp/result.json
           retention-days: 90
+
+      # Transform to github-action-benchmark format for historical tracking
+      - name: Transform results for trend tracking
+        run: |
+          php -r '
+          $r = json_decode(file_get_contents("/tmp/result.json"), true);
+          echo json_encode([
+              ["name" => "Wall time", "value" => $r["wall_time_s"], "unit" => "s"],
+              ["name" => "Peak memory", "value" => $r["peak_memory_mb"], "unit" => "MB"],
+          ], JSON_PRETTY_PRINT);
+          ' > /tmp/benchmark-trend.json
+
+      - name: Store benchmark trend
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: raw
+          name: Plugin Performance
+          output-file-path: /tmp/benchmark-trend.json
+          github-token: ${{ github.token }}
+          auto-push: true
+          alert-threshold: "150%"
+          comment-on-alert: true
+          fail-on-alert: false
