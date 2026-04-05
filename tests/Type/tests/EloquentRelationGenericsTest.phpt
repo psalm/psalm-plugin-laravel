@@ -54,7 +54,7 @@ function test_latest_preserves_relation_type(): HasOne
 {
     /** @var HasOne<Phone, User> $relation */
     $relation = (new User())->phone();
-    /** @psalm-check-type-exact $latest = HasOne<Phone, User> */
+    /** @psalm-check-type-exact $latest = HasOne<Phone, User>&static */
     $latest = $relation->latest();
     return $latest;
 }
@@ -78,28 +78,8 @@ function test_sole_returns_model(): Phone
     return $model;
 }
 
-/** @todo where() on Relation returns Builder instead of HasOne (needs mixin interception fix) */
-// function test_where_preserves_relation_type(HasOne $relation): void
-// {
-//     /** @var HasOne<Phone, User> $relation */
-//     /** @psalm-check-type-exact $result = HasOne<Phone, User> */
-//     $result = $relation->where('active', true);
-// }
-
-/** @todo orderBy() on Relation loses type entirely (needs __call forwarding fix) */
-// function test_orderby_preserves_relation_type(HasOne $relation): void
-// {
-//     /** @var HasOne<Phone, User> $relation */
-//     /** @psalm-check-type-exact $result = HasOne<Phone, User> */
-//     $result = $relation->orderBy('name');
-// }
-
-/** @todo chained Builder+QueryBuilder returns Builder instead of HasOne */
-// function test_chained_builder_and_querybuilder(HasOne $relation): void
-// {
-//     /** @var HasOne<Phone, User> $relation */
-//     $step1 = $relation->where('x', 1);
-//     /** @psalm-check-type-exact $step1 = HasOne<Phone, User> */
-// }
+// where(), orderBy(), and chained calls on Relations are tested in
+// MagicForwardingHandlerTest.phpt — the MethodForwardingHandler now
+// preserves Relation generic types for both mixin and __call paths.
 ?>
 --EXPECTF--
