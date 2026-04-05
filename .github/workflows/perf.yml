@@ -227,7 +227,7 @@ jobs:
             --warmup 1 \
             --runs "$HYPERFINE_RUNS" \
             --command-name psalm \
-            "bash $GITHUB_WORKSPACE/tests/Benchmark/run-psalm.sh /tmp/monica psalm-benchmark.xml /tmp/mem.txt" \
+            "bash \"$GITHUB_WORKSPACE/tests/Benchmark/run-psalm.sh\" /tmp/monica psalm-benchmark.xml /tmp/mem.txt" \
             --export-json /tmp/hyperfine.json \
             --ignore-failure
 
@@ -243,7 +243,7 @@ jobs:
           }
           '
 
-      # Transform to github-action-benchmark format
+      # Transform to github-action-benchmark customSmallerIsBetter format
       - name: Build trend data
         run: |
           php -r '
