@@ -29,13 +29,25 @@ final class ReturnTypeResolver
      */
     private static array $selfReturnCache = [];
 
-    /** @var list<lowercase-string> Pre-lowered selfReturnIndicators, set via resetCache() */
+    /** @var list<lowercase-string> Pre-lowered selfReturnIndicators, set via initForRule() */
     private static array $indicatorsLower = [];
 
-    public static function resetCache(): void
+    /**
+     * Reset cache and pre-compute lowered indicators for the given rule.
+     *
+     * Must be called when the active ForwardingRule changes (e.g., in tests
+     * with multiple init() calls). Called from MethodForwardingHandler::init().
+     *
+     * @param list<class-string> $selfReturnIndicators
+     */
+    public static function initForRule(array $selfReturnIndicators): void
     {
         self::$selfReturnCache = [];
-        self::$indicatorsLower = [];
+        /** @var list<lowercase-string> */
+        self::$indicatorsLower = \array_map(
+            static fn(string $s): string => \strtolower($s),
+            $selfReturnIndicators,
+        );
     }
 
     /**
@@ -99,17 +111,11 @@ final class ReturnTypeResolver
         return $result;
     }
 
-    /** @psalm-external-mutation-free */
     private static function resolveTargetMethodReturnsSelf(
         Codebase $codebase,
         ForwardingRule $rule,
         string $methodNameLowercase,
     ): bool {
-        // Lazy-init: compute lowered indicators once per rule (cleared via resetCache())
-        if (self::$indicatorsLower === [] && $rule->selfReturnIndicators !== []) {
-            self::$indicatorsLower = \array_map(static fn(string $s): string => \strtolower($s), $rule->selfReturnIndicators);
-        }
-
         $indicatorsLower = self::$indicatorsLower;
 
         foreach ($rule->searchClasses as $searchClass) {
