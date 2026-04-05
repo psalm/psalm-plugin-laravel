@@ -52,11 +52,11 @@ final class ForeignIdForPkTypeTest extends AbstractSchemaAggregatorTestCase
 
         $table = $schemaAggregator->tables['comments'];
 
-        // foreignIdFor(User::class) → unsigned int because PK is standard auto-increment
-        self::assertTableHasColumn('user_id', $table);
-        self::assertColumnHasType('int', $table->columns['user_id']);
-        self::assertColumnNotNullable($table->columns['user_id']);
-        $this->assertTrue($table->columns['user_id']->unsigned, 'Standard FK should be unsigned');
+        // foreignIdFor(Customer::class) → unsigned int because PK is standard auto-increment
+        self::assertTableHasColumn('customer_id', $table);
+        self::assertColumnHasType('int', $table->columns['customer_id']);
+        self::assertColumnNotNullable($table->columns['customer_id']);
+        $this->assertTrue($table->columns['customer_id']->unsigned, 'Standard FK should be unsigned');
     }
 
     #[Test]

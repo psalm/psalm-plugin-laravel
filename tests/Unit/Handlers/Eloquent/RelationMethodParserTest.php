@@ -70,8 +70,8 @@ final class RelationMethodParserTest extends TestCase
         ];
 
         yield 'FQCN in generic param' => [
-            '/** @return MorphTo<\App\Models\User|\App\Models\Post, $this> */',
-            '\App\Models\User|\App\Models\Post',
+            '/** @return MorphTo<\App\Models\Customer|\App\Models\WorkOrder, $this> */',
+            '\App\Models\Customer|\App\Models\WorkOrder',
         ];
 
         yield 'no generic params' => [
