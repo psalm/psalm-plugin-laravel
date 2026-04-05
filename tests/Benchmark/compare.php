@@ -172,6 +172,7 @@ if ($baseIssues > 0 || $prIssues > 0) {
         number_format($issueDelta),
     );
 }
+
 echo $exitWarning;
 echo "\n";
 echo "**Status:** {$statusEmoji} {$status} (thresholds: time <{$timeThreshold}%, memory <{$memoryThreshold}%)\n";
