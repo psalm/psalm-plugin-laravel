@@ -30,6 +30,45 @@ class Builder implements BuilderContract
     public function make(array $attributes = []) {}
 
     /**
+     * Set the columns to be selected.
+     *
+     * Declared here because @psalm-variadic on Query\Builder::select does not
+     * propagate through the @mixin chain. Without this, Model::select('a', 'b')
+     * cannot resolve through the Model → @mixin Builder hop.
+     *
+     * @param  array<array-key, \Closure|\Illuminate\Contracts\Database\Query\Expression|\Illuminate\Database\Query\Builder|string>|\Illuminate\Contracts\Database\Query\Expression|string  $columns
+     * @return self<TModel>
+     *
+     * @psalm-variadic
+     */
+    public function select($columns = ['*']) {}
+
+    /**
+     * Add a new select column to the query.
+     *
+     * Declared here because @psalm-variadic on Query\Builder::addSelect does not
+     * propagate through the @mixin chain.
+     *
+     * @param  array<array-key, \Closure|\Illuminate\Contracts\Database\Query\Expression|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation|string>|\Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return self<TModel>
+     *
+     * @psalm-variadic
+     */
+    public function addSelect($column) {}
+
+    /**
+     * Force the query to only return distinct results.
+     *
+     * Declared here because @psalm-variadic on Query\Builder::distinct does not
+     * propagate through the @mixin chain.
+     *
+     * @return self<TModel>
+     *
+     * @psalm-variadic
+     */
+    public function distinct() {}
+
+    /**
      * @param  string  $identifier
      * @param  \Illuminate\Database\Eloquent\Scope|\Closure  $scope
      * @return self<TModel>

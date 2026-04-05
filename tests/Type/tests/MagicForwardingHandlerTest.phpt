@@ -118,5 +118,30 @@ function test_limit_validates_arguments(): void {
     $_ = $r->limit(10);
     /** @psalm-check-type-exact $_ = HasOne<Phone, User>&static */
 }
+
+// Variadic stubs on Relation: select(), addSelect(), distinct()
+// These need explicit stubs because @psalm-variadic doesn't propagate through @mixin.
+// Variadic stubs declared directly on Relation (not via MethodForwardingHandler):
+// Psalm resolves @return $this natively, producing HasOne<Phone, User>&static.
+function test_select_preserves_relation_type(): void {
+    /** @var HasOne<Phone, User> $r */
+    $r = (new User())->phone();
+    $_ = $r->select('name', 'email');
+    /** @psalm-check-type-exact $_ = HasOne<Phone, User>&static */
+}
+
+function test_addSelect_preserves_relation_type(): void {
+    /** @var HasOne<Phone, User> $r */
+    $r = (new User())->phone();
+    $_ = $r->addSelect('name', 'email');
+    /** @psalm-check-type-exact $_ = HasOne<Phone, User>&static */
+}
+
+function test_distinct_preserves_relation_type(): void {
+    /** @var HasOne<Phone, User> $r */
+    $r = (new User())->phone();
+    $_ = $r->distinct('name');
+    /** @psalm-check-type-exact $_ = HasOne<Phone, User>&static */
+}
 ?>
 --EXPECTF--

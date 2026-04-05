@@ -91,6 +91,31 @@ abstract class Relation
     public function select($columns = ['*']) {}
 
     /**
+     * Add a new select column to the query.
+     *
+     * Declared here because @psalm-variadic on Query\Builder::addSelect does not
+     * propagate through the __call / @mixin chain.
+     *
+     * @param  array<array-key, \Closure|\Illuminate\Contracts\Database\Query\Expression|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation|string>|\Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function addSelect($column) {}
+
+    /**
+     * Force the query to only return distinct results.
+     *
+     * Declared here because @psalm-variadic on Query\Builder::distinct does not
+     * propagate through the __call / @mixin chain.
+     *
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function distinct() {}
+
+    /**
      * Add an "order by" clause for a timestamp to the query.
      *
      * Psalm note: ideally the type should be inferred from $this->query
