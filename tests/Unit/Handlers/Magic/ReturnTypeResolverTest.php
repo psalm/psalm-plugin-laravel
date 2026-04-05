@@ -44,7 +44,7 @@ final class ReturnTypeResolverTest extends TestCase
     {
         $result = ReturnTypeResolver::resolve('App\\Source', null, $this->createCodebaseStub(), 'where');
 
-        $this->assertNull($result);
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
     }
 
     #[Test]
@@ -52,7 +52,7 @@ final class ReturnTypeResolverTest extends TestCase
     {
         $result = ReturnTypeResolver::resolve('App\\Source', [], $this->createCodebaseStub(), 'where');
 
-        $this->assertNull($result);
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
     }
 
     #[Test]
