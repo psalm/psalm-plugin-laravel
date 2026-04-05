@@ -44,7 +44,6 @@ final class ReturnTypeResolver
     {
         self::$selfReturnCache = [];
         self::$rule = $rule;
-        /** @var list<lowercase-string> */
         self::$indicatorsLower = \array_map(
             static fn(string $s): string => \strtolower($s),
             $rule->selfReturnIndicators,
@@ -65,7 +64,7 @@ final class ReturnTypeResolver
         Codebase $codebase,
         string   $methodNameLowercase,
     ): ?Union {
-        if (self::$rule === null || $sourceTemplateParams === null || $sourceTemplateParams === []) {
+        if (!self::$rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule || $sourceTemplateParams === null || $sourceTemplateParams === []) {
             return null;
         }
 
@@ -105,7 +104,7 @@ final class ReturnTypeResolver
         }
 
         $rule = self::$rule;
-        \assert($rule !== null, 'initForRule() must be called before targetMethodReturnsSelf()');
+        \assert($rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule, 'initForRule() must be called before targetMethodReturnsSelf()');
 
         $result = false;
 
