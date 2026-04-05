@@ -17,7 +17,7 @@ return new class extends Migration {
             $table->foreignIdFor(\App\Models\UlidModel::class);
 
             // FK to a standard int PK model — should stay unsigned int
-            $table->foreignIdFor(\App\Models\User::class);
+            $table->foreignIdFor(\App\Models\Customer::class);
 
             // FK to a UUID model with custom column name — should still resolve to string
             $table->foreignIdFor(\App\Models\UuidModel::class, 'reviewer_id');
