@@ -3,7 +3,7 @@ name: Performance Benchmark
 # Three triggers:
 # 1. Label "pr:benchmark-ready" added to a PR — compares PR vs base
 # 2. Comment "/benchmark" or "/pr:benchmark" on a PR — same comparison
-# 3. Push to master — stores baseline result as artifact for historical tracking
+# 3. Push to master — stores baseline for historical trend tracking
 
 on:
   pull_request:
@@ -16,10 +16,10 @@ on:
       - 'src/**'
       - 'stubs/**'
       - 'composer.json'
+      - '.github/workflows/perf.yml'
 
-# Cancel in-flight benchmark if a new one is requested
 concurrency:
-  group: benchmark-${{ github.event.pull_request.number || github.event.issue.number || github.sha }}
+  group: benchmark-${{ github.event.pull_request.number || github.event.issue.number || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -31,6 +31,7 @@ env:
   MONICA_REPO: monicahq/monica
   MONICA_REF: "v5.0.0-beta.5"
   PHP_VERSION: "8.3"
+  HYPERFINE_RUNS: 3
 
 jobs:
 
@@ -49,8 +50,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      pull-requests: write  # needed for posting PR comments
-      issues: write  # needed for comment reactions
+      pull-requests: write
+      issues: write
     steps:
 
       - name: React to comment
@@ -66,12 +67,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # For label trigger, PR number is in the event; for comment trigger, it's the issue number
           PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
           PR_JSON=$(gh pr view "$PR_NUMBER" \
             --repo ${{ github.repository }} \
             --json headRefOid,baseRefOid,headRefName,number,headRepository)
-          # Refuse to run unless PR head is from this exact repository (not a same-org fork)
           HEAD_REPO=$(echo "$PR_JSON" | jq -r .headRepository.nameWithOwner)
           EXPECTED_REPO="${{ github.repository }}"
           if [ "$HEAD_REPO" != "$EXPECTED_REPO" ]; then
@@ -80,10 +79,8 @@ jobs:
           fi
           echo "head_sha=$(echo "$PR_JSON" | jq -r .headRefOid)" >> "$GITHUB_OUTPUT"
           echo "base_sha=$(echo "$PR_JSON" | jq -r .baseRefOid)" >> "$GITHUB_OUTPUT"
-          echo "head_ref=$(echo "$PR_JSON" | jq -r .headRefName)" >> "$GITHUB_OUTPUT"
           echo "pr_number=$(echo "$PR_JSON" | jq -r .number)" >> "$GITHUB_OUTPUT"
 
-      # Check out both plugin versions side by side
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
@@ -104,6 +101,9 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      - name: Install hyperfine
+        run: sudo apt-get update -qq && sudo apt-get install -yqq hyperfine
+
       - name: Clone Monica
         run: |
           git clone --depth 1 --branch "$MONICA_REF" \
@@ -115,9 +115,7 @@ jobs:
             local dir=$1 plugin_path=$2
             cp -a /tmp/monica-source "$dir"
             cd "$dir"
-            # Install from Monica's lockfile first to anchor all non-plugin deps
             COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
-            # Then add only the plugin, updating only its dependency tree
             composer config repositories.plugin \
               '{"type": "path", "url": "'"$plugin_path"'", "options": {"symlink": true}}'
             composer config minimum-stability dev
@@ -125,29 +123,33 @@ jobs:
             COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel \
               --no-interaction --no-progress --with-all-dependencies
             composer show psalm/plugin-laravel
-            # Always use base checkout's config so both runs use the same Psalm settings
             cp "$GITHUB_WORKSPACE/plugin-base/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
           }
           setup_project /tmp/monica-base "$GITHUB_WORKSPACE/plugin-base"
           setup_project /tmp/monica-pr "$GITHUB_WORKSPACE/plugin-pr"
 
-      # Use base checkout's harness and compare scripts for both runs so the PR
-      # cannot alter the measurement infrastructure to hide regressions.
-      - name: Benchmark base
+      # Use base checkout's harness for both runs so the PR cannot alter measurement.
+      - name: Benchmark with hyperfine
         run: |
-          bash plugin-base/tests/Benchmark/benchmark.sh /tmp/monica-base psalm-benchmark.xml \
-            | tee /tmp/base-result.json
-
-      - name: Benchmark PR
-        run: |
-          bash plugin-base/tests/Benchmark/benchmark.sh /tmp/monica-pr psalm-benchmark.xml \
-            | tee /tmp/pr-result.json
+          HARNESS="$GITHUB_WORKSPACE/plugin-base/tests/Benchmark/run-psalm.sh"
+          > /tmp/mem-base.txt
+          > /tmp/mem-pr.txt
+          hyperfine \
+            --warmup 1 \
+            --runs "$HYPERFINE_RUNS" \
+            --command-name base "bash $HARNESS /tmp/monica-base psalm-benchmark.xml /tmp/mem-base.txt" \
+            --command-name pr   "bash $HARNESS /tmp/monica-pr   psalm-benchmark.xml /tmp/mem-pr.txt" \
+            --export-json /tmp/hyperfine.json \
+            --ignore-failure
+          echo "--- hyperfine results ---"
+          cat /tmp/hyperfine.json | jq '.results[] | {command, mean, stddev, min, max}'
 
       - name: Compare results
         id: compare
         run: |
           set +e
-          REPORT=$(php plugin-base/tests/Benchmark/compare.php /tmp/base-result.json /tmp/pr-result.json)
+          REPORT=$(php plugin-base/tests/Benchmark/compare.php \
+            /tmp/hyperfine.json /tmp/mem-base.txt /tmp/mem-pr.txt)
           EXIT_CODE=$?
           set -e
           echo "$REPORT"
@@ -171,7 +173,7 @@ jobs:
             --body "$BODY"
 
 
-  # ── Master baseline: stores result as artifact ───────────────────────
+  # ── Master baseline: stores result + historical trend ────────────────
   master-baseline:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -191,6 +193,9 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      - name: Install hyperfine
+        run: sudo apt-get update -qq && sudo apt-get install -yqq hyperfine
+
       - name: Clone Monica
         run: |
           git clone --depth 1 --branch "$MONICA_REF" \
@@ -199,9 +204,7 @@ jobs:
       - name: Setup project
         run: |
           cd /tmp/monica
-          # Install from Monica's lockfile first to anchor all non-plugin deps
           COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
-          # Then add only the plugin, updating only its dependency tree
           composer config repositories.plugin \
             '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true}}'
           composer config minimum-stability dev
@@ -211,28 +214,39 @@ jobs:
           composer show psalm/plugin-laravel
           cp "$GITHUB_WORKSPACE/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
 
-      - name: Benchmark
+      - name: Benchmark with hyperfine
         run: |
-          bash tests/Benchmark/benchmark.sh /tmp/monica psalm-benchmark.xml \
-            | tee /tmp/result.json
+          > /tmp/mem.txt
+          hyperfine \
+            --warmup 1 \
+            --runs "$HYPERFINE_RUNS" \
+            --command-name psalm \
+            "bash $GITHUB_WORKSPACE/tests/Benchmark/run-psalm.sh /tmp/monica psalm-benchmark.xml /tmp/mem.txt" \
+            --export-json /tmp/hyperfine.json \
+            --ignore-failure
 
-      - name: Upload baseline
+      # Transform to github-action-benchmark raw format
+      - name: Build trend data
+        run: |
+          php -r '
+          $h = json_decode(file_get_contents("/tmp/hyperfine.json"), true)["results"][0];
+          $memLines = array_filter(array_map("trim", file("/tmp/mem.txt")), fn($l) => $l !== "");
+          $peakMem = max(array_map("floatval", $memLines));
+          echo json_encode([
+              ["name" => "Wall time",   "value" => round($h["mean"], 2),   "unit" => "s",  "range" => "± " . round($h["stddev"], 2)],
+              ["name" => "Peak memory", "value" => round($peakMem, 0),     "unit" => "MB"],
+          ], JSON_PRETTY_PRINT);
+          ' > /tmp/benchmark-trend.json
+          cat /tmp/benchmark-trend.json
+
+      - name: Upload baseline artifact
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-baseline-${{ github.sha }}
-          path: /tmp/result.json
+          path: |
+            /tmp/hyperfine.json
+            /tmp/benchmark-trend.json
           retention-days: 90
-
-      # Transform to github-action-benchmark format for historical tracking
-      - name: Transform results for trend tracking
-        run: |
-          php -r '
-          $r = json_decode(file_get_contents("/tmp/result.json"), true);
-          echo json_encode([
-              ["name" => "Wall time", "value" => $r["wall_time_s"], "unit" => "s"],
-              ["name" => "Peak memory", "value" => $r["peak_memory_mb"], "unit" => "MB"],
-          ], JSON_PRETTY_PRINT);
-          ' > /tmp/benchmark-trend.json
 
       - name: Store benchmark trend
         uses: benchmark-action/github-action-benchmark@v1
