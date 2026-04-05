@@ -64,6 +64,7 @@ PSALM_EXIT=0
     --no-cache \
     --no-suggestions \
     --no-progress \
+    --monochrome \
     >"$TMPDIR/stdout.txt" \
     2>"$TMPDIR/stderr.txt" \
     || PSALM_EXIT=$?
@@ -97,9 +98,8 @@ fi
 # Convert KB to MB with 1 decimal
 PEAK_MB=$(awk -v kb="$PEAK_KB" 'BEGIN {printf "%.1f", kb / 1024}')
 
-# Extract issue count from Psalm's stderr (e.g. "329 errors found").
-# Strip ANSI escape codes first — Psalm may colorize the output.
-ISSUE_COUNT=$(sed $'s/\x1b\\[[0-9;]*m//g' "$TMPDIR/stderr.txt" 2>/dev/null | grep -oE '[0-9]+ errors? found' | grep -oE '^[0-9]+' || echo "0")
+# Extract issue count from Psalm's stderr (e.g. "329 errors found")
+ISSUE_COUNT=$(grep -oE '[0-9]+ errors? found' "$TMPDIR/stderr.txt" 2>/dev/null | grep -oE '^[0-9]+' || echo "0")
 
 # Output clean JSON to stdout
 echo "{\"wall_time_s\":$WALL_S,\"peak_memory_mb\":$PEAK_MB,\"psalm_exit_code\":$PSALM_EXIT,\"issue_count\":$ISSUE_COUNT}"
