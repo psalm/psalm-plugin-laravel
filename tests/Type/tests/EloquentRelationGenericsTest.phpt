@@ -78,6 +78,17 @@ function test_sole_returns_model(): Phone
     return $model;
 }
 
+/**
+ * Relation::select() accepts variadic string arguments (forwarded to Query\Builder::select).
+ * Laravel uses func_get_args() so callers can write ->select('id', 'name') instead of ->select(['id', 'name']).
+ */
+function test_select_variadic_on_relation(): HasOne
+{
+    /** @var HasOne<Phone, User> $relation */
+    $relation = (new User())->phone();
+    return $relation->select('id', 'name', 'created_at');
+}
+
 // where(), orderBy(), and chained calls on Relations are tested in
 // MagicForwardingHandlerTest.phpt — the MethodForwardingHandler now
 // preserves Relation generic types for both mixin and __call paths.
