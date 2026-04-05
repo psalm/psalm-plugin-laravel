@@ -225,6 +225,18 @@ jobs:
             --export-json /tmp/hyperfine.json \
             --ignore-failure
 
+      - name: Validate benchmark results
+        run: |
+          php -r '
+          $data = json_decode(file_get_contents("/tmp/hyperfine.json"), true);
+          $exitCodes = $data["results"][0]["exit_codes"] ?? [];
+          $failures = array_filter($exitCodes, fn($c) => (int) $c === 1 || (int) $c >= 128);
+          if ($failures !== []) {
+              fwrite(STDERR, "Psalm failed with exit codes: " . implode(", ", $exitCodes) . "\n");
+              exit(1);
+          }
+          '
+
       # Transform to github-action-benchmark raw format
       - name: Build trend data
         run: |

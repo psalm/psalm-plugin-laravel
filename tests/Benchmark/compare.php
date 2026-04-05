@@ -59,6 +59,19 @@ if (count($results) < 2) {
 $baseTiming = $results[0];
 $prTiming = $results[1];
 
+// Validate exit codes — Psalm 0 (no issues) and 2 (issues found) both mean analysis completed.
+// Exit 1 = config/runtime error, >=128 = signal (crash). hyperfine records per-run exit codes.
+foreach (['base' => $baseTiming, 'pr' => $prTiming] as $label => $timing) {
+    $exitCodes = $timing['exit_codes'] ?? [];
+    $failures = array_filter($exitCodes, static fn(int $code): bool => $code === 1 || $code >= 128);
+    if ($failures !== []) {
+        echo "## Benchmark Results\n\n";
+        echo sprintf("**%s Psalm did not complete analysis — results are not comparable.**\n\n", ucfirst($label));
+        echo sprintf("- Exit codes across runs: %s\n", implode(', ', $exitCodes));
+        exit(1);
+    }
+}
+
 // Read peak memory (max of all runs per command)
 $readMaxMemory = static function (string $file) use ($fail): float {
     if (!is_file($file)) {
@@ -79,8 +92,10 @@ $baseMem = $readMaxMemory($baseMemFile);
 $prMem = $readMaxMemory($prMemFile);
 
 // Validate metrics are positive
-if ($baseTiming['mean'] <= 0 || $baseMem <= 0) {
-    $fail("base metrics are invalid (time: {$baseTiming['mean']}s, memory: {$baseMem}MB)");
+foreach (['base' => [$baseTiming['mean'], $baseMem], 'pr' => [$prTiming['mean'], $prMem]] as $label => [$time, $mem]) {
+    if ($time <= 0 || $mem <= 0) {
+        $fail("{$label} metrics are invalid (time: {$time}s, memory: {$mem}MB)");
+    }
 }
 
 // Compute deltas
