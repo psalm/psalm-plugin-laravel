@@ -44,7 +44,7 @@ final class ReturnTypeResolverTest extends TestCase
     {
         $result = ReturnTypeResolver::resolve('App\\Source', null, $this->createCodebaseStub(), 'where');
 
-        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
+        $this->assertNull($result);
     }
 
     #[Test]
@@ -52,7 +52,7 @@ final class ReturnTypeResolverTest extends TestCase
     {
         $result = ReturnTypeResolver::resolve('App\\Source', [], $this->createCodebaseStub(), 'where');
 
-        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
+        $this->assertNull($result);
     }
 
     #[Test]
@@ -60,6 +60,7 @@ final class ReturnTypeResolverTest extends TestCase
     {
         $reflection = new \ReflectionClass(ReturnTypeResolver::class);
         $cacheProperty = $reflection->getProperty('selfReturnCache');
+        $cacheProperty->setAccessible(true);
 
         // Seed the cache with a fake entry
         $cacheProperty->setValue(null, ['test::key' => true]);
