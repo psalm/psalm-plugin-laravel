@@ -1,0 +1,29 @@
+--FILE--
+<?php declare(strict_types=1);
+
+namespace Tests\Psalm\LaravelPlugin\Sandbox;
+
+use App\Models\Customer;
+use App\Models\Vehicle;
+
+/**
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/409
+ *
+ * When a model declares @property ?Vehicle $primary_vehicle, the nullable type should be
+ * respected even though a relationship method with the same name exists.
+ */
+function test_nullable_relationship_property_allows_null_check(Customer $customer): void
+{
+    if ($customer->primary_vehicle === null) {
+        echo 'null';
+    }
+}
+
+function test_nullable_relationship_property_type(Customer $customer): ?Vehicle
+{
+    /** @psalm-check-type-exact $vehicle = Vehicle|null */
+    $vehicle = $customer->primary_vehicle;
+    return $vehicle;
+}
+?>
+--EXPECTF--
