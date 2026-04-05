@@ -11,6 +11,7 @@ use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Union;
@@ -182,7 +183,7 @@ final class MethodForwardingHandler implements
 
             if ($declaringId !== null) {
                 try {
-                    return $codebase->methods->getMethodParams($declaringId);
+                    return ModelMethodHandler::getParamsWithVariadicFlag($codebase, $declaringId);
                 } catch (\InvalidArgumentException|\UnexpectedValueException) {
                     return null;
                 }
