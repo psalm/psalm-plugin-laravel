@@ -76,11 +76,13 @@ foreach (['base' => $base, 'pr' => $pr] as $label => $data) {
     }
 }
 
-// Psalm exit codes: 0 = no errors, 1 = errors found (analysis completed), 2+ = config/runtime failure.
-// Only 0 and 1 mean analysis actually ran; anything else makes timing meaningless.
+// Psalm exit codes: 0 = no issues, 1 = config/runtime error, 2 = issues found.
+// Both 0 and 2 mean analysis completed successfully; only 1 or >=128 are failures.
 $baseExit = (int) $base['psalm_exit_code'];
 $prExit = (int) $pr['psalm_exit_code'];
-if ($baseExit > 1 || $prExit > 1) {
+$baseFailed = $baseExit === 1 || $baseExit >= 128;
+$prFailed = $prExit === 1 || $prExit >= 128;
+if ($baseFailed || $prFailed) {
     echo "## Benchmark Results\n\n";
     if ($baseExit >= 128 || $prExit >= 128) {
         echo "**Psalm crashed during benchmark — results are not comparable.**\n\n";
@@ -120,13 +122,15 @@ $failed = $timeRegression || $memRegression;
 
 $status = $failed ? 'FAIL' : 'PASS';
 
-// Exit code mismatch warning (non-crash, e.g. different error counts)
+// Exit code mismatch warning (e.g. base found no issues but PR introduced some, or vice versa)
 $exitWarning = '';
 if ($baseExit !== $prExit) {
     $exitWarning = sprintf(
-        "\n> **Note:** Psalm exit codes differ (base: %d, PR: %d). Results may not be fully comparable.\n",
+        "\n> **Note:** Psalm exit codes differ (base: %d, PR: %d) — the PR %s issues that the base %s.\n",
         $baseExit,
         $prExit,
+        $prExit === 2 ? 'introduced' : 'resolved',
+        $baseExit === 2 ? 'had' : 'did not have',
     );
 }
 
