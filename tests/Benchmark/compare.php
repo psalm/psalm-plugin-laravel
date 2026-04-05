@@ -3,13 +3,13 @@
 declare(strict_types=1);
 
 /**
- * Compare two benchmark results and output a markdown table.
+ * Build a PR benchmark report from hyperfine JSON + memory capture files.
  *
- * Usage: php compare.php <base.json> <pr.json> [--time-threshold=15] [--memory-threshold=20]
+ * Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt> [base-issues.txt] [pr-issues.txt] [base-stats.txt] [pr-stats.txt] [--time-threshold=15] [--memory-threshold=20]
  *
  * Exit codes:
  *   0 = within thresholds
- *   1 = regression detected or Psalm crashed
+ *   1 = regression detected, or results are not comparable (Psalm crashed)
  *   2 = usage error / bad input
  */
 
@@ -22,104 +22,107 @@ $positional = array_values(array_filter(
     static fn(string $arg): bool => !str_starts_with($arg, '--'),
 ));
 
-if (count($positional) < 2) {
-    fwrite(STDERR, "Usage: php compare.php <base.json> <pr.json> [--time-threshold=15] [--memory-threshold=20]\n");
+if (count($positional) < 3) {
+    fwrite(STDERR, "Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt> [base-issues.txt] [pr-issues.txt] [base-stats.txt] [pr-stats.txt] [--time-threshold=15] [--memory-threshold=20]\n");
     exit(2);
 }
 
-[$baseFile, $prFile] = $positional;
+[$hyperfineFile, $baseMemFile, $prMemFile] = $positional;
+$baseIssuesFile = $positional[3] ?? null;
+$prIssuesFile = $positional[4] ?? null;
+$baseStatsFile = $positional[5] ?? null;
+$prStatsFile = $positional[6] ?? null;
 
-// Helper: emit error to both stdout (for PR comment) and stderr (for CI logs), then exit
 $fail = static function (string $message): never {
     echo "## Benchmark Results\n\n**Error:** {$message}\n";
     fwrite(STDERR, "Error: {$message}\n");
     exit(2);
 };
 
-// Validate input files exist and are readable
-foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
-    if (!is_file($file)) {
-        $fail("{$label} result file not found: {$file}");
-    }
+// Read hyperfine JSON
+$hyperfineJson = file_get_contents($hyperfineFile);
+if ($hyperfineJson === false) {
+    $fail("unable to read hyperfine results: {$hyperfineFile}");
 }
 
-$decoded = [];
-foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
-    $json = file_get_contents($file);
-    if ($json === false) {
-        $fail("failed to read {$label} result file: {$file}");
-    }
-
-    try {
-        $decodedValue = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-    } catch (\JsonException $e) {
-        $fail("invalid {$label} JSON in {$file}: {$e->getMessage()}");
-    }
-
-    if (!is_array($decodedValue)) {
-        $fail("{$label} JSON in {$file} must decode to an object/array");
-    }
-
-    $decoded[$label] = $decodedValue;
+try {
+    $hyperfine = json_decode($hyperfineJson, true, 512, JSON_THROW_ON_ERROR);
+} catch (\JsonException $jsonException) {
+    $fail("invalid hyperfine JSON: {$jsonException->getMessage()}");
 }
 
-$base = $decoded['base'];
-$pr = $decoded['pr'];
-
-// Validate required keys
-$required = ['wall_time_s', 'peak_memory_mb', 'psalm_exit_code'];
-foreach (['base' => $base, 'pr' => $pr] as $label => $data) {
-    foreach ($required as $key) {
-        if (!array_key_exists($key, $data)) {
-            $fail("missing key '{$key}' in {$label} JSON");
-        }
-    }
+$results = $hyperfine['results'] ?? [];
+if (count($results) < 2) {
+    $fail("expected 2 commands in hyperfine results, got " . count($results));
 }
 
-// Psalm exit codes: 0 = no issues, 1 = config/runtime error, 2 = issues found.
-// Both 0 and 2 mean analysis completed successfully; only 1 or >=128 are failures.
-$baseExit = (int) $base['psalm_exit_code'];
-$prExit = (int) $pr['psalm_exit_code'];
-$baseFailed = $baseExit === 1 || $baseExit >= 128;
-$prFailed = $prExit === 1 || $prExit >= 128;
-if ($baseFailed || $prFailed) {
-    echo "## Benchmark Results\n\n";
-    if ($baseExit >= 128 || $prExit >= 128) {
-        echo "**Psalm crashed during benchmark — results are not comparable.**\n\n";
-    } else {
-        echo "**Psalm did not complete analysis — results are not comparable.**\n\n";
-    }
+$baseTiming = $results[0];
+$prTiming = $results[1];
 
-    echo sprintf("- Base exit code: %d%s\n", $baseExit, $baseExit >= 128 ? ' (signal ' . ($baseExit - 128) . ')' : '');
-    echo sprintf("- PR exit code: %d%s\n", $prExit, $prExit >= 128 ? ' (signal ' . ($prExit - 128) . ')' : '');
-    exit(1);
-}
-
-// Validate metrics are positive (zero/negative means measurement failure)
-foreach (['base' => $base, 'pr' => $pr] as $label => $data) {
-    if ($data['wall_time_s'] <= 0 || $data['peak_memory_mb'] <= 0) {
-        $displayLabel = ucfirst($label);
+// Validate exit codes — Psalm 0 (no issues) and 2 (issues found) both mean analysis completed.
+// Exit 1 = config/runtime error, >=128 = signal (crash). hyperfine records per-run exit codes.
+foreach (['base' => $baseTiming, 'pr' => $prTiming] as $label => $timing) {
+    $exitCodes = $timing['exit_codes'] ?? [];
+    $failures = array_filter($exitCodes, static fn(int $code): bool => $code === 1 || $code >= 128);
+    if ($failures !== []) {
         echo "## Benchmark Results\n\n";
-        echo sprintf("**%s benchmark metrics are invalid — results are not comparable.**\n\n", $displayLabel);
-        echo sprintf("- %s wall_time_s: %s\n", $displayLabel, (string) $data['wall_time_s']);
-        echo sprintf("- %s peak_memory_mb: %s\n", $displayLabel, (string) $data['peak_memory_mb']);
-        exit(2);
+        echo sprintf("**%s Psalm did not complete analysis — results are not comparable.**\n\n", ucfirst($label));
+        echo sprintf("- Exit codes across runs: %s\n", implode(', ', $exitCodes));
+        exit(1);
     }
 }
 
-$timeDelta = $pr['wall_time_s'] - $base['wall_time_s'];
-$timePct = ($timeDelta / $base['wall_time_s']) * 100;
+// Read peak memory from capture files (max of all runs per command).
+// These files are written by run-psalm.sh in the same CI job — one float per line.
+$readMaxMemory = static function (string $file) use ($fail): float {
+    $rawLines = file($file);
+    if ($rawLines === false) {
+        $fail("failed to read memory file: {$file}");
+    }
 
-$memDelta = $pr['peak_memory_mb'] - $base['peak_memory_mb'];
-$memPct = ($memDelta / $base['peak_memory_mb']) * 100;
+    $lines = array_values(array_filter(array_map('trim', $rawLines), static fn(string $l): bool => $l !== ''));
+    if ($lines === []) {
+        $fail("memory file is empty: {$file}");
+    }
+
+    return max(array_map('floatval', $lines));
+};
+
+$baseMem = $readMaxMemory($baseMemFile);
+$prMem = $readMaxMemory($prMemFile);
+
+// Read optional capture files (issue counts, type coverage) — last run's value
+$readLastLine = static function (?string $file): ?string {
+    if ($file === null || !is_file($file)) {
+        return null;
+    }
+
+    $lines = array_filter(array_map('trim', file($file) ?: []), static fn(string $l): bool => $l !== '');
+
+    return $lines === [] ? null : end($lines);
+};
+
+$baseIssues = ($v = $readLastLine($baseIssuesFile)) !== null ? (int) $v : null;
+$prIssues = ($v = $readLastLine($prIssuesFile)) !== null ? (int) $v : null;
+$baseCoverage = ($v = $readLastLine($baseStatsFile)) !== null ? (float) $v : null;
+$prCoverage = ($v = $readLastLine($prStatsFile)) !== null ? (float) $v : null;
+
+// Validate metrics are positive
+foreach (['base' => [$baseTiming['mean'], $baseMem], 'pr' => [$prTiming['mean'], $prMem]] as $label => [$time, $mem]) {
+    if ($time <= 0 || $mem <= 0) {
+        $fail("{$label} metrics are invalid (time: {$time}s, memory: {$mem}MB)");
+    }
+}
+
+// Compute deltas
+$timeDelta = $prTiming['mean'] - $baseTiming['mean'];
+$timePct = ($timeDelta / $baseTiming['mean']) * 100;
+
+$memDelta = $prMem - $baseMem;
+$memPct = ($memDelta / $baseMem) * 100;
 
 $timeSign = $timeDelta >= 0 ? '+' : '';
 $memSign = $memDelta >= 0 ? '+' : '';
-
-$baseIssues = (int) ($base['issue_count'] ?? 0);
-$prIssues = (int) ($pr['issue_count'] ?? 0);
-$issueDelta = $prIssues - $baseIssues;
-$issueSign = $issueDelta >= 0 ? '+' : '';
 
 $timeRegression = $timePct > $timeThreshold;
 $memRegression = $memPct > $memoryThreshold;
@@ -128,25 +131,18 @@ $failed = $timeRegression || $memRegression;
 $statusEmoji = $failed ? '🔴' : '🟢';
 $status = $failed ? 'FAIL' : 'PASS';
 
-// Exit code mismatch warning (e.g. base found no issues but PR introduced some, or vice versa)
-$exitWarning = '';
-if ($baseExit !== $prExit) {
-    $exitWarning = sprintf(
-        "\n> **Note:** Psalm exit codes differ (base: %d, PR: %d) — the PR %s issues that the base %s.\n",
-        $baseExit,
-        $prExit,
-        $prExit === 2 ? 'introduced' : 'resolved',
-        $baseExit === 2 ? 'had' : 'did not have',
-    );
-}
-
+// Build report
 echo "## Benchmark Results\n\n";
+
+// Timing table (from hyperfine data, with stddev)
 echo "| Metric | Base | PR | Delta |\n";
 echo "|--------|------|-----|-------|\n";
 echo sprintf(
-    "| Wall time | %.1fs | %.1fs | %s%.1fs (%s%.1f%%) %s |\n",
-    $base['wall_time_s'],
-    $pr['wall_time_s'],
+    "| Wall time | %.1fs ± %.1fs | %.1fs ± %.1fs | %s%.1fs (%s%.1f%%) %s |\n",
+    $baseTiming['mean'],
+    $baseTiming['stddev'],
+    $prTiming['mean'],
+    $prTiming['stddev'],
     $timeSign,
     $timeDelta,
     $timeSign,
@@ -155,15 +151,17 @@ echo sprintf(
 );
 echo sprintf(
     "| Peak memory | %.0fMB | %.0fMB | %s%.0fMB (%s%.1f%%) %s |\n",
-    $base['peak_memory_mb'],
-    $pr['peak_memory_mb'],
+    $baseMem,
+    $prMem,
     $memSign,
     $memDelta,
     $memSign,
     $memPct,
     $memRegression ? '**REGRESSION**' : '',
 );
-if ($baseIssues > 0 || $prIssues > 0) {
+if ($baseIssues !== null && $prIssues !== null) {
+    $issueDelta = $prIssues - $baseIssues;
+    $issueSign = $issueDelta >= 0 ? '+' : '';
     echo sprintf(
         "| Issues found | %s | %s | %s%s |\n",
         number_format($baseIssues),
@@ -173,14 +171,23 @@ if ($baseIssues > 0 || $prIssues > 0) {
     );
 }
 
-echo $exitWarning;
-echo "\n";
-echo "**Status:** {$statusEmoji} {$status} (thresholds: time <{$timeThreshold}%, memory <{$memoryThreshold}%)\n";
-echo "\n";
-echo "<details><summary>Methodology</summary>\n\n";
-echo "- **App:** [Monica](https://github.com/monicahq/monica) v5.0.0-beta.5\n";
-echo "- **Runs:** 1 per version (single-threaded, no cache)\n";
-echo "- **Config:** errorLevel 1, no unused code detection\n";
-echo "</details>\n";
+if ($baseCoverage !== null && $prCoverage !== null) {
+    $coverageDelta = $prCoverage - $baseCoverage;
+    $coverageSign = $coverageDelta >= 0 ? '+' : '';
+    echo sprintf(
+        "| Type coverage | %.2f%% | %.2f%% | %s%.2f%% |\n",
+        $baseCoverage,
+        $prCoverage,
+        $coverageSign,
+        $coverageDelta,
+    );
+}
+
+echo sprintf(
+    "\n*%d run(s), 1 warmup. Measured by [hyperfine](https://github.com/sharkdp/hyperfine).*\n",
+    count($baseTiming['times']),
+);
+
+echo "\n**Status:** {$statusEmoji} {$status} (thresholds: time <{$timeThreshold}%, memory <{$memoryThreshold}%)\n";
 
 exit($failed ? 1 : 0);

@@ -378,7 +378,7 @@ final class RelationMethodParser
      */
     private static function resolveTypeNames(string $typeString, array $useMap, string $namespace): ?Union
     {
-        $names = \array_map('trim', \explode('|', $typeString));
+        $names = \array_map(\trim(...), \explode('|', $typeString));
         $atomics = [];
 
         foreach ($names as $name) {
