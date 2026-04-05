@@ -15,6 +15,7 @@ on:
     paths:
       - 'src/**'
       - 'stubs/**'
+      - 'tests/Benchmark/**'
       - 'composer.json'
       - '.github/workflows/perf.yml'
 
@@ -137,8 +138,8 @@ jobs:
           hyperfine \
             --warmup 1 \
             --runs "$HYPERFINE_RUNS" \
-            --command-name base "bash $HARNESS /tmp/monica-base psalm-benchmark.xml /tmp/mem-base.txt" \
-            --command-name pr   "bash $HARNESS /tmp/monica-pr   psalm-benchmark.xml /tmp/mem-pr.txt" \
+            --command-name base "bash \"$HARNESS\" /tmp/monica-base psalm-benchmark.xml /tmp/mem-base.txt" \
+            --command-name pr   "bash \"$HARNESS\" /tmp/monica-pr   psalm-benchmark.xml /tmp/mem-pr.txt" \
             --export-json /tmp/hyperfine.json \
             --ignore-failure
           echo "--- hyperfine results ---"
@@ -241,8 +242,14 @@ jobs:
       - name: Build trend data
         run: |
           php -r '
-          $h = json_decode(file_get_contents("/tmp/hyperfine.json"), true)["results"][0];
-          $memLines = array_filter(array_map("trim", file("/tmp/mem.txt")), fn($l) => $l !== "");
+          $json = file_get_contents("/tmp/hyperfine.json");
+          if ($json === false) { fwrite(STDERR, "Cannot read hyperfine.json\n"); exit(1); }
+          $h = json_decode($json, true, 512, JSON_THROW_ON_ERROR)["results"][0] ?? null;
+          if (!$h || !isset($h["mean"])) { fwrite(STDERR, "Invalid hyperfine results\n"); exit(1); }
+          $memRaw = file("/tmp/mem.txt");
+          if ($memRaw === false) { fwrite(STDERR, "Cannot read mem.txt\n"); exit(1); }
+          $memLines = array_filter(array_map("trim", $memRaw), fn($l) => $l !== "");
+          if ($memLines === []) { fwrite(STDERR, "mem.txt is empty\n"); exit(1); }
           $peakMem = max(array_map("floatval", $memLines));
           echo json_encode([
               ["name" => "Wall time",   "value" => round($h["mean"], 2),   "unit" => "s",  "range" => "± " . round($h["stddev"], 2)],
