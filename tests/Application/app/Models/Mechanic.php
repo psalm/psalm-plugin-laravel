@@ -7,14 +7,53 @@ namespace App\Models;
 use App\Builders\MechanicBuilder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 /**
- * Mechanic model with a custom query builder via static $builder property (all Laravel versions).
+ * Technician who performs repairs.
+ *
+ * Custom query builder via static $builder property (all Laravel versions).
  */
 final class Mechanic extends Model
 {
     protected $table = 'mechanics';
+
+    /** @var class-string<MechanicBuilder<static>> */
+    protected static string $builder = MechanicBuilder::class;
+
+    public function workOrders(): HasMany
+    {
+        return $this->hasMany(WorkOrder::class);
+    }
+
+    /**
+     * @psalm-return HasOneThrough<Customer>
+     */
+    public function vehicleOwner(): HasOneThrough
+    {
+        return $this->hasOneThrough(Customer::class, Vehicle::class);
+    }
+
+    /**
+     * @psalm-return BelongsToMany<MechanicSpecialization, $this>
+     */
+    public function specializations(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class);
+    }
+
+    /**
+     * Admin bookmarks for this mechanic (inverse of Admin::mechanics()).
+     *
+     * @psalm-return MorphToMany<Admin>
+     */
+    public function bookmarkedAdmins(): MorphToMany
+    {
+        return $this->morphedByMany(Admin::class, 'bookmarkable');
+    }
 
     /**
      * Legacy scope for testing scope resolution on the static $builder property pattern.
@@ -25,16 +64,5 @@ final class Mechanic extends Model
     public function scopeExperienced($query)
     {
         return $query->where('years_experience', '>', 5);
-    }
-
-    /** @var class-string<MechanicBuilder<static>> */
-    protected static string $builder = MechanicBuilder::class;
-
-    /**
-     * @psalm-return HasOneThrough<User>
-     */
-    public function carOwner(): HasOneThrough
-    {
-        return $this->hasOneThrough(User::class, Car::class);
     }
 }
