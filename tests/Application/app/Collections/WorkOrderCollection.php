@@ -26,7 +26,7 @@ class WorkOrderCollection extends Collection
     public function completed(): static
     {
         return $this->filter(
-            fn(\App\Models\WorkOrder $wo): bool => $wo->getAttribute('status') === 'completed'
+            fn(\App\Models\WorkOrder $wo): bool => $wo->getAttribute('status') === 'completed',
         );
     }
 
