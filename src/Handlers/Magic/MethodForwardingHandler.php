@@ -67,7 +67,7 @@ final class MethodForwardingHandler implements
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        if (self::$rule === null) {
+        if (!self::$rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule) {
             return [];
         }
 
@@ -86,7 +86,7 @@ final class MethodForwardingHandler implements
     {
         $rule = self::$rule;
 
-        if ($rule === null) {
+        if (!$rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule) {
             return null;
         }
 
@@ -104,7 +104,7 @@ final class MethodForwardingHandler implements
         // Must run first — see spec "Path ordering" section for rationale.
         $mixinResult = self::handleMixinInterception($source, $event, $fqClassName, $methodName, $codebase);
 
-        if ($mixinResult !== null) {
+        if ($mixinResult instanceof \Psalm\Type\Union) {
             return $mixinResult;
         }
 
@@ -145,7 +145,7 @@ final class MethodForwardingHandler implements
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
-        if (self::$rule === null) {
+        if (!self::$rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule) {
             return null;
         }
 
@@ -210,7 +210,7 @@ final class MethodForwardingHandler implements
     ): ?Union {
         $rule = self::$rule;
 
-        if ($rule === null || !$rule->interceptMixin) {
+        if (!$rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule || !$rule->interceptMixin) {
             return null;
         }
 
@@ -225,7 +225,7 @@ final class MethodForwardingHandler implements
         // (confirmed in MethodCallAnalyzer.php lines 67-69).
         $callerType = $source->getNodeTypeProvider()->getType($stmt->var);
 
-        if ($callerType === null) {
+        if (!$callerType instanceof \Psalm\Type\Union) {
             return null;
         }
 
@@ -285,7 +285,7 @@ final class MethodForwardingHandler implements
         // the method call's return type provider fires.
         $varType = $source->getNodeTypeProvider()->getType($stmt->var);
 
-        if ($varType === null) {
+        if (!$varType instanceof \Psalm\Type\Union) {
             return null;
         }
 

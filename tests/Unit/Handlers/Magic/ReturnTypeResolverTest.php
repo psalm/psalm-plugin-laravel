@@ -41,7 +41,7 @@ final class ReturnTypeResolverTest extends TestCase
         // short-circuit before any Codebase access. Use a stub via reflection.
         $result = ReturnTypeResolver::resolve($rule, 'App\\Source', null, $this->createCodebaseStub(), 'where');
 
-        $this->assertNull($result);
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
     }
 
     #[Test]
@@ -54,7 +54,7 @@ final class ReturnTypeResolverTest extends TestCase
 
         $result = ReturnTypeResolver::resolve($rule, 'App\\Source', [], $this->createCodebaseStub(), 'where');
 
-        $this->assertNull($result);
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
     }
 
     #[Test]
@@ -66,11 +66,11 @@ final class ReturnTypeResolverTest extends TestCase
 
         // Seed the cache with a fake entry
         $cacheProperty->setValue(null, ['test::key' => true]);
-        $this->assertNotEmpty($cacheProperty->getValue(null));
+        $this->assertNotEmpty($cacheProperty->getValue());
 
         ReturnTypeResolver::resetCache();
 
-        $this->assertEmpty($cacheProperty->getValue(null));
+        $this->assertEmpty($cacheProperty->getValue());
     }
 
     /**

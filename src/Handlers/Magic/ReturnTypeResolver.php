@@ -107,7 +107,6 @@ final class ReturnTypeResolver
     ): bool {
         // Lazy-init: compute lowered indicators once per rule (cleared via resetCache())
         if (self::$indicatorsLower === [] && $rule->selfReturnIndicators !== []) {
-            /** @var list<lowercase-string> */
             self::$indicatorsLower = \array_map(static fn(string $s): string => \strtolower($s), $rule->selfReturnIndicators);
         }
 
@@ -116,7 +115,7 @@ final class ReturnTypeResolver
         foreach ($rule->searchClasses as $searchClass) {
             $returnType = self::getDeclaredReturnType($codebase, $searchClass, $methodNameLowercase);
 
-            if ($returnType === null) {
+            if (!$returnType instanceof \Psalm\Type\Union) {
                 continue;
             }
 
