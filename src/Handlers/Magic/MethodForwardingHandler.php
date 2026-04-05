@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Magic;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -182,7 +183,7 @@ final class MethodForwardingHandler implements
 
             if ($declaringId !== null) {
                 try {
-                    return $codebase->methods->getMethodParams($declaringId);
+                    return ModelMethodHandler::getParamsWithVariadicFlag($codebase, $declaringId);
                 } catch (\InvalidArgumentException|\UnexpectedValueException) {
                     return null;
                 }
