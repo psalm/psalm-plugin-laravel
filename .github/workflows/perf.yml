@@ -115,12 +115,15 @@ jobs:
             local dir=$1 plugin_path=$2
             cp -a /tmp/monica-source "$dir"
             cd "$dir"
+            # Install from Monica's lockfile first to anchor all non-plugin deps
+            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+            # Then add only the plugin, updating only its dependency tree
             composer config repositories.plugin \
               '{"type": "path", "url": "'"$plugin_path"'", "options": {"symlink": true}}'
             composer config minimum-stability dev
-            COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" \
-              --no-interaction --no-progress --update-with-all-dependencies
-            # Verify plugin was actually installed
+            composer require --dev "psalm/plugin-laravel:*" --no-interaction --no-update
+            COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel \
+              --no-interaction --no-progress --with-all-dependencies
             composer show psalm/plugin-laravel
             # Always use base checkout's config so both runs use the same Psalm settings
             cp "$GITHUB_WORKSPACE/plugin-base/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
@@ -194,11 +197,15 @@ jobs:
       - name: Setup project
         run: |
           cd /tmp/monica
+          # Install from Monica's lockfile first to anchor all non-plugin deps
+          COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+          # Then add only the plugin, updating only its dependency tree
           composer config repositories.plugin \
             '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true}}'
           composer config minimum-stability dev
-          COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" \
-            --no-interaction --no-progress --update-with-all-dependencies
+          composer require --dev "psalm/plugin-laravel:*" --no-interaction --no-update
+          COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel \
+            --no-interaction --no-progress --with-all-dependencies
           composer show psalm/plugin-laravel
           cp "$GITHUB_WORKSPACE/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
 

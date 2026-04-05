@@ -84,11 +84,20 @@ if ($baseExit > 1 || $prExit > 1) {
     exit(1);
 }
 
+// Validate base metrics are positive (zero/negative means measurement failure)
+if ($base['wall_time_s'] <= 0 || $base['peak_memory_mb'] <= 0) {
+    echo "## Benchmark Results\n\n";
+    echo "**Base benchmark metrics are invalid — results are not comparable.**\n\n";
+    echo sprintf("- Base wall_time_s: %s\n", (string) $base['wall_time_s']);
+    echo sprintf("- Base peak_memory_mb: %s\n", (string) $base['peak_memory_mb']);
+    exit(2);
+}
+
 $timeDelta = $pr['wall_time_s'] - $base['wall_time_s'];
-$timePct = $base['wall_time_s'] > 0 ? ($timeDelta / $base['wall_time_s']) * 100 : 0;
+$timePct = ($timeDelta / $base['wall_time_s']) * 100;
 
 $memDelta = $pr['peak_memory_mb'] - $base['peak_memory_mb'];
-$memPct = $base['peak_memory_mb'] > 0 ? ($memDelta / $base['peak_memory_mb']) * 100 : 0;
+$memPct = ($memDelta / $base['peak_memory_mb']) * 100;
 
 $timeSign = $timeDelta >= 0 ? '+' : '';
 $memSign = $memDelta >= 0 ? '+' : '';
