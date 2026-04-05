@@ -69,7 +69,7 @@ final class MissingViewHandlerTest extends TestCase
     #[Test]
     public function returns_factory_class_name_as_first_entry(): void
     {
-        // FacadeMap is not initialized in unit tests, so only Factory is returned.
+        // FacadeMapProvider is not initialized in unit tests, so only Factory is returned.
         // The type test (MissingViewTest.phpt) verifies facade classes are included
         // when the full plugin is booted.
         $classNames = MissingViewHandler::getClassLikeNames();
