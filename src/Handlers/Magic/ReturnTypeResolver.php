@@ -15,6 +15,8 @@ use Psalm\Type\Union;
  *
  * Results are cached per method+rule combination since return types are
  * immutable during a single Psalm run.
+ *
+ * @psalm-external-mutation-free
  */
 final class ReturnTypeResolver
 {
@@ -39,6 +41,8 @@ final class ReturnTypeResolver
      *
      * Must be called when the active ForwardingRule changes (e.g., in tests
      * with multiple init() calls). Called from MethodForwardingHandler::init().
+     *
+     * @psalm-external-mutation-free
      */
     public static function initForRule(ForwardingRule $rule): void
     {
@@ -57,6 +61,7 @@ final class ReturnTypeResolver
      * the source's generic type. Otherwise returns null to let Psalm resolve.
      *
      * @param list<Union>|null $sourceTemplateParams
+     * @psalm-external-mutation-free
      */
     public static function resolve(
         string   $sourceClass,
@@ -89,6 +94,8 @@ final class ReturnTypeResolver
      * 3. TNamedObject matching selfReturnIndicators — catches explicit class returns
      *    like Builder::where() which declares @return self<TModel>
      *    (Psalm stores this as TGenericObject("Builder", [TModel]))
+     *
+     * @psalm-external-mutation-free
      */
     private static function targetMethodReturnsSelf(
         Codebase $codebase,
