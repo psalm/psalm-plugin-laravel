@@ -466,7 +466,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
 
         try {
             $storage = $codebase->methods->getStorage($methodId);
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+        } catch (\UnexpectedValueException) {
             // Method exists through @mixin but has no direct storage on the class
             return $params;
         }

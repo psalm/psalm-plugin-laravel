@@ -62,6 +62,12 @@ function test_addselect_zero_args_still_fails(): void
     $_result = User::addSelect();
 }
 
+/** Non-variadic methods must still reject extra args. */
+function test_non_variadic_too_many_args(): void
+{
+    $_result = User::orderBy('name', 'asc', 'extra');
+}
+
 // --- Relation instance calls (MethodForwardingHandler) ---
 
 /** @param HasOne<Phone, User> $r */
@@ -80,3 +86,4 @@ function test_relation_distinct_variadic(HasOne $r): void
 ?>
 --EXPECTF--
 TooFewArguments on line %d: Too few arguments for App\Models\User::addselect - expecting column to be passed
+TooManyArguments on line %d: Too many arguments for App\Models\User::orderby - expecting 2 but saw 3
