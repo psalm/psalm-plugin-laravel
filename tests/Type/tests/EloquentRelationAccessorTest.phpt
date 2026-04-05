@@ -115,6 +115,20 @@ function test_morphTo_without_generics(Vault $vault): ?Model
     return $vaultable;
 }
 
+function test_morphTo_with_psalm_return_generics(Comment $comment): Post|User|null
+{
+    /** @psalm-check-type-exact $commentable = Post|User|null */
+    $commentable = $comment->commentable;
+    return $commentable;
+}
+
+function test_morphTo_with_return_generics(Image $image): Post|User|null
+{
+    /** @psalm-check-type-exact $imageable = Post|User|null */
+    $imageable = $image->imageable;
+    return $imageable;
+}
+
 // --- No declared return type: inferred from method body ---
 
 function test_no_return_type_morphOne(User $user): ?Image
