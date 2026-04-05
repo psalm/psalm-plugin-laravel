@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent;
 
-use App\Models\Post;
+use App\Models\WorkOrder;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -33,23 +33,23 @@ final class ModelPropertyHandlerTest extends TestCase
         $table->setColumn(new SchemaColumn('id', SchemaColumn::TYPE_INT));
         $table->setColumn(new SchemaColumn('title', SchemaColumn::TYPE_STRING));
         $table->setColumn(new SchemaColumn('published_at', SchemaColumn::TYPE_STRING, nullable: true));
-        $schema->tables['posts'] = $table;
+        $schema->tables['work_orders'] = $table;
         SchemaStateProvider::setSchema($schema);
 
         $this->classLikeStorageProvider = new ClassLikeStorageProvider();
-        $this->classLikeStorageProvider->create(Post::class);
+        $this->classLikeStorageProvider->create(WorkOrder::class);
     }
 
     #[\Override]
     protected function tearDown(): void
     {
-        $this->classLikeStorageProvider->remove(Post::class);
+        $this->classLikeStorageProvider->remove(WorkOrder::class);
     }
 
     #[Test]
     public function it_recognizes_column_property_in_read_mode(): void
     {
-        $event = $this->createEvent(Post::class, 'title', readMode: true);
+        $event = $this->createEvent(WorkOrder::class, 'title', readMode: true);
 
         $this->assertTrue(ModelPropertyHandler::doesPropertyExist($event));
     }
@@ -57,7 +57,7 @@ final class ModelPropertyHandlerTest extends TestCase
     #[Test]
     public function it_returns_null_for_write_mode(): void
     {
-        $event = $this->createEvent(Post::class, 'title', readMode: false);
+        $event = $this->createEvent(WorkOrder::class, 'title', readMode: false);
 
         $this->assertNull(
             ModelPropertyHandler::doesPropertyExist($event),
@@ -68,7 +68,7 @@ final class ModelPropertyHandlerTest extends TestCase
     #[Test]
     public function it_returns_null_for_unknown_property(): void
     {
-        $event = $this->createEvent(Post::class, 'nonexistent', readMode: true);
+        $event = $this->createEvent(WorkOrder::class, 'nonexistent', readMode: true);
 
         $this->assertNull(ModelPropertyHandler::doesPropertyExist($event));
     }
@@ -76,7 +76,7 @@ final class ModelPropertyHandlerTest extends TestCase
     #[Test]
     public function it_resolves_all_columns_for_model(): void
     {
-        $columns = ModelPropertyHandler::resolveAllColumns(Post::class);
+        $columns = ModelPropertyHandler::resolveAllColumns(WorkOrder::class);
 
         $this->assertArrayHasKey('id', $columns);
         $this->assertArrayHasKey('title', $columns);

@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent;
 
-use App\Builders\CarBuilder;
 use App\Builders\MechanicBuilder;
-use App\Builders\PostBuilder;
-use App\Models\Car;
+use App\Builders\VehicleBuilder;
+use App\Builders\WorkOrderBuilder;
+use App\Models\Customer;
 use App\Models\Mechanic;
-use App\Models\Post;
-use App\Models\User;
+use App\Models\Vehicle;
+use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -47,25 +47,25 @@ final class CustomBuilderDetectionTest extends TestCase
     #[Test]
     public function it_registers_custom_builder_for_model_with_attribute(): void
     {
-        $this->callDetectCustomBuilder(Post::class);
+        $this->callDetectCustomBuilder(WorkOrder::class);
 
-        $this->assertSame(PostBuilder::class, $this->getRegisteredBuilder(Post::class));
+        $this->assertSame(WorkOrderBuilder::class, $this->getRegisteredBuilder(WorkOrder::class));
     }
 
     #[Test]
     public function it_does_not_register_builder_for_model_without_attribute(): void
     {
-        $this->callDetectCustomBuilder(User::class);
+        $this->callDetectCustomBuilder(Customer::class);
 
-        $this->assertNull($this->getRegisteredBuilder(User::class));
+        $this->assertNull($this->getRegisteredBuilder(Customer::class));
     }
 
     #[Test]
     public function it_registers_custom_builder_for_model_with_new_eloquent_builder_override(): void
     {
-        $this->callDetectCustomBuilder(Car::class);
+        $this->callDetectCustomBuilder(Vehicle::class);
 
-        $this->assertSame(CarBuilder::class, $this->getRegisteredBuilder(Car::class));
+        $this->assertSame(VehicleBuilder::class, $this->getRegisteredBuilder(Vehicle::class));
     }
 
     #[Test]
@@ -88,8 +88,8 @@ final class CustomBuilderDetectionTest extends TestCase
     #[Test]
     public function it_returns_null_for_inherited_new_eloquent_builder(): void
     {
-        // User inherits newEloquentBuilder from Model — not an override, so no custom builder.
-        $result = $this->callResolveBuilderFromMethodOverride(User::class);
+        // Customer inherits newEloquentBuilder from Model — not an override, so no custom builder.
+        $result = $this->callResolveBuilderFromMethodOverride(Customer::class);
 
         $this->assertNull($result);
     }
@@ -105,8 +105,8 @@ final class CustomBuilderDetectionTest extends TestCase
     #[Test]
     public function it_returns_null_for_inherited_static_builder_property(): void
     {
-        // User inherits $builder from Model — not an override.
-        $result = $this->callResolveBuilderFromStaticProperty(User::class);
+        // Customer inherits $builder from Model — not an override.
+        $result = $this->callResolveBuilderFromStaticProperty(Customer::class);
 
         $this->assertNull($result);
     }
