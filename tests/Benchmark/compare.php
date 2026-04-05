@@ -29,11 +29,17 @@ if (count($positional) < 2) {
 
 [$baseFile, $prFile] = $positional;
 
+// Helper: emit error to both stdout (for PR comment) and stderr (for CI logs), then exit
+$fail = static function (string $message): never {
+    echo "## Benchmark Results\n\n**Error:** {$message}\n";
+    fwrite(STDERR, "Error: {$message}\n");
+    exit(2);
+};
+
 // Validate input files exist and are readable
 foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
     if (!is_file($file)) {
-        fwrite(STDERR, "Error: {$label} result file not found: {$file}\n");
-        exit(2);
+        $fail("{$label} result file not found: {$file}");
     }
 }
 
@@ -41,20 +47,17 @@ $decoded = [];
 foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
     $json = file_get_contents($file);
     if ($json === false) {
-        fwrite(STDERR, "Error: failed to read {$label} result file: {$file}\n");
-        exit(2);
+        $fail("failed to read {$label} result file: {$file}");
     }
 
     try {
         $decodedValue = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     } catch (\JsonException $e) {
-        fwrite(STDERR, "Error: invalid {$label} JSON in {$file}: {$e->getMessage()}\n");
-        exit(2);
+        $fail("invalid {$label} JSON in {$file}: {$e->getMessage()}");
     }
 
     if (!is_array($decodedValue)) {
-        fwrite(STDERR, "Error: {$label} JSON in {$file} must decode to an object/array\n");
-        exit(2);
+        $fail("{$label} JSON in {$file} must decode to an object/array");
     }
 
     $decoded[$label] = $decodedValue;
@@ -68,8 +71,7 @@ $required = ['wall_time_s', 'peak_memory_mb', 'psalm_exit_code'];
 foreach (['base' => $base, 'pr' => $pr] as $label => $data) {
     foreach ($required as $key) {
         if (!array_key_exists($key, $data)) {
-            fwrite(STDERR, "Error: missing key '{$key}' in {$label} JSON\n");
-            exit(2);
+            $fail("missing key '{$key}' in {$label} JSON");
         }
     }
 }

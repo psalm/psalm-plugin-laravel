@@ -68,6 +68,12 @@ PSALM_EXIT=0
     2>"$TMPDIR/stderr.txt" \
     || PSALM_EXIT=$?
 
+# On non-analysis failure (exit > 1), dump Psalm output to stderr for diagnostics
+if [[ $PSALM_EXIT -gt 1 ]]; then
+    echo "Warning: Psalm exited with code $PSALM_EXIT (>1 = non-analysis failure)" >&2
+    cat "$TMPDIR/stderr.txt" >&2 2>/dev/null || true
+fi
+
 # Parse GNU time output (last line — gtime prepends a status line on non-zero exit).
 # "%e" = elapsed wall seconds, "%M" = max RSS in KB.
 # read can fail under set -e if time.txt is empty (e.g. Psalm was killed before gtime wrote)
