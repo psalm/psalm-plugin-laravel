@@ -1,0 +1,222 @@
+name: Performance Benchmark
+
+# Three triggers:
+# 1. Label "pr:benchmark-ready" added to a PR — compares PR vs base
+# 2. Comment "/benchmark" or "/pr:benchmark" on a PR — same comparison
+# 3. Push to master — stores baseline result as artifact for historical tracking
+
+on:
+  pull_request:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'stubs/**'
+      - 'composer.json'
+
+# Cancel in-flight benchmark if a new one is requested
+concurrency:
+  group: benchmark-${{ github.event.pull_request.number || github.event.issue.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned Monica release for reproducible benchmarks.
+  # Monica is a real-world Laravel app (~700 PHP files, Laravel 12).
+  MONICA_REPO: monicahq/monica
+  MONICA_REF: "v5.0.0-beta.5"
+  PHP_VERSION: "8.3"
+
+jobs:
+
+  # ── PR benchmark: triggered by label or "/benchmark" comment ─────────
+  pr-benchmark:
+    if: >-
+      (github.event_name == 'pull_request'
+       && github.event.action == 'labeled'
+       && github.event.label.name == 'pr:benchmark-ready')
+      || (github.event_name == 'issue_comment'
+       && github.event.issue.pull_request
+       && (startsWith(github.event.comment.body, '/benchmark')
+        || startsWith(github.event.comment.body, '/pr:benchmark'))
+       && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write  # needed for posting PR comments
+      issues: write  # needed for comment reactions
+    steps:
+
+      - name: React to comment
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -f content=rocket --silent
+
+      - name: Get PR refs
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # For label trigger, PR number is in the event; for comment trigger, it's the issue number
+          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
+          PR_JSON=$(gh pr view "$PR_NUMBER" \
+            --repo ${{ github.repository }} \
+            --json headRefOid,baseRefOid,headRefName,number,headRepository)
+          # Refuse to run unless PR head is from this exact repository (not a same-org fork)
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r .headRepository.nameWithOwner)
+          EXPECTED_REPO="${{ github.repository }}"
+          if [ "$HEAD_REPO" != "$EXPECTED_REPO" ]; then
+            echo "::error::Refusing to benchmark PR from a different repository (head: $HEAD_REPO, expected: $EXPECTED_REPO)"
+            exit 1
+          fi
+          echo "head_sha=$(echo "$PR_JSON" | jq -r .headRefOid)" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$(echo "$PR_JSON" | jq -r .baseRefOid)" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$(echo "$PR_JSON" | jq -r .headRefName)" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$(echo "$PR_JSON" | jq -r .number)" >> "$GITHUB_OUTPUT"
+
+      # Check out both plugin versions side by side
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          path: plugin-pr
+
+      - name: Checkout base branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.pr.outputs.base_sha }}
+          path: plugin-base
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          ini-values: opcache.enable_cli=1
+          coverage: none
+          tools: composer:v2
+
+      - name: Clone Monica
+        run: |
+          git clone --depth 1 --branch "$MONICA_REF" \
+            "https://github.com/$MONICA_REPO" /tmp/monica-source
+
+      - name: Setup benchmark projects
+        run: |
+          setup_project() {
+            local dir=$1 plugin_path=$2
+            cp -a /tmp/monica-source "$dir"
+            cd "$dir"
+            # Install from Monica's lockfile first to anchor all non-plugin deps
+            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+            # Then add only the plugin, updating only its dependency tree
+            composer config repositories.plugin \
+              '{"type": "path", "url": "'"$plugin_path"'", "options": {"symlink": true}}'
+            composer config minimum-stability dev
+            composer require --dev "psalm/plugin-laravel:*" --no-interaction --no-update
+            COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel \
+              --no-interaction --no-progress --with-all-dependencies
+            composer show psalm/plugin-laravel
+            # Always use base checkout's config so both runs use the same Psalm settings
+            cp "$GITHUB_WORKSPACE/plugin-base/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
+          }
+          setup_project /tmp/monica-base "$GITHUB_WORKSPACE/plugin-base"
+          setup_project /tmp/monica-pr "$GITHUB_WORKSPACE/plugin-pr"
+
+      # Use base checkout's harness and compare scripts for both runs so the PR
+      # cannot alter the measurement infrastructure to hide regressions.
+      - name: Benchmark base
+        run: |
+          bash plugin-base/tests/Benchmark/benchmark.sh /tmp/monica-base psalm-benchmark.xml \
+            | tee /tmp/base-result.json
+
+      - name: Benchmark PR
+        run: |
+          bash plugin-base/tests/Benchmark/benchmark.sh /tmp/monica-pr psalm-benchmark.xml \
+            | tee /tmp/pr-result.json
+
+      - name: Compare results
+        id: compare
+        run: |
+          set +e
+          REPORT=$(php plugin-base/tests/Benchmark/compare.php /tmp/base-result.json /tmp/pr-result.json)
+          EXIT_CODE=$?
+          set -e
+          echo "$REPORT"
+          {
+            echo "report<<REPORT_EOF"
+            echo "$REPORT"
+            echo "REPORT_EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit $EXIT_CODE
+
+      - name: Post PR comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ steps.compare.outputs.report }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          BODY="${REPORT:-Benchmark failed to produce results. Check the workflow logs.}"
+          gh pr comment "$PR_NUMBER" \
+            --repo ${{ github.repository }} \
+            --body "$BODY"
+
+
+  # ── Master baseline: stores result as artifact ───────────────────────
+  master-baseline:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          ini-values: opcache.enable_cli=1
+          coverage: none
+          tools: composer:v2
+
+      - name: Clone Monica
+        run: |
+          git clone --depth 1 --branch "$MONICA_REF" \
+            "https://github.com/$MONICA_REPO" /tmp/monica
+
+      - name: Setup project
+        run: |
+          cd /tmp/monica
+          # Install from Monica's lockfile first to anchor all non-plugin deps
+          COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+          # Then add only the plugin, updating only its dependency tree
+          composer config repositories.plugin \
+            '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true}}'
+          composer config minimum-stability dev
+          composer require --dev "psalm/plugin-laravel:*" --no-interaction --no-update
+          COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel \
+            --no-interaction --no-progress --with-all-dependencies
+          composer show psalm/plugin-laravel
+          cp "$GITHUB_WORKSPACE/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
+
+      - name: Benchmark
+        run: |
+          bash tests/Benchmark/benchmark.sh /tmp/monica psalm-benchmark.xml \
+            | tee /tmp/result.json
+
+      - name: Upload baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline-${{ github.sha }}
+          path: /tmp/result.json
+          retention-days: 90
