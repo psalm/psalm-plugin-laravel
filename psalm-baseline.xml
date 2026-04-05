@@ -3,7 +3,7 @@
   <file src="src/Handlers/Magic/ReturnTypeResolver.php">
     <MissingPureAnnotation>
       <code><![CDATA[initForRule]]></code>
-      <code><![CDATA[resolveTargetMethodReturnsSelf]]></code>
+      <code><![CDATA[targetMethodReturnsSelf]]></code>
     </MissingPureAnnotation>
   </file>
 </files>

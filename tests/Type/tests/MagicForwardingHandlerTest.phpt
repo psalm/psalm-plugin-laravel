@@ -1,10 +1,13 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Models\Car;
+use App\Models\Mechanic;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Phone;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
@@ -81,6 +84,31 @@ function test_terminal_after_chain(): void {
     $r = (new User())->phone();
     $_ = $r->where('active', true)->orderBy('name')->first();
     /** @psalm-check-type-exact $_ = Phone|null */
+}
+
+// Non-fluent mixin method: count() returns int, not HasOne<Phone, User>
+function test_count_returns_int_not_relation(): void {
+    /** @var HasOne<Phone, User> $r */
+    $r = (new User())->phone();
+    $_ = $r->count();
+    /** @psalm-check-type-exact $_ = int<0, max> */
+}
+
+// HasManyThrough: 3 template params (verifies TGenericObject construction with varying arity)
+function test_hasManyThrough_where_preserves_relation_type(): void {
+    /** @var HasManyThrough<Mechanic, Car, User> $r */
+    $r = (new User())->carsAtMechanic();
+    $_ = $r->where('active', true);
+    /** @psalm-check-type-exact $_ = HasManyThrough<Mechanic, Car, User> */
+}
+
+// Path 2: limit() is QueryBuilder-only with typed param (int $value).
+// MethodParamsProvider forwards the param types so Psalm validates arguments.
+function test_limit_validates_arguments(): void {
+    /** @var HasOne<Phone, User> $r */
+    $r = (new User())->phone();
+    $_ = $r->limit(10);
+    /** @psalm-check-type-exact $_ = HasOne<Phone, User>&static */
 }
 ?>
 --EXPECTF--

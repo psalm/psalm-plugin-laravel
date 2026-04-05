@@ -29,23 +29,25 @@ final class ReturnTypeResolver
      */
     private static array $selfReturnCache = [];
 
+    private static ?ForwardingRule $rule = null;
+
     /** @var list<lowercase-string> Pre-lowered selfReturnIndicators, set via initForRule() */
     private static array $indicatorsLower = [];
 
     /**
-     * Reset cache and pre-compute lowered indicators for the given rule.
+     * Reset cache and store the active rule with pre-computed lowered indicators.
      *
      * Must be called when the active ForwardingRule changes (e.g., in tests
      * with multiple init() calls). Called from MethodForwardingHandler::init().
-     *
-     * @param list<class-string> $selfReturnIndicators
      */
-    public static function initForRule(array $selfReturnIndicators): void
+    public static function initForRule(ForwardingRule $rule): void
     {
         self::$selfReturnCache = [];
+        self::$rule = $rule;
+        /** @var list<lowercase-string> */
         self::$indicatorsLower = \array_map(
             static fn(string $s): string => \strtolower($s),
-            $selfReturnIndicators,
+            $rule->selfReturnIndicators,
         );
     }
 
@@ -58,21 +60,20 @@ final class ReturnTypeResolver
      * @param list<Union>|null $sourceTemplateParams
      */
     public static function resolve(
-        ForwardingRule $rule,
-        string         $sourceClass,
-        ?array         $sourceTemplateParams,
-        Codebase       $codebase,
-        string         $methodNameLowercase,
+        string   $sourceClass,
+        ?array   $sourceTemplateParams,
+        Codebase $codebase,
+        string   $methodNameLowercase,
     ): ?Union {
-        if ($sourceTemplateParams === null || $sourceTemplateParams === []) {
+        if (self::$rule === null || $sourceTemplateParams === null || $sourceTemplateParams === []) {
             return null;
         }
 
-        if (!self::methodExistsOnSearchClasses($codebase, $rule->searchClasses, $methodNameLowercase)) {
+        if (!self::methodExistsOnSearchClasses($codebase, self::$rule->searchClasses, $methodNameLowercase)) {
             return null;
         }
 
-        if (self::targetMethodReturnsSelf($codebase, $rule, $methodNameLowercase)) {
+        if (self::targetMethodReturnsSelf($codebase, $methodNameLowercase)) {
             return new Union([
                 new TGenericObject($sourceClass, $sourceTemplateParams),
             ]);
@@ -96,7 +97,6 @@ final class ReturnTypeResolver
      */
     private static function targetMethodReturnsSelf(
         Codebase $codebase,
-        ForwardingRule $rule,
         string $methodNameLowercase,
     ): bool {
         // Cache key is just the method name — the rule is a singleton per Psalm run.
@@ -104,23 +104,15 @@ final class ReturnTypeResolver
             return self::$selfReturnCache[$methodNameLowercase];
         }
 
-        $result = self::resolveTargetMethodReturnsSelf($codebase, $rule, $methodNameLowercase);
-        self::$selfReturnCache[$methodNameLowercase] = $result;
+        $rule = self::$rule;
+        \assert($rule !== null, 'initForRule() must be called before targetMethodReturnsSelf()');
 
-        return $result;
-    }
-
-    private static function resolveTargetMethodReturnsSelf(
-        Codebase $codebase,
-        ForwardingRule $rule,
-        string $methodNameLowercase,
-    ): bool {
-        $indicatorsLower = self::$indicatorsLower;
+        $result = false;
 
         foreach ($rule->searchClasses as $searchClass) {
             $returnType = self::getDeclaredReturnType($codebase, $searchClass, $methodNameLowercase);
 
-            if (!$returnType instanceof \Psalm\Type\Union) {
+            if (!$returnType instanceof Union) {
                 continue;
             }
 
@@ -133,17 +125,21 @@ final class ReturnTypeResolver
                 // Psalm stores these as TNamedObject(value="static", is_static=false),
                 // NOT as is_static=true. Match the literal "static" value.
                 if ($atomicType->value === 'static' || $atomicType->is_static) {
-                    return true;
+                    $result = true;
+                    break 2;
                 }
 
                 // Check 2: class name matches selfReturnIndicators (e.g., Builder)
-                if (\in_array(\strtolower($atomicType->value), $indicatorsLower, true)) {
-                    return true;
+                if (\in_array(\strtolower($atomicType->value), self::$indicatorsLower, true)) {
+                    $result = true;
+                    break 2;
                 }
             }
         }
 
-        return false;
+        self::$selfReturnCache[$methodNameLowercase] = $result;
+
+        return $result;
     }
 
     /**

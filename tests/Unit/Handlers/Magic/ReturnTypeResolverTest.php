@@ -23,44 +23,41 @@ use Psalm\LaravelPlugin\Handlers\Magic\ReturnTypeResolver;
 #[CoversClass(ReturnTypeResolver::class)]
 final class ReturnTypeResolverTest extends TestCase
 {
+    private static ForwardingRule $emptyRule;
+
+    public static function setUpBeforeClass(): void
+    {
+        self::$emptyRule = new ForwardingRule(
+            sourceClass: 'App\\Source',
+            searchClasses: ['App\\Target'],
+        );
+    }
+
     #[\Override]
     protected function setUp(): void
     {
-        ReturnTypeResolver::initForRule([]);
+        ReturnTypeResolver::initForRule(self::$emptyRule);
     }
 
     #[Test]
     public function resolve_returns_null_when_template_params_are_null(): void
     {
-        $rule = new ForwardingRule(
-            sourceClass: 'App\\Source',
-            searchClasses: ['App\\Target'],
-        );
+        $result = ReturnTypeResolver::resolve('App\\Source', null, $this->createCodebaseStub(), 'where');
 
-        // We can't easily construct a real Codebase, but null template params
-        // short-circuit before any Codebase access. Use a stub via reflection.
-        $result = ReturnTypeResolver::resolve($rule, 'App\\Source', null, $this->createCodebaseStub(), 'where');
-
-        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
+        $this->assertNull($result);
     }
 
     #[Test]
     public function resolve_returns_null_when_template_params_are_empty(): void
     {
-        $rule = new ForwardingRule(
-            sourceClass: 'App\\Source',
-            searchClasses: ['App\\Target'],
-        );
+        $result = ReturnTypeResolver::resolve('App\\Source', [], $this->createCodebaseStub(), 'where');
 
-        $result = ReturnTypeResolver::resolve($rule, 'App\\Source', [], $this->createCodebaseStub(), 'where');
-
-        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
+        $this->assertNull($result);
     }
 
     #[Test]
     public function initForRule_clears_cache(): void
     {
-        // Access the private cache via reflection to verify reset works
         $reflection = new \ReflectionClass(ReturnTypeResolver::class);
         $cacheProperty = $reflection->getProperty('selfReturnCache');
 
@@ -68,7 +65,7 @@ final class ReturnTypeResolverTest extends TestCase
         $cacheProperty->setValue(null, ['test::key' => true]);
         $this->assertNotEmpty($cacheProperty->getValue());
 
-        ReturnTypeResolver::initForRule([]);
+        ReturnTypeResolver::initForRule(self::$emptyRule);
 
         $this->assertEmpty($cacheProperty->getValue());
     }
