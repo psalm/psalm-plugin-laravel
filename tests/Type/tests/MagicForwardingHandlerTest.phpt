@@ -67,26 +67,20 @@ function test_belongsToMany_orderBy_preserves_relation_type(): void {
     /** @psalm-check-type-exact $_ = BelongsToMany<Role, User> */
 }
 
-/**
- * @todo first() on Relations via @mixin doesn't resolve template params — Psalm limitation.
- * Psalm stores the mixin return type as TRelatedModel|null (unresolved template param)
- * instead of Phone|null. Fixing this requires template substitution in the handler.
- *
- * Expected: Phone|null
- * Actual: (TRelatedModel:HasOne as Model)|null
- */
-// function test_first_returns_model_or_null(): void {
-//     /** @var HasOne<Phone, User> $r */
-//     $r = (new User())->phone();
-//     $_ = $r->first();
-//     /** @psalm-check-type-exact $_ = Phone|null */
-// }
+// Non-fluent: first() resolved via Relation stub (workaround for Psalm mixin template bug)
+function test_first_returns_model_or_null(): void {
+    /** @var HasOne<Phone, User> $r */
+    $r = (new User())->phone();
+    $_ = $r->first();
+    /** @psalm-check-type-exact $_ = Phone|null */
+}
 
-// function test_terminal_after_chain(): void {
-//     /** @var HasOne<Phone, User> $r */
-//     $r = (new User())->phone();
-//     $_ = $r->where('active', true)->orderBy('name')->first();
-//     /** @psalm-check-type-exact $_ = Phone|null */
-// }
+// Terminal after chain: where()+orderBy() preserve HasOne, first() resolves via stub
+function test_terminal_after_chain(): void {
+    /** @var HasOne<Phone, User> $r */
+    $r = (new User())->phone();
+    $_ = $r->where('active', true)->orderBy('name')->first();
+    /** @psalm-check-type-exact $_ = Phone|null */
+}
 ?>
 --EXPECTF--
