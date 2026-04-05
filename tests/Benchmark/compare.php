@@ -9,7 +9,7 @@ declare(strict_types=1);
  *
  * Exit codes:
  *   0 = within thresholds
- *   1 = regression detected
+ *   1 = regression detected, or results are not comparable (Psalm crashed)
  *   2 = usage error / bad input
  */
 
@@ -23,7 +23,7 @@ $positional = array_values(array_filter(
 ));
 
 if (count($positional) < 3) {
-    fwrite(STDERR, "Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt> [base-issues.txt] [pr-issues.txt]\n");
+    fwrite(STDERR, "Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt> [base-issues.txt] [pr-issues.txt] [base-stats.txt] [pr-stats.txt] [--time-threshold=15] [--memory-threshold=20]\n");
     exit(2);
 }
 
@@ -92,7 +92,16 @@ $readMaxMemory = static function (string $file) use ($fail): float {
         $fail("memory file is empty: {$file}");
     }
 
-    return max(array_map('floatval', $lines));
+    $values = [];
+    foreach ($lines as $index => $line) {
+        if (!is_numeric($line)) {
+            $lineNumber = $index + 1;
+            $fail("invalid memory value in {$file} on line {$lineNumber}: {$line}");
+        }
+        $values[] = (float) $line;
+    }
+
+    return max($values);
 };
 
 $baseMem = $readMaxMemory($baseMemFile);

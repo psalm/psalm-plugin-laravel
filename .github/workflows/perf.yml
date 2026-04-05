@@ -234,8 +234,14 @@ jobs:
       - name: Validate benchmark results
         run: |
           php -r '
-          $data = json_decode(file_get_contents("/tmp/hyperfine.json"), true);
-          $exitCodes = $data["results"][0]["exit_codes"] ?? [];
+          $json = file_get_contents("/tmp/hyperfine.json");
+          if ($json === false) { fwrite(STDERR, "Cannot read /tmp/hyperfine.json\n"); exit(1); }
+          $data = json_decode($json, true);
+          if (!is_array($data) || !isset($data["results"][0]["exit_codes"])) {
+              fwrite(STDERR, "Invalid or corrupt hyperfine JSON\n");
+              exit(1);
+          }
+          $exitCodes = $data["results"][0]["exit_codes"];
           $failures = array_filter($exitCodes, fn($c) => (int) $c === 1 || (int) $c >= 128);
           if ($failures !== []) {
               fwrite(STDERR, "Psalm failed with exit codes: " . implode(", ", $exitCodes) . "\n");
