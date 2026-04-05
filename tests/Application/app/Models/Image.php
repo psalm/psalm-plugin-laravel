@@ -11,6 +11,10 @@ final class Image extends Model
 {
     /**
      * Get the owning imageable model.
+     *
+     * Uses @return (not @psalm-return) to test the @return regex path.
+     *
+     * @return MorphTo<Post|User, $this>
      */
     public function imageable(): MorphTo
     {
