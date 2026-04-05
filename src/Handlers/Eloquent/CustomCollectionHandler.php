@@ -7,6 +7,20 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
+use Illuminate\Database\Eloquent\Relations\HasOneOrManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphOneOrMany;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
@@ -22,9 +36,9 @@ use Psalm\Type\Union;
  *
  * When a model declares a custom collection via `#[CollectedBy(UserCollection::class)]`,
  * overriding `newCollection()` with a narrowed return type, or setting the
- * `$collectionClass` property, Builder methods like `get()`, `findMany()`, and
- * `Model::all()` should return the custom collection type instead of
- * `Illuminate\Database\Eloquent\Collection`.
+ * `$collectionClass` property, Builder methods like `get()`, `findMany()`,
+ * Relation methods like `$user->roles()->get()`, and `Model::all()` should return
+ * the custom collection type instead of `Illuminate\Database\Eloquent\Collection`.
  *
  * Detection is performed eagerly by {@see ModelRegistrationHandler} at codebase
  * population time, using runtime reflection (consistent with custom builder detection).
@@ -32,6 +46,7 @@ use Psalm\Type\Union;
  *
  * @see https://laravel.com/docs/master/eloquent-collections#custom-collections
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/622
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/658
  * @internal
  */
 final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
@@ -70,13 +85,39 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
+     * Relation subclasses whose collection-returning methods (get, findMany) should
+     * be narrowed. Psalm's provider lookup requires exact class name matching, so
+     * every concrete and abstract subclass must be listed.
+     *
+     * Matches the MethodForwardingHandler's source class list.
+     *
+     * @var list<class-string>
+     */
+    private const RELATION_CLASSES = [
+        Relation::class,
+        BelongsTo::class,
+        BelongsToMany::class,
+        HasMany::class,
+        HasManyThrough::class,
+        HasOne::class,
+        HasOneOrMany::class,
+        HasOneOrManyThrough::class,
+        HasOneThrough::class,
+        MorphMany::class,
+        MorphOne::class,
+        MorphOneOrMany::class,
+        MorphTo::class,
+        MorphToMany::class,
+    ];
+
+    /**
      * @return list<string>
      * @psalm-pure
      */
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [Builder::class];
+        return [Builder::class, ...self::RELATION_CLASSES];
     }
 
     /** @psalm-external-mutation-free */
@@ -94,7 +135,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
 
         $templateTypeParameters = $event->getTemplateTypeParameters();
 
-        // Builder<TModel> — TModel is template param at index 0
+        // Builder<TModel> and Relation<TRelatedModel, ...> both have the model at index 0
         $modelClass = ModelPropertyResolver::extractModelFromUnion($templateTypeParameters[0] ?? null);
         if ($modelClass === null) {
             return null;
