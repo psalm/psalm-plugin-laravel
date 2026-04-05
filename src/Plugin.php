@@ -9,6 +9,7 @@ use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -42,6 +43,11 @@ final class Plugin implements PluginEntryPointInterface
             }
 
             $this->generateAliasStubs($pluginConfig);
+
+            // Build facade → service class map before registering handlers.
+            // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
+            // to also register for facade/alias classes that proxy to their service.
+            FacadeMapProvider::init($output);
 
             Handlers\Rules\NoEnvOutsideConfigHandler::init(
                 ApplicationProvider::getApp()->configPath(),
