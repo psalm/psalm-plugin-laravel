@@ -43,7 +43,6 @@ final class ReturnTypeResolver
     public static function initForRule(array $selfReturnIndicators): void
     {
         self::$selfReturnCache = [];
-        /** @var list<lowercase-string> */
         self::$indicatorsLower = \array_map(
             static fn(string $s): string => \strtolower($s),
             $selfReturnIndicators,
