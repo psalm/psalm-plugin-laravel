@@ -172,8 +172,42 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
 
-        require_once __DIR__ . '/Handlers/Eloquent/RelationsMethodHandler.php';
-        $registration->registerHooksFromClass(Handlers\Eloquent\RelationsMethodHandler::class);
+        // Magic method forwarding: Relation -> Builder (decorated forwarding).
+        // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and
+        // CustomCollectionHandler — the handler returns null for non-Relation callers
+        // (fast O(1) check), so downstream handlers fire unaffected.
+        require_once __DIR__ . '/Handlers/Magic/ForwardingRule.php';
+        require_once __DIR__ . '/Handlers/Magic/ReturnTypeResolver.php';
+        require_once __DIR__ . '/Handlers/Magic/MethodForwardingHandler.php';
+        Handlers\Magic\MethodForwardingHandler::init(new Handlers\Magic\ForwardingRule(
+            sourceClass: \Illuminate\Database\Eloquent\Relations\Relation::class,
+            searchClasses: [
+                \Illuminate\Database\Eloquent\Builder::class,
+                \Illuminate\Database\Query\Builder::class,
+            ],
+            selfReturnIndicators: [\Illuminate\Database\Eloquent\Builder::class],
+            // Relation subclasses (concrete + abstract bases, since Psalm hook lookup
+            // is exact-class). MorphPivot is in the Relations namespace but extends
+            // Model (not Relation) — intentionally excluded.
+            additionalSourceClasses: [
+                \Illuminate\Database\Eloquent\Relations\BelongsTo::class,
+                \Illuminate\Database\Eloquent\Relations\BelongsToMany::class,
+                \Illuminate\Database\Eloquent\Relations\HasMany::class,
+                \Illuminate\Database\Eloquent\Relations\HasManyThrough::class,
+                \Illuminate\Database\Eloquent\Relations\HasOne::class,
+                \Illuminate\Database\Eloquent\Relations\HasOneOrMany::class,
+                \Illuminate\Database\Eloquent\Relations\HasOneOrManyThrough::class,
+                \Illuminate\Database\Eloquent\Relations\HasOneThrough::class,
+                \Illuminate\Database\Eloquent\Relations\MorphMany::class,
+                \Illuminate\Database\Eloquent\Relations\MorphOne::class,
+                \Illuminate\Database\Eloquent\Relations\MorphOneOrMany::class,
+                \Illuminate\Database\Eloquent\Relations\MorphTo::class,
+                \Illuminate\Database\Eloquent\Relations\MorphToMany::class,
+            ],
+            interceptMixin: true,
+        ));
+        $registration->registerHooksFromClass(Handlers\Magic\MethodForwardingHandler::class);
+
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelMethodHandler::class);
         require_once __DIR__ . '/Util/ModelPropertyResolver.php';
