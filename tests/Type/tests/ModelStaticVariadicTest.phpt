@@ -54,6 +54,14 @@ function test_custom_builder_static_select_variadic(): void
     /** @psalm-check-type-exact $_result = PostBuilder<Post>&static */
 }
 
+// --- Arity preservation: required params still enforced ---
+
+/** addSelect($column) requires at least one arg — variadic flag must not relax arity. */
+function test_addselect_zero_args_still_fails(): void
+{
+    $_result = User::addSelect();
+}
+
 // --- Relation instance calls (MethodForwardingHandler) ---
 
 /** @param HasOne<Phone, User> $r */
@@ -71,3 +79,4 @@ function test_relation_distinct_variadic(HasOne $r): void
 }
 ?>
 --EXPECTF--
+TooFewArguments on line %d: Too few arguments for App\Models\User::addselect - expecting column to be passed

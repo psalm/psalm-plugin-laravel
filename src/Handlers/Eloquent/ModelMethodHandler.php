@@ -465,21 +465,16 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
 
         try {
             $storage = $codebase->methods->getStorage($methodId);
-        } catch (\UnexpectedValueException) {
+        } catch (\InvalidArgumentException | \UnexpectedValueException) {
             // Method exists through @mixin but has no direct storage on the class
             return $params;
         }
 
         if ($storage->variadic) {
-            if ($params !== []) {
-                // Mark the last formal param as variadic (e.g., select($columns) → select(...$columns))
-                $lastIndex = \array_key_last($params);
-                $params[$lastIndex] = clone $params[$lastIndex];
-                $params[$lastIndex]->is_variadic = true;
-            } else {
-                // Zero formal params, purely func_get_args() (e.g., distinct())
-                $params[] = new FunctionLikeParameter(name: 'args', by_ref: false, type: Type::getMixed(), is_variadic: true);
-            }
+            // Append a synthetic variadic rest param instead of marking the last formal param.
+            // Marking the last param as variadic would relax arity — e.g., addSelect($column)
+            // would accept zero args. Appending preserves the required params while allowing extras.
+            $params[] = new FunctionLikeParameter(name: 'args', by_ref: false, type: Type::getMixed(), is_variadic: true);
         }
 
         return $params;
