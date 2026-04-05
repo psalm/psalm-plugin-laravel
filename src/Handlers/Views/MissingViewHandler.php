@@ -22,7 +22,7 @@ use Psalm\Type\Union;
  * with a view name that does not correspond to an existing template file.
  *
  * Registers for both the service class (Factory) and its facades/aliases
- * (View, \Illuminate\Support\Facades\View) via FacadeMap, so the handler
+ * (View, \Illuminate\Support\Facades\View) via FacadeMapProvider, so the handler
  * fires regardless of how the developer calls make().
  *
  * Only string literal view names are checked — dynamic names and namespaced

@@ -80,6 +80,7 @@ final class FacadeMapProvider
      * Example: getFacadeClasses(Factory::class) returns
      * ['Illuminate\Support\Facades\View', 'View']
      *
+     * @param class-string $serviceClass
      * @return list<class-string>
      * @psalm-external-mutation-free
      */
