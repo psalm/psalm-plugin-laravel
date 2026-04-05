@@ -67,6 +67,9 @@ $prTiming = $results[1];
 // Exit 1 = config/runtime error, >=128 = signal (crash). hyperfine records per-run exit codes.
 foreach (['base' => $baseTiming, 'pr' => $prTiming] as $label => $timing) {
     $exitCodes = $timing['exit_codes'] ?? [];
+    if ($exitCodes === []) {
+        $fail("{$label} hyperfine results missing exit_codes — corrupt or incompatible JSON");
+    }
     $failures = array_filter($exitCodes, static fn(int $code): bool => $code === 1 || $code >= 128);
     if ($failures !== []) {
         echo "## Benchmark Results\n\n";
