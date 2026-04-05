@@ -103,10 +103,12 @@ $readLastIssueCount = static function (?string $file): ?int {
     if ($file === null || !is_file($file)) {
         return null;
     }
+
     $lines = array_filter(array_map('trim', file($file) ?: []), static fn(string $l): bool => $l !== '');
     if ($lines === []) {
         return null;
     }
+
     return (int) end($lines);
 };
 $baseIssues = $readLastIssueCount($baseIssuesFile);
@@ -117,10 +119,12 @@ $readLastStat = static function (?string $file): ?float {
     if ($file === null || !is_file($file)) {
         return null;
     }
+
     $lines = array_filter(array_map('trim', file($file) ?: []), static fn(string $l): bool => $l !== '');
     if ($lines === []) {
         return null;
     }
+
     return (float) end($lines);
 };
 $baseCoverage = $readLastStat($baseStatsFile);
@@ -189,6 +193,7 @@ if ($baseIssues !== null && $prIssues !== null) {
         number_format($issueDelta),
     );
 }
+
 if ($baseCoverage !== null && $prCoverage !== null) {
     $coverageDelta = $prCoverage - $baseCoverage;
     $coverageSign = $coverageDelta >= 0 ? '+' : '';
