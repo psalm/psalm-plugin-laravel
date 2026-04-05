@@ -96,7 +96,7 @@ final class HigherOrderCollectionProxyHandler implements
      * @psalm-pure
      */
     #[\Override]
-    public static function getMethodParams(MethodParamsProviderEvent $event): ?array
+    public static function getMethodParams(MethodParamsProviderEvent $event): array
     {
         return [
             new FunctionLikeParameter('args', false, Type::getMixed(), is_variadic: true),
