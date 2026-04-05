@@ -1,0 +1,70 @@
+<?php
+
+namespace Illuminate\Http;
+
+/**
+ * Taint annotations for UploadedFile methods that return user-controlled data.
+ *
+ * These methods extract metadata from the multipart upload request, which is
+ * entirely attacker-controlled: the filename, extension, and MIME type are sent
+ * by the client and can contain path-traversal sequences, XSS payloads, or
+ * spoofed values. The file contents are likewise user-supplied.
+ *
+ * @see \Symfony\Component\HttpFoundation\File\UploadedFile (parent)
+ */
+class UploadedFile
+{
+    /**
+     * Returns the original file name supplied by the client.
+     *
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function getClientOriginalName(): string {}
+
+    /**
+     * Returns the original file full path supplied by the client (webkitdirectory uploads).
+     *
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function getClientOriginalPath(): string {}
+
+    /**
+     * Returns the original file extension supplied by the client.
+     *
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function getClientOriginalExtension(): string {}
+
+    /**
+     * Returns the MIME type supplied by the client (Content-Type header, spoofable).
+     *
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function getClientMimeType(): string {}
+
+    /**
+     * Returns the file extension guessed from the client-supplied MIME type.
+     *
+     * @psalm-taint-source input
+     */
+    public function clientExtension() {}
+
+    /**
+     * Returns the raw contents of the uploaded file.
+     *
+     * @return false|string
+     *
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     *
+     * @psalm-taint-source input
+     */
+    public function get() {}
+}
