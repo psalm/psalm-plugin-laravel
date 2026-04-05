@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<psalm errorLevel="3"
+    xmlns="https://getpsalm.org/schema/config"
+    findUnusedCode="false"
+    findUnusedBaselineEntry="false">
+    <projectFiles>
+        <directory name="app" />
+    </projectFiles>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <failOnInternalError value="true" />
+        </pluginClass>
+    </plugins>
+    <!-- Suppress strict issues that add noise to benchmarks without affecting timing -->
+    <issueHandlers>
+        <MissingPureAnnotation errorLevel="suppress" />
+        <MissingAbstractPureAnnotation errorLevel="suppress" />
+        <MissingImmutableAnnotation errorLevel="suppress" />
+        <MissingInterfaceImmutableAnnotation errorLevel="suppress" />
+        <MissingOverrideAttribute errorLevel="suppress" />
+        <ClassMustBeFinal errorLevel="suppress" />
+    </issueHandlers>
+</psalm>
