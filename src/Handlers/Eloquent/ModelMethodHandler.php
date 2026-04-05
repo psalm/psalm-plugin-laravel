@@ -217,7 +217,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             /** @var lowercase-string $methodName */
             $customBuilderMethodId = new MethodIdentifier($builderClass, $methodName);
             if ($codebase->methodExists($customBuilderMethodId)) {
-                return $codebase->methods->getMethodParams($customBuilderMethodId);
+                return self::getParamsWithVariadicFlag($codebase, $customBuilderMethodId);
             }
         }
 
@@ -231,7 +231,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         /** @var lowercase-string $methodName */
         $queryBuilderMethodId = new MethodIdentifier(QueryBuilder::class, $methodName);
         if ($codebase->methodExists($queryBuilderMethodId)) {
-            return $codebase->methods->getMethodParams($queryBuilderMethodId);
+            return self::getParamsWithVariadicFlag($codebase, $queryBuilderMethodId);
         }
 
         // Scope method — params from the scope definition minus the first $query param.
@@ -444,6 +444,41 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         }
 
         return null;
+    }
+
+    /**
+     * Get method params, appending a synthetic variadic rest parameter when needed.
+     *
+     * Methods like Query\Builder::select() use @psalm-variadic (internally func_get_args())
+     * which sets MethodStorage::$variadic = true. But getMethodParams() returns formal params
+     * without a variadic parameter. When these methods are called statically on Models via
+     * __callStatic, Psalm checks arity against our provided params and emits TooManyArguments.
+     *
+     * This mirrors the storage-level variadic flag by appending a synthetic variadic rest
+     * parameter to the returned param list so Psalm allows extra args.
+     *
+     * @internal Used by {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler}
+     * @return list<FunctionLikeParameter>
+     */
+    public static function getParamsWithVariadicFlag(Codebase $codebase, MethodIdentifier $methodId): array
+    {
+        $params = $codebase->methods->getMethodParams($methodId);
+
+        try {
+            $storage = $codebase->methods->getStorage($methodId);
+        } catch (\UnexpectedValueException) {
+            // Method exists through @mixin but has no direct storage on the class
+            return $params;
+        }
+
+        if ($storage->variadic) {
+            // Append a synthetic variadic rest param instead of marking the last formal param.
+            // Marking the last param as variadic would relax arity — e.g., addSelect($column)
+            // would accept zero args. Appending preserves the required params while allowing extras.
+            $params[] = new FunctionLikeParameter(name: 'args', by_ref: false, type: Type::getMixed(), is_variadic: true);
+        }
+
+        return $params;
     }
 
     /** @inheritDoc */
