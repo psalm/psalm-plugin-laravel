@@ -22,12 +22,11 @@ if command -v gtime &>/dev/null; then
 elif [[ -x /usr/bin/time ]] && /usr/bin/time --version 2>&1 | grep -q GNU; then
     TIME_CMD=/usr/bin/time
 else
-    # No GNU time — run without memory capture
-    exec php -d memory_limit=-1 vendor/bin/psalm \
-        --config="$PSALM_CONFIG" --threads=1 --no-cache --no-suggestions --no-progress
+    echo "Error: GNU time is required for memory capture. Install: brew install gnu-time (macOS) or apt install time (Linux)" >&2
+    exit 1
 fi
 
-TMPFILE=$(mktemp)
+TMPFILE=$(mktemp -t psalm-bench.XXXXXX)
 trap 'rm -f "$TMPFILE"' EXIT
 
 PSALM_EXIT=0
@@ -38,6 +37,10 @@ PSALM_EXIT=0
 
 # Append peak RSS in MB (GNU time reports KB; last line to skip gtime's status prefix)
 PEAK_KB=$(tail -1 "$TMPFILE")
+if [[ ! "$PEAK_KB" =~ ^[0-9]+$ ]]; then
+    echo "Error: failed to capture valid peak RSS from GNU time: '${PEAK_KB:-<empty>}'" >&2
+    exit 1
+fi
 awk -v kb="$PEAK_KB" 'BEGIN {printf "%.1f\n", kb / 1024}' >> "$MEMORY_FILE"
 
 exit $PSALM_EXIT

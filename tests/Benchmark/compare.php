@@ -40,8 +40,13 @@ if (!is_file($hyperfineFile)) {
     $fail("hyperfine results not found: {$hyperfineFile}");
 }
 
+$hyperfineJson = file_get_contents($hyperfineFile);
+if ($hyperfineJson === false) {
+    $fail("unable to read hyperfine results: {$hyperfineFile}");
+}
+
 try {
-    $hyperfine = json_decode(file_get_contents($hyperfineFile), true, 512, JSON_THROW_ON_ERROR);
+    $hyperfine = json_decode($hyperfineJson, true, 512, JSON_THROW_ON_ERROR);
 } catch (\JsonException $e) {
     $fail("invalid hyperfine JSON: {$e->getMessage()}");
 }
@@ -59,7 +64,11 @@ $readMaxMemory = static function (string $file) use ($fail): float {
     if (!is_file($file)) {
         $fail("memory file not found: {$file}");
     }
-    $lines = array_filter(array_map('trim', file($file)), static fn(string $l): bool => $l !== '');
+    $rawLines = file($file);
+    if ($rawLines === false) {
+        $fail("failed to read memory file: {$file}");
+    }
+    $lines = array_values(array_filter(array_map('trim', $rawLines), static fn(string $l): bool => $l !== ''));
     if ($lines === []) {
         $fail("memory file is empty: {$file}");
     }
