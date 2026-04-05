@@ -18,10 +18,12 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use PhpParser;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Union;
 
 /**
- * AST-parses a model's relationship method body to extract the related model class
- * and the relationship factory method name, without invoking the method.
+ * Extracts relationship metadata from a model method's AST body and docblock annotations,
+ * without invoking the method.
  *
  * This enables property type resolution for relationship accessors even when the
  * return type lacks generic annotations. For example, given:
@@ -34,6 +36,7 @@ use Psalm\Internal\MethodIdentifier;
  * - Direct returns: return $this->belongsTo(Vault::class)
  * - Chained methods: return $this->belongsTo(Vault::class)->withDefault()
  * - No declared return type: public function image() { return $this->morphOne(Image::class, 'imageable'); }
+ * - Docblock generics for morphTo: @return MorphTo<User|Post, $this>
  *
  * @internal
  */
@@ -49,6 +52,13 @@ final class RelationMethodParser
      * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string}>
      */
     private static array $cache = [];
+
+    /** @var list<string> Types that should not be resolved as class names in generic params */
+    private const NON_CLASS_TYPES = [
+        'static', 'self', 'parent', 'null', 'int', 'string', 'bool', 'float', 'mixed',
+        'array', 'object', 'callable', 'iterable', 'void', 'never', 'true', 'false',
+        'scalar', 'numeric', 'resource',
+    ];
 
     /**
      * Maps HasRelationships factory method names to their corresponding Relation class FQCNs.
@@ -96,33 +106,13 @@ final class RelationMethodParser
      */
     private static function doParse(Codebase $codebase, string $className, string $methodName): ?array
     {
-        $methodId = $className . '::' . $methodName;
-
-        // No methodExists() guard needed — all call sites in ModelRelationshipPropertyHandler
-        // already verify method existence. The try/catch below handles missing storage safely.
-        try {
-            $methodStorage = $codebase->methods->getStorage(
-                MethodIdentifier::wrap($methodId),
-            );
-        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-            $codebase->progress->debug("Laravel plugin: could not get method storage for {$methodId}: {$e->getMessage()}\n");
+        $context = self::findClassMethodWithStatements($codebase, $className, $methodName);
+        if ($context === null) {
             return null;
         }
 
-        $location = $methodStorage->location;
-        if (!$location instanceof \Psalm\CodeLocation) {
-            return null;
-        }
-
-        try {
-            $stmts = $codebase->getStatementsForFile($location->file_path);
-        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-            $codebase->progress->debug("Laravel plugin: could not get statements for {$location->file_path}: {$e->getMessage()}\n");
-            return null;
-        }
-
-        $classMethod = self::findMethod($stmts, $className, $methodName);
-        if (!$classMethod instanceof PhpParser\Node\Stmt\ClassMethod || $classMethod->stmts === null) {
+        $classMethod = $context['classMethod'];
+        if ($classMethod->stmts === null) {
             return null;
         }
 
@@ -218,6 +208,207 @@ final class RelationMethodParser
         }
 
         return null;
+    }
+
+    /**
+     * Extract TRelatedModel from the method's docblock generic return type annotation.
+     *
+     * Used for morphTo relations where the related model can't be determined from the
+     * factory call arguments but may be annotated via @return MorphTo<User|Post, $this>.
+     *
+     * When Psalm resolves $this in generic params, it may collapse the type to a
+     * non-generic TNamedObject, losing the generic info. This method reads the raw
+     * docblock to recover it.
+     *
+     * @return ?Union The related model type (e.g. User|Post), or null if not annotated
+     */
+    public static function extractDocblockRelatedModelType(Codebase $codebase, string $className, string $methodName): ?Union
+    {
+        $context = self::findClassMethodWithStatements($codebase, $className, $methodName);
+        if ($context === null) {
+            return null;
+        }
+
+        $docComment = $context['classMethod']->getDocComment();
+        if (!$docComment instanceof \PhpParser\Comment\Doc) {
+            return null;
+        }
+
+        // Extract the first generic param from @psalm-return (preferred), @phpstan-return, or @return
+        $firstParam = self::extractFirstGenericParam($docComment->getText());
+        if ($firstParam === null) {
+            return null;
+        }
+
+        // Resolve short class names against the file's use statements
+        $useMap = self::buildUseMap($context['fileStmts']);
+        $namespace = self::extractNamespace($className);
+
+        return self::resolveTypeNames($firstParam, $useMap, $namespace);
+    }
+
+    /**
+     * Locate a ClassMethod node and its enclosing file statements.
+     *
+     * Shared by both parse() and extractDocblockRelatedModelType() to avoid
+     * duplicating the method-storage → file-statements → findMethod sequence.
+     *
+     * @return ?array{classMethod: PhpParser\Node\Stmt\ClassMethod, fileStmts: list<PhpParser\Node\Stmt>}
+     */
+    private static function findClassMethodWithStatements(Codebase $codebase, string $className, string $methodName): ?array
+    {
+        $methodId = $className . '::' . $methodName;
+
+        try {
+            $methodStorage = $codebase->methods->getStorage(
+                MethodIdentifier::wrap($methodId),
+            );
+        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+            $codebase->progress->debug("Laravel plugin: could not get method storage for {$methodId}: {$e->getMessage()}\n");
+            return null;
+        }
+
+        $location = $methodStorage->location;
+        if (!$location instanceof \Psalm\CodeLocation) {
+            return null;
+        }
+
+        try {
+            $stmts = $codebase->getStatementsForFile($location->file_path);
+        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+            $codebase->progress->debug("Laravel plugin: could not get statements for {$location->file_path}: {$e->getMessage()}\n");
+            return null;
+        }
+
+        $classMethod = self::findMethod($stmts, $className, $methodName);
+        if (!$classMethod instanceof PhpParser\Node\Stmt\ClassMethod) {
+            return null;
+        }
+
+        return ['classMethod' => $classMethod, 'fileStmts' => $stmts];
+    }
+
+    /**
+     * Extract the first generic type parameter from a docblock @return annotation.
+     *
+     * Checks @psalm-return, @phpstan-return, then @return (matching Psalm's priority).
+     * e.g. "@psalm-return MorphTo<User|Post, $this>" → "User|Post"
+     *
+     * @psalm-pure
+     */
+    private static function extractFirstGenericParam(string $docblock): ?string
+    {
+        // Psalm's priority: @psalm-return > @phpstan-return > @return
+        foreach (['@psalm-return', '@phpstan-return', '@return'] as $tag) {
+            if (\preg_match('/' . $tag . '\s+\S+<([^,>]+)/', $docblock, $matches)) {
+                return \trim($matches[1]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Build a map of short class name → FQCN from use statements in the file AST.
+     *
+     * Handles both regular use statements and group use statements (use App\Models\{User, Post}).
+     *
+     * @param list<PhpParser\Node\Stmt> $stmts
+     * @return array<string, string> alias → FQCN
+     */
+    private static function buildUseMap(array $stmts): array
+    {
+        $map = [];
+
+        foreach ($stmts as $stmt) {
+            self::collectUseStatements($stmt, $map);
+
+            // Also check inside namespace blocks
+            if ($stmt instanceof PhpParser\Node\Stmt\Namespace_) {
+                foreach ($stmt->stmts as $nsStmt) {
+                    self::collectUseStatements($nsStmt, $map);
+                }
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Collect use and group-use statements into the alias map.
+     *
+     * @param array<string, string> $map
+     */
+    private static function collectUseStatements(PhpParser\Node\Stmt $stmt, array &$map): void
+    {
+        // Only collect class imports (TYPE_NORMAL), skip use function/use const
+        if ($stmt instanceof PhpParser\Node\Stmt\Use_ && $stmt->type === PhpParser\Node\Stmt\Use_::TYPE_NORMAL) {
+            foreach ($stmt->uses as $use) {
+                $alias = $use->alias?->toString() ?? $use->name->getLast();
+                $map[$alias] = $use->name->toString();
+            }
+        } elseif ($stmt instanceof PhpParser\Node\Stmt\GroupUse && $stmt->type === PhpParser\Node\Stmt\Use_::TYPE_NORMAL) {
+            $prefix = $stmt->prefix->toString();
+            foreach ($stmt->uses as $use) {
+                $alias = $use->alias?->toString() ?? $use->name->getLast();
+                $map[$alias] = $prefix . '\\' . $use->name->toString();
+            }
+        }
+    }
+
+    /**
+     * Extract the namespace from a FQCN (everything before the last backslash).
+     *
+     * @psalm-pure
+     */
+    private static function extractNamespace(string $className): string
+    {
+        $lastSlash = \strrpos($className, '\\');
+
+        return $lastSlash !== false ? \substr($className, 0, $lastSlash) : '';
+    }
+
+    /**
+     * Resolve a pipe-separated type string (e.g. "User|Post") to a Psalm Union type.
+     *
+     * Each name is resolved against the use map, falling back to the current namespace.
+     *
+     * @param array<string, string> $useMap
+     * @psalm-pure
+     */
+    private static function resolveTypeNames(string $typeString, array $useMap, string $namespace): ?Union
+    {
+        $names = \array_map('trim', \explode('|', $typeString));
+        $atomics = [];
+
+        foreach ($names as $name) {
+            // Skip non-class types ($this, static, self, scalar types)
+            if ($name === '' || $name[0] === '$' || \in_array(\strtolower($name), self::NON_CLASS_TYPES, true)) {
+                continue;
+            }
+
+            // Already fully qualified
+            if ($name[0] === '\\') {
+                $atomics[] = new TNamedObject(\ltrim($name, '\\'));
+                continue;
+            }
+
+            // Check use map
+            if (isset($useMap[$name])) {
+                $atomics[] = new TNamedObject($useMap[$name]);
+                continue;
+            }
+
+            // Fall back to current namespace
+            $fqcn = $namespace !== '' ? $namespace . '\\' . $name : $name;
+            $atomics[] = new TNamedObject($fqcn);
+        }
+
+        if ($atomics === []) {
+            return null;
+        }
+
+        return new Union($atomics);
     }
 
     /**
