@@ -42,7 +42,6 @@ final class MethodForwardingHandler implements
     /** @var array<lowercase-string, bool> Indexed search classes for O(1) lookup in mixin interception */
     private static array $searchClassIndex = [];
 
-    /** @psalm-external-mutation-free */
     public static function init(ForwardingRule $rule): void
     {
         self::$rule = $rule;
@@ -57,7 +56,7 @@ final class MethodForwardingHandler implements
             self::$searchClassIndex[\strtolower($class)] = true;
         }
 
-        ReturnTypeResolver::resetCache();
+        ReturnTypeResolver::initForRule($rule->selfReturnIndicators);
     }
 
     /**

@@ -26,7 +26,7 @@ final class ReturnTypeResolverTest extends TestCase
     #[\Override]
     protected function setUp(): void
     {
-        ReturnTypeResolver::resetCache();
+        ReturnTypeResolver::initForRule([]);
     }
 
     #[Test]
@@ -58,7 +58,7 @@ final class ReturnTypeResolverTest extends TestCase
     }
 
     #[Test]
-    public function reset_cache_clears_internal_state(): void
+    public function initForRule_clears_cache(): void
     {
         // Access the private cache via reflection to verify reset works
         $reflection = new \ReflectionClass(ReturnTypeResolver::class);
@@ -68,7 +68,7 @@ final class ReturnTypeResolverTest extends TestCase
         $cacheProperty->setValue(null, ['test::key' => true]);
         $this->assertNotEmpty($cacheProperty->getValue());
 
-        ReturnTypeResolver::resetCache();
+        ReturnTypeResolver::initForRule([]);
 
         $this->assertEmpty($cacheProperty->getValue());
     }
