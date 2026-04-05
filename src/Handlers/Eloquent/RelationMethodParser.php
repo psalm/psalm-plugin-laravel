@@ -58,6 +58,8 @@ final class RelationMethodParser
         'static', 'self', 'parent', 'null', 'int', 'string', 'bool', 'float', 'mixed',
         'array', 'object', 'callable', 'iterable', 'void', 'never', 'true', 'false',
         'scalar', 'numeric', 'resource',
+        // Deprecated aliases recognized by Psalm's TypeTokenizer
+        'boolean', 'integer', 'double', 'real',
     ];
 
     /**
@@ -347,9 +349,20 @@ final class RelationMethodParser
                 $alias = $use->alias?->toString() ?? $use->name->getLast();
                 $map[$alias] = $use->name->toString();
             }
-        } elseif ($stmt instanceof PhpParser\Node\Stmt\GroupUse && $stmt->type === PhpParser\Node\Stmt\Use_::TYPE_NORMAL) {
+        } elseif ($stmt instanceof PhpParser\Node\Stmt\GroupUse) {
             $prefix = $stmt->prefix->toString();
             foreach ($stmt->uses as $use) {
+                // Combine statement-level and item-level type via bitwise OR, matching
+                // PhpParser's NameResolver. For "use App\Models\{User}" the GroupUse
+                // has TYPE_UNKNOWN and items have TYPE_NORMAL. For "use function App\{foo}"
+                // the GroupUse has TYPE_FUNCTION and items have TYPE_UNKNOWN.
+                $type = $stmt->type | $use->type;
+                if ($type === PhpParser\Node\Stmt\Use_::TYPE_FUNCTION
+                    || $type === PhpParser\Node\Stmt\Use_::TYPE_CONSTANT
+                ) {
+                    continue;
+                }
+
                 $alias = $use->alias?->toString() ?? $use->name->getLast();
                 $map[$alias] = $prefix . '\\' . $use->name->toString();
             }

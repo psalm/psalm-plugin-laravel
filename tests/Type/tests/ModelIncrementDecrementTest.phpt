@@ -46,5 +46,29 @@ function test_decrement_quietly(User $user): void
     $_result = $user->decrementQuietly('login_count');
     /** @psalm-check-type-exact $_result = int */
 }
+
+function test_increment_each(User $user): void
+{
+    $_result = $user->incrementEach(['login_count' => 1, 'view_count' => 5]);
+    /** @psalm-check-type-exact $_result = int */
+}
+
+function test_decrement_each(User $user): void
+{
+    $_result = $user->decrementEach(['login_count' => 1]);
+    /** @psalm-check-type-exact $_result = int */
+}
+
+function test_increment_each_with_extra(User $user): void
+{
+    $_result = $user->incrementEach(['login_count' => 1], ['last_login' => now()]);
+    /** @psalm-check-type-exact $_result = int */
+}
+
+function test_decrement_each_with_extra(User $user): void
+{
+    $_result = $user->decrementEach(['login_count' => 1], ['last_login' => now()]);
+    /** @psalm-check-type-exact $_result = int */
+}
 ?>
 --EXPECT--
