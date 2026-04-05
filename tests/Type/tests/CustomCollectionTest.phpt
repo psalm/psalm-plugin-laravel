@@ -185,6 +185,16 @@ function test_relation_get_default_collection(\Illuminate\Database\Eloquent\Rela
     return $result;
 }
 
+// --- MorphTo::get() on a union related model must not narrow to a single custom collection ---
+
+/** @param \Illuminate\Database\Eloquent\Relations\MorphTo<Post|User, Secret> $relation */
+function test_morphTo_get_union_related_collection(\Illuminate\Database\Eloquent\Relations\MorphTo $relation): Collection
+{
+    /** @psalm-check-type-exact $result = Collection<int, Post|User> */
+    $result = $relation->get();
+    return $result;
+}
+
 // === Models WITHOUT custom collection still return Eloquent\Collection ===
 
 /** @param Builder<User> $builder */
