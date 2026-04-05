@@ -32,7 +32,7 @@ final class Mechanic extends Model
     /**
      * @psalm-return HasOneThrough<Customer>
      */
-    public function carOwner(): HasOneThrough
+    public function vehicleOwner(): HasOneThrough
     {
         return $this->hasOneThrough(Customer::class, Vehicle::class);
     }
