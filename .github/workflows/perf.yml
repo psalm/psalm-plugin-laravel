@@ -234,14 +234,8 @@ jobs:
       - name: Validate benchmark results
         run: |
           php -r '
-          $json = file_get_contents("/tmp/hyperfine.json");
-          if ($json === false) { fwrite(STDERR, "Cannot read /tmp/hyperfine.json\n"); exit(1); }
-          $data = json_decode($json, true);
-          if (!is_array($data) || !isset($data["results"][0]["exit_codes"])) {
-              fwrite(STDERR, "Invalid or corrupt hyperfine JSON\n");
-              exit(1);
-          }
-          $exitCodes = $data["results"][0]["exit_codes"];
+          $data = json_decode(file_get_contents("/tmp/hyperfine.json"), true, 512, JSON_THROW_ON_ERROR);
+          $exitCodes = $data["results"][0]["exit_codes"] ?? [];
           $failures = array_filter($exitCodes, fn($c) => (int) $c === 1 || (int) $c >= 128);
           if ($failures !== []) {
               fwrite(STDERR, "Psalm failed with exit codes: " . implode(", ", $exitCodes) . "\n");
@@ -249,27 +243,13 @@ jobs:
           }
           '
 
-      # Transform to github-action-benchmark raw format
+      # Transform to github-action-benchmark format
       - name: Build trend data
         run: |
           php -r '
-          $json = file_get_contents("/tmp/hyperfine.json");
-          if ($json === false) { fwrite(STDERR, "Cannot read hyperfine.json\n"); exit(1); }
-          $h = json_decode($json, true, 512, JSON_THROW_ON_ERROR)["results"][0] ?? null;
-          if (!$h || !isset($h["mean"])) { fwrite(STDERR, "Invalid hyperfine results\n"); exit(1); }
-          $memRaw = file("/tmp/mem.txt");
-          if ($memRaw === false) { fwrite(STDERR, "Cannot read mem.txt\n"); exit(1); }
-          $memLines = array_filter(array_map("trim", $memRaw), fn($l) => $l !== "");
-          if ($memLines === []) { fwrite(STDERR, "mem.txt is empty\n"); exit(1); }
-          $memValues = [];
-          foreach ($memLines as $index => $memLine) {
-              if (!is_numeric($memLine)) {
-                  fwrite(STDERR, "Invalid memory value on line " . ($index + 1) . ": " . $memLine . "\n");
-                  exit(1);
-              }
-              $memValues[] = (float) $memLine;
-          }
-          $peakMem = max($memValues);
+          $h = json_decode(file_get_contents("/tmp/hyperfine.json"), true, 512, JSON_THROW_ON_ERROR)["results"][0];
+          $memLines = array_filter(array_map("trim", file("/tmp/mem.txt")), fn($l) => $l !== "");
+          $peakMem = max(array_map("floatval", $memLines));
           echo json_encode([
               ["name" => "Wall time",   "value" => round($h["mean"], 2),   "unit" => "s",  "range" => "± " . round($h["stddev"], 2)],
               ["name" => "Peak memory", "value" => round($peakMem, 0),     "unit" => "MB"],
