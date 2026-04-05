@@ -447,14 +447,15 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
     }
 
     /**
-     * Get method params, propagating @psalm-variadic to the last parameter.
+     * Get method params, appending a synthetic variadic rest parameter when needed.
      *
      * Methods like Query\Builder::select() use @psalm-variadic (internally func_get_args())
      * which sets MethodStorage::$variadic = true. But getMethodParams() returns formal params
-     * without the variadic flag. When these methods are called statically on Models via
+     * without a variadic parameter. When these methods are called statically on Models via
      * __callStatic, Psalm checks arity against our provided params and emits TooManyArguments.
      *
-     * This propagates the storage-level flag to the parameter level so Psalm allows extra args.
+     * This mirrors the storage-level variadic flag by appending a synthetic variadic rest
+     * parameter to the returned param list so Psalm allows extra args.
      *
      * @internal Used by {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler}
      * @return list<FunctionLikeParameter>
