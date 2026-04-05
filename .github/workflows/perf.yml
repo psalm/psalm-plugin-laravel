@@ -289,7 +289,7 @@ jobs:
       - name: Store benchmark trend
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          tool: raw
+          tool: customSmallerIsBetter
           name: Plugin Performance
           output-file-path: /tmp/benchmark-trend.json
           github-token: ${{ github.token }}
