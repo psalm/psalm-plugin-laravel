@@ -1,9 +1,2 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="7.0.0-beta17@a7f96f911fc869c40c48ec977e21f01a8ca534bd">
-  <file src="src/Handlers/Magic/ReturnTypeResolver.php">
-    <MissingPureAnnotation>
-      <code><![CDATA[initForRule]]></code>
-      <code><![CDATA[targetMethodReturnsSelf]]></code>
-    </MissingPureAnnotation>
-  </file>
-</files>
+<files psalm-version="7.0.0-beta17@a7f96f911fc869c40c48ec977e21f01a8ca534bd"/>
