@@ -78,6 +78,19 @@ abstract class Relation
     }
 
     /**
+     * Set the columns to be selected.
+     *
+     * Declared here because @psalm-variadic on Query\Builder::select does not
+     * propagate through the __call / @mixin chain.
+     *
+     * @param  array<array-key, \Closure|\Illuminate\Contracts\Database\Query\Expression|\Illuminate\Database\Query\Builder|string>|\Illuminate\Contracts\Database\Query\Expression|string  $columns
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function select($columns = ['*']) {}
+
+    /**
      * Add an "order by" clause for a timestamp to the query.
      *
      * Psalm note: ideally the type should be inferred from $this->query
