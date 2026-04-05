@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
@@ -297,14 +298,23 @@ final class ModelRelationshipPropertyHandler
      *
      * Single relations (HasOne, BelongsTo, MorphOne, MorphTo, HasOneThrough) → ?RelatedModel
      * Collection relations (HasMany, BelongsToMany, etc.) → Collection<int, RelatedModel>
+     *   — uses the model's custom collection class when registered (e.g. #[CollectedBy])
      *
      * @psalm-external-mutation-free
      */
     private static function buildPropertyType(string $relationClassName, Union $modelType): Union
     {
         if (\in_array($relationClassName, self::COLLECTION_RELATIONS, true)) {
+            // Use the model's custom collection when one is registered.
+            // Falls back to Eloquent\Collection when no custom collection exists
+            // or when the Union has no concrete Model subclass (e.g. mixed).
+            $modelClass = ModelPropertyResolver::extractModelFromUnion($modelType);
+            $collectionClass = $modelClass !== null
+                ? (CustomCollectionHandler::getCollectionClassForModel($modelClass) ?? Collection::class)
+                : Collection::class;
+
             return new Union([
-                new TGenericObject(Collection::class, [
+                new TGenericObject($collectionClass, [
                     new Union([new TInt()]),
                     $modelType,
                 ]),
