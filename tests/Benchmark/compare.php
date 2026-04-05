@@ -46,11 +46,16 @@ foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
     }
 
     try {
-        $decoded[$label] = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        $decodedValue = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     } catch (\JsonException $e) {
         fwrite(STDERR, "Error: invalid {$label} JSON in {$file}: {$e->getMessage()}\n");
         exit(2);
     }
+    if (!is_array($decodedValue)) {
+        fwrite(STDERR, "Error: {$label} JSON in {$file} must decode to an object/array\n");
+        exit(2);
+    }
+    $decoded[$label] = $decodedValue;
 }
 
 $base = $decoded['base'];
@@ -84,13 +89,16 @@ if ($baseExit > 1 || $prExit > 1) {
     exit(1);
 }
 
-// Validate base metrics are positive (zero/negative means measurement failure)
-if ($base['wall_time_s'] <= 0 || $base['peak_memory_mb'] <= 0) {
-    echo "## Benchmark Results\n\n";
-    echo "**Base benchmark metrics are invalid — results are not comparable.**\n\n";
-    echo sprintf("- Base wall_time_s: %s\n", (string) $base['wall_time_s']);
-    echo sprintf("- Base peak_memory_mb: %s\n", (string) $base['peak_memory_mb']);
-    exit(2);
+// Validate metrics are positive (zero/negative means measurement failure)
+foreach (['base' => $base, 'pr' => $pr] as $label => $data) {
+    if ($data['wall_time_s'] <= 0 || $data['peak_memory_mb'] <= 0) {
+        $displayLabel = ucfirst($label);
+        echo "## Benchmark Results\n\n";
+        echo sprintf("**%s benchmark metrics are invalid — results are not comparable.**\n\n", $displayLabel);
+        echo sprintf("- %s wall_time_s: %s\n", $displayLabel, (string) $data['wall_time_s']);
+        echo sprintf("- %s peak_memory_mb: %s\n", $displayLabel, (string) $data['peak_memory_mb']);
+        exit(2);
+    }
 }
 
 $timeDelta = $pr['wall_time_s'] - $base['wall_time_s'];
