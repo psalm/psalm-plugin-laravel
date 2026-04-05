@@ -764,7 +764,7 @@ Relation, and Collection. Never add this annotation to classes that rely on `__c
 | Suppress known false positives | **AfterClassLikeVisit** | Modify storage suppression lists |
 
 The Relation pattern uses **both**: stubs declare fluent methods so Psalm finds them before `@mixin`,
-then `RelationsMethodHandler` overrides the return type to the concrete relation subclass with
+then `MethodForwardingHandler` overrides the return type to the concrete relation subclass with
 template parameters. If the stub's `@return $this` were sufficient alone, no handler would be needed —
 but the handler ensures template params propagate correctly.
 

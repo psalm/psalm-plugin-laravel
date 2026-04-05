@@ -66,11 +66,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             // reflection works in property handlers (e.g. getTable(), getCasts())
             try {
                 if (!\class_exists($storage->name, true)) {
-                    $codebase->progress->debug("Laravel plugin: skipping model '{$storage->name}': class could not be loaded by autoloader\n");
+                    $codebase->progress->warning("Laravel plugin: skipping model '{$storage->name}': class could not be loaded by autoloader");
                     continue;
                 }
-            } catch (\Error $error) {
-                $codebase->progress->debug("Laravel plugin: skipping model '{$storage->name}': {$error->getMessage()}\n", );
+            } catch (\Error|\Exception $error) {
+                $codebase->progress->warning("Laravel plugin: skipping model '{$storage->name}': {$error->getMessage()}");
                 continue;
             }
 
@@ -250,10 +250,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             return null;
         }
 
-        // is_subclass_of() may trigger autoloading which can throw \Error for broken classes.
+        // is_subclass_of() may trigger autoloading which can throw for broken classes.
         try {
             $isValid = \is_subclass_of($builderClass, Builder::class, true);
-        } catch (\Error $error) {
+        } catch (\Error|\Exception $error) {
             $codebase->progress->debug(
                 "Laravel plugin: model '{$className}' builder '{$builderClass}' failed autoloading: {$error->getMessage()}\n",
             );
@@ -488,10 +488,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
 
         // Validate that the class is a Collection subclass.
-        // is_subclass_of() may trigger autoloading which can throw \Error for broken classes.
+        // is_subclass_of() may trigger autoloading which can throw for broken classes.
         try {
             $isValid = \is_subclass_of($collectionClass, EloquentCollection::class, true);
-        } catch (\Error $error) {
+        } catch (\Error|\Exception $error) {
             $codebase->progress->debug(
                 "Laravel plugin: model '{$className}' collection '{$collectionClass}' failed autoloading: {$error->getMessage()}\n",
             );
