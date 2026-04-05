@@ -70,6 +70,15 @@ function test_non_variadic_too_many_args(): void
 
 // --- Relation instance calls (MethodForwardingHandler) ---
 
+/** select() has its own stub on Relation — exercises Path 1 (mixin interception). */
+/** @param HasOne<Phone, User> $r */
+function test_relation_select_variadic(HasOne $r): void
+{
+    $_result = $r->select('name', 'email');
+    /** @psalm-check-type-exact $_result = HasOne<Phone, User>&static */
+}
+
+/** addSelect/distinct go through Path 2 (MethodForwardingHandler __call). */
 /** @param HasOne<Phone, User> $r */
 function test_relation_addselect_variadic(HasOne $r): void
 {
