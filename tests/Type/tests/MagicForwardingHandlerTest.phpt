@@ -86,6 +86,14 @@ function test_terminal_after_chain(): void {
     /** @psalm-check-type-exact $_ = Phone|null */
 }
 
+// firstOrFail() via Relation stub returns TRelatedModel (no |null)
+function test_firstOrFail_returns_model(): void {
+    /** @var HasOne<Phone, User> $r */
+    $r = (new User())->phone();
+    $_ = $r->firstOrFail();
+    /** @psalm-check-type-exact $_ = Phone */
+}
+
 // Non-fluent mixin method: count() returns int, not HasOne<Phone, User>
 function test_count_returns_int_not_relation(): void {
     /** @var HasOne<Phone, User> $r */
