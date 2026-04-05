@@ -262,9 +262,9 @@ final class ModelRelationshipPropertyHandler
     private static function buildPropertyType(string $relationClassName, Union $modelType): Union
     {
         if (\in_array($relationClassName, self::COLLECTION_RELATIONS, true)) {
-            // Check if the related model has a custom collection registered.
-            // extractModelFromUnion() returns null for polymorphic/unresolved models,
-            // in which case we fall back to the default Eloquent\Collection.
+            // Use the model's custom collection when one is registered.
+            // Falls back to Eloquent\Collection when no custom collection exists
+            // or when the Union has no concrete Model subclass (e.g. mixed).
             $modelClass = ModelPropertyResolver::extractModelFromUnion($modelType);
             $collectionClass = $modelClass !== null
                 ? (CustomCollectionHandler::getCollectionClassForModel($modelClass) ?? Collection::class)
