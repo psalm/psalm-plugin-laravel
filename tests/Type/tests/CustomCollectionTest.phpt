@@ -128,6 +128,51 @@ function test_collectionClass_model_all(): TagCollection
     return $result;
 }
 
+// === Relation method calls should also return custom collection (#658) ===
+// These tests document the expected behavior when calling collection-returning
+// methods directly on a Relation instance (not via Builder).
+// Currently commented out — Relation::get() is resolved from the Relation stub,
+// not via @mixin Builder, so CustomCollectionHandler doesn't fire.
+
+// --- HasMany::get() on a model with custom collection ---
+
+// /** @param \Illuminate\Database\Eloquent\Relations\HasMany<Post, \App\Models\Vault> $relation */
+// function test_relation_get_custom_collection(\Illuminate\Database\Eloquent\Relations\HasMany $relation): PostCollection
+// {
+//     /** @psalm-check-type-exact $result = PostCollection<int, Post> */
+//     $result = $relation->get();
+//     return $result;
+// }
+
+// --- BelongsToMany::get() on a model with custom collection ---
+
+// /** @param \Illuminate\Database\Eloquent\Relations\BelongsToMany<Tag, \App\Models\Vault> $relation */
+// function test_belongsToMany_get_custom_collection(\Illuminate\Database\Eloquent\Relations\BelongsToMany $relation): TagCollection
+// {
+//     /** @psalm-check-type-exact $result = TagCollection<int, Tag> */
+//     $result = $relation->get();
+//     return $result;
+// }
+
+// --- Relation::get() on model WITHOUT custom collection stays Collection ---
+
+// /** @param \Illuminate\Database\Eloquent\Relations\HasMany<\App\Models\Comment, Post> $relation */
+// function test_relation_get_default_collection(\Illuminate\Database\Eloquent\Relations\HasMany $relation): Collection
+// {
+//     /** @psalm-check-type-exact $result = Collection<int, \App\Models\Comment> */
+//     $result = $relation->get();
+//     return $result;
+// }
+
+// --- Chained: $model->relation()->get() ---
+
+// function test_chained_relation_get_custom_collection(\App\Models\Vault $vault): PostCollection
+// {
+//     /** @psalm-check-type-exact $result = PostCollection<int, Post> */
+//     $result = $vault->posts()->get();
+//     return $result;
+// }
+
 // === Models WITHOUT custom collection still return Eloquent\Collection ===
 
 /** @param Builder<User> $builder */
