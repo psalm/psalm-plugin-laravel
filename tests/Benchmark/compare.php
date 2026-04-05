@@ -78,6 +78,7 @@ if ($baseExit > 1 || $prExit > 1) {
     } else {
         echo "**Psalm did not complete analysis — results are not comparable.**\n\n";
     }
+
     echo sprintf("- Base exit code: %d%s\n", $baseExit, $baseExit >= 128 ? ' (signal ' . ($baseExit - 128) . ')' : '');
     echo sprintf("- PR exit code: %d%s\n", $prExit, $prExit >= 128 ? ' (signal ' . ($prExit - 128) . ')' : '');
     exit(1);
