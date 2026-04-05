@@ -68,9 +68,11 @@ PSALM_EXIT=0
     2>"$TMPDIR/stderr.txt" \
     || PSALM_EXIT=$?
 
-# On non-analysis failure (exit > 1), dump Psalm output to stderr for diagnostics
-if [[ $PSALM_EXIT -gt 1 ]]; then
-    echo "Warning: Psalm exited with code $PSALM_EXIT (>1 = non-analysis failure)" >&2
+# Psalm exit codes: 0 = no issues, 1 = config/runtime error, 2 = issues found.
+# Exit 0 and 2 both mean analysis completed successfully.
+# Exit 1 or >=128 (signal) means something went wrong.
+if [[ $PSALM_EXIT -eq 1 || $PSALM_EXIT -ge 128 ]]; then
+    echo "Warning: Psalm exited with code $PSALM_EXIT (config error or crash)" >&2
     cat "$TMPDIR/stderr.txt" >&2 2>/dev/null || true
 fi
 
