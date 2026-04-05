@@ -6,7 +6,7 @@
 # Usage:
 #   benchmark.sh <project-dir> [psalm-config]
 #
-# Output (stdout): {"wall_time_s": float, "peak_memory_mb": float, "psalm_exit_code": int}
+# Output (stdout): {"wall_time_s": float, "peak_memory_mb": float, "psalm_exit_code": int, "issue_count": int}
 # All other output goes to stderr so JSON stays clean.
 
 set -euo pipefail
@@ -97,5 +97,8 @@ fi
 # Convert KB to MB with 1 decimal
 PEAK_MB=$(awk -v kb="$PEAK_KB" 'BEGIN {printf "%.1f", kb / 1024}')
 
+# Extract issue count from Psalm's stderr (e.g. "329 errors found")
+ISSUE_COUNT=$(grep -oE '[0-9]+ errors? found' "$TMPDIR/stderr.txt" 2>/dev/null | grep -oE '^[0-9]+' || echo "0")
+
 # Output clean JSON to stdout
-echo "{\"wall_time_s\":$WALL_S,\"peak_memory_mb\":$PEAK_MB,\"psalm_exit_code\":$PSALM_EXIT}"
+echo "{\"wall_time_s\":$WALL_S,\"peak_memory_mb\":$PEAK_MB,\"psalm_exit_code\":$PSALM_EXIT,\"issue_count\":$ISSUE_COUNT}"
