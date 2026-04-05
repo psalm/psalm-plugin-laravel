@@ -109,12 +109,17 @@ $baseMem = $readMaxMemory($baseMemFile);
 $prMem = $readMaxMemory($prMemFile);
 
 // Read issue counts (optional — last run's value)
-$readLastIssueCount = static function (?string $file): ?int {
+$readLastIssueCount = static function (?string $file) use ($fail): ?int {
     if ($file === null || !is_file($file)) {
         return null;
     }
 
-    $lines = array_filter(array_map('trim', file($file) ?: []), static fn(string $l): bool => $l !== '');
+    $rawLines = file($file);
+    if ($rawLines === false) {
+        $fail("failed to read issues file: {$file}");
+    }
+
+    $lines = array_filter(array_map('trim', $rawLines), static fn(string $l): bool => $l !== '');
     if ($lines === []) {
         return null;
     }
@@ -125,12 +130,17 @@ $baseIssues = $readLastIssueCount($baseIssuesFile);
 $prIssues = $readLastIssueCount($prIssuesFile);
 
 // Read type coverage (optional — last run's value)
-$readLastStat = static function (?string $file): ?float {
+$readLastStat = static function (?string $file) use ($fail): ?float {
     if ($file === null || !is_file($file)) {
         return null;
     }
 
-    $lines = array_filter(array_map('trim', file($file) ?: []), static fn(string $l): bool => $l !== '');
+    $rawLines = file($file);
+    if ($rawLines === false) {
+        $fail("failed to read stats file: {$file}");
+    }
+
+    $lines = array_filter(array_map('trim', $rawLines), static fn(string $l): bool => $l !== '');
     if ($lines === []) {
         return null;
     }
