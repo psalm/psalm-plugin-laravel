@@ -47,8 +47,8 @@ if ($hyperfineJson === false) {
 
 try {
     $hyperfine = json_decode($hyperfineJson, true, 512, JSON_THROW_ON_ERROR);
-} catch (\JsonException $e) {
-    $fail("invalid hyperfine JSON: {$e->getMessage()}");
+} catch (\JsonException $jsonException) {
+    $fail("invalid hyperfine JSON: {$jsonException->getMessage()}");
 }
 
 $results = $hyperfine['results'] ?? [];
@@ -77,14 +77,17 @@ $readMaxMemory = static function (string $file) use ($fail): float {
     if (!is_file($file)) {
         $fail("memory file not found: {$file}");
     }
+
     $rawLines = file($file);
     if ($rawLines === false) {
         $fail("failed to read memory file: {$file}");
     }
+
     $lines = array_values(array_filter(array_map('trim', $rawLines), static fn(string $l): bool => $l !== ''));
     if ($lines === []) {
         $fail("memory file is empty: {$file}");
     }
+
     return max(array_map('floatval', $lines));
 };
 
