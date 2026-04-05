@@ -180,7 +180,7 @@ echo "\n";
 echo "<details><summary>Methodology</summary>\n\n";
 echo "- **App:** [Monica](https://github.com/monicahq/monica) v5.0.0-beta.5\n";
 echo "- **Runs:** 1 per version (single-threaded, no cache)\n";
-echo "- **Config:** errorLevel 3, no unused code detection\n";
+echo "- **Config:** errorLevel 1, no unused code detection\n";
 echo "</details>\n";
 
 exit($failed ? 1 : 0);
