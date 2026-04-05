@@ -67,12 +67,17 @@ foreach (['base' => $base, 'pr' => $pr] as $label => $data) {
     }
 }
 
-// Check for Psalm crashes (signal kills: exit >= 128)
+// Psalm exit codes: 0 = no errors, 1 = errors found (analysis completed), 2+ = config/runtime failure.
+// Only 0 and 1 mean analysis actually ran; anything else makes timing meaningless.
 $baseExit = (int) $base['psalm_exit_code'];
 $prExit = (int) $pr['psalm_exit_code'];
-if ($baseExit >= 128 || $prExit >= 128) {
+if ($baseExit > 1 || $prExit > 1) {
     echo "## Benchmark Results\n\n";
-    echo "**Psalm crashed during benchmark — results are not comparable.**\n\n";
+    if ($baseExit >= 128 || $prExit >= 128) {
+        echo "**Psalm crashed during benchmark — results are not comparable.**\n\n";
+    } else {
+        echo "**Psalm did not complete analysis — results are not comparable.**\n\n";
+    }
     echo sprintf("- Base exit code: %d%s\n", $baseExit, $baseExit >= 128 ? ' (signal ' . ($baseExit - 128) . ')' : '');
     echo sprintf("- PR exit code: %d%s\n", $prExit, $prExit >= 128 ? ' (signal ' . ($prExit - 128) . ')' : '');
     exit(1);
