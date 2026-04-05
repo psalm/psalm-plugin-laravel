@@ -54,7 +54,10 @@ final class RelationMethodParser
     private static array $cache = [];
 
     /** @var list<string> Types that should not be resolved as class names in generic params */
-    private const NON_CLASS_TYPES = ['static', 'self', 'null', 'int', 'string', 'bool', 'float', 'mixed'];
+    private const NON_CLASS_TYPES = [
+        'static', 'self', 'null', 'int', 'string', 'bool', 'float', 'mixed',
+        'array', 'object', 'callable', 'iterable', 'void', 'never', 'true', 'false',
+    ];
 
     /**
      * Maps HasRelationships factory method names to their corresponding Relation class FQCNs.
@@ -230,7 +233,7 @@ final class RelationMethodParser
             return null;
         }
 
-        // Extract the first generic param from @psalm-return (preferred) or @return
+        // Extract the first generic param from @psalm-return (preferred), @phpstan-return, or @return
         $firstParam = self::extractFirstGenericParam($docComment->getText());
         if ($firstParam === null) {
             return null;
@@ -337,12 +340,13 @@ final class RelationMethodParser
      */
     private static function collectUseStatements(PhpParser\Node\Stmt $stmt, array &$map): void
     {
-        if ($stmt instanceof PhpParser\Node\Stmt\Use_) {
+        // Only collect class imports (TYPE_NORMAL), skip use function/use const
+        if ($stmt instanceof PhpParser\Node\Stmt\Use_ && $stmt->type === PhpParser\Node\Stmt\Use_::TYPE_NORMAL) {
             foreach ($stmt->uses as $use) {
                 $alias = $use->alias?->toString() ?? $use->name->getLast();
                 $map[$alias] = $use->name->toString();
             }
-        } elseif ($stmt instanceof PhpParser\Node\Stmt\GroupUse) {
+        } elseif ($stmt instanceof PhpParser\Node\Stmt\GroupUse && $stmt->type === PhpParser\Node\Stmt\Use_::TYPE_NORMAL) {
             $prefix = $stmt->prefix->toString();
             foreach ($stmt->uses as $use) {
                 $alias = $use->alias?->toString() ?? $use->name->getLast();
