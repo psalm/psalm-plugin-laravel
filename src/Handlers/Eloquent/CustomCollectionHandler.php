@@ -128,7 +128,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      *
      * @psalm-external-mutation-free
      */
-    private static function getCollectionClassForModel(string $modelClass): ?string
+    public static function getCollectionClassForModel(string $modelClass): ?string
     {
         return self::$modelToCollectionMap[$modelClass] ?? null;
     }

@@ -1,6 +1,8 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Collections\PostCollection;
+use App\Collections\TagCollection;
 use App\Models\Comment;
 use App\Models\Image;
 use App\Models\Mechanic;
@@ -49,24 +51,25 @@ function test_belongsTo_chained_withDefault(Vault $vault): ?User
     return $account;
 }
 
-// --- Collection relations: Collection<int, RelatedModel> ---
+// --- Collection relations: custom collection types when registered (#645) ---
 
-/** @return Collection<int, Post> */
-function test_hasMany_without_generics(Vault $vault): Collection
+/** @return PostCollection<int, Post> */
+function test_hasMany_custom_collection(Vault $vault): PostCollection
 {
-    /** @psalm-check-type-exact $posts = Collection<int, Post> */
+    /** @psalm-check-type-exact $posts = PostCollection<int, Post> */
     $posts = $vault->posts;
     return $posts;
 }
 
-/** @return Collection<int, Tag> */
-function test_belongsToMany_without_generics(Vault $vault): Collection
+/** @return TagCollection<int, Tag> */
+function test_belongsToMany_custom_collection(Vault $vault): TagCollection
 {
-    /** @psalm-check-type-exact $tags = Collection<int, Tag> */
+    /** @psalm-check-type-exact $tags = TagCollection<int, Tag> */
     $tags = $vault->tags;
     return $tags;
 }
 
+// Comment has no custom collection — still returns default Collection
 /** @return Collection<int, Comment> */
 function test_morphMany_without_generics(Vault $vault): Collection
 {
@@ -75,6 +78,7 @@ function test_morphMany_without_generics(Vault $vault): Collection
     return $comments;
 }
 
+// Mechanic has no custom collection — still returns default Collection
 /** @return Collection<int, Mechanic> */
 function test_hasManyThrough_without_generics(Vault $vault): Collection
 {
@@ -83,10 +87,10 @@ function test_hasManyThrough_without_generics(Vault $vault): Collection
     return $mechanics;
 }
 
-/** @return Collection<int, Tag> */
-function test_morphToMany_without_generics(Vault $vault): Collection
+/** @return TagCollection<int, Tag> */
+function test_morphToMany_custom_collection(Vault $vault): TagCollection
 {
-    /** @psalm-check-type-exact $allTags = Collection<int, Tag> */
+    /** @psalm-check-type-exact $allTags = TagCollection<int, Tag> */
     $allTags = $vault->allTags;
     return $allTags;
 }
@@ -98,10 +102,10 @@ function test_hasOneThrough_without_generics(Vault $vault): ?User
     return $carOwner;
 }
 
-/** @return Collection<int, Post> */
-function test_morphedByMany_without_generics(Vault $vault): Collection
+/** @return PostCollection<int, Post> */
+function test_morphedByMany_custom_collection(Vault $vault): PostCollection
 {
-    /** @psalm-check-type-exact $posts = Collection<int, Post> */
+    /** @psalm-check-type-exact $posts = PostCollection<int, Post> */
     $posts = $vault->morphedPosts;
     return $posts;
 }
@@ -124,6 +128,7 @@ function test_no_return_type_morphOne(User $user): ?Image
     return $image;
 }
 
+// Image has no custom collection — default Collection
 /** @return Collection<int, Image> */
 function test_no_return_type_morphMany(Vault $vault): Collection
 {
@@ -147,6 +152,16 @@ function test_hasMany_with_generics(Post $post): Collection
     /** @psalm-check-type-exact $comments = Collection<int, Comment> */
     $comments = $post->comments;
     return $comments;
+}
+
+// --- Generics + custom collection: Tag has $collectionClass ---
+
+/** @return TagCollection<int, Tag> */
+function test_morphToMany_with_generics_custom_collection(Post $post): TagCollection
+{
+    /** @psalm-check-type-exact $tags = TagCollection<int, Tag> */
+    $tags = $post->tags;
+    return $tags;
 }
 ?>
 --EXPECTF--
