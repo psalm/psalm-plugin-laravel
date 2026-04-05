@@ -170,6 +170,7 @@ if ($baseIssues !== null && $prIssues !== null) {
         number_format($issueDelta),
     );
 }
+
 if ($baseCoverage !== null && $prCoverage !== null) {
     $coverageDelta = $prCoverage - $baseCoverage;
     $coverageSign = $coverageDelta >= 0 ? '+' : '';
