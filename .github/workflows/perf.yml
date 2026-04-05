@@ -25,7 +25,7 @@ concurrency:
 permissions:
   contents: read
   pull-requests: write  # needed for posting PR comments
-  issues: read
+  issues: write  # needed for comment reactions
 
 env:
   # Pinned Monica release for reproducible benchmarks.
@@ -45,7 +45,8 @@ jobs:
       || (github.event_name == 'issue_comment'
        && github.event.issue.pull_request
        && (startsWith(github.event.comment.body, '/benchmark')
-        || startsWith(github.event.comment.body, '/pr:benchmark')))
+        || startsWith(github.event.comment.body, '/pr:benchmark'))
+       && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -112,26 +113,29 @@ jobs:
               --no-interaction --no-progress --update-with-all-dependencies
             # Verify plugin was actually installed
             composer show psalm/plugin-laravel
-            cp "$plugin_path/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
+            # Always use base checkout's config so both runs use the same Psalm settings
+            cp "$GITHUB_WORKSPACE/plugin-base/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
           }
           setup_project /tmp/monica-base "$GITHUB_WORKSPACE/plugin-base"
           setup_project /tmp/monica-pr "$GITHUB_WORKSPACE/plugin-pr"
 
+      # Use base checkout's harness and compare scripts for both runs so the PR
+      # cannot alter the measurement infrastructure to hide regressions.
       - name: Benchmark base
         run: |
-          bash plugin-pr/tests/Benchmark/benchmark.sh /tmp/monica-base psalm-benchmark.xml \
+          bash plugin-base/tests/Benchmark/benchmark.sh /tmp/monica-base psalm-benchmark.xml \
             | tee /tmp/base-result.json
 
       - name: Benchmark PR
         run: |
-          bash plugin-pr/tests/Benchmark/benchmark.sh /tmp/monica-pr psalm-benchmark.xml \
+          bash plugin-base/tests/Benchmark/benchmark.sh /tmp/monica-pr psalm-benchmark.xml \
             | tee /tmp/pr-result.json
 
       - name: Compare results
         id: compare
         run: |
           set +e
-          REPORT=$(php plugin-pr/tests/Benchmark/compare.php /tmp/base-result.json /tmp/pr-result.json)
+          REPORT=$(php plugin-base/tests/Benchmark/compare.php /tmp/base-result.json /tmp/pr-result.json)
           EXIT_CODE=$?
           set -e
           echo "$REPORT"

@@ -37,8 +37,22 @@ foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
     }
 }
 
-$base = json_decode(file_get_contents($baseFile), true, 512, JSON_THROW_ON_ERROR);
-$pr = json_decode(file_get_contents($prFile), true, 512, JSON_THROW_ON_ERROR);
+$decoded = [];
+foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
+    $json = file_get_contents($file);
+    if ($json === false) {
+        fwrite(STDERR, "Error: failed to read {$label} result file: {$file}\n");
+        exit(2);
+    }
+    try {
+        $decoded[$label] = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+    } catch (\JsonException $e) {
+        fwrite(STDERR, "Error: invalid {$label} JSON in {$file}: {$e->getMessage()}\n");
+        exit(2);
+    }
+}
+$base = $decoded['base'];
+$pr = $decoded['pr'];
 
 // Validate required keys
 $required = ['wall_time_s', 'peak_memory_mb', 'psalm_exit_code'];
