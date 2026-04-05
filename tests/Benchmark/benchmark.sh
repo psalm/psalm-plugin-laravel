@@ -56,6 +56,8 @@ cd "$PROJECT_DIR"
 # Run Psalm with GNU time to capture wall time and peak memory.
 # --threads=1 for deterministic results (no scheduler noise).
 # --no-cache so every run does full analysis.
+# --output-format=json-summary gives structured issue counts on stdout.
+# --show-snippet=false reduces output size.
 PSALM_EXIT=0
 "$TIME_CMD" -f '%e %M' -o "$TMPDIR/time.txt" \
     php -d memory_limit=-1 vendor/bin/psalm \
@@ -64,6 +66,9 @@ PSALM_EXIT=0
     --no-cache \
     --no-suggestions \
     --no-progress \
+    --monochrome \
+    --show-snippet=false \
+    --output-format=json-summary \
     >"$TMPDIR/stdout.txt" \
     2>"$TMPDIR/stderr.txt" \
     || PSALM_EXIT=$?
@@ -97,8 +102,11 @@ fi
 # Convert KB to MB with 1 decimal
 PEAK_MB=$(awk -v kb="$PEAK_KB" 'BEGIN {printf "%.1f", kb / 1024}')
 
-# Extract issue count from Psalm's stderr (e.g. "329 errors found")
-ISSUE_COUNT=$(grep -oE '[0-9]+ errors? found' "$TMPDIR/stderr.txt" 2>/dev/null | grep -oE '^[0-9]+' || echo "0")
+# Extract issue count from json-summary output (sum of all issue_counts values)
+ISSUE_COUNT=$(php -r "
+    \$data = json_decode(file_get_contents('$TMPDIR/stdout.txt'), true);
+    echo array_sum(\$data['issue_counts'] ?? []);
+" 2>/dev/null || echo "0")
 
 # Output clean JSON to stdout
 echo "{\"wall_time_s\":$WALL_S,\"peak_memory_mb\":$PEAK_MB,\"psalm_exit_code\":$PSALM_EXIT,\"issue_count\":$ISSUE_COUNT}"
