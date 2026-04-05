@@ -55,8 +55,9 @@ final class RelationMethodParser
 
     /** @var list<string> Types that should not be resolved as class names in generic params */
     private const NON_CLASS_TYPES = [
-        'static', 'self', 'null', 'int', 'string', 'bool', 'float', 'mixed',
+        'static', 'self', 'parent', 'null', 'int', 'string', 'bool', 'float', 'mixed',
         'array', 'object', 'callable', 'iterable', 'void', 'never', 'true', 'false',
+        'scalar', 'numeric', 'resource',
     ];
 
     /**
