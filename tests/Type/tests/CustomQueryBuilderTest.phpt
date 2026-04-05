@@ -3,10 +3,13 @@
 
 use App\Builders\CarBuilder;
 use App\Builders\MechanicBuilder;
+use App\Builders\ServiceRecordBuilder;
 use App\Builders\PostBuilder;
+use App\Collections\ServiceRecordCollection;
 use App\Collections\PostCollection;
 use App\Models\Car;
 use App\Models\Mechanic;
+use App\Models\ServiceRecord;
 use App\Models\Post;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -336,6 +339,61 @@ function test_scope_on_static_builder_property_via_query(): void
 function test_nonexistent_method_on_custom_builder_model(): void
 {
     $_result = Post::completelyFakeMethod();
+}
+
+// -----------------------------------------------------------------------
+// Custom builder without template parameters
+// ServiceRecordBuilder extends Builder<ServiceRecord> without declaring its own @template.
+// Should return plain ServiceRecordBuilder (TNamedObject), not ServiceRecordBuilder<ServiceRecord>
+// (TGenericObject) which would trigger TooManyTemplateParams.
+// -----------------------------------------------------------------------
+
+/** Non-template builder: query() returns plain ServiceRecordBuilder. */
+function test_non_template_builder_query(): void
+{
+    $_result = ServiceRecord::query();
+    /** @psalm-check-type-exact $_result = ServiceRecordBuilder */
+}
+
+/** Non-template builder: custom method still works. */
+function test_non_template_builder_custom_method(): void
+{
+    $_result = ServiceRecord::query()->whereOpen();
+    /** @psalm-check-type-exact $_result = ServiceRecordBuilder */
+}
+
+/** Non-template builder: custom method via static call. */
+function test_non_template_builder_static_call(): void
+{
+    $_result = ServiceRecord::whereOpen();
+    /** @psalm-check-type-exact $_result = ServiceRecordBuilder */
+}
+
+/**
+ * Non-template builder: terminal get() returns base Collection, not ServiceRecordCollection.
+ *
+ * CustomCollectionHandler relies on Builder<TModel> template params to identify the model.
+ * A non-template builder (plain TNamedObject) doesn't carry template params, so collection
+ * narrowing through the builder path doesn't apply. Use Model::all() for custom collection.
+ */
+function test_non_template_builder_terminal_get(): void
+{
+    $_result = ServiceRecord::query()->get();
+    /** @psalm-check-type-exact $_result = Collection<int, ServiceRecord> */
+}
+
+/** Non-template builder: first() preserves model type. */
+function test_non_template_builder_terminal_first(): void
+{
+    $_result = ServiceRecord::query()->first();
+    /** @psalm-check-type-exact $_result = ServiceRecord|null */
+}
+
+/** Non-template collection: Model::all() returns plain ServiceRecordCollection. */
+function test_non_template_collection_all(): void
+{
+    $_result = ServiceRecord::all();
+    /** @psalm-check-type-exact $_result = ServiceRecordCollection */
 }
 ?>
 --EXPECTF--

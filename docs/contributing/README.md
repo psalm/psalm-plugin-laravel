@@ -29,8 +29,9 @@ flowchart TD
         Auth — AuthHandler, GuardHandler, RequestHandler
         Collections — CollectionPluckHandler, CollectionFilterHandler
         Console — CommandArgumentHandler
-        Eloquent — ModelRegistrationHandler, RelationsMethodHandler,
-        ModelMethodHandler, BuilderScopeHandler
+        Eloquent — ModelRegistrationHandler,
+        ModelMethodHandler, BuilderScopeHandler, CustomCollectionHandler
+        Magic — MethodForwardingHandler
         Helpers — CacheHandler, PathHandler, TransHandler
         Translations — TranslationKeyHandler
         Views — MissingViewHandler
@@ -170,7 +171,7 @@ flowchart LR
         AuthHandler, GuardHandler
         RequestHandler, ContainerHandler
         CommandArgumentHandler
-        RelationsMethodHandler
+        MethodForwardingHandler
         ModelMethodHandler
         BuilderScopeHandler, PathHandler
         CollectionPluckHandler
@@ -219,7 +220,7 @@ There are two ways to register:
 1. **Class-level** (most handlers): implement the interface, register via `$registration->registerHooksFromClass(MyHandler::class)` in `Plugin::registerHandlers()`
 2. **Closure-level** (model property handlers): register via `$providers->property_type_provider->registerClosure(...)` — used by `ModelRegistrationHandler` to bind property handlers per-model after codebase is populated
 
-See [Architecture Decisions](decisions.md) for design rationale, [Psalm Type Annotations](types.md) for a quick reference of all supported types and annotations, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
+See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Annotations](types.md) for a quick reference of all supported types and annotations, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 
 ## External resources
 

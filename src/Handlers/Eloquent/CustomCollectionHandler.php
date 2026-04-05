@@ -7,6 +7,8 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
+use Psalm\Codebase;
+use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -85,6 +87,11 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        $source = $event->getSource();
+        if (!$source instanceof StatementsAnalyzer) {
+            return null;
+        }
+
         $templateTypeParameters = $event->getTemplateTypeParameters();
 
         // Builder<TModel> — TModel is template param at index 0
@@ -96,7 +103,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         $collectionClass = self::getCollectionClassForModel($modelClass);
 
         return $collectionClass !== null
-            ? self::collectionType($collectionClass, $modelClass)
+            ? self::collectionType($collectionClass, $modelClass, $source->getCodebase())
             : null;
     }
 
@@ -114,12 +121,17 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        $source = $event->getSource();
+        if (!$source instanceof StatementsAnalyzer) {
+            return null;
+        }
+
         $calledClass = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
         $collectionClass = self::getCollectionClassForModel($calledClass);
 
         /** @var class-string<Model> $calledClass */
         return $collectionClass !== null
-            ? self::collectionType($collectionClass, $calledClass)
+            ? self::collectionType($collectionClass, $calledClass, $source->getCodebase())
             : null;
     }
 
@@ -134,17 +146,38 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Build a generic type like `CustomCollection<int, TModel>`.
+     * Build a type for the custom collection.
      *
-     * @psalm-pure
+     * If the collection class declares template parameters, returns a generic type like
+     * `CustomCollection<int, TModel>`. If it has no template params (e.g., a collection
+     * that extends `EloquentCollection<int, ConcreteModel>` without its own @template),
+     * returns a plain `TNamedObject` to avoid TooManyTemplateParams.
+     *
+     * Mirrors the template-param check in {@see ModelMethodHandler::builderType()}.
+     *
+     * Assumes custom collections always have exactly 2 class-level template parameters
+     * (TKey, TModel) inherited from EloquentCollection. This holds for all practical
+     * custom collection patterns in the Laravel ecosystem.
+     *
+     * @psalm-mutation-free
      */
-    private static function collectionType(string $collectionClass, string $modelClass): Union
+    private static function collectionType(string $collectionClass, string $modelClass, Codebase $codebase): Union
     {
-        return new Union([
-            new TGenericObject($collectionClass, [
-                Type::getInt(),
-                new Union([new TNamedObject($modelClass)]),
-            ]),
-        ]);
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($collectionClass));
+        } catch (\InvalidArgumentException) {
+            return new Union([new TNamedObject($collectionClass)]);
+        }
+
+        if ($storage->template_types !== null && $storage->template_types !== []) {
+            return new Union([
+                new TGenericObject($collectionClass, [
+                    Type::getInt(),
+                    new Union([new TNamedObject($modelClass)]),
+                ]),
+            ]);
+        }
+
+        return new Union([new TNamedObject($collectionClass)]);
     }
 }
