@@ -17,6 +17,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\CustomBuilderMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\Progress\VoidProgress;
@@ -38,9 +39,9 @@ final class CustomBuilderDetectionTest extends TestCase
         // Reset static state to prevent leaking between tests.
         // All maps and caches must be cleared together — they are interdependent.
         (new \ReflectionProperty(ModelMethodHandler::class, 'customBuilderMap'))->setValue(null, []);
-        (new \ReflectionProperty(ModelMethodHandler::class, 'builderToModelMap'))->setValue(null, []);
-        (new \ReflectionProperty(ModelMethodHandler::class, 'traitBuilderMethods'))->setValue(null, []);
         (new \ReflectionProperty(ModelMethodHandler::class, 'unresolvedCache'))->setValue(null, []);
+        (new \ReflectionProperty(CustomBuilderMethodHandler::class, 'builderToModelMap'))->setValue(null, []);
+        (new \ReflectionProperty(CustomBuilderMethodHandler::class, 'traitBuilderMethods'))->setValue(null, []);
     }
 
     #[Test]

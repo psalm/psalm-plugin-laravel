@@ -101,19 +101,19 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             // explicit registration. See https://github.com/psalm/psalm-plugin-laravel/issues/630
             $methods->existence_provider->registerClosure(
                 $customBuilder,
-                ModelMethodHandler::doesScopeMethodExistOnBuilder(...),
+                CustomBuilderMethodHandler::doesScopeMethodExistOnBuilder(...),
             );
             $methods->visibility_provider->registerClosure(
                 $customBuilder,
-                ModelMethodHandler::isScopeMethodVisibleOnBuilder(...),
+                CustomBuilderMethodHandler::isScopeMethodVisibleOnBuilder(...),
             );
             $methods->params_provider->registerClosure(
                 $customBuilder,
-                ModelMethodHandler::getScopeMethodParamsOnBuilder(...),
+                CustomBuilderMethodHandler::getScopeMethodParamsOnBuilder(...),
             );
             $methods->return_type_provider->registerClosure(
                 $customBuilder,
-                ModelMethodHandler::getScopeMethodReturnTypeOnBuilder(...),
+                CustomBuilderMethodHandler::getScopeMethodReturnTypeOnBuilder(...),
             );
         }
 
@@ -306,26 +306,26 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             unset($storage->pseudo_static_methods[$methodName]);
         }
 
-        ModelMethodHandler::registerTraitBuilderMethods($modelClass, $traitMethods);
+        CustomBuilderMethodHandler::registerTraitBuilderMethods($modelClass, $traitMethods);
 
         // Register method handlers on the custom builder class so builder instance
         // calls like Post::query()->withTrashed() also resolve correctly.
         $methods = $codebase->methods;
         $methods->existence_provider->registerClosure(
             $builderClass,
-            ModelMethodHandler::doesTraitMethodExistOnBuilder(...),
+            CustomBuilderMethodHandler::doesTraitMethodExistOnBuilder(...),
         );
         $methods->visibility_provider->registerClosure(
             $builderClass,
-            ModelMethodHandler::isTraitMethodVisibleOnBuilder(...),
+            CustomBuilderMethodHandler::isTraitMethodVisibleOnBuilder(...),
         );
         $methods->params_provider->registerClosure(
             $builderClass,
-            ModelMethodHandler::getTraitMethodParamsOnBuilder(...),
+            CustomBuilderMethodHandler::getTraitMethodParamsOnBuilder(...),
         );
         $methods->return_type_provider->registerClosure(
             $builderClass,
-            ModelMethodHandler::getTraitMethodReturnTypeOnBuilder(...),
+            CustomBuilderMethodHandler::getTraitMethodReturnTypeOnBuilder(...),
         );
     }
 
