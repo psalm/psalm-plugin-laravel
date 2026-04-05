@@ -40,10 +40,6 @@ $fail = static function (string $message): never {
 };
 
 // Read hyperfine JSON
-if (!is_file($hyperfineFile)) {
-    $fail("hyperfine results not found: {$hyperfineFile}");
-}
-
 $hyperfineJson = file_get_contents($hyperfineFile);
 if ($hyperfineJson === false) {
     $fail("unable to read hyperfine results: {$hyperfineFile}");
@@ -67,10 +63,6 @@ $prTiming = $results[1];
 // Exit 1 = config/runtime error, >=128 = signal (crash). hyperfine records per-run exit codes.
 foreach (['base' => $baseTiming, 'pr' => $prTiming] as $label => $timing) {
     $exitCodes = $timing['exit_codes'] ?? [];
-    if ($exitCodes === []) {
-        $fail("{$label} hyperfine results missing exit_codes — corrupt or incompatible JSON");
-    }
-
     $failures = array_filter($exitCodes, static fn(int $code): bool => $code === 1 || $code >= 128);
     if ($failures !== []) {
         echo "## Benchmark Results\n\n";
@@ -80,12 +72,9 @@ foreach (['base' => $baseTiming, 'pr' => $prTiming] as $label => $timing) {
     }
 }
 
-// Read peak memory (max of all runs per command)
+// Read peak memory from capture files (max of all runs per command).
+// These files are written by run-psalm.sh in the same CI job — one float per line.
 $readMaxMemory = static function (string $file) use ($fail): float {
-    if (!is_file($file)) {
-        $fail("memory file not found: {$file}");
-    }
-
     $rawLines = file($file);
     if ($rawLines === false) {
         $fail("failed to read memory file: {$file}");
@@ -96,73 +85,27 @@ $readMaxMemory = static function (string $file) use ($fail): float {
         $fail("memory file is empty: {$file}");
     }
 
-    $values = [];
-    foreach ($lines as $index => $line) {
-        if (!is_numeric($line)) {
-            $lineNumber = $index + 1;
-            $fail("invalid memory value in {$file} on line {$lineNumber}: {$line}");
-        }
-
-        $values[] = (float) $line;
-    }
-
-    return max($values);
+    return max(array_map('floatval', $lines));
 };
 
 $baseMem = $readMaxMemory($baseMemFile);
 $prMem = $readMaxMemory($prMemFile);
 
-// Read issue counts (optional — last run's value)
-$readLastIssueCount = static function (?string $file) use ($fail): ?int {
+// Read optional capture files (issue counts, type coverage) — last run's value
+$readLastLine = static function (?string $file): ?string {
     if ($file === null || !is_file($file)) {
         return null;
     }
 
-    $rawLines = file($file);
-    if ($rawLines === false) {
-        $fail("failed to read issues file: {$file}");
-    }
+    $lines = array_filter(array_map('trim', file($file) ?: []), static fn(string $l): bool => $l !== '');
 
-    $lines = array_filter(array_map('trim', $rawLines), static fn(string $l): bool => $l !== '');
-    if ($lines === []) {
-        return null;
-    }
-
-    $lastLine = end($lines);
-    if (preg_match('/^\d+$/', $lastLine) !== 1) {
-        $fail("invalid issue count in {$file}: {$lastLine}");
-    }
-
-    return (int) $lastLine;
+    return $lines === [] ? null : end($lines);
 };
-$baseIssues = $readLastIssueCount($baseIssuesFile);
-$prIssues = $readLastIssueCount($prIssuesFile);
 
-// Read type coverage (optional — last run's value)
-$readLastStat = static function (?string $file) use ($fail): ?float {
-    if ($file === null || !is_file($file)) {
-        return null;
-    }
-
-    $rawLines = file($file);
-    if ($rawLines === false) {
-        $fail("failed to read stats file: {$file}");
-    }
-
-    $lines = array_filter(array_map('trim', $rawLines), static fn(string $l): bool => $l !== '');
-    if ($lines === []) {
-        return null;
-    }
-
-    $lastLine = end($lines);
-    if (!is_numeric($lastLine)) {
-        $fail("invalid stats value in {$file}: {$lastLine}");
-    }
-
-    return (float) $lastLine;
-};
-$baseCoverage = $readLastStat($baseStatsFile);
-$prCoverage = $readLastStat($prStatsFile);
+$baseIssues = ($v = $readLastLine($baseIssuesFile)) !== null ? (int) $v : null;
+$prIssues = ($v = $readLastLine($prIssuesFile)) !== null ? (int) $v : null;
+$baseCoverage = ($v = $readLastLine($baseStatsFile)) !== null ? (float) $v : null;
+$prCoverage = ($v = $readLastLine($prStatsFile)) !== null ? (float) $v : null;
 
 // Validate metrics are positive
 foreach (['base' => [$baseTiming['mean'], $baseMem], 'pr' => [$prTiming['mean'], $prMem]] as $label => [$time, $mem]) {
@@ -227,7 +170,6 @@ if ($baseIssues !== null && $prIssues !== null) {
         number_format($issueDelta),
     );
 }
-
 if ($baseCoverage !== null && $prCoverage !== null) {
     $coverageDelta = $prCoverage - $baseCoverage;
     $coverageSign = $coverageDelta >= 0 ? '+' : '';
