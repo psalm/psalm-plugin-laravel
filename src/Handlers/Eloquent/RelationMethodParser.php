@@ -362,6 +362,7 @@ final class RelationMethodParser
                 ) {
                     continue;
                 }
+
                 $alias = $use->alias?->toString() ?? $use->name->getLast();
                 $map[$alias] = $prefix . '\\' . $use->name->toString();
             }

@@ -232,6 +232,7 @@ final class RelationMethodParserTest extends TestCase
     {
         $ref = new \ReflectionMethod(RelationMethodParser::class, 'collectUseStatements');
         $ref->setAccessible(true);
+
         $args = [$stmt, &$map];
         $ref->invokeArgs(null, $args);
     }
