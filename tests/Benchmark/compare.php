@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Build a PR benchmark report from hyperfine JSON + memory capture files.
  *
- * Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt> [base-issues.txt] [pr-issues.txt] [--time-threshold=15] [--memory-threshold=20]
+ * Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt> [base-issues.txt] [pr-issues.txt] [base-stats.txt] [pr-stats.txt] [--time-threshold=15] [--memory-threshold=20]
  *
  * Exit codes:
  *   0 = within thresholds
