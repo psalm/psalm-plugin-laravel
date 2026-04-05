@@ -456,9 +456,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
      *
      * This propagates the storage-level flag to the parameter level so Psalm allows extra args.
      *
+     * @internal Used by {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler}
      * @return list<FunctionLikeParameter>
      */
-    private static function getParamsWithVariadicFlag(Codebase $codebase, MethodIdentifier $methodId): array
+    public static function getParamsWithVariadicFlag(Codebase $codebase, MethodIdentifier $methodId): array
     {
         $params = $codebase->methods->getMethodParams($methodId);
 
