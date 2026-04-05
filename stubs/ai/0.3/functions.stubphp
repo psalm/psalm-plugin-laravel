@@ -1,0 +1,19 @@
+<?php
+
+namespace Laravel\Ai;
+
+/**
+ * Create an anonymous AI agent with the given instructions.
+ *
+ * The $instructions parameter flows directly into the LLM system prompt.
+ * User input here is a prompt injection vulnerability (TaintedLlmPrompt).
+ *
+ * @param string $instructions
+ * @param iterable $messages
+ * @param iterable $tools
+ * @param \Closure|null $schema
+ * @return \Laravel\Ai\Contracts\Agent
+ *
+ * @psalm-taint-sink llm_prompt $instructions
+ */
+function agent(string $instructions = '', iterable $messages = [], iterable $tools = [], ?\Closure $schema = null): \Laravel\Ai\Contracts\Agent {}
