@@ -30,6 +30,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @param  (callable(TValue, TKey): bool)|null  $callback
      * @param  TFirstDefault|(\Closure(): TFirstDefaultFromClosure)  $default
      * @return ($default is \Closure ? TFirstDefaultFromClosure : (TFirstDefault | TValue))
+     *
+     * @psalm-flow ($default) -> return
      */
     public function first(callable $callback = null, $default = null) {}
 
@@ -42,6 +44,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @param  TKey  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
      * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
+     *
+     * @psalm-flow ($default) -> return
      */
     public function get($key, $default = null) {}
 
@@ -63,8 +67,23 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @param  TKey  $key
      * @param  TPullDefault|(\Closure(): TPullClosureReturn)  $default
      * @return ($default is \Closure ? TPullClosureReturn : (TPullDefault | TValue))
+     *
+     * @psalm-flow ($default) -> return
      */
     public function pull($key, $default = null) {}
+
+    /**
+     * Get a value in the first item from the collection passing the given truth test.
+     *
+     * @template TValueDefault
+     *
+     * @param  string|int  $key
+     * @param  TValueDefault|(\Closure(): TValueDefault)  $default
+     * @return TValue|TValueDefault
+     *
+     * @psalm-flow ($default) -> return
+     */
+    public function value($key, $default = null) {}
 
     /**
      * @psalm-mutation-free
