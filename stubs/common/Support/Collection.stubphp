@@ -73,13 +73,15 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function pull($key, $default = null) {}
 
     /**
-     * Get a value in the first item from the collection passing the given truth test.
+     * Get a value from the first item in the collection.
+     *
+     * @psalm-mutation-free
      *
      * @template TValueDefault
      *
      * @param  string|int  $key
      * @param  TValueDefault|(\Closure(): TValueDefault)  $default
-     * @return TValue|TValueDefault
+     * @return mixed|TValueDefault
      *
      * @psalm-flow ($default) -> return
      */
