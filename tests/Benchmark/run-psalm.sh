@@ -16,6 +16,15 @@ MEMORY_FILE="$3"
 
 cd "$PROJECT_DIR"
 
+if [[ ! -f "vendor/bin/psalm" ]]; then
+    echo "Error: vendor/bin/psalm not found in $PROJECT_DIR" >&2
+    exit 1
+fi
+if [[ ! -f "$PSALM_CONFIG" ]]; then
+    echo "Error: Psalm config not found: $PSALM_CONFIG" >&2
+    exit 1
+fi
+
 # Detect GNU time for memory capture
 if command -v gtime &>/dev/null; then
     TIME_CMD=gtime
