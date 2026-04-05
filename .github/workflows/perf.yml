@@ -2,7 +2,7 @@ name: Performance Benchmark
 
 # Three triggers:
 # 1. Label "pr:benchmark-ready" added to a PR — compares PR vs base
-# 2. Comment "/benchmark" on a PR — same comparison
+# 2. Comment "/benchmark" or "/pr:benchmark" on a PR — same comparison
 # 3. Push to master — stores baseline result as artifact for historical tracking
 
 on:
@@ -44,7 +44,8 @@ jobs:
        && github.event.label.name == 'pr:benchmark-ready')
       || (github.event_name == 'issue_comment'
        && github.event.issue.pull_request
-       && startsWith(github.event.comment.body, '/benchmark'))
+       && (startsWith(github.event.comment.body, '/benchmark')
+        || startsWith(github.event.comment.body, '/pr:benchmark')))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
