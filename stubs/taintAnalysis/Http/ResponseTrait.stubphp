@@ -36,6 +36,7 @@ trait ResponseTrait
      * @param  \Symfony\Component\HttpFoundation\Cookie|string  $cookie
      * @return $this
      *
+     * @psalm-taint-sink header $cookie
      * @psalm-variadic
      */
     public function cookie($cookie) {}
@@ -49,6 +50,7 @@ trait ResponseTrait
      * @param  \Symfony\Component\HttpFoundation\Cookie|string  $cookie
      * @return $this
      *
+     * @psalm-taint-sink header $cookie
      * @psalm-variadic
      */
     public function withCookie($cookie) {}
