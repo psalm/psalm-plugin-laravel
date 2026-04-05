@@ -56,7 +56,7 @@ final class MethodForwardingHandler implements
             self::$searchClassIndex[\strtolower($class)] = true;
         }
 
-        ReturnTypeResolver::initForRule($rule->selfReturnIndicators);
+        ReturnTypeResolver::initForRule($rule);
     }
 
     /**
@@ -125,7 +125,6 @@ final class MethodForwardingHandler implements
             ?? self::extractTemplateParamsFromCaller($source, $event, $fqClassName);
 
         return ReturnTypeResolver::resolve(
-            $rule,
             $fqClassName,
             $templateParams,
             $codebase,
@@ -249,7 +248,6 @@ final class MethodForwardingHandler implements
 
             // Match! Apply Decorated forwarding with the caller's template params.
             return ReturnTypeResolver::resolve(
-                $rule,
                 $atomicType->value,
                 $atomicType->type_params,
                 $codebase,
