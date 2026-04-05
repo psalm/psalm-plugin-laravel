@@ -53,7 +53,7 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
 
         $taintFlowGraph = $source->taint_flow_graph;
 
-        if ($taintFlowGraph === null) {
+        if (!$taintFlowGraph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
             return null;
         }
 
@@ -136,7 +136,7 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
         string $locationId,
         CodeLocation $codeLocation,
     ): void {
-        if ($type === null || $type->parent_nodes === []) {
+        if (!$type instanceof \Psalm\Type\Union || $type->parent_nodes === []) {
             return;
         }
 
