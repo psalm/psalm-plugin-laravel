@@ -59,14 +59,14 @@ final class QueryBuilderSelectTest
      */
     public function addSelectDirectlyOnModel(): void
     {
-        $_ = User::query()->addSelect('name', 'email');
-        /** @psalm-check-type-exact $_ = \Illuminate\Database\Eloquent\Builder<User> */
+        $_ = User::addSelect('name', 'email');
+        /** @psalm-check-type-exact $_ = \Illuminate\Database\Eloquent\Builder<User&static> */
     }
 
     public function distinctDirectlyOnModel(): void
     {
-        $_ = User::query()->distinct('name');
-        /** @psalm-check-type-exact $_ = \Illuminate\Database\Eloquent\Builder<User> */
+        $_ = User::distinct('name');
+        /** @psalm-check-type-exact $_ = \Illuminate\Database\Eloquent\Builder<User&static> */
     }
 }
 ?>
