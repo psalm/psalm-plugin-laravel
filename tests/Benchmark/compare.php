@@ -70,6 +70,7 @@ foreach (['base' => $baseTiming, 'pr' => $prTiming] as $label => $timing) {
     if ($exitCodes === []) {
         $fail("{$label} hyperfine results missing exit_codes — corrupt or incompatible JSON");
     }
+
     $failures = array_filter($exitCodes, static fn(int $code): bool => $code === 1 || $code >= 128);
     if ($failures !== []) {
         echo "## Benchmark Results\n\n";
