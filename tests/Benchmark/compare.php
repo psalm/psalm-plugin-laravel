@@ -128,7 +128,12 @@ $readLastIssueCount = static function (?string $file) use ($fail): ?int {
         return null;
     }
 
-    return (int) end($lines);
+    $lastLine = end($lines);
+    if (preg_match('/^\d+$/', $lastLine) !== 1) {
+        $fail("invalid issue count in {$file}: {$lastLine}");
+    }
+
+    return (int) $lastLine;
 };
 $baseIssues = $readLastIssueCount($baseIssuesFile);
 $prIssues = $readLastIssueCount($prIssuesFile);
@@ -149,7 +154,12 @@ $readLastStat = static function (?string $file) use ($fail): ?float {
         return null;
     }
 
-    return (float) end($lines);
+    $lastLine = end($lines);
+    if (!is_numeric($lastLine)) {
+        $fail("invalid stats value in {$file}: {$lastLine}");
+    }
+
+    return (float) $lastLine;
 };
 $baseCoverage = $readLastStat($baseStatsFile);
 $prCoverage = $readLastStat($prStatsFile);
