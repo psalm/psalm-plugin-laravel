@@ -20,6 +20,10 @@ final class Comment extends Model
 
     /**
      * Get the owning commentable model.
+     *
+     * Uses generic annotation to narrow the polymorphic type.
+     *
+     * @psalm-return MorphTo<Post|User, $this>
      */
     public function commentable(): MorphTo
     {
