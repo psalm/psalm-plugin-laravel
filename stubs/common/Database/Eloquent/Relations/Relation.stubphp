@@ -128,6 +128,29 @@ abstract class Relation
     }
 
     /**
+     * Execute the query and get the first result.
+     *
+     * Declared here (not just on Builder) because Psalm's templated mixin resolution
+     * fails to substitute TRelatedModel when resolving non-fluent return types through
+     * the @mixin Builder<TRelatedModel> chain. The handler skips these via
+     * isInDeclaringMethodIds, so the stub types are used directly.
+     *
+     * @param  list<non-empty-string>  $columns
+     * @return TRelatedModel|null
+     */
+    public function first($columns = ['*']) {}
+
+    /**
+     * Execute the query and get the first result or throw an exception.
+     *
+     * @param  list<non-empty-string>  $columns
+     * @return TRelatedModel
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     */
+    public function firstOrFail($columns = ['*']) {}
+
+    /**
      * Execute the query and get the first result if it's the sole matching record.
      *
      * @param  list<non-empty-string>  $columns
