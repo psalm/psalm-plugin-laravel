@@ -1,0 +1,19 @@
+<?php
+
+namespace Illuminate\View;
+
+class View implements \Illuminate\Contracts\View\View, \Stringable
+{
+    // $key is marked as a sink for the array form: with(['name' => $tainted]).
+    // For the string form with('name', $tainted), only $value carries data,
+    // but Psalm cannot distinguish the two calling conventions.
+    /**
+     * @param  array|string  $key
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink html $key
+     * @psalm-taint-sink html $value
+     */
+    public function with($key, $value = null) {}
+}

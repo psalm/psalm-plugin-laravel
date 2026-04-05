@@ -1,0 +1,250 @@
+<?php
+
+namespace Illuminate\Filesystem;
+
+use Illuminate\Contracts\Filesystem\Cloud as CloudFilesystemContract;
+
+class FilesystemAdapter implements CloudFilesystemContract
+{
+    /**
+     * Determine if a file or directory exists.
+     *
+     * Not a taint sink: read-only boolean check with minimal security risk.
+     * Marking it would cause false positives in common patterns
+     * like checking if a user upload exists before serving it.
+     *
+     * @param  string  $path
+     * @return bool
+     */
+    public function exists($path) {}
+
+    /**
+     * Get the contents of a file.
+     *
+     * @param  string  $path
+     * @return string|null
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function get($path) {}
+
+    /**
+     * Get the contents of a file as decoded JSON.
+     *
+     * @param  string  $path
+     * @param  int  $flags
+     * @return array|null
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function json($path, $flags = 0) {}
+
+    /**
+     * Create a streamed response for a given file.
+     *
+     * @param  string  $path
+     * @param  string|null  $name
+     * @param  array  $headers
+     * @param  string|null  $disposition
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function response($path, $name = null, array $headers = [], $disposition = 'inline') {}
+
+    /**
+     * Create a streamed download response for a given file.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  string  $path
+     * @param  string|null  $name
+     * @param  array  $headers
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function serve(\Illuminate\Http\Request $request, $path, $name = null, array $headers = []) {}
+
+    /**
+     * Create a streamed download response for a given file.
+     *
+     * @param  string  $path
+     * @param  string|null  $name
+     * @param  array  $headers
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function download($path, $name = null, array $headers = []) {}
+
+    /**
+     * Write the contents of a file.
+     *
+     * @param  string  $path
+     * @param  \Psr\Http\Message\StreamInterface|\Illuminate\Http\File|\Illuminate\Http\UploadedFile|string|resource  $contents
+     * @param  mixed  $options
+     * @return string|bool
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function put($path, $contents, $options = []) {}
+
+    /**
+     * Store the uploaded file on the disk.
+     *
+     * @param  \Illuminate\Http\File|\Illuminate\Http\UploadedFile|string  $path
+     * @param  \Illuminate\Http\File|\Illuminate\Http\UploadedFile|string|array|null  $file
+     * @param  mixed  $options
+     * @return string|false
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function putFile($path, $file = null, $options = []) {}
+
+    /**
+     * Store the uploaded file on the disk with a given name.
+     *
+     * The $name parameter is especially dangerous as it often comes
+     * from $file->getClientOriginalName() which is user-controlled.
+     *
+     * @param  \Illuminate\Http\File|\Illuminate\Http\UploadedFile|string  $path
+     * @param  \Illuminate\Http\File|\Illuminate\Http\UploadedFile|string|array|null  $file
+     * @param  string|array|null  $name
+     * @param  mixed  $options
+     * @return string|false
+     *
+     * @psalm-taint-sink file $path
+     * @psalm-taint-sink file $name
+     */
+    public function putFileAs($path, $file, $name = null, $options = []) {}
+
+    /**
+     * Prepend to a file.
+     *
+     * @param  string  $path
+     * @param  string  $data
+     * @param  string  $separator
+     * @return bool
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function prepend($path, $data, $separator = PHP_EOL) {}
+
+    /**
+     * Append to a file.
+     *
+     * @param  string  $path
+     * @param  string  $data
+     * @param  string  $separator
+     * @return bool
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function append($path, $data, $separator = PHP_EOL) {}
+
+    /**
+     * Delete the file at a given path.
+     *
+     * @param  string|array  $paths
+     * @return bool
+     *
+     * @psalm-taint-sink file $paths
+     */
+    public function delete($paths) {}
+
+    /**
+     * Copy a file to a new location.
+     *
+     * @param  string  $from
+     * @param  string  $to
+     * @return bool
+     *
+     * @psalm-taint-sink file $from
+     * @psalm-taint-sink file $to
+     */
+    public function copy($from, $to) {}
+
+    /**
+     * Move a file to a new location.
+     *
+     * @param  string  $from
+     * @param  string  $to
+     * @return bool
+     *
+     * @psalm-taint-sink file $from
+     * @psalm-taint-sink file $to
+     */
+    public function move($from, $to) {}
+
+    /**
+     * Get a resource to read the file.
+     *
+     * @param  string  $path
+     * @return resource|null
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function readStream($path) {}
+
+    /**
+     * Write a new file using a stream.
+     *
+     * @param  string  $path
+     * @param  resource  $resource
+     * @param  array  $options
+     * @return bool
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function writeStream($path, $resource, array $options = []) {}
+
+    /**
+     * Get the URL for the file at the given path.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    public function url($path) {}
+
+    /**
+     * Get a temporary URL for the file at the given path.
+     *
+     * @param  string  $path
+     * @param  \DateTimeInterface  $expiration
+     * @param  array  $options
+     * @return string
+     */
+    public function temporaryUrl($path, $expiration, array $options = []) {}
+
+    /**
+     * Get a temporary upload URL for the file at the given path.
+     *
+     * @param  string  $path
+     * @param  \DateTimeInterface  $expiration
+     * @param  array  $options
+     * @return array
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function temporaryUploadUrl($path, $expiration, array $options = []) {}
+
+    /**
+     * Create a directory.
+     *
+     * @param  string  $path
+     * @return bool
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function makeDirectory($path) {}
+
+    /**
+     * Recursively delete a directory.
+     *
+     * @param  string  $directory
+     * @return bool
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function deleteDirectory($directory) {}
+}

@@ -85,6 +85,7 @@ function back($status = 302, $headers = [], $fallback = false) {}
  * @return non-empty-string
  *
  * @psalm-taint-escape user_secret
+ * @psalm-taint-escape system_secret
  */
 function bcrypt($value, $options = []) {}
 
@@ -124,13 +125,30 @@ function config($key = null, $default = null) {}
  * @param  bool  $raw
  * @param  string|null  $sameSite
  * @return ($name is null ? \Illuminate\Cookie\CookieJar : \Symfony\Component\HttpFoundation\Cookie)
+ *
+ * @psalm-taint-sink header $name
+ * @psalm-taint-sink header $value
+ * @psalm-taint-sink header $path
+ * @psalm-taint-sink header $domain
  */
 function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain = null, $secure = null, $httpOnly = true, $raw = false, $sameSite = null) {}
 
 // csrf_field: nothing to stub
 // csrf_token: nothing to stub
 // database_path: processed by Psalm handlers
-// decrypt: nothing to stub
+
+/**
+ * Decrypt the given value.
+ *
+ * @param  string  $value
+ * @param  bool  $unserialize
+ * @return mixed
+ *
+ * @psalm-taint-unescape user_secret
+ * @psalm-taint-unescape system_secret
+ * @psalm-flow ($value) -> return
+ */
+function decrypt($value, $unserialize = true) {}
 
 /**
  * Dispatch a job to its appropriate handler.
@@ -151,7 +169,18 @@ function dispatch($job) {}
  */
 function dispatch_sync($job, $handler = null) {}
 
-// encrypt: nothing to stub
+/**
+ * Encrypt the given value.
+ *
+ * @param  mixed  $value
+ * @param  bool  $serialize
+ * @return string
+ *
+ * @psalm-taint-escape user_secret
+ * @psalm-taint-escape system_secret
+ * @psalm-flow ($value) -> return
+ */
+function encrypt($value, $serialize = true): string {}
 
 /**
  * Dispatch an event and call the listeners.
@@ -189,7 +218,17 @@ function logs($driver = null) {}
 // method_field: nothing to stub
 // mix: nothing to stub
 // now: nothing to stub
-// old: nothing to stub
+/**
+ * Retrieve an old input item.
+ *
+ * @param  string|null  $key
+ * @param  \Illuminate\Database\Eloquent\Model|string|array|null  $default
+ * @return string|array|null
+ *
+ * @psalm-taint-source input
+ */
+function old($key = null, $default = null) {}
+
 // policy: nothing to stub
 
 /**
@@ -282,6 +321,8 @@ function route($name, $parameters = [], $absolute = true) {}
  * @param  mixed[]|string|null  $key
  * @param  mixed  $default
  * @return ($key is null ? \Illuminate\Session\SessionManager : ($key is array ? null : mixed))
+ *
+ * @psalm-taint-source input
  */
 function session($key = null, $default = null) {}
 
@@ -308,7 +349,7 @@ function to_route($route, $parameters = [], $status = 302, $headers = []) {}
  * @param  string|null  $key
  * @param  array<string, scalar>  $replace
  * @param  string|null  $locale
- * @return ($key is null ? null : mixed)
+ * @return ($key is null ? null : string|array)
  */
 function __($key = null, $replace = [], $locale = null) {}
 
@@ -342,5 +383,25 @@ function validator(array $data = [], array $rules = [], array $messages = [], ar
  * @return ($view is null ? \Illuminate\Contracts\View\Factory : (\Illuminate\View\View|\Illuminate\Contracts\View\View))
  *
  * @psalm-taint-sink html $data
+ * @psalm-taint-sink html $mergeData
  */
 function view($view = null, $data = [], $mergeData = []) {}
+
+/**
+ * Get / set the specified context value.
+ *
+ * @param  array|string|null  $key
+ * @param  mixed  $default
+ * @return ($key is string ? mixed : \Illuminate\Log\Context\Repository)
+ */
+function context($key = null, $default = null) {}
+
+/**
+ * Defer execution of the given callback.
+ *
+ * @param  callable|null  $callback
+ * @param  string|null  $name
+ * @param  bool  $always
+ * @return ($callback is null ? \Illuminate\Support\Defer\DeferredCallbackCollection : \Illuminate\Support\Defer\DeferredCallback)
+ */
+function defer(?callable $callback = null, ?string $name = null, bool $always = false) {}

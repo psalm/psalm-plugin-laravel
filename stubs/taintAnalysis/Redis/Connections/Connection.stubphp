@@ -1,0 +1,7 @@
+<?php
+
+namespace Illuminate\Redis\Connections;
+
+abstract class Connection
+{
+}
