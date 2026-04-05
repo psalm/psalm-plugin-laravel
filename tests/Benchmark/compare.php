@@ -98,6 +98,7 @@ $readMaxMemory = static function (string $file) use ($fail): float {
             $lineNumber = $index + 1;
             $fail("invalid memory value in {$file} on line {$lineNumber}: {$line}");
         }
+
         $values[] = (float) $line;
     }
 
