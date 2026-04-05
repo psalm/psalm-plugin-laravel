@@ -10,6 +10,7 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\MissingView;
+use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
@@ -17,13 +18,15 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Union;
 
 /**
- * Detects calls to the view() helper and Factory::make() with a view name
- * that does not correspond to an existing template file.
+ * Detects calls to the view() helper, Factory::make(), and View facade
+ * with a view name that does not correspond to an existing template file.
+ *
+ * Registers for both the service class (Factory) and its facades/aliases
+ * (View, \Illuminate\Support\Facades\View) via FacadeMap, so the handler
+ * fires regardless of how the developer calls make().
  *
  * Only string literal view names are checked — dynamic names and namespaced
  * views (e.g., 'mail::html.header') are skipped to avoid false positives.
- *
- * @todo Support View facade calls — see https://github.com/psalm/psalm-plugin-laravel/issues/591
  *
  * @see https://laravel.com/docs/views
  */
@@ -92,13 +95,16 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     }
 
     /**
+     * Register for Factory (direct usage) plus any facades/aliases that
+     * proxy to it (View, \Illuminate\Support\Facades\View).
+     *
      * @inheritDoc
-     * @psalm-pure
+     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [Factory::class];
+        return [Factory::class, ...FacadeMapProvider::getFacadeClasses(Factory::class)];
     }
 
     /** @inheritDoc */
