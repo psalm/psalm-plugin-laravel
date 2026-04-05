@@ -116,10 +116,16 @@ $memPct = ($memDelta / $base['peak_memory_mb']) * 100;
 $timeSign = $timeDelta >= 0 ? '+' : '';
 $memSign = $memDelta >= 0 ? '+' : '';
 
+$baseIssues = (int) ($base['issue_count'] ?? 0);
+$prIssues = (int) ($pr['issue_count'] ?? 0);
+$issueDelta = $prIssues - $baseIssues;
+$issueSign = $issueDelta >= 0 ? '+' : '';
+
 $timeRegression = $timePct > $timeThreshold;
 $memRegression = $memPct > $memoryThreshold;
 $failed = $timeRegression || $memRegression;
 
+$statusEmoji = $failed ? '🔴' : '🟢';
 $status = $failed ? 'FAIL' : 'PASS';
 
 // Exit code mismatch warning (e.g. base found no issues but PR introduced some, or vice versa)
@@ -157,8 +163,23 @@ echo sprintf(
     $memPct,
     $memRegression ? '**REGRESSION**' : '',
 );
+if ($baseIssues > 0 || $prIssues > 0) {
+    echo sprintf(
+        "| Issues found | %s | %s | %s%s |\n",
+        number_format($baseIssues),
+        number_format($prIssues),
+        $issueSign,
+        number_format($issueDelta),
+    );
+}
 echo $exitWarning;
 echo "\n";
-echo "**Status:** {$status} (thresholds: time <{$timeThreshold}%, memory <{$memoryThreshold}%)\n";
+echo "**Status:** {$statusEmoji} {$status} (thresholds: time <{$timeThreshold}%, memory <{$memoryThreshold}%)\n";
+echo "\n";
+echo "<details><summary>Methodology</summary>\n\n";
+echo "- **App:** [Monica](https://github.com/monicahq/monica) v5.0.0-beta.5\n";
+echo "- **Runs:** 1 per version (single-threaded, no cache)\n";
+echo "- **Config:** errorLevel 3, no unused code detection\n";
+echo "</details>\n";
 
 exit($failed ? 1 : 0);
