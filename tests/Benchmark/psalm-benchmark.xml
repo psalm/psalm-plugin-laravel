@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<psalm errorLevel="3"
+<psalm errorLevel="1"
     xmlns="https://getpsalm.org/schema/config"
     findUnusedCode="false"
     findUnusedBaselineEntry="false">
