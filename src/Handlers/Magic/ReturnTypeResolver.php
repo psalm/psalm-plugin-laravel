@@ -22,7 +22,7 @@ final class ReturnTypeResolver
      * Cache: method name -> returns self?
      *
      * Keyed by method name alone since the active ForwardingRule is a singleton
-     * (one rule per Psalm run). Must be cleared via resetCache() when the rule changes
+     * (one rule per Psalm run). Must be cleared via initForRule() when the rule changes
      * (e.g., in tests with multiple init() calls).
      *
      * @var array<string, bool>
@@ -65,10 +65,6 @@ final class ReturnTypeResolver
         string   $methodNameLowercase,
     ): ?Union {
         if (!self::$rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule || $sourceTemplateParams === null || $sourceTemplateParams === []) {
-            return null;
-        }
-
-        if (!self::methodExistsOnSearchClasses($codebase, self::$rule->searchClasses, $methodNameLowercase)) {
             return null;
         }
 
@@ -139,35 +135,6 @@ final class ReturnTypeResolver
         self::$selfReturnCache[$methodNameLowercase] = $result;
 
         return $result;
-    }
-
-    /**
-     * Check if the method exists on any of the search classes via declaring_method_ids.
-     *
-     * Uses ClassLikeStorage->declaring_method_ids instead of Codebase->methodExists()
-     * to avoid resolving through __call (which would give mixed return type).
-     *
-     * @param list<string> $searchClasses
-     * @psalm-mutation-free
-     */
-    private static function methodExistsOnSearchClasses(
-        Codebase $codebase,
-        array $searchClasses,
-        string $methodNameLowercase,
-    ): bool {
-        foreach ($searchClasses as $searchClass) {
-            try {
-                $classStorage = $codebase->classlike_storage_provider->get(\strtolower($searchClass));
-            } catch (\InvalidArgumentException) {
-                continue;
-            }
-
-            if (isset($classStorage->declaring_method_ids[$methodNameLowercase])) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

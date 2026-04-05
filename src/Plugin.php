@@ -186,8 +186,9 @@ final class Plugin implements PluginEntryPointInterface
                 \Illuminate\Database\Query\Builder::class,
             ],
             selfReturnIndicators: [\Illuminate\Database\Eloquent\Builder::class],
-            // All concrete Relation subclasses. MorphPivot is in the Relations namespace
-            // but extends Model (not Relation) — intentionally excluded.
+            // Relation subclasses (concrete + abstract bases, since Psalm hook lookup
+            // is exact-class). MorphPivot is in the Relations namespace but extends
+            // Model (not Relation) — intentionally excluded.
             additionalSourceClasses: [
                 \Illuminate\Database\Eloquent\Relations\BelongsTo::class,
                 \Illuminate\Database\Eloquent\Relations\BelongsToMany::class,
