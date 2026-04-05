@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
- * A single repair visit linking a vehicle to a mechanic.
+ * A single repair visit for a vehicle with related damage reports.
  *
  * Uses #[CollectedBy] to test custom collection on Relation method calls (#658).
  */

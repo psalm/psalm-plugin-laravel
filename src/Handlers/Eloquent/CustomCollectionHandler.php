@@ -135,9 +135,12 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
 
         $templateTypeParameters = $event->getTemplateTypeParameters();
 
-        // Builder<TModel> and Relation<TRelatedModel, ...> both have the model at index 0
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateTypeParameters[0] ?? null);
-        if ($modelClass === null) {
+        // Builder<TModel> and Relation<TRelatedModel, ...> both have the model at index 0.
+        // Skip union types (e.g., MorphTo<Post|User>) — each model may use a different
+        // custom collection, making the narrowing ambiguous.
+        $templateUnion = $templateTypeParameters[0] ?? null;
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion);
+        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion)) {
             return null;
         }
 
@@ -184,6 +187,33 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
     public static function getCollectionClassForModel(string $modelClass): ?string
     {
         return self::$modelToCollectionMap[$modelClass] ?? null;
+    }
+
+    /**
+     * Check if a Union contains more than one Model subclass type.
+     *
+     * Used to skip narrowing for union types like MorphTo<Post|User> where each
+     * model may use a different custom collection.
+     *
+     * @psalm-mutation-free
+     */
+    private static function hasMultipleModelTypes(?Union $union): bool
+    {
+        if (!$union instanceof Union) {
+            return false;
+        }
+
+        $count = 0;
+        foreach ($union->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNamedObject && \is_a($atomic->value, Model::class, true)) {
+                $count++;
+                if ($count > 1) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
