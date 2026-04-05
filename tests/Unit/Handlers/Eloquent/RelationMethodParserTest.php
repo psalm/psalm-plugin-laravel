@@ -153,6 +153,48 @@ final class RelationMethodParserTest extends TestCase
         $this->assertArrayHasKey('App\\Models\\User', $atomics);
     }
 
+    // --- collectUseStatements ---
+
+    #[Test]
+    public function collect_use_statements_handles_group_use(): void
+    {
+        // use App\Models\{User, Post}; — PhpParser sets GroupUse->type = TYPE_UNKNOWN (0),
+        // items get TYPE_NORMAL (1). Bitwise OR gives TYPE_NORMAL → collected.
+        $groupUse = new \PhpParser\Node\Stmt\GroupUse(
+            new \PhpParser\Node\Name('App\\Models'),
+            [
+                new \PhpParser\Node\UseItem(new \PhpParser\Node\Name('User'), null, \PhpParser\Node\Stmt\Use_::TYPE_NORMAL),
+                new \PhpParser\Node\UseItem(new \PhpParser\Node\Name('Post'), null, \PhpParser\Node\Stmt\Use_::TYPE_NORMAL),
+            ],
+            \PhpParser\Node\Stmt\Use_::TYPE_UNKNOWN,
+        );
+
+        $map = [];
+        $this->callCollectUseStatements($groupUse, $map);
+
+        $this->assertSame(['User' => 'App\\Models\\User', 'Post' => 'App\\Models\\Post'], $map);
+    }
+
+    #[Test]
+    public function collect_use_statements_skips_group_use_function(): void
+    {
+        // use function App\Helpers\{foo, bar}; — GroupUse->type = TYPE_FUNCTION (2),
+        // items get TYPE_UNKNOWN (0). Bitwise OR gives TYPE_FUNCTION → skipped.
+        $groupUse = new \PhpParser\Node\Stmt\GroupUse(
+            new \PhpParser\Node\Name('App\\Helpers'),
+            [
+                new \PhpParser\Node\UseItem(new \PhpParser\Node\Name('foo')),
+                new \PhpParser\Node\UseItem(new \PhpParser\Node\Name('bar')),
+            ],
+            \PhpParser\Node\Stmt\Use_::TYPE_FUNCTION,
+        );
+
+        $map = [];
+        $this->callCollectUseStatements($groupUse, $map);
+
+        $this->assertSame([], $map);
+    }
+
     // --- extractNamespace ---
 
     #[Test]
@@ -176,5 +218,22 @@ final class RelationMethodParserTest extends TestCase
         $ref->setAccessible(true);
 
         return $ref->invoke(null, ...$args);
+    }
+
+    /**
+     * Call collectUseStatements which takes a by-reference $map parameter.
+     *
+     * ReflectionMethod::invoke() does not support pass-by-reference, so we
+     * use invokeArgs() with an explicit reference in the args array.
+     *
+     * @param array<string, string> $map
+     */
+    private function callCollectUseStatements(\PhpParser\Node\Stmt $stmt, array &$map): void
+    {
+        $ref = new \ReflectionMethod(RelationMethodParser::class, 'collectUseStatements');
+        $ref->setAccessible(true);
+
+        $args = [$stmt, &$map];
+        $ref->invokeArgs(null, $args);
     }
 }

@@ -4,6 +4,9 @@ namespace Illuminate\Database\Eloquent;
 
 use ArrayAccess;
 use JsonSerializable;
+use Stringable;
+use Illuminate\Contracts\Broadcasting\HasBroadcastChannel;
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
 use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Routing\UrlRoutable;
@@ -14,7 +17,7 @@ use Illuminate\Support\Traits\ForwardsCalls;
  * @implements \ArrayAccess<string, mixed>
  * @mixin \Illuminate\Database\Eloquent\Builder<static>
  */
-abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializable, QueueableEntity, UrlRoutable
+abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToString, HasBroadcastChannel, Jsonable, JsonSerializable, QueueableEntity, Stringable, UrlRoutable
 {
     use Concerns\HasAttributes,
             Concerns\HasEvents,
@@ -231,4 +234,22 @@ abstract class Model implements ArrayAccess, Arrayable, Jsonable, JsonSerializab
      * @return int
      */
     public function decrementQuietly($column, $amount = 1, array $extra = []) {}
+
+    /**
+     * Increment each given column's value by the given amounts.
+     *
+     * @param  array<string, float|int>  $columns
+     * @param  array<string, mixed>  $extra
+     * @return int
+     */
+    public function incrementEach(array $columns, array $extra = []) {}
+
+    /**
+     * Decrement each given column's value by the given amounts.
+     *
+     * @param  array<string, float|int>  $columns
+     * @param  array<string, mixed>  $extra
+     * @return int
+     */
+    public function decrementEach(array $columns, array $extra = []) {}
 }
