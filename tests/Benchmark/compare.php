@@ -44,6 +44,7 @@ foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
         fwrite(STDERR, "Error: failed to read {$label} result file: {$file}\n");
         exit(2);
     }
+
     try {
         $decoded[$label] = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     } catch (\JsonException $e) {
@@ -51,6 +52,7 @@ foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
         exit(2);
     }
 }
+
 $base = $decoded['base'];
 $pr = $decoded['pr'];
 
