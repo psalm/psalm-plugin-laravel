@@ -70,11 +70,17 @@ PSALM_EXIT=0
 
 # Parse GNU time output (last line — gtime prepends a status line on non-zero exit).
 # "%e" = elapsed wall seconds, "%M" = max RSS in KB.
-read -r WALL_S PEAK_KB < <(tail -1 "$TMPDIR/time.txt")
+# read can fail under set -e if time.txt is empty (e.g. Psalm was killed before gtime wrote)
+if ! read -r WALL_S PEAK_KB < <(tail -1 "$TMPDIR/time.txt"); then
+    echo "Error: failed to parse GNU time output (empty or missing)" >&2
+    echo "Psalm exit code was $PSALM_EXIT (137=OOM, 139=segfault)" >&2
+    cat "$TMPDIR/time.txt" >&2 2>/dev/null || true
+    exit 1
+fi
 
-# Validate parsed values are numeric (guards against empty/corrupt time output from crashes)
+# Validate parsed values are numeric (guards against corrupt time output)
 if ! [[ "$WALL_S" =~ ^[0-9.]+$ ]] || ! [[ "$PEAK_KB" =~ ^[0-9]+$ ]]; then
-    echo "Error: failed to parse GNU time output" >&2
+    echo "Error: non-numeric GNU time output: WALL_S='$WALL_S' PEAK_KB='$PEAK_KB'" >&2
     echo "Psalm exit code was $PSALM_EXIT (137=OOM, 139=segfault)" >&2
     cat "$TMPDIR/time.txt" >&2 2>/dev/null || true
     exit 1

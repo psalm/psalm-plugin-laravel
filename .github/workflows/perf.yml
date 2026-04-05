@@ -70,12 +70,12 @@ jobs:
           PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
           PR_JSON=$(gh pr view "$PR_NUMBER" \
             --repo ${{ github.repository }} \
-            --json headRefOid,baseRefOid,headRefName,number,headRepositoryOwner)
-          # Refuse to run on fork PRs — they could execute untrusted code with write token
-          HEAD_OWNER=$(echo "$PR_JSON" | jq -r .headRepositoryOwner.login)
-          REPO_OWNER="${{ github.repository_owner }}"
-          if [ "$HEAD_OWNER" != "$REPO_OWNER" ]; then
-            echo "::error::Refusing to benchmark fork PR (head: $HEAD_OWNER, expected: $REPO_OWNER)"
+            --json headRefOid,baseRefOid,headRefName,number,headRepository)
+          # Refuse to run unless PR head is from this exact repository (not a same-org fork)
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r .headRepository.nameWithOwner)
+          EXPECTED_REPO="${{ github.repository }}"
+          if [ "$HEAD_REPO" != "$EXPECTED_REPO" ]; then
+            echo "::error::Refusing to benchmark PR from a different repository (head: $HEAD_REPO, expected: $EXPECTED_REPO)"
             exit 1
           fi
           echo "head_sha=$(echo "$PR_JSON" | jq -r .headRefOid)" >> "$GITHUB_OUTPUT"
