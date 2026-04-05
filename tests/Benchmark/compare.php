@@ -51,10 +51,12 @@ foreach (['base' => $baseFile, 'pr' => $prFile] as $label => $file) {
         fwrite(STDERR, "Error: invalid {$label} JSON in {$file}: {$e->getMessage()}\n");
         exit(2);
     }
+
     if (!is_array($decodedValue)) {
         fwrite(STDERR, "Error: {$label} JSON in {$file} must decode to an object/array\n");
         exit(2);
     }
+
     $decoded[$label] = $decodedValue;
 }
 
