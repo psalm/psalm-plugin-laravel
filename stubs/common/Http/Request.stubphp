@@ -2,9 +2,14 @@
 
 namespace Illuminate\Http;
 
+use ArrayAccess;
+use Illuminate\Contracts\Support\Arrayable;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
-class Request extends SymfonyRequest
+/**
+ * @implements ArrayAccess<string, mixed>
+ */
+class Request extends SymfonyRequest implements Arrayable, ArrayAccess
 {
     /**
      * Retrieve a header from the request.
