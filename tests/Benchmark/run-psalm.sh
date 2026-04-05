@@ -11,9 +11,9 @@
 
 set -euo pipefail
 
-PROJECT_DIR="${1:?Usage: run-psalm.sh <project-dir> <psalm-config> <memory-file> [issues-file]}"
-PSALM_CONFIG="$2"
-MEMORY_FILE="$3"
+PROJECT_DIR="${1:?Usage: run-psalm.sh <project-dir> <psalm-config> <memory-file> [issues-file] [stats-file]}"
+PSALM_CONFIG="${2:?Usage: run-psalm.sh <project-dir> <psalm-config> <memory-file> [issues-file] [stats-file]}"
+MEMORY_FILE="${3:?Usage: run-psalm.sh <project-dir> <psalm-config> <memory-file> [issues-file] [stats-file]}"
 ISSUES_FILE="${4:-}"
 STATS_FILE="${5:-}"
 
