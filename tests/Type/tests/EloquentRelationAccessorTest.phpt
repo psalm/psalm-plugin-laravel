@@ -4,6 +4,7 @@
 use App\Collections\PostCollection;
 use App\Collections\TagCollection;
 use App\Models\Comment;
+use App\Models\DamageReport;
 use App\Models\Image;
 use App\Models\Mechanic;
 use App\Models\Phone;
@@ -11,6 +12,8 @@ use App\Models\Post;
 use App\Models\Tag;
 use App\Models\User;
 use App\Models\Vault;
+use App\Models\Vehicle;
+use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 
@@ -131,6 +134,13 @@ function test_morphTo_with_return_generics(Image $image): Post|User|null
     /** @psalm-check-type-exact $imageable = Post|User|null */
     $imageable = $image->imageable;
     return $imageable;
+}
+
+function test_morphTo_with_phpstan_return_generics(DamageReport $report): Vehicle|WorkOrder|null
+{
+    /** @psalm-check-type-exact $reportable = Vehicle|WorkOrder|null */
+    $reportable = $report->reportable;
+    return $reportable;
 }
 
 // --- No declared return type: inferred from method body ---
