@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 
-# Wrapper for hyperfine: runs Psalm and captures peak memory as a side effect.
-# hyperfine handles timing; this script captures what hyperfine can't (peak RSS).
+# Wrapper for hyperfine: runs Psalm and captures peak memory + issue count as side effects.
+# hyperfine handles timing; this script captures what hyperfine can't (peak RSS, issue count).
 #
-# Usage: run-psalm.sh <project-dir> <psalm-config> <memory-file>
+# Usage: run-psalm.sh <project-dir> <psalm-config> <memory-file> [issues-file] [stats-file]
 #
 # The memory file receives peak RSS in MB (one value per line, appended).
+# The issues file receives issue count (one value per line, appended).
 # Psalm's exit code is passed through.
 
 set -euo pipefail
 
-PROJECT_DIR="${1:?Usage: run-psalm.sh <project-dir> <psalm-config> <memory-file>}"
+PROJECT_DIR="${1:?Usage: run-psalm.sh <project-dir> <psalm-config> <memory-file> [issues-file]}"
 PSALM_CONFIG="$2"
 MEMORY_FILE="$3"
+ISSUES_FILE="${4:-}"
+STATS_FILE="${5:-}"
 
 cd "$PROJECT_DIR"
 
@@ -36,12 +39,14 @@ else
 fi
 
 TMPFILE=$(mktemp -t psalm-bench.XXXXXX)
-trap 'rm -f "$TMPFILE"' EXIT
+PSALM_OUT=$(mktemp -t psalm-out.XXXXXX)
+trap 'rm -f "$TMPFILE" "$PSALM_OUT"' EXIT
 
 PSALM_EXIT=0
 "$TIME_CMD" -f '%M' -o "$TMPFILE" \
     php -d memory_limit=-1 vendor/bin/psalm \
     --config="$PSALM_CONFIG" --threads=1 --no-cache --no-suggestions --no-progress \
+    >"$PSALM_OUT" 2>&1 \
     || PSALM_EXIT=$?
 
 # Append peak RSS in MB (GNU time reports KB; last line to skip gtime's status prefix)
@@ -51,5 +56,20 @@ if [[ ! "$PEAK_KB" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 awk -v kb="$PEAK_KB" 'BEGIN {printf "%.1f\n", kb / 1024}' >> "$MEMORY_FILE"
+
+# Parse Psalm summary (strip ANSI codes first)
+CLEAN_OUT=$(sed 's/\x1b\[[0-9;]*m//g' "$PSALM_OUT")
+
+# Append issue count (from summary line like "2000 errors found")
+if [[ -n "$ISSUES_FILE" ]]; then
+    ISSUE_COUNT=$(echo "$CLEAN_OUT" | sed -n 's/^\([0-9]*\) error.*/\1/p' | tail -1)
+    echo "${ISSUE_COUNT:-0}" >> "$ISSUES_FILE"
+fi
+
+# Append type coverage percentage (from "infer types for 95.2214% of the codebase")
+if [[ -n "$STATS_FILE" ]]; then
+    TYPE_COVERAGE=$(echo "$CLEAN_OUT" | sed -n 's/.*infer types for \([0-9.]*\)%.*/\1/p' | tail -1)
+    echo "${TYPE_COVERAGE:-}" >> "$STATS_FILE"
+fi
 
 exit $PSALM_EXIT

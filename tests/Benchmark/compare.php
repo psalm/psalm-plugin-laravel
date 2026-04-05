@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Build a PR benchmark report from hyperfine JSON + memory capture files.
  *
- * Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt> [--time-threshold=15] [--memory-threshold=20]
+ * Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt> [base-issues.txt] [pr-issues.txt] [--time-threshold=15] [--memory-threshold=20]
  *
  * Exit codes:
  *   0 = within thresholds
@@ -23,11 +23,15 @@ $positional = array_values(array_filter(
 ));
 
 if (count($positional) < 3) {
-    fwrite(STDERR, "Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt>\n");
+    fwrite(STDERR, "Usage: php compare.php <hyperfine.json> <base-mem.txt> <pr-mem.txt> [base-issues.txt] [pr-issues.txt]\n");
     exit(2);
 }
 
 [$hyperfineFile, $baseMemFile, $prMemFile] = $positional;
+$baseIssuesFile = $positional[3] ?? null;
+$prIssuesFile = $positional[4] ?? null;
+$baseStatsFile = $positional[5] ?? null;
+$prStatsFile = $positional[6] ?? null;
 
 $fail = static function (string $message): never {
     echo "## Benchmark Results\n\n**Error:** {$message}\n";
@@ -94,6 +98,34 @@ $readMaxMemory = static function (string $file) use ($fail): float {
 $baseMem = $readMaxMemory($baseMemFile);
 $prMem = $readMaxMemory($prMemFile);
 
+// Read issue counts (optional — last run's value)
+$readLastIssueCount = static function (?string $file): ?int {
+    if ($file === null || !is_file($file)) {
+        return null;
+    }
+    $lines = array_filter(array_map('trim', file($file) ?: []), static fn(string $l): bool => $l !== '');
+    if ($lines === []) {
+        return null;
+    }
+    return (int) end($lines);
+};
+$baseIssues = $readLastIssueCount($baseIssuesFile);
+$prIssues = $readLastIssueCount($prIssuesFile);
+
+// Read type coverage (optional — last run's value)
+$readLastStat = static function (?string $file): ?float {
+    if ($file === null || !is_file($file)) {
+        return null;
+    }
+    $lines = array_filter(array_map('trim', file($file) ?: []), static fn(string $l): bool => $l !== '');
+    if ($lines === []) {
+        return null;
+    }
+    return (float) end($lines);
+};
+$baseCoverage = $readLastStat($baseStatsFile);
+$prCoverage = $readLastStat($prStatsFile);
+
 // Validate metrics are positive
 foreach (['base' => [$baseTiming['mean'], $baseMem], 'pr' => [$prTiming['mean'], $prMem]] as $label => [$time, $mem]) {
     if ($time <= 0 || $mem <= 0) {
@@ -146,6 +178,28 @@ echo sprintf(
     $memPct,
     $memRegression ? '**REGRESSION**' : '',
 );
+if ($baseIssues !== null && $prIssues !== null) {
+    $issueDelta = $prIssues - $baseIssues;
+    $issueSign = $issueDelta >= 0 ? '+' : '';
+    echo sprintf(
+        "| Issues found | %s | %s | %s%s |\n",
+        number_format($baseIssues),
+        number_format($prIssues),
+        $issueSign,
+        number_format($issueDelta),
+    );
+}
+if ($baseCoverage !== null && $prCoverage !== null) {
+    $coverageDelta = $prCoverage - $baseCoverage;
+    $coverageSign = $coverageDelta >= 0 ? '+' : '';
+    echo sprintf(
+        "| Type coverage | %.2f%% | %.2f%% | %s%.2f%% |\n",
+        $baseCoverage,
+        $prCoverage,
+        $coverageSign,
+        $coverageDelta,
+    );
+}
 
 echo sprintf(
     "\n*%d run(s), 1 warmup. Measured by [hyperfine](https://github.com/sharkdp/hyperfine).*\n",

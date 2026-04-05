@@ -1,11 +1,13 @@
 name: Performance Benchmark
 
-# Three triggers:
+# Four triggers:
 # 1. Label "pr:benchmark-ready" added to a PR — compares PR vs base
 # 2. Comment "/benchmark" or "/pr:benchmark" on a PR — same comparison
 # 3. Push to master — stores baseline for historical trend tracking
+# 4. Manual dispatch — runs baseline on the selected branch
 
 on:
+  workflow_dispatch:
   pull_request:
     types: [labeled]
   issue_comment:
@@ -133,13 +135,14 @@ jobs:
       - name: Benchmark with hyperfine
         run: |
           HARNESS="$GITHUB_WORKSPACE/plugin-base/tests/Benchmark/run-psalm.sh"
-          > /tmp/mem-base.txt
-          > /tmp/mem-pr.txt
+          > /tmp/mem-base.txt && > /tmp/mem-pr.txt
+          > /tmp/issues-base.txt && > /tmp/issues-pr.txt
+          > /tmp/stats-base.txt && > /tmp/stats-pr.txt
           hyperfine \
             --warmup 1 \
             --runs "$HYPERFINE_RUNS" \
-            --command-name base "bash \"$HARNESS\" /tmp/monica-base psalm-benchmark.xml /tmp/mem-base.txt" \
-            --command-name pr   "bash \"$HARNESS\" /tmp/monica-pr   psalm-benchmark.xml /tmp/mem-pr.txt" \
+            --command-name base "bash \"$HARNESS\" /tmp/monica-base psalm-benchmark.xml /tmp/mem-base.txt /tmp/issues-base.txt /tmp/stats-base.txt" \
+            --command-name pr   "bash \"$HARNESS\" /tmp/monica-pr   psalm-benchmark.xml /tmp/mem-pr.txt /tmp/issues-pr.txt /tmp/stats-pr.txt" \
             --export-json /tmp/hyperfine.json \
             --ignore-failure
           echo "--- hyperfine results ---"
@@ -150,7 +153,9 @@ jobs:
         run: |
           set +e
           REPORT=$(php plugin-base/tests/Benchmark/compare.php \
-            /tmp/hyperfine.json /tmp/mem-base.txt /tmp/mem-pr.txt)
+            /tmp/hyperfine.json /tmp/mem-base.txt /tmp/mem-pr.txt \
+            /tmp/issues-base.txt /tmp/issues-pr.txt \
+            /tmp/stats-base.txt /tmp/stats-pr.txt)
           EXIT_CODE=$?
           set -e
           echo "$REPORT"
@@ -176,7 +181,7 @@ jobs:
 
   # ── Master baseline: stores result + historical trend ────────────────
   master-baseline:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
