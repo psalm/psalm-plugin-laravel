@@ -74,8 +74,8 @@ function storageReadStream(\Illuminate\Http\Request $request, \Illuminate\Filesy
 }
 
 function storageWriteStream(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
-    /** @var resource $stream */
-    $stream = null;
+    $stream = tmpfile();
+    assert($stream !== false);
     $fs->writeStream($request->input('path'), $stream);
 }
 
