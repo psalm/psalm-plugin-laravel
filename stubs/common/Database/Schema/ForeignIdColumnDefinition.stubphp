@@ -1,0 +1,34 @@
+<?php
+
+namespace Illuminate\Database\Schema;
+
+/**
+ * Stub for ForeignIdColumnDefinition.
+ *
+ * Redeclares commonly-chained fluent methods so their return type stays
+ * ForeignIdColumnDefinition, preserving access to constrained() and references()
+ * after chaining calls like nullable().
+ */
+class ForeignIdColumnDefinition extends ColumnDefinition
+{
+    /** Allow NULL values to be inserted into the column. */
+    public function nullable(bool $value = true): ForeignIdColumnDefinition {}
+
+    /** Specify a "default" value for the column. */
+    public function default(mixed $value): ForeignIdColumnDefinition {}
+
+    /** Add a comment to the column (MySQL/PostgreSQL). */
+    public function comment(string $comment): ForeignIdColumnDefinition {}
+
+    /** Set the INTEGER column as UNSIGNED (MySQL). */
+    public function unsigned(): ForeignIdColumnDefinition {}
+
+    /** Place the column "after" another column (MySQL). */
+    public function after(string $column): ForeignIdColumnDefinition {}
+
+    /** Create a foreign key constraint referencing the "id" column of the related table. */
+    public function constrained(?string $table = null, ?string $column = null, ?string $indexName = null): ForeignKeyDefinition {}
+
+    /** Specify which column this foreign ID references on another table. */
+    public function references(string $column, ?string $indexName = null): ForeignKeyDefinition {}
+}

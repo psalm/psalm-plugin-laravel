@@ -8,6 +8,8 @@ use Illuminate\Foundation\Application;
 use Psalm\LaravelPlugin\Handlers\Application\ContainerHandler;
 use Psalm\LaravelPlugin\Handlers\Application\OffsetHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
+use Psalm\LaravelPlugin\Handlers\Collections\CollectionFilterHandler;
+use Psalm\LaravelPlugin\Handlers\Collections\CollectionFlattenHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardHandler;
 use Psalm\LaravelPlugin\Handlers\Auth\RequestHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
@@ -174,6 +176,11 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(RelationsMethodHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(ModelMethodHandler::class);
+
+        require_once __DIR__ . '/Handlers/Collections/CollectionFilterHandler.php';
+        $registration->registerHooksFromClass(CollectionFilterHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/CollectionFlattenHandler.php';
+        $registration->registerHooksFromClass(CollectionFlattenHandler::class);
 
         require_once __DIR__ . '/Handlers/Helpers/CacheHandler.php';
         $registration->registerHooksFromClass(CacheHandler::class);

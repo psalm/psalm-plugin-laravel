@@ -1,0 +1,52 @@
+<?php
+
+namespace Illuminate\Database\Schema;
+
+/**
+ * Stub for ForeignKeyDefinition fluent methods.
+ *
+ * These methods are defined as @method annotations in Laravel's source and dispatched
+ * via Fluent::__call(). Psalm does not resolve @method annotations through __call magic,
+ * so we declare them explicitly here.
+ *
+ * Parameter types match Laravel's @method annotations exactly — do not narrow them.
+ */
+class ForeignKeyDefinition
+{
+    /** Set the foreign key as deferrable (PostgreSQL). */
+    public function deferrable(bool $value = true): static {}
+
+    /** Set the default time to check the constraint (PostgreSQL). */
+    public function initiallyImmediate(bool $value = true): static {}
+
+    /**
+     * Specify the DDL lock mode for the foreign key operation (MySQL).
+     *
+     * @param 'none'|'shared'|'default'|'exclusive' $value
+     */
+    public function lock(string $value): static {}
+
+    /** Specify the referenced table. */
+    public function on(string $table): static {}
+
+    /**
+     * Add an ON DELETE action.
+     *
+     * @param 'cascade'|'restrict'|'set null'|'no action' $action
+     */
+    public function onDelete(string $action): static {}
+
+    /**
+     * Add an ON UPDATE action.
+     *
+     * @param 'cascade'|'restrict'|'set null'|'no action' $action
+     */
+    public function onUpdate(string $action): static {}
+
+    /**
+     * Specify the referenced column(s).
+     *
+     * @param string|string[] $columns
+     */
+    public function references(string|array $columns): static {}
+}
