@@ -40,7 +40,7 @@ Psalm tracks data from **sources** (where user input enters) through the code to
 **Sources** (where taint originates) -- including but not limited to:
 - `$request->input()`, `$request->query()`, `$request->all()`, `$request->post()`, `$request->cookie()`, `$request->header()`, `$request->json()`, `$request->only()`, `$request->except()`
 - `$request->ip()`, `$request->userAgent()`, `$request->url()`, `$request->fullUrl()`, `$request->path()`, `$request->getContent()`
-- `$request->route()` parameters, `Route::parameter()`
+- Route parameters via `$request->route()->parameter('id')` or `$request->route('id')`
 - `Session::get()`, `Session::pull()`, `Session::all()`, `session()` values
 - Validator `validated()`, `safe()` output, `ValidatedInput` methods
 - `UploadedFile::getClientOriginalName()`, `getClientOriginalExtension()`, `getClientMimeType()`
@@ -59,7 +59,7 @@ Psalm tracks data from **sources** (where user input enters) through the code to
 **Escapes** (what removes taint):
 - HTML: `e()` helper, `Js::from()`, `Js::encode()` — remove `html` taint
 - SQL: `DB::escape()`, `Connection::escape()` — remove `sql` taint
-- Crypto: `Crypt::encrypt()`, `bcrypt()`, `Hash::make()`, `encrypt()` — remove `user_secret`/`system_secret` taint
+- Crypto: `encrypt()` helper, `bcrypt()` helper, `Encrypter::encrypt()`, `HashManager::make()` — remove `user_secret`/`system_secret` taint (facade calls like `Crypt::encrypt()` may not propagate due to `__callStatic` limitation)
 - Parameterized queries (`DB::select('...?', [$value])`) are safe — only string interpolation into raw SQL is flagged
 
 ## Taint issue types and how to fix them
