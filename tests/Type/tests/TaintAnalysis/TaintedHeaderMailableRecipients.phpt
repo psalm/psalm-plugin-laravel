@@ -33,8 +33,26 @@ function mailableFromName(\Illuminate\Http\Request $request): void {
     $mailable = new \Illuminate\Mail\Mailable();
     $mailable->from('safe@example.com', $request->input('name'));
 }
+
+function mailableCcName(\Illuminate\Http\Request $request): void {
+    $mailable = new \Illuminate\Mail\Mailable();
+    $mailable->cc('safe@example.com', $request->input('name'));
+}
+
+function mailableBccName(\Illuminate\Http\Request $request): void {
+    $mailable = new \Illuminate\Mail\Mailable();
+    $mailable->bcc('safe@example.com', $request->input('name'));
+}
+
+function mailableReplyToName(\Illuminate\Http\Request $request): void {
+    $mailable = new \Illuminate\Mail\Mailable();
+    $mailable->replyTo('safe@example.com', $request->input('name'));
+}
 ?>
 --EXPECTF--
+%ATaintedHeader on line %d: Detected tainted header
+%ATaintedHeader on line %d: Detected tainted header
+%ATaintedHeader on line %d: Detected tainted header
 %ATaintedHeader on line %d: Detected tainted header
 %ATaintedHeader on line %d: Detected tainted header
 %ATaintedHeader on line %d: Detected tainted header
