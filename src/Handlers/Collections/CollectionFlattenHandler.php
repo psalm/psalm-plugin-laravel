@@ -7,7 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Support\LazyCollection;
-use PhpParser\Node\Scalar\LNumber;
+use PhpParser\Node\Scalar\Int_;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -94,7 +94,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
 
         $depthArg = $args[0]->value;
 
-        if ($depthArg instanceof LNumber) {
+        if ($depthArg instanceof Int_) {
             return $depthArg->value;
         }
 
