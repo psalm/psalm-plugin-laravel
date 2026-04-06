@@ -107,7 +107,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      * Remove falsy types and narrow remaining types to their non-empty variants.
      *
      * - Removes `null` and `false` entirely
-     * - Narrows `string` → `non-empty-string`, `array` → `non-empty-array`
+     * - Narrows `string` → `non-falsy-string` (excludes both `""` and `"0"`),
+     *   `array` → `non-empty-array`
      *
      * Returns null if nothing changed or narrowing would leave the union empty.
      * @psalm-mutation-free

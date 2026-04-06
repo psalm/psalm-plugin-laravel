@@ -358,7 +358,7 @@ class Builder implements BuilderContract
     public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}
 
     /**
-     * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|int, mixed>|\Illuminate\Database\Query\Expression  $column
+     * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|array<int, mixed>|\Illuminate\Database\Query\Expression  $column
      * @param  string  $boolean
      * @psalm-return TModel|null
      *
