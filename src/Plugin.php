@@ -24,6 +24,7 @@ use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\FacadeStubProvider;
 use Psalm\LaravelPlugin\Providers\ModelStubProvider;
+use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\PluginRegistrationSocket;
@@ -34,8 +35,6 @@ use function dirname;
 use function explode;
 use function is_dir;
 use function is_string;
-use function sprintf;
-use function urlencode;
 
 /**
  * @psalm-suppress UnusedClass
@@ -58,32 +57,12 @@ final class Plugin implements PluginEntryPointInterface
 
         try {
             ApplicationProvider::bootApp();
-        } catch (\Throwable $throwable) {
-            $output->warning("Laravel plugin error on booting Laravel app: “{$throwable->getMessage()}”");
-            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $this->generateReportIssueUrl($throwable));
-
-            if ($failOnInternalError) {
-                throw $throwable;
-            }
-
-            return;
-        }
-
-        try {
             $this->generateStubFiles();
+            $this->registerHandlers($registration);
+            $this->registerStubs($registration);
         } catch (\Throwable $throwable) {
-            $output->warning("Laravel plugin error on generating stub files: “{$throwable->getMessage()}”");
-            $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $this->generateReportIssueUrl($throwable));
-
-            if ($failOnInternalError) {
-                throw $throwable;
-            }
-
-            return;
+            $this->handleInternalError($throwable, $output, $failOnInternalError);
         }
-
-        $this->registerHandlers($registration);
-        $this->registerStubs($registration);
     }
 
     /** @return list<string> */
@@ -199,12 +178,13 @@ final class Plugin implements PluginEntryPointInterface
         ModelStubProvider::generateStubFile();
     }
 
-    private function generateReportIssueUrl(\Throwable $throwable): string
+    private function handleInternalError(\Throwable $throwable, \Psalm\Progress\Progress $output, bool $failOnInternalError): void
     {
-        return sprintf(
-            'https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md&title=%s&body=%s',
-            urlencode("Error on generating stub files: {$throwable->getMessage()}"),
-            urlencode("```\n{$throwable->__toString()}\n```"),
-        );
+        $output->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
+        $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
+
+        if ($failOnInternalError) {
+            throw $throwable;
+        }
     }
 }
