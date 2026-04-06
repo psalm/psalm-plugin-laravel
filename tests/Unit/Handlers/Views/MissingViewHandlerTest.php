@@ -67,12 +67,14 @@ final class MissingViewHandlerTest extends TestCase
     }
 
     #[Test]
-    public function returns_factory_class_name(): void
+    public function returns_factory_class_name_as_first_entry(): void
     {
-        $this->assertSame(
-            [\Illuminate\View\Factory::class],
-            MissingViewHandler::getClassLikeNames(),
-        );
+        // FacadeMapProvider is not initialized in unit tests, so only Factory is returned.
+        // The type test (MissingViewTest.phpt) verifies facade classes are included
+        // when the full plugin is booted.
+        $classNames = MissingViewHandler::getClassLikeNames();
+        $this->assertNotEmpty($classNames);
+        $this->assertSame(\Illuminate\View\Factory::class, $classNames[0]);
     }
 
     /**
