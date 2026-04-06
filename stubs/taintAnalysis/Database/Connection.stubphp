@@ -2,7 +2,7 @@
 
 namespace Illuminate\Database;
 
-class Connection
+class Connection implements ConnectionInterface
 {
     /**
      * Run a select statement against the database.
@@ -149,4 +149,28 @@ class Connection
      * @psalm-taint-sink sql $query
      */
     public function selectResultSets($query, $bindings = [], $useReadPdo = true) {}
+
+    /**
+     * Begin a fluent query against a database table.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Contracts\Database\Query\Expression|\UnitEnum|string  $table
+     * @param  string|null  $as
+     * @return \Illuminate\Database\Query\Builder
+     *
+     * @psalm-taint-sink sql $table
+     * @psalm-taint-sink sql $as
+     */
+    public function table($table, $as = null) {}
+
+    /**
+     * Escape a value for safe SQL embedding.
+     *
+     * @param  string|float|int|bool|null  $value
+     * @param  bool  $binary
+     * @return string
+     *
+     * @psalm-taint-escape sql
+     * @psalm-flow ($value) -> return
+     */
+    public function escape($value, $binary = false) {}
 }
