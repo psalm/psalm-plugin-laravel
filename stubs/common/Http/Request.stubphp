@@ -2,9 +2,14 @@
 
 namespace Illuminate\Http;
 
+use ArrayAccess;
+use Illuminate\Contracts\Support\Arrayable;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
-class Request extends SymfonyRequest
+/**
+ * @implements ArrayAccess<string, mixed>
+ */
+class Request extends SymfonyRequest implements Arrayable, ArrayAccess
 {
     /**
      * Retrieve a header from the request.
@@ -22,7 +27,7 @@ class Request extends SymfonyRequest
     /**
      * Get the route handling the request.
      *
-     * @template TDefault
+     * @template TDefault of object
      *
      * @param string|null $param
      * @param TDefault $default
@@ -114,6 +119,35 @@ class Request extends SymfonyRequest
      * @psalm-taint-source input
      */
     public function fullUrl() {}
+
+    /**
+     * Get the full URL for the request with the added query string parameters.
+     *
+     * @param  array  $query
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function fullUrlWithQuery(array $query) {}
+
+    /**
+     * Get the full URL for the request without the given query string parameters.
+     *
+     * @param  array|string  $keys
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function fullUrlWithoutQuery($keys) {}
+
+    /**
+     * Get the scheme and HTTP host.
+     *
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function schemeAndHttpHost() {}
 
     /**
      * Get the host name.

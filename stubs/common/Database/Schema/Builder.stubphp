@@ -1,0 +1,62 @@
+<?php
+
+namespace Illuminate\Database\Schema;
+
+use Closure;
+
+class Builder
+{
+    /**
+     * Modify a table on the schema.
+     *
+     * @param  string  $table
+     * @param  \Closure  $callback
+     * @return void
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public function table($table, Closure $callback) {}
+
+    /**
+     * Create a new table on the schema.
+     *
+     * @param  string  $table
+     * @param  \Closure  $callback
+     * @return void
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public function create($table, Closure $callback) {}
+
+    /**
+     * Drop a table from the schema.
+     *
+     * @param  string  $table
+     * @return void
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public function drop($table) {}
+
+    /**
+     * Drop a table from the schema if it exists.
+     *
+     * @param  string  $table
+     * @return void
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public function dropIfExists($table) {}
+
+    /**
+     * Rename a table on the schema.
+     *
+     * @param  string  $from
+     * @param  string  $to
+     * @return void
+     *
+     * @psalm-taint-sink sql $from
+     * @psalm-taint-sink sql $to
+     */
+    public function rename($from, $to) {}
+}
