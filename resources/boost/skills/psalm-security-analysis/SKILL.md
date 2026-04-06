@@ -37,7 +37,7 @@ If the project has a `psalm-baseline.xml`, existing issues are suppressed. To se
 
 Psalm tracks data from **sources** (where user input enters) through the code to **sinks** (where it becomes dangerous). If tainted data reaches a sink without being sanitized, Psalm reports an issue.
 
-**Sources** (where taint originates) -- includes but not limited to:
+**Sources** (where taint originates) -- including but not limited to:
 - `$request->input()`, `$request->query()`, `$request->all()`, `$request->post()`, `$request->cookie()`, `$request->header()`, `$request->json()`, `$request->only()`, `$request->except()`
 - `$request->ip()`, `$request->userAgent()`, `$request->url()`, `$request->fullUrl()`, `$request->path()`, `$request->getContent()`
 - `$request->route()` parameters, `Route::parameter()`
@@ -46,7 +46,7 @@ Psalm tracks data from **sources** (where user input enters) through the code to
 - `UploadedFile::getClientOriginalName()`, `getClientOriginalExtension()`, `getClientMimeType()`
 - `request()` and `old()` helper functions
 
-**Sinks** (where tainted data is dangerous) -- includes but not limited to:
+**Sinks** (where tainted data is dangerous) -- including but not limited to:
 - SQL: `DB::statement()`, `DB::unprepared()`, `DB::select()`, `DB::insert()`, `DB::update()`, `DB::delete()`, `whereRaw()`, `selectRaw()`, `orderByRaw()`, `groupByRaw()`, `havingRaw()`, and other raw query methods
 - Shell: `Process::run()`, `Process::start()`, `Process::command()`
 - HTML/XSS: `Response::make()`, `response()`, `View::share()`, `HtmlString`, `Mailable::html()`
