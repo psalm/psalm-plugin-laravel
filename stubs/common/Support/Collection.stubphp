@@ -196,4 +196,17 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @return static<int, static<TKey, TValue>>
      */
     public function chunkWhile(callable $callback) {}
+
+    /**
+     * Get the sum of the given values.
+     *
+     * At runtime, the accumulator starts at 0 and uses the + operator,
+     * so the result is always int|float (non-numeric values throw TypeError).
+     *
+     * @template TCallbackReturn of int|float
+     *
+     * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
+     * @return ($callback is string|null ? int|float : TCallbackReturn)
+     */
+    public function sum($callback = null) {}
 }
