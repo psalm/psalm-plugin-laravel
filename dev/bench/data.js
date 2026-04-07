@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775573233467,
+  "lastUpdate": 1775574921998,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -349,6 +349,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1126,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "c57541ad467abbec6a2cb7c2f36627871ef53a50",
+          "message": "fix(stubs): use subclass approach for Http async return types #538\n\nThe @template TAsync approach used the bound (bool) instead of the\ndefault (false) for unresolved templates, producing unwanted union\nreturn types on sync calls (vimeo/psalm#6046).\n\nAlso fixes version boundary: LazyPromise was introduced in v12.42.0\n(PR laravel/framework#57973), not v12.41.0.",
+          "timestamp": "2026-04-07T17:11:54+02:00",
+          "tree_id": "7428b47357b96138003e1dff0ad0ba4b268d45cb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c57541ad467abbec6a2cb7c2f36627871ef53a50"
+        },
+        "date": 1775574921671,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.15,
+            "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1125,
             "unit": "MB"
           }
         ]
