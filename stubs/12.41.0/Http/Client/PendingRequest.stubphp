@@ -5,17 +5,20 @@ namespace Illuminate\Http\Client;
 /**
  * Async-aware PendingRequest — available since Laravel 12.41.0.
  *
- * Before 12.41.0, async requests returned GuzzleHttp\Promise\PromiseInterface.
- * From 12.41.0+, Laravel introduced LazyPromise and the $async property became
- * a template parameter, enabling conditional return types on HTTP methods.
+ * From 12.41.0+, async HTTP requests return LazyPromise instead of
+ * GuzzleHttp\Promise\PromiseInterface. This stub overrides the common
+ * one to use LazyPromise in conditional return types.
  *
  * @template TAsync of bool = false
  */
 class PendingRequest
 {
     /**
-     * Toggle asynchronicity in requests.
-     *
+     * @var TAsync
+     */
+    protected $async = false;
+
+    /**
      * @template T of bool = true
      *
      * @param  T  $async
@@ -26,8 +29,6 @@ class PendingRequest
     public function async(bool $async = true) {}
 
     /**
-     * Issue a GET request to the given URL.
-     *
      * @param  string  $url
      * @param  array<string, mixed>|string|null  $query
      * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
@@ -37,8 +38,6 @@ class PendingRequest
     public function get(string $url, $query = null) {}
 
     /**
-     * Issue a HEAD request to the given URL.
-     *
      * @param  string  $url
      * @param  array<string, mixed>|string|null  $query
      * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
@@ -48,8 +47,6 @@ class PendingRequest
     public function head(string $url, $query = null) {}
 
     /**
-     * Issue a POST request to the given URL.
-     *
      * @param  string  $url
      * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
      * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
@@ -59,8 +56,6 @@ class PendingRequest
     public function post(string $url, $data = []) {}
 
     /**
-     * Issue a PATCH request to the given URL.
-     *
      * @param  string  $url
      * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
      * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
@@ -70,8 +65,6 @@ class PendingRequest
     public function patch(string $url, $data = []) {}
 
     /**
-     * Issue a PUT request to the given URL.
-     *
      * @param  string  $url
      * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
      * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
@@ -81,8 +74,6 @@ class PendingRequest
     public function put(string $url, $data = []) {}
 
     /**
-     * Issue a DELETE request to the given URL.
-     *
      * @param  string  $url
      * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
      * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
@@ -92,8 +83,6 @@ class PendingRequest
     public function delete(string $url, $data = []) {}
 
     /**
-     * Send the request to the given URL.
-     *
      * @param  string  $method
      * @param  string  $url
      * @param  array<string, mixed>  $options
