@@ -24,7 +24,7 @@ final class PluginVersionStubsTest extends TestCase
         string $targetVersion,
         array $expected,
     ): void {
-        self::assertSame($expected, Plugin::filterVersionDirectories($candidates, $targetVersion));
+        $this->assertSame($expected, Plugin::filterVersionDirectories($candidates, $targetVersion));
     }
 
     /** @return iterable<string, array{list<string>, string, list<string>}> */
