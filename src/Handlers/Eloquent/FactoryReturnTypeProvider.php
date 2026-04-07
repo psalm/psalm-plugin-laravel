@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
 use Psalm\Type;
