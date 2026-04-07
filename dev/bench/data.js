@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775556362940,
+  "lastUpdate": 1775564493141,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -134,6 +134,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.17,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1125,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8ba60629a2cbfc3c772f026aab840cb3e90b1fca",
+          "message": "Merge pull request #679 from psalm/worktree-collection-empty-stub\n\nAdd `Collection::empty()` stub with `static<never, never>` return type",
+          "timestamp": "2026-04-07T14:18:26+02:00",
+          "tree_id": "6d18d34264e72d49b3697b920339bec100a9c84e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8ba60629a2cbfc3c772f026aab840cb3e90b1fca"
+        },
+        "date": 1775564492353,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.91,
+            "range": "± 0.85",
             "unit": "s"
           },
           {
