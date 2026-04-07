@@ -33,7 +33,7 @@ final class FactoryReturnTypeProvider implements AfterMethodCallAnalysisInterfac
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
         $returnType = $event->getReturnTypeCandidate();
-        if ($returnType === null) {
+        if (!$returnType instanceof \Psalm\Type\Union) {
             return;
         }
 
