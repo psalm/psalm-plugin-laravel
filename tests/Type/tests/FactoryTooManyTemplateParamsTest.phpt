@@ -51,13 +51,13 @@ class FactoryUser extends Model
 }
 
 // Must resolve to FactoryUserFactory (no template args), not FactoryUserFactory<FactoryUser>
-$new = FactoryUserFactory::new();
-/** @psalm-check-type-exact $new = FactoryUserFactory */
+$_new = FactoryUserFactory::new();
+/** @psalm-check-type-exact $_new = FactoryUserFactory */
 
 FactoryUserFactory::new()->count(250)->createQuietly();
 
-$seq = FactoryUserFactory::new()->sequence(['name' => 'test']);
-/** @psalm-check-type-exact $seq = FactoryUserFactory */
+$_seq = FactoryUserFactory::new()->sequence(['name' => 'test']);
+/** @psalm-check-type-exact $_seq = FactoryUserFactory */
 
 // --- Test 2: Direct Factory subclass without intermediate layer (standard pattern) ---
 
@@ -81,12 +81,9 @@ class DirectUser extends Model
 
 // Standard pattern — no intermediate layer, no @return static<TModel> override.
 // Should work without interference from the handler.
-$direct = DirectUserFactory::new();
-/** @psalm-check-type-exact $direct = DirectUserFactory */
+$_direct = DirectUserFactory::new();
+/** @psalm-check-type-exact $_direct = DirectUserFactory */
 ?>
 --EXPECTF--
 InvalidReturnType on line %d: %s
 InvalidReturnStatement on line %d: %s
-UnusedVariable on line %d: %s
-UnusedVariable on line %d: %s
-UnusedVariable on line %d: %s
