@@ -1,0 +1,105 @@
+<?php
+
+namespace Illuminate\Http\Client;
+
+/**
+ * Async-aware PendingRequest — available since Laravel 12.41.0.
+ *
+ * Before 12.41.0, async requests returned GuzzleHttp\Promise\PromiseInterface.
+ * From 12.41.0+, Laravel introduced LazyPromise and the $async property became
+ * a template parameter, enabling conditional return types on HTTP methods.
+ *
+ * @template TAsync of bool = false
+ */
+class PendingRequest
+{
+    /**
+     * Toggle asynchronicity in requests.
+     *
+     * @template T of bool = true
+     *
+     * @param  T  $async
+     * @return self<T>
+     *
+     * @psalm-self-out self<T>
+     */
+    public function async(bool $async = true) {}
+
+    /**
+     * Issue a GET request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|string|null  $query
+     * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function get(string $url, $query = null) {}
+
+    /**
+     * Issue a HEAD request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|string|null  $query
+     * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function head(string $url, $query = null) {}
+
+    /**
+     * Issue a POST request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function post(string $url, $data = []) {}
+
+    /**
+     * Issue a PATCH request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function patch(string $url, $data = []) {}
+
+    /**
+     * Issue a PUT request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function put(string $url, $data = []) {}
+
+    /**
+     * Issue a DELETE request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function delete(string $url, $data = []) {}
+
+    /**
+     * Send the request to the given URL.
+     *
+     * @param  string  $method
+     * @param  string  $url
+     * @param  array<string, mixed>  $options
+     * @return (TAsync is true ? \Illuminate\Http\Client\Promises\LazyPromise : \Illuminate\Http\Client\Response)
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function send(string $method, string $url, array $options = []) {}
+}
