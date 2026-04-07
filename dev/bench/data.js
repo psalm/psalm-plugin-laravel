@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775564493141,
+  "lastUpdate": 1775566413918,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -174,6 +174,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1125,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ec7ed10f0b65cc2f307090fd6261476ee992c017",
+          "message": "Merge pull request #681 from psalm/worktree-patch-version-stubs\n\nSupport patch-version stub directories",
+          "timestamp": "2026-04-07T14:50:13+02:00",
+          "tree_id": "84b54fbb4ca294b1391bac290b1adac9b96eca4c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ec7ed10f0b65cc2f307090fd6261476ee992c017"
+        },
+        "date": 1775566413598,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.72,
+            "range": "± 1.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1126,
             "unit": "MB"
           }
         ]
