@@ -105,13 +105,13 @@ final class Plugin implements PluginEntryPointInterface
             }
         }
 
-        $stubs = [];
+        $stubGroups = [];
 
         foreach (self::filterVersionDirectories($candidates, $version) as $dir) {
-            $stubs = \array_merge($stubs, $this->findStubFiles($stubsRoot . '/' . $dir));
+            $stubGroups[] = $this->findStubFiles($stubsRoot . '/' . $dir);
         }
 
-        return $stubs;
+        return $stubGroups === [] ? [] : \array_merge(...$stubGroups);
     }
 
     /**
