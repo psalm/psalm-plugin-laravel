@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775570684247,
+  "lastUpdate": 1775571285627,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -274,6 +274,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.88,
             "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1125,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "6af52b3cb7a0ef901dbc7f37b762e6d4d43007b7",
+          "message": "fix(stubs): narrow Collection::sum() no-arg return type by TValue #678\n\nCollection<_, int>::sum() now returns int instead of int|float,\nmatching Psalm's array_sum behavior for typed arrays.",
+          "timestamp": "2026-04-07T16:11:09+02:00",
+          "tree_id": "8620a3dc534de1faaba2bebaf1eace308a59fa8e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6af52b3cb7a0ef901dbc7f37b762e6d4d43007b7"
+        },
+        "date": 1775571285223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.69,
+            "range": "± 0.11",
             "unit": "s"
           },
           {
