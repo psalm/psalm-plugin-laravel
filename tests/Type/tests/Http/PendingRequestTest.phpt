@@ -5,29 +5,28 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\Client\Promises\LazyPromise;
 
-/**
- * After calling async(), Psalm narrows TAsync to true via @psalm-self-out,
- * so HTTP methods return LazyPromise.
- */
-function async_get_returns_promise(PendingRequest $request): LazyPromise {
-    return $request->async()->get('https://example.com');
-};
+// TAsync=true after async(): returns LazyPromise only
+function test_async(PendingRequest $request): void {
+    $_get = $request->async()->get('https://example.com');
+    /** @psalm-check-type-exact $_get = LazyPromise */
 
-function async_post_returns_promise(PendingRequest $request): LazyPromise {
-    return $request->async()->post('https://example.com');
-};
+    $_post = $request->async()->post('https://example.com');
+    /** @psalm-check-type-exact $_post = LazyPromise */
 
-function async_send_returns_promise(PendingRequest $request): LazyPromise {
-    return $request->async()->send('GET', 'https://example.com');
-};
+    $_send = $request->async()->send('GET', 'https://example.com');
+    /** @psalm-check-type-exact $_send = LazyPromise */
+}
 
-/**
- * When TAsync is unresolved (Psalm doesn't narrow class template defaults),
- * sync methods return the union. This is correct — callers receiving a
- * PendingRequest don't know whether async() was called.
- */
-function sync_get_returns_union(PendingRequest $request): LazyPromise|Response {
-    return $request->get('https://example.com');
-};
+// TAsync=false after async(false): returns Response only
+function test_explicit_sync(PendingRequest $request): void {
+    $_result = $request->async(false)->get('https://example.com');
+    /** @psalm-check-type-exact $_result = Response */
+}
+
+// Unresolved TAsync (bare PendingRequest param uses bound `bool`): returns union
+function test_unresolved_template(PendingRequest $request): void {
+    $_result = $request->get('https://example.com');
+    /** @psalm-check-type-exact $_result = LazyPromise|Response */
+}
 ?>
 --EXPECTF--

@@ -2,8 +2,30 @@
 
 namespace Illuminate\Http\Client;
 
+/**
+ * @template TAsync of bool = false
+ */
 class PendingRequest
 {
+    /**
+     * Whether the requests should be asynchronous.
+     *
+     * @var TAsync
+     */
+    protected $async = false;
+
+    /**
+     * Toggle asynchronicity in requests.
+     *
+     * @template T of bool = true
+     *
+     * @param  T  $async
+     * @return self<T>
+     *
+     * @psalm-self-out self<T>
+     */
+    public function async(bool $async = true) {}
+
     /**
      * Set the base URL for the pending request.
      *
@@ -19,8 +41,8 @@ class PendingRequest
      *
      * @param  string  $method
      * @param  string  $url
-     * @param  array  $options
-     * @return \Illuminate\Http\Client\Response
+     * @param  array<string, mixed>  $options
+     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -40,8 +62,8 @@ class PendingRequest
      * Issue a GET request to the given URL.
      *
      * @param  string  $url
-     * @param  array|string|null  $query
-     * @return \Illuminate\Http\Client\Response
+     * @param  array<string, mixed>|string|null  $query
+     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -51,8 +73,8 @@ class PendingRequest
      * Issue a POST request to the given URL.
      *
      * @param  string  $url
-     * @param  array|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable  $data
-     * @return \Illuminate\Http\Client\Response
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -62,8 +84,8 @@ class PendingRequest
      * Issue a PUT request to the given URL.
      *
      * @param  string  $url
-     * @param  array|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable  $data
-     * @return \Illuminate\Http\Client\Response
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -73,8 +95,8 @@ class PendingRequest
      * Issue a PATCH request to the given URL.
      *
      * @param  string  $url
-     * @param  array|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable  $data
-     * @return \Illuminate\Http\Client\Response
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -84,8 +106,8 @@ class PendingRequest
      * Issue a DELETE request to the given URL.
      *
      * @param  string  $url
-     * @param  array|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable  $data
-     * @return \Illuminate\Http\Client\Response
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -95,8 +117,8 @@ class PendingRequest
      * Issue a HEAD request to the given URL.
      *
      * @param  string  $url
-     * @param  array|string|null  $query
-     * @return \Illuminate\Http\Client\Response
+     * @param  array<string, mixed>|string|null  $query
+     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
      *
      * @psalm-taint-sink ssrf $url
      */
