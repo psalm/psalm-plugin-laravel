@@ -74,12 +74,67 @@ final class Plugin implements PluginEntryPointInterface
         return $this->findStubFiles(\dirname(__DIR__) . '/stubs/common');
     }
 
-    /** @return list<string> */
+    /**
+     * Collect stubs from all version directories that are <= the installed Laravel version.
+     *
+     * Supports both major-only directories (e.g. "12/", "13/") and patch-level directories
+     * (e.g. "12.20.0/", "12.41.0/"). Directories are sorted in ascending version order so
+     * that later versions override earlier ones for same-named stubs.
+     *
+     * @see https://www.php.net/version_compare — treats "12" as "12.0.0"
+     *
+     * @return list<string>
+     */
     private function getStubsForLaravelVersion(string $version): array
     {
-        [$majorVersion] = \explode('.', $version);
+        $stubsRoot = \dirname(__DIR__) . '/stubs';
 
-        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/' . $majorVersion);
+        // Collect version directories (names starting with a digit, e.g. "12", "12.20.0", "13")
+        $candidates = [];
+
+        foreach (new \DirectoryIterator($stubsRoot) as $entry) {
+            if (! $entry->isDir() || $entry->isDot()) {
+                continue;
+            }
+
+            $dirName = $entry->getFilename();
+
+            // Skip non-version directories (e.g. "common")
+            if (\ctype_digit($dirName[0])) {
+                $candidates[] = $dirName;
+            }
+        }
+
+        $stubGroups = [];
+
+        foreach (self::filterVersionDirectories($candidates, $version) as $dir) {
+            $stubGroups[] = $this->findStubFiles($stubsRoot . '/' . $dir);
+        }
+
+        return $stubGroups === [] ? [] : \array_merge(...$stubGroups);
+    }
+
+    /**
+     * Filter and sort version directory names, keeping only those <= the target version.
+     *
+     * @param list<string> $candidates directory names (e.g. ["13", "12", "12.20.0"])
+     *
+     * @return list<string> sorted ascending by version (e.g. ["12", "12.20.0"])
+     *
+     * @psalm-pure
+     *
+     * @internal used by tests
+     */
+    public static function filterVersionDirectories(array $candidates, string $targetVersion): array
+    {
+        $matched = \array_filter(
+            $candidates,
+            static fn(string $dir): bool => \version_compare($dir, $targetVersion, '<='),
+        );
+
+        \usort($matched, static fn(string $a, string $b): int => \version_compare($a, $b));
+
+        return $matched;
     }
 
     /**
