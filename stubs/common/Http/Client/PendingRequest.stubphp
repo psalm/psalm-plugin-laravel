@@ -2,27 +2,21 @@
 
 namespace Illuminate\Http\Client;
 
-/**
- * @template TAsync of bool = false
- */
 class PendingRequest
 {
     /**
-     * Whether the requests should be asynchronous.
-     *
-     * @var TAsync
-     */
-    protected $async = false;
-
-    /**
      * Toggle asynchronicity in requests.
      *
-     * @template T of bool = true
+     * Returns AsyncPendingRequest when enabled, so HTTP methods return the
+     * appropriate promise type. Parameter-based conditional avoids the
+     * template-default issue where Psalm uses the bound (bool) instead of
+     * the default (false), which would produce unwanted union return types.
      *
-     * @param  T  $async
-     * @return self<T>
+     * @see https://github.com/vimeo/psalm/issues/6046 — remove AsyncPendingRequest subclass
+     *      and revert to @template TAsync approach once Psalm supports template defaults
      *
-     * @psalm-self-out self<T>
+     * @param  bool  $async
+     * @return ($async is true ? AsyncPendingRequest : self)
      */
     public function async(bool $async = true) {}
 
@@ -42,7 +36,7 @@ class PendingRequest
      * @param  string  $method
      * @param  string  $url
      * @param  array<string, mixed>  $options
-     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
+     * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -63,7 +57,7 @@ class PendingRequest
      *
      * @param  string  $url
      * @param  array<string, mixed>|string|null  $query
-     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
+     * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -74,7 +68,7 @@ class PendingRequest
      *
      * @param  string  $url
      * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
-     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
+     * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -85,7 +79,7 @@ class PendingRequest
      *
      * @param  string  $url
      * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
-     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
+     * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -96,7 +90,7 @@ class PendingRequest
      *
      * @param  string  $url
      * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
-     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
+     * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -107,7 +101,7 @@ class PendingRequest
      *
      * @param  string  $url
      * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
-     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
+     * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
      */
@@ -118,7 +112,76 @@ class PendingRequest
      *
      * @param  string  $url
      * @param  array<string, mixed>|string|null  $query
-     * @return (TAsync is true ? \GuzzleHttp\Promise\PromiseInterface : \Illuminate\Http\Client\Response)
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function head(string $url, $query = null) {}
+}
+
+/**
+ * Stub-only subclass representing a PendingRequest in async mode.
+ *
+ * Workaround for https://github.com/vimeo/psalm/issues/6046 (template defaults).
+ * When async() is called, Psalm narrows the type to this class. HTTP methods
+ * return GuzzleHttp\Promise\PromiseInterface (overridden to LazyPromise in
+ * the 12.42.0+ version-specific stub).
+ *
+ * Extends PendingRequest so fluent methods (withToken, timeout, etc.) keep
+ * returning $this (AsyncPendingRequest), preserving async semantics through chains.
+ */
+class AsyncPendingRequest extends PendingRequest
+{
+    /**
+     * @param  bool  $async
+     * @return ($async is true ? self : PendingRequest)
+     */
+    public function async(bool $async = true) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function send(string $method, string $url, array $options = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function get(string $url, $query = null) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function post(string $url, $data = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function put(string $url, $data = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function patch(string $url, $data = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function delete(string $url, $data = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
      *
      * @psalm-taint-sink ssrf $url
      */

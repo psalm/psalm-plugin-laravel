@@ -43,15 +43,15 @@ final class PluginVersionStubsTest extends TestCase
         ];
 
         yield 'patch dirs — includes only versions <= target' => [
-            ['12', '12.20.0', '12.41.0', '13'],
+            ['12', '12.20.0', '12.42.0', '13'],
             '12.30.0',
             ['12', '12.20.0'],
         ];
 
         yield 'patch dirs — includes all matching versions' => [
-            ['12', '12.20.0', '12.41.0'],
+            ['12', '12.20.0', '12.42.0'],
             '12.50.0',
-            ['12', '12.20.0', '12.41.0'],
+            ['12', '12.20.0', '12.42.0'],
         ];
 
         yield 'exact version match is included' => [
@@ -79,9 +79,9 @@ final class PluginVersionStubsTest extends TestCase
         ];
 
         yield 'mixed major and patch versions' => [
-            ['11', '12', '12.20.0', '12.41.0', '13', '13.5.0'],
+            ['11', '12', '12.20.0', '12.42.0', '13', '13.5.0'],
             '13.2.0',
-            ['11', '12', '12.20.0', '12.41.0', '13'],
+            ['11', '12', '12.20.0', '12.42.0', '13'],
         ];
     }
 }
