@@ -211,9 +211,33 @@ final class CollectionTypes
     }
 
     /** @see https://github.com/psalm/psalm-plugin-laravel/issues/678 */
-    public function sumWithoutArguments(): int|float
+    public function sumWithoutArguments(): int
     {
         /** @var Collection<int, int> */
+        $numbers = new Collection();
+
+        /** @psalm-check-type-exact $sum = int */
+        $sum = $numbers->sum();
+
+        return $sum;
+    }
+
+    /** @see https://github.com/psalm/psalm-plugin-laravel/issues/678 */
+    public function sumWithoutArgumentsFloat(): float
+    {
+        /** @var Collection<int, float> */
+        $numbers = new Collection();
+
+        /** @psalm-check-type-exact $sum = float */
+        $sum = $numbers->sum();
+
+        return $sum;
+    }
+
+    /** @see https://github.com/psalm/psalm-plugin-laravel/issues/678 */
+    public function sumWithoutArgumentsMixed(): int|float
+    {
+        /** @var Collection<int, int|float> */
         $numbers = new Collection();
 
         /** @psalm-check-type-exact $sum = float|int */
