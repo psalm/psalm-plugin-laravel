@@ -25,7 +25,10 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Countable
      * @template TCallbackReturn of int|float
      *
      * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
-     * @return ($callback is null ? (TValue is int ? int : (TValue is float ? float : int|float)) : ($callback is string ? int|float : TCallbackReturn))
+     * @return ($callback is null
+     *  ? (TValue is int ? int : (TValue is float ? float : int|float))
+     *  : ($callback is string ? int|float : TCallbackReturn)
+     * )
      */
     public function sum($callback = null);
 }
