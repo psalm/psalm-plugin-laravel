@@ -2,7 +2,6 @@
 <?php declare(strict_types=1);
 
 use Illuminate\Support\Collection;
-
 final class CollectionTypes
 {
     /** @return Collection<int, string> */
@@ -175,6 +174,54 @@ final class CollectionTypes
     {
         return Collection::empty();
     }
+
+    /**
+     * sum() returns int|float for string-key and no-argument calls,
+     * while callable callbacks narrow the return type.
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/678
+     */
+    public function sumWithStringKey(): int|float
+    {
+        /** @psalm-check-type-exact $sum = float|int */
+        $sum = $this->getCollection()->sum('length');
+
+        return $sum;
+    }
+
+    /**
+     * When the callback returns int, sum() narrows to int (not int|float).
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/678
+     */
+    public function sumWithCallableReturningInt(): int
+    {
+        return $this->getCollection()->sum(function (string $item): int {
+            return strlen($item);
+        });
+    }
+
+    /**
+     * When the callback returns float, sum() narrows to float.
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/678
+     */
+    public function sumWithCallableReturningFloat(): float
+    {
+        return $this->getCollection()->sum(function (string $item): float {
+            return (float) strlen($item);
+        });
+    }
+
+    /** @see https://github.com/psalm/psalm-plugin-laravel/issues/678 */
+    public function sumWithoutArguments(): int|float
+    {
+        /** @var Collection<int, int> */
+        $numbers = new Collection();
+
+        /** @psalm-check-type-exact $sum = float|int */
+        $sum = $numbers->sum();
+
+        return $sum;
+    }
+
 }
 
 /** @var Collection<string, string> */
@@ -194,5 +241,6 @@ $collection = new Collection(['data']);
 foreach ($collection as $key => $value) {
     echo substr($value, $key);
 }
+
 ?>
 --EXPECT--
