@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775566889940,
+  "lastUpdate": 1775570684247,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -244,6 +244,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1126,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "6507ab0534dc578a79538de0305fccbd0e330e73",
+          "message": "chore: remove empty dirs for stubs\n\nSigned-off-by: Alies Lapatsin <web.lapateen@gmail.com>",
+          "timestamp": "2026-04-07T16:01:23+02:00",
+          "tree_id": "155ccd2ffc26321b31c9770689d0e5f1d734a577",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6507ab0534dc578a79538de0305fccbd0e330e73"
+        },
+        "date": 1775570683235,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.88,
+            "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1125,
             "unit": "MB"
           }
         ]
