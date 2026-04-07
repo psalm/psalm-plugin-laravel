@@ -20,6 +20,14 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     use EnumeratesValues;
 
     /**
+     * Create a new instance with no items.
+     *
+     * @psalm-mutation-free
+     * @return static<never, never>
+     */
+    public static function empty() {}
+
+    /**
      * Get the first item from the collection passing the given truth test.
      *
      * @psalm-mutation-free

@@ -154,6 +154,27 @@ final class CollectionTypes
 
         return $collection->isNotEmpty() ? null : $collection->first();
     }
+
+    /**
+     * empty() returns static<never, never>, assignable to any Collection type.
+     * @psalm-check-type-exact $empty = Collection<never, never>
+     */
+    public function emptyReturnsNeverNever(): Collection
+    {
+        $empty = Collection::empty();
+
+        return $empty;
+    }
+
+    /**
+     * Collection<never, never> is assignable to any concrete Collection type
+     * because never is the bottom type (subtype of everything).
+     * @return Collection<int, string>
+     */
+    public function emptyIsAssignableToConcreteCollection(): Collection
+    {
+        return Collection::empty();
+    }
 }
 
 /** @var Collection<string, string> */
