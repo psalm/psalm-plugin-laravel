@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775467729622,
+  "lastUpdate": 1775556362940,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -104,6 +104,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1126,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "74377361e3a4599e1a5020a47229dfbe76b63c47",
+          "message": "Merge pull request #676 from psalm/538-taint-client-response\n\nAdd `@psalm-taint-source input` for `Http\\Client\\Response` methods",
+          "timestamp": "2026-04-07T12:02:55+02:00",
+          "tree_id": "8d5424471b441be91757952d806f49d0b23d3f1a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/74377361e3a4599e1a5020a47229dfbe76b63c47"
+        },
+        "date": 1775556362080,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.17,
+            "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1125,
             "unit": "MB"
           }
         ]
