@@ -78,7 +78,7 @@ final class Plugin implements PluginEntryPointInterface
      * Collect stubs from all version directories that are <= the installed Laravel version.
      *
      * Supports both major-only directories (e.g. "12/", "13/") and patch-level directories
-     * (e.g. "12.20.0/", "12.41.0/"). Directories are sorted in ascending version order so
+     * (e.g. "12.20.0/", "12.42.0/"). Directories are sorted in ascending version order so
      * that later versions override earlier ones for same-named stubs.
      *
      * @see https://www.php.net/version_compare — treats "12" as "12.0.0"

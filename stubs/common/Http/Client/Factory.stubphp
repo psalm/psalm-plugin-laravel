@@ -5,7 +5,7 @@ namespace Illuminate\Http\Client;
 /**
  * The Http client factory creates PendingRequest instances and delegates method
  * calls via __call. The @mixin lets Psalm see PendingRequest methods (get, post, etc.)
- * on Factory with the default TAsync=false template, so sync calls return Response.
+ * on Factory, so sync calls return Response.
  *
  * @mixin PendingRequest
  */
