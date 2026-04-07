@@ -18,6 +18,7 @@ class Response implements \ArrayAccess, \Stringable
      *
      * @param  string|null  $key
      * @param  mixed  $default
+     * @param  int|null  $flags  Bitmask of JSON decode options.
      * @return mixed
      *
      * @psalm-taint-source input
@@ -27,6 +28,7 @@ class Response implements \ArrayAccess, \Stringable
     /**
      * Get the decoded JSON body of the response as an object.
      *
+     * @param  int|null  $flags  Bitmask of JSON decode options.
      * @return object|null
      *
      * @psalm-taint-source input
@@ -37,6 +39,7 @@ class Response implements \ArrayAccess, \Stringable
      * Get the decoded JSON body of the response as a collection.
      *
      * @param  string|null  $key
+     * @param  int|null  $flags  Bitmask of JSON decode options.
      * @return \Illuminate\Support\Collection
      *
      * @psalm-taint-source input
@@ -47,6 +50,7 @@ class Response implements \ArrayAccess, \Stringable
      * Get the decoded JSON body of the response as a fluent object.
      *
      * @param  string|null  $key
+     * @param  int|null  $flags  Bitmask of JSON decode options.
      * @return \Illuminate\Support\Fluent
      *
      * @psalm-taint-source input
