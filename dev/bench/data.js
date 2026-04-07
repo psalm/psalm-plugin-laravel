@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775566413918,
+  "lastUpdate": 1775566889940,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -204,6 +204,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.72,
             "range": "± 1.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1126,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "be79dadde8eb9858bebccd8eed0242343d44a097",
+          "message": "Merge pull request #680 from psalm/worktree-678-collection-sum\n\nNarrow `Collection::sum()` return type from `mixed` to `int|float`",
+          "timestamp": "2026-04-07T14:58:29+02:00",
+          "tree_id": "a818ced5c68e24cfe5a15c0fae3b23b159d13cca",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/be79dadde8eb9858bebccd8eed0242343d44a097"
+        },
+        "date": 1775566889348,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.95,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
