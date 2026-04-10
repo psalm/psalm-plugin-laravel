@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775574921998,
+  "lastUpdate": 1775858380011,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -384,6 +384,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1125,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "5c4013b01cd9063e33252560ae7289ff16b748c2",
+          "message": "fix(stubs): add string return type to __toString() and taint tests for Http\\Client\\Response\n\n- Add `: string` return type to `__toString()` for Stringable interface compliance\n- Add PHPT taint tests for object(), collect(), fluent(), and headers() methods",
+          "timestamp": "2026-04-10T23:56:26+02:00",
+          "tree_id": "6f11828bff7e6407a025975227f9df6796abb326",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5c4013b01cd9063e33252560ae7289ff16b748c2"
+        },
+        "date": 1775858379329,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.96,
+            "range": "± 0.5",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1126,
             "unit": "MB"
           }
         ]
