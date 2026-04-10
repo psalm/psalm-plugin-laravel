@@ -83,5 +83,5 @@ class Response implements \ArrayAccess, \Stringable
      *
      * @psalm-taint-source input
      */
-    public function __toString() {}
+    public function __toString(): string {}
 }
