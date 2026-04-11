@@ -202,11 +202,11 @@ function inputOutputHandler(string $value, string ...$items): string {}
 
 ## PDO parameterized queries
 
-Eloquent and the Query Builder use PDO prepared statements for WHERE conditions, HAVING clauses, and primary-key lookups. When a value is passed to `where('col', $value)`, Laravel stores it in `$this->bindings[]` via `addBinding()` and the grammar compiles it as a `?` placeholder — the value never enters the SQL string. PDO binds it at execution time, making SQL injection impossible regardless of content.
+Eloquent and the Query Builder use PDO prepared statements for WHERE conditions, HAVING clauses, and primary-key lookups. When a value is passed to `where('col', $value)`, Laravel stores it in `$this->bindings['where'][]` via `addBinding()` and the grammar compiles it as a `?` placeholder — the value never enters the SQL string. PDO binds it at execution time, making SQL injection impossible regardless of content.
 
 This creates two distinct annotation responsibilities:
 
-- **Column names** (`$column`) — interpolated into the SQL identifier (e.g., `WHERE name = ?`), so user-controlled column names are a real injection risk. Mark with `@psalm-taint-sink sql $column`.
+- **Column names** (`$column`) — interpolated literally into the SQL identifier (e.g., `WHERE {$column} = ?`), so user-controlled column names are a real injection risk. Mark with `@psalm-taint-sink sql $column`.
 - **Values** (`$value`, `$operator` in 2-arg form, `$id`) — PDO-bound, never interpolated. Use `@psalm-taint-escape sql` to suppress false-positive `TaintedSql` warnings, paired with `@psalm-flow` to preserve other taint kinds.
 
 ### Pattern for where-family methods
@@ -222,7 +222,7 @@ public function where($column, $operator = null, $value = null, $boolean = 'and'
 
 Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argument form** (`where('col', $userValue)`), Laravel's `prepareValueAndOperator()` moves the second argument into the `$value` position (the original `$value = null` is discarded) — so user input may arrive via `$operator` at the call site, even though it is always PDO-bound.
 
-The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, `orHaving()`, and `firstWhere()`.
+The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, and `orHaving()`.
 
 ### Pattern for find-family methods
 
@@ -237,7 +237,7 @@ public function find($id, $columns = ['*']) {}
 
 `@psalm-taint-specialize` is required here. Without it, a single `find($taintedId)` call anywhere in the codebase would mark ALL `find()` return values as tainted globally — including `find(1)` with a safe literal. See [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the general rule.
 
-This specialize + escape pattern applies to `find()`, `findMany()`, `findOrFail()`, `findOrNew()`, and `findSole()`.
+This specialize + escape pattern applies to `find()`, `findMany()`, `findOrFail()`, `findOrNew()`, `findSole()`, and `firstWhere()`.
 
 Note that `where()` does NOT need `@psalm-taint-specialize` because it returns `$this` (the fluent builder) — a value that is chained further rather than consumed at the call site. Per-call-site isolation matters for concrete return values (models, scalars), not for method-chaining builders.
 

@@ -595,7 +595,7 @@ final class ValidationRuleAnalyzer
                 continue;
             }
 
-            if (\strtolower($classStmt->name->toString()) !== 'rules') {
+            if ($classStmt->name->toLowerString() !== 'rules') {
                 continue;
             }
 
