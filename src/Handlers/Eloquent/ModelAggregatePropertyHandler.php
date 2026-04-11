@@ -266,14 +266,16 @@ final class ModelAggregatePropertyHandler
             $pos = 0;
 
             while (($pos = \strpos($propertyName, $needle, $pos)) !== false) {
-                if ($pos > 0) {
-                    $prefix = \substr($propertyName, 0, $pos);
-                    if (self::isRelationPrefix($codebase, $fqClasslikeName, $prefix)) {
-                        return $suffix;
-                    }
+                $pos++;
+                if ($pos === 1) {
+                    // needle at position 0 — no relation prefix possible
+                    continue;
                 }
 
-                $pos++;
+                $prefix = \substr($propertyName, 0, $pos - 1);
+                if (self::isRelationPrefix($codebase, $fqClasslikeName, $prefix)) {
+                    return $suffix;
+                }
             }
         }
 
@@ -321,7 +323,7 @@ final class ModelAggregatePropertyHandler
         $selfClass = $fqClasslikeName;
         try {
             $returnType = $codebase->getMethodReturnType($key, $selfClass);
-        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException|\RuntimeException $e) {
             $codebase->progress->debug("Laravel plugin: could not get return type for {$key}: {$e->getMessage()}\n");
             return self::$relationMethodCache[$key] = false;
         }

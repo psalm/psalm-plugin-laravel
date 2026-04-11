@@ -70,7 +70,6 @@ final class MethodForwardingHandler implements
      */
     private static array $dynamicWhereCache = [];
 
-
     /** @psalm-external-mutation-free */
     public static function init(ForwardingRule $rule): void
     {
@@ -242,7 +241,7 @@ final class MethodForwardingHandler implements
                 try {
                     return ModelMethodHandler::getParamsWithVariadicFlag($codebase, $declaringId);
                 } catch (\InvalidArgumentException|\UnexpectedValueException) {
-                    return null;
+                    continue;
                 }
             }
         }
@@ -431,7 +430,7 @@ final class MethodForwardingHandler implements
         }
 
         // TRelatedModel is always the first template parameter on Relation subclasses.
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0] ?? null);
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0]);
 
         if ($modelClass === null) {
             return null;

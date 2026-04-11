@@ -48,5 +48,8 @@ $_guardUnknown = \Illuminate\Support\Facades\Auth::guard('nonexistent-guard');
 $_guardNull = \Illuminate\Support\Facades\Auth::guard(null);
 // null is equivalent to no argument — narrows to the default guard's concrete class
 /** @psalm-check-type-exact $_guardNull = \Illuminate\Auth\SessionGuard */
+
+$_guardApi = \Illuminate\Support\Facades\Auth::guard('api');
+/** @psalm-check-type-exact $_guardApi = \Illuminate\Auth\TokenGuard */
 ?>
 --EXPECT--
