@@ -54,7 +54,6 @@ final class MethodForwardingHandler implements
     /**
      * Whether dynamic where{Column} method resolution is enabled.
      *
-     * Opt-in via <resolveDynamicWhereClauses value="true" /> in psalm.xml.
      * When enabled, methods matching the pattern where{Column} (e.g. whereTitle, whereEmail)
      * are resolved on relation chains when the column exists in the model's declared property annotations.
      */
@@ -510,7 +509,7 @@ final class MethodForwardingHandler implements
         // snapshot taken on the first call could be incomplete for subsequent method checks.
         // The per-(model, method) $dynamicWhereCache still prevents redundant lookups.
         // "$first_name" → "firstname", "$title" → "title"
-        foreach (array_keys($storage->pseudo_property_get_types) as $propName) {
+        foreach ($storage->pseudo_property_get_types as $propName => $_) {
             $normalized = \strtolower(\str_replace(['$', '_'], '', $propName));
 
             if ($normalized === $columnSuffix) {
