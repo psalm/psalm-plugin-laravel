@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Collections;
 
-use Illuminate\Support\HigherOrderCollectionProxy;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
@@ -56,7 +55,7 @@ final class HigherOrderCollectionProxyHandler implements AfterMethodCallAnalysis
         $source = $event->getStatementsSource();
         $calleeType = $source->getNodeTypeProvider()->getType($expr->var);
 
-        if (!$calleeType instanceof \Psalm\Type\Union) {
+        if (!$calleeType instanceof Union) {
             return;
         }
 
@@ -69,7 +68,7 @@ final class HigherOrderCollectionProxyHandler implements AfterMethodCallAnalysis
 
             $typeParams = $atomic->type_params;
             if (\count($typeParams) < 2) {
-                return;
+                continue;
             }
 
             // Override the @mixin TValue resolution (e.g. int) with the collection-level result,
