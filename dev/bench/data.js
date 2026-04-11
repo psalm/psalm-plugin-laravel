@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775930746358,
+  "lastUpdate": 1775931356494,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -902,6 +902,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.58,
             "range": "± 0.22",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "48acb4210c04a1155b183ba38d995a40db2f1bef",
+          "message": "docs: clarify firstWhere() hybrid taint pattern and fix stale ssrf comment #0",
+          "timestamp": "2026-04-11T20:12:08+02:00",
+          "tree_id": "82669632b89ee34413cbf376ee84918f547397e4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/48acb4210c04a1155b183ba38d995a40db2f1bef"
+        },
+        "date": 1775931356042,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.57,
+            "range": "± 0.14",
             "unit": "s"
           },
           {
