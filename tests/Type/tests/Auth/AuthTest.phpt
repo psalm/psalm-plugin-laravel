@@ -46,7 +46,7 @@ $_guardUnknown = \Illuminate\Support\Facades\Auth::guard('nonexistent-guard');
 /** @psalm-check-type-exact $_guardUnknown = \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard */
 
 $_guardNull = \Illuminate\Support\Facades\Auth::guard(null);
-// null arg is treated like a dynamic value (not String_ AST node) — falls back to stub's declared union type
-/** @psalm-check-type-exact $_guardNull = \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard */
+// null is equivalent to no argument — narrows to the default guard's concrete class
+/** @psalm-check-type-exact $_guardNull = \Illuminate\Auth\SessionGuard */
 ?>
 --EXPECT--
