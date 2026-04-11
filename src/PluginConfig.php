@@ -23,6 +23,7 @@ final readonly class PluginConfig
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         public string $cachePath,
+        public bool $dynamicWhereMethods,
     ) {}
 
     public static function fromXml(?\SimpleXMLElement $config): self
@@ -44,6 +45,7 @@ final readonly class PluginConfig
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        $dynamicWhereMethods = self::xmlBoolAttr($config?->dynamicWhereMethods, 'dynamicWhereMethods');
 
         return new self(
             columnFallback: $columnFallback,
@@ -51,6 +53,7 @@ final readonly class PluginConfig
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             cachePath: self::resolveCachePath(),
+            dynamicWhereMethods: $dynamicWhereMethods,
         );
     }
 
