@@ -360,9 +360,6 @@ function validator(array $data = [], array $rules = [], array $messages = [], ar
  * @param  \Illuminate\Contracts\Support\Arrayable<string, mixed>|array<string, mixed>  $data
  * @param  array<string, mixed>  $mergeData
  * @return ($view is null ? \Illuminate\Contracts\View\Factory : (\Illuminate\View\View|\Illuminate\Contracts\View\View))
- *
- * @psalm-taint-sink html $data
- * @psalm-taint-sink html $mergeData
  */
 function view($view = null, $data = [], $mergeData = []) {}
 
