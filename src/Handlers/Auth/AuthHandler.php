@@ -36,6 +36,7 @@ use Psalm\Type;
 final class AuthHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
     use ExtractsGuardNameFromCallLike;
+
     /**
      * @return list<string>
      * @psalm-pure
