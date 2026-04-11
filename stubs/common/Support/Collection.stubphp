@@ -169,8 +169,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Merge the collection with the given items.
      *
      * Uses an independent key template `TMergeKey` rather than constraining input keys to `TKey`.
-     * This allows `Collection<never, never>::merge(Collection<int, Lesson>)` to return
-     * `Collection<int, Lesson>` instead of failing with a key-type mismatch.
+     * This allows `Collection<never, never>::merge(Collection<int, string>)` to return
+     * `Collection<int, string>` instead of failing with a key-type mismatch.
      *
      * @template TMergeKey of array-key
      * @template TMergeValue
