@@ -9,7 +9,6 @@ use Psalm\Codebase;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
-use Psalm\Type;
 use Psalm\Type\Atomic\TBool;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TNamedObject;
@@ -70,6 +69,13 @@ final class ModelAggregatePropertyHandler
     private static array $suffixCache = [];
 
     /**
+     * @var array<string, bool> Cache for isRelationMethod(), keyed by "class::method".
+     *                           Prevents redundant getMethodReturnType() calls when the same
+     *                           relation is referenced by multiple aggregate properties.
+     */
+    private static array $relationMethodCache = [];
+
+    /**
      * @var array<string, Union> Cached Union instances for each aggregate suffix,
      *                            to avoid repeated allocation across analysis runs.
      */
@@ -110,18 +116,25 @@ final class ModelAggregatePropertyHandler
 
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
+        // PropertyVisibilityProviderEvent::getSource() is non-nullable, unlike the other events.
         if (!$event->isReadMode()) {
             return null;
         }
 
         $propertyName = $event->getPropertyName();
+        $fqClasslikeName = $event->getFqClasslikeName();
+
+        // Fast path: use cached suffix from doesPropertyExist() if available.
+        $cacheKey = $fqClasslikeName . '::' . $propertyName;
+        if (\array_key_exists($cacheKey, self::$suffixCache)) {
+            return self::$suffixCache[$cacheKey] !== null ? true : null;
+        }
 
         if (!self::couldBeAggregate($propertyName)) {
             return null;
         }
 
         $codebase = $event->getSource()->getCodebase();
-        $fqClasslikeName = $event->getFqClasslikeName();
 
         if (self::hasUserPseudoProperty($codebase, $fqClasslikeName, $propertyName)) {
             return null;
@@ -141,6 +154,14 @@ final class ModelAggregatePropertyHandler
         }
 
         $propertyName = $event->getPropertyName();
+        $fqClasslikeName = $event->getFqClasslikeName();
+
+        // Fast path: use cached suffix from doesPropertyExist()/isPropertyVisible() if available.
+        $cacheKey = $fqClasslikeName . '::' . $propertyName;
+        if (\array_key_exists($cacheKey, self::$suffixCache)) {
+            $suffix = self::$suffixCache[$cacheKey];
+            return $suffix !== null ? self::buildTypeForSuffix($suffix) : null;
+        }
 
         if (!self::couldBeAggregate($propertyName)) {
             return null;
@@ -152,7 +173,6 @@ final class ModelAggregatePropertyHandler
         }
 
         $codebase = $source->getCodebase();
-        $fqClasslikeName = $event->getFqClasslikeName();
 
         if (self::hasUserPseudoProperty($codebase, $fqClasslikeName, $propertyName)) {
             return null;
@@ -221,7 +241,8 @@ final class ModelAggregatePropertyHandler
      * 2. Column-including suffix (min, max, sum, avg): property contains `_{suffix}_`.
      *    The relation prefix is everything before `_{suffix}_`; the column follows.
      *    Multiple `_{suffix}_` occurrences are tried left-to-right until a relation match
-     *    is found (handles relation names that themselves contain the suffix word).
+     *    is found (handles relation names that themselves contain the suffix word, and
+     *    column names containing underscores, e.g. `contacts_min_unit_price`).
      */
     private static function doParseAggregateProperty(Codebase $codebase, string $fqClasslikeName, string $propertyName): ?string
     {
@@ -232,7 +253,7 @@ final class ModelAggregatePropertyHandler
             }
 
             $prefix = \substr($propertyName, 0, -\strlen($suffix) - 1);
-            if ($prefix !== '' && self::findRelationMethod($codebase, $fqClasslikeName, $prefix) !== null) {
+            if ($prefix !== '' && self::isRelationPrefix($codebase, $fqClasslikeName, $prefix)) {
                 return $suffix;
             }
         }
@@ -246,7 +267,7 @@ final class ModelAggregatePropertyHandler
             while (($pos = \strpos($propertyName, $needle, $pos)) !== false) {
                 if ($pos > 0) {
                     $prefix = \substr($propertyName, 0, $pos);
-                    if (self::findRelationMethod($codebase, $fqClasslikeName, $prefix) !== null) {
+                    if (self::isRelationPrefix($codebase, $fqClasslikeName, $prefix)) {
                         return $suffix;
                     }
                 }
@@ -259,24 +280,19 @@ final class ModelAggregatePropertyHandler
     }
 
     /**
-     * Find the relation method name matching the given snake_case prefix.
+     * Check whether the given snake_case prefix maps to a relation method on this model.
      *
-     * Tries the prefix directly (for snake_case method names) and then its
-     * camelCase equivalent (for typical camelCase methods like `workOrders`).
-     * Returns the method name on match, null if no relation method found.
+     * Tries the prefix directly (for snake_case method names) and then its camelCase
+     * equivalent (for typical camelCase methods like `workOrders`).
      */
-    private static function findRelationMethod(Codebase $codebase, string $fqClasslikeName, string $prefix): ?string
+    private static function isRelationPrefix(Codebase $codebase, string $fqClasslikeName, string $prefix): bool
     {
         if (self::isRelationMethod($codebase, $fqClasslikeName, $prefix)) {
-            return $prefix;
+            return true;
         }
 
         $camelPrefix = self::snakeToCamelCase($prefix);
-        if ($camelPrefix !== $prefix && self::isRelationMethod($codebase, $fqClasslikeName, $camelPrefix)) {
-            return $camelPrefix;
-        }
-
-        return null;
+        return $camelPrefix !== $prefix && self::isRelationMethod($codebase, $fqClasslikeName, $camelPrefix);
     }
 
     /**
@@ -284,13 +300,19 @@ final class ModelAggregatePropertyHandler
      *
      * Mirrors ModelRelationshipPropertyHandler::relationExists() — accepts both generic and
      * non-generic Relation return types, and falls back to body parsing for untyped methods.
+     * Results are cached to avoid redundant codebase lookups across multiple aggregate
+     * properties sharing the same relation (e.g. contacts_count and contacts_sum_amount).
      */
     private static function isRelationMethod(Codebase $codebase, string $fqClasslikeName, string $methodName): bool
     {
         $key = $fqClasslikeName . '::' . $methodName;
 
+        if (\array_key_exists($key, self::$relationMethodCache)) {
+            return self::$relationMethodCache[$key];
+        }
+
         if (!$codebase->methodExists($key)) {
-            return false;
+            return self::$relationMethodCache[$key] = false;
         }
 
         // getMethodReturnType() takes $self_class by reference and may set it to null,
@@ -298,25 +320,24 @@ final class ModelAggregatePropertyHandler
         $selfClass = $fqClasslikeName;
         try {
             $returnType = $codebase->getMethodReturnType($key, $selfClass);
-        } catch (\InvalidArgumentException $e) {
-            // Anomalous: methodExists() returned true but storage lookup failed.
-            // Surface as a warning (not debug) so users can report it without --debug.
-            $codebase->progress->warning("Laravel plugin: could not get return type for {$key}: {$e->getMessage()}");
-            return false;
+        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+            $codebase->progress->debug("Laravel plugin: could not get return type for {$key}: {$e->getMessage()}\n");
+            return self::$relationMethodCache[$key] = false;
         }
 
         if ($returnType instanceof Union) {
             foreach ($returnType->getAtomicTypes() as $type) {
                 if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
-                    return true;
+                    return self::$relationMethodCache[$key] = true;
                 }
             }
 
-            return false;
+            return self::$relationMethodCache[$key] = false;
         }
 
         // No return type declared — check the method body for relationship factory calls.
-        return RelationMethodParser::parse($codebase, $fqClasslikeName, $methodName) !== null;
+        $result = RelationMethodParser::parse($codebase, $fqClasslikeName, $methodName) !== null;
+        return self::$relationMethodCache[$key] = $result;
     }
 
     /**
@@ -338,12 +359,10 @@ final class ModelAggregatePropertyHandler
             'exists'     => new Union([new TBool()]),
             'min', 'max' => new Union([new TString(), new TNull()]),
             'sum', 'avg' => new Union([new TNumericString(), new TNull()]),
-            default      => Type::getMixed(),
+            default      => throw new \LogicException("Unexpected aggregate suffix: {$suffix}"),
         };
 
-        self::$typeCache[$suffix] = $type;
-
-        return $type;
+        return self::$typeCache[$suffix] = $type;
     }
 
     /**
@@ -372,10 +391,12 @@ final class ModelAggregatePropertyHandler
             return self::$pseudoPropertyCache[$key];
         }
 
+        if (!$codebase->classlike_storage_provider->has($fqClasslikeName)) {
+            return self::$pseudoPropertyCache[$key] = false;
+        }
+
         $classStorage = $codebase->classlike_storage_provider->get($fqClasslikeName);
         $result = isset($classStorage->pseudo_property_get_types['$' . $propertyName]);
-        self::$pseudoPropertyCache[$key] = $result;
-
-        return $result;
+        return self::$pseudoPropertyCache[$key] = $result;
     }
 }

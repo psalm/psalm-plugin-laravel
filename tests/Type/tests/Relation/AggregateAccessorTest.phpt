@@ -96,6 +96,17 @@ function test_avg_camelCase_relation(Shop $shop): string|null
     return $avg;
 }
 
+// --- Multi-word column name (underscore in column) ---
+// alias: Str::snake("work_orders min unit_price") = "work_orders_min_unit_price"
+// Verifies the left-to-right strpos scan handles `_{suffix}_` inside a column name.
+
+function test_min_multi_word_column(Shop $shop): string|null
+{
+    /** @psalm-check-type-exact $min = string|null */
+    $min = $shop->work_orders_min_unit_price;
+    return $min;
+}
+
 // --- Body-parsed relation method (no declared return type) ---
 // Shop::supplierList() has no return type; the handler must parse the body AST.
 
