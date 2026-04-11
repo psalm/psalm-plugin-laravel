@@ -163,13 +163,27 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             ModelRelationshipPropertyHandler::getPropertyType(...),
         );
 
-        // 2. Factory property ($model::factory())
+        // 2. Aggregate accessor properties (e.g. $label->contacts_count via withCount())
+        $properties->property_existence_provider->registerClosure(
+            $className,
+            ModelAggregatePropertyHandler::doesPropertyExist(...),
+        );
+        $properties->property_visibility_provider->registerClosure(
+            $className,
+            ModelAggregatePropertyHandler::isPropertyVisible(...),
+        );
+        $properties->property_type_provider->registerClosure(
+            $className,
+            ModelAggregatePropertyHandler::getPropertyType(...),
+        );
+
+        // 3. Factory property ($model::factory())
         $properties->property_type_provider->registerClosure(
             $className,
             ModelFactoryTypeProvider::getPropertyType(...),
         );
 
-        // 3. Accessor properties (e.g. $user->full_name via attribute accessor)
+        // 4. Accessor properties (e.g. $user->full_name via attribute accessor)
         $properties->property_existence_provider->registerClosure(
             $className,
             ModelPropertyAccessorHandler::doesPropertyExist(...),
@@ -183,7 +197,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             ModelPropertyAccessorHandler::getPropertyType(...),
         );
 
-        // 4. Column properties from migrations (e.g. $user->email)
+        // 5. Column properties from migrations (e.g. $user->email)
         if (self::$useMigrations) {
             $properties->property_existence_provider->registerClosure(
                 $className,
