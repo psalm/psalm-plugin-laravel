@@ -61,6 +61,37 @@ function test_eloquent_builder_unless_return_type(Builder $builder): void
     /** @psalm-check-type-exact $_result = Builder<Customer>&static */
 }
 
+/**
+ * Regression: real two-parameter callback must not collapse the return type to mixed.
+ * This is the exact pattern from issue #704 — Psalm previously returned mixed here
+ * because TWhenReturnType resolved to mixed when inferred from the callback return.
+ *
+ * @param Builder<Customer> $query
+ * @param string|null $search
+ */
+function test_eloquent_builder_when_with_real_callback(Builder $query, ?string $search): void
+{
+    $_result = $query->when(
+        $search,
+        fn(Builder $q, string $v) => $q->where('name', 'like', "%$v%")
+    );
+    /** @psalm-check-type-exact $_result = Builder<Customer>&static */
+}
+
+/**
+ * unless() with a real callback must also preserve the builder type.
+ *
+ * @param Builder<Customer> $query
+ */
+function test_eloquent_builder_unless_with_real_callback(Builder $query): void
+{
+    $_result = $query->unless(
+        false,
+        fn(Builder $q, bool $_v) => $q->where('deleted_at', null)
+    );
+    /** @psalm-check-type-exact $_result = Builder<Customer>&static */
+}
+
 // --- Query\Builder (via BuildsQueries trait) ---
 
 /**
