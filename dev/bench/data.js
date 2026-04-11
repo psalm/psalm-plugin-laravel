@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775901037538,
+  "lastUpdate": 1775907052152,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -449,6 +449,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.15,
             "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1126,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8b6623a53c4e3a50aab68d1bf5445bc6c4fafd1f",
+          "message": "Merge pull request #690 from psalm/684-fix-view-tainted-html-false-positive\n\nfix(taint): remove false-positive TaintedHtml sinks from Blade view data",
+          "timestamp": "2026-04-11T12:27:58+01:00",
+          "tree_id": "3b23d105e53f625dcb09f2a07db2476b8504bfb2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8b6623a53c4e3a50aab68d1bf5445bc6c4fafd1f"
+        },
+        "date": 1775907051429,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.76,
+            "range": "± 0.32",
             "unit": "s"
           },
           {
