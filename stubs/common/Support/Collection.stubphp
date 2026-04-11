@@ -16,6 +16,9 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * These annotations are declared directly here so that TKey/TValue resolve to the class-level
  * template parameters and higher-order proxy method calls are properly typed.
  *
+ * The list mirrors EnumeratesValues::$proxies exactly — do not edit without checking that array.
+ * Note: $hasMany here is a collection method (not an Eloquent relationship).
+ *
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $average
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $avg
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $contains
