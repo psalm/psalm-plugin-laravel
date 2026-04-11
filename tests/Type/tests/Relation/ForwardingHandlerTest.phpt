@@ -10,6 +10,7 @@ use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
 /**
  * Tests for MethodForwardingHandler: verifies that method calls on Eloquent Relations
@@ -58,17 +59,17 @@ function test_mixin_only_preserves_relation_type(): void {
 
 // Different Relation subclass: BelongsToMany (verifies template params work beyond HasOne)
 function test_belongsToMany_where_preserves_relation_type(): void {
-    /** @var BelongsToMany<Part, WorkOrder> $r */
+    /** @var BelongsToMany<Part, WorkOrder, Pivot, 'pivot'> $r */
     $r = (new WorkOrder())->parts();
     $_ = $r->where('active', true);
-    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder> */
+    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot, 'pivot'> */
 }
 
 function test_belongsToMany_orderBy_preserves_relation_type(): void {
-    /** @var BelongsToMany<Part, WorkOrder> $r */
+    /** @var BelongsToMany<Part, WorkOrder, Pivot, 'pivot'> $r */
     $r = (new WorkOrder())->parts();
     $_ = $r->orderBy('name');
-    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder> */
+    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot, 'pivot'> */
 }
 
 // Non-fluent: first() resolved via Relation stub (workaround for Psalm mixin template bug)
