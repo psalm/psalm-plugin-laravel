@@ -65,5 +65,14 @@ function safeOrHavingValue(\Illuminate\Http\Request $request): void {
 
     $builder->orHaving('total', '>', $count);
 }
+
+/** @psalm-suppress TooFewArguments, MixedAssignment */
+function safeFindById(\Illuminate\Http\Request $request): void {
+    $builder = new \Illuminate\Database\Query\Builder();
+    $id = $request->input('id');
+
+    // find($id) delegates to where('id', '=', $id) — PDO-bound, cannot inject
+    $builder->find($id);
+}
 ?>
 --EXPECTF--
