@@ -9,6 +9,42 @@ use Illuminate\Support\Collection as BaseCollection;
  * @template TKey of array-key
  * @template TModel of \Illuminate\Database\Eloquent\Model
  * @extends \Illuminate\Support\Collection<TKey, TModel>
+ *
+ * Psalm does not inherit @property-read from a parent class when template parameters
+ * are remapped via @extends, so these annotations must be repeated here with TModel.
+ *
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $average
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $avg
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $contains
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $doesntContain
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $each
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $every
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $filter
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $first
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $flatMap
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $groupBy
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $hasMany
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $hasSole
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $keyBy
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $last
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $map
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $max
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $min
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $partition
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $percentage
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $reject
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $skipUntil
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $skipWhile
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $some
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $sortBy
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $sortByDesc
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $sum
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $takeUntil
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $takeWhile
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $unique
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $unless
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $until
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $when
  */
 class Collection extends BaseCollection implements QueueableCollection
 {
