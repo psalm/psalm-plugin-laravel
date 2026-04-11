@@ -9,6 +9,7 @@ use Psalm\Codebase;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
+use Psalm\StatementsSource;
 use Psalm\Type\Atomic\TBool;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TNamedObject;
@@ -83,7 +84,7 @@ final class ModelAggregatePropertyHandler
 
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
-        if (!$event->isReadMode()) {
+        if (! $event->isReadMode()) {
             return null;
         }
 
@@ -91,12 +92,12 @@ final class ModelAggregatePropertyHandler
 
         // Fast pre-check: bail before any codebase calls for the vast majority of
         // property accesses that can't possibly match an aggregate pattern.
-        if (!self::couldBeAggregate($propertyName)) {
+        if (! self::couldBeAggregate($propertyName)) {
             return null;
         }
 
         $source = $event->getSource();
-        if (!$source) {
+        if (! $source instanceof StatementsSource) {
             return null;
         }
 
@@ -117,7 +118,7 @@ final class ModelAggregatePropertyHandler
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         // PropertyVisibilityProviderEvent::getSource() is non-nullable, unlike the other events.
-        if (!$event->isReadMode()) {
+        if (! $event->isReadMode()) {
             return null;
         }
 
@@ -130,7 +131,7 @@ final class ModelAggregatePropertyHandler
             return self::$suffixCache[$cacheKey] !== null ? true : null;
         }
 
-        if (!self::couldBeAggregate($propertyName)) {
+        if (! self::couldBeAggregate($propertyName)) {
             return null;
         }
 
@@ -149,7 +150,7 @@ final class ModelAggregatePropertyHandler
 
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
-        if (!$event->isReadMode()) {
+        if (! $event->isReadMode()) {
             return null;
         }
 
@@ -163,12 +164,12 @@ final class ModelAggregatePropertyHandler
             return $suffix !== null ? self::buildTypeForSuffix($suffix) : null;
         }
 
-        if (!self::couldBeAggregate($propertyName)) {
+        if (! self::couldBeAggregate($propertyName)) {
             return null;
         }
 
         $source = $event->getSource();
-        if (!$source) {
+        if (! $source instanceof StatementsSource) {
             return null;
         }
 
@@ -248,7 +249,7 @@ final class ModelAggregatePropertyHandler
     {
         // Strategy 1: withCount/withExists — alias is {relation}_{suffix}, no column in name.
         foreach (self::EXACT_SUFFIXES as $suffix) {
-            if (!\str_ends_with($propertyName, '_' . $suffix)) {
+            if (! \str_ends_with($propertyName, '_' . $suffix)) {
                 continue;
             }
 
@@ -311,7 +312,7 @@ final class ModelAggregatePropertyHandler
             return self::$relationMethodCache[$key];
         }
 
-        if (!$codebase->methodExists($key)) {
+        if (! $codebase->methodExists($key)) {
             return self::$relationMethodCache[$key] = false;
         }
 
@@ -391,7 +392,7 @@ final class ModelAggregatePropertyHandler
             return self::$pseudoPropertyCache[$key];
         }
 
-        if (!$codebase->classlike_storage_provider->has($fqClasslikeName)) {
+        if (! $codebase->classlike_storage_provider->has($fqClasslikeName)) {
             return self::$pseudoPropertyCache[$key] = false;
         }
 
