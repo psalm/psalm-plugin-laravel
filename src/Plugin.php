@@ -270,6 +270,7 @@ final class Plugin implements PluginEntryPointInterface
         if ($pluginConfig->dynamicWhereMethods) {
             Handlers\Magic\MethodForwardingHandler::enableDynamicWhere();
         }
+
         $registration->registerHooksFromClass(Handlers\Magic\MethodForwardingHandler::class);
 
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
