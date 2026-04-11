@@ -4,6 +4,7 @@
 use App\Models\Customer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Stringable;
 
@@ -98,9 +99,8 @@ function test_collection_when_fluent_chain(): void
 /** when() on Stringable must preserve Stringable, not return mixed. */
 function test_stringable_when_fluent_chain(): void
 {
-    (new Stringable('hello'))
-        ->when(true, null, null)
-        ->value();
+    $_result = (new Stringable('hello'))->when(true, null, null);
+    /** @psalm-check-type-exact $_result = Stringable&static */
 }
 
 // --- Tappable::tap() ---
@@ -126,5 +126,16 @@ function test_tap_without_callback(): void
     $_result = (new Stringable('hello'))->tap();
     /** @psalm-check-type-exact $_result = Stringable&static */
 }
+/**
+ * tap() on Http\Client\Response (another Tappable user) confirms trait-level application
+ * is not limited to Stringable.
+ */
+function test_response_tap_with_callback(Response $response): void
+{
+    $_result = $response->tap(static function (Response $r): void {
+        $r->status();
+    });
+    /** @psalm-check-type-exact $_result = Response&static */
+}
 ?>
---EXPECT--
+--EXPECTF--
