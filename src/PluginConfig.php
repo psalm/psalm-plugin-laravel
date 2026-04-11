@@ -88,7 +88,7 @@ final readonly class PluginConfig
             return $default;
         }
 
-        $value = (string) ($element['value'] ?? 'false');
+        $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException(
