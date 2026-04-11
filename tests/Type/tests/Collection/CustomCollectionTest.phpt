@@ -11,6 +11,8 @@ use App\Models\Vehicle;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Relations\MorphPivot;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
 /**
  * Models with custom collections should return the custom collection type
@@ -145,7 +147,7 @@ function test_relation_get_custom_collection(\Illuminate\Database\Eloquent\Relat
 
 // --- BelongsToMany::get() on a model with custom collection ---
 
-/** @param \Illuminate\Database\Eloquent\Relations\BelongsToMany<Part, \App\Models\Shop> $relation */
+/** @param \Illuminate\Database\Eloquent\Relations\BelongsToMany<Part, \App\Models\Shop, Pivot, 'pivot'> $relation */
 function test_belongsToMany_get_custom_collection(\Illuminate\Database\Eloquent\Relations\BelongsToMany $relation): PartCollection
 {
     /** @psalm-check-type-exact $result = PartCollection<int, Part> */
@@ -155,7 +157,7 @@ function test_belongsToMany_get_custom_collection(\Illuminate\Database\Eloquent\
 
 // --- BelongsToMany::findMany() on a model with custom collection ---
 
-/** @param \Illuminate\Database\Eloquent\Relations\BelongsToMany<Part, \App\Models\Shop> $relation */
+/** @param \Illuminate\Database\Eloquent\Relations\BelongsToMany<Part, \App\Models\Shop, Pivot, 'pivot'> $relation */
 function test_belongsToMany_findMany_custom_collection(\Illuminate\Database\Eloquent\Relations\BelongsToMany $relation): PartCollection
 {
     /** @psalm-check-type-exact $result = PartCollection<int, Part> */
@@ -165,7 +167,7 @@ function test_belongsToMany_findMany_custom_collection(\Illuminate\Database\Eloq
 
 // --- MorphToMany::get() on a model with custom collection ---
 
-/** @param \Illuminate\Database\Eloquent\Relations\MorphToMany<WorkOrder, \App\Models\Shop> $relation */
+/** @param \Illuminate\Database\Eloquent\Relations\MorphToMany<WorkOrder, \App\Models\Shop, MorphPivot, 'pivot'> $relation */
 function test_morphToMany_get_custom_collection(\Illuminate\Database\Eloquent\Relations\MorphToMany $relation): WorkOrderCollection
 {
     /** @psalm-check-type-exact $result = WorkOrderCollection<int, WorkOrder> */
