@@ -510,7 +510,7 @@ final class MethodForwardingHandler implements
         // snapshot taken on the first call could be incomplete for subsequent method checks.
         // The per-(model, method) $dynamicWhereCache still prevents redundant lookups.
         // "$first_name" → "firstname", "$title" → "title"
-        foreach ($storage->pseudo_property_get_types as $propName => $_) {
+        foreach (array_keys($storage->pseudo_property_get_types) as $propName) {
             $normalized = \strtolower(\str_replace(['$', '_'], '', $propName));
 
             if ($normalized === $columnSuffix) {
