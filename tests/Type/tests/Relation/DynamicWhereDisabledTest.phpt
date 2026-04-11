@@ -20,7 +20,7 @@ function test_dynamic_where_not_resolved_when_disabled(): void {
     $r = (new WorkOrder())->invoice();
     // whereInvoiceNumber IS a valid @property on Invoice, but the feature is off —
     // must fall through to mixed instead of preserving the relation generic type.
-    $_ = $r->whereInvoiceNumber('INV-2024-001')->first();
+    $_ = $r->whereInvoiceNumber('INV-2024-001');
     /** @psalm-check-type-exact $_ = mixed */
 }
 ?>
