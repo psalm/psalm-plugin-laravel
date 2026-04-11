@@ -58,7 +58,7 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
 
         // Unknown type, default includes null, or default is mixed (implicitly includes null):
         // fall back to string|null
-        if ($second_arg_type === null
+        if (!$second_arg_type instanceof \Psalm\Type\Union
             || $second_arg_type->isNullable()
             || $second_arg_type->hasMixed()
         ) {
