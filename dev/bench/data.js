@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775925692080,
+  "lastUpdate": 1775928089521,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -797,6 +797,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.52,
             "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "6c122058c6c695c7773e620de87fc258784ee12d",
+          "message": "fix: cosing style changes\n\nSigned-off-by: Alies Lapatsin <web.lapateen@gmail.com>",
+          "timestamp": "2026-04-11T19:16:57+02:00",
+          "tree_id": "2a7636fb19a61d2b491b4ed677239c486bcfd6d5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6c122058c6c695c7773e620de87fc258784ee12d"
+        },
+        "date": 1775928088779,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.55,
+            "range": "± 0.29",
             "unit": "s"
           },
           {
