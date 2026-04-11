@@ -220,7 +220,7 @@ This creates two distinct annotation responsibilities:
 public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 ```
 
-Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argument form** (`where('col', $userValue)`), Laravel's `prepareValueAndOperator()` swaps the second argument into the `$value` position — so user input may arrive via `$operator` at the call site, even though it is always PDO-bound.
+Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argument form** (`where('col', $userValue)`), Laravel's `prepareValueAndOperator()` moves the second argument into the `$value` position (the original `$value = null` is discarded) — so user input may arrive via `$operator` at the call site, even though it is always PDO-bound.
 
 The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, `orHaving()`, and `firstWhere()`.
 
@@ -292,7 +292,7 @@ This differs from **escape functions** like `e()`, where `@psalm-taint-specializ
 2. **For database methods, check whether values are PDO-bound or raw SQL** -- see [PDO parameterized queries](#pdo-parameterized-queries). Column names go into SQL identifiers (sink); values go into bindings (escape).
 3. **Choose the correct annotation type**: source, sink, escape, or flow
 4. **If using `@psalm-taint-escape` or `@psalm-taint-unescape`**: always add `@psalm-flow` to preserve other taint kinds (unless the return value's other taints are truly irrelevant)
-5. **If using `@psalm-flow` without escape on a factory method**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution
+5. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution — this applies whether or not `@psalm-taint-escape` is also present
 6. **Match parameter types exactly** to Laravel's signatures -- do not narrow types
 7. **Place in `stubs/common/`** under a path matching the Laravel namespace
 8. **Keep taint and type annotations together** -- if a method already has type stubs, add taint annotations to the same file (see [Stub merging](README.md#stub-merging-how-psalm-combines-annotations))
