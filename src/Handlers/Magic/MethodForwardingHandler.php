@@ -514,6 +514,10 @@ final class MethodForwardingHandler implements
                 return false;
             }
 
+            // Use pseudo_property_get_types (from @property and @property-read) rather than
+            // pseudo_property_set_types (@property-write). Dynamic WHERE filters on readable
+            // database columns; @property-write only properties are write-only computed fields
+            // (e.g. password hashing) that do not correspond to filterable columns.
             // "$first_name" → "firstname", "$title" → "title"
             $normalised = \array_map(
                 static fn(string $p): string => \strtolower(\str_replace(['$', '_'], '', $p)),
