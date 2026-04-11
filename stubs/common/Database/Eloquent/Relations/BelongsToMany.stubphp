@@ -5,7 +5,9 @@ namespace Illuminate\Database\Eloquent\Relations;
 /**
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
  * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
- * @template-extends Relation<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>>
+ * @template TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\Pivot
+ * @template TAccessor of string = 'pivot'
+ * @template-extends Relation<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>>
  * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
  */
 class BelongsToMany extends Relation
@@ -13,18 +15,33 @@ class BelongsToMany extends Relation
     use Concerns\InteractsWithPivotTable;
 
     /**
+     * Specify the custom pivot model to use for the relationship.
+     *
+     * The @psalm-this-out annotation is intended to narrow TPivotModel on the
+     * returned instance. Full generic-param narrowing via @psalm-this-out is
+     * a known Psalm 7 limitation; the annotation is included for forward
+     * compatibility as Psalm's support matures.
+     *
+     * @template TNewPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot
+     * @param  class-string<TNewPivotModel>  $class
+     * @psalm-this-out static<TRelatedModel, TDeclaringModel, TNewPivotModel, TAccessor>
+     * @return $this
+     */
+    public function using($class) {}
+
+    /**
      * @template T
      * @psalm-param T $id
      * @param  int|non-empty-string|array<int|non-empty-string>|\Illuminate\Contracts\Support\Arrayable<int|non-empty-string>  $id
      * @param  list<non-empty-string>  $columns
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Support\Collection<int, TRelatedModel> : TRelatedModel)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}> : TRelatedModel&object{pivot: TPivotModel})
      */
     public function findOrNew($id, $columns = ['*']) {}
 
     /**
      * @param  array<string, mixed>  $attributes
      * @param  array<string, mixed>  $values
-     * @return TRelatedModel
+     * @return TRelatedModel&object{pivot: TPivotModel}
      */
     public function firstOrNew(array $attributes = [], array $values = []) {}
 
@@ -33,7 +50,7 @@ class BelongsToMany extends Relation
      * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
      * @param  array<string, mixed>  $joining
      * @param  bool   $touch
-     * @return TRelatedModel
+     * @return TRelatedModel&object{pivot: TPivotModel}
      */
     public function firstOrCreate(array $attributes = [], \Closure|array $values = [], array $joining = [], $touch = true) {}
 
@@ -42,7 +59,7 @@ class BelongsToMany extends Relation
      * @param  array<string, mixed>  $values
      * @param  array<string, mixed>  $joining
      * @param  bool   $touch
-     * @return TRelatedModel
+     * @return TRelatedModel&object{pivot: TPivotModel}
      */
     public function updateOrCreate(array $attributes, array $values = [], array $joining = [], $touch = true) {}
 
@@ -51,14 +68,14 @@ class BelongsToMany extends Relation
      * @psalm-param T $id
      * @param  mixed  $id
      * @param  list<non-empty-string>  $columns
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>|null : (TRelatedModel&object{pivot: TPivotModel})|null)
      */
     public function find($id, $columns = ['*']) {}
 
     /**
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<array-key, int|string>  $ids
      * @param  list<non-empty-string>  $columns
-     * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function findMany($ids, $columns = ['*']) {}
 
@@ -66,7 +83,7 @@ class BelongsToMany extends Relation
      * @template T
      * @psalm-param T $id
      * @param  list<non-empty-string>  $columns
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}> : TRelatedModel&object{pivot: TPivotModel})
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
@@ -74,7 +91,7 @@ class BelongsToMany extends Relation
 
     /**
      * @param  list<non-empty-string>  $columns
-     * @return TRelatedModel|null
+     * @return (TRelatedModel&object{pivot: TPivotModel})|null
      */
     public function first($columns = ['*']) {}
 
@@ -82,7 +99,7 @@ class BelongsToMany extends Relation
      * Execute the query and get the first result or throw an exception.
      *
      * @param  list<non-empty-string>  $columns
-     * @return TRelatedModel
+     * @return TRelatedModel&object{pivot: TPivotModel}
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
@@ -92,14 +109,14 @@ class BelongsToMany extends Relation
      * @param  array<string, mixed>  $attributes
      * @param  array<string, mixed>  $joining
      * @param  bool   $touch
-     * @return TRelatedModel
+     * @return TRelatedModel&object{pivot: TPivotModel}
      */
     public function create(array $attributes = [], array $joining = [], $touch = true) {}
 
     /**
      * @param  iterable<array<string, mixed>>  $records
      * @param  array<array-key, array<string, mixed>>  $joinings
-     * @return list<TRelatedModel>
+     * @return list<TRelatedModel&object{pivot: TPivotModel}>
      */
     public function createMany(iterable $records, array $joinings = []) {}
 
@@ -114,7 +131,7 @@ class BelongsToMany extends Relation
     public function withPivot($columns) {}
 
     /**
-     * @return \Traversable<int, TRelatedModel>
+     * @return \Traversable<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function getResults() {}
 
@@ -123,7 +140,7 @@ class BelongsToMany extends Relation
      * @param  array<int, mixed>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel>
+     * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -134,7 +151,7 @@ class BelongsToMany extends Relation
      * @param  array<int, mixed>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Pagination\Paginator<int, TRelatedModel>
+     * @return \Illuminate\Pagination\Paginator<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -145,7 +162,7 @@ class BelongsToMany extends Relation
      * @param  array<int, mixed>  $columns
      * @param  string  $cursorName
      * @param  string|null  $cursor
-     * @return \Illuminate\Pagination\CursorPaginator<int, TRelatedModel>
+     * @return \Illuminate\Pagination\CursorPaginator<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 
@@ -154,7 +171,7 @@ class BelongsToMany extends Relation
      *
      * @param  \Closure|array  $columns
      * @param  (\Closure(): TValue)|null  $callback
-     * @return TRelatedModel|TValue
+     * @return (TRelatedModel&object{pivot: TPivotModel})|TValue
      */
     public function firstOr($columns = ['*'], \Closure $callback = null) {}
 
@@ -163,7 +180,7 @@ class BelongsToMany extends Relation
      * @param  mixed  $operator
      * @param  mixed  $value
      * @param  string  $boolean
-     * @return TRelatedModel|null
+     * @return (TRelatedModel&object{pivot: TPivotModel})|null
      */
     public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -174,7 +191,7 @@ class BelongsToMany extends Relation
      * @param  T  $id
      * @param  list<non-empty-string>|\Closure  $columns
      * @param  (\Closure(): TValue)|null  $callback
-     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|TValue : TRelatedModel|TValue)
+     * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>|TValue : (TRelatedModel&object{pivot: TPivotModel})|TValue)
      */
     public function findOr($id, $columns = ['*'], \Closure $callback = null) {}
 
@@ -185,7 +202,7 @@ class BelongsToMany extends Relation
      * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
      * @param  array<string, mixed>  $joining
      * @param  bool  $touch
-     * @return TRelatedModel
+     * @return TRelatedModel&object{pivot: TPivotModel}
      */
     public function createOrFirst(array $attributes = [], \Closure|array $values = [], array $joining = [], $touch = true) {}
 
@@ -195,7 +212,7 @@ class BelongsToMany extends Relation
      * @param  TRelatedModel  $model
      * @param  array<string, mixed>  $pivotAttributes
      * @param  bool  $touch
-     * @return TRelatedModel
+     * @return TRelatedModel&object{pivot: TPivotModel}
      */
     public function save(\Illuminate\Database\Eloquent\Model $model, array $pivotAttributes = [], $touch = true) {}
 
@@ -205,14 +222,14 @@ class BelongsToMany extends Relation
      * @param  TRelatedModel  $model
      * @param  array<string, mixed>  $pivotAttributes
      * @param  bool  $touch
-     * @return TRelatedModel
+     * @return TRelatedModel&object{pivot: TPivotModel}
      */
     public function saveQuietly(\Illuminate\Database\Eloquent\Model $model, array $pivotAttributes = [], $touch = true) {}
 
     /**
      * Get a lazy collection for the given query.
      *
-     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel>
+     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function cursor() {}
 
@@ -220,7 +237,7 @@ class BelongsToMany extends Relation
      * Query lazily, by chunks of the given size.
      *
      * @param  int  $chunkSize
-     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel>
+     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function lazy($chunkSize = 1000) {}
 
@@ -230,7 +247,7 @@ class BelongsToMany extends Relation
      * @param  int  $chunkSize
      * @param  string|null  $column
      * @param  string|null  $alias
-     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel>
+     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function lazyById($chunkSize = 1000, $column = null, $alias = null) {}
 
@@ -240,7 +257,7 @@ class BelongsToMany extends Relation
      * @param  int  $chunkSize
      * @param  string|null  $column
      * @param  string|null  $alias
-     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel>
+     * @return \Illuminate\Support\LazyCollection<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function lazyByIdDesc($chunkSize = 1000, $column = null, $alias = null) {}
 }
