@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775916433860,
+  "lastUpdate": 1775918362688,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -589,6 +589,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 33.15,
             "range": "± 0.55",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b6d535f6c1f43036f1fd20c9a95857085af1151",
+          "message": "Merge pull request #711 from psalm/705-auth-guard-return-type-narrowing\n\nNarrow `Auth::guard()` return type to concrete guard class",
+          "timestamp": "2026-04-11T15:36:28+01:00",
+          "tree_id": "64a6476620ba9e7a3907c39fa6bd5d99e01d670f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1b6d535f6c1f43036f1fd20c9a95857085af1151"
+        },
+        "date": 1775918361995,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.36,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
