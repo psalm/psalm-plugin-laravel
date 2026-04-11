@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775919348217,
+  "lastUpdate": 1775920679936,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -692,6 +692,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.17,
             "range": "± 0.52",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b74c06c6a4ab8f86cbbfeae68e18955b1184d5e1",
+          "message": "Merge pull request #716 from psalm/709-belongs-to-many-templates\n\nFix `BelongsToMany`/`MorphToMany` stubs to declare 4 template params, restoring pivot types in return values",
+          "timestamp": "2026-04-11T16:14:44+01:00",
+          "tree_id": "4e22042b59d857f7ae421e9c6870618dae188db6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b74c06c6a4ab8f86cbbfeae68e18955b1184d5e1"
+        },
+        "date": 1775920679618,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.47,
+            "range": "± 0.14",
             "unit": "s"
           },
           {
