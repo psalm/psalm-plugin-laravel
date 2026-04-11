@@ -15,8 +15,9 @@
  *   $status = Status::findOrFail($id); // DB fetch — result is trusted
  *   redirect($status->url());          // must NOT fire TaintedSSRF + TaintedHeader
  *
- * Current behavior: Psalm does not propagate taint through stub functions without
- * @psalm-flow, so the fetch methods already do not propagate ssrf/header taint.
+ * Current behavior: find() has @psalm-flow ($id) -> return and @psalm-taint-escape sql,
+ * so $id's sql taint is removed but other taint kinds would flow through. However, taint
+ * stops at getAttribute() because it has no @psalm-flow and returns a fresh value.
  * This test is a regression guard to catch if that behavior changes.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/686
