@@ -292,7 +292,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         }
 
         $lhsType = $source->getNodeTypeProvider()->getType($stmt->var);
-        if ($lhsType === null) {
+        if (!$lhsType instanceof \Psalm\Type\Union) {
             return null;
         }
 
