@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775929008894,
+  "lastUpdate": 1775930746358,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -867,6 +867,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.01,
             "range": "± 0.36",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "17c7b4711c006d88bafe9ec6cca7b0b21f9613e3",
+          "message": "refactor(config): rename to resolveDynamicWhereClauses, enable by default #647\n\nAligns with Laravel's own \"dynamic where clauses\" terminology.\nDefault flips to true — unmatched columns fall through to mixed, so\nthere is no regression risk for codebases without @property annotations.",
+          "timestamp": "2026-04-11T20:02:51+02:00",
+          "tree_id": "faf5d3f3eb7c630229bfb2fbbb89e4b5b245c328",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/17c7b4711c006d88bafe9ec6cca7b0b21f9613e3"
+        },
+        "date": 1775930746046,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.58,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
