@@ -21,8 +21,8 @@ Full config example:
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
         <failOnInternalError value="true" />
-        <modelProperties columnFallback="migrations" />
-        <resolveDynamicWhereClauses value="true" />
+        <modelProperties columnFallback="none" />
+        <resolveDynamicWhereClauses value="false" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
     </pluginClass>
