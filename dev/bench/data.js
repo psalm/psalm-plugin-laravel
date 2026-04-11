@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775931356494,
+  "lastUpdate": 1775943263759,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -937,6 +937,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.57,
             "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5c91d7758726f16f095474618201bd16ba1a8d94",
+          "message": "Merge pull request #722 from psalm/worktree-fix-collect-never-type-721\n\nFix `collect()` with no args to return `Collection<never, never>`",
+          "timestamp": "2026-04-11T22:31:30+01:00",
+          "tree_id": "a4b9d622a7ae92a2fc06dc2f324175d188c490fe",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5c91d7758726f16f095474618201bd16ba1a8d94"
+        },
+        "date": 1775943263455,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.87,
+            "range": "± 0.55",
             "unit": "s"
           },
           {
