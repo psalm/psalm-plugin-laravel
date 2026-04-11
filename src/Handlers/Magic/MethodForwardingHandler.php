@@ -189,7 +189,7 @@ final class MethodForwardingHandler implements
 
         // Dynamic where{Column} fallback for Path 2 (opt-in).
         // This handles the case where the method arrives via __call rather than @mixin.
-        if (self::$enableDynamicWhere && $templateParams !== null) {
+        if (self::$enableDynamicWhere && $templateParams !== null && self::isDynamicWhereMethod($methodName)) {
             return self::resolveDynamicWhereOnRelation($codebase, $methodName, $fqClassName, $templateParams);
         }
 
@@ -257,9 +257,10 @@ final class MethodForwardingHandler implements
 
         // Dynamic where{Column}: confirm existence so Psalm doesn't emit UndefinedMagicMethod.
         // Column validation is deferred to getMethodReturnType (where template params are available).
-        // We accept any mixed value argument — Laravel's dynamicWhere takes $value as first param.
+        // Variadic mixed accepts both single-column (whereTitle($v)) and multi-column forms
+        // (whereFirstNameAndLastName($a, $b)) without raising TooManyArguments.
         if (self::$enableDynamicWhere && self::isDynamicWhereMethod($methodName)) {
-            return [new FunctionLikeParameter('value', by_ref: false, type: Type::getMixed())];
+            return [new FunctionLikeParameter('args', by_ref: false, type: Type::getMixed(), is_variadic: true)];
         }
 
         return null;
@@ -472,8 +473,16 @@ final class MethodForwardingHandler implements
      *
      * The column suffix (method name minus "where") is compared against the model's
      * pseudo_property_get_types (populated from @property / @property-read annotations).
-     * Comparison is case-insensitive and ignores underscores, so "wherefirstname" matches
-     * "$first_name" and "whereEmailAddress" (lowercased to "whereemailaddress") matches "$email_address".
+     *
+     * Psalm lowercases all method names before passing them to providers, so the suffix is
+     * already lowercase (e.g. "wherefirstname" → suffix "firstname"). The @property names
+     * are normalised to the same form by stripping "$" and underscores and lowercasing, so:
+     *   - whereTitle (→ "title") matches @property string $title (→ "title")
+     *   - whereFirstName (→ "firstname") matches @property string $first_name (→ "firstname")
+     *   - whereEmailAddress (→ "emailaddress") matches @property string $email_address (→ "emailaddress")
+     *
+     * Note: PHP method names use camelCase, so underscores in the suffix only arise for
+     * non-standard calls that would not match Laravel's dynamicWhere convention anyway.
      *
      * @param class-string<\Illuminate\Database\Eloquent\Model> $modelClass
      * @psalm-external-mutation-free
