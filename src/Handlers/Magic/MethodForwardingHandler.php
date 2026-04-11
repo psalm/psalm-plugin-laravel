@@ -202,8 +202,9 @@ final class MethodForwardingHandler implements
      * Only fires for Path 2 (QueryBuilder-only methods like orderBy, limit, groupBy).
      * Mixin-resolved methods (Path 1) already have params from the target class.
      *
-     * When dynamicWhereMethods is enabled, also provides params for where{Column} methods
-     * so Psalm confirms they exist and validates the value argument.
+     * When dynamicWhereMethods is enabled, also provides a permissive variadic signature
+     * for where{Column} methods so Psalm confirms they exist and doesn't emit
+     * UndefinedMagicMethod or TooManyArguments. This path does not validate value types.
      *
      * @return list<FunctionLikeParameter>|null
      */
