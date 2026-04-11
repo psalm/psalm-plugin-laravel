@@ -19,6 +19,9 @@ class Builder implements BuilderContract
      * @template T
      * @param  list<non-empty-string>  $columns
      * @return \stdClass|null
+     *
+     * @psalm-taint-escape sql
+     * @psalm-flow ($id) -> return
      */
     public function find($id, $columns = ['*']) {}
 
@@ -99,6 +102,8 @@ class Builder implements BuilderContract
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($value) -> return
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -111,6 +116,8 @@ class Builder implements BuilderContract
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($value) -> return
      */
     public function orWhere($column, $operator = null, $value = null) {}
 
@@ -124,6 +131,8 @@ class Builder implements BuilderContract
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($value) -> return
      */
     public function whereNot($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -136,6 +145,8 @@ class Builder implements BuilderContract
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($value) -> return
      */
     public function orWhereNot($column, $operator = null, $value = null) {}
 
@@ -149,6 +160,8 @@ class Builder implements BuilderContract
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($value) -> return
      */
     public function having($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -161,6 +174,8 @@ class Builder implements BuilderContract
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($value) -> return
      */
     public function orHaving($column, $operator = null, $value = null) {}
 
