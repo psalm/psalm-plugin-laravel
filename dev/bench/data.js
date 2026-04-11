@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775907052152,
+  "lastUpdate": 1775910629402,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -489,6 +489,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1126,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c4a8c05fcc6493df655193386a52185889c835b",
+          "message": "Merge pull request #691 from psalm/685-taint-escape-builder-array-conditions\n\nfix(stubs): add @psalm-taint-escape sql to parameterized Builder methods",
+          "timestamp": "2026-04-11T13:27:36+01:00",
+          "tree_id": "fc095a5767b91d2ab77e41985d72d8bb778404c7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8c4a8c05fcc6493df655193386a52185889c835b"
+        },
+        "date": 1775910628663,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.39,
+            "range": "± 0.33",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
             "unit": "MB"
           }
         ]
