@@ -33,10 +33,11 @@ use Psalm\Type\Union;
  * Also implements MethodParamsProvider for Path 2 methods (QueryBuilder-only methods
  * like orderBy, limit, groupBy) so Psalm can check arguments.
  *
- * When dynamic where is enabled (opt-in via <dynamicWhereMethods value="true" /> in psalm.xml),
- * the handler also resolves Laravel's dynamic where{Column} magic methods on relation chains
- * (e.g., $user->posts()->whereTitle('foo')). Column names are validated against the model's
- * declared @property annotations to avoid false positives.
+ * Also resolves Laravel's dynamic where{Column} magic methods on relation chains
+ * (e.g., $user->posts()->whereTitle('foo')) when resolveDynamicWhereClauses is enabled (default: true).
+ * Column names are validated against the model's declared @property annotations;
+ * unmatched columns fall through to mixed without an error.
+ * Disable via <resolveDynamicWhereClauses value="false" /> in psalm.xml.
  */
 final class MethodForwardingHandler implements
     MethodReturnTypeProviderInterface,
@@ -53,7 +54,7 @@ final class MethodForwardingHandler implements
     /**
      * Whether dynamic where{Column} method resolution is enabled.
      *
-     * Opt-in via <dynamicWhereMethods value="true" /> in psalm.xml.
+     * Opt-in via <resolveDynamicWhereClauses value="true" /> in psalm.xml.
      * When enabled, methods matching the pattern where{Column} (e.g. whereTitle, whereEmail)
      * are resolved on relation chains when the column exists in the model's declared property annotations.
      */
@@ -91,7 +92,7 @@ final class MethodForwardingHandler implements
     /**
      * Enable resolution of dynamic where{Column} methods on relation chains.
      *
-     * Called from Plugin::registerHandlers() when <dynamicWhereMethods value="true" /> is set.
+     * Called from Plugin::registerHandlers() when <resolveDynamicWhereClauses value="true" /> is set.
      * Must be called after init() if called at all.
      *
      * @psalm-external-mutation-free
@@ -192,7 +193,7 @@ final class MethodForwardingHandler implements
      * Only fires for Path 2 (QueryBuilder-only methods like orderBy, limit, groupBy).
      * Mixin-resolved methods (Path 1) already have params from the target class.
      *
-     * When dynamicWhereMethods is enabled, also provides a permissive variadic signature
+     * When resolveDynamicWhereClauses is enabled, also provides a permissive variadic signature
      * for where{Column} methods so Psalm confirms they exist and doesn't emit
      * UndefinedMagicMethod or TooManyArguments. This path does not validate value types.
      *
