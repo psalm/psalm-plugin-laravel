@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775920679936,
+  "lastUpdate": 1775924017524,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -727,6 +727,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.47,
             "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6b9fb87b2a0fd33707c4f7e728f18989164cf76f",
+          "message": "Merge pull request #719 from psalm/717-str-replace-conditional-return-type\n\nAdd conditional return type stub for `Str::replace()`",
+          "timestamp": "2026-04-11T17:10:33+01:00",
+          "tree_id": "106399593ed0821df7790a0404f9783b7fc6d53d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6b9fb87b2a0fd33707c4f7e728f18989164cf76f"
+        },
+        "date": 1775924016735,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.99,
+            "range": "± 0.66",
             "unit": "s"
           },
           {
