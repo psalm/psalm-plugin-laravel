@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775924017524,
+  "lastUpdate": 1775925692080,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -762,6 +762,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.99,
             "range": "± 0.66",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f59feb6ca1518b5ea22d55e6f0167a175014756d",
+          "message": "Merge pull request #720 from psalm/718-higher-order-collection-proxy\n\nAdd @property-read stubs for higher-order collection proxies",
+          "timestamp": "2026-04-11T17:38:41+01:00",
+          "tree_id": "2f623b1933e379bef4f0d087633d86869a575691",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f59feb6ca1518b5ea22d55e6f0167a175014756d"
+        },
+        "date": 1775925691778,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.52,
+            "range": "± 0.15",
             "unit": "s"
           },
           {
