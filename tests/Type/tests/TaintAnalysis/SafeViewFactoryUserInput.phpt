@@ -11,6 +11,7 @@ function renderProfile(\Illuminate\Http\Request $request, \Illuminate\View\Facto
     $factory->file('/views/profile.blade.php', ['name' => $request->input('name')]);
     $factory->file('/views/profile.blade.php', [], ['name' => $request->input('name')]);
     $factory->first(['profile', 'fallback'], ['name' => $request->input('name')]);
+    $factory->first(['profile', 'fallback'], [], ['name' => $request->input('name')]);
     $factory->renderWhen(true, 'profile', ['name' => $request->input('name')]);
     $factory->renderWhen(true, 'profile', [], ['name' => $request->input('name')]);
     $factory->renderUnless(false, 'profile', ['name' => $request->input('name')]);
