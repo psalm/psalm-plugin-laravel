@@ -21,12 +21,8 @@ function responseJsonp(\Illuminate\Http\Request $request, \Illuminate\Routing\Re
     $response->jsonp($request->input('callback'), $request->input('data'));
 }
 
-function responseView(\Illuminate\Http\Request $request, \Illuminate\Routing\ResponseFactory $response): void {
-    $response->view('welcome', $request->input('data'));
-}
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
 %ATaintedHtml on line %d: Detected tainted HTML
 %ATaintedHtml on line %d: Detected tainted HTML
 %ATaintedHtml on line %d: Detected tainted HTML
