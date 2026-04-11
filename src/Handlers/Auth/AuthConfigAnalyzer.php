@@ -60,6 +60,31 @@ final class AuthConfigAnalyzer
         return \is_string($guard) ? $guard : null;
     }
 
+    /**
+     * Maps a guard name to its concrete guard class based on the configured driver.
+     * Returns null for unknown guards or non-standard (custom) drivers.
+     *
+     * Standard driver → class mappings (built into Laravel's AuthManager):
+     * - 'session' → SessionGuard
+     * - 'token'   → TokenGuard
+     *
+     * @return class-string<\Illuminate\Contracts\Auth\Guard>|null
+     */
+    public function getGuardFQCN(string $guard): ?string
+    {
+        $driver = $this->config->get("auth.guards.{$guard}.driver");
+
+        if (! \is_string($driver)) {
+            return null;
+        }
+
+        return match ($driver) {
+            'session' => \Illuminate\Auth\SessionGuard::class,
+            'token' => \Illuminate\Auth\TokenGuard::class,
+            default => null, // custom drivers cannot be statically resolved
+        };
+    }
+
     /** @return list<class-string<\Illuminate\Contracts\Auth\Authenticatable>> */
     public function getAllAuthenticatables(): array
     {
