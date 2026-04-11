@@ -166,6 +166,37 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function shift($count = 1) {}
 
     /**
+     * Merge the collection with the given items.
+     *
+     * Uses an independent key template `TMergeKey` rather than constraining input keys to `TKey`.
+     * This allows `Collection<never, never>::merge(Collection<int, Lesson>)` to return
+     * `Collection<int, Lesson>` instead of failing with a key-type mismatch.
+     *
+     * @template TMergeKey of array-key
+     * @template TMergeValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TMergeKey, TMergeValue>|iterable<TMergeKey, TMergeValue>  $items
+     * @return static<TKey|TMergeKey, TValue|TMergeValue>
+     */
+    public function merge($items) {}
+
+    /**
+     * Push one or more items onto the end of the collection.
+     *
+     * Uses an independent value template `TPushValue` so that calling `push()` on a
+     * `Collection<never, never>` widens the return type to include the concrete pushed value.
+     * Fluent chains like `collect()->push($x)->push($y)` propagate types correctly.
+     * The mutable accumulator pattern (`$c = collect(); $c->push($x)`) still requires a
+     * `@var` annotation on the `collect()` line — that is expected Psalm behaviour.
+     *
+     * @template TPushValue
+     *
+     * @param  TPushValue  ...$values
+     * @return static<TKey|int, TValue|TPushValue>
+     */
+    public function push(...$values) {}
+
+    /**
      * Count the number of items in the collection.
      *
      * @psalm-mutation-free
