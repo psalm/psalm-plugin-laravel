@@ -14,4 +14,22 @@ class Str
      * @psalm-flow ($string) -> return
      */
     public static function of($string) {}
+
+    /**
+     * Replace all occurrences of the search string with the replacement string.
+     *
+     * When $subject is a plain string, the return type narrows to string.
+     * When $subject is a Traversable<TKey, string>, the return type narrows to array<TKey, string>.
+     * Adapted from Larastan's stub; uses array-key (not scalar) for TKey to correctly model PHP array key types.
+     *
+     * @template TKey of array-key
+     * @template TSubject of string|iterable<string>|\Traversable<TKey, string>
+     *
+     * @param  string|iterable<string>  $search
+     * @param  string|iterable<string>  $replace
+     * @param  TSubject  $subject
+     * @param  bool  $caseSensitive
+     * @return ($subject is \Traversable ? array<TKey, string> : TSubject)
+     */
+    public static function replace($search, $replace, $subject, $caseSensitive = true) {}
 }
