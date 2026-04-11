@@ -6,7 +6,8 @@
 class Article extends \Illuminate\Database\Eloquent\Model {}
 
 /**
- * Eloquent where(), orWhere(), firstWhere() bind values via PDO — cannot inject.
+ * Eloquent where(), orWhere(), whereNot(), orWhereNot(), firstWhere() use parameterized
+ * queries for values — user-supplied values cannot inject SQL.
  *
  * @psalm-suppress MixedAssignment
  */
@@ -15,6 +16,8 @@ function safeEloquentWhereValue(\Illuminate\Http\Request $request): void {
 
     Article::where('title', '=', $value);
     Article::orWhere('slug', $value);
+    Article::whereNot('status', $value);
+    Article::orWhereNot('status', $value);
     Article::firstWhere('title', $value);
 }
 ?>
