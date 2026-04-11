@@ -26,7 +26,7 @@ use Psalm\Type;
  * name is a known string literal and its driver is a standard Laravel driver (session/token):
  * @see \Illuminate\Support\Facades\Auth::guard() returns Guard|StatefulGuard (narrowed when possible)
  *
- * There are also Methods that return Guard instance (handed in {@see \Psalm\LaravelPlugin\Handlers\Auth\GuardHandler}):
+ * There are also Methods that return Guard instance (handled in {@see \Psalm\LaravelPlugin\Handlers\Auth\GuardHandler}):
  * @see \Illuminate\Support\Facades\Auth::createSessionDriver()
  * @see \Illuminate\Support\Facades\Auth::createTokenDriver()
  * @see \Illuminate\Support\Facades\Auth::setRememberDuration()
