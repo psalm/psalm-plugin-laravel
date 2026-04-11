@@ -25,7 +25,7 @@ use Illuminate\Support\Stringable;
 function test_eloquent_builder_when_fluent_chain(): void
 {
     Customer::query()
-        ->when(true, null, null)
+        ->when(false, null, null)
         ->where('active', true)
         ->paginate();
 }
@@ -34,7 +34,7 @@ function test_eloquent_builder_when_fluent_chain(): void
 function test_eloquent_builder_unless_fluent_chain(): void
 {
     Customer::query()
-        ->unless(false, null, null)
+        ->unless(true, null, null)
         ->where('active', true)
         ->paginate();
 }
@@ -46,7 +46,7 @@ function test_eloquent_builder_unless_fluent_chain(): void
  */
 function test_eloquent_builder_when_return_type(Builder $builder): void
 {
-    $_result = $builder->when(true, null, null);
+    $_result = $builder->when(false, null, null);
     /** @psalm-check-type-exact $_result = Builder<Customer>&static */
 }
 
@@ -57,7 +57,7 @@ function test_eloquent_builder_when_return_type(Builder $builder): void
  */
 function test_eloquent_builder_unless_return_type(Builder $builder): void
 {
-    $_result = $builder->unless(false, null, null);
+    $_result = $builder->unless(true, null, null);
     /** @psalm-check-type-exact $_result = Builder<Customer>&static */
 }
 
@@ -101,7 +101,7 @@ function test_eloquent_builder_unless_with_real_callback(Builder $query): void
 function test_query_builder_when_fluent_chain(QueryBuilder $builder): void
 {
     $builder
-        ->when(true, null, null)
+        ->when(false, null, null)
         ->where('active', true)
         ->get();
 }
@@ -109,7 +109,7 @@ function test_query_builder_when_fluent_chain(QueryBuilder $builder): void
 /** when() on Query\Builder returns the same builder type ($this). */
 function test_query_builder_when_return_type(QueryBuilder $builder): void
 {
-    $_result = $builder->when(true, null, null);
+    $_result = $builder->when(false, null, null);
     /** @psalm-check-type-exact $_result = Illuminate\Database\Query\Builder&static */
 }
 
@@ -120,7 +120,7 @@ function test_collection_when_fluent_chain(): void
 {
     /** @var Collection<int, string> $collection */
     $collection = new Collection(['a', 'b', 'c']);
-    $_result = $collection->when(true, null, null);
+    $_result = $collection->when(false, null, null);
     /** @psalm-check-type-exact $_result = Collection<int, string>&static */
     $_result->values();
 }
@@ -130,7 +130,7 @@ function test_collection_when_fluent_chain(): void
 /** when() on Stringable must preserve Stringable, not return mixed. */
 function test_stringable_when_fluent_chain(): void
 {
-    $_result = (new Stringable('hello'))->when(true, null, null);
+    $_result = (new Stringable('hello'))->when(false, null, null);
     /** @psalm-check-type-exact $_result = Stringable&static */
 }
 
