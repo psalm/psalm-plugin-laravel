@@ -183,7 +183,7 @@ final class MethodForwardingHandler implements
             $methodName,
         );
 
-        if ($resolved !== null) {
+        if ($resolved instanceof \Psalm\Type\Union) {
             return $resolved;
         }
 
@@ -328,7 +328,7 @@ final class MethodForwardingHandler implements
                 $methodName,
             );
 
-            if ($resolved !== null) {
+            if ($resolved instanceof \Psalm\Type\Union) {
                 return $resolved;
             }
 
