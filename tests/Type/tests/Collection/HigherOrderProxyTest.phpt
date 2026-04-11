@@ -37,14 +37,13 @@ function testCollectionStringKeyedProxy(Collection $collection): void
     $_proxy = $collection->map;
 }
 
-// Method calls on the proxy are typed via @mixin TValue
+// Method calls on the proxy return Enumerable<TKey, TValue>, reflecting the actual
+// Laravel runtime behaviour: each() returns the collection, not the callback's return value.
+// (Previously typed as bool via @mixin TValue, which was incorrect.)
 /** @param Collection<int, User> $collection */
-function testMethodCallViaProxy(Collection $collection): bool
+function testMethodCallViaProxy(Collection $collection): \Illuminate\Support\Enumerable
 {
-    /**
-     * Method calls on the proxy are typed via @mixin TValue.
-     * @psalm-check-type-exact $result = bool
-     */
+    /** @psalm-check-type-exact $result = \Illuminate\Support\Enumerable<int, User> */
     $result = $collection->each->sendWelcomeEmail();
 
     return $result;
@@ -65,9 +64,9 @@ function testLazyCollectionProxyTypes(LazyCollection $lazy): void
 }
 
 /** @param LazyCollection<int, User> $lazy */
-function testLazyMethodCallViaProxy(LazyCollection $lazy): bool
+function testLazyMethodCallViaProxy(LazyCollection $lazy): \Illuminate\Support\Enumerable
 {
-    /** @psalm-check-type-exact $result = bool */
+    /** @psalm-check-type-exact $result = \Illuminate\Support\Enumerable<int, User> */
     $result = $lazy->each->sendWelcomeEmail();
 
     return $result;
@@ -99,9 +98,9 @@ function testEloquentCollectionStringKeyedProxy(EloquentCollection $eloquent): v
 }
 
 /** @param EloquentCollection<int, User> $eloquent */
-function testEloquentMethodCallViaProxy(EloquentCollection $eloquent): bool
+function testEloquentMethodCallViaProxy(EloquentCollection $eloquent): \Illuminate\Support\Enumerable
 {
-    /** @psalm-check-type-exact $result = bool */
+    /** @psalm-check-type-exact $result = \Illuminate\Support\Enumerable<int, User> */
     $result = $eloquent->each->sendWelcomeEmail();
 
     return $result;
