@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775914769922,
+  "lastUpdate": 1775916433860,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -559,6 +559,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1127,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a3182bdd5937acab14a4d88d6cc12159d847dfe4",
+          "message": "Merge pull request #713 from psalm/706-wherenotnull-narrowing\n\nNarrow `Collection::whereNotNull()` return type to remove null from TValue",
+          "timestamp": "2026-04-11T15:04:01+01:00",
+          "tree_id": "04b45b4d5f5247b2fb14e4e5015fca6b0e064ea9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a3182bdd5937acab14a4d88d6cc12159d847dfe4"
+        },
+        "date": 1775916433550,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.15,
+            "range": "± 0.55",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
             "unit": "MB"
           }
         ]
