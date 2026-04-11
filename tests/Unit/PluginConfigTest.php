@@ -42,7 +42,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
-        $this->assertFalse($config->dynamicWhereMethods);
+        $this->assertTrue($config->resolveDynamicWhereClauses);
     }
 
     #[Test]
@@ -172,30 +172,30 @@ final class PluginConfigTest extends TestCase
     #[Test]
     public function dynamic_where_methods_true(): void
     {
-        $xml = new \SimpleXMLElement('<pluginClass><dynamicWhereMethods value="true" /></pluginClass>');
+        $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="true" /></pluginClass>');
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertTrue($config->dynamicWhereMethods);
+        $this->assertTrue($config->resolveDynamicWhereClauses);
     }
 
     #[Test]
     public function dynamic_where_methods_false(): void
     {
-        $xml = new \SimpleXMLElement('<pluginClass><dynamicWhereMethods value="false" /></pluginClass>');
+        $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="false" /></pluginClass>');
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertFalse($config->dynamicWhereMethods);
+        $this->assertFalse($config->resolveDynamicWhereClauses);
     }
 
     #[Test]
     public function invalid_dynamic_where_methods_throws(): void
     {
-        $xml = new \SimpleXMLElement('<pluginClass><dynamicWhereMethods value="yes" /></pluginClass>');
+        $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="yes" /></pluginClass>');
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("Invalid dynamicWhereMethods value 'yes'");
+        $this->expectExceptionMessage("Invalid resolveDynamicWhereClauses value 'yes'");
 
         PluginConfig::fromXml($xml);
     }
@@ -275,7 +275,7 @@ final class PluginConfigTest extends TestCase
             . '<failOnInternalError value="true" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
-            . '<dynamicWhereMethods value="true" />'
+            . '<resolveDynamicWhereClauses value="false" />'
             . '</pluginClass>',
         );
 
@@ -285,7 +285,7 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->failOnInternalError);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
-        $this->assertTrue($config->dynamicWhereMethods);
+        $this->assertFalse($config->resolveDynamicWhereClauses);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
     }
 }

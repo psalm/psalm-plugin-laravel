@@ -267,7 +267,7 @@ final class Plugin implements PluginEntryPointInterface
             ],
             interceptMixin: true,
         ));
-        if ($pluginConfig->dynamicWhereMethods) {
+        if ($pluginConfig->resolveDynamicWhereClauses) {
             Handlers\Magic\MethodForwardingHandler::enableDynamicWhere();
         }
 

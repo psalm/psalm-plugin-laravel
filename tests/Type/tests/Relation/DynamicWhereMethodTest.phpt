@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * Tests for dynamic where{Column} method resolution on Eloquent Relation chains.
  *
  * Laravel's Builder::__call converts whereTitle('foo') to where('title', '=', 'foo').
- * With dynamicWhereMethods enabled, these are resolved on relation chains when the
+ * With resolveDynamicWhereClauses enabled (default), these are resolved on relation chains when the
  * column exists in the model's @property annotations.
  *
  * Uses HasOne<Invoice, WorkOrder> with an explicit @var annotation to get a stable
