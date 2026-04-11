@@ -16,7 +16,6 @@ class Builder implements BuilderContract
     /**
      * Execute a query for a single record by ID.
      *
-     * @template T
      * @param  list<non-empty-string>  $columns
      * @return \stdClass|null
      *
