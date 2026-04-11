@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775918640400,
+  "lastUpdate": 1775919348217,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -659,6 +659,39 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.83,
             "range": "± 0.27",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Alies Lapatsin",
+            "username": "alies-dev",
+            "email": "5278175+alies-dev@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "de3cfdf12ce4f30f402f82397d0915fddf8042c3",
+          "message": "Merge branch 'master' into 503-withcount-aggregate-accessors",
+          "timestamp": "2026-04-11T14:52:06Z",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/de3cfdf12ce4f30f402f82397d0915fddf8042c3"
+        },
+        "date": 1775919347919,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.17,
+            "range": "± 0.52",
             "unit": "s"
           },
           {
