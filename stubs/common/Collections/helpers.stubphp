@@ -7,13 +7,16 @@
 /**
  * Create a collection from the given value.
  *
- * Without this stub, `collect()` with no args infers `Collection<never, never>` from the `[]` default.
+ * With no arguments `$value` defaults to `[]`, so TKey/TValue infer as `never` — identical to `collect([])`.
+ * This is the correct behaviour: `Collection<never, never>` is assignable to any `Collection<TKey, TValue>`
+ * because `never` is the bottom type (subtype of everything), and methods like `merge()` / `push()` are
+ * stubbed to widen generics on their return so fluent chains propagate concrete types.
  *
  * @template TKey of array-key
  * @template TValue
  *
  * @param  \Illuminate\Contracts\Support\Arrayable<TKey, TValue>|iterable<TKey, TValue>|null  $value
- * @psalm-return (func_num_args() is 0 ? \Illuminate\Support\Collection<array-key, mixed> : \Illuminate\Support\Collection<TKey, TValue>)
+ * @psalm-return \Illuminate\Support\Collection<TKey, TValue>
  */
 function collect($value = []) {}
 
