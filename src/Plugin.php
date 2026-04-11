@@ -305,8 +305,15 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+        // NoEnvOutsideConfigHandler must be registered BEFORE EnvHandler.
+        // Both handle 'env()' via FunctionReturnTypeProviderInterface; Psalm dispatches handlers
+        // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler
+        // always returns null (it only emits an issue), so the chain continues to EnvHandler for
+        // type narrowing. Reversing the order would silently suppress the NoEnvOutsideConfig issue.
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\NoEnvOutsideConfigHandler::class);
+        require_once __DIR__ . '/Handlers/Helpers/EnvHandler.php';
+        $registration->registerHooksFromClass(Handlers\Helpers\EnvHandler::class);
 
         // Unlike TranslationKeyHandler (which always runs for type narrowing),
         // MissingViewHandler provides no type information — skip entirely when disabled
