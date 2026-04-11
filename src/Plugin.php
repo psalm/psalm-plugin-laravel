@@ -307,6 +307,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(Handlers\SuppressHandler::class);
 
+        require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
+        $registration->registerHooksFromClass(Handlers\Jobs\DispatchableHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
         // NoEnvOutsideConfigHandler must be registered BEFORE EnvHandler.
