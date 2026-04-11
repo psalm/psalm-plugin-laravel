@@ -19,26 +19,22 @@ class User extends Model
 /** @param Collection<int, User> $collection */
 function testCollectionProxyTypes(Collection $collection): void
 {
-    /** @psalm-check-type-exact $mapProxy = HigherOrderCollectionProxy<int, User> */
-    $mapProxy = $collection->map;
-    unset($mapProxy);
+    /** @psalm-check-type-exact $_mapProxy = HigherOrderCollectionProxy<int, User> */
+    $_mapProxy = $collection->map;
 
-    /** @psalm-check-type-exact $filterProxy = HigherOrderCollectionProxy<int, User> */
-    $filterProxy = $collection->filter;
-    unset($filterProxy);
+    /** @psalm-check-type-exact $_filterProxy = HigherOrderCollectionProxy<int, User> */
+    $_filterProxy = $collection->filter;
 
-    /** @psalm-check-type-exact $rejectProxy = HigherOrderCollectionProxy<int, User> */
-    $rejectProxy = $collection->reject;
-    unset($rejectProxy);
+    /** @psalm-check-type-exact $_rejectProxy = HigherOrderCollectionProxy<int, User> */
+    $_rejectProxy = $collection->reject;
 }
 
 // Collection — string keys (TKey must propagate through the stub)
 /** @param Collection<string, User> $collection */
 function testCollectionStringKeyedProxy(Collection $collection): void
 {
-    /** @psalm-check-type-exact $proxy = HigherOrderCollectionProxy<string, User> */
-    $proxy = $collection->map;
-    unset($proxy);
+    /** @psalm-check-type-exact $_proxy = HigherOrderCollectionProxy<string, User> */
+    $_proxy = $collection->map;
 }
 
 // Method calls on the proxy are typed via @mixin TValue
@@ -58,17 +54,14 @@ function testMethodCallViaProxy(Collection $collection): bool
 /** @param LazyCollection<int, User> $lazy */
 function testLazyCollectionProxyTypes(LazyCollection $lazy): void
 {
-    /** @psalm-check-type-exact $proxy = HigherOrderCollectionProxy<int, User> */
-    $proxy = $lazy->map;
-    unset($proxy);
+    /** @psalm-check-type-exact $_proxy = HigherOrderCollectionProxy<int, User> */
+    $_proxy = $lazy->map;
 
-    /** @psalm-check-type-exact $filter = HigherOrderCollectionProxy<int, User> */
-    $filter = $lazy->filter;
-    unset($filter);
+    /** @psalm-check-type-exact $_filter = HigherOrderCollectionProxy<int, User> */
+    $_filter = $lazy->filter;
 
-    /** @psalm-check-type-exact $reject = HigherOrderCollectionProxy<int, User> */
-    $reject = $lazy->reject;
-    unset($reject);
+    /** @psalm-check-type-exact $_reject = HigherOrderCollectionProxy<int, User> */
+    $_reject = $lazy->reject;
 }
 
 /** @param LazyCollection<int, User> $lazy */
@@ -82,23 +75,27 @@ function testLazyMethodCallViaProxy(LazyCollection $lazy): bool
 
 // EloquentCollection — TModel must replace TValue in the proxy generic
 /** @param EloquentCollection<int, User> $eloquent */
-function testEloquentCollectionProxyTypes(EloquentCollection $eloquent): void
+function testEloquentCollectionIntKeyedProxy(EloquentCollection $eloquent): void
 {
-    /** @psalm-check-type-exact $proxy = HigherOrderCollectionProxy<int, User> */
-    $proxy = $eloquent->map;
-    unset($proxy);
+    /** @psalm-check-type-exact $_proxy = HigherOrderCollectionProxy<int, User> */
+    $_proxy = $eloquent->map;
 
-    /** @psalm-check-type-exact $eachProxy = HigherOrderCollectionProxy<int, User> */
-    $eachProxy = $eloquent->each;
-    unset($eachProxy);
+    /** @psalm-check-type-exact $_eachProxy = HigherOrderCollectionProxy<int, User> */
+    $_eachProxy = $eloquent->each;
 
-    /** @psalm-check-type-exact $filter = HigherOrderCollectionProxy<int, User> */
-    $filter = $eloquent->filter;
-    unset($filter);
+    /** @psalm-check-type-exact $_filter = HigherOrderCollectionProxy<int, User> */
+    $_filter = $eloquent->filter;
 
-    /** @psalm-check-type-exact $reject = HigherOrderCollectionProxy<int, User> */
-    $reject = $eloquent->reject;
-    unset($reject);
+    /** @psalm-check-type-exact $_reject = HigherOrderCollectionProxy<int, User> */
+    $_reject = $eloquent->reject;
+}
+
+// EloquentCollection — string keys (TKey propagation through @extends remapping)
+/** @param EloquentCollection<string, User> $eloquent */
+function testEloquentCollectionStringKeyedProxy(EloquentCollection $eloquent): void
+{
+    /** @psalm-check-type-exact $_proxy = HigherOrderCollectionProxy<string, User> */
+    $_proxy = $eloquent->map;
 }
 
 /** @param EloquentCollection<int, User> $eloquent */

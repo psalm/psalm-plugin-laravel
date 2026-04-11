@@ -13,6 +13,9 @@ use Illuminate\Support\Collection as BaseCollection;
  * Psalm does not inherit @property-read from a parent class when template parameters
  * are remapped via @extends, so these annotations must be repeated here with TModel.
  *
+ * The list mirrors EnumeratesValues::$proxies exactly — do not edit without checking that array.
+ * Note: $hasMany here is a collection method (not an Eloquent relationship).
+ *
  * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $average
  * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $avg
  * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $contains
