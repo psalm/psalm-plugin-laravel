@@ -89,7 +89,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -110,7 +110,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orWhere($column, $operator = null, $value = null) {}
 
@@ -300,6 +300,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-escape sql
      * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function find($id, $columns = ['*']) {}
 
@@ -310,6 +311,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-escape sql
      * @psalm-flow ($ids) -> return
+     * @psalm-taint-specialize
      */
     public function findMany($ids, $columns = ['*']) {}
 
@@ -322,6 +324,7 @@ class Builder implements BuilderContract
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      * @psalm-taint-escape sql
      * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function findOrFail($id, $columns = ['*']) {}
 
@@ -333,6 +336,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-escape sql
      * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function findOrNew($id, $columns = ['*']) {}
 
@@ -379,7 +383,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -671,7 +675,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function whereNot($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -685,7 +689,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orWhereNot($column, $operator = null, $value = null) {}
 
@@ -709,6 +713,7 @@ class Builder implements BuilderContract
      * @throws \Illuminate\Database\MultipleRecordsFoundException
      * @psalm-taint-escape sql
      * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function findSole($id, $columns = ['*']) {}
 
