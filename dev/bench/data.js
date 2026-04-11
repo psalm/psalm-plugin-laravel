@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775858380011,
+  "lastUpdate": 1775901037538,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -414,6 +414,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.96,
             "range": "± 0.5",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1126,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e0539a67182f33ff5565fa11d5fac35dcb233ec7",
+          "message": "Merge pull request #688 from psalm/stub-sync/borrow-larastan-types\n\nstubs: Add `@psalm-this-out` to paginator `setCollection()`",
+          "timestamp": "2026-04-11T10:47:43+01:00",
+          "tree_id": "c37e3892c6526f28c03a6c614d90fa5b7e80dcf4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e0539a67182f33ff5565fa11d5fac35dcb233ec7"
+        },
+        "date": 1775901037217,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.15,
+            "range": "± 0.28",
             "unit": "s"
           },
           {
