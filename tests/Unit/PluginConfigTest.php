@@ -42,6 +42,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->dynamicWhereMethods);
     }
 
     #[Test]
@@ -169,6 +170,37 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function dynamic_where_methods_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><dynamicWhereMethods value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->dynamicWhereMethods);
+    }
+
+    #[Test]
+    public function dynamic_where_methods_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><dynamicWhereMethods value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->dynamicWhereMethods);
+    }
+
+    #[Test]
+    public function invalid_dynamic_where_methods_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><dynamicWhereMethods value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid dynamicWhereMethods value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
     public function cache_path_uses_env_var(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-custom');
@@ -243,6 +275,7 @@ final class PluginConfigTest extends TestCase
             . '<failOnInternalError value="true" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<dynamicWhereMethods value="true" />'
             . '</pluginClass>',
         );
 
@@ -252,6 +285,7 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->failOnInternalError);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->dynamicWhereMethods);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
     }
 }

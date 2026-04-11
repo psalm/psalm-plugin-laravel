@@ -55,7 +55,7 @@ class Customer extends Authenticatable
     /**
      * All vehicles belonging to this customer.
      *
-     * @psalm-return HasMany<Vehicle>
+     * @psalm-return HasMany<Vehicle, $this>
      */
     public function vehicles(): HasMany
     {

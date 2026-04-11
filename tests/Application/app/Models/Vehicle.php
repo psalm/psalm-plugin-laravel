@@ -17,6 +17,9 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
  * Car or truck belonging to a customer.
  *
  * Custom query builder via newEloquentBuilder() override (pre-Laravel 12 pattern).
+ *
+ * @property string $make  Manufacturer (e.g. "Toyota")
+ * @property string $model Vehicle model name (e.g. "Camry")
  */
 final class Vehicle extends Model
 {
