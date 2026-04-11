@@ -22,6 +22,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-escape sql
      * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function find($id, $columns = ['*']) {}
 
@@ -103,7 +104,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -117,7 +118,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orWhere($column, $operator = null, $value = null) {}
 
@@ -132,7 +133,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function whereNot($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -146,7 +147,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orWhereNot($column, $operator = null, $value = null) {}
 
@@ -161,7 +162,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function having($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -175,7 +176,7 @@ class Builder implements BuilderContract
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
-     * @psalm-flow ($value) -> return
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orHaving($column, $operator = null, $value = null) {}
 
