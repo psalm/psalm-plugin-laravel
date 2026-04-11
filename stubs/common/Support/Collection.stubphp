@@ -181,7 +181,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function merge($items) {}
 
     /**
-     * Push one or more items onto the end of the collection.
+     * Push items onto the end of the collection.
      *
      * Uses an independent value template `TPushValue` so that calling `push()` on a
      * `Collection<never, never>` widens the return type to include the concrete pushed value.
