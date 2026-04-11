@@ -69,16 +69,6 @@ final class MethodForwardingHandler implements
      */
     private static array $dynamicWhereCache = [];
 
-    /**
-     * Cache: "ModelClass" → hash-set of normalised property names (keys, values are true).
-     *
-     * Normalising (strip $ and _, lowercase) the same model's properties is done once
-     * per model class. Stored as a hash set (array keys) for O(1) column suffix lookup
-     * rather than O(n) via in_array.
-     *
-     * @var array<string, array<string, true>>
-     */
-    private static array $normalisedPropsCache = [];
 
     /** @psalm-external-mutation-free */
     public static function init(ForwardingRule $rule): void
@@ -256,10 +246,11 @@ final class MethodForwardingHandler implements
             }
         }
 
-        // Dynamic where{Column}: confirm existence so Psalm doesn't emit UndefinedMagicMethod.
-        // Column validation is deferred to getMethodReturnType (where template params are available).
-        // Variadic mixed accepts both single-column (whereTitle($v)) and multi-column forms
-        // (whereFirstNameAndLastName($a, $b)) without raising TooManyArguments.
+        // Dynamic where{Column}: provide a variadic mixed signature so Psalm's magic-method
+        // handler can validate argument counts. Existence itself is confirmed by Relation's
+        // __call; these params only govern argument arity checking.
+        // A variadic signature accepts both single-column (whereTitle($v)) and multi-column
+        // (whereFirstNameAndLastName($a, $b)) patterns without raising TooManyArguments.
         if (self::$enableDynamicWhere && self::isDynamicWhereMethod($methodName)) {
             return [new FunctionLikeParameter('args', by_ref: false, type: Type::getMixed(), is_variadic: true)];
         }
@@ -502,35 +493,33 @@ final class MethodForwardingHandler implements
         // Extract the column suffix: "wheretitle" → "title", "wherefirstname" → "firstname"
         $columnSuffix = \substr($methodName, 5);
 
-        // Build and cache the normalised property hash-set for this model class.
-        // Normalisation: strip "$" prefix and underscores, lowercase.
-        // Done once per model rather than once per (model, method) pair.
-        // Stored as array keys (hash set) for O(1) lookup via isset.
-        if (!\array_key_exists($modelClass, self::$normalisedPropsCache)) {
-            try {
-                $storage = $codebase->classlike_storage_provider->get(\strtolower($modelClass));
-            } catch (\InvalidArgumentException) {
-                self::$dynamicWhereCache[$key] = false;
-                return false;
-            }
-
-            // Use pseudo_property_get_types (from @property and @property-read) rather than
-            // pseudo_property_set_types (@property-write). Dynamic WHERE filters on readable
-            // database columns; @property-write only properties are write-only computed fields
-            // (e.g. password hashing) that do not correspond to filterable columns.
-            // "$first_name" → "firstname", "$title" → "title"
-            $normalised = \array_map(
-                static fn(string $p): string => \strtolower(\str_replace(['$', '_'], '', $p)),
-                \array_keys($storage->pseudo_property_get_types),
-            );
-
-            /** @var array<string, true> $hashSet */
-            $hashSet = \array_fill_keys($normalised, true);
-            self::$normalisedPropsCache[$modelClass] = $hashSet;
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($modelClass));
+        } catch (\InvalidArgumentException) {
+            self::$dynamicWhereCache[$key] = false;
+            return false;
         }
 
-        $result = isset(self::$normalisedPropsCache[$modelClass][$columnSuffix]);
-        self::$dynamicWhereCache[$key] = $result;
-        return $result;
+        // Use pseudo_property_get_types (from @property and @property-read) rather than
+        // pseudo_property_set_types (@property-write). Dynamic WHERE filters on readable
+        // database columns; @property-write only properties are write-only computed fields
+        // (e.g. password hashing) that do not correspond to filterable columns.
+        //
+        // We do NOT cache the per-model normalised property set separately. Psalm may populate
+        // pseudo_property_get_types lazily (adding entries as it parses the class), so a
+        // snapshot taken on the first call could be incomplete for subsequent method checks.
+        // The per-(model, method) $dynamicWhereCache still prevents redundant lookups.
+        // "$first_name" → "firstname", "$title" → "title"
+        foreach ($storage->pseudo_property_get_types as $propName => $_) {
+            $normalized = \strtolower(\str_replace(['$', '_'], '', $propName));
+
+            if ($normalized === $columnSuffix) {
+                self::$dynamicWhereCache[$key] = true;
+                return true;
+            }
+        }
+
+        self::$dynamicWhereCache[$key] = false;
+        return false;
     }
 }
