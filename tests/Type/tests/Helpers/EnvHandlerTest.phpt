@@ -30,6 +30,12 @@ function env_false_default(): void
     /** @psalm-check-type-exact $_result = string|false */
 }
 
+function env_true_default(): void
+{
+    $_result = env('FOO', true);
+    /** @psalm-check-type-exact $_result = string|true */
+}
+
 function env_bool_default(bool $default): void
 {
     $_result = env('FOO', $default);
@@ -40,6 +46,12 @@ function env_int_default(int $default): void
 {
     $_result = env('FOO', $default);
     /** @psalm-check-type-exact $_result = string|int */
+}
+
+function env_literal_int_default(): void
+{
+    $_result = env('FOO', 42);
+    /** @psalm-check-type-exact $_result = string|42 */
 }
 
 function env_float_default(float $default): void

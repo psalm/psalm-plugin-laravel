@@ -69,7 +69,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return 0;
         }
 
-        if (\strtolower($expr->name->toString()) !== 'validated') {
+        if ($expr->name->toLowerString() !== 'validated') {
             return 0;
         }
 
@@ -125,7 +125,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return null;
         }
 
-        $methodName = \strtolower($expr->name->toString());
+        $methodName = $expr->name->toLowerString();
 
         if (!\in_array($methodName, ['validated', 'validate', 'safe'], true)) {
             return null;
