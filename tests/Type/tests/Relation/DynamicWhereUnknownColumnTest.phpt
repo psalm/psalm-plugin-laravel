@@ -19,7 +19,7 @@ function test_dynamic_where_unknown_column_falls_through_to_mixed(): void {
     $r = (new WorkOrder())->invoice();
     // "nonexistent_column" is not a @property on Invoice — handler returns null,
     // Psalm falls to __call on the Relation, which returns mixed.
-    $_ = $r->whereNonExistentColumn('x')->first();
+    $_ = $r->whereNonExistentColumn('x');
     /** @psalm-check-type-exact $_ = mixed */
 }
 ?>
