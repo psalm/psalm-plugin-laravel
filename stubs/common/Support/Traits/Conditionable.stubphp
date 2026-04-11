@@ -1,0 +1,27 @@
+<?php
+
+namespace Illuminate\Support\Traits;
+
+trait Conditionable
+{
+    /**
+     * Apply the callback if the given "value" is (or resolves to) truthy.
+     *
+     * Psalm can't narrow `$this|TWhenReturnType` when the callback return type
+     * is a template — inference collapses to `mixed`. Returning `$this` unconditionally
+     * keeps fluent chains type-safe for the common case where the callback returns void
+     * or the same builder/collection instance.
+     *
+     * @return $this
+     */
+    public function when($value = null, ?callable $callback = null, ?callable $default = null) {}
+
+    /**
+     * Apply the callback if the given "value" is (or resolves to) falsy.
+     *
+     * Same rationale as `when()` — `$this` keeps fluent chains type-safe.
+     *
+     * @return $this
+     */
+    public function unless($value = null, ?callable $callback = null, ?callable $default = null) {}
+}
