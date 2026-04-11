@@ -17,6 +17,7 @@
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <failOnInternalError value="true" />
+            <dynamicWhereMethods value="true" />
         </pluginClass>
     </plugins>
     <issueHandlers>

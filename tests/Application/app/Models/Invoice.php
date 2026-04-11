@@ -21,6 +21,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  *
  * @see InvoiceBuilder — extends Builder<Invoice> without declaring its own @template.
  * @see InvoiceCollection — extends Collection<int, Invoice> without declaring its own @template.
+ *
+ * @property string $invoice_number Human-readable invoice identifier (e.g. "INV-2024-001")
+ * @property string $status         Lifecycle status: draft, sent, paid, void
  */
 #[UseEloquentBuilder(InvoiceBuilder::class)]
 #[CollectedBy(InvoiceCollection::class)]
