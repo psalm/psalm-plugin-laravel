@@ -21,6 +21,16 @@ abstract class AbstractPaginator implements \Illuminate\Contracts\Support\Htmlab
     public function getCollection(): \Illuminate\Support\Collection {}
 
     /**
+     * @template TSetKey of array-key
+     * @template TSetValue
+     *
+     * @param  \Illuminate\Support\Collection<TSetKey, TSetValue>  $collection
+     * @psalm-this-out static<TSetKey, TSetValue>
+     * @return $this
+     */
+    public function setCollection(\Illuminate\Support\Collection $collection) {}
+
+    /**
      * @return \ArrayIterator<TKey, TValue>
      */
     public function getIterator(): \Traversable {}
@@ -85,6 +95,16 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
      * @return \Illuminate\Support\Collection<TKey, TValue>
      */
     public function getCollection(): \Illuminate\Support\Collection {}
+
+    /**
+     * @template TSetKey of array-key
+     * @template TSetValue
+     *
+     * @param  \Illuminate\Support\Collection<TSetKey, TSetValue>  $collection
+     * @psalm-this-out static<TSetKey, TSetValue>
+     * @return $this
+     */
+    public function setCollection(\Illuminate\Support\Collection $collection) {}
 
     /**
      * @return \ArrayIterator<TKey, TValue>
