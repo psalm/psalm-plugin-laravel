@@ -56,7 +56,7 @@ final class HigherOrderCollectionProxyHandler implements AfterMethodCallAnalysis
         $source = $event->getStatementsSource();
         $calleeType = $source->getNodeTypeProvider()->getType($expr->var);
 
-        if ($calleeType === null) {
+        if (!$calleeType instanceof \Psalm\Type\Union) {
             return;
         }
 
