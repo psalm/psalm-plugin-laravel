@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775918362688,
+  "lastUpdate": 1775918640400,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -624,6 +624,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.36,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "658aa4613b3c660f1908744720fe54f903691830",
+          "message": "Merge pull request #710 from psalm/704-stub-conditionable-tappable\n\nStub `Conditionable::when()`/`unless()` and `Tappable::tap()` to fix `mixed` return on fluent chains",
+          "timestamp": "2026-04-11T15:41:06+01:00",
+          "tree_id": "a4f56f4cc0ebe8222677d1842c3bd6b199f252c7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/658aa4613b3c660f1908744720fe54f903691830"
+        },
+        "date": 1775918640064,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.83,
+            "range": "± 0.27",
             "unit": "s"
           },
           {
