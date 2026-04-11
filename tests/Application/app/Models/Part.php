@@ -14,6 +14,10 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * Spare part (brake pads, oil filter, etc.).
  *
  * Custom collection via newCollection() override — the second detection pattern.
+ *
+ * @property string $name          Human-readable name (e.g. "Brake Pads")
+ * @property string $part_number   Manufacturer SKU (e.g. "BP-1234")
+ * @property float  $unit_price    Price per unit in USD
  */
 final class Part extends Model
 {
