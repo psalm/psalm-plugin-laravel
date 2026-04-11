@@ -157,7 +157,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         if (\count($args) === 1) {
             $argValue = $args[0]->value;
             if ($argValue instanceof ConstFetch
-                && \strtolower($argValue->name->toString()) === 'null') {
+                && $argValue->name->toLowerString() === 'null') {
                 return true;
             }
         }
