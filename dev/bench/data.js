@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775928089521,
+  "lastUpdate": 1775929008894,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -832,6 +832,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.55,
             "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9182615c110350882739671db984b9683dc7dc98",
+          "message": "Merge pull request #714 from psalm/feat/dynamic-where-methods-647\n\nAdd opt-in dynamic `where{Column}` method resolution on relation chains",
+          "timestamp": "2026-04-11T18:33:46+01:00",
+          "tree_id": "1276bd6d984d97b261f7697f0ead386c6db31142",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9182615c110350882739671db984b9683dc7dc98"
+        },
+        "date": 1775929008368,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.01,
+            "range": "± 0.36",
             "unit": "s"
           },
           {
