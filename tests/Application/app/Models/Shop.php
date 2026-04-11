@@ -98,6 +98,12 @@ final class Shop extends Model
 
     // --- Edge cases ---
 
+    /** snake_case method name — exercises the direct (non-camelCase) path in isRelationPrefix() */
+    public function damage_reports(): MorphMany
+    {
+        return $this->morphMany(DamageReport::class, 'reportable');
+    }
+
     /** No return type at all — plugin must parse the body to find both relation type and model */
     public function supplierList()
     {

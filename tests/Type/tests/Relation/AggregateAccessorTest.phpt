@@ -96,6 +96,24 @@ function test_avg_camelCase_relation(Shop $shop): string|null
     return $avg;
 }
 
+// --- Snake-case method name (direct prefix match, no camelCase conversion needed) ---
+// Shop::damage_reports() is named in snake_case, so `damage_reports_count` matches directly
+// without going through snakeToCamelCase(). Exercises the first branch of isRelationPrefix().
+
+function test_count_snake_named_relation(Shop $shop): int
+{
+    /** @psalm-check-type-exact $count = int */
+    $count = $shop->damage_reports_count;
+    return $count;
+}
+
+function test_sum_snake_named_relation(Shop $shop): string|null
+{
+    /** @psalm-check-type-exact $sum = numeric-string|null */
+    $sum = $shop->damage_reports_sum_amount;
+    return $sum;
+}
+
 // --- Multi-word column name (underscore in column) ---
 // alias: Str::snake("work_orders min unit_price") = "work_orders_min_unit_price"
 // Verifies the left-to-right strpos scan handles `_{suffix}_` inside a column name.
