@@ -119,7 +119,7 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
 
         $constructorId = new MethodIdentifier($className, '__construct');
 
-        if (!$codebase->methods->methodExists($constructorId)) {
+        if (!$codebase->methodExists($constructorId)) {
             // No __construct: zero arguments expected.
             if ($constructorArgs !== []) {
                 IssueBuffer::maybeAdd(
