@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775991409346,
+  "lastUpdate": 1775995313477,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1217,6 +1217,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.77,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "16d3540c458553801adbc465367879bac91b558d",
+          "message": "fix: replace string callable with typed closure for usort #0\n\nPsalm 7 now enforces that usort comparators return int, not bool.\nversion_compare as a string callable is typed ambiguously (returns bool\nwhen called with 3 args), causing InvalidArgument. Explicit closure\nwith :int return type resolves it.",
+          "timestamp": "2026-04-12T13:58:08+02:00",
+          "tree_id": "31830ddf68ef844a2fa4fee7ac0d7d2959171aea",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/16d3540c458553801adbc465367879bac91b558d"
+        },
+        "date": 1775995313169,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.65,
+            "range": "± 0.27",
             "unit": "s"
           },
           {
