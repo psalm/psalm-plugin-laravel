@@ -38,9 +38,6 @@ use Psalm\Type\Union;
  */
 final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
-    /** Lowercase FQCN constant avoids repeated strtolower(Builder::class) calls on the hot path. */
-    private const BUILDER_CLASS_LOWER = 'illuminate\\database\\eloquent\\builder';
-
     /** @var array<string, bool> */
     private static array $scopeCache = [];
 
@@ -252,7 +249,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         }
 
         foreach ($returnType->getAtomicTypes() as $type) {
-            if ($type instanceof TGenericObject && \strtolower($type->value) === self::BUILDER_CLASS_LOWER) {
+            if ($type instanceof TGenericObject && \strtolower($type->value) === \strtolower(Builder::class)) {
                 return self::$traitBuilderCache[$key] = true;
             }
         }
@@ -283,7 +280,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         }
 
         foreach ($lhsType->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TGenericObject && \strtolower($atomic->value) === self::BUILDER_CLASS_LOWER) {
+            if ($atomic instanceof TGenericObject && \strtolower($atomic->value) === \strtolower(Builder::class)) {
                 return $atomic->type_params;
             }
         }
