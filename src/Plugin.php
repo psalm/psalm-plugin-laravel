@@ -301,6 +301,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Helpers/CacheHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\CacheHandler::class);
+        require_once __DIR__ . '/Handlers/Helpers/NowTodayHandler.php';
+        $registration->registerHooksFromClass(Handlers\Helpers\NowTodayHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\PathHandler::class);
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
@@ -308,6 +310,9 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(Handlers\SuppressHandler::class);
+
+        require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
+        $registration->registerHooksFromClass(Handlers\Jobs\DispatchableHandler::class);
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
