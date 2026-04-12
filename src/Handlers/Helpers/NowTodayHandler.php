@@ -10,10 +10,9 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 
 use function array_key_exists;
-use function assert;
-use function call_user_func;
 use function get_class;
-use function is_object;
+use function now;
+use function today;
 
 /**
  * Resolves the return type of now() and today() dynamically.
@@ -58,11 +57,12 @@ final class NowTodayHandler implements FunctionReturnTypeProviderInterface
         if (!array_key_exists($functionId, self::$resolvedClasses)) {
             // Call the actual helper at analysis time to discover the configured date class.
             // Results are cached so Carbon is only instantiated once per function per analysis run.
-            $dateInstance = call_user_func($functionId);
-            assert(is_object($dateInstance));
+            $dateInstance = $functionId === 'today' ? today() : now();
             self::$resolvedClasses[$functionId] = get_class($dateInstance);
         }
 
-        return new Type\Union([new TNamedObject(self::$resolvedClasses[$functionId])]);
+        return new Type\Union([new TNamedObject(
+            self::$resolvedClasses[$functionId] ?? \Illuminate\Support\Carbon::class,
+        )]);
     }
 }
