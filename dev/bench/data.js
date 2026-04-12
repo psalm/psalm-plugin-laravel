@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775990198654,
+  "lastUpdate": 1775991409346,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1182,6 +1182,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.69,
             "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "f00791062e4ce7fee65ac07b22ba9f5188d7c36a",
+          "message": "Revert \"fix(stubs): broaden sum() TCallbackReturn to include numeric-string #0\"\n\nThis reverts commit 1a72bac7513a05dc4cd77e5044170c61a7a374aa.",
+          "timestamp": "2026-04-12T12:53:28+02:00",
+          "tree_id": "d298136eeea94da5599e91ceadd8211cedd33e2b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f00791062e4ce7fee65ac07b22ba9f5188d7c36a"
+        },
+        "date": 1775991408592,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.77,
+            "range": "± 0.17",
             "unit": "s"
           },
           {
