@@ -180,11 +180,11 @@ final class Plugin implements PluginEntryPointInterface
 
                 $stubs[] = $realPath;
             }
-        } catch (\UnexpectedValueException $e) {
+        } catch (\UnexpectedValueException $unexpectedValueException) {
             // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories.
             // Return whatever stubs were collected before the error — partial results from
             // readable subdirectories are better than none.
-            $output->warning("Laravel plugin: error scanning stub directory '{$directory}': {$e->getMessage()}");
+            $output->warning("Laravel plugin: error scanning stub directory '{$directory}': {$unexpectedValueException->getMessage()}");
         }
 
         \sort($stubs);
