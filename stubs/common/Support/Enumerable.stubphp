@@ -4,12 +4,12 @@ namespace Illuminate\Support;
 
 /**
  * @template TKey of array-key
- * @template-covariant TValue
+ * @template TValue
  *
  * @extends \IteratorAggregate<TKey, TValue>
  * @extends \Illuminate\Contracts\Support\Arrayable<TKey, TValue>
  */
-interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminate\Contracts\Support\Jsonable, \Countable, \IteratorAggregate, \JsonSerializable
+interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Countable, \IteratorAggregate, \JsonSerializable
 {
     /**
      * Get the sum of the given values.

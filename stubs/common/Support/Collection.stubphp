@@ -68,6 +68,27 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public static function empty() {}
 
     /**
+     * Get the sum of the given values.
+     *
+     * At runtime, the accumulator starts at 0 and uses the + operator,
+     * so the result is always int|float (non-numeric values throw TypeError).
+     *
+     * When called without arguments, the return type narrows based on TValue:
+     * - Collection<_, int>::sum() → int (matches array_sum behavior for int arrays)
+     * - Collection<_, float>::sum() → float
+     * - Otherwise → int|float
+     *
+     * @template TCallbackReturn of int|float
+     *
+     * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
+     * @return ($callback is null
+     *  ? (TValue is int ? int : (TValue is float ? float : int|float))
+     *  : ($callback is string ? int|float : TCallbackReturn)
+     * )
+     */
+    public function sum($callback = null) {}
+
+    /**
      * Get the first item from the collection passing the given truth test.
      *
      * @psalm-mutation-free
