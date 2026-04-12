@@ -59,6 +59,16 @@ final class HigherOrderCollectionProxyTest
     }
 
     /**
+     * map on LazyCollection returns LazyCollection (LazyCollection::map() is static).
+     * @param LazyCollection<int, Customer> $users
+     */
+    public function mapLazyCollectionReturnType(LazyCollection $users): void
+    {
+        $_result = $users->map->getKey();
+        /** @psalm-check-type-exact $_result = LazyCollection<int, int|string> */
+    }
+
+    /**
      * filter returns the same collection (passthrough).
      * @param Collection<int, Customer> $users
      */
@@ -109,13 +119,13 @@ final class HigherOrderCollectionProxyTest
     }
 
     /**
-     * avg returns float|null.
+     * avg returns float|int|null (matches Laravel's actual return type).
      * @param Collection<int, Customer> $users
      */
     public function avgReturnType(Collection $users): void
     {
         $_result = $users->avg->getKey();
-        /** @psalm-check-type-exact $_result = float|null */
+        /** @psalm-check-type-exact $_result = float|int|null */
     }
 
     /**

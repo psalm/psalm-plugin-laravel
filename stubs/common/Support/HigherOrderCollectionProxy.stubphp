@@ -13,12 +13,11 @@ namespace Illuminate\Support;
  *
  * The actual false-positive fix (sortByDesc->method()->values()) is implemented in
  * HigherOrderCollectionProxyHandler::afterMethodCallAnalysis(), which intercepts the
- * mixin-resolved call and overrides the return type to Enumerable<TKey, TValue>.
+ * mixin-resolved call and overrides the return type with the precise collection type
+ * (e.g. Collection<TKey, TValue>, bool, float|int|null, etc. depending on the proxy).
  *
  * This stub's purpose is narrower: declaring __call prevents Psalm from reporting
  * UndefinedMagicMethod errors when sealAllMethods is enabled.
- *
- * @mixin \Illuminate\Support\Enumerable<TKey, TValue>
  */
 class HigherOrderCollectionProxy
 {

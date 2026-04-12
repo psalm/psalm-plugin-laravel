@@ -11,7 +11,6 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
-use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -76,12 +75,17 @@ final class HigherOrderCollectionProxyHandler implements
      * Proxy properties that return the original collection (passthrough).
      * The called method's return value is ignored — these methods operate
      * on items for side effects or filtering.
+     *
+     * Note: `when` and `unless` are intentionally excluded here. At runtime,
+     * `$collection->when->method()` calls `$collection->when(fn($v) => $v->method())`,
+     * which — since the callable is passed as `$value` with no `$callback` — returns
+     * `HigherOrderWhenProxy`, not the collection. These are unusual proxy uses and
+     * are not modelled here to avoid false-negative type narrowing.
      */
     private const PASSTHROUGH_METHODS = [
         'each', 'filter', 'reject',
         'skipuntil', 'skipwhile', 'sortby', 'sortbydesc',
-        'takeuntil', 'takewhile', 'unique',
-        'unless', 'until', 'when',
+        'takeuntil', 'takewhile', 'unique', 'until',
     ];
 
     /** Proxy properties that return a boolean result. */
@@ -118,7 +122,7 @@ final class HigherOrderCollectionProxyHandler implements
 
             $typeParams = $atomic->type_params;
             if (\count($typeParams) < 2) {
-                return;
+                continue;
             }
 
             // Extract the proxy method name (e.g. "each" from $collection->each->delete())
@@ -182,7 +186,10 @@ final class HigherOrderCollectionProxyHandler implements
         $source = $event->getSource();
         $stmt = $event->getStmt();
 
-        if (!$source instanceof StatementsAnalyzer || !$stmt instanceof MethodCall) {
+        // We need a MethodCall (not StaticCall) to access the proxy expression.
+        // getNodeTypeProvider() and getCodebase() are on the StatementsSource interface,
+        // so no downcast to StatementsAnalyzer is needed.
+        if (!$stmt instanceof MethodCall) {
             return null;
         }
 
@@ -267,8 +274,9 @@ final class HigherOrderCollectionProxyHandler implements
         }
 
         // Numeric aggregation proxies
+        // avg/average return float|int|null (Laravel returns $reduced[0] / $reduced[1] which can be int/float)
         if (\in_array($proxyMethod, ['average', 'avg', 'percentage'], true)) {
-            return new Union([new Type\Atomic\TFloat(), new Type\Atomic\TNull()]);
+            return new Union([new Type\Atomic\TFloat(), new Type\Atomic\TInt(), new Type\Atomic\TNull()]);
         }
 
         if ($proxyMethod === 'sum') {
@@ -285,12 +293,13 @@ final class HigherOrderCollectionProxyHandler implements
             return self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase) ?? Type::getMixed();
         }
 
-        // map — always returns base Collection (Laravel's map() returns Collection, not static)
+        // map — returns the same concrete collection class with the new value type.
+        // LazyCollection::map() returns LazyCollection (static), so we use $collectionClass.
         if ($proxyMethod === 'map') {
             $methodReturnType = self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase);
 
             return new Union([
-                new TGenericObject(Collection::class, [
+                new TGenericObject($collectionClass, [
                     $tKey,
                     $methodReturnType ?? Type::getMixed(),
                 ]),
