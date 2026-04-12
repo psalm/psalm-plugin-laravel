@@ -120,13 +120,13 @@ final class HigherOrderCollectionProxyTest
     }
 
     /**
-     * sum returns int|float.
+     * sum resolves the called method return type (e.g. getKey(): int|string → int|string).
      * @param Collection<int, Customer> $users
      */
     public function sumReturnType(Collection $users): void
     {
         $_result = $users->sum->getKey();
-        /** @psalm-check-type-exact $_result = float|int */
+        /** @psalm-check-type-exact $_result = int|string */
     }
 
     /**
@@ -200,13 +200,13 @@ final class HigherOrderCollectionProxyTest
     }
 
     /**
-     * flatMap returns Collection<int, mixed>.
+     * flatMap returns Collection<array-key, mixed> (keys are controlled by the callback).
      * @param Collection<int, Customer> $users
      */
     public function flatMapReturnType(Collection $users): void
     {
         $_result = $users->flatMap->getKey();
-        /** @psalm-check-type-exact $_result = Collection<int, mixed> */
+        /** @psalm-check-type-exact $_result = Collection<array-key, mixed> */
     }
 
     /**
@@ -239,6 +239,87 @@ final class HigherOrderCollectionProxyTest
         /** @psalm-check-type-exact $_result = Collection<int, Collection<int, Customer>> */
     }
 
+
+    /**
+     * max returns the called method result directly.
+     * @param Collection<int, Customer> $users
+     */
+    public function maxReturnType(Collection $users): void
+    {
+        $_result = $users->max->getKey();
+        /** @psalm-check-type-exact $_result = int|string */
+    }
+
+    /**
+     * min returns the called method result directly.
+     * @param Collection<int, Customer> $users
+     */
+    public function minReturnType(Collection $users): void
+    {
+        $_result = $users->min->getKey();
+        /** @psalm-check-type-exact $_result = int|string */
+    }
+
+    /**
+     * average returns float|int|null.
+     * @param Collection<int, Customer> $users
+     */
+    public function averageReturnType(Collection $users): void
+    {
+        $_result = $users->average->getKey();
+        /** @psalm-check-type-exact $_result = float|int|null */
+    }
+
+    /**
+     * doesntContain returns bool.
+     * @param Collection<int, Customer> $users
+     */
+    public function doesntContainReturnType(Collection $users): void
+    {
+        $_result = $users->doesntContain->trashed();
+        /** @psalm-check-type-exact $_result = bool */
+    }
+
+    /**
+     * hasSole returns bool.
+     * @param Collection<int, Customer> $users
+     */
+    public function hasSoleReturnType(Collection $users): void
+    {
+        $_result = $users->hasSole->trashed();
+        /** @psalm-check-type-exact $_result = bool */
+    }
+
+    /**
+     * EloquentCollection partition outer bucket falls back to base Collection.
+     * EloquentCollection::partition() calls parent::partition()->toBase().
+     * @param EloquentCollection<int, Customer> $users
+     */
+    public function partitionEloquentReturnType(EloquentCollection $users): void
+    {
+        $_result = $users->partition->trashed();
+        /** @psalm-check-type-exact $_result = Collection<int, EloquentCollection<int, Customer>> */
+    }
+
+    /**
+     * flatMap on LazyCollection preserves the LazyCollection type.
+     * @param LazyCollection<int, Customer> $users
+     */
+    public function flatMapLazyCollectionReturnType(LazyCollection $users): void
+    {
+        $_result = $users->flatMap->getKey();
+        /** @psalm-check-type-exact $_result = LazyCollection<array-key, mixed> */
+    }
+
+    /**
+     * sum resolves the called method return type for precision.
+     * @param Collection<int, Customer> $users
+     */
+    public function sumResolvesMethodReturnType(Collection $users): void
+    {
+        $_result = $users->sum->getKey();
+        /** @psalm-check-type-exact $_result = int|string */
+    }
     /**
      * sortByDesc->method() chaining must not produce InvalidMethodCall.
      * Previously Psalm inferred int via @mixin TValue and failed on ->values() on int.

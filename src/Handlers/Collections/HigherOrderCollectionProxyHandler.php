@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
+use Illuminate\Support\LazyCollection;
 use Illuminate\Support\HigherOrderCollectionProxy;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\PropertyFetch;
@@ -280,8 +281,11 @@ final class HigherOrderCollectionProxyHandler implements
             return new Union([new Type\Atomic\TFloat(), new Type\Atomic\TInt(), new Type\Atomic\TNull()]);
         }
 
+        // sum — resolve the called method's return type for precision (e.g. getPrice(): int → int).
+        // Falls back to int|float when resolution fails (mirrors Collection::sum() accumulator).
         if ($proxyMethod === 'sum') {
-            return new Union([new Type\Atomic\TInt(), new Type\Atomic\TFloat()]);
+            $sumReturnType = self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase);
+            return $sumReturnType ?? new Union([new Type\Atomic\TInt(), new Type\Atomic\TFloat()]);
         }
 
         // first/last — returns TValue|null
@@ -312,10 +316,12 @@ final class HigherOrderCollectionProxyHandler implements
             ]);
         }
 
-        // flatMap — inner structure is unpacked, keys are re-indexed
+        // flatMap — inner structure is unpacked; static return type preserves LazyCollection.
+        // EloquentCollection falls back to base Collection; key widened to array-key.
         if ($proxyMethod === 'flatmap') {
+            $flatMapClass = $collectionClass === EloquentCollection::class ? Collection::class : $collectionClass;
             return new Union([
-                new TGenericObject(Collection::class, [Type::getInt(), Type::getMixed()]),
+                new TGenericObject($flatMapClass, [Type::getArrayKey(), Type::getMixed()]),
             ]);
         }
 
@@ -331,12 +337,15 @@ final class HigherOrderCollectionProxyHandler implements
             ]);
         }
 
-        // partition — always two buckets (truthy/falsy), keyed 0 and 1
+        // partition — always two buckets (truthy/falsy), keyed 0 and 1.
+        // EloquentCollection::partition() calls parent::partition()->toBase(), making the outer
+        // bucket a base Collection regardless of the receiver.
         if ($proxyMethod === 'partition') {
             $innerCollection = new TGenericObject($collectionClass, [$tKey, $tValue]);
+            $outerClass = $collectionClass === EloquentCollection::class ? Collection::class : $collectionClass;
 
             return new Union([
-                new TGenericObject($collectionClass, [
+                new TGenericObject($outerClass, [
                     Type::getInt(),
                     new Union([$innerCollection]),
                 ]),
@@ -397,12 +406,21 @@ final class HigherOrderCollectionProxyHandler implements
     private static function extractCollectionInfoFromType(Union $collectionType): ?array
     {
         foreach ($collectionType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TGenericObject || \count($atomic->type_params) < 2) {
+                continue;
+            }
+
+            $class = $atomic->value;
+
+            // Fast-path: equality check for the three common classes avoids is_a() inheritance
+            // walk for ~99% of real-world usage, which would also trigger PHP autoloading.
             if (
-                $atomic instanceof TGenericObject
-                && \count($atomic->type_params) >= 2
-                && \is_a($atomic->value, Enumerable::class, allow_string: true)
+                $class === Collection::class
+                || $class === EloquentCollection::class
+                || $class === LazyCollection::class
+                || \is_a($class, Enumerable::class, allow_string: true)
             ) {
-                return [$atomic->type_params[0], $atomic->type_params[1], $atomic->value];
+                return [$atomic->type_params[0], $atomic->type_params[1], $class];
             }
         }
 
