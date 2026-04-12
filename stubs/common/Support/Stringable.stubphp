@@ -1,0 +1,86 @@
+<?php
+
+namespace Illuminate\Support;
+
+use ArrayAccess;
+use JsonSerializable;
+use Stringable as BaseStringable;
+
+/**
+ * Taint flow stubs for Illuminate\Support\Stringable.
+ *
+ * Methods that accept additional string parameters (append, prepend, replace, etc.)
+ * can inject tainted data into the chain. The @psalm-flow annotations below ensure
+ * taint from those parameters reaches the return value.
+ *
+ * Note: taint propagation from $this through chains (e.g. Str::of($tainted)->trim())
+ * is a Psalm limitation — @psalm-flow does not support $this as a source.
+ */
+class Stringable implements JsonSerializable, ArrayAccess, BaseStringable
+{
+    /**
+     * @return static
+     * @psalm-flow ($values) -> return
+     */
+    public function append(...$values) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($values) -> return
+     */
+    public function prepend(...$values) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($before, $after) -> return
+     */
+    public function wrap($before, $after = null) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($replace) -> return
+     */
+    public function replace($search, $replace, $caseSensitive = true) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($replace) -> return
+     */
+    public function replaceArray($search, $replace) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($replace) -> return
+     */
+    public function replaceFirst($search, $replace) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($replace) -> return
+     */
+    public function replaceStart($search, $replace) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($replace) -> return
+     */
+    public function replaceLast($search, $replace) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($replace) -> return
+     */
+    public function replaceEnd($search, $replace) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($replace) -> return
+     */
+    public function replaceMatches($pattern, $replace, $limit = -1) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($replace) -> return
+     */
+    public function substrReplace($replace, $offset = 0, $length = null) {}
+}

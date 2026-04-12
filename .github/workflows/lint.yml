@@ -1,4 +1,4 @@
-name: PHP CS check
+name: Code Style
 
 on:
   push:
@@ -6,16 +6,51 @@ on:
     paths:
       - '**.php'
       - 'composer.json'
-      - 'phpcs*'
   pull_request:
     paths:
       - '**.php'
       - 'composer.json'
-      - 'phpcs*'
 
 jobs:
-  phpcs:
-    name: PHP CS
+  fix:
+    name: Auto-fix code style
+    # Skip fork PRs — GITHUB_TOKEN can't push to external forks.
+    # Fork contributors: run `composer rector && composer cs` locally.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ github.token }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.2
+          coverage: none
+          tools: cs2pr
+
+      - name: Install composer dependencies
+        run: composer install --prefer-dist --no-progress --no-suggest --no-interaction
+
+      - name: Rector
+        run: composer rector
+
+      - name: PHP CS Fixer
+        run: composer cs
+
+      - name: Commit fixes
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: 'style: auto-fix (rector + php-cs-fixer)'
+          commit_author: 'GitHub Actions <actions@github.com>'
+
+  check:
+    name: Verify code style (forks)
+    # Only run the check job on fork PRs where we can't auto-fix.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -24,30 +59,14 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.5
+          php-version: 8.2
           coverage: none
-          tools: cs2pr
 
       - name: Install composer dependencies
-        run: export COMPOSER_ROOT_VERSION=dev-master && composer install --prefer-dist --no-progress --no-suggest
+        run: composer install --prefer-dist --no-progress --no-suggest --no-interaction
+
+      - name: Rector (dry-run)
+        run: composer rector:dry
 
       - name: PHP CS check
-        id: lint_php
-        run: 'composer cs:check'
-        continue-on-error: true
-
-      - name: Fix detected PHP coding style issues (if any)
-        if: ${{ steps.lint_php.outcome == 'failure' }}
-        id: fix_php
-        run: 'composer cs:fix'
-        continue-on-error: true
-
-      - name: Commit PHP code-style fixes (if any)
-        if: ${{ steps.lint_php.outcome == 'failure' }}
-        uses: EndBug/add-and-commit@v9
-        with:
-          message: "Fix PHP coding style issues 🪄"
-          author_name: GitHub Actions
-          author_email: actions@github.com
-          add: '*.php'
-          pull: '--rebase --autostash'
+        run: composer cs:check

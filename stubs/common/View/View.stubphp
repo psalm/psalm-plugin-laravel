@@ -1,0 +1,21 @@
+<?php
+
+namespace Illuminate\View;
+
+class View implements \Illuminate\Contracts\View\View, \Stringable
+{
+    // View data passed via with() is intentionally NOT marked as @psalm-taint-sink html.
+    // Blade auto-escapes all {{ $var }} expressions via htmlspecialchars(), so passing
+    // user input as view data is safe for the common case.
+    // Real XSS requires {!! $var !!} (raw output), which Psalm cannot detect because it
+    // does not parse .blade.php files. Marking view data as an html sink causes massive
+    // false positives with no corresponding detection benefit.
+    // See: https://github.com/psalm/psalm-plugin-laravel/issues/684
+
+    /**
+     * @param  array|string  $key
+     * @param  mixed  $value
+     * @return $this
+     */
+    public function with($key, $value = null) {}
+}

@@ -1,0 +1,45 @@
+<?php
+
+namespace Illuminate\Support\Traits;
+
+trait InteractsWithData
+{
+    /**
+     * Retrieve data from the instance as an array of enums.
+     *
+     * Not a taint source: BackedEnum::tryFrom() is a strict whitelist.
+     * Each element can only be one of the developer-defined enum cases.
+     *
+     * @template TEnum of \BackedEnum
+     *
+     * @param  string  $key
+     * @param  class-string<TEnum>  $enumClass
+     * @return TEnum[]
+     */
+    public function enums($key, $enumClass) {}
+
+    /**
+     * Retrieve data from the instance as an array.
+     *
+     * @param  array|string|null  $key
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function array($key = null) {}
+
+    /**
+     * Retrieve data clamped between min and max values.
+     *
+     * Not a taint source: returns a numeric value constrained by min()
+     * and max(). Like integer()/float(), a number cannot carry an
+     * injection payload.
+     *
+     * @param  string  $key
+     * @param  int|float  $min
+     * @param  int|float  $max
+     * @param  int|float  $default
+     * @return int|float
+     */
+    public function clamp($key, $min, $max, $default = 0) {}
+}

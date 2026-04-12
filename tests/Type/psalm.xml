@@ -8,6 +8,7 @@
     findUnusedVariablesAndParams="true"
     memoizeMethodCallResults="true"
     reportMixedIssues="true"
+    runTaintAnalysis="false"
     sealAllMethods="true"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
@@ -15,7 +16,15 @@
 >
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <failOnInternalError>true</failOnInternalError>
+            <failOnInternalError value="true" />
+            <resolveDynamicWhereClauses value="true" />
         </pluginClass>
     </plugins>
+    <issueHandlers>
+        <!-- NoEnvOutsideConfig is a linting rule, not a type issue. psalm-tester runs
+             Psalm on temp files in sys_get_temp_dir(), which don't match the /tests/
+             pattern that NoEnvOutsideConfigHandler uses to auto-exclude test code, so
+             env() calls in PHPT tests would emit this issue spuriously. -->
+        <PluginIssue name="NoEnvOutsideConfig" errorLevel="info" />
+    </issueHandlers>
 </psalm>

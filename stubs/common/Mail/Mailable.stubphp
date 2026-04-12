@@ -1,0 +1,89 @@
+<?php
+
+namespace Illuminate\Mail;
+
+use Illuminate\Contracts\Mail\Mailable as MailableContract;
+use Illuminate\Contracts\Support\Renderable;
+
+class Mailable implements MailableContract, Renderable
+{
+    /**
+     * Set the sender of the message.
+     *
+     * @param  object|array|string  $address
+     * @param  string|null  $name
+     * @return $this
+     *
+     * @psalm-taint-sink header $address
+     * @psalm-taint-sink header $name
+     */
+    public function from($address, $name = null) {}
+
+    /**
+     * Set the recipients of the message.
+     *
+     * @param  object|array|string  $address
+     * @param  string|null  $name
+     * @return $this
+     *
+     * @psalm-taint-sink header $address
+     * @psalm-taint-sink header $name
+     */
+    public function to($address, $name = null) {}
+
+    /**
+     * Set the cc recipients of the message.
+     *
+     * @param  object|array|string  $address
+     * @param  string|null  $name
+     * @return $this
+     *
+     * @psalm-taint-sink header $address
+     * @psalm-taint-sink header $name
+     */
+    public function cc($address, $name = null) {}
+
+    /**
+     * Set the bcc recipients of the message.
+     *
+     * @param  object|array|string  $address
+     * @param  string|null  $name
+     * @return $this
+     *
+     * @psalm-taint-sink header $address
+     * @psalm-taint-sink header $name
+     */
+    public function bcc($address, $name = null) {}
+
+    /**
+     * Set the "reply to" address of the message.
+     *
+     * @param  object|array|string  $address
+     * @param  string|null  $name
+     * @return $this
+     *
+     * @psalm-taint-sink header $address
+     * @psalm-taint-sink header $name
+     */
+    public function replyTo($address, $name = null) {}
+
+    /**
+     * Set the subject of the message.
+     *
+     * @param  string  $subject
+     * @return $this
+     *
+     * @psalm-taint-sink header $subject
+     */
+    public function subject($subject) {}
+
+    /**
+     * Set the rendered HTML content for the message.
+     *
+     * @param  string  $html
+     * @return $this
+     *
+     * @psalm-taint-sink html $html
+     */
+    public function html($html) {}
+}

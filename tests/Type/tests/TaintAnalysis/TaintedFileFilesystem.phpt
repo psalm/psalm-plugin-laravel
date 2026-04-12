@@ -10,4 +10,4 @@ function downloadAttachment(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-TaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling

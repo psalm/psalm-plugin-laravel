@@ -2,11 +2,12 @@
 
 namespace Illuminate\Database\Query;
 
+use Illuminate\Contracts\Database\Query\Builder as BuilderContract;
 use Illuminate\Database\Concerns\BuildsQueries;
 use Illuminate\Support\Traits\ForwardsCalls;
 use Illuminate\Support\Traits\Macroable;
 
-class Builder
+class Builder implements BuilderContract
 {
     use BuildsQueries, ForwardsCalls, Macroable {
         __call as macroCall;
@@ -15,9 +16,12 @@ class Builder
     /**
      * Execute a query for a single record by ID.
      *
-     * @template T
      * @param  list<non-empty-string>  $columns
      * @return \stdClass|null
+     *
+     * @psalm-taint-escape sql
+     * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function find($id, $columns = ['*']) {}
 
@@ -98,6 +102,8 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -110,6 +116,8 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orWhere($column, $operator = null, $value = null) {}
 
@@ -123,6 +131,8 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function whereNot($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -135,6 +145,8 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orWhereNot($column, $operator = null, $value = null) {}
 
@@ -148,6 +160,8 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function having($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -160,6 +174,8 @@ class Builder
      * @return $this
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orHaving($column, $operator = null, $value = null) {}
 

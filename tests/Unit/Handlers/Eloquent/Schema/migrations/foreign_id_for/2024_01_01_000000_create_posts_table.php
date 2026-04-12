@@ -11,7 +11,7 @@ return new class extends Migration {
             $table->id();
             $table->string('title');
             // foreignIdFor with a string column name override as second arg
-            $table->foreignIdFor(\App\Models\User::class, 'author_id');
+            $table->foreignIdFor(\App\Models\Customer::class, 'author_id');
             $table->timestamps();
         });
     }

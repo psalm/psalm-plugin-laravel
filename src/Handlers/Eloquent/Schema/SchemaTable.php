@@ -29,6 +29,7 @@ final class SchemaTable
         $this->columns[$new_name] = $old_column;
     }
 
+    /** @psalm-external-mutation-free */
     public function dropColumn(string $column_name): void
     {
         unset($this->columns[$column_name]);

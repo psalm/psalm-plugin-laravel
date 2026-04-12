@@ -88,6 +88,8 @@ class Builder implements BuilderContract
      * @return self<TModel>
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -107,6 +109,8 @@ class Builder implements BuilderContract
      * @return self<TModel>
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orWhere($column, $operator = null, $value = null) {}
 
@@ -293,6 +297,10 @@ class Builder implements BuilderContract
      * @param  T $id
      * @param  list<non-empty-string>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel|null)
+     *
+     * @psalm-taint-escape sql
+     * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function find($id, $columns = ['*']) {}
 
@@ -300,6 +308,10 @@ class Builder implements BuilderContract
      * @param  \Illuminate\Contracts\Support\Arrayable|array  $ids
      * @param  list<non-empty-string>  $columns
      * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
+     *
+     * @psalm-taint-escape sql
+     * @psalm-flow ($ids) -> return
+     * @psalm-taint-specialize
      */
     public function findMany($ids, $columns = ['*']) {}
 
@@ -310,6 +322,10 @@ class Builder implements BuilderContract
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     *
+     * @psalm-taint-escape sql
+     * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function findOrFail($id, $columns = ['*']) {}
 
@@ -318,6 +334,10 @@ class Builder implements BuilderContract
      * @param  T  $id
      * @param  list<non-empty-string>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel)
+     *
+     * @psalm-taint-escape sql
+     * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function findOrNew($id, $columns = ['*']) {}
 
@@ -358,11 +378,14 @@ class Builder implements BuilderContract
     public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}
 
     /**
-     * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|array<int, mixed>|\Illuminate\Database\Query\Expression  $column
+     * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|int, mixed>|\Illuminate\Database\Query\Expression  $column
      * @param  string  $boolean
      * @psalm-return TModel|null
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
+     * @psalm-taint-specialize
      */
     public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -480,7 +503,7 @@ class Builder implements BuilderContract
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<TModel>
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, TModel>
      *
      * @throws \InvalidArgumentException
      */
@@ -491,7 +514,7 @@ class Builder implements BuilderContract
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\Paginator<TModel>
+     * @return \Illuminate\Contracts\Pagination\Paginator<int, TModel>
      */
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -502,7 +525,7 @@ class Builder implements BuilderContract
      * @param  array<array-key, mixed>  $columns
      * @param  string  $cursorName
      * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
-     * @return \Illuminate\Pagination\CursorPaginator<TModel>
+     * @return \Illuminate\Pagination\CursorPaginator<int, TModel>
      */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 
@@ -653,6 +676,8 @@ class Builder implements BuilderContract
      * @return self<TModel>
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function whereNot($column, $operator = null, $value = null, $boolean = 'and') {}
 
@@ -665,6 +690,8 @@ class Builder implements BuilderContract
      * @return self<TModel>
      *
      * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
      */
     public function orWhereNot($column, $operator = null, $value = null) {}
 
@@ -686,6 +713,10 @@ class Builder implements BuilderContract
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      * @throws \Illuminate\Database\MultipleRecordsFoundException
+     *
+     * @psalm-taint-escape sql
+     * @psalm-flow ($id) -> return
+     * @psalm-taint-specialize
      */
     public function findSole($id, $columns = ['*']) {}
 

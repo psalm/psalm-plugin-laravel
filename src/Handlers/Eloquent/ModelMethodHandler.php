@@ -6,29 +6,357 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Stmt\Class_;
+use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
+use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
+use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\Event\MethodVisibilityProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\StatementsSource;
+use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
 use Psalm\Type\Union;
 
-use function is_string;
-use function strtolower;
-
+/**
+ * Handles static method calls on Eloquent Models that are forwarded to Builder via __callStatic.
+ *
+ * Responsibilities:
+ * 1. Method existence — confirms magic methods exist (suppresses UndefinedMagicMethod)
+ * 2. Method visibility — confirms magic methods are public
+ * 3. Method params — provides parameter definitions for argument checking
+ * 4. Return types — proxies calls to Builder<TModel> for type inference
+ * 5. afterClassLikeVisit — removes pseudo static methods so the plugin can handle them
+ *
+ * Existence, visibility, params, and return type providers for concrete Model subclasses are
+ * registered dynamically per-model by {@see ModelRegistrationHandler} because Psalm's
+ * provider lookup requires exact class name matching — a handler registered for Model::class
+ * is not consulted for concrete subclasses like App\Models\User.
+ *
+ * The getClassLikeNames() registration for Model::class still handles Model::query()
+ * and the __callStatic proxy for methods resolvable through the single-hop mixin chain.
+ *
+ * Builder-instance handlers (trait methods and scopes on custom builders) are in
+ * {@see CustomBuilderMethodHandler}.
+ */
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
 {
-    /** @inheritDoc */
+    /**
+     * Cache for isUnresolvedBuilderMethod results.
+     *
+     * This method is called up to 4 times per static method call (existence, visibility,
+     * params, return type), so caching avoids redundant methodExists lookups.
+     *
+     * @var array<string, bool>
+     */
+    private static array $unresolvedCache = [];
+
+    /**
+     * Maps model FQCN → custom Eloquent builder FQCN.
+     *
+     * Populated by {@see ModelRegistrationHandler} when a model declares a dedicated builder
+     * via #[UseEloquentBuilder] attribute, newEloquentBuilder() override, or $builder property.
+     * Used to return the correct builder type from query(), __callStatic, and scope methods.
+     *
+     * @var array<class-string<Model>, class-string<Builder>>
+     */
+    private static array $customBuilderMap = [];
+
+    /**
+     * Register a custom Eloquent builder class for a model.
+     *
+     * @param class-string<Model> $modelClass
+     * @param class-string<Builder> $builderClass
+     * @psalm-external-mutation-free
+     */
+    public static function registerCustomBuilder(string $modelClass, string $builderClass): void
+    {
+        self::$customBuilderMap[$modelClass] = $builderClass;
+        CustomBuilderMethodHandler::registerBuilderToModelMapping($modelClass, $builderClass);
+    }
+
+    /**
+     * Get the builder class for a model — custom builder if registered, base Builder otherwise.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function getBuilderClassForModel(string $modelClass): string
+    {
+        return self::$customBuilderMap[$modelClass] ?? Builder::class;
+    }
+
+    /**
+     * Build the Psalm type for Builder<Model> (or CustomBuilder<Model>).
+     *
+     * If the custom builder has template parameters, returns TGenericObject (e.g. PostBuilder<Post>).
+     * If the builder has no template params (e.g. `final class MemberBuilder extends Builder<Member>`),
+     * returns a plain TNamedObject (just MemberBuilder) to avoid "too many template params" errors.
+     *
+     * @internal Used by {@see CustomBuilderMethodHandler} for builder-instance return types
+     * @psalm-mutation-free
+     */
+    public static function builderType(string $builderClass, string $modelClass, Codebase $codebase): Type\Atomic\TNamedObject
+    {
+        // Non-custom builders (base Builder) always have the TModel template param.
+        if ($builderClass === Builder::class) {
+            return new Type\Atomic\TGenericObject($builderClass, [
+                new Union([new Type\Atomic\TNamedObject($modelClass)]),
+            ]);
+        }
+
+        // Custom builders: check if they declare their own template params.
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($builderClass));
+        } catch (\InvalidArgumentException) {
+            return new Type\Atomic\TNamedObject($builderClass);
+        }
+
+        if ($storage->template_types !== null && $storage->template_types !== []) {
+            return new Type\Atomic\TGenericObject($builderClass, [
+                new Union([new Type\Atomic\TNamedObject($modelClass)]),
+            ]);
+        }
+
+        return new Type\Atomic\TNamedObject($builderClass);
+    }
+
+    /**
+     * @return list<string>
+     * @psalm-pure
+     */
     #[\Override]
     public static function getClassLikeNames(): array
     {
         return [Model::class];
+    }
+
+    /**
+     * Confirm that a static magic method exists on a Model subclass.
+     *
+     * Only confirms methods NOT already resolvable through Psalm's @mixin chain.
+     * Methods on Eloquent\Builder (like where(), get()) are found by Psalm via
+     * Model's @mixin Builder<static> automatically. Confirming them here would
+     * set $fake_method_exists=true in the analyzer, bypassing mixin resolution
+     * for instance calls and losing type information.
+     *
+     * We only handle:
+     * 1. Query\Builder methods not explicitly on Eloquent\Builder (e.g., whereIn, orderBy)
+     *    These can't be reached through the double mixin: Model → Builder → Query\Builder.
+     * 2. Scope methods (legacy scopeX or #[Scope] attribute)
+     *
+     * Registered as a closure per concrete Model class by {@see ModelRegistrationHandler}.
+     */
+    public static function doesMethodExist(MethodExistenceProviderEvent $event): ?bool
+    {
+        $source = $event->getSource();
+
+        if (!$source instanceof \Psalm\StatementsSource) {
+            return null;
+        }
+
+        return self::isUnresolvedBuilderMethod(
+            $source->getCodebase(),
+            $event->getFqClasslikeName(),
+            $event->getMethodNameLowercase(),
+        ) ? true : null;
+    }
+
+    /**
+     * Magic methods forwarded via __callStatic are effectively public.
+     *
+     * Registered defensively per concrete Model class by {@see ModelRegistrationHandler}
+     * in case Psalm's visibility check is reached for fake-method-exists paths.
+     */
+    public static function isMethodVisible(MethodVisibilityProviderEvent $event): ?bool
+    {
+        return self::isUnresolvedBuilderMethod(
+            $event->getSource()->getCodebase(),
+            $event->getFqClasslikeName(),
+            $event->getMethodNameLowercase(),
+        ) ? true : null;
+    }
+
+    /**
+     * Provide method parameter definitions for methods confirmed by doesMethodExist.
+     *
+     * Psalm needs to know the parameter types for argument checking (checkMethodArgs).
+     * For Query\Builder methods, we delegate to the actual Query\Builder params.
+     * For scope methods, we use the scope's params minus the first $query parameter.
+     *
+     * Registered as a closure per concrete Model class by {@see ModelRegistrationHandler}.
+     *
+     * @return list<FunctionLikeParameter>|null
+     */
+    public static function getMethodParams(MethodParamsProviderEvent $event): ?array
+    {
+        $source = $event->getStatementsSource();
+
+        if (!$source instanceof StatementsSource) {
+            return null;
+        }
+
+        $codebase = $source->getCodebase();
+        $modelClass = $event->getFqClasslikeName();
+        $methodName = $event->getMethodNameLowercase();
+
+        if (!self::isUnresolvedBuilderMethod($codebase, $modelClass, $methodName)) {
+            return null;
+        }
+
+        // Custom builder method — use its actual params (e.g., PostBuilder::wherePublished)
+        $builderClass = self::getBuilderClassForModel($modelClass);
+        if ($builderClass !== Builder::class) {
+            /** @var lowercase-string $methodName */
+            $customBuilderMethodId = new MethodIdentifier($builderClass, $methodName);
+            if ($codebase->methodExists($customBuilderMethodId)) {
+                return self::getParamsWithVariadicFlag($codebase, $customBuilderMethodId);
+            }
+        }
+
+        // Trait-declared builder method — use stored params from the original @method annotation.
+        $traitParams = CustomBuilderMethodHandler::getTraitMethodParams($modelClass, $methodName);
+        if ($traitParams !== null) {
+            return $traitParams;
+        }
+
+        // Query\Builder method — use its actual params
+        /** @var lowercase-string $methodName */
+        $queryBuilderMethodId = new MethodIdentifier(QueryBuilder::class, $methodName);
+        if ($codebase->methodExists($queryBuilderMethodId)) {
+            return self::getParamsWithVariadicFlag($codebase, $queryBuilderMethodId);
+        }
+
+        // Scope method — params from the scope definition minus the first $query param.
+        /** @var class-string<Model> $modelClass */
+        return self::getScopeParams($codebase, $modelClass, $methodName);
+    }
+
+    /**
+     * Provide return types for methods confirmed by doesMethodExist.
+     *
+     * When the existence provider confirms a method (e.g., whereIn, active), Psalm calls
+     * the return type provider with the method name directly (not __callstatic). This handler
+     * proxies the call to Builder<ModelClass> to resolve the return type.
+     *
+     * Registered as a closure per concrete Model class by {@see ModelRegistrationHandler}.
+     */
+    public static function getReturnTypeForForwardedMethod(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $source = $event->getSource();
+
+        if (!$source instanceof StatementsAnalyzer) {
+            return null;
+        }
+
+        $codebase = $source->getCodebase();
+        $modelClass = $event->getFqClasslikeName();
+        $methodName = $event->getMethodNameLowercase();
+
+        // Only handle methods confirmed by doesMethodExist — don't interfere with
+        // methods already resolved through the @mixin chain (where, get, first, etc.)
+        if (!self::isUnresolvedBuilderMethod($codebase, $modelClass, $methodName)) {
+            return null;
+        }
+
+        $calledClass = $event->getCalledFqClasslikeName() ?? $modelClass;
+
+        // Use $modelClass for builder lookup — matches the registration key in $customBuilderMap.
+        // $calledClass is used only for the template parameter (TNamedObject) in the return type.
+        $builderClass = self::getBuilderClassForModel($modelClass);
+
+        // Scope methods: return Builder<Model> directly.
+        // Using executeFakeCall for scopes doesn't work reliably because the scope
+        // is resolved via Builder's __call magic which may fail in a fake call context.
+        /** @var class-string<Model> $modelClass */
+        if (BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
+            return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+        }
+
+        // Trait-declared builder methods (e.g., SoftDeletes::withTrashed): return custom builder type.
+        if (CustomBuilderMethodHandler::hasTraitMethod($modelClass, $methodName)) {
+            return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+        }
+
+        // Query\Builder methods: proxy the call through Builder<Model> to resolve
+        // the return type with proper template type preservation.
+        $fake_method_call = new MethodCall(
+            // Variable name must match what executeFakeCall sets in context: $fakeProxyObject
+            new Variable('fakeProxyObject'),
+            $methodName,
+            $event->getCallArgs(),
+        );
+
+        $fakeProxy = self::builderType($builderClass, $calledClass, $codebase);
+
+        return ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $fakeProxy);
+    }
+
+    /**
+     * Check if a method on a Model needs explicit existence confirmation.
+     *
+     * Returns true only for methods that Psalm can't resolve via its normal
+     * @mixin chain — either Query\Builder methods unreachable through the double
+     * mixin hop, or scope methods defined on the model.
+     */
+    private static function isUnresolvedBuilderMethod(Codebase $codebase, string $modelClass, string $methodName): bool
+    {
+        $key = $modelClass . '::' . $methodName;
+
+        if (\array_key_exists($key, self::$unresolvedCache)) {
+            return self::$unresolvedCache[$key];
+        }
+
+        /** @var lowercase-string $methodName */
+
+        // Methods defined directly on the Model class (e.g., newQuery, newModelQuery)
+        // should be resolved by Psalm normally using the stub/source return types.
+        // Don't intercept them — otherwise Query\Builder methods with the same name
+        // (like Query\Builder::newQuery()) would shadow the Model's own definition.
+        if ($codebase->methodExists(new MethodIdentifier(Model::class, $methodName))) {
+            return self::$unresolvedCache[$key] = false;
+        }
+
+        // Methods on Eloquent\Builder (e.g., where, get, first) are resolved by Psalm
+        // via Model's @mixin Builder<static>. Don't interfere — let the mixin handle it.
+        if ($codebase->methodExists(new MethodIdentifier(Builder::class, $methodName))) {
+            return self::$unresolvedCache[$key] = false;
+        }
+
+        // Methods on Query\Builder that are NOT on Eloquent\Builder (e.g., whereIn,
+        // orderBy). At runtime these are forwarded via Builder::__call → forwardCallTo.
+        // Psalm's single-level mixin resolution can't reach them through the double hop:
+        // Model → Builder → Query\Builder. Confirm existence so Psalm doesn't emit
+        // UndefinedMagicMethod.
+        if ($codebase->methodExists(new MethodIdentifier(QueryBuilder::class, $methodName))) {
+            return self::$unresolvedCache[$key] = true;
+        }
+
+        // Methods on a custom builder class (e.g., PostBuilder::wherePublished).
+        // These are declared directly on the custom builder and forwarded via __callStatic.
+        $builderClass = self::getBuilderClassForModel($modelClass);
+        if ($builderClass !== Builder::class && $codebase->methodExists(new MethodIdentifier($builderClass, $methodName))) {
+            return self::$unresolvedCache[$key] = true;
+        }
+
+        // Trait-declared builder methods (e.g., SoftDeletes::withTrashed, onlyTrashed).
+        // These are @method static on model traits that return Builder<static>. For models
+        // with custom builders, removed from pseudo_static_methods so we control the return type.
+        if (CustomBuilderMethodHandler::hasTraitMethod($modelClass, $methodName)) {
+            return self::$unresolvedCache[$key] = true;
+        }
+
+        // Scope methods (e.g., scopeActive → active, #[Scope] verified → verified).
+        // These are defined on the model and forwarded via __callStatic → Builder.
+        /** @var class-string<Model> $modelClass */
+        return self::$unresolvedCache[$key] = BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName);
     }
 
     /** @inheritDoc */
@@ -41,21 +369,18 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             return null;
         }
 
+        $codebase = $source->getCodebase();
         $called_fq_classlike_name = $event->getCalledFqClasslikeName();
 
-        if (! is_string($called_fq_classlike_name)) {
+        if (! \is_string($called_fq_classlike_name)) {
             return null;
         }
 
         // Model::query()
         if ($event->getMethodNameLowercase() === 'query') {
-            return new Union([
-                new Type\Atomic\TGenericObject(Builder::class, [
-                    new Union([
-                        new Type\Atomic\TNamedObject($called_fq_classlike_name),
-                    ]),
-                ]),
-            ]);
+            $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
+
+            return new Union([self::builderType($builderClass, $called_fq_classlike_name, $codebase)]);
         }
 
         // proxy to builder object
@@ -67,6 +392,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
             }
 
             $methodId = new MethodIdentifier($called_fq_classlike_name, $called_method_name_lowercase);
+            $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
             $fake_method_call = new MethodCall(
                 new Variable('builder'),
@@ -74,16 +400,85 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
                 $event->getCallArgs(),
             );
 
-            $fakeProxy = new Type\Atomic\TGenericObject(Builder::class, [
-                new Union([
-                    new Type\Atomic\TNamedObject($called_fq_classlike_name),
-                ]),
-            ]);
+            $fakeProxy = self::builderType($builderClass, $called_fq_classlike_name, $codebase);
 
             return ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $fakeProxy);
         }
 
         return null;
+    }
+
+    /**
+     * Get params for a scope method on a model, minus the $query parameter.
+     *
+     * Handles both legacy scopeXxx() methods and modern #[Scope] attribute methods.
+     * Used by both the static model call handler ({@see getMethodParams}) and
+     * {@see CustomBuilderMethodHandler::getScopeMethodParamsOnBuilder}.
+     *
+     * @internal Used by {@see CustomBuilderMethodHandler}
+     * @param class-string<Model> $modelClass
+     * @return list<FunctionLikeParameter>|null
+     */
+    public static function getScopeParams(Codebase $codebase, string $modelClass, string $methodName): ?array
+    {
+        // Legacy: scopeActive(Builder $query, ...) → active(...)
+        $legacyScopeMethod = $modelClass . '::scope' . \ucfirst($methodName);
+        if ($codebase->methodExists($legacyScopeMethod)) {
+            /** @var lowercase-string $legacyScopeLower */
+            $legacyScopeLower = 'scope' . $methodName;
+
+            return \array_slice(
+                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $legacyScopeLower)),
+                1,
+            );
+        }
+
+        // Modern #[Scope]: active(Builder $query, ...) → active(...)
+        $directMethod = $modelClass . '::' . $methodName;
+        if ($codebase->methodExists($directMethod)) {
+            /** @var lowercase-string $methodName */
+            return \array_slice(
+                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $methodName)),
+                1,
+            );
+        }
+
+        return null;
+    }
+
+    /**
+     * Get method params, appending a synthetic variadic rest parameter when needed.
+     *
+     * Methods like Query\Builder::select() use @psalm-variadic (internally func_get_args())
+     * which sets MethodStorage::$variadic = true. But getMethodParams() returns formal params
+     * without a variadic parameter. When these methods are called statically on Models via
+     * __callStatic, Psalm checks arity against our provided params and emits TooManyArguments.
+     *
+     * This mirrors the storage-level variadic flag by appending a synthetic variadic rest
+     * parameter to the returned param list so Psalm allows extra args.
+     *
+     * @internal Used by {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler}
+     * @return list<FunctionLikeParameter>
+     */
+    public static function getParamsWithVariadicFlag(Codebase $codebase, MethodIdentifier $methodId): array
+    {
+        $params = $codebase->methods->getMethodParams($methodId);
+
+        try {
+            $storage = $codebase->methods->getStorage($methodId);
+        } catch (\UnexpectedValueException) {
+            // Method exists through @mixin but has no direct storage on the class
+            return $params;
+        }
+
+        if ($storage->variadic) {
+            // Append a synthetic variadic rest param instead of marking the last formal param.
+            // Marking the last param as variadic would relax arity — e.g., addSelect($column)
+            // would accept zero args. Appending preserves the required params while allowing extras.
+            $params[] = new FunctionLikeParameter(name: 'args', by_ref: false, type: Type::getMixed(), is_variadic: true);
+        }
+
+        return $params;
     }
 
     /** @inheritDoc */
@@ -94,7 +489,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         if (
             $event->getStmt() instanceof Class_
             && !$storage->abstract
-            && isset($storage->parent_classes[strtolower(Model::class)])
+            && isset($storage->parent_classes[\strtolower(Model::class)])
         ) {
             unset(
                 $storage->pseudo_static_methods['newmodelquery'],

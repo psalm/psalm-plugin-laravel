@@ -3,10 +3,13 @@
 namespace Illuminate\Database\Eloquent\Relations;
 
 /**
-* @template TRelatedModel of \Illuminate\Database\Eloquent\Model
-* @template-extends BelongsToMany<TRelatedModel>
-* @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
-*/
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\MorphPivot
+ * @template TAccessor of string = 'pivot'
+ * @template-extends BelongsToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
 class MorphToMany extends BelongsToMany
 {
 

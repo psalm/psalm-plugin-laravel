@@ -18,61 +18,55 @@ final class UnsignedIntegerTest extends AbstractSchemaAggregatorTestCase
             __DIR__ . '/migrations/unsigned_integers',
         );
 
-        self::assertArrayHasKey('products', $schemaAggregator->tables);
+        $this->assertArrayHasKey('products', $schemaAggregator->tables);
 
         $table = $schemaAggregator->tables['products'];
 
         // id() — auto-increment, should be unsigned
-        self::assertColumnIsUnsigned($table->columns['id']);
+        $this->assertColumnIsUnsigned($table->columns['id']);
 
         // Explicitly unsigned methods
-        self::assertColumnIsUnsigned($table->columns['category_id']);
-        self::assertColumnIsUnsigned($table->columns['stock']);
-        self::assertColumnIsUnsigned($table->columns['priority']);
-        self::assertColumnIsUnsigned($table->columns['rating']);
-        self::assertColumnIsUnsigned($table->columns['views']);
+        $this->assertColumnIsUnsigned($table->columns['category_id']);
+        $this->assertColumnIsUnsigned($table->columns['stock']);
+        $this->assertColumnIsUnsigned($table->columns['priority']);
+        $this->assertColumnIsUnsigned($table->columns['rating']);
+        $this->assertColumnIsUnsigned($table->columns['views']);
 
         // foreignId is always unsigned
-        self::assertColumnIsUnsigned($table->columns['user_id']);
+        $this->assertColumnIsUnsigned($table->columns['user_id']);
 
         // All *increments methods are unsigned
-        self::assertColumnIsUnsigned($table->columns['legacy_id']);
-        self::assertColumnIsUnsigned($table->columns['big_legacy_id']);
-        self::assertColumnIsUnsigned($table->columns['tiny_legacy_id']);
-        self::assertColumnIsUnsigned($table->columns['small_legacy_id']);
-        self::assertColumnIsUnsigned($table->columns['medium_legacy_id']);
-        self::assertColumnIsUnsigned($table->columns['int_legacy_id']);
+        $this->assertColumnIsUnsigned($table->columns['legacy_id']);
+        $this->assertColumnIsUnsigned($table->columns['big_legacy_id']);
+        $this->assertColumnIsUnsigned($table->columns['tiny_legacy_id']);
+        $this->assertColumnIsUnsigned($table->columns['small_legacy_id']);
+        $this->assertColumnIsUnsigned($table->columns['medium_legacy_id']);
+        $this->assertColumnIsUnsigned($table->columns['int_legacy_id']);
 
         // Signed integer methods should NOT be unsigned
-        self::assertColumnIsNotUnsigned($table->columns['signed_quantity']);
-        self::assertColumnIsNotUnsigned($table->columns['signed_big']);
+        $this->assertColumnIsNotUnsigned($table->columns['signed_quantity']);
+        $this->assertColumnIsNotUnsigned($table->columns['signed_big']);
 
         // ->unsigned() chained modifier
-        self::assertColumnIsUnsigned($table->columns['made_unsigned']);
+        $this->assertColumnIsUnsigned($table->columns['made_unsigned']);
 
         // morphs() produces unsigned id column
-        self::assertColumnIsUnsigned($table->columns['taggable_id']);
-        self::assertColumnIsNotUnsigned($table->columns['taggable_type']);
+        $this->assertColumnIsUnsigned($table->columns['taggable_id']);
+        $this->assertColumnIsNotUnsigned($table->columns['taggable_type']);
 
         // nullableMorphs() produces unsigned id column
-        self::assertColumnIsUnsigned($table->columns['imageable_id']);
-        self::assertColumnIsNotUnsigned($table->columns['imageable_type']);
+        $this->assertColumnIsUnsigned($table->columns['imageable_id']);
+        $this->assertColumnIsNotUnsigned($table->columns['imageable_type']);
     }
 
-    private static function assertColumnIsUnsigned(SchemaColumn $column): void
+    private function assertColumnIsUnsigned(SchemaColumn $column): void
     {
-        self::assertTrue(
-            $column->unsigned,
-            "Column '{$column->name}' should be unsigned but is not",
-        );
-        self::assertSame('int', $column->type, "Unsigned column '{$column->name}' should be int type");
+        $this->assertTrue($column->unsigned, "Column '{$column->name}' should be unsigned but is not");
+        $this->assertSame('int', $column->type, "Unsigned column '{$column->name}' should be int type");
     }
 
-    private static function assertColumnIsNotUnsigned(SchemaColumn $column): void
+    private function assertColumnIsNotUnsigned(SchemaColumn $column): void
     {
-        self::assertFalse(
-            $column->unsigned,
-            "Column '{$column->name}' should not be unsigned but is",
-        );
+        $this->assertFalse($column->unsigned, "Column '{$column->name}' should not be unsigned but is");
     }
 }

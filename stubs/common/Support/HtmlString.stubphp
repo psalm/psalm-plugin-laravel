@@ -1,0 +1,22 @@
+<?php
+
+namespace Illuminate\Support;
+
+use Illuminate\Contracts\Support\Htmlable;
+use Stringable;
+
+class HtmlString implements Htmlable, Stringable
+{
+    /**
+     * Create a new HTML string instance.
+     *
+     * HtmlString marks content as "safe HTML" that bypasses Blade's {{ }} escaping.
+     * If user input is wrapped in HtmlString, it creates an XSS vulnerability
+     * that is invisible in Blade templates.
+     *
+     * @param  string  $html
+     *
+     * @psalm-taint-sink html $html
+     */
+    public function __construct($html = '') {}
+}

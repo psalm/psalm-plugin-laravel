@@ -4,22 +4,14 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Providers;
 
-use Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
-use Illuminate\View\Factory;
-use Illuminate\View\FileViewFinder;
+use Illuminate\Foundation\Application as LaravelApplication;
 use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
-use Illuminate\Foundation\Application as LaravelApplication;
+use Illuminate\View\Factory;
+use Illuminate\View\FileViewFinder;
 use Orchestra\Testbench\Concerns\CreatesApplication;
-
-use function define;
-use function defined;
-use function dirname;
-use function file_exists;
-use function getcwd;
-use function microtime;
 
 final class ApplicationProvider
 {
@@ -40,22 +32,36 @@ final class ApplicationProvider
             return self::$app;
         }
 
-        if (! defined('LARAVEL_START')) {
-            define('LARAVEL_START', microtime(true));
+        // Psalm's ErrorHandler converts PHP warnings/notices to RuntimeException.
+        // Laravel's bootstrap process may emit warnings during service provider loading
+        // (e.g., deprecated features, missing extensions). We suppress exception-throwing
+        // during boot to prevent these from crashing the plugin.
+        return self::withErrorExceptionsSuppressed(static function (): LaravelApplication {
+            return (new self())->doGetApp();
+        });
+    }
+
+    /**
+     * Bootstrap the Laravel application — extracted from getApp() to run
+     * inside the error-handler suppression wrapper.
+     */
+    private function doGetApp(): LaravelApplication
+    {
+        if (! \defined('LARAVEL_START')) {
+            \define('LARAVEL_START', \microtime(true));
         }
 
-        if (file_exists($applicationPath = (getcwd() ?: '.') . '/bootstrap/app.php')) { // Applications and Local Dev
+        if (\file_exists($applicationPath = (\getcwd() ?: '.') . '/bootstrap/app.php')) { // Applications and Local Dev
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
-        } elseif (file_exists($applicationPath = dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
+            assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
+        } elseif (\file_exists($applicationPath = \dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
+            assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
         } else { // Laravel Packages
+            /** @psalm-suppress InternalMethod */
             $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
-        }
-
-        if (! $app instanceof LaravelApplication) {
-            throw new \RuntimeException('Could not find Laravel bootstrap file.');
         }
 
         self::$app = $app;
@@ -74,18 +80,48 @@ final class ApplicationProvider
         if (!self::$booted) {
             // Bootstrap console app
             $consoleApp = $app->make(Kernel::class);
-            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function () {
+            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function (): object {
                 return new class {
+                    /** @psalm-mutation-free */
                     public function bootstrap(): void {}
                 };
             });
             $consoleApp->bootstrap();
 
-            $app->register(IdeHelperServiceProvider::class);
             self::$booted = true;
         }
 
         return $app;
+    }
+
+    /**
+     * Run a callback with Psalm's error-to-exception promotion disabled.
+     *
+     * When Psalm's ErrorHandler is loaded, it uses `runWithExceptionsSuppressed()`
+     * which toggles the `$exceptions_enabled` flag on Psalm's existing handler.
+     * When Psalm's ErrorHandler is not loaded (e.g., testing), the fallback installs
+     * a passthrough handler that delegates to PHP's default error handling.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    private static function withErrorExceptionsSuppressed(callable $callback): mixed
+    {
+        if (\class_exists(\Psalm\Internal\ErrorHandler::class, false)) {
+            return \Psalm\Internal\ErrorHandler::runWithExceptionsSuppressed($callback);
+        }
+
+        // Fallback: install a passthrough handler that delegates to PHP's default behavior
+        \set_error_handler(static function (int $_errno, string $_errstr): bool {
+            return false;
+        });
+
+        try {
+            return $callback();
+        } finally {
+            \restore_error_handler();
+        }
     }
 
     /**
@@ -114,7 +150,9 @@ final class ApplicationProvider
         $app->make(\Illuminate\Foundation\Bootstrap\BootProviders::class)->bootstrap($app);
 
         foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
-            $app->make($bootstrap)->bootstrap($app);
+            /** @var \Illuminate\Foundation\Bootstrap\BootProviders $bootstrapper */
+            $bootstrapper = $app->make($bootstrap);
+            $bootstrapper->bootstrap($app);
         }
 
         $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
@@ -138,34 +176,12 @@ final class ApplicationProvider
         $config = $app['config'];
         $config->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
 
-        // in testing, we want ide-helper to load our test models. Unfortunately this has to be a relative path, with
-        // the base path being inside of orchestra/testbench-core/laravel
-
-        $config->set('ide-helper.model_locations', [
-            '../../../../tests/Application/app/Models',
+        // Register a token-driver guard so Auth::guard('api') narrows to TokenGuard in type tests.
+        // The testbench default auth.php only ships a 'web' (session) guard; without this the
+        // AuthConfigAnalyzer cannot resolve the driver and falls back to the stub's Guard interface.
+        $config->set('auth.guards.api', [
+            'driver' => 'token',
+            'provider' => 'users',
         ]);
-
-        // Set up view paths for ide-helper
-        $viewPath = dirname((new \ReflectionClass(IdeHelperServiceProvider::class))->getFileName(), 2) . '/resources/views';
-
-        if (!$app->bound('view')) {
-            $filesystem = new \Illuminate\Filesystem\Filesystem();
-
-            // Set up the view finder
-            $viewFinder = new FileViewFinder($filesystem, [$viewPath]);
-
-            // Set up the engine resolver
-            $engineResolver = new EngineResolver();
-            $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
-
-            // Create and bind the view factory
-            /** @var \Illuminate\Contracts\Events\Dispatcher $events */
-            $events = $app['events'];
-            $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events));
-        }
-
-        /** @var \Illuminate\View\Factory $view */
-        $view = $app['view'];
-        $view->addNamespace('ide-helper', $viewPath);
     }
 }

@@ -2,7 +2,6 @@
 <?php declare(strict_types=1);
 
 use Illuminate\Support\Collection;
-
 final class CollectionTypes
 {
     /** @return Collection<int, string> */
@@ -127,6 +126,20 @@ final class CollectionTypes
         return $this->getCollection()->put(5, 'five');
     }
 
+    /**
+     * count() returns int<0, max>, not just int.
+     * This prevents false-positive ArgumentTypeCoercion when using count()
+     * in arithmetic expressions passed to offsetGet.
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/499
+     * @psalm-check-type-exact $count = int<0, max>
+     */
+    public function countReturnsNonNegativeInt(): int
+    {
+        $count = $this->getCollection()->count();
+
+        return $count;
+    }
+
     public function isEmpty_assertions_works(): null
     {
         $collection = $this->getCollection();
@@ -163,8 +176,7 @@ final class CollectionTypes
     }
 
     /**
-     * String key falls through to the string branch: int|float.
-     * Distinguishes from callable branches where result type narrows,
+     * sum() returns int|float for string-key and no-argument calls,
      * while callable callbacks narrow the return type.
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/678
      */
@@ -178,7 +190,6 @@ final class CollectionTypes
 
     /**
      * When the callback returns int, sum() narrows to int (not int|float).
-     * Return type `: int` verifies narrowing — Psalm rejects int|float here.
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/678
      */
     public function sumWithCallableReturningInt(): int
@@ -190,7 +201,6 @@ final class CollectionTypes
 
     /**
      * When the callback returns float, sum() narrows to float.
-     * Return type `: float` verifies narrowing — Psalm rejects int|float here.
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/678
      */
     public function sumWithCallableReturningFloat(): float
@@ -235,6 +245,7 @@ final class CollectionTypes
 
         return $sum;
     }
+
 }
 
 /** @var Collection<string, string> */
@@ -254,5 +265,6 @@ $collection = new Collection(['data']);
 foreach ($collection as $key => $value) {
     echo substr($value, $key);
 }
+
 ?>
 --EXPECT--

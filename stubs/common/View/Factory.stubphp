@@ -1,0 +1,32 @@
+<?php
+
+namespace Illuminate\View;
+
+class Factory implements \Illuminate\Contracts\View\Factory
+{
+    // View data ($data, $mergeData) is intentionally NOT marked as @psalm-taint-sink html.
+    // Blade auto-escapes all {{ $var }} expressions via htmlspecialchars(), so passing
+    // user input as view data is safe for the common case.
+    // Real XSS requires {!! $var !!} (raw output), which Psalm cannot detect because it
+    // does not parse .blade.php files. Marking view data as an html sink causes massive
+    // false positives with no corresponding detection benefit.
+    // See: https://github.com/psalm/psalm-plugin-laravel/issues/684
+
+    public function make($view, $data = [], $mergeData = []) {}
+
+    /**
+     * @psalm-taint-sink file $path
+     * @psalm-taint-sink include $path
+     */
+    public function file($path, $data = [], $mergeData = []) {}
+
+    public function first(array $views, $data = [], $mergeData = []) {}
+
+    public function renderWhen($condition, $view, $data = [], $mergeData = []) {}
+
+    public function renderUnless($condition, $view, $data = [], $mergeData = []) {}
+
+    public function renderEach($view, $data, $iterator, $empty = 'raw|') {}
+
+    public function share($key, $value = null) {}
+}

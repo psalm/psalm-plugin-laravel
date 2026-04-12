@@ -47,6 +47,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
         return [Collection::class, LazyCollection::class];
     }
 
+    /** @psalm-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -82,6 +83,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
      * Extract the literal integer depth from the first argument, if present.
      *
      * Returns null for: no arguments (= INF depth), non-literal expressions, non-int values.
+     * @psalm-mutation-free
      */
     private static function extractLiteralDepth(MethodReturnTypeProviderEvent $event): ?int
     {

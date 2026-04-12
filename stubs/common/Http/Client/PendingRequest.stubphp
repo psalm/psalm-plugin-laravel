@@ -1,0 +1,189 @@
+<?php
+
+namespace Illuminate\Http\Client;
+
+class PendingRequest
+{
+    /**
+     * Toggle asynchronicity in requests.
+     *
+     * Returns AsyncPendingRequest when enabled, so HTTP methods return the
+     * appropriate promise type. Parameter-based conditional avoids the
+     * template-default issue where Psalm uses the bound (bool) instead of
+     * the default (false), which would produce unwanted union return types.
+     *
+     * @see https://github.com/vimeo/psalm/issues/6046 — remove AsyncPendingRequest subclass
+     *      and revert to @template TAsync approach once Psalm supports template defaults
+     *
+     * @param  bool  $async
+     * @return ($async is true ? AsyncPendingRequest : self)
+     */
+    public function async(bool $async = true) {}
+
+    /**
+     * Set the base URL for the pending request.
+     *
+     * @param  string  $url
+     * @return $this
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function baseUrl(string $url) {}
+
+    /**
+     * Send the request to the given URL.
+     *
+     * @param  string  $method
+     * @param  string  $url
+     * @param  array<string, mixed>  $options
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function send(string $method, string $url, array $options = []) {}
+
+    /**
+     * Specify the URL parameters that can be substituted into the request URL.
+     *
+     * @param  array  $parameters
+     * @return $this
+     *
+     * @psalm-taint-sink ssrf $parameters
+     */
+    public function withUrlParameters(array $parameters = []) {}
+
+    /**
+     * Issue a GET request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|string|null  $query
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function get(string $url, $query = null) {}
+
+    /**
+     * Issue a POST request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function post(string $url, $data = []) {}
+
+    /**
+     * Issue a PUT request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function put(string $url, $data = []) {}
+
+    /**
+     * Issue a PATCH request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function patch(string $url, $data = []) {}
+
+    /**
+     * Issue a DELETE request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function delete(string $url, $data = []) {}
+
+    /**
+     * Issue a HEAD request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<string, mixed>|string|null  $query
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function head(string $url, $query = null) {}
+}
+
+/**
+ * Stub-only subclass representing a PendingRequest in async mode.
+ *
+ * Workaround for https://github.com/vimeo/psalm/issues/6046 (template defaults).
+ * When async() is called, Psalm narrows the type to this class. HTTP methods
+ * return GuzzleHttp\Promise\PromiseInterface (overridden to LazyPromise in
+ * the 12.42.0+ version-specific stub).
+ *
+ * Extends PendingRequest so fluent methods (withToken, timeout, etc.) keep
+ * returning $this (AsyncPendingRequest), preserving async semantics through chains.
+ */
+class AsyncPendingRequest extends PendingRequest
+{
+    /**
+     * @param  bool  $async
+     * @return ($async is true ? self : PendingRequest)
+     */
+    public function async(bool $async = true) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function send(string $method, string $url, array $options = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function get(string $url, $query = null) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function post(string $url, $data = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function put(string $url, $data = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function patch(string $url, $data = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function delete(string $url, $data = []) {}
+
+    /**
+     * @return \GuzzleHttp\Promise\PromiseInterface
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function head(string $url, $query = null) {}
+}

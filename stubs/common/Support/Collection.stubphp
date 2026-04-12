@@ -11,6 +11,46 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * @template TValue
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \Illuminate\Support\Enumerable<TKey, TValue>
+ *
+ * Psalm does not resolve @property-read from trait template parameters when using @use bindings.
+ * These annotations are declared directly here so that TKey/TValue resolve to the class-level
+ * template parameters and higher-order proxy method calls are properly typed.
+ *
+ * The list mirrors EnumeratesValues::$proxies exactly — do not edit without checking that array.
+ * Note: $hasMany here is a collection method (not an Eloquent relationship).
+ *
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $average
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $avg
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $contains
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $doesntContain
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $each
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $every
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $filter
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $first
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $flatMap
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $groupBy
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasMany
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasSole
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $keyBy
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $last
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $map
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $max
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $min
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $partition
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $percentage
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $reject
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipUntil
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipWhile
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $some
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortBy
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortByDesc
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $sum
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeUntil
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeWhile
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $unique
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $unless
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $until
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $when
  */
 class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerable
 {
@@ -102,6 +142,21 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function pull($key, $default = null) {}
 
     /**
+     * Get a value from the first item in the collection.
+     *
+     * @psalm-mutation-free
+     *
+     * @template TValueDefault
+     *
+     * @param  string|int  $key
+     * @param  TValueDefault|(\Closure(): TValueDefault)  $default
+     * @return mixed|TValueDefault
+     *
+     * @psalm-flow ($default) -> return
+     */
+    public function value($key, $default = null) {}
+
+    /**
      * @psalm-mutation-free
      *
      * @param  (callable(TValue): int)|int|null  $number
@@ -132,6 +187,37 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function shift($count = 1) {}
 
     /**
+     * Merge the collection with the given items.
+     *
+     * Uses an independent key template `TMergeKey` rather than constraining input keys to `TKey`.
+     * This allows `Collection<never, never>::merge(Collection<int, string>)` to return
+     * `Collection<int, string>` instead of failing with a key-type mismatch.
+     *
+     * @template TMergeKey of array-key
+     * @template TMergeValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TMergeKey, TMergeValue>|iterable<TMergeKey, TMergeValue>  $items
+     * @return static<TKey|TMergeKey, TValue|TMergeValue>
+     */
+    public function merge($items) {}
+
+    /**
+     * Push items onto the end of the collection.
+     *
+     * Uses an independent value template `TPushValue` so that calling `push()` on a
+     * `Collection<never, never>` widens the return type to include the concrete pushed value.
+     * Fluent chains like `collect()->push($x)->push($y)` propagate types correctly.
+     * The mutable accumulator pattern (`$c = collect(); $c->push($x)`) still requires a
+     * `@var` annotation on the `collect()` line — that is expected Psalm behaviour.
+     *
+     * @template TPushValue
+     *
+     * @param  TPushValue  ...$values
+     * @return static<TKey|int, TValue|TPushValue>
+     */
+    public function push(...$values) {}
+
+    /**
      * Count the number of items in the collection.
      *
      * @psalm-mutation-free
@@ -158,4 +244,69 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @return bool
      */
     public function isNotEmpty() {}
+
+    /**
+     * Create a collection by using this collection for keys and another for its values.
+     *
+     * @template TCombineValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TCombineValue>|iterable<array-key, TCombineValue>  $values
+     * @return static<TValue, TCombineValue>
+     */
+    public function combine($values) {}
+
+    /**
+     * Group an associative array by a field or using a callback.
+     *
+     * @template TGroupKey of array-key|\UnitEnum|\Stringable
+     *
+     * @param  (callable(TValue, TKey): TGroupKey)|array|string  $groupBy
+     * @param  bool  $preserveKeys
+     * @return static<
+     *  ($groupBy is (array|string)
+     *      ? array-key
+     *      : (TGroupKey is \UnitEnum ? array-key : (TGroupKey is \Stringable ? string : TGroupKey))),
+     *  static<($preserveKeys is true ? TKey : int), ($groupBy is array ? mixed : TValue)>
+     * >
+     */
+    public function groupBy($groupBy, $preserveKeys = false) {}
+
+    /**
+     * Key an associative array by a field or using a callback.
+     *
+     * @template TNewKey of array-key|\UnitEnum
+     *
+     * @param  (callable(TValue, TKey): TNewKey)|array|string  $keyBy
+     * @return static<($keyBy is (array|string) ? array-key : (TNewKey is \UnitEnum ? array-key : TNewKey)), TValue>
+     */
+    public function keyBy($keyBy) {}
+
+    /**
+     * Chunk the collection into chunks with a callback.
+     *
+     * @param  callable(TValue, TKey, static<TKey, TValue>): bool  $callback
+     * @return static<int, static<TKey, TValue>>
+     */
+    public function chunkWhile(callable $callback) {}
+
+    /**
+     * Get the sum of the given values.
+     *
+     * At runtime, the accumulator starts at 0 and uses the + operator,
+     * so the result is always int|float (non-numeric values throw TypeError).
+     *
+     * When called without arguments, the return type narrows based on TValue:
+     * - Collection<_, int>::sum() → int (matches array_sum behavior for int arrays)
+     * - Collection<_, float>::sum() → float
+     * - Otherwise → int|float
+     *
+     * @template TCallbackReturn of int|float
+     *
+     * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
+     * @return ($callback is null
+     *  ? (TValue is int ? int : (TValue is float ? float : int|float))
+     *  : ($callback is string ? int|float : TCallbackReturn)
+     * )
+     */
+    public function sum($callback = null) {}
 }

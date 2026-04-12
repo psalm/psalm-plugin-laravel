@@ -9,6 +9,8 @@ use Illuminate\Support\Traits\Macroable;
 
 /**
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template TResult
  * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
  */
 abstract class Relation
@@ -20,23 +22,21 @@ abstract class Relation
     /**
      * The Eloquent query builder instance.
      *
-     * @var \Illuminate\Database\Eloquent\Builder
-     * @psalm-var \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+     * @var \Illuminate\Database\Eloquent\Builder<TRelatedModel>
      */
     protected $query;
 
     /**
      * The parent model instance.
      *
-     * @var \Illuminate\Database\Eloquent\Model
+     * @var TDeclaringModel
      */
     protected $parent;
 
     /**
      * The related model instance.
      *
-     * @var \Illuminate\Database\Eloquent\Model
-     * @psalm-var TRelatedModel
+     * @var TRelatedModel
      */
     protected $related;
 
@@ -59,8 +59,7 @@ abstract class Relation
     /**
      * Get the relationship for eager loading.
      *
-     * @return \Illuminate\Database\Eloquent\Collection
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function getEager()
     {
@@ -71,12 +70,25 @@ abstract class Relation
      * Execute the query as a "select" statement.
      *
      * @param  list<non-empty-string>  $columns
-     * @psalm-return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
+     * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function get($columns = ['*'])
     {
         return $this->query->get($columns);
     }
+
+    /**
+     * Set the columns to be selected.
+     *
+     * Declared here because @psalm-variadic on Query\Builder::select does not
+     * propagate through the __call / @mixin chain.
+     *
+     * @param  array<array-key, \Closure|\Illuminate\Contracts\Database\Query\Expression|\Illuminate\Database\Query\Builder|string>|\Illuminate\Contracts\Database\Query\Expression|string  $columns
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function select($columns = ['*']) {}
 
     /**
      * Add an "order by" clause for a timestamp to the query.
@@ -111,11 +123,54 @@ abstract class Relation
     /**
      * Get the related model of the relation.
      *
-     * @return \Illuminate\Database\Eloquent\Model
-     * @psalm-return TRelatedModel
+     * @return TRelatedModel
      */
     public function getRelated()
     {
         return $this->related;
     }
+
+    /**
+     * Get the parent model of the relation.
+     *
+     * @return TDeclaringModel
+     */
+    public function getParent()
+    {
+        return $this->parent;
+    }
+
+    /**
+     * Execute the query and get the first result.
+     *
+     * Declared here (not just on Builder) because Psalm's templated mixin resolution
+     * fails to substitute TRelatedModel when resolving non-fluent return types through
+     * the @mixin Builder<TRelatedModel> chain. The handler skips these via
+     * isInDeclaringMethodIds, so the stub types are used directly.
+     *
+     * @param  list<non-empty-string>  $columns
+     * @return TRelatedModel|null
+     */
+    public function first($columns = ['*']) {}
+
+    /**
+     * Execute the query and get the first result or throw an exception.
+     *
+     * @param  list<non-empty-string>  $columns
+     * @return TRelatedModel
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     */
+    public function firstOrFail($columns = ['*']) {}
+
+    /**
+     * Execute the query and get the first result if it's the sole matching record.
+     *
+     * @param  list<non-empty-string>  $columns
+     * @return TRelatedModel
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     * @throws \Illuminate\Database\MultipleRecordsFoundException
+     */
+    public function sole($columns = ['*']) {}
 }

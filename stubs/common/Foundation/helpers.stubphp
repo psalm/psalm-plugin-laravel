@@ -217,17 +217,7 @@ function logs($driver = null) {}
 
 // method_field: nothing to stub
 // mix: nothing to stub
-// now: nothing to stub
-/**
- * Retrieve an old input item.
- *
- * @param  string|null  $key
- * @param  \Illuminate\Database\Eloquent\Model|string|array|null  $default
- * @return string|array|null
- *
- * @psalm-taint-source input
- */
-function old($key = null, $default = null) {}
+// now: processed by Psalm handlers
 
 // policy: nothing to stub
 
@@ -300,16 +290,6 @@ function rescue(callable $callback, $rescue = null, $report = true) {}
  */
 function response($content = '', $status = 200, array $headers = []) {}
 
-/**
- * Generate the URL to a named route.
- *
- * @param  string  $name
- * @param  scalar|array|null  $parameters
- * @param  bool  $absolute
- * @return string
- */
-function route($name, $parameters = [], $absolute = true) {}
-
 // secure_asset: nothing to stub
 // secure_url: nothing to stub
 
@@ -339,7 +319,8 @@ function session($key = null, $default = null) {}
  */
 function to_route($route, $parameters = [], $status = 302, $headers = []) {}
 
-// today: nothing to stub
+// today: processed by Psalm handlers
+
 // trans: processed by Psalm handlers
 // trans_choice: processed by Psalm handlers
 
@@ -381,11 +362,19 @@ function validator(array $data = [], array $rules = [], array $messages = [], ar
  * @param  \Illuminate\Contracts\Support\Arrayable<string, mixed>|array<string, mixed>  $data
  * @param  array<string, mixed>  $mergeData
  * @return ($view is null ? \Illuminate\Contracts\View\Factory : (\Illuminate\View\View|\Illuminate\Contracts\View\View))
- *
- * @psalm-taint-sink html $data
- * @psalm-taint-sink html $mergeData
  */
 function view($view = null, $data = [], $mergeData = []) {}
+
+/**
+ * Retrieve an old input item.
+ *
+ * @param  string|null  $key
+ * @param  \Illuminate\Database\Eloquent\Model|string|array|null  $default
+ * @return string|array|null
+ *
+ * @psalm-taint-source input
+ */
+function old($key = null, $default = null) {}
 
 /**
  * Get / set the specified context value.
@@ -405,3 +394,13 @@ function context($key = null, $default = null) {}
  * @return ($callback is null ? \Illuminate\Support\Defer\DeferredCallbackCollection : \Illuminate\Support\Defer\DeferredCallback)
  */
 function defer(?callable $callback = null, ?string $name = null, bool $always = false) {}
+
+/**
+ * Generate the URL to a named route.
+ *
+ * @param  string  $name
+ * @param  scalar|array|null  $parameters
+ * @param  bool  $absolute
+ * @return string
+ */
+function route($name, $parameters = [], $absolute = true) {}
