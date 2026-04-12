@@ -111,7 +111,7 @@ final class HigherOrderCollectionProxyHandler implements
         $source = $event->getStatementsSource();
         $calleeType = $source->getNodeTypeProvider()->getType($expr->var);
 
-        if (!$calleeType instanceof \Psalm\Type\Union) {
+        if (!$calleeType instanceof Union) {
             return;
         }
 
@@ -160,7 +160,7 @@ final class HigherOrderCollectionProxyHandler implements
                 self::extractCalledMethodName($expr),
             );
 
-            if ($returnType instanceof \Psalm\Type\Union) {
+            if ($returnType instanceof Union) {
                 $event->setReturnTypeCandidate($returnType);
             }
 

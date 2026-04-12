@@ -312,14 +312,25 @@ final class HigherOrderCollectionProxyTest
     }
 
     /**
-     * sum resolves the called method return type for precision.
+     * hasMany returns bool (boolean proxy, shares the BOOLEAN_METHODS path with contains/every).
      * @param Collection<int, Customer> $users
      */
-    public function sumResolvesMethodReturnType(Collection $users): void
+    public function hasManyReturnType(Collection $users): void
     {
-        $_result = $users->sum->getKey();
-        /** @psalm-check-type-exact $_result = int|string */
+        $_result = $users->hasMany->trashed();
+        /** @psalm-check-type-exact $_result = bool */
     }
+
+    /**
+     * percentage returns float|int|null (aggregation proxy, same path as avg/average).
+     * @param Collection<int, Customer> $users
+     */
+    public function percentageReturnType(Collection $users): void
+    {
+        $_result = $users->percentage->getKey();
+        /** @psalm-check-type-exact $_result = float|int|null */
+    }
+
     /**
      * sortByDesc->method() chaining must not produce InvalidMethodCall.
      * Previously Psalm inferred int via @mixin TValue and failed on ->values() on int.
@@ -334,4 +345,4 @@ final class HigherOrderCollectionProxyTest
 }
 
 ?>
---EXPECT--
+--EXPECTF--

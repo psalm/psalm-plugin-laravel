@@ -113,4 +113,4 @@ function mutable_accumulator_push_then_each(): void
 }
 
 ?>
---EXPECT--
+--EXPECTF--
