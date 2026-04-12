@@ -2,6 +2,7 @@
 <?php declare(strict_types=1);
 
 use App\Models\Customer;
+use App\Models\Vehicle;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -62,8 +63,13 @@ function test_static_legacy_scope(): void
 }
 
 /**
- * Modern #[Scope] attribute: the idiomatic call is through the Builder.
- * This exercises BuilderScopeHandler::hasScopeAttribute via the Builder path.
+ * Modern #[Scope] attribute: calling via the builder instance returns mixed.
+ *
+ * Known limitation: #[Scope] and legacy scopeXxx() methods on base-Builder models
+ * return mixed when called on builder instances. Psalm routes through Builder::__call,
+ * and BuilderScopeHandler cannot safely provide a return type here without also providing
+ * params (which require knowing the model class — unavailable in the params provider event).
+ * Custom-builder models don't have this limitation (CustomBuilderMethodHandler handles them).
  *
  * Calling Customer::verified() statically triggers InvalidStaticInvocation because
  * it's a real instance method — see test_scope_attribute_static_is_invalid below.
@@ -104,6 +110,62 @@ function test_soft_deletes_only_trashed_standard_builder(): void
     /** @psalm-check-type-exact $_result = Builder<Customer&static> */
 }
 
+// -----------------------------------------------------------------------
+// SoftDeletes on base Builder instances (issue #635).
+// Customer uses SoftDeletes with base Builder — trait @method static methods
+// must also resolve when called on Builder instances (e.g., Customer::query()->withTrashed()).
+// At runtime, SoftDeletingScope::extend() registers these as Builder macros.
+// See https://github.com/psalm/psalm-plugin-laravel/issues/635
+// -----------------------------------------------------------------------
+
+/** SoftDeletes withTrashed on base Builder instance returns Builder<Customer>. */
+function test_soft_deletes_with_trashed_via_query(): void
+{
+    $_result = Customer::query()->withTrashed();
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
+
+/** SoftDeletes onlyTrashed on base Builder instance returns Builder<Customer>. */
+function test_soft_deletes_only_trashed_via_query(): void
+{
+    $_result = Customer::query()->onlyTrashed();
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
+
+/** SoftDeletes withoutTrashed on base Builder instance returns Builder<Customer>. */
+function test_soft_deletes_without_trashed_via_query(): void
+{
+    $_result = Customer::query()->withoutTrashed();
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
+
+/** Chaining: withTrashed -> where -> get returns the correct collection type. */
+function test_soft_deletes_with_trashed_chain_to_get(): void
+{
+    $_result = Customer::query()->withTrashed()->where('active', true)->get();
+    /** @psalm-check-type-exact $_result = Collection<int, Customer> */
+}
+
+/** withTrashed accepts the optional bool argument without TooManyArguments. */
+function test_soft_deletes_with_trashed_bool_arg(): void
+{
+    $_result = Customer::query()->withTrashed(false);
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
+
+/**
+ * Negative test: model without SoftDeletes must NOT resolve withTrashed on its builder.
+ *
+ * isTraitBuilderMethod guards against false positives by checking the specific model's
+ * pseudo_static_methods — Vehicle has no SoftDeletes, so withTrashed remains unresolved
+ * even though Customer's registration has populated $baseBuilderTraitMethods.
+ */
+/** @return Builder<Vehicle> */
+function test_non_soft_deletes_query_with_trashed(): Builder
+{
+    return Vehicle::query()->withTrashed();
+}
+
 /** Negative test: non-existent methods must still be reported. */
 function test_nonexistent_method(): void
 {
@@ -113,4 +175,6 @@ function test_nonexistent_method(): void
 --EXPECTF--
 MixedReturnStatement on line %d: Could not infer a return type
 InvalidStaticInvocation on line %d: Method App\Models\Customer::verified is not static, but is called statically
+MixedReturnStatement on line %d: Could not infer a return type
+UndefinedMagicMethod on line %d: Magic method App\Builders\VehicleBuilder::withtrashed does not exist
 UndefinedMagicMethod on line %d: Magic method App\Models\Customer::completelyfakemethod does not exist
