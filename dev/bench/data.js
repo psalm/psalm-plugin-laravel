@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775984202826,
+  "lastUpdate": 1775984804083,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1077,6 +1077,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.85,
             "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1cc6369f5794f38afecb164094d3982c20bbd2e8",
+          "message": "Merge pull request #727 from psalm/worktree-635-softdeletes-base-builder\n\nfix: resolve `SoftDeletes` methods on base Builder instances",
+          "timestamp": "2026-04-12T10:03:49+01:00",
+          "tree_id": "f904c591167151a5dab9a7bf35109fa0862008bc",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1cc6369f5794f38afecb164094d3982c20bbd2e8"
+        },
+        "date": 1775984803796,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.85,
+            "range": "± 0.09",
             "unit": "s"
           },
           {
