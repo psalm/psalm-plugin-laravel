@@ -62,16 +62,16 @@ final class Plugin implements PluginEntryPointInterface
             }
 
             $this->registerHandlers($registration, $pluginConfig);
-            $this->registerStubs($registration, $pluginConfig);
+            $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
             $this->handleInternalError($throwable, $output, $pluginConfig->failOnInternalError);
         }
     }
 
     /** @return list<string> */
-    private function getCommonStubs(): array
+    private function getCommonStubs(\Psalm\Progress\Progress $output): array
     {
-        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/common');
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/common', $output);
     }
 
     /**
@@ -85,7 +85,7 @@ final class Plugin implements PluginEntryPointInterface
      *
      * @return list<string>
      */
-    private function getStubsForLaravelVersion(string $version): array
+    private function getStubsForLaravelVersion(string $version, \Psalm\Progress\Progress $output): array
     {
         $stubsRoot = \dirname(__DIR__) . '/stubs';
 
@@ -108,7 +108,7 @@ final class Plugin implements PluginEntryPointInterface
         $stubGroups = [];
 
         foreach (self::filterVersionDirectories($candidates, $version) as $dir) {
-            $stubGroups[] = $this->findStubFiles($stubsRoot . '/' . $dir);
+            $stubGroups[] = $this->findStubFiles($stubsRoot . '/' . $dir, $output);
         }
 
         return $stubGroups === [] ? [] : \array_merge(...$stubGroups);
@@ -132,7 +132,7 @@ final class Plugin implements PluginEntryPointInterface
             static fn(string $dir): bool => \version_compare($dir, $targetVersion, '<='),
         );
 
-        \usort($matched, static fn(string $a, string $b): int => \version_compare($a, $b));
+        \usort($matched, 'version_compare');
 
         return $matched;
     }
@@ -153,7 +153,7 @@ final class Plugin implements PluginEntryPointInterface
      *
      * @return list<string>
      */
-    private function findStubFiles(string $directory): array
+    private function findStubFiles(string $directory, \Psalm\Progress\Progress $output): array
     {
         if (!\is_dir($directory)) {
             return [];
@@ -180,10 +180,11 @@ final class Plugin implements PluginEntryPointInterface
 
                 $stubs[] = $realPath;
             }
-        } catch (\UnexpectedValueException) {
+        } catch (\UnexpectedValueException $e) {
             // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories.
             // Return whatever stubs were collected before the error — partial results from
             // readable subdirectories are better than none.
+            $output->warning("Laravel plugin: error scanning stub directory '{$directory}': {$e->getMessage()}");
         }
 
         \sort($stubs);
@@ -191,11 +192,11 @@ final class Plugin implements PluginEntryPointInterface
         return $stubs;
     }
 
-    private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig): void
+    private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
     {
         $stubs = \array_merge(
-            $this->getCommonStubs(),
-            $this->getStubsForLaravelVersion(Application::VERSION),
+            $this->getCommonStubs($output),
+            $this->getStubsForLaravelVersion(Application::VERSION, $output),
         );
 
         foreach ($stubs as $stubFilePath) {
