@@ -122,10 +122,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // At runtime these are macros registered via global scopes (SoftDeletingScope::extend).
         // BuilderScopeHandler needs both the return type and the params to avoid crashing Psalm's
         // checkMethodArgs when it looks up Builder::withTrashed params.
-        // Short-circuit: once any model has registered the methods (first SoftDeletes model found),
-        // subsequent base-Builder models skip the scan since the signatures are uniform across models.
+        // Scan every base-Builder model: different models may carry different builder-returning trait
+        // methods, so we must not stop early. The += merge keeps the first-seen signature for any
+        // given method name, which is correct since trait signatures are uniform across models.
         // See https://github.com/psalm/psalm-plugin-laravel/issues/635
-        if ($customBuilder === null && !BuilderScopeHandler::hasBaseBuilderTraitMethods()) {
+        if ($customBuilder === null) {
             $traitMethods = self::extractBuilderReturningMethods($storage);
             if ($traitMethods !== []) {
                 BuilderScopeHandler::registerBaseBuilderTraitMethods($traitMethods);

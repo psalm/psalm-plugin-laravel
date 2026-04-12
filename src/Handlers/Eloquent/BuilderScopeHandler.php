@@ -70,20 +70,6 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     private static array $baseBuilderTraitMethods = [];
 
     /**
-     * Check if any base-Builder trait methods have been registered yet.
-     *
-     * Used by {@see ModelRegistrationHandler} to skip scanning subsequent base-Builder
-     * models once the trait method signatures have been collected from the first model.
-     * SoftDeletes signatures are uniform across all models, so one registration suffices.
-     *
-     * @psalm-external-mutation-free
-     */
-    public static function hasBaseBuilderTraitMethods(): bool
-    {
-        return self::$baseBuilderTraitMethods !== [];
-    }
-
-    /**
      * Register trait-declared builder methods discovered on a base-Builder model.
      *
      * Called by {@see ModelRegistrationHandler} after extracting @method static annotations
