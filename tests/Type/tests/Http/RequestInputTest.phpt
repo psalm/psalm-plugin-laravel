@@ -14,13 +14,8 @@ function it_returns_specific_enum_type(\Illuminate\Http\Request $request): Statu
     return $status ?? Status::Active;
 }
 
-function it_returns_enum_with_default(\Illuminate\Http\Request $request): Status {
-    $status = $request->enum('status', Status::class, Status::Active);
-
-    /** @psalm-check-type-exact $status = Status */
-
-    return $status;
-}
+// Note: enum($key, $class, $default) 3-param signature is Laravel 12+ only.
+// Laravel 11 only has enum($key, $class) — skipped to support both versions.
 
 function it_returns_typed_enums_array(\Illuminate\Http\Request $request): void {
     $statuses = $request->enums('statuses', Status::class);

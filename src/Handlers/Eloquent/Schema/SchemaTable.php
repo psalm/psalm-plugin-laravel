@@ -9,7 +9,6 @@ final class SchemaTable
     /** @var array<string, SchemaColumn> */
     public array $columns = [];
 
-    /** @psalm-external-mutation-free */
     public function setColumn(SchemaColumn $column): void
     {
         $this->columns[$column->name] = $column;

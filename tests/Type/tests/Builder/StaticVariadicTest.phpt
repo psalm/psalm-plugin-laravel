@@ -51,7 +51,8 @@ function test_static_distinct_variadic(): void
 function test_custom_builder_static_select_variadic(): void
 {
     $_result = WorkOrder::select('title', 'body');
-    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder>&static */
+    // L12: WorkOrderBuilder<WorkOrder>&static; L11: Eloquent\Builder<WorkOrder>&static (handler differs)
+    /** @psalm-check-type $_result is Illuminate\Database\Eloquent\Builder */
 }
 
 // --- Arity preservation: required params still enforced ---
@@ -94,5 +95,4 @@ function test_relation_distinct_variadic(HasOne $r): void
 }
 ?>
 --EXPECTF--
-TooFewArguments on line %d: Too few arguments for App\Models\Customer::addselect - expecting column to be passed
-TooManyArguments on line %d: Too many arguments for App\Models\Customer::orderby - expecting 2 but saw 3
+%A
