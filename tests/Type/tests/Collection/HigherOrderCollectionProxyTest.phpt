@@ -69,6 +69,17 @@ final class HigherOrderCollectionProxyTest
     }
 
     /**
+     * map on EloquentCollection falls back to Support\Collection when the mapped values
+     * are not Model instances — mirrors EloquentCollection::map() @psalm-return conditional.
+     * @param EloquentCollection<int, Customer> $users
+     */
+    public function mapEloquentCollectionReturnType(EloquentCollection $users): void
+    {
+        $_result = $users->map->getKey();
+        /** @psalm-check-type-exact $_result = Collection<int, int|string> */
+    }
+
+    /**
      * filter returns the same collection (passthrough).
      * @param Collection<int, Customer> $users
      */

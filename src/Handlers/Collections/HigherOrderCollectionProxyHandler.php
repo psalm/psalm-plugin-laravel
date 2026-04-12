@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Collections;
 
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Support\HigherOrderCollectionProxy;
@@ -293,13 +294,18 @@ final class HigherOrderCollectionProxyHandler implements
             return self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase) ?? Type::getMixed();
         }
 
-        // map — returns the same concrete collection class with the new value type.
-        // LazyCollection::map() returns LazyCollection (static), so we use $collectionClass.
+        // map — return type depends on collection class and what the mapped method returns:
+        // - LazyCollection::map() returns LazyCollection (static) → use $collectionClass
+        // - EloquentCollection::map() returns static only when mapped values are Model instances;
+        //   otherwise it falls back to Support\Collection (via toBase()). Since proxy map calls
+        //   extract scalar values (e.g. ->map->getKey()), always return base Collection here.
+        // - Support\Collection::map() returns Collection → use $collectionClass (same class)
         if ($proxyMethod === 'map') {
             $methodReturnType = self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase);
+            $mapClass = $collectionClass === EloquentCollection::class ? Collection::class : $collectionClass;
 
             return new Union([
-                new TGenericObject($collectionClass, [
+                new TGenericObject($mapClass, [
                     $tKey,
                     $methodReturnType ?? Type::getMixed(),
                 ]),
