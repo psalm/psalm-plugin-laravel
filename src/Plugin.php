@@ -28,13 +28,6 @@ final class Plugin implements PluginEntryPointInterface
         $pluginConfig = PluginConfig::fromXml($config);
         $output = $this->getProgress($registration);
 
-        if (\getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH') !== false) {
-            $output->warning(
-                'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
-                . "The plugin now uses Psalm's cache directory automatically.",
-            );
-        }
-
         try {
             ApplicationProvider::bootApp();
 

@@ -56,4 +56,12 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @use \Illuminate\Support\Traits\EnumeratesValues<TKey, TValue>
      */
     use EnumeratesValues;
+
+    /**
+     * Create a new instance with no items.
+     *
+     * @psalm-mutation-free
+     * @return static<never, never>
+     */
+    public static function empty() {}
 }
