@@ -185,16 +185,37 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * Uses an independent value template `TPushValue` so that calling `push()` on a
      * `Collection<never, never>` widens the return type to include the concrete pushed value.
-     * Fluent chains like `collect()->push($x)->push($y)` propagate types correctly.
-     * The mutable accumulator pattern (`$c = collect(); $c->push($x)`) still requires a
-     * `@var` annotation on the `collect()` line — that is expected Psalm behaviour.
+     * Both fluent chains (`collect()->push($x)->push($y)`) and the mutable accumulator
+     * pattern (`$c = collect(); $c->push($x); $c->each(...)`) propagate types correctly.
+     * `@psalm-this-out` updates the variable type for the mutable accumulator pattern.
      *
      * @template TPushValue
      *
      * @param  TPushValue  ...$values
+     * @psalm-this-out static<TKey|int, TValue|TPushValue>
      * @return static<TKey|int, TValue|TPushValue>
      */
     public function push(...$values) {}
+
+    /**
+     * Set the item at a given offset.
+     *
+     * Uses independent key/value templates so calling `put()` on a `Collection<never, never>`
+     * widens the return type to include the concrete inserted key and value.
+     * Both fluent chains (`collect()->put($k, $v)->each(...)`) and the mutable accumulator
+     * pattern (`$c = collect(); $c->put($k, $v); $c->each(...)`) propagate types correctly.
+     * `@psalm-this-out` updates the variable type for the mutable accumulator pattern,
+     * fixing false-positive InvalidArgument and ReservedWord errors (see issue #723).
+     *
+     * @template TPutKey of array-key
+     * @template TPutValue
+     *
+     * @param  TPutKey  $key
+     * @param  TPutValue  $value
+     * @psalm-this-out static<TKey|TPutKey, TValue|TPutValue>
+     * @return static<TKey|TPutKey, TValue|TPutValue>
+     */
+    public function put($key, $value) {}
 
     /**
      * Count the number of items in the collection.

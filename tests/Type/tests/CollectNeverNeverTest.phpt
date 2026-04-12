@@ -75,6 +75,41 @@ final class CollectNeverNeverTests
 
         return $strings->merge($ints);
     }
+
+    /**
+     * put() on Collection<never, never> widens generics in the fluent chain.
+     * @return Collection<string, Closure(): bool>
+     */
+    public function put_on_never_never_is_assignable_to_concrete(): Collection
+    {
+        return collect()->put('label', fn (): bool => true);
+    }
+}
+
+/**
+ * Mutable accumulator pattern: put() + each() (issue #723).
+ * @psalm-this-out on put() updates $tasks so each() sees the concrete types.
+ * No @var annotation is needed on the collect() line.
+ */
+function mutable_accumulator_put_then_each(): void
+{
+    $tasks = collect();
+    $tasks->put('label', fn (): bool => true);
+    $tasks->each(function (\Closure $task, string $description): void {
+        echo $description;
+        $task();
+    });
+}
+
+/**
+ * Mutable accumulator pattern: push() + each().
+ * @psalm-this-out on push() updates $items so each() sees the concrete types.
+ */
+function mutable_accumulator_push_then_each(): void
+{
+    $items = collect();
+    $items->push('hello');
+    $items->each(fn (string $item) => strtoupper($item));
 }
 
 ?>
