@@ -421,7 +421,7 @@ final class HigherOrderCollectionProxyHandler implements
             // Fast-path: equality check for the three common classes avoids is_a() inheritance
             // walk for ~99% of real-world usage, which would also trigger PHP autoloading.
             if (
-                in_array($class, [Collection::class, EloquentCollection::class, LazyCollection::class], true)
+                \in_array($class, [Collection::class, EloquentCollection::class, LazyCollection::class], true)
                 || \is_a($class, Enumerable::class, allow_string: true)
             ) {
                 return [$atomic->type_params[0], $atomic->type_params[1], $class];
