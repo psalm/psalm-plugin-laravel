@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775995313477,
+  "lastUpdate": 1776001583046,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1252,6 +1252,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.65,
             "range": "± 0.27",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ec4adfc94fde145df59b2a05c864c90696f525a9",
+          "message": "Fix `InvalidMethodCall` false positive on `HigherOrderCollectionProxy` method call chains (#724)\n\n* fix: HigherOrderCollectionProxy method calls return Enumerable<TKey, TValue>\n\nPsalm's @mixin TValue on HigherOrderCollectionProxy caused method calls\non the proxy (e.g. sortByDesc->getHours()) to be resolved through the item\ntype, returning the item method's scalar (e.g. int). Chaining collection\nmethods on that result (->values()) then triggered InvalidMethodCall.\n\nStubs cannot remove @mixin TValue — Psalm merges (not replaces) class-level\nmixin annotations. MethodReturnTypeProvider also does not fire for mixin-resolved\nmethods. Uses AfterMethodCallAnalysisInterface to intercept the call after\nanalysis, checks if the callee is HigherOrderCollectionProxy via the node\ntype provider, and overrides the return type to Enumerable<TKey, TValue>.\n\nAdds HigherOrderCollectionProxy stub to declare __call and prevent\nUndefinedMagicMethod errors under sealAllMethods.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix: remove unused import, use imported Union, continue on malformed proxy type params\n\n* fix: Collection put() supports mutable accumulator pattern via @psalm-this-out\n\nAdds a `put()` stub with `@psalm-this-out` so that Psalm updates the variable\ntype after each call, fixing false-positive InvalidArgument and ReservedWord\nerrors in the mutable accumulator pattern (`$c = collect(); $c->put($k, $v);\n$c->each(...)`).\n\nAlso adds `@psalm-this-out` to the existing `push()` stub for consistency,\nenabling the same pattern with `push()`.\n\nFixes #723\n\n* docs: use consistent settings order\n\n* feat: precise return types for HigherOrderCollectionProxy per proxy method\n\nReplaces the single-Enumerable fallback with per-proxy return type resolution,\nmerging the best of PR #666 into the AfterMethodCallAnalysis architecture:\n\n- passthrough (each, filter, reject, sortBy, …) → same concrete collection type\n  (EloquentCollection stays EloquentCollection, LazyCollection stays LazyCollection)\n- map → Collection<TKey, TMethodReturn> (resolves called method's return type)\n- boolean (contains, every, some) → bool\n- aggregation (avg/average/percentage) → float|null; sum → int|float\n- first/last → TValue|null; max/min → method return type\n- groupBy → Collection<array-key, Collection<int, TValue>>\n- partition → Collection<int, Collection<TKey, TValue>>\n- keyBy → Collection<array-key, TValue>\n- flatMap → Collection<int, mixed>\n\nAlso adds MethodReturnTypeProviderInterface + MethodParamsProviderInterface\nfor the __call path (edge cases when @mixin TValue doesn't apply).\n\nThe comprehensive test file (from #666) is adapted with an inline Customer\nmodel and includes a regression test for the sortByDesc chaining fix.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix: address Copilot review feedback on HigherOrderCollectionProxy handler\n\n- Fix return → continue in afterMethodCallAnalysis loop (skips invalid\n  atomic types instead of aborting the whole method)\n- Fix map proxy: use $collectionClass instead of hardcoded Collection::class\n  so LazyCollection::map() returns LazyCollection, not Collection\n- Fix avg/average return type: float|int|null to match Laravel's actual\n  return ($reduced[0] / $reduced[1] can be int when values are integers)\n- Remove when/unless from PASSTHROUGH_METHODS — at runtime these invoke\n  Conditionable::when() which returns HigherOrderWhenProxy, not the collection\n- Remove unnecessary StatementsAnalyzer downcast in getMethodReturnType;\n  getNodeTypeProvider() and getCodebase() are on StatementsSource interface\n- Update stub docblock: remove stale reference to Enumerable return type\n  and remove @mixin Enumerable to prevent false-negative method resolution\n- Move test file to tests/Type/tests/Collection/ where it belongs\n- Add mapLazyCollectionReturnType test to cover the LazyCollection::map fix\n\n* fix: EloquentCollection map proxy falls back to Support Collection for non-Model values\n\n* fix: use compatiable API to check for method existance\n\n* fix: partition/flatMap/sum precision, is_a fast-path, missing tests\n\n* style: apply ordered_imports cs fix to HigherOrderCollectionProxyHandler\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix: apply round-3 review fixes for HigherOrderCollectionProxy PR\n\n- Use short Union name (already imported) instead of FQCN on lines 114/163\n- Remove duplicate sumResolvesMethodReturnType() test (identical to sumReturnType())\n- Add hasManyReturnType() and percentageReturnType() tests covering the remaining untested BOOLEAN_METHODS and aggregation proxy paths\n- Normalize --EXPECT-- to --EXPECTF-- in new test files for consistency with Collection/ directory convention\n\n* fix(collections): correct return types for sum, max/min, and percentage proxies\n\n- sum: always int|float — the + accumulator produces int|float regardless of callee\n  type; resolving the callee return type was unsound for string-returning methods\n  (e.g. getKey() on UUID/ULID models would TypeError at runtime, not return string)\n- max/min: add |null — reduce() uses null as initial value, so empty collections\n  return null (common with empty query results)\n- percentage: separate from avg/average — percentage() wraps round() which always\n  returns float, unlike avg/average which can return int via integer division\n- Replace hardcoded 'Illuminate\\\\Support\\\\Enumerable' string with Enumerable::class\n- Add regression-guard tests: sum/max/min with numeric callee to verify callee type\n  is/isn't preserved per proxy method semantics\n\n* style: add missing \\ prefix on in_array at line 424\n\n* fix(collections): address Copilot review feedback on HigherOrderCollectionProxy\n\n- resolveMethodReturnTypeOnValue: collect return types from ALL named-object atomics\n  and combine into a union, so TValue=User|Admin gives User::method()|Admin::method()\n  instead of only User::method() (thread #7)\n- resolveMethodReturnTypeOnValue: wrap getMethodReturnType() in try/catch for\n  InvalidArgumentException|UnexpectedValueException|RuntimeException that can be\n  thrown on unusual method storage edge cases (thread #1)\n- extractCollectionInfoFromType: guard is_a() call with try/catch(Throwable) since\n  allow_string: true triggers autoloading which could throw in misconfigured\n  environments (thread #4)\n- resolveProxyReturnType: use is_a() instead of strict equality for EloquentCollection\n  checks so custom subclasses (e.g. OrderCollection) fall back to base Collection\n  correctly for map/flatMap/partition (thread #6)\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-12T15:43:27+02:00",
+          "tree_id": "95a5e4b2eaad96f2be2aedeb258f01585863e770",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ec4adfc94fde145df59b2a05c864c90696f525a9"
+        },
+        "date": 1776001582741,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.18,
+            "range": "± 0.12",
             "unit": "s"
           },
           {
