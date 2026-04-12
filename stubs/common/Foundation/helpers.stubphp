@@ -217,7 +217,8 @@ function logs($driver = null) {}
 
 // method_field: nothing to stub
 // mix: nothing to stub
-// now: nothing to stub
+// now: processed by Psalm handlers
+
 // policy: nothing to stub
 
 /**
@@ -318,7 +319,8 @@ function session($key = null, $default = null) {}
  */
 function to_route($route, $parameters = [], $status = 302, $headers = []) {}
 
-// today: nothing to stub
+// today: processed by Psalm handlers
+
 // trans: processed by Psalm handlers
 // trans_choice: processed by Psalm handlers
 
@@ -360,9 +362,6 @@ function validator(array $data = [], array $rules = [], array $messages = [], ar
  * @param  \Illuminate\Contracts\Support\Arrayable<string, mixed>|array<string, mixed>  $data
  * @param  array<string, mixed>  $mergeData
  * @return ($view is null ? \Illuminate\Contracts\View\Factory : (\Illuminate\View\View|\Illuminate\Contracts\View\View))
- *
- * @psalm-taint-sink html $data
- * @psalm-taint-sink html $mergeData
  */
 function view($view = null, $data = [], $mergeData = []) {}
 

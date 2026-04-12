@@ -29,6 +29,17 @@ final class CustomerRepository
     {
       return Customer::query()->where($attributes)->get();
     }
+
+    /**
+     * Eloquent\Collection::empty() resolves static<never, never> through inheritance.
+     * @psalm-check-type-exact $empty = \Illuminate\Database\Eloquent\Collection<never, never>
+     */
+    public function emptyEloquentCollection(): \Illuminate\Database\Eloquent\Collection
+    {
+      $empty = \Illuminate\Database\Eloquent\Collection::empty();
+
+      return $empty;
+    }
 }
 ?>
 --EXPECTF--

@@ -104,7 +104,7 @@ final class SchemaAggregator
         foreach ($stmts as $stmt) {
             if (
                 $stmt instanceof PhpParser\Node\Stmt\ClassMethod
-                && \strtolower($stmt->name->toString()) !== 'down'
+                && $stmt->name->toLowerString() !== 'down'
                 && \is_array($stmt->stmts)
             ) {
                 $this->addMethodStatements($stmt->stmts);

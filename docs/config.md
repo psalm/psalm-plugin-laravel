@@ -5,7 +5,7 @@ nav_order: 2
 
 # Configuration
 
-Default plugin config is simple:
+The default plugin config is simple:
 
 ```xml
 <plugins>
@@ -20,8 +20,9 @@ Full config example:
 ```xml
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <modelProperties columnFallback="none" />
         <failOnInternalError value="true" />
+        <modelProperties columnFallback="none" />
+        <resolveDynamicWhereClauses value="false" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
     </pluginClass>
@@ -93,6 +94,22 @@ See [MissingView](issues/MissingView.md) for details.
 
 ```xml
 <findMissingViews value="true" />
+```
+
+## `resolveDynamicWhereClauses`
+
+**default**: `true`
+
+When enabled, the plugin resolves Laravel's [dynamic where methods](https://laravel.com/docs/queries#dynamic-where-clauses) (e.g. `whereTitle('foo')`, `whereFirstName('John')`) on Eloquent relation chains, preserving the relation's generic type instead of returning `mixed`.
+
+Column names are validated against the model's `@property` annotations. Unmatched columns fall through to `mixed` without an error, so partial annotation is safe.
+
+Disable if dynamic where resolution conflicts with your codebase.
+
+### Example
+
+```xml
+<resolveDynamicWhereClauses value="false" />
 ```
 
 ## Cache directory

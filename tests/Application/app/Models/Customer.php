@@ -24,6 +24,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
  * @property CarbonInterface|null $email_verified_at
  * @property Vehicle|null $primary_vehicle Nullable HasOne relationship to the Vehicle Model
  * @property non-empty-string $first_name_using_legacy_accessor
+ * @property int<0, max> $vehicles_count Declared to verify @property takes precedence over aggregate type inference
  */
 class Customer extends Authenticatable
 {
@@ -54,7 +55,7 @@ class Customer extends Authenticatable
     /**
      * All vehicles belonging to this customer.
      *
-     * @psalm-return HasMany<Vehicle>
+     * @psalm-return HasMany<Vehicle, $this>
      */
     public function vehicles(): HasMany
     {
