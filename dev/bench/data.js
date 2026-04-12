@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775943821143,
+  "lastUpdate": 1775983849366,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1007,6 +1007,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.23,
             "range": "± 0.05",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d9f1102007540289dd5bd0c0f56e5ea99b4ea737",
+          "message": "Merge pull request #726 from psalm/698-job-dispatch-validation\n\nValidate `dispatch()` arguments against job/event constructor signature",
+          "timestamp": "2026-04-12T09:47:40+01:00",
+          "tree_id": "e975f0f3969d7a6323871ad5546aa0da476cf9fc",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d9f1102007540289dd5bd0c0f56e5ea99b4ea737"
+        },
+        "date": 1775983848465,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.69,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
