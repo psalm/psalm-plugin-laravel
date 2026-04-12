@@ -7,11 +7,11 @@ nav_order: 5
 
 ## Requirements
 
-| Dependency | v3           | v4           |
-|------------|--------------|--------------|
-| PHP        | ^8.2         | **^8.3**     |
-| Laravel    | 11, 12       | **12, 13**   |
-| Psalm      | 6, 7 (beta)  | **7 only**   |
+| Dependency | v3           | v4         |
+|------------|--------------|------------|
+| PHP        | ^8.2         | **^8.2**   |
+| Laravel    | 11, 12       | **12, 13** |
+| Psalm      | 6, 7 (beta)  | **7 only** |
 
 Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
@@ -34,15 +34,26 @@ Psalm 7 is still in beta. You may need to add this to your project's `composer.j
 }
 ```
 
-Psalm 7 introduces new issue types that may surface in your codebase. These catch real design problems – fixing them improves your code, but you can suppress them during the upgrade and address them later:
+Psalm 7 introduces new issue types that may surface in your codebase:
 
-- `MissingPureAnnotation` -- a method has no side effects but lacks `@psalm-pure`. Adding it lets Psalm verify the method stays side-effect-free and enables callers to use it in pure contexts.
+- `MissingPureAnnotation` -- a method has no side effects but lacks `@psalm-pure`.
 - `MissingAbstractPureAnnotation` -- an abstract method should be declared `@psalm-pure` so all implementations are guaranteed pure.
-- `MissingImmutableAnnotation` -- a class has no mutable state but lacks `@psalm-immutable`. Marking it immutable prevents accidental mutation in future changes.
 - `MissingInterfaceImmutableAnnotation` -- an interface should be `@psalm-immutable` so all implementations are guaranteed immutable.
+
+Additionally, `MissingImmutableAnnotation` (introduced in Psalm v3) fires when a class has no mutable state but lacks `@psalm-immutable`.
+
+**Why these annotations matter beyond documentation:**
+
+- `@psalm-pure` enables *taint specialization* — Psalm tracks whether a pure function's return value is tainted based on whether its arguments are tainted. Without it, taint can be lost or incorrectly propagated through the function.
+- `@psalm-immutable` enables *per-instance property taint tracking* — without it, a tainted property on one instance can pollute type inference across all instances of the class.
+
+If you use taint analysis (security scanning), fixing these is recommended. Otherwise, suppress them during the upgrade and address later:
 
 ```xml
 <issueHandlers>
+    <MissingAbstractPureAnnotation errorLevel="suppress" />
+    <MissingImmutableAnnotation errorLevel="suppress" />
+    <MissingInterfaceImmutableAnnotation errorLevel="suppress" />
     <MissingPureAnnotation errorLevel="suppress" />
 </issueHandlers>
 ```
@@ -51,18 +62,18 @@ Psalm 7 introduces new issue types that may surface in your codebase. These catc
 
 All Eloquent relation stubs gained additional template parameters. If your codebase has `@psalm-return` (or `@return`) annotations with relation generics, they must be updated:
 
-| Relation type      | v3 signature                    | v4 signature                                          |
-|--------------------|---------------------------------|-------------------------------------------------------|
-| `BelongsTo`        | `BelongsTo<TRelated>`           | `BelongsTo<TRelated, TDeclaringModel>`                |
-| `HasOne`           | `HasOne<TRelated>`              | `HasOne<TRelated, TDeclaringModel>`                   |
-| `HasMany`          | `HasMany<TRelated>`             | `HasMany<TRelated, TDeclaringModel>`                  |
-| `BelongsToMany`    | `BelongsToMany<TRelated>`       | `BelongsToMany<TRelated, TDeclaringModel>`            |
-| `MorphOne`         | `MorphOne<TRelated>`            | `MorphOne<TRelated, TDeclaringModel>`                 |
-| `MorphMany`        | `MorphMany<TRelated>`           | `MorphMany<TRelated, TDeclaringModel>`                |
-| `MorphTo`          | `MorphTo<TRelated>`             | `MorphTo<TRelated, TDeclaringModel>`                  |
-| `MorphToMany`      | `MorphToMany<TRelated>`         | `MorphToMany<TRelated, TDeclaringModel>`              |
-| `HasOneThrough`    | `HasOneThrough<TRelated>`       | `HasOneThrough<TRelated, TIntermediate, TDeclaring>`  |
-| `HasManyThrough`   | `HasManyThrough<TRelated>`      | `HasManyThrough<TRelated, TIntermediate, TDeclaring>` |
+| Relation type    | v3 signature               | v4 signature                                                                        |
+|------------------|----------------------------|-------------------------------------------------------------------------------------|
+| `BelongsTo`      | `BelongsTo<TRelated>`      | `BelongsTo<TRelatedModel, TDeclaringModel>`                                         |
+| `HasOne`         | `HasOne<TRelated>`         | `HasOne<TRelatedModel, TDeclaringModel>`                                            |
+| `HasMany`        | `HasMany<TRelated>`        | `HasMany<TRelatedModel, TDeclaringModel>`                                           |
+| `BelongsToMany`  | `BelongsToMany<TRelated>`  | `BelongsToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7) |
+| `MorphOne`       | `MorphOne<TRelated>`       | `MorphOne<TRelatedModel, TDeclaringModel>`                                          |
+| `MorphMany`      | `MorphMany<TRelated>`      | `MorphMany<TRelatedModel, TDeclaringModel>`                                         |
+| `MorphTo`        | `MorphTo<TRelated>`        | `MorphTo<TRelatedModel, TDeclaringModel>`                                           |
+| `MorphToMany`    | `MorphToMany<TRelated>`    | `MorphToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7)   |
+| `HasOneThrough`  | `HasOneThrough<TRelated>`  | `HasOneThrough<TRelatedModel, TIntermediateModel, TDeclaringModel>`                 |
+| `HasManyThrough` | `HasManyThrough<TRelated>` | `HasManyThrough<TRelatedModel, TIntermediateModel, TDeclaringModel>`                |
 
 `Collection`, `EloquentCollection`, and `Builder` are **unchanged**.
 
@@ -118,16 +129,17 @@ composer require --dev psalm/plugin-laravel:^4.0
 #    BelongsTo<Foo>        → BelongsTo<Foo, self>
 #    HasMany<Foo>          → HasMany<Foo, self>
 #    HasOne<Foo>           → HasOne<Foo, self>
-#    BelongsToMany<Foo>    → BelongsToMany<Foo, self>
 #    MorphOne<Foo>         → MorphOne<Foo, self>
 #    MorphMany<Foo>        → MorphMany<Foo, self>
 #    HasManyThrough<Foo>   → HasManyThrough<Foo, Intermediate, self>
 #    HasOneThrough<Foo>    → HasOneThrough<Foo, Intermediate, self>
+#    BelongsToMany<Foo>    → BelongsToMany<Foo, self, Pivot, 'pivot'>
+#    MorphToMany<Foo>      → MorphToMany<Foo, self, MorphPivot, 'pivot'>
 #
 #    Quick sed for the common cases (run from project root):
-find app -name '*.php' -exec grep -l '@psalm-return \(BelongsTo\|HasMany\|HasOne\|BelongsToMany\|MorphOne\|MorphMany\|MorphTo\|MorphToMany\)<' {} \; \
-  | xargs sed -i 's/@psalm-return \(BelongsTo\|HasMany\|HasOne\|BelongsToMany\|MorphOne\|MorphMany\|MorphTo\|MorphToMany\)<\([^>]*\)>/@psalm-return \1<\2, self>/g'
-#    HasManyThrough / HasOneThrough need manual edits (add intermediate model).
+find app -name '*.php' -exec grep -l '@psalm-return \(BelongsTo\|HasMany\|HasOne\|MorphOne\|MorphMany\|MorphTo\)<' {} \; \
+  | xargs sed -i 's/@psalm-return \(BelongsTo\|HasMany\|HasOne\|MorphOne\|MorphMany\|MorphTo\)<\([^>]*\)>/@psalm-return \1<\2, self>/g'
+#    BelongsToMany / MorphToMany / HasManyThrough / HasOneThrough need manual edits.
 
 # 5. Run Psalm and update your baseline
 ./vendor/bin/psalm --set-baseline=psalm-baseline.xml
