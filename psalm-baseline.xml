@@ -1,3 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="7.0.0-beta17@a7f96f911fc869c40c48ec977e21f01a8ca534bd">
+<files psalm-version="6.16.1@f1f5de594dc76faf8784e02d3dc4716c91c6f6ac">
+  <file src="src/Handlers/Collections/CollectionFilterHandler.php">
+    <ImpureMethodCall>
+      <code><![CDATA[getCallArgs]]></code>
+    </ImpureMethodCall>
+  </file>
+  <file src="src/Handlers/Collections/CollectionFlattenHandler.php">
+    <ImpureMethodCall>
+      <code><![CDATA[getCallArgs]]></code>
+    </ImpureMethodCall>
+  </file>
+  <file src="src/Handlers/Eloquent/Schema/SchemaAggregator.php">
+    <ImpureFunctionCall>
+      <code><![CDATA[\array_map]]></code>
+      <code><![CDATA[\array_map]]></code>
+      <code><![CDATA[\array_map]]></code>
+    </ImpureFunctionCall>
+  </file>
+  <file src="src/Handlers/Eloquent/Schema/SqlSchemaParser.php">
+    <ImpureMethodCall>
+      <code><![CDATA[setColumn]]></code>
+      <code><![CDATA[setTable]]></code>
+    </ImpureMethodCall>
+  </file>
+  <file src="src/Handlers/Rules/ModelMakeHandler.php">
+    <ImpureMethodCall>
+      <code><![CDATA[classExists]]></code>
+      <code><![CDATA[classExtends]]></code>
+    </ImpureMethodCall>
+  </file>
 </files>

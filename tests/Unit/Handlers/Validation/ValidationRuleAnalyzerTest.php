@@ -9,7 +9,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Validation\ResolvedRule;
 use Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer;
-use Psalm\Type\TaintKind;
 
 /**
  * Tests for the rule parsing and type/taint resolution logic in ValidationRuleAnalyzer.
@@ -164,7 +163,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('integer');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -172,7 +171,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('string');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -180,7 +179,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('uuid');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -188,7 +187,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('url');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -196,7 +195,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('ip');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -204,7 +203,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('email');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -212,7 +211,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('in:a,b,c');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -220,7 +219,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('date');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -228,7 +227,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('alpha_num');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -237,7 +236,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $rule = $this->resolve('decimal:2');
 
         $this->assertSame('numeric-string', $rule->type->getId());
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -246,7 +245,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $rule = $this->resolve('digits:4');
 
         $this->assertSame('numeric-string', $rule->type->getId());
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -254,7 +253,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('accepted');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -262,7 +261,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('declined');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -271,7 +270,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $rule = $this->resolve('before:2025-01-01');
 
         $this->assertSame('string', $rule->type->getId());
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -279,7 +278,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('date_equals:today');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -303,7 +302,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('file');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -311,7 +310,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('image');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -359,7 +358,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('json');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -367,7 +366,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('boolean');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     // --- Array rule format ---
@@ -379,7 +378,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $rule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'integer', 'max:100']);
 
         $this->assertSame('int|numeric-string', $rule->type->getId());
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     // --- Edge cases ---
@@ -403,7 +402,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $ruleB = ValidationRuleAnalyzer::resolveRuleSegments(['integer', 'string']);
 
         $this->assertSame($ruleA->removedTaints, $ruleB->removedTaints);
-        $this->assertSame(TaintKind::ALL_INPUT, $ruleA->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $ruleA->removedTaints);
     }
 
     #[Test]

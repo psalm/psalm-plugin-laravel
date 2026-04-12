@@ -17,7 +17,7 @@ use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNumericString;
 use Psalm\Type\Atomic\TTrue;
-use Psalm\Type\TaintKind;
+use Psalm\Type\TaintKindGroup;
 use Psalm\Type\Union;
 
 /**
@@ -93,7 +93,8 @@ final class ValidationRuleAnalyzer
     public static function resolveRuleSegments(array $segments): ResolvedRule
     {
         $type = null;
-        $removedTaints = 0;
+        /** @var list<string> */
+        $removedTaints = [];
         $nullable = false;
         $sometimes = false;
         $required = false;
@@ -136,7 +137,8 @@ final class ValidationRuleAnalyzer
                 $type = $ruleType;
             }
 
-            $removedTaints |= self::ruleToRemovedTaints($ruleName);
+            // Union of removed taints: accumulate across all rule segments
+            $removedTaints = \array_values(\array_unique(\array_merge($removedTaints, self::ruleToRemovedTaints($ruleName))));
         }
 
         // Default: if no type rule matched, return mixed (don't narrow)
@@ -158,28 +160,28 @@ final class ValidationRuleAnalyzer
     private static function ruleToType(string $rule, ?string $param): ?Union
     {
         return match ($rule) {
-            'string'                           => Type::getString(),
-            'integer'                          => new Union([new TInt(), new TNumericString()]),
-            'numeric'                          => new Union([new TInt(), new TFloat(), new TNumericString()]),
+            'string' => Type::getString(),
+            'integer' => new Union([new TInt(), new TNumericString()]),
+            'numeric' => new Union([new TInt(), new TFloat(), new TNumericString()]),
             'decimal',
-            'digits', 'digits_between'         => new Union([new TNumericString()]),
+            'digits', 'digits_between' => new Union([new TNumericString()]),
             // Laravel's boolean rule accepts: true, false, 0, 1, '0', '1'
-            'boolean'                          => self::booleanRuleType(),
+            'boolean' => self::booleanRuleType(),
             // Laravel's accepted rule accepts: 'yes', 'on', 1, '1', true
-            'accepted', 'accepted_if'          => self::acceptedRuleType(),
+            'accepted', 'accepted_if' => self::acceptedRuleType(),
             // Laravel's declined rule accepts: 'no', 'off', 0, '0', false
-            'declined', 'declined_if'          => self::declinedRuleType(),
-            'array'                            => new Union([
+            'declined', 'declined_if' => self::declinedRuleType(),
+            'array' => new Union([
                 new TArray([Type::getArrayKey(), Type::getMixed()]),
             ]),
-            'list'                             => new Union([
+            'list' => new Union([
                 Type::getListAtomic(Type::getMixed()),
             ]),
             'file', 'image',
-            'mimes', 'mimetypes'               => new Union([
+            'mimes', 'mimetypes' => new Union([
                 new TNamedObject(\Illuminate\Http\UploadedFile::class),
             ]),
-            'in'                               => self::inRuleToLiteralUnion($param),
+            'in' => self::inRuleToLiteralUnion($param),
             'uuid', 'ulid',
             'alpha', 'alpha_num', 'alpha_dash',
             'hex_color', 'mac_address',
@@ -190,20 +192,36 @@ final class ValidationRuleAnalyzer
             'timezone',
             'email', 'url', 'active_url',
             'ip', 'ipv4', 'ipv6',
-            'json'                             => Type::getString(),
-            default                            => null,
+            'json' => Type::getString(),
+            default => null,
         };
     }
 
     /**
-     * Map a validation rule name to a taint-escape bitmask.
+     * All input-related taint kinds — delegates to Psalm's own canonical list.
+     *
+     * Equivalent to Psalm 7's TaintKind::ALL_INPUT bitmask.
+     * Using TaintKindGroup::ALL_INPUT (Psalm 6 public API) avoids duplicating the list
+     * and automatically picks up any new INPUT_* kinds added in future Psalm 6.x releases.
+     *
+     * @return list<string>
+     * @psalm-pure
+     */
+    public static function allInputTaints(): array
+    {
+        return TaintKindGroup::ALL_INPUT;
+    }
+
+    /**
+     * Map a validation rule name to a list of escaped taint kinds.
      *
      * Returns the set of taint kinds that this rule makes safe.
      * Adding a new rule = adding one line to this match.
      *
+     * @return list<string>
      * @psalm-pure
      */
-    private static function ruleToRemovedTaints(string $rule): int
+    private static function ruleToRemovedTaints(string $rule): array
     {
         return match ($rule) {
             'integer', 'numeric', 'boolean',
@@ -218,10 +236,10 @@ final class ValidationRuleAnalyzer
             'after', 'after_or_equal',
             'date_equals',
             'timezone',
-            'in'                                    => TaintKind::ALL_INPUT,
+            'in' => self::allInputTaints(),
             // file, image, mimes, mimetypes → keep taint (file names/paths/contents are user-controlled)
             // string, email, url, ip, json, regex, required, max, min, etc. → keep all taint
-            default                                 => 0,
+            default => [],
         };
     }
 
@@ -361,7 +379,7 @@ final class ValidationRuleAnalyzer
      *   'items.*' → wraps in list<T>
      *   'items.*.name' → builds list<array{name: T}>
      *
-     * @param array<string, list<string>> $rawRules  field => rule segments
+     * @param array<string, list<string>> $rawRules field => rule segments
      * @return array<string, ResolvedRule>
      */
     private static function resolveRules(array $rawRules): array
@@ -446,7 +464,7 @@ final class ValidationRuleAnalyzer
                 $properties[$childField] = $childType;
             }
 
-            $shape = TKeyedArray::make($properties);
+            $shape = new TKeyedArray($properties);
             $listType = new Union([
                 Type::getListAtomic(new Union([$shape])),
             ]);
@@ -457,10 +475,11 @@ final class ValidationRuleAnalyzer
 
             // Aggregate child taint removal — if ALL children remove all taint,
             // the list container is also safe. Otherwise keep tainted.
-            $aggregatedTaint = TaintKind::ALL_INPUT;
+            // Intersection: only keep taint kinds removed by every child rule.
+            $aggregatedTaint = self::allInputTaints();
 
             foreach ($children as $childRule) {
-                $aggregatedTaint &= $childRule->removedTaints;
+                $aggregatedTaint = \array_values(\array_intersect($aggregatedTaint, $childRule->removedTaints));
             }
 
             $topLevel[$parent] = new ResolvedRule(

@@ -11,7 +11,6 @@ use Psalm\Plugin\EventHandler\AddTaintsInterface;
 use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
@@ -44,13 +43,13 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      * gets skipped when ValidatedTypeHandler provides a return type.
      */
     #[\Override]
-    public static function addTaints(AddRemoveTaintsEvent $event): int
+    public static function addTaints(AddRemoveTaintsEvent $event): array
     {
         if (self::isValidationMethodCall($event) !== null) {
-            return TaintKind::ALL_INPUT;
+            return ValidationRuleAnalyzer::allInputTaints();
         }
 
-        return 0;
+        return [];
     }
 
     /**
@@ -61,34 +60,34 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      * validate()/safe() return full arrays where per-field taint removal is not possible.
      */
     #[\Override]
-    public static function removeTaints(AddRemoveTaintsEvent $event): int
+    public static function removeTaints(AddRemoveTaintsEvent $event): array
     {
         $expr = $event->getExpr();
 
         if (!$expr instanceof MethodCall || !$expr->name instanceof Identifier) {
-            return 0;
+            return [];
         }
 
         if ($expr->name->toLowerString() !== 'validated') {
-            return 0;
+            return [];
         }
 
         $args = $expr->getArgs();
 
         if ($args === []) {
-            return 0;
+            return [];
         }
 
         $statementsAnalyzer = $event->getStatementsSource();
 
         if (!$statementsAnalyzer instanceof StatementsAnalyzer) {
-            return 0;
+            return [];
         }
 
         $firstArgType = $statementsAnalyzer->node_data->getType($args[0]->value);
 
         if (!$firstArgType instanceof Union || !$firstArgType->isSingleStringLiteral()) {
-            return 0;
+            return [];
         }
 
         $fieldKey = $firstArgType->getSingleStringLiteral()->value;
@@ -96,13 +95,13 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         $className = self::resolveCallerClass($event, \Illuminate\Foundation\Http\FormRequest::class);
 
         if ($className === null) {
-            return 0;
+            return [];
         }
 
         $rules = ValidationRuleAnalyzer::getRulesForFormRequest($className);
 
         if ($rules === null || !isset($rules[$fieldKey])) {
-            return 0;
+            return [];
         }
 
         return $rules[$fieldKey]->removedTaints;

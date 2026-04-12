@@ -388,6 +388,6 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
         }
 
         /** @var non-empty-array<string, Union> $properties */
-        return new Union([TKeyedArray::make($properties)]);
+        return new Union([new TKeyedArray($properties)]);
     }
 }
