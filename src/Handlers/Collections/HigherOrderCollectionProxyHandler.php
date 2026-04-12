@@ -312,7 +312,7 @@ final class HigherOrderCollectionProxyHandler implements
         // - Support\Collection::map() returns Collection → use $collectionClass (same class)
         if ($proxyMethod === 'map') {
             $methodReturnType = self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase);
-            $mapClass = $collectionClass === EloquentCollection::class ? Collection::class : $collectionClass;
+            $mapClass = \is_a($collectionClass, EloquentCollection::class, true) ? Collection::class : $collectionClass;
 
             return new Union([
                 new TGenericObject($mapClass, [
@@ -325,7 +325,7 @@ final class HigherOrderCollectionProxyHandler implements
         // flatMap — inner structure is unpacked; static return type preserves LazyCollection.
         // EloquentCollection falls back to base Collection; key widened to array-key.
         if ($proxyMethod === 'flatmap') {
-            $flatMapClass = $collectionClass === EloquentCollection::class ? Collection::class : $collectionClass;
+            $flatMapClass = \is_a($collectionClass, EloquentCollection::class, true) ? Collection::class : $collectionClass;
             return new Union([
                 new TGenericObject($flatMapClass, [Type::getArrayKey(), Type::getMixed()]),
             ]);
@@ -348,7 +348,7 @@ final class HigherOrderCollectionProxyHandler implements
         // bucket a base Collection regardless of the receiver.
         if ($proxyMethod === 'partition') {
             $innerCollection = new TGenericObject($collectionClass, [$tKey, $tValue]);
-            $outerClass = $collectionClass === EloquentCollection::class ? Collection::class : $collectionClass;
+            $outerClass = \is_a($collectionClass, EloquentCollection::class, true) ? Collection::class : $collectionClass;
 
             return new Union([
                 new TGenericObject($outerClass, [
@@ -419,11 +419,18 @@ final class HigherOrderCollectionProxyHandler implements
             $class = $atomic->value;
 
             // Fast-path: equality check for the three common classes avoids is_a() inheritance
-            // walk for ~99% of real-world usage, which would also trigger PHP autoloading.
-            if (
-                \in_array($class, [Collection::class, EloquentCollection::class, LazyCollection::class], true)
-                || \is_a($class, Enumerable::class, allow_string: true)
-            ) {
+            // walk for ~99% of real-world usage. is_a() with allow_string triggers autoloading,
+            // which can throw if the autoloader raises an error for unknown classes.
+            $isCommon = \in_array($class, [Collection::class, EloquentCollection::class, LazyCollection::class], true);
+            if (!$isCommon) {
+                try {
+                    $isCommon = \is_a($class, Enumerable::class, allow_string: true);
+                } catch (\Throwable) {
+                    $isCommon = false;
+                }
+            }
+
+            if ($isCommon) {
                 return [$atomic->type_params[0], $atomic->type_params[1], $class];
             }
         }
@@ -493,6 +500,11 @@ final class HigherOrderCollectionProxyHandler implements
         string $methodName,
         Codebase $codebase,
     ): ?Union {
+        // Collect return types from all named-object atomics in TValue (not just the first),
+        // so that a union TValue like User|Admin gives User::method()|Admin::method() rather
+        // than only User::method().
+        $returnTypes = [];
+
         foreach ($tValue->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TNamedObject) {
                 continue;
@@ -505,10 +517,28 @@ final class HigherOrderCollectionProxyHandler implements
                 continue;
             }
 
-            return $codebase->getMethodReturnType($methodId, $className);
+            try {
+                $type = $codebase->getMethodReturnType($methodId, $className);
+            } catch (\InvalidArgumentException | \UnexpectedValueException | \RuntimeException) {
+                // getMethodReturnType() can throw on unusual method storage edge cases
+                // even after a methodExistsOnClass() check — fall back to mixed.
+                $type = Type::getMixed();
+            }
+
+            if ($type !== null) {
+                $returnTypes[] = $type;
+            }
         }
 
-        return null;
+        if ($returnTypes === []) {
+            return null;
+        }
+
+        return \array_reduce(
+            \array_slice($returnTypes, 1),
+            static fn (Union $carry, Union $type) => Type::combineUnionTypes($carry, $type),
+            $returnTypes[0],
+        );
     }
 
     /**

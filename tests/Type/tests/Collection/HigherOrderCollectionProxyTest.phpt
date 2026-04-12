@@ -17,6 +17,7 @@ class Customer extends Model
     }
 }
 
+
 /**
  * HigherOrderCollectionProxy: $collection->each->method() pattern.
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/511
