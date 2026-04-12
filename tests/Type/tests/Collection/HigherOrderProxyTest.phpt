@@ -37,13 +37,13 @@ function testCollectionStringKeyedProxy(Collection $collection): void
     $_proxy = $collection->map;
 }
 
-// Method calls on the proxy return Enumerable<TKey, TValue>, reflecting the actual
-// Laravel runtime behaviour: each() returns the collection, not the callback's return value.
-// (Previously typed as bool via @mixin TValue, which was incorrect.)
+// Method calls on the proxy return the original collection type (passthrough behaviour).
+// each() returns the same concrete collection — Collection, LazyCollection, or EloquentCollection.
+// Previously typed as bool via @mixin TValue (incorrect) or Enumerable (imprecise).
 /** @param Collection<int, User> $collection */
-function testMethodCallViaProxy(Collection $collection): \Illuminate\Support\Enumerable
+function testMethodCallViaProxy(Collection $collection): Collection
 {
-    /** @psalm-check-type-exact $result = \Illuminate\Support\Enumerable<int, User> */
+    /** @psalm-check-type-exact $result = Collection<int, User> */
     $result = $collection->each->sendWelcomeEmail();
 
     return $result;
@@ -64,9 +64,9 @@ function testLazyCollectionProxyTypes(LazyCollection $lazy): void
 }
 
 /** @param LazyCollection<int, User> $lazy */
-function testLazyMethodCallViaProxy(LazyCollection $lazy): \Illuminate\Support\Enumerable
+function testLazyMethodCallViaProxy(LazyCollection $lazy): LazyCollection
 {
-    /** @psalm-check-type-exact $result = \Illuminate\Support\Enumerable<int, User> */
+    /** @psalm-check-type-exact $result = LazyCollection<int, User> */
     $result = $lazy->each->sendWelcomeEmail();
 
     return $result;
@@ -98,9 +98,9 @@ function testEloquentCollectionStringKeyedProxy(EloquentCollection $eloquent): v
 }
 
 /** @param EloquentCollection<int, User> $eloquent */
-function testEloquentMethodCallViaProxy(EloquentCollection $eloquent): \Illuminate\Support\Enumerable
+function testEloquentMethodCallViaProxy(EloquentCollection $eloquent): EloquentCollection
 {
-    /** @psalm-check-type-exact $result = \Illuminate\Support\Enumerable<int, User> */
+    /** @psalm-check-type-exact $result = EloquentCollection<int, User> */
     $result = $eloquent->each->sendWelcomeEmail();
 
     return $result;
