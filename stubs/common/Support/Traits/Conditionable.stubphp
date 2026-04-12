@@ -1,0 +1,34 @@
+<?php
+
+namespace Illuminate\Support\Traits;
+
+/**
+ * Simplify return types for Conditionable methods.
+ *
+ * Laravel's PHPDoc uses `@return $this|TWhenReturnType` with template inference,
+ * but Psalm 7 resolves callable return types to `mixed`, breaking fluent chains.
+ * Stubbing as `@return $this` makes ->when() and ->unless() chainable on
+ * Builder, Collection, Stringable, and any other class using this trait.
+ */
+trait Conditionable
+{
+    /**
+     * Apply the callback if the given "value" is (or resolves to) truthy.
+     *
+     * @param  mixed  $value
+     * @param  callable|null  $callback
+     * @param  callable|null  $default
+     * @return $this
+     */
+    public function when($value = null, ?callable $callback = null, ?callable $default = null) {}
+
+    /**
+     * Apply the callback if the given "value" is (or resolves to) falsy.
+     *
+     * @param  mixed  $value
+     * @param  callable|null  $callback
+     * @param  callable|null  $default
+     * @return $this
+     */
+    public function unless($value = null, ?callable $callback = null, ?callable $default = null) {}
+}

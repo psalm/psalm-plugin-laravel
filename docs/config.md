@@ -5,7 +5,7 @@ nav_order: 2
 
 # Configuration
 
-Default plugin config is simple:
+The default plugin config is simple:
 
 ```xml
 <plugins>
@@ -21,9 +21,10 @@ Full config example:
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
         <modelProperties columnFallback="none" />
-        <failOnInternalError value="true" />
+        <resolveDynamicWhereClauses value="false" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
+        <failOnInternalError value="true" />
     </pluginClass>
 </plugins>
 ```
@@ -46,20 +47,20 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 - `migrations` — Parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types (e.g. `$user->email` resolves to `string`).
 - `none` — Disables migration-based column inference. Use this if you declare column types via `@property` annotations, or if your migrations can't be statically parsed (dynamic schema changes).
 
-## `failOnInternalError`
+## `resolveDynamicWhereClauses`
 
-**default**: `false`
+**default**: `true`
 
-When the plugin encounters an internal error (e.g. failing to boot the Laravel app or generate stubs), it prints a warning and disables itself for that run.
-Set this to `true` to throw the exception instead.
+When enabled, the plugin resolves Laravel's [dynamic where methods](https://laravel.com/docs/queries#dynamic-where-clauses) (e.g. `whereTitle('foo')`, `whereFirstName('John')`) on Eloquent relation chains, preserving the relation's generic type instead of returning `mixed`.
 
-**Recommended for CI.** Without this, a misconfigured environment causes the plugin to silently disable itself — your pipeline passes but without any plugin analysis.
-With `failOnInternalError`, the Psalm run fails immediately, so you know the plugin isn't working.
+Column names are validated against the model's `@property` annotations. Unmatched columns fall through to `mixed` without an error, so partial annotation is safe.
+
+Disable if dynamic where resolution conflicts with your codebase.
 
 ### Example
 
 ```xml
-<failOnInternalError value="true" />
+<resolveDynamicWhereClauses value="false" />
 ```
 
 ## `findMissingTranslations`
@@ -119,4 +120,20 @@ Environment variable to override the cache location.
 
 ```bash
 PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
+```
+
+## `failOnInternalError`
+
+**default**: `false`
+
+When the plugin encounters an internal error (e.g. failing to boot the Laravel app or generate stubs), it prints a warning and disables itself for that run.
+Set this to `true` to throw the exception instead.
+
+**Recommended for CI.** Without this, a misconfigured environment causes the plugin to silently disable itself — your pipeline passes but without any plugin analysis.
+With `failOnInternalError`, the Psalm run fails immediately, so you know the plugin isn't working.
+
+### Example
+
+```xml
+<failOnInternalError value="true" />
 ```

@@ -4,9 +4,31 @@ namespace Illuminate\Support;
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @extends \IteratorAggregate<TKey, TValue>
  * @extends \Illuminate\Contracts\Support\Arrayable<TKey, TValue>
  */
-interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Countable, \IteratorAggregate, \JsonSerializable {}
+interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminate\Contracts\Support\Jsonable, \Countable, \IteratorAggregate, \JsonSerializable
+{
+    /**
+     * Get the sum of the given values.
+     *
+     * At runtime, the accumulator starts at 0 and uses the + operator,
+     * so the result is always int|float (non-numeric values throw TypeError).
+     *
+     * When called without arguments, the return type narrows based on TValue:
+     * - Collection<_, int>::sum() → int (matches array_sum behavior for int arrays)
+     * - Collection<_, float>::sum() → float
+     * - Otherwise → int|float
+     *
+     * @template TCallbackReturn of int|float
+     *
+     * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
+     * @return ($callback is null
+     *  ? (TValue is int ? int : (TValue is float ? float : int|float))
+     *  : ($callback is string ? int|float : TCallbackReturn)
+     * )
+     */
+    public function sum($callback = null);
+}

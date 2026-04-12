@@ -5,6 +5,7 @@ use App\Models\Customer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
 /**
@@ -67,8 +68,8 @@ function test_query_builder_distinct(QueryBuilder $builder): QueryBuilder
 }
 
 /**
- * @param BelongsToMany<Customer, Customer> $relation
- * @return BelongsToMany<Customer, Customer>
+ * @param BelongsToMany<Customer, Customer, Pivot, 'pivot'> $relation
+ * @return BelongsToMany<Customer, Customer, Pivot, 'pivot'>
  */
 function test_belongs_to_many_with_pivot(BelongsToMany $relation): BelongsToMany
 {

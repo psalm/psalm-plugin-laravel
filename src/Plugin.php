@@ -9,6 +9,7 @@ use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -27,13 +28,6 @@ final class Plugin implements PluginEntryPointInterface
         $pluginConfig = PluginConfig::fromXml($config);
         $output = $this->getProgress($registration);
 
-        if (\getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH') !== false) {
-            $output->warning(
-                'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
-                . "The plugin now uses Psalm's cache directory automatically.",
-            );
-        }
-
         try {
             ApplicationProvider::bootApp();
 
@@ -42,6 +36,11 @@ final class Plugin implements PluginEntryPointInterface
             }
 
             $this->generateAliasStubs($pluginConfig);
+
+            // Build facade → service class map before registering handlers.
+            // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
+            // to also register for facade/alias classes that proxy to their service.
+            FacadeMapProvider::init($output);
 
             Handlers\Rules\NoEnvOutsideConfigHandler::init(
                 ApplicationProvider::getApp()->configPath(),
@@ -56,24 +55,79 @@ final class Plugin implements PluginEntryPointInterface
             }
 
             $this->registerHandlers($registration, $pluginConfig);
-            $this->registerStubs($registration, $pluginConfig);
+            $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
             $this->handleInternalError($throwable, $output, $pluginConfig->failOnInternalError);
         }
     }
 
     /** @return list<string> */
-    private function getCommonStubs(): array
+    private function getCommonStubs(\Psalm\Progress\Progress $output): array
     {
-        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/common');
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/common', $output);
     }
 
-    /** @return list<string> */
-    private function getStubsForLaravelVersion(string $version): array
+    /**
+     * Collect stubs from all version directories that are <= the installed Laravel version.
+     *
+     * Supports both major-only directories (e.g. "12/", "13/") and patch-level directories
+     * (e.g. "12.20.0/", "12.42.0/"). Directories are sorted in ascending version order so
+     * that later versions override earlier ones for same-named stubs.
+     *
+     * @see https://www.php.net/version_compare — treats "12" as "12.0.0"
+     *
+     * @return list<string>
+     */
+    private function getStubsForLaravelVersion(string $version, \Psalm\Progress\Progress $output): array
     {
-        [$majorVersion] = \explode('.', $version);
+        $stubsRoot = \dirname(__DIR__) . '/stubs';
 
-        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/' . $majorVersion);
+        // Collect version directories (names starting with a digit, e.g. "12", "12.20.0", "13")
+        $candidates = [];
+
+        foreach (new \DirectoryIterator($stubsRoot) as $entry) {
+            if (! $entry->isDir() || $entry->isDot()) {
+                continue;
+            }
+
+            $dirName = $entry->getFilename();
+
+            // Skip non-version directories (e.g. "common")
+            if (\ctype_digit($dirName[0])) {
+                $candidates[] = $dirName;
+            }
+        }
+
+        $stubGroups = [];
+
+        foreach (self::filterVersionDirectories($candidates, $version) as $dir) {
+            $stubGroups[] = $this->findStubFiles($stubsRoot . '/' . $dir, $output);
+        }
+
+        return $stubGroups === [] ? [] : \array_merge(...$stubGroups);
+    }
+
+    /**
+     * Filter and sort version directory names, keeping only those <= the target version.
+     *
+     * @param list<string> $candidates directory names (e.g. ["13", "12", "12.20.0"])
+     *
+     * @return list<string> sorted ascending by version (e.g. ["12", "12.20.0"])
+     *
+     * @psalm-pure
+     *
+     * @internal used by tests
+     */
+    public static function filterVersionDirectories(array $candidates, string $targetVersion): array
+    {
+        $matched = \array_filter(
+            $candidates,
+            static fn(string $dir): bool => \version_compare($dir, $targetVersion, '<='),
+        );
+
+        \usort($matched, static fn(string $a, string $b): int => \version_compare($a, $b));
+
+        return $matched;
     }
 
     /**
@@ -92,7 +146,7 @@ final class Plugin implements PluginEntryPointInterface
      *
      * @return list<string>
      */
-    private function findStubFiles(string $directory): array
+    private function findStubFiles(string $directory, \Psalm\Progress\Progress $output): array
     {
         if (!\is_dir($directory)) {
             return [];
@@ -119,10 +173,11 @@ final class Plugin implements PluginEntryPointInterface
 
                 $stubs[] = $realPath;
             }
-        } catch (\UnexpectedValueException) {
+        } catch (\UnexpectedValueException $unexpectedValueException) {
             // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories.
             // Return whatever stubs were collected before the error — partial results from
             // readable subdirectories are better than none.
+            $output->warning("Laravel plugin: error scanning stub directory '{$directory}': {$unexpectedValueException->getMessage()}");
         }
 
         \sort($stubs);
@@ -130,11 +185,11 @@ final class Plugin implements PluginEntryPointInterface
         return $stubs;
     }
 
-    private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig): void
+    private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
     {
         $stubs = \array_merge(
-            $this->getCommonStubs(),
-            $this->getStubsForLaravelVersion(Application::VERSION),
+            $this->getCommonStubs($output),
+            $this->getStubsForLaravelVersion(Application::VERSION, $output),
         );
 
         foreach ($stubs as $stubFilePath) {
@@ -206,6 +261,10 @@ final class Plugin implements PluginEntryPointInterface
             ],
             interceptMixin: true,
         ));
+        if ($pluginConfig->resolveDynamicWhereClauses) {
+            Handlers\Magic\MethodForwardingHandler::enableDynamicWhere();
+        }
+
         $registration->registerHooksFromClass(Handlers\Magic\MethodForwardingHandler::class);
 
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
@@ -223,6 +282,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Collections\CollectionFlattenHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/HigherOrderCollectionProxyHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\HigherOrderCollectionProxyHandler::class);
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
@@ -234,6 +295,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Helpers/CacheHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\CacheHandler::class);
+        require_once __DIR__ . '/Handlers/Helpers/NowTodayHandler.php';
+        $registration->registerHooksFromClass(Handlers\Helpers\NowTodayHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\PathHandler::class);
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
@@ -242,10 +305,20 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(Handlers\SuppressHandler::class);
 
+        require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
+        $registration->registerHooksFromClass(Handlers\Jobs\DispatchableHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+        // NoEnvOutsideConfigHandler must be registered BEFORE EnvHandler.
+        // Both handle 'env()' via FunctionReturnTypeProviderInterface; Psalm dispatches handlers
+        // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler
+        // always returns null (it only emits an issue), so the chain continues to EnvHandler for
+        // type narrowing. Reversing the order would silently suppress the NoEnvOutsideConfig issue.
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\NoEnvOutsideConfigHandler::class);
+        require_once __DIR__ . '/Handlers/Helpers/EnvHandler.php';
+        $registration->registerHooksFromClass(Handlers\Helpers\EnvHandler::class);
 
         // Unlike TranslationKeyHandler (which always runs for type narrowing),
         // MissingViewHandler provides no type information — skip entirely when disabled
