@@ -133,7 +133,7 @@ final class HigherOrderCollectionProxyHandler implements
                 // Unknown proxy shape — fall back to Enumerable<TKey, TValue> to at least
                 // allow chaining of collection methods without InvalidMethodCall.
                 $event->setReturnTypeCandidate(new Union([
-                    new TGenericObject('Illuminate\Support\Enumerable', [$typeParams[0], $typeParams[1]]),
+                    new TGenericObject(Enumerable::class, [$typeParams[0], $typeParams[1]]),
                 ]));
                 return;
             }
@@ -144,7 +144,7 @@ final class HigherOrderCollectionProxyHandler implements
             if ($collectionInfo === null) {
                 // Couldn't find the collection — fall back to Enumerable.
                 $event->setReturnTypeCandidate(new Union([
-                    new TGenericObject('Illuminate\Support\Enumerable', [$typeParams[0], $typeParams[1]]),
+                    new TGenericObject(Enumerable::class, [$typeParams[0], $typeParams[1]]),
                 ]));
                 return;
             }
@@ -275,17 +275,20 @@ final class HigherOrderCollectionProxyHandler implements
             return Type::getBool();
         }
 
-        // Numeric aggregation proxies
-        // avg/average return float|int|null (Laravel returns $reduced[0] / $reduced[1] which can be int/float)
-        if (\in_array($proxyMethod, ['average', 'avg', 'percentage'], true)) {
+        // Numeric aggregation proxies — return types don't depend on the called method.
+        // avg/average: $reduced[0] / $reduced[1] → float|int|null (div of two ints yields int when exact).
+        if (\in_array($proxyMethod, ['average', 'avg'], true)) {
             return new Union([new Type\Atomic\TFloat(), new Type\Atomic\TInt(), new Type\Atomic\TNull()]);
         }
 
-        // sum — resolve the called method's return type for precision (e.g. getPrice(): int → int).
-        // Falls back to int|float when resolution fails (mirrors Collection::sum() accumulator).
+        // percentage: wraps round() → always float|null (never int, unlike avg/average).
+        if ($proxyMethod === 'percentage') {
+            return new Union([new Type\Atomic\TFloat(), new Type\Atomic\TNull()]);
+        }
+
+        // sum: $result + $callback(...) → always int|float (string callees produce TypeError at runtime).
         if ($proxyMethod === 'sum') {
-            $sumReturnType = self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase);
-            return $sumReturnType ?? new Union([new Type\Atomic\TInt(), new Type\Atomic\TFloat()]);
+            return new Union([new Type\Atomic\TInt(), new Type\Atomic\TFloat()]);
         }
 
         // first/last — returns TValue|null
@@ -293,9 +296,12 @@ final class HigherOrderCollectionProxyHandler implements
             return Type::combineUnionTypes($tValue, Type::getNull());
         }
 
-        // max/min — returns the called method result directly
+        // max/min — use reduce() with null as the initial value, so null is always a possible result
+        // for empty collections (common with empty query results). The method return type is included
+        // to preserve precision (e.g. getPrice(): int → int|null instead of mixed|null).
         if ($proxyMethod === 'max' || $proxyMethod === 'min') {
-            return self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase) ?? Type::getMixed();
+            $methodReturnType = self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase) ?? Type::getMixed();
+            return Type::combineUnionTypes($methodReturnType, Type::getNull());
         }
 
         // map — return type depends on collection class and what the mapped method returns:

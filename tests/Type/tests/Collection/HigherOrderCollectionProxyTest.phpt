@@ -10,6 +10,11 @@ use Illuminate\Support\LazyCollection;
 class Customer extends Model
 {
     use SoftDeletes;
+
+    public function getPrice(): float
+    {
+        return 0.0;
+    }
 }
 
 /**
@@ -120,13 +125,26 @@ final class HigherOrderCollectionProxyTest
     }
 
     /**
-     * sum resolves the called method return type (e.g. getKey(): int|string → int|string).
+     * sum always returns int|float — the + accumulator produces int|float regardless of
+     * what the callee returns. String-returning methods (e.g. getKey() on UUID models)
+     * would cause a TypeError at runtime, so we don't narrow to the callee type.
      * @param Collection<int, Customer> $users
      */
     public function sumReturnType(Collection $users): void
     {
         $_result = $users->sum->getKey();
-        /** @psalm-check-type-exact $_result = int|string */
+        /** @psalm-check-type-exact $_result = float|int */
+    }
+
+    /**
+     * sum with a purely numeric callee (float) — still int|float, not narrowed to float.
+     * Guards against a future regression where the callee type leaks into the sum return.
+     * @param Collection<int, Customer> $users
+     */
+    public function sumWithNumericCalleeReturnType(Collection $users): void
+    {
+        $_result = $users->sum->getPrice();
+        /** @psalm-check-type-exact $_result = float|int */
     }
 
     /**
@@ -241,23 +259,44 @@ final class HigherOrderCollectionProxyTest
 
 
     /**
-     * max returns the called method result directly.
+     * max returns the called method result|null — null for empty collections (reduce() with null initial value).
      * @param Collection<int, Customer> $users
      */
     public function maxReturnType(Collection $users): void
     {
         $_result = $users->max->getKey();
-        /** @psalm-check-type-exact $_result = int|string */
+        /** @psalm-check-type-exact $_result = int|string|null */
     }
 
     /**
-     * min returns the called method result directly.
+     * min returns the called method result|null — null for empty collections (reduce() with null initial value).
      * @param Collection<int, Customer> $users
      */
     public function minReturnType(Collection $users): void
     {
         $_result = $users->min->getKey();
-        /** @psalm-check-type-exact $_result = int|string */
+        /** @psalm-check-type-exact $_result = int|string|null */
+    }
+
+    /**
+     * max with a numeric callee — callee type is preserved with null added for empty collections.
+     * Contrasts with sum: max preserves the callee return type; sum always returns int|float.
+     * @param Collection<int, Customer> $users
+     */
+    public function maxWithNumericCalleeReturnType(Collection $users): void
+    {
+        $_result = $users->max->getPrice();
+        /** @psalm-check-type-exact $_result = float|null */
+    }
+
+    /**
+     * min with a numeric callee — same semantics as max (callee type preserved, null added).
+     * @param Collection<int, Customer> $users
+     */
+    public function minWithNumericCalleeReturnType(Collection $users): void
+    {
+        $_result = $users->min->getPrice();
+        /** @psalm-check-type-exact $_result = float|null */
     }
 
     /**
@@ -322,13 +361,14 @@ final class HigherOrderCollectionProxyTest
     }
 
     /**
-     * percentage returns float|int|null (aggregation proxy, same path as avg/average).
+     * percentage returns float|null — percentage() calls round() which always returns float.
+     * Unlike avg/average which can return int via integer division, percentage never returns int.
      * @param Collection<int, Customer> $users
      */
     public function percentageReturnType(Collection $users): void
     {
         $_result = $users->percentage->getKey();
-        /** @psalm-check-type-exact $_result = float|int|null */
+        /** @psalm-check-type-exact $_result = float|null */
     }
 
     /**
