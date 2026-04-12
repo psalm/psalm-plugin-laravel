@@ -18,12 +18,12 @@ use Psalm\Config;
 final readonly class PluginConfig
 {
     private function __construct(
-        public ColumnFallback $columnFallback,
-        public bool $failOnInternalError,
+        public ColumnFallback $modelPropertiesColumnFallback,
+        public bool $resolveDynamicWhereClauses,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         public string $cachePath,
-        public bool $resolveDynamicWhereClauses,
+        public bool $failOnInternalError,
     ) {}
 
     public static function fromXml(?\SimpleXMLElement $config): self
@@ -48,18 +48,18 @@ final readonly class PluginConfig
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
 
         return new self(
-            columnFallback: $columnFallback,
-            failOnInternalError: $failOnInternalError,
+            modelPropertiesColumnFallback: $columnFallback,
+            resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             cachePath: self::resolveCachePath(),
-            resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
+            failOnInternalError: $failOnInternalError,
         );
     }
 
     public function shouldUseMigrations(): bool
     {
-        return $this->columnFallback === ColumnFallback::Migrations;
+        return $this->modelPropertiesColumnFallback === ColumnFallback::Migrations;
     }
 
     /**
