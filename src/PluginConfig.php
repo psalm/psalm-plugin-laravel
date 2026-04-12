@@ -106,7 +106,8 @@ final readonly class PluginConfig
         $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
 
         if ($env !== false && $env !== '') {
-            \fwrite(\STDERR,
+            \fwrite(
+                \STDERR,
                 'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
                     . "The plugin now uses Psalm's cache directory automatically.\n",
             );
