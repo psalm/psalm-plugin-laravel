@@ -175,5 +175,13 @@ final class ApplicationProvider
         /** @var \Illuminate\Config\Repository $config */
         $config = $app['config'];
         $config->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
+
+        // Register a token-driver guard so Auth::guard('api') narrows to TokenGuard in type tests.
+        // The testbench default auth.php only ships a 'web' (session) guard; without this the
+        // AuthConfigAnalyzer cannot resolve the driver and falls back to the stub's Guard interface.
+        $config->set('auth.guards.api', [
+            'driver' => 'token',
+            'provider' => 'users',
+        ]);
     }
 }

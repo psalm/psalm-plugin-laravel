@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
+use Psalm\LaravelPlugin\Handlers\Auth\Concerns\ExtractsGuardNameFromCallLike;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -21,7 +22,11 @@ use Psalm\Type;
  * @see \Illuminate\Support\Facades\Auth::getUser() returns Authenticatable|null
  * @see \Illuminate\Support\Facades\Auth::authenticate() returns Authenticatable
  *
- * There are also Methods that return Guard instance (handed in {@see \Psalm\LaravelPlugin\Handlers\Auth\GuardHandler}):
+ * Also narrows the return type of Auth::guard($name) to the concrete guard class when the guard
+ * name is a known string literal and its driver is a standard Laravel driver (session/token):
+ * @see \Illuminate\Support\Facades\Auth::guard() returns Guard|StatefulGuard (narrowed when possible)
+ *
+ * There are also Methods that return Guard instance (handled in {@see \Psalm\LaravelPlugin\Handlers\Auth\GuardHandler}):
  * @see \Illuminate\Support\Facades\Auth::createSessionDriver()
  * @see \Illuminate\Support\Facades\Auth::createTokenDriver()
  * @see \Illuminate\Support\Facades\Auth::setRememberDuration()
@@ -30,6 +35,8 @@ use Psalm\Type;
  */
 final class AuthHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
+    use ExtractsGuardNameFromCallLike;
+
     /**
      * @return list<string>
      * @psalm-pure
@@ -45,6 +52,10 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
         $method_name_lowercase = $event->getMethodNameLowercase();
+
+        if ($method_name_lowercase === 'guard') {
+            return self::resolveGuardReturnType($event);
+        }
 
         if (
             ! \in_array($method_name_lowercase, [
@@ -87,6 +98,32 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
     }
 
     /**
+     * Narrows Auth::guard($name) to the concrete guard class when the guard name is a known
+     * string literal and its driver maps to a standard Laravel guard class.
+     * Returns null to fall back to the stub's declared type when narrowing is not possible
+     * (dynamic guard name, unknown guard, or custom driver).
+     */
+    private static function resolveGuardReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
+    {
+        $default_guard = AuthConfigAnalyzer::instance()->getDefaultGuard();
+        if ($default_guard === null) {
+            return null; // normally should not happen (e.g. empty or invalid auth.php)
+        }
+
+        $guard_name = self::getGuardNameFromFirstArgument($event->getStmt(), $default_guard);
+        if ($guard_name === null) {
+            return null; // dynamic guard name — cannot narrow statically
+        }
+
+        $fqcn = AuthConfigAnalyzer::instance()->getGuardFQCN($guard_name);
+        if ($fqcn === null) {
+            return null; // unknown guard or custom driver
+        }
+
+        return new Type\Union([new Type\Atomic\TNamedObject($fqcn)]);
+    }
+
+    /**
      * Provide explicit parameter definitions for all methods handled by {@see getMethodReturnType}.
      *
      * In Psalm 7, returning null from a MethodParamsProvider for methods that only exist as
@@ -104,6 +141,18 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
             // Guard::user(), GuardHelpers::authenticate(), SessionGuard::getUser(),
             // SessionGuard::getLastAttempted() — all take no parameters
             'user', 'getuser', 'authenticate', 'getlastattempted' => [],
+
+            // AuthManager::guard(?string $name = null)
+            'guard' => [
+                new FunctionLikeParameter(
+                    'name',
+                    false,
+                    new Type\Union([new Type\Atomic\TString(), new Type\Atomic\TNull()]),
+                    new Type\Union([new Type\Atomic\TString(), new Type\Atomic\TNull()]),
+                    is_optional: true,
+                    default_type: Type::getNull(),
+                ),
+            ],
 
             // SessionGuard::logoutOtherDevices(#[\SensitiveParameter] string $password)
             'logoutotherdevices' => [

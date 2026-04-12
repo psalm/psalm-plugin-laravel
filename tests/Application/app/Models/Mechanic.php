@@ -46,6 +46,16 @@ final class Mechanic extends Model
     }
 
     /**
+     * Specializations with a custom pivot model — used to test 4-template BelongsToMany.
+     *
+     * @psalm-return BelongsToMany<MechanicSpecialization, $this, SpecializationPivot, 'pivot'>
+     */
+    public function specializationsWithPivot(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->using(SpecializationPivot::class);
+    }
+
+    /**
      * Admin bookmarks for this mechanic (inverse of Admin::mechanics()).
      *
      * @psalm-return MorphToMany<Admin>

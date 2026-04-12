@@ -23,6 +23,7 @@ final readonly class PluginConfig
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         public string $cachePath,
+        public bool $resolveDynamicWhereClauses,
     ) {}
 
     public static function fromXml(?\SimpleXMLElement $config): self
@@ -44,6 +45,7 @@ final readonly class PluginConfig
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
 
         return new self(
             columnFallback: $columnFallback,
@@ -51,6 +53,7 @@ final readonly class PluginConfig
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             cachePath: self::resolveCachePath(),
+            resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
         );
     }
 
@@ -76,16 +79,16 @@ final readonly class PluginConfig
     /**
      * Read the `value` attribute of an XML element as a boolean.
      * Expects `<element value="true" />` or `<element value="false" />`.
-     * Returns false when the element is absent.
+     * Returns $default when the element is absent.
      * @psalm-pure
      */
-    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name): bool
+    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false): bool
     {
         if (!$element instanceof \SimpleXMLElement) {
-            return false;
+            return $default;
         }
 
-        $value = (string) ($element['value'] ?? 'false');
+        $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException(
