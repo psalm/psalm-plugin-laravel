@@ -217,14 +217,7 @@ function logs($driver = null) {}
 
 // method_field: nothing to stub
 // mix: nothing to stub
-
-/**
- * Create a new Carbon instance for the current time.
- *
- * @param  \DateTimeZone|\UnitEnum|string|null  $tz
- * @return \Illuminate\Support\Carbon
- */
-function now($tz = null) {}
+// now: processed by Psalm handlers
 
 // policy: nothing to stub
 
@@ -326,13 +319,7 @@ function session($key = null, $default = null) {}
  */
 function to_route($route, $parameters = [], $status = 302, $headers = []) {}
 
-/**
- * Create a new Carbon instance for the current date.
- *
- * @param  \DateTimeZone|\UnitEnum|string|null  $tz
- * @return \Illuminate\Support\Carbon
- */
-function today($tz = null) {}
+// today: processed by Psalm handlers
 
 // trans: processed by Psalm handlers
 // trans_choice: processed by Psalm handlers
