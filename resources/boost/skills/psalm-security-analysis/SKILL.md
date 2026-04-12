@@ -4,7 +4,9 @@ description: >
   Run and interpret Psalm security (taint) analysis on a Laravel project. Use this skill when the
   user asks to find security vulnerabilities, run a security scan, check for SQL injection or XSS,
   audit code for taint issues, or fix Psalm taint errors like TaintedSql, TaintedHtml, TaintedShell.
-  Also use when investigating data flow from user input to sensitive operations.
+  Also use when investigating data flow from user input to sensitive operations, even if the user
+  doesn't explicitly mention Psalm or taint analysis.
+compatibility: Requires psalm-plugin-laravel installed and runTaintAnalysis="true" in psalm.xml (or the --taint-analysis CLI flag).
 ---
 
 # Psalm Security Analysis for Laravel
@@ -20,17 +22,16 @@ description: >
 ## Running a security scan
 
 ```bash
-# Psalm 7 runs taint analysis by default alongside type checking
-./vendor/bin/psalm --no-cache
+./vendor/bin/psalm --taint-analysis --no-cache --no-progress --no-suggestions --output-format=text
 
 # To see only taint-related issues, filter the output
-./vendor/bin/psalm --no-cache 2>&1 | grep -E "Tainted"
+./vendor/bin/psalm --taint-analysis --no-cache --no-progress --no-suggestions --output-format=text 2>&1 | grep -E "Tainted"
 ```
 
 If the project has a `psalm-baseline.xml`, existing issues are suppressed. To see all issues including baselined ones:
 
 ```bash
-./vendor/bin/psalm --no-cache --ignore-baseline
+./vendor/bin/psalm --taint-analysis --no-cache --ignore-baseline --no-progress --no-suggestions --output-format=text
 ```
 
 ## How taint analysis works
@@ -45,6 +46,7 @@ Psalm tracks data from **sources** (where user input enters) through the code to
 - Validator `validated()`, `safe()` output, `ValidatedInput` methods
 - `UploadedFile::getClientOriginalName()`, `getClientOriginalExtension()`, `getClientMimeType()`
 - `request()` and `old()` helper functions
+- `Http\Client\Response` methods: `->body()`, `->json()`, `->object()`, `->collect()` — HTTP client responses are taint sources (in SSRF chains, the response body may carry user-influenced data)
 
 **Sinks** (where tainted data is dangerous) -- including but not limited to:
 - SQL: `DB::statement()`, `DB::unprepared()`, `DB::select()`, `DB::insert()`, `DB::update()`, `DB::delete()`, `whereRaw()`, `selectRaw()`, `orderByRaw()`, `groupByRaw()`, `havingRaw()`, and other raw query methods
@@ -54,13 +56,16 @@ Psalm tracks data from **sources** (where user input enters) through the code to
 - File: `Storage::get()`, `Storage::put()`, `Storage::delete()`, `File::get()`, `File::delete()`, and related filesystem methods
 - Redirect: `redirect()->to()`, `Redirect::away()`, `Redirect::guest()`, `Redirect::intended()`
 - Mail headers: `Mailable::to()`, `Mailable::cc()`, `Mailable::bcc()`, `Mailable::subject()`, `MailMessage::cc()`, `MailMessage::subject()`
-- Cookie: `CookieJar::make()`, `CookieJar::forever()`, `cookie()` helper
+- Cookie: `CookieJar::make()`, `CookieJar::forever()`, `cookie()` helper; `$path` and `$domain` parameters on `Cookie`/`CookieJar` methods (including `expire()`, `forget()`) are header-injection sinks
+- Redis: `Redis::eval()`, `Redis::executeRaw()` — Lua script injection sinks (note: facade calls may not propagate taint due to the `__callStatic` limitation; the stubs target `PhpRedisConnection` directly)
 
 **Escapes** (what removes taint):
 - HTML: `e()` helper, `Js::from()`, `Js::encode()` — remove `html` taint
 - SQL: `DB::escape()`, `Connection::escape()` — remove `sql` taint
 - Crypto: `encrypt()` helper, `bcrypt()` helper, `Encrypter::encrypt()`, `HashManager::make()` — remove `user_secret`/`system_secret` taint (facade calls like `Crypt::encrypt()` may not propagate due to `__callStatic` limitation)
 - Parameterized queries (`DB::select('...?', [$value])`) are safe — only string interpolation into raw SQL is flagged
+
+> **Note**: `Str::of($input)` and `str($input)` are not escapes — taint from the argument propagates to the returned `Stringable`. Due to a Psalm limitation, subsequent chain methods (like `->upper()`, `->slug()`) do not propagate taint from `$this`; avoid relying on Psalm to detect taint through method chains on `Stringable`.
 
 ## Taint issue types and how to fix them
 
@@ -193,5 +198,6 @@ class ReportService
 ## Common false positives
 
 - **Validated input**: `$request->validated()` and `$request->safe()` are marked as taint sources because validation rules don't guarantee safety against all sink types (a valid email is still dangerous in raw SQL). If the validated data is used safely (e.g., in Eloquent), suppress with a baseline.
-- **Eloquent methods**: `User::where('col', $value)` is safe because Eloquent parameterizes automatically. Psalm should not flag this. If it does, this is a plugin bug.
+- **Eloquent and Query Builder**: `User::where('col', $value)` is safe — Eloquent and Builder parameterized methods carry `@psalm-taint-escape sql`. Psalm should not flag these; if it does, use the baseline.
+- **Blade view data**: Passing variables to Blade templates (`view('name', ['key' => $value])`) does **not** trigger `TaintedHtml`. Use `{{ $value }}` for auto-escaped output; `{!! $value !!}` only for explicitly trusted HTML.
 - **Integer casting**: `(int) $request->input('page')` should remove taint. If Psalm still flags it, use the baseline.
