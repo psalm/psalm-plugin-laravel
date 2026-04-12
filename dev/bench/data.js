@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775984804083,
+  "lastUpdate": 1775988140978,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1117,6 +1117,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "1cbe9bfb8977cb7cd644fd2e9ffce0b8f5c66763",
+          "message": "fix: use public Codebase::methodExists() instead of internal Methods API #0",
+          "timestamp": "2026-04-12T11:58:49+02:00",
+          "tree_id": "09a055dc0ee1847f8e48f8cf84f20fe8f1a5a5d9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1cbe9bfb8977cb7cd644fd2e9ffce0b8f5c66763"
+        },
+        "date": 1775988140664,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.94,
+            "range": "± 0.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1127,
             "unit": "MB"
           }
         ]
