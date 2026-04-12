@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776001583046,
+  "lastUpdate": 1776017619408,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1287,6 +1287,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.18,
             "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "1f2ff29917d7c1c59ff23a14f5a0a1acb9ada76c",
+          "message": "feat: optimize psalm-security-analysis AI skill",
+          "timestamp": "2026-04-12T20:10:34+02:00",
+          "tree_id": "538f430f1dc34c3a0b57455a65ad24da54fc00ff",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1f2ff29917d7c1c59ff23a14f5a0a1acb9ada76c"
+        },
+        "date": 1776017619109,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.08,
+            "range": "± 0.09",
             "unit": "s"
           },
           {
