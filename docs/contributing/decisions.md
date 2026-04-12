@@ -16,6 +16,7 @@ Decisions made during development of the plugin. Contributors should follow thes
 2. Cover the 80% — Laravel offers many ways to do the same thing; support the common patterns, not every edge case
 3. Complexity is fine when it's well isolated
 4. Stubs vs. handlers: prefer stubs when they cover 95% of cases (incl. using [conditional types](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/conditional_types.md))
+5. DX > micro-optimisations
 
 ## Static inference over runtime reflection
 
