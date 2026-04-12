@@ -279,7 +279,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * - Collection<_, float>::sum() → float
      * - Otherwise → int|float
      *
-     * @template TCallbackReturn of int|float
+     * @template TCallbackReturn of int|float|numeric-string
      *
      * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
      * @return ($callback is null
