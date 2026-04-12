@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
+use function now;
+
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
-
-use function get_class;
-use function now;
 
 /**
  * Resolves the return type of now() and today() dynamically.
@@ -39,6 +38,6 @@ final class NowTodayHandler implements FunctionReturnTypeProviderInterface
     #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
     {
-        return new Type\Union([new TNamedObject(get_class(now()))]);
+        return new Type\Union([new TNamedObject(\get_class(\now()))]);
     }
 }
