@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776017619408,
+  "lastUpdate": 1776026411378,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1322,6 +1322,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.08,
             "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "36f449c1c4a3d6eae125eb98a341bdaf1c63a6aa",
+          "message": "Fix: `PossiblyUnusedMethod` false positives for Eloquent legacy accessor/mutator methods (#732)\n\n* feat: optimize psalm-security-analysis AI skill\n\n* fix: suppress PossiblyUnusedMethod for Eloquent legacy accessors/mutators\n\nLegacy getXxxAttribute() and setXxxAttribute() methods are invoked via\nEloquent's __get()/__set() magic — Psalm cannot see these call sites and\nincorrectly reports them as PossiblyUnusedMethod.\n\nAdd dynamic suppression in SuppressHandler: for Model subclasses, iterate\nmethods and suppress PossiblyUnusedMethod for names matching the get/set\n*Attribute pattern. Core Eloquent methods getAttribute/setAttribute are\nintentionally excluded (the regex requires content between get/set and Attribute).\n\nCloses #731",
+          "timestamp": "2026-04-12T22:37:07+02:00",
+          "tree_id": "4de4cbfe2f7ac338eed6e59fd0d47d61fe94ba52",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/36f449c1c4a3d6eae125eb98a341bdaf1c63a6aa"
+        },
+        "date": 1776026411029,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.42,
+            "range": "± 0.12",
             "unit": "s"
           },
           {
