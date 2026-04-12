@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775983849366,
+  "lastUpdate": 1775984202826,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1042,6 +1042,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.69,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "32881f2132f07a118d732c9582f6a59d7418cb47",
+          "message": "chore: move suppression to the correct layer",
+          "timestamp": "2026-04-12T10:53:16+02:00",
+          "tree_id": "620501657b8a95a36ca80b4e5517ba64e8682c4b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/32881f2132f07a118d732c9582f6a59d7418cb47"
+        },
+        "date": 1775984202521,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.85,
+            "range": "± 0.12",
             "unit": "s"
           },
           {
