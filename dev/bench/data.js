@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775988140978,
+  "lastUpdate": 1775990198654,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1152,6 +1152,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1127,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "38616a5f0161aaec73037741ecb1f99034d81fb7",
+          "message": "perf: use isset lookup instead of in_array for selfReturnIndicators #0\n\nLinear scan on a hot path (called per return-type union per method).\nConvert the list to array<lowercase-string, true> and use isset for O(1).",
+          "timestamp": "2026-04-12T12:32:22+02:00",
+          "tree_id": "1e2321b9665088f01780481f34c83bf237c7a42e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/38616a5f0161aaec73037741ecb1f99034d81fb7"
+        },
+        "date": 1775990197793,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.69,
+            "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
             "unit": "MB"
           }
         ]
