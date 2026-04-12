@@ -125,7 +125,7 @@ final class Plugin implements PluginEntryPointInterface
             static fn(string $dir): bool => \version_compare($dir, $targetVersion, '<='),
         );
 
-        \usort($matched, 'version_compare');
+        \usort($matched, static fn(string $a, string $b): int => \version_compare($a, $b));
 
         return $matched;
     }
