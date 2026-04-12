@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
+use function now;
+
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 
-use function array_key_exists;
-use function get_class;
-use function now;
 use function today;
 
 /**
@@ -54,11 +53,11 @@ final class NowTodayHandler implements FunctionReturnTypeProviderInterface
     {
         $functionId = $event->getFunctionId();
 
-        if (!array_key_exists($functionId, self::$resolvedClasses)) {
+        if (!\array_key_exists($functionId, self::$resolvedClasses)) {
             // Call the actual helper at analysis time to discover the configured date class.
             // Results are cached so Carbon is only instantiated once per function per analysis run.
-            $dateInstance = $functionId === 'today' ? today() : now();
-            self::$resolvedClasses[$functionId] = get_class($dateInstance);
+            $dateInstance = $functionId === 'today' ? \today() : \now();
+            self::$resolvedClasses[$functionId] = \get_class($dateInstance);
         }
 
         return new Type\Union([new TNamedObject(
