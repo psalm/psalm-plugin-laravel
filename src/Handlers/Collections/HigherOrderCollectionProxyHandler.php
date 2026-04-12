@@ -519,13 +519,13 @@ final class HigherOrderCollectionProxyHandler implements
 
             try {
                 $type = $codebase->getMethodReturnType($methodId, $className);
-            } catch (\InvalidArgumentException | \UnexpectedValueException | \RuntimeException) {
+            } catch (\InvalidArgumentException|\UnexpectedValueException|\RuntimeException) {
                 // getMethodReturnType() can throw on unusual method storage edge cases
                 // even after a methodExistsOnClass() check — fall back to mixed.
                 $type = Type::getMixed();
             }
 
-            if ($type !== null) {
+            if ($type instanceof \Psalm\Type\Union) {
                 $returnTypes[] = $type;
             }
         }
@@ -536,7 +536,7 @@ final class HigherOrderCollectionProxyHandler implements
 
         return \array_reduce(
             \array_slice($returnTypes, 1),
-            static fn (Union $carry, Union $type) => Type::combineUnionTypes($carry, $type),
+            static fn(Union $carry, Union $type): \Psalm\Type\Union => Type::combineUnionTypes($carry, $type),
             $returnTypes[0],
         );
     }
