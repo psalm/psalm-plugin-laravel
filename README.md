@@ -73,7 +73,7 @@ Security scanning runs automatically alongside type analysis — no extra config
 
 ### Step 1: Install
 
-Since [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta, allow beta packages first:
+Since [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta, allow dev (or beta) packages first:
 
 ```bash
 composer config minimum-stability dev && composer config prefer-stable true
@@ -82,7 +82,7 @@ composer require --dev psalm/plugin-laravel
 
 ### Step 2: Set up Psalm
 
-New to Psalm? Initialize a config and enable the plugin:
+Initialize a config and enable the plugin:
 
 ```bash
 ./vendor/bin/psalm --init
@@ -126,8 +126,8 @@ See [docs/config.md](docs/config.md) for all configuration options.
 The plugin emits custom issues beyond Psalm's built-in checks:
 
 - [NoEnvOutsideConfig](docs/issues/NoEnvOutsideConfig.md) — `env()` called outside `config/` directory
-- [InvalidConsoleArgumentName](docs/issues/InvalidConsoleArgumentName.md) — `argument()` references undefined command argument
-- [InvalidConsoleOptionName](docs/issues/InvalidConsoleOptionName.md) — `option()` references undefined command option
+- [InvalidConsoleArgumentName](docs/issues/InvalidConsoleArgumentName.md) — `argument()` references undefined console command argument
+- [InvalidConsoleOptionName](docs/issues/InvalidConsoleOptionName.md) — `option()` references undefined console command option
 - [MissingView](docs/issues/MissingView.md) — `view()` references a non-existent Blade template (opt-in)
 - [MissingTranslation](docs/issues/MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
 - [ModelMakeDiscouraged](docs/issues/ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
