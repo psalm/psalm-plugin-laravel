@@ -67,7 +67,7 @@ final class FacadeMapProvider
             // Root aliases (e.g., 'View') are generated as stub classes that extend
             // the facade FQCN. Psalm treats them as separate classes, so handlers
             // must register for both.
-            if (!\str_contains($alias, '\\') && \strtolower($alias) !== \strtolower($facadeClass)) {
+            if (!\str_contains($alias, '\\')) {
                 /** @var class-string $alias */
                 self::$serviceToFacades[$key][] = $alias;
             }
