@@ -162,7 +162,7 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
     private static function isDispatchableMethod(string $className, string $methodName, Codebase $codebase): bool
     {
         $cacheKey = $className . '#' . $methodName;
-        if (isset(self::$dispatchableCache[$cacheKey])) {
+        if (\array_key_exists($cacheKey, self::$dispatchableCache)) {
             return self::$dispatchableCache[$cacheKey];
         }
 
