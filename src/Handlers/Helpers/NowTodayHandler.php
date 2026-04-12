@@ -56,6 +56,7 @@ final class NowTodayHandler implements FunctionReturnTypeProviderInterface
         if (!\array_key_exists($functionId, self::$resolvedClasses)) {
             // Call the actual helper at analysis time to discover the configured date class.
             // Results are cached so Carbon is only instantiated once per function per analysis run.
+            /** @psalm-suppress ImpureFunctionCall */
             $dateInstance = $functionId === 'today' ? \today() : \now();
             self::$resolvedClasses[$functionId] = \get_class($dateInstance);
         }
