@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776026411378,
+  "lastUpdate": 1776112903702,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1357,6 +1357,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.42,
             "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "7ce2012c5f8a5d91f8a9583018edfddf27b3601d",
+          "message": "fix: remove @psalm-immutable from PluginConfig — conflicts with impure factory method\n\n@psalm-immutable forces all methods to be @psalm-pure, but resolveCachePath()\nlegitimately calls fwrite(), sys_get_temp_dir(), getcwd(), and Config::getInstance().\nThe class is already final readonly, so PHP enforces property immutability.",
+          "timestamp": "2026-04-13T22:38:24+02:00",
+          "tree_id": "fb915626f84b5534740d72a63462455c32191a13",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7ce2012c5f8a5d91f8a9583018edfddf27b3601d"
+        },
+        "date": 1776112902757,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.3,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
