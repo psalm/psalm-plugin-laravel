@@ -26,14 +26,16 @@ use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
  *
  * What is fixed automatically:
  *
- *   @return BelongsTo<User>      → @return BelongsTo<User, self>
- *   @return HasMany<Post>        → @return HasMany<Post, self>
- *   @return HasOne<Profile>      → @return HasOne<Profile, self>
- *   @return BelongsToMany<Tag>   → @return BelongsToMany<Tag, self>
- *   @return MorphOne<Image>      → @return MorphOne<Image, self>
- *   @return MorphMany<Tag>       → @return MorphMany<Tag, self>
- *   @return MorphTo<Model>       → @return MorphTo<Model, self>
- *   @return MorphToMany<Tag>     → @return MorphToMany<Tag, self>
+ *   @return BelongsTo<User>            → @return BelongsTo<User, self>
+ *   @return HasMany<Post>              → @return HasMany<Post, self>
+ *   @return HasOne<Profile>            → @return HasOne<Profile, self>
+ *   @return BelongsToMany<Tag>         → @return BelongsToMany<Tag, self, Pivot, 'pivot'>
+ *   @return BelongsToMany<Tag, self>   → @return BelongsToMany<Tag, self, Pivot, 'pivot'>
+ *   @return MorphOne<Image>            → @return MorphOne<Image, self>
+ *   @return MorphMany<Tag>             → @return MorphMany<Tag, self>
+ *   @return MorphTo<Model>             → @return MorphTo<Model, self>
+ *   @return MorphToMany<Tag>           → @return MorphToMany<Tag, self, Pivot, 'pivot'>
+ *   @return MorphToMany<Tag, self>     → @return MorphToMany<Tag, self, Pivot, 'pivot'>
  *
  * What requires manual migration (a warning is emitted for these):
  *
@@ -48,8 +50,9 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
 {
     /**
      * Relations where TDeclaringModel becomes the second type parameter.
-     * BelongsToMany and MorphToMany also fall here: their TPivotModel and
-     * TAccessor params have defaults, so adding only `self` is sufficient.
+     * BelongsToMany and MorphToMany are included here so that 1-param annotations
+     * gain `self` first; a second PIVOT_RELATIONS pass then appends the two
+     * remaining pivot params.
      *
      * @var list<string>
      */
@@ -61,6 +64,23 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
         'MorphMany',
         'MorphOne',
         'MorphTo',
+        'MorphToMany',
+    ];
+
+    /**
+     * Relations that gained TPivotModel and TAccessor template parameters in v4.7.
+     * After the AUTO_RELATIONS pass ensures TDeclaringModel is present, this pass
+     * upgrades 2-param annotations to the full 4-param signature, defaulting to
+     * the base Pivot class and the standard 'pivot' accessor.
+     *
+     * Annotations already at 4 params are left untouched because the second
+     * capture group ([^<,>]+) stops at the first comma and the closing '>' then
+     * fails to match.
+     *
+     * @var list<string>
+     */
+    private const PIVOT_RELATIONS = [
+        'BelongsToMany',
         'MorphToMany',
     ];
 
@@ -143,6 +163,20 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
                 $line = (string) \preg_replace(
                     '/\b' . $relation . '<([^<,>]+)>/',
                     $relation . '<$1, self>',
+                    $line,
+                );
+            }
+
+            // Second pass: upgrade BelongsToMany/MorphToMany from 2 params to 4.
+            // After the AUTO pass above, any previously 1-param annotation is now
+            // at 2 params, so both 1-param (now 2) and already-2-param annotations
+            // are caught here in the same upgradeDocblock() call.
+            // Annotations already at 4 params are skipped: [^<,>]+ stops at the
+            // second comma, so > cannot match and preg_replace leaves the line unchanged.
+            foreach (self::PIVOT_RELATIONS as $relation) {
+                $line = (string) \preg_replace(
+                    '/\b' . $relation . '<([^<,>]+),\s*([^<,>]+)>/',
+                    $relation . '<$1, $2, \Illuminate\Database\Eloquent\Relations\Pivot, \'pivot\'>',
                     $line,
                 );
             }

@@ -40,18 +40,17 @@ final class UpgradeRelationAnnotationsTest extends TestCase
     /** @return iterable<string, array{non-empty-string, non-empty-string}> */
     public static function autoRelationProvider(): iterable
     {
-        $relations = [
+        // Relations that go 1-param → 2-param (TDeclaringModel = self).
+        $twoParamRelations = [
             'BelongsTo',
-            'BelongsToMany',
             'HasMany',
             'HasOne',
             'MorphMany',
             'MorphOne',
             'MorphTo',
-            'MorphToMany',
         ];
 
-        foreach ($relations as $relation) {
+        foreach ($twoParamRelations as $relation) {
             yield "@return {$relation}" => [
                 "/**\n * @return {$relation}<User>\n */",
                 "/**\n * @return {$relation}<User, self>\n */",
@@ -60,6 +59,54 @@ final class UpgradeRelationAnnotationsTest extends TestCase
             yield "@psalm-return {$relation}" => [
                 "/**\n * @psalm-return {$relation}<User>\n */",
                 "/**\n * @psalm-return {$relation}<User, self>\n */",
+            ];
+        }
+
+        // Pivot relations go 1-param → 4-param in a single call (AUTO step adds
+        // self, then PIVOT step appends the two pivot params).
+        $pivotRelations = ['BelongsToMany', 'MorphToMany'];
+        $pivot = '\Illuminate\Database\Eloquent\Relations\Pivot';
+
+        foreach ($pivotRelations as $relation) {
+            yield "@return {$relation}" => [
+                "/**\n * @return {$relation}<User>\n */",
+                "/**\n * @return {$relation}<User, self, {$pivot}, 'pivot'>\n */",
+            ];
+
+            yield "@psalm-return {$relation}" => [
+                "/**\n * @psalm-return {$relation}<User>\n */",
+                "/**\n * @psalm-return {$relation}<User, self, {$pivot}, 'pivot'>\n */",
+            ];
+        }
+    }
+
+    // --- Pivot relations: 2-param → 4-param ---
+
+    /**
+     * @param non-empty-string $input
+     * @param non-empty-string $expected
+     */
+    #[Test]
+    #[DataProvider('pivotRelationProvider')]
+    public function it_adds_pivot_params_to_already_declaring_model_annotations(string $input, string $expected): void
+    {
+        $this->assertSame($expected, \UpgradeRelationAnnotations::upgradeDocblock($input));
+    }
+
+    /** @return iterable<string, array{non-empty-string, non-empty-string}> */
+    public static function pivotRelationProvider(): iterable
+    {
+        $pivot = '\Illuminate\Database\Eloquent\Relations\Pivot';
+
+        foreach (['BelongsToMany', 'MorphToMany'] as $relation) {
+            yield "{$relation} 2-param with short class names" => [
+                "/**\n * @return {$relation}<Tag, self>\n */",
+                "/**\n * @return {$relation}<Tag, self, {$pivot}, 'pivot'>\n */",
+            ];
+
+            yield "{$relation} 2-param with FQN model" => [
+                "/**\n * @return {$relation}<\\App\\Models\\Member, self>\n */",
+                "/**\n * @return {$relation}<\\App\\Models\\Member, self, {$pivot}, 'pivot'>\n */",
             ];
         }
     }
@@ -79,9 +126,15 @@ final class UpgradeRelationAnnotationsTest extends TestCase
     /** @return iterable<string, array{non-empty-string}> */
     public static function unchangedProvider(): iterable
     {
-        // Already has two params — skip.
+        $pivot = '\Illuminate\Database\Eloquent\Relations\Pivot';
+
+        // Already has two params — skip (non-pivot relations).
         yield 'BelongsTo already migrated' => ["/**\n * @return BelongsTo<User, self>\n */"];
         yield 'HasMany already migrated' => ["/**\n * @return HasMany<Post, self>\n */"];
+
+        // Already at four params — pivot relations fully migrated.
+        yield 'BelongsToMany already 4-param' => ["/**\n * @return BelongsToMany<Tag, self, {$pivot}, 'pivot'>\n */"];
+        yield 'MorphToMany already 4-param' => ["/**\n * @return MorphToMany<Tag, self, {$pivot}, 'pivot'>\n */"];
 
         // Manual-only relations — never touch them.
         yield 'HasManyThrough unchanged' => ["/**\n * @return HasManyThrough<Post>\n */"];
