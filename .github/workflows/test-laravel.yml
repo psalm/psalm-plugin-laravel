@@ -78,4 +78,4 @@ jobs:
 
     - name: Test laravel/ai LLM prompt taint analysis
       run: |
-        ./tests/Application/laravel_ai.sh
+        ./tests/Application/laravel-ai.sh
