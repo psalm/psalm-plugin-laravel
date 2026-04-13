@@ -132,7 +132,7 @@ composer require --dev psalm/plugin-laravel:^4.0
 ./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php
 #    HasManyThrough / HasOneThrough are flagged with a warning — fix those manually.
 #    BelongsToMany / MorphToMany at 1 or 2 params are upgraded to 4 params automatically
-#    (v4.7 added TPivotModel and TAccessor; the plugin defaults to Pivot and 'pivot').
+#    (v4.7 added TPivotModel and TAccessor; defaults: Pivot/'pivot' and MorphPivot/'pivot').
 #
 #    Option B — sed (handles @psalm-return only, run from project root):
 find app -name '*.php' -exec grep -l '@psalm-return \(BelongsTo\|HasMany\|HasOne\|MorphOne\|MorphMany\|MorphTo\)<' {} \; \
