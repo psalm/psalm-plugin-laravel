@@ -130,7 +130,9 @@ composer require --dev psalm/plugin-laravel:^4.0
 #    Option A — Psalter plugin (handles @return and @psalm-return, AST-aware):
 ./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php --dry-run
 ./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php
-#    HasManyThrough / HasOneThrough are flagged with a warning — fix those manually.
+#    HasManyThrough / HasOneThrough: the plugin reads the method body to extract the
+#    intermediate model from the hasManyThrough()/hasOneThrough() call (second arg).
+#    A warning is printed only for cases it cannot resolve (dynamic args, etc.).
 #    BelongsToMany / MorphToMany at 1 or 2 params are upgraded to 4 params automatically
 #    (v4.7 added TPivotModel and TAccessor; defaults: Pivot/'pivot' and MorphPivot/'pivot').
 #
