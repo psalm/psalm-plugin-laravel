@@ -128,18 +128,31 @@ composer require --dev psalm/plugin-laravel:^4.0
 # 4. Update relation generic annotations (add declaring model parameter)
 #
 #    Option A — Psalter plugin (handles @return and @psalm-return, AST-aware):
-./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php --dry-run
-./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php
-#    HasManyThrough / HasOneThrough: the plugin reads the method body to extract the
-#    intermediate model from the hasManyThrough()/hasOneThrough() call (second arg).
-#    A warning is printed only for cases it cannot resolve (dynamic args, etc.).
-#    BelongsToMany / MorphToMany at 1 or 2 params are upgraded to 4 params automatically
-#    (v4.7 added TPivotModel and TAccessor; defaults: Pivot/'pivot' and MorphPivot/'pivot').
+./vendor/bin/psalter --plugin=vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php --dry-run
+./vendor/bin/psalter --plugin=vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php
 #
-#    Option B — sed (handles @psalm-return only, run from project root):
-find app -name '*.php' -exec grep -l '@psalm-return \(BelongsTo\|HasMany\|HasOne\|MorphOne\|MorphMany\|MorphTo\)<' {} \; \
-  | xargs sed -i 's/@psalm-return \(BelongsTo\|HasMany\|HasOne\|MorphOne\|MorphMany\|MorphTo\)<\([^>]*\)>/@psalm-return \1<\2, self>/g'
-#    BelongsToMany / MorphToMany / HasManyThrough / HasOneThrough need manual edits.
+#    Option B — AI prompt (paste into Claude Code / Cursor / Copilot):
+#
+#      Update all Eloquent relation @return / @psalm-return annotations in app/ to
+#      match the psalm-plugin-laravel v4 signatures. Use grep to find affected files,
+#      then edit each one with sed or direct file edits.
+#
+#      Rules (apply to both @return and @psalm-return lines):
+#        BelongsTo<T>     → BelongsTo<T, self>
+#        HasOne<T>        → HasOne<T, self>
+#        HasMany<T>       → HasMany<T, self>
+#        MorphOne<T>      → MorphOne<T, self>
+#        MorphMany<T>     → MorphMany<T, self>
+#        MorphTo<T>       → MorphTo<T, self>
+#        BelongsToMany<T>        → BelongsToMany<T, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+#        BelongsToMany<T, self>  → BelongsToMany<T, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+#        MorphToMany<T>          → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+#        MorphToMany<T, self>    → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+#        HasManyThrough<T> → HasManyThrough<T, IntermediateModel, self>  (read the method body to find IntermediateModel)
+#        HasOneThrough<T>  → HasOneThrough<T, IntermediateModel, self>   (read the method body to find IntermediateModel)
+#
+#      Do not touch annotations that already have the correct number of type params.
+#      Do not touch @param or @var annotations.
 
 # 5. Run Psalm and update your baseline
 ./vendor/bin/psalm --set-baseline=psalm-baseline.xml
