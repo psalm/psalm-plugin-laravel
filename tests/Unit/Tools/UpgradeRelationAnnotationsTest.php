@@ -62,12 +62,14 @@ final class UpgradeRelationAnnotationsTest extends TestCase
             ];
         }
 
-        // Pivot relations go 1-param → 4-param in a single call (AUTO step adds
-        // self, then PIVOT step appends the two pivot params).
-        $pivotRelations = ['BelongsToMany', 'MorphToMany'];
-        $pivot = '\Illuminate\Database\Eloquent\Relations\Pivot';
+        // Pivot relations go 1-param → 4-param directly (FOUR_PARAM_RELATIONS handles both cases).
+        // BelongsToMany defaults to Pivot; MorphToMany defaults to MorphPivot.
+        $pivotRelations = [
+            'BelongsToMany' => '\Illuminate\Database\Eloquent\Relations\Pivot',
+            'MorphToMany'   => '\Illuminate\Database\Eloquent\Relations\MorphPivot',
+        ];
 
-        foreach ($pivotRelations as $relation) {
+        foreach ($pivotRelations as $relation => $pivot) {
             yield "@return {$relation}" => [
                 "/**\n * @return {$relation}<User>\n */",
                 "/**\n * @return {$relation}<User, self, {$pivot}, 'pivot'>\n */",
@@ -96,9 +98,12 @@ final class UpgradeRelationAnnotationsTest extends TestCase
     /** @return iterable<string, array{non-empty-string, non-empty-string}> */
     public static function pivotRelationProvider(): iterable
     {
-        $pivot = '\Illuminate\Database\Eloquent\Relations\Pivot';
+        $pivotRelations = [
+            'BelongsToMany' => '\Illuminate\Database\Eloquent\Relations\Pivot',
+            'MorphToMany'   => '\Illuminate\Database\Eloquent\Relations\MorphPivot',
+        ];
 
-        foreach (['BelongsToMany', 'MorphToMany'] as $relation) {
+        foreach ($pivotRelations as $relation => $pivot) {
             yield "{$relation} 2-param with short class names" => [
                 "/**\n * @return {$relation}<Tag, self>\n */",
                 "/**\n * @return {$relation}<Tag, self, {$pivot}, 'pivot'>\n */",
@@ -126,7 +131,8 @@ final class UpgradeRelationAnnotationsTest extends TestCase
     /** @return iterable<string, array{non-empty-string}> */
     public static function unchangedProvider(): iterable
     {
-        $pivot = '\Illuminate\Database\Eloquent\Relations\Pivot';
+        $pivot      = '\Illuminate\Database\Eloquent\Relations\Pivot';
+        $morphPivot = '\Illuminate\Database\Eloquent\Relations\MorphPivot';
 
         // Already has two params — skip (non-pivot relations).
         yield 'BelongsTo already migrated' => ["/**\n * @return BelongsTo<User, self>\n */"];
@@ -134,7 +140,7 @@ final class UpgradeRelationAnnotationsTest extends TestCase
 
         // Already at four params — pivot relations fully migrated.
         yield 'BelongsToMany already 4-param' => ["/**\n * @return BelongsToMany<Tag, self, {$pivot}, 'pivot'>\n */"];
-        yield 'MorphToMany already 4-param' => ["/**\n * @return MorphToMany<Tag, self, {$pivot}, 'pivot'>\n */"];
+        yield 'MorphToMany already 4-param' => ["/**\n * @return MorphToMany<Tag, self, {$morphPivot}, 'pivot'>\n */"];
 
         // Manual-only relations — never touch them.
         yield 'HasManyThrough unchanged' => ["/**\n * @return HasManyThrough<Post>\n */"];
