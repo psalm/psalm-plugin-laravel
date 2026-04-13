@@ -12,7 +12,6 @@ use Psalm\Config;
  * Built once from the `<pluginClass>` XML element in psalm.xml,
  * then threaded through to handlers that need it.
  *
- * @psalm-immutable
  * @internal
  */
 final readonly class PluginConfig
