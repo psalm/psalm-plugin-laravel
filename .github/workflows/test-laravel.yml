@@ -6,14 +6,14 @@ on:
       - '**.php'
       - '**.stubphp'
       - 'composer.json'
-      - 'tests/laravel*'
+      - 'tests/Application/laravel*'
       - '.github/workflows/test-laravel.yml'
   pull_request:
     paths:
       - '**.php'
       - '**.stubphp'
       - 'composer.json'
-      - 'tests/laravel*'
+      - 'tests/Application/laravel*'
       - '.github/workflows/test-laravel.yml'
 
 jobs:

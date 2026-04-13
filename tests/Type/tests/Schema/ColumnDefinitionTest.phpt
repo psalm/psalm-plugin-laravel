@@ -49,7 +49,7 @@ Schema::create('work_orders', function (Blueprint $table) {
 
     // nullable() preserves ForeignIdColumnDefinition type for constrained()
     $_afterNullable = $table->foreignId('temp_id')->nullable();
-    /** @psalm-check-type-exact $_afterNullable = ForeignIdColumnDefinition */
+    /** @psalm-check-type-exact $_afterNullable = ForeignIdColumnDefinition&static */
 
     $_constrained = $table->foreignId('check_id')->constrained();
     /** @psalm-check-type-exact $_constrained = ForeignKeyDefinition */

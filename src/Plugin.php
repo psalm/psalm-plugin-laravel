@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin;
 
+use Composer\InstalledVersions;
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
@@ -65,6 +66,37 @@ final class Plugin implements PluginEntryPointInterface
     private function getCommonStubs(\Psalm\Progress\Progress $output): array
     {
         return $this->findStubFiles(\dirname(__DIR__) . '/stubs/common', $output);
+    }
+
+    /** @return list<string> */
+    private function getTaintAnalysisStubs(\Psalm\Progress\Progress $output): array
+    {
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/taintAnalysis', $output);
+    }
+
+    /**
+     * Load stubs for laravel/ai when installed, matched to major.minor version.
+     * @return list<string>
+     */
+    private function getAiStubs(\Psalm\Progress\Progress $output): array
+    {
+        if (!InstalledVersions::isInstalled('laravel/ai')) {
+            return [];
+        }
+
+        $version = InstalledVersions::getPrettyVersion('laravel/ai');
+
+        if ($version === null) {
+            return [];
+        }
+
+        // Extract major.minor from semver (e.g., "v0.3.2" → "0.3").
+        // Dev versions like "dev-main" or "0.4.x-dev" are handled via regex.
+        if (!\preg_match('/^v?(\d+\.\d+)/', $version, $matches)) {
+            return [];
+        }
+
+        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/ai/' . $matches[1], $output);
     }
 
     /**
@@ -190,6 +222,8 @@ final class Plugin implements PluginEntryPointInterface
         $stubs = \array_merge(
             $this->getCommonStubs($output),
             $this->getStubsForLaravelVersion(Application::VERSION, $output),
+            $this->getTaintAnalysisStubs($output),
+            $this->getAiStubs($output),
         );
 
         foreach ($stubs as $stubFilePath) {
@@ -325,6 +359,11 @@ final class Plugin implements PluginEntryPointInterface
         if ($pluginConfig->findMissingViews) {
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
+        }
+
+        if (InstalledVersions::isInstalled('laravel/ai')) {
+            require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
+            $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
         }
     }
 
