@@ -104,14 +104,24 @@ final class UpgradeRelationAnnotationsTest extends TestCase
         ];
 
         foreach ($pivotRelations as $relation => $pivot) {
-            yield "{$relation} 2-param with short class names" => [
+            yield "{$relation} 2-param with self" => [
                 "/**\n * @return {$relation}<Tag, self>\n */",
                 "/**\n * @return {$relation}<Tag, self, {$pivot}, 'pivot'>\n */",
             ];
 
-            yield "{$relation} 2-param with FQN model" => [
+            yield "{$relation} 2-param with \$this" => [
+                "/**\n * @return {$relation}<Tag, \$this>\n */",
+                "/**\n * @return {$relation}<Tag, \$this, {$pivot}, 'pivot'>\n */",
+            ];
+
+            yield "{$relation} 2-param with FQN model and self" => [
                 "/**\n * @return {$relation}<\\App\\Models\\Member, self>\n */",
                 "/**\n * @return {$relation}<\\App\\Models\\Member, self, {$pivot}, 'pivot'>\n */",
+            ];
+
+            yield "{$relation} 2-param with FQN model and \$this" => [
+                "/**\n * @return {$relation}<\\App\\Models\\Member, \$this>\n */",
+                "/**\n * @return {$relation}<\\App\\Models\\Member, \$this, {$pivot}, 'pivot'>\n */",
             ];
         }
     }

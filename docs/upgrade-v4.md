@@ -67,11 +67,11 @@ All Eloquent relation stubs gained additional template parameters. If your codeb
 | `BelongsTo`      | `BelongsTo<TRelated>`      | `BelongsTo<TRelatedModel, TDeclaringModel>`                                         |
 | `HasOne`         | `HasOne<TRelated>`         | `HasOne<TRelatedModel, TDeclaringModel>`                                            |
 | `HasMany`        | `HasMany<TRelated>`        | `HasMany<TRelatedModel, TDeclaringModel>`                                           |
-| `BelongsToMany`  | `BelongsToMany<TRelated>`  | `BelongsToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7) |
+| `BelongsToMany`  | `BelongsToMany<TRelated>` or `BelongsToMany<TRelated, TDeclaringModel>` | `BelongsToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7) |
 | `MorphOne`       | `MorphOne<TRelated>`       | `MorphOne<TRelatedModel, TDeclaringModel>`                                          |
 | `MorphMany`      | `MorphMany<TRelated>`      | `MorphMany<TRelatedModel, TDeclaringModel>`                                         |
 | `MorphTo`        | `MorphTo<TRelated>`        | `MorphTo<TRelatedModel, TDeclaringModel>`                                           |
-| `MorphToMany`    | `MorphToMany<TRelated>`    | `MorphToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7)   |
+| `MorphToMany`    | `MorphToMany<TRelated>` or `MorphToMany<TRelated, TDeclaringModel>` | `MorphToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7)   |
 | `HasOneThrough`  | `HasOneThrough<TRelated>`  | `HasOneThrough<TRelatedModel, TIntermediateModel, TDeclaringModel>`                 |
 | `HasManyThrough` | `HasManyThrough<TRelated>` | `HasManyThrough<TRelatedModel, TIntermediateModel, TDeclaringModel>`                |
 
@@ -145,9 +145,11 @@ composer require --dev psalm/plugin-laravel:^4.0
 #        MorphMany<T>     → MorphMany<T, self>
 #        MorphTo<T>       → MorphTo<T, self>
 #        BelongsToMany<T>        → BelongsToMany<T, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-#        BelongsToMany<T, self>  → BelongsToMany<T, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-#        MorphToMany<T>          → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
-#        MorphToMany<T, self>    → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+#        BelongsToMany<T, self>   → BelongsToMany<T, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+#        BelongsToMany<T, $this>  → BelongsToMany<T, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+#        MorphToMany<T>           → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+#        MorphToMany<T, self>     → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+#        MorphToMany<T, $this>    → MorphToMany<T, $this, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
 #        HasManyThrough<T> → HasManyThrough<T, IntermediateModel, self>  (read the method body to find IntermediateModel)
 #        HasOneThrough<T>  → HasOneThrough<T, IntermediateModel, self>   (read the method body to find IntermediateModel)
 #
