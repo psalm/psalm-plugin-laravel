@@ -16,6 +16,21 @@ use Illuminate\Database\Eloquent\Collection;
 class WorkOrderCollection extends Collection
 {
     /**
+     * Get only completed work orders.
+     *
+     * Returns static to test that custom collection methods with
+     * static return type preserve the collection's generic parameters.
+     *
+     * @psalm-return static
+     */
+    public function completed(): static
+    {
+        return $this->filter(
+            fn(\App\Models\WorkOrder $wo): bool => $wo->getAttribute('status') === 'completed',
+        );
+    }
+
+    /**
      * Sum the total labor hours across all work orders.
      */
     public function totalLaborHours(): float

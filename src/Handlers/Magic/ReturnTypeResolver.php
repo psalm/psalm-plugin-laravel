@@ -33,7 +33,7 @@ final class ReturnTypeResolver
 
     private static ?ForwardingRule $rule = null;
 
-    /** @var list<lowercase-string> Pre-lowered selfReturnIndicators, set via initForRule() */
+    /** @var array<lowercase-string, true> Pre-lowered selfReturnIndicators as a lookup set, set via initForRule() */
     private static array $indicatorsLower = [];
 
     /**
@@ -48,9 +48,9 @@ final class ReturnTypeResolver
     {
         self::$selfReturnCache = [];
         self::$rule = $rule;
-        self::$indicatorsLower = \array_map(
-            static fn(string $s): string => \strtolower($s),
-            $rule->selfReturnIndicators,
+        self::$indicatorsLower = \array_fill_keys(
+            \array_map(static fn(string $s): string => \strtolower($s), $rule->selfReturnIndicators),
+            true,
         );
     }
 
@@ -132,7 +132,7 @@ final class ReturnTypeResolver
                 }
 
                 // Check 2: class name matches selfReturnIndicators (e.g., Builder)
-                if (\in_array(\strtolower($atomicType->value), self::$indicatorsLower, true)) {
+                if (isset(self::$indicatorsLower[\strtolower($atomicType->value)])) {
                     $result = true;
                     break 2;
                 }

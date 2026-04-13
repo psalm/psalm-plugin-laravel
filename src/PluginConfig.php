@@ -18,11 +18,12 @@ use Psalm\Config;
 final readonly class PluginConfig
 {
     private function __construct(
-        public ColumnFallback $columnFallback,
-        public bool $failOnInternalError,
+        public ColumnFallback $modelPropertiesColumnFallback,
+        public bool $resolveDynamicWhereClauses,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         public string $cachePath,
+        public bool $failOnInternalError,
     ) {}
 
     public static function fromXml(?\SimpleXMLElement $config): self
@@ -44,19 +45,21 @@ final readonly class PluginConfig
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
 
         return new self(
-            columnFallback: $columnFallback,
-            failOnInternalError: $failOnInternalError,
+            modelPropertiesColumnFallback: $columnFallback,
+            resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             cachePath: self::resolveCachePath(),
+            failOnInternalError: $failOnInternalError,
         );
     }
 
     public function shouldUseMigrations(): bool
     {
-        return $this->columnFallback === ColumnFallback::Migrations;
+        return $this->modelPropertiesColumnFallback === ColumnFallback::Migrations;
     }
 
     /**
@@ -76,16 +79,16 @@ final readonly class PluginConfig
     /**
      * Read the `value` attribute of an XML element as a boolean.
      * Expects `<element value="true" />` or `<element value="false" />`.
-     * Returns false when the element is absent.
+     * Returns $default when the element is absent.
      * @psalm-pure
      */
-    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name): bool
+    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false): bool
     {
         if (!$element instanceof \SimpleXMLElement) {
-            return false;
+            return $default;
         }
 
-        $value = (string) ($element['value'] ?? 'false');
+        $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException(
@@ -103,6 +106,11 @@ final readonly class PluginConfig
         $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
 
         if ($env !== false && $env !== '') {
+            \fwrite(
+                \STDERR,
+                'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
+                    . "The plugin now uses Psalm's cache directory automatically.\n",
+            );
             return \rtrim($env, \DIRECTORY_SEPARATOR);
         }
 

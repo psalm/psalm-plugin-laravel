@@ -38,10 +38,11 @@ final class PluginConfigTest extends TestCase
     {
         $config = PluginConfig::fromXml(null);
 
-        $this->assertSame(ColumnFallback::Migrations, $config->columnFallback);
+        $this->assertSame(ColumnFallback::Migrations, $config->modelPropertiesColumnFallback);
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertTrue($config->resolveDynamicWhereClauses);
     }
 
     #[Test]
@@ -51,7 +52,7 @@ final class PluginConfigTest extends TestCase
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertSame(ColumnFallback::None, $config->columnFallback);
+        $this->assertSame(ColumnFallback::None, $config->modelPropertiesColumnFallback);
     }
 
     #[Test]
@@ -61,7 +62,7 @@ final class PluginConfigTest extends TestCase
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertSame(ColumnFallback::Migrations, $config->columnFallback);
+        $this->assertSame(ColumnFallback::Migrations, $config->modelPropertiesColumnFallback);
     }
 
     #[Test]
@@ -169,6 +170,37 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function dynamic_where_methods_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->resolveDynamicWhereClauses);
+    }
+
+    #[Test]
+    public function dynamic_where_methods_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->resolveDynamicWhereClauses);
+    }
+
+    #[Test]
+    public function invalid_dynamic_where_methods_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid resolveDynamicWhereClauses value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
     public function cache_path_uses_env_var(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-custom');
@@ -240,6 +272,7 @@ final class PluginConfigTest extends TestCase
         $xml = new \SimpleXMLElement(
             '<pluginClass>'
             . '<modelProperties columnFallback="none" />'
+            . '<resolveDynamicWhereClauses value="false" />'
             . '<failOnInternalError value="true" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
@@ -248,10 +281,11 @@ final class PluginConfigTest extends TestCase
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertSame(ColumnFallback::None, $config->columnFallback);
-        $this->assertTrue($config->failOnInternalError);
+        $this->assertSame(ColumnFallback::None, $config->modelPropertiesColumnFallback);
+        $this->assertFalse($config->resolveDynamicWhereClauses);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
+        $this->assertTrue($config->failOnInternalError);
     }
 }

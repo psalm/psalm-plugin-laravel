@@ -1,0 +1,66 @@
+<?php
+
+namespace Illuminate\Http\Client;
+
+/**
+ * From Laravel 12.42.0+, async HTTP requests return LazyPromise instead of
+ * GuzzleHttp\Promise\PromiseInterface. This stub overrides only the async
+ * subclass to use LazyPromise.
+ */
+class AsyncPendingRequest extends PendingRequest
+{
+    /**
+     * @param  bool  $async
+     * @return ($async is true ? self : PendingRequest)
+     */
+    public function async(bool $async = true) {}
+
+    /**
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function send(string $method, string $url, array $options = []) {}
+
+    /**
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function get(string $url, $query = null) {}
+
+    /**
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function post(string $url, $data = []) {}
+
+    /**
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function put(string $url, $data = []) {}
+
+    /**
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function patch(string $url, $data = []) {}
+
+    /**
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function delete(string $url, $data = []) {}
+
+    /**
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function head(string $url, $query = null) {}
+}
