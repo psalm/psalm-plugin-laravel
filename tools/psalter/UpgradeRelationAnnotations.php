@@ -26,16 +26,21 @@ use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
  *
  * What is fixed automatically:
  *
- *   @return BelongsTo<User>            → @return BelongsTo<User, self>
- *   @return HasMany<Post>              → @return HasMany<Post, self>
- *   @return HasOne<Profile>            → @return HasOne<Profile, self>
- *   @return BelongsToMany<Tag>         → @return BelongsToMany<Tag, self, Pivot, 'pivot'>
- *   @return BelongsToMany<Tag, self>   → @return BelongsToMany<Tag, self, Pivot, 'pivot'>
- *   @return MorphOne<Image>            → @return MorphOne<Image, self>
- *   @return MorphMany<Tag>             → @return MorphMany<Tag, self>
- *   @return MorphTo<Model>             → @return MorphTo<Model, self>
- *   @return MorphToMany<Tag>           → @return MorphToMany<Tag, self, Pivot, 'pivot'>
- *   @return MorphToMany<Tag, self>     → @return MorphToMany<Tag, self, Pivot, 'pivot'>
+ *   @return BelongsTo<User>      → @return BelongsTo<User, self>
+ *   @return HasMany<Post>        → @return HasMany<Post, self>
+ *   @return HasOne<Profile>      → @return HasOne<Profile, self>
+ *   @return MorphOne<Image>      → @return MorphOne<Image, self>
+ *   @return MorphMany<Tag>       → @return MorphMany<Tag, self>
+ *   @return MorphTo<Model>       → @return MorphTo<Model, self>
+ *
+ *   BelongsToMany and MorphToMany require all 4 template params because Psalm
+ *   does not honour template-param defaults. The plugin appends the default
+ *   pivot class and accessor when they are missing:
+ *
+ *   @return BelongsToMany<Tag>        → @return BelongsToMany<Tag, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+ *   @return BelongsToMany<Tag, self>  → @return BelongsToMany<Tag, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+ *   @return MorphToMany<Tag>          → @return MorphToMany<Tag, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+ *   @return MorphToMany<Tag, self>    → @return MorphToMany<Tag, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
  *
  * What requires manual migration (a warning is emitted for these):
  *
@@ -49,39 +54,28 @@ use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
 final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInterface
 {
     /**
-     * Relations where TDeclaringModel becomes the second type parameter.
-     * BelongsToMany and MorphToMany are included here so that 1-param annotations
-     * gain `self` first; a second PIVOT_RELATIONS pass then appends the two
-     * remaining pivot params.
+     * Relations where TDeclaringModel becomes the second (and final) type parameter.
      *
      * @var list<string>
      */
     private const AUTO_RELATIONS = [
         'BelongsTo',
-        'BelongsToMany',
         'HasMany',
         'HasOne',
         'MorphMany',
         'MorphOne',
         'MorphTo',
-        'MorphToMany',
     ];
 
     /**
-     * Relations that gained TPivotModel and TAccessor template parameters in v4.7.
-     * After the AUTO_RELATIONS pass ensures TDeclaringModel is present, this pass
-     * upgrades 2-param annotations to the full 4-param signature, defaulting to
-     * the base Pivot class and the standard 'pivot' accessor.
+     * Relations that require all 4 type parameters because Psalm does not honour
+     * template-param defaults. Maps relation name → fully-qualified default pivot class.
      *
-     * Annotations already at 4 params are left untouched because the second
-     * capture group ([^<,>]+) stops at the first comma and the closing '>' then
-     * fails to match.
-     *
-     * @var list<string>
+     * @var array<string, string>
      */
-    private const PIVOT_RELATIONS = [
-        'BelongsToMany',
-        'MorphToMany',
+    private const FOUR_PARAM_RELATIONS = [
+        'BelongsToMany' => '\Illuminate\Database\Eloquent\Relations\Pivot',
+        'MorphToMany'   => '\Illuminate\Database\Eloquent\Relations\MorphPivot',
     ];
 
     /**
@@ -167,16 +161,20 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
                 );
             }
 
-            // Second pass: upgrade BelongsToMany/MorphToMany from 2 params to 4.
-            // After the AUTO pass above, any previously 1-param annotation is now
-            // at 2 params, so both 1-param (now 2) and already-2-param annotations
-            // are caught here in the same upgradeDocblock() call.
-            // Annotations already at 4 params are skipped: [^<,>]+ stops at the
-            // second comma, so > cannot match and preg_replace leaves the line unchanged.
-            foreach (self::PIVOT_RELATIONS as $relation) {
+            foreach (self::FOUR_PARAM_RELATIONS as $relation => $pivotClass) {
+                // Case 1: v3 single-param — BelongsToMany<T> → BelongsToMany<T, self, Pivot, 'pivot'>
                 $line = (string) \preg_replace(
-                    '/\b' . $relation . '<([^<,>]+),\s*([^<,>]+)>/',
-                    $relation . '<$1, $2, \Illuminate\Database\Eloquent\Relations\Pivot, \'pivot\'>',
+                    '/\b' . $relation . '<([^<,>]+)>/',
+                    $relation . '<$1, self, ' . $pivotClass . ", 'pivot'>",
+                    $line,
+                );
+
+                // Case 2: incomplete two-param — BelongsToMany<T, self> → BelongsToMany<T, self, Pivot, 'pivot'>
+                // Psalm does not support template-param defaults, so two params is not enough.
+                // Matching ', self>' explicitly avoids touching annotations with a custom declaring model.
+                $line = (string) \preg_replace(
+                    '/\b' . $relation . '<([^<,>]+), self>/',
+                    $relation . '<$1, self, ' . $pivotClass . ", 'pivot'>",
                     $line,
                 );
             }
