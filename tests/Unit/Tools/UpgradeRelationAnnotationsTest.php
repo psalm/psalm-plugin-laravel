@@ -142,9 +142,10 @@ final class UpgradeRelationAnnotationsTest extends TestCase
         yield 'BelongsToMany already 4-param' => ["/**\n * @return BelongsToMany<Tag, self, {$pivot}, 'pivot'>\n */"];
         yield 'MorphToMany already 4-param' => ["/**\n * @return MorphToMany<Tag, self, {$morphPivot}, 'pivot'>\n */"];
 
-        // Manual-only relations — never touch them.
-        yield 'HasManyThrough unchanged' => ["/**\n * @return HasManyThrough<Post>\n */"];
-        yield 'HasOneThrough unchanged' => ["/**\n * @return HasOneThrough<Post>\n */"];
+        // Through relations — upgradeDocblock() leaves these unchanged; the
+        // AST-based upgradeThroughRelations() handles them at runtime.
+        yield 'HasManyThrough unchanged by upgradeDocblock' => ["/**\n * @return HasManyThrough<Post>\n */"];
+        yield 'HasOneThrough unchanged by upgradeDocblock' => ["/**\n * @return HasOneThrough<Post>\n */"];
 
         // Non-return annotation — never touch.
         yield '@param annotation untouched' => ["/**\n * @param BelongsTo<User> \$rel\n */"];
