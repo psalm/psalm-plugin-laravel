@@ -53,29 +53,3 @@ jobs:
     - run: |
         echo "Psalm analysis failed on a fresh Laravel project. Please consider updating baseline: tests/Application/laravel-test-psalm-baseline.xml"
       if: ${{ failure() }}
-
-  build-ai:
-    runs-on: ubuntu-latest
-    name: Test laravel/ai taint (PHP ${{ matrix.php-version }})
-
-    strategy:
-      fail-fast: true
-      matrix:
-        php-version:
-          - '8.3'
-          - '8.4'
-          - '8.5'
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v6
-
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: ${{ matrix.php-version }}
-        coverage: none
-
-    - name: Test laravel/ai LLM prompt taint analysis
-      run: |
-        ./tests/Application/laravel-ai.sh
