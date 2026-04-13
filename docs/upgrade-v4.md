@@ -126,17 +126,13 @@ composer require --dev vimeo/psalm:^7.0.0-beta17
 composer require --dev psalm/plugin-laravel:^4.0
 
 # 4. Update relation generic annotations (add declaring model parameter)
-#    BelongsTo<Foo>        → BelongsTo<Foo, self>
-#    HasMany<Foo>          → HasMany<Foo, self>
-#    HasOne<Foo>           → HasOne<Foo, self>
-#    MorphOne<Foo>         → MorphOne<Foo, self>
-#    MorphMany<Foo>        → MorphMany<Foo, self>
-#    HasManyThrough<Foo>   → HasManyThrough<Foo, Intermediate, self>
-#    HasOneThrough<Foo>    → HasOneThrough<Foo, Intermediate, self>
-#    BelongsToMany<Foo>    → BelongsToMany<Foo, self, Pivot, 'pivot'>
-#    MorphToMany<Foo>      → MorphToMany<Foo, self, MorphPivot, 'pivot'>
 #
-#    Quick sed for the common cases (run from project root):
+#    Option A — Psalter plugin (handles @return and @psalm-return, AST-aware):
+vendor/bin/psalter --plugin=vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php --dry-run
+vendor/bin/psalter --plugin=vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php
+#    HasManyThrough / HasOneThrough are flagged with a warning — fix those manually.
+#
+#    Option B — sed (handles @psalm-return only, run from project root):
 find app -name '*.php' -exec grep -l '@psalm-return \(BelongsTo\|HasMany\|HasOne\|MorphOne\|MorphMany\|MorphTo\)<' {} \; \
   | xargs sed -i 's/@psalm-return \(BelongsTo\|HasMany\|HasOne\|MorphOne\|MorphMany\|MorphTo\)<\([^>]*\)>/@psalm-return \1<\2, self>/g'
 #    BelongsToMany / MorphToMany / HasManyThrough / HasOneThrough need manual edits.
