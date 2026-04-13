@@ -16,6 +16,7 @@ use Psalm\Config;
  */
 final readonly class PluginConfig
 {
+    /** @psalm-mutation-free */
     private function __construct(
         public ColumnFallback $modelPropertiesColumnFallback,
         public bool $resolveDynamicWhereClauses,
@@ -56,6 +57,7 @@ final readonly class PluginConfig
         );
     }
 
+    /** @psalm-mutation-free */
     public function shouldUseMigrations(): bool
     {
         return $this->modelPropertiesColumnFallback === ColumnFallback::Migrations;
