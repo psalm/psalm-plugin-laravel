@@ -316,7 +316,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         string $methodName,
     ): bool {
         $storage = self::getScopeAttributeMethodStorage($codebase, $modelClass, $methodName);
-        if ($storage === null) {
+        if (!$storage instanceof \Psalm\Storage\MethodStorage) {
             return false;
         }
 
@@ -333,7 +333,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      */
     private static function hasScopeAttribute(Codebase $codebase, string $modelClass, string $methodName): bool
     {
-        return self::getScopeAttributeMethodStorage($codebase, $modelClass, $methodName) !== null;
+        return self::getScopeAttributeMethodStorage($codebase, $modelClass, $methodName) instanceof \Psalm\Storage\MethodStorage;
     }
 
     /**
