@@ -87,9 +87,20 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: 8.4
           coverage: none
           extensions: igbinary
+          ini-values: >-
+            opcache.jit=function,
+            opcache.validate_timestamps=0,
+            opcache.max_accelerated_files=1000000,
+            opcache.interned_strings_buffer=64,
+            opcache.memory_consumption=512,
+            opcache.jit_buffer_size=128M,
+            opcache.jit_prof_threshold=0.000000001,
+            opcache.optimization_level=0x7FFEBFFF,
+            opcache.file_update_protection=0,
+            zend.assertions=-1
 
       - name: Install dependencies
         uses: ramsey/composer-install@v4
