@@ -91,10 +91,12 @@ final class WorkOrder extends Model
     /**
      * Modern #[Scope] attribute scope.
      *
+     * Must be protected — see Customer::verified() for the rationale.
+     *
      * @param  Builder<self>  $query
      */
     #[Scope]
-    public function completed(Builder $query): void
+    protected function completed(Builder $query): void
     {
         $query->where('status', 'completed');
     }

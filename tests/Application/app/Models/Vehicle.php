@@ -82,10 +82,12 @@ final class Vehicle extends Model
     /**
      * Modern #[Scope] attribute scope.
      *
+     * Must be protected — see Customer::verified() for the rationale.
+     *
      * @param  Builder<self>  $query
      */
     #[Scope]
-    public function electric(Builder $query): void
+    protected function electric(Builder $query): void
     {
         $query->where('fuel_type', 'electric');
     }

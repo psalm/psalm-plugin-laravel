@@ -18,6 +18,7 @@ use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Storage\FunctionLikeParameter;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -38,6 +39,14 @@ use Psalm\Type\Union;
  */
 final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
+    /**
+     * Maps to ClassLikeAnalyzer::VISIBILITY_PROTECTED.
+     *
+     * We avoid importing the internal Psalm class and hardcode the integer value instead.
+     * The encoding of MethodStorage::$visibility has been stable across Psalm majors.
+     */
+    private const VISIBILITY_PROTECTED = 2;
+
     /** @var array<string, bool> */
     private static array $scopeCache = [];
 
@@ -289,6 +298,34 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     }
 
     /**
+     * Check whether $methodName is a protected #[Scope]-attributed method on $modelClass.
+     *
+     * Only protected #[Scope] methods can be called statically via Model::__callStatic:
+     *  - public  methods cause a PHP Fatal Error in PHP 8.0+ (called directly, bypassing __callStatic)
+     *  - private methods cause infinite recursion through __callStatic → callNamedScope → __call
+     *
+     * Used by {@see ScopeStaticCallHandler} to suppress InvalidStaticInvocation false positives
+     * only where the static call genuinely works at runtime.
+     *
+     * @param class-string<Model> $modelClass
+     * @psalm-mutation-free
+     */
+    public static function isProtectedScopeAttributeMethod(
+        Codebase $codebase,
+        string $modelClass,
+        string $methodName,
+    ): bool {
+        $storage = self::getScopeAttributeMethodStorage($codebase, $modelClass, $methodName);
+        if ($storage === null) {
+            return false;
+        }
+
+        // MethodStorage::$visibility uses ClassLikeAnalyzer::VISIBILITY_* integers:
+        // 1 = public, 2 = protected, 3 = private.
+        return $storage->visibility === self::VISIBILITY_PROTECTED;
+    }
+
+    /**
      * Check for #[Scope] attribute using Psalm's method storage rather than runtime Reflection.
      *
      * @param class-string<Model> $modelClass
@@ -296,20 +333,34 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      */
     private static function hasScopeAttribute(Codebase $codebase, string $modelClass, string $methodName): bool
     {
+        return self::getScopeAttributeMethodStorage($codebase, $modelClass, $methodName) !== null;
+    }
+
+    /**
+     * Return MethodStorage for a #[Scope]-attributed method, or null if absent or not a scope.
+     *
+     * @param class-string<Model> $modelClass
+     * @psalm-mutation-free
+     */
+    private static function getScopeAttributeMethodStorage(
+        Codebase $codebase,
+        string $modelClass,
+        string $methodName,
+    ): ?MethodStorage {
         try {
-            $methodStorage = $codebase->methods->getStorage(
+            $storage = $codebase->methods->getStorage(
                 new MethodIdentifier($modelClass, \strtolower($methodName)),
             );
         } catch (\InvalidArgumentException|\UnexpectedValueException) {
-            return false;
+            return null;
         }
 
-        foreach ($methodStorage->attributes as $attribute) {
+        foreach ($storage->attributes as $attribute) {
             if ($attribute->fq_class_name === Scope::class) {
-                return true;
+                return $storage;
             }
         }
 
-        return false;
+        return null;
     }
 }
