@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Magic;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -38,6 +39,10 @@ use Psalm\Type\Union;
  * Column names are validated against the model's declared @property annotations;
  * unmatched columns fall through to mixed without an error.
  * Disable via <resolveDynamicWhereClauses value="false" /> in psalm.xml.
+ *
+ * Also resolves model scope methods called on relation chains
+ * (e.g., $user->posts()->published()->get() where Post::scopePublished() exists).
+ * Both legacy scope{Name}() methods and modern #[Scope] attribute methods are supported.
  */
 final class MethodForwardingHandler implements
     MethodReturnTypeProviderInterface,
@@ -69,12 +74,29 @@ final class MethodForwardingHandler implements
      */
     private static array $dynamicWhereCache = [];
 
+    /**
+     * Cache: "lowercase-relation-class::method" → related model class.
+     *
+     * Populated by resolveScopeOnRelation() when a scope is confirmed on the related model.
+     * Consulted by getMethodParams() so Psalm can validate call arguments without crashing
+     * on the missing HasMany::electric method storage.
+     *
+     * When the same method name is a scope on different related models via the same relation
+     * class (e.g. HasMany<Vehicle>::electric and HasMany<Report>::electric), the last write
+     * wins. In practice, scope methods with the same name have the same param structure,
+     * so this is harmless.
+     *
+     * @var array<string, class-string<\Illuminate\Database\Eloquent\Model>>
+     */
+    private static array $scopeParamsCache = [];
+
     /** @psalm-external-mutation-free */
     public static function init(ForwardingRule $rule): void
     {
         self::$rule = $rule;
         self::$sourceClassIndex = [];
         self::$searchClassIndex = [];
+        self::$scopeParamsCache = [];
 
         foreach ($rule->allSourceClasses() as $class) {
             self::$sourceClassIndex[\strtolower($class)] = true;
@@ -176,6 +198,14 @@ final class MethodForwardingHandler implements
             return $resolved;
         }
 
+        // Scope method fallback for Path 2: check if the method is a scope on the related model.
+        // Handles $relation->published() where the related model has scopePublished() or #[Scope] published().
+        $scopeResult = self::resolveScopeOnRelation($codebase, $methodName, $fqClassName, $templateParams);
+
+        if ($scopeResult instanceof Union) {
+            return $scopeResult;
+        }
+
         // Dynamic where{Column} fallback for Path 2 (opt-in).
         // This handles the case where the method arrives via __call rather than @mixin.
         if (self::$enableDynamicWhere && $templateParams !== null && self::isDynamicWhereMethod($methodName)) {
@@ -243,6 +273,15 @@ final class MethodForwardingHandler implements
                     continue;
                 }
             }
+        }
+
+        // Scope method on relation chain: return scope params to avoid an UnexpectedValueException
+        // crash in Psalm when checkMethodArgs tries to look up params for HasMany::scopeName.
+        // The model class is resolved from the cache populated by resolveScopeOnRelation().
+        $scopeKey = \strtolower($fqClassName) . '::' . $methodName;
+
+        if (isset(self::$scopeParamsCache[$scopeKey])) {
+            return ModelMethodHandler::getScopeParams($codebase, self::$scopeParamsCache[$scopeKey], $methodName) ?? [];
         }
 
         // Dynamic where{Column}: provide a variadic mixed signature so Psalm's magic-method
@@ -322,6 +361,20 @@ final class MethodForwardingHandler implements
 
             if ($resolved instanceof \Psalm\Type\Union) {
                 return $resolved;
+            }
+
+            // Scope method fallback: check if the method is a scope on the related model.
+            // Handles $relation->published() where Post::scopePublished() or #[Scope] published() exists.
+            // TRelatedModel is always the first template parameter on Relation subclasses.
+            $scopeResult = self::resolveScopeOnRelation(
+                $codebase,
+                $methodName,
+                $atomicType->value,
+                $atomicType->type_params,
+            );
+
+            if ($scopeResult instanceof Union) {
+                return $scopeResult;
             }
 
             // Dynamic where{Column} fallback (opt-in): preserve the Relation's generic type
@@ -440,6 +493,48 @@ final class MethodForwardingHandler implements
         }
 
         // Column exists on the model → method is fluent, return the full Relation type.
+        return new Union([
+            new TGenericObject($relationClass, $templateParams),
+        ]);
+    }
+
+    /**
+     * Attempt to resolve a scope method call on a relation chain.
+     *
+     * Returns the relation's generic type (e.g. HasMany<Post, User>) when the method
+     * name matches a scope defined on the related model — either a legacy scopeXxx() method
+     * (e.g. scopePublished → published()) or a modern #[Scope] attribute method.
+     * Returns null otherwise, letting Psalm fall through to its default handling.
+     *
+     * @param non-empty-list<Union>|list<Union>|null $templateParams Relation's template type parameters
+     */
+    private static function resolveScopeOnRelation(
+        Codebase $codebase,
+        string $methodName,
+        string $relationClass,
+        ?array $templateParams,
+    ): ?Union {
+        if ($templateParams === null || $templateParams === []) {
+            return null;
+        }
+
+        // TRelatedModel is always the first template parameter on Relation subclasses.
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0]);
+
+        if ($modelClass === null) {
+            return null;
+        }
+
+        if (!BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
+            return null;
+        }
+
+        // Populate params cache so getMethodParams() can provide params without crashing.
+        // Keyed by lowercase relation class + method to match the params provider lookup.
+        $cacheKey = \strtolower($relationClass) . '::' . $methodName;
+        self::$scopeParamsCache[$cacheKey] = $modelClass;
+
+        // Scope exists on the related model → method is fluent, return the full Relation type.
         return new Union([
             new TGenericObject($relationClass, $templateParams),
         ]);
