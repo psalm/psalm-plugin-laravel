@@ -82,8 +82,58 @@ function storageWriteStream(\Illuminate\Http\Request $request, \Illuminate\Files
 function storageTemporaryUploadUrl(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
     $fs->temporaryUploadUrl($request->input('path'), new \DateTimeImmutable('+1 hour'));
 }
+
+function storageGetVisibility(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->getVisibility($request->input('path'));
+}
+
+function storageSetVisibility(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->setVisibility($request->input('path'), 'public');
+}
+
+function storageSize(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->size($request->input('path'));
+}
+
+function storageChecksum(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->checksum($request->input('path'));
+}
+
+function storageMimeType(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->mimeType($request->input('path'));
+}
+
+function storageLastModified(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->lastModified($request->input('path'));
+}
+
+function storageFiles(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->files($request->input('dir'));
+}
+
+function storageAllFiles(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->allFiles($request->input('dir'));
+}
+
+function storageDirectories(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->directories($request->input('dir'));
+}
+
+function storageAllDirectories(\Illuminate\Http\Request $request, \Illuminate\Filesystem\FilesystemAdapter $fs): void {
+    $fs->allDirectories($request->input('dir'));
+}
 ?>
 --EXPECTF--
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedFile on line %d: Detected tainted file handling
 %ATaintedFile on line %d: Detected tainted file handling
 %ATaintedFile on line %d: Detected tainted file handling
 %ATaintedFile on line %d: Detected tainted file handling
