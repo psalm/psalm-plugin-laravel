@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776112903702,
+  "lastUpdate": 1776236484415,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1392,6 +1392,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.3,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15a1beafbcd9548f2ca7e907422341d46e8f248d",
+          "message": "Resolve scope methods on Eloquent relation chains (#738)\n\n* feat: resolve scope methods on Eloquent relation chains\n\nWhen calling a model scope through a relation chain (e.g.,\n$user->posts()->published()->get()), the plugin now recognizes the\nscope on the related model and preserves the Relation's generic type\nfor fluent chaining.\n\nExtends MethodForwardingHandler to check the related model (TRelatedModel\nfrom the Relation's first template param) for scope methods via\nBuilderScopeHandler::hasScopeMethod(). Both legacy scopeXxx() and\nmodern #[Scope] attribute methods are supported.\n\nAlso provides method params via getMethodParams() to prevent an\nUnexpectedValueException crash in Psalm's checkMethodArgs() when it\ntries to look up params for a synthetic method like HasMany::published.\n\nFixes #646\n\n* fix: variadic fallback in getMethodParams, fix typos in test names",
+          "timestamp": "2026-04-15T08:58:13+02:00",
+          "tree_id": "6433111c837afe780681d7f33f1d4a2dbc80e537",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/15a1beafbcd9548f2ca7e907422341d46e8f248d"
+        },
+        "date": 1776236484125,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.44,
+            "range": "± 0.08",
             "unit": "s"
           },
           {
