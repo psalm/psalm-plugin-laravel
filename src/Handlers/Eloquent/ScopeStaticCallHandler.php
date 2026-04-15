@@ -25,7 +25,10 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  */
 final class ScopeStaticCallHandler implements BeforeAddIssueInterface
 {
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     * @psalm-mutation-free
+     */
     #[\Override]
     public static function beforeAddIssue(BeforeAddIssueEvent $event): ?bool
     {
@@ -36,9 +39,13 @@ final class ScopeStaticCallHandler implements BeforeAddIssueInterface
         }
 
         // Message format: "Method ClassName::methodName is not static, but is called statically"
-        // Anchored to the full message to avoid matching future Psalm variants that share
-        // only the "is not static" prefix.
-        if (!\preg_match('/^Method (\S+)::(\S+) is not static, but is called statically$/', $issue->message, $matches)) {
+        // Tolerates minor Psalm wording changes such as adding `()` after the method name or
+        // appending extra explanatory text, while still anchoring the key semantic content.
+        if (!\preg_match(
+            '/^Method\s+(\S+)::([^\s(]+)(?:\(\))?\s+is not static, but is called statically(?:\b.*)?$/',
+            $issue->message,
+            $matches,
+        )) {
             return null;
         }
 
@@ -62,10 +69,10 @@ final class ScopeStaticCallHandler implements BeforeAddIssueInterface
         //  - private #[Scope] methods cause infinite recursion through __callStatic
         // Legacy scopeXxx() methods never reach this check: since active() does not exist as a
         // real method on the model, Psalm uses a fake-exists path that skips the static check.
+        // isProtectedScopeAttributeMethod already checks method existence, #[Scope] attribute,
+        // and protected visibility — no need for a redundant hasScopeMethod call first.
         /** @var class-string<Model> $className */
-        if (BuilderScopeHandler::hasScopeMethod($codebase, $className, $methodName)
-            && BuilderScopeHandler::isProtectedScopeAttributeMethod($codebase, $className, $methodName)
-        ) {
+        if (BuilderScopeHandler::isProtectedScopeAttributeMethod($codebase, $className, $methodName)) {
             return false;
         }
 
