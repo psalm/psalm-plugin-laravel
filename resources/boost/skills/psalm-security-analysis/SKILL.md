@@ -1,30 +1,98 @@
 ---
 name: psalm-security-analysis
 description: >
-  Run and interpret Psalm security (taint) analysis on a Laravel project. Use this skill when the
-  user asks to find security vulnerabilities, run a security scan, check for SQL injection or XSS,
-  audit code for taint issues, or fix Psalm taint errors like TaintedSql, TaintedHtml, TaintedShell.
-  Also use when investigating data flow from user input to sensitive operations, even if the user
-  doesn't explicitly mention Psalm or taint analysis.
-compatibility: Requires psalm-plugin-laravel installed and runTaintAnalysis="true" in psalm.xml (or the --taint-analysis CLI flag).
+  Runs and interprets Psalm security (taint) analysis on a Laravel project. Use when the user asks
+  to find security vulnerabilities, run a security scan, check for SQL injection or XSS, audit code
+  for taint issues, or fix Psalm taint errors. Also use when investigating data flow from user input
+  to sensitive operations, even if the user doesn't explicitly mention Psalm or taint analysis.
+  Requires psalm-plugin-laravel installed.
+metadata:
+  author: alies-dev
+  version: '1.0'
 ---
 
 # Psalm Security Analysis for Laravel
 
-## Running a security scan
+## Running the analysis
+
+Determine which mode to use from the user's prompt before running anything:
+
+- **Incremental** ("any new issues?", "check for regressions", "did I break anything?") → baseline run
+- **Full audit** ("find vulnerabilities", "full scan", "audit security", "show all") → full run
+
+`--output-format` and `--report` are independent simultaneous channels — one run produces both a compact stdout summary and a structured JSON report with full taint traces, covering all triage needs.
+
+**Do not pipe the command output** (e.g. `| grep` or `| head`). Psalm writes the `--report` file at the very end of execution; piping to a command that exits early sends SIGPIPE and kills Psalm before the file is written. The Bash tool captures all stdout automatically, so this is only a risk if you write a piped command explicitly.
+
+**Baseline run** — respects `psalm-baseline.xml`, reports only *new* findings since it was created:
 
 ```bash
-./vendor/bin/psalm --taint-analysis --no-cache --no-progress --no-suggestions --output-format=text
-
-# To see only taint-related issues only
-./vendor/bin/psalm --taint-analysis --no-cache --no-progress --no-suggestions --output-format=text 2>&1 | grep -E "Tainted"
+./vendor/bin/psalm --taint-analysis --no-cache --no-progress --no-suggestions \
+  --output-format=text \
+  --report=/tmp/psalm_taint.json
+echo "Exit: $?"
 ```
 
-If the project has a `psalm-baseline.xml`, existing issues are suppressed. To see all issues including baselined ones:
+Exit 0 with no compact output = no new issues.
+
+**Full run** — ignores baseline, surfaces all findings:
 
 ```bash
-./vendor/bin/psalm --taint-analysis --no-cache --ignore-baseline --no-progress --no-suggestions --output-format=text
+./vendor/bin/psalm --taint-analysis --no-cache --no-progress --no-suggestions \
+  --ignore-baseline \
+  --output-format=text \
+  --report=/tmp/psalm_taint.json
+echo "Exit: $?"
 ```
+
+- stdout — compact `FILE:LINE:COL - ERROR_CODE - message` lines, visible immediately in the tool result without reading any file
+- `/tmp/psalm_taint.json` — structured report with full source→sink taint trace chains; use `jq` to pull individual findings without reading the whole file (`txt` format is redundant with stdout and lacks trace data)
+
+## Triage
+
+Use the compact stdout output to assess the scope. For individual findings, query the JSON — this avoids reading the entire report:
+
+```bash
+# All taint issue types found
+jq -r '[.issues[].type] | unique[]' /tmp/psalm_taint.json | grep Tainted
+
+# Full trace for a specific issue type
+jq '.issues[] | select(.type == "TaintedSql")' /tmp/psalm_taint.json
+
+# Issues in a specific directory
+jq '.issues[] | select(.file_path | contains("app/Http"))' /tmp/psalm_taint.json
+
+# Affected files (unique)
+jq -r '.issues[] | select(.type | startswith("Tainted")) | .file_name' /tmp/psalm_taint.json | sort -u
+```
+
+### Triage each finding
+
+Use the taint trace from the JSON report as your primary source. For each finding, answer three questions:
+
+1. **Is there a real path from user input to the sink?** (or is the tainted value from a model/service that doesn't actually accept user data?)
+2. **Is there any sanitization/validation between source and sink?** (allowlist check, `in_array`, cast to int, `e()`, parameterized query?)
+3. **What's the access level?** (public endpoint vs admin-only — affects real-world exploitability)
+
+If the answer to #1 is yes and #2 is no → **real issue**. Document it with file, line, sink type, and severity.
+
+If the taint trace is insufficient, fall back to manually opening the file and reading ~20 lines of context around the flagged line.
+
+### Trace cross-file taint flows manually (when needed)
+
+When Psalm flags a method inside a service class and the trace doesn't surface the origin, grep for usages:
+
+```bash
+grep -rn "->methodName(" app/
+```
+
+Then read the caller to see how arguments are passed — whether they originate from `$request->input()` or from trusted internal sources.
+
+### Report
+
+Group findings by type (SQL injection, open redirect, SSRF, etc.) and severity. For each:
+- Confirmed real: document file, line, input source, sink, fix
+- False positive: document why (allowlist protection, admin-only, model-generated value, etc.) and whether to suppress inline with `@psalm-suppress`
 
 ## How taint analysis works
 
@@ -59,6 +127,17 @@ Psalm tracks data from **sources** (user input) through the code to **sinks** (d
 - Parameterized queries (`DB::select('...?', [$value])`) are safe — only string interpolation into raw SQL is flagged
 
 > **Note**: `Str::of($input)` and `str($input)` propagate input taint to the returned `Stringable` but do not escape it. Psalm cannot track taint through subsequent chain calls (`->upper()`, `->slug()`) due to a `$this` flow limitation.
+
+## Severity Classification
+
+Use this when reporting findings:
+
+- **HIGH** — public endpoint, direct exploitation, data exfiltration or code execution possible
+- **MEDIUM** — public endpoint but requires specific conditions, or significant impact (open redirect, SSRF with format validation only)
+- **LOW** — admin/authenticated-only endpoints; reduces blast radius but still warrants fixing
+- **FALSE** — false positive
+
+Open redirect in an auth flow (post-login redirect) is always HIGH — it enables phishing with a legitimate domain URL.
 
 ## Fixing taint issues
 
@@ -184,6 +263,19 @@ return redirect(request()->header('Referer'));
 return back();
 ```
 
+### TaintedCallable
+
+Fires when a user-controlled string is used to instantiate a class or call a function dynamically. Often appears in admin testing or notification preview controllers.
+
+```diff
+$class = $request->input('errorType');
+- if (!class_exists($class)) { abort(400); } / BAD — any existing PHP class can be instantiated, not just Throwable subclasses
++ if (!class_exists($class) || !is_subclass_of($class, \Throwable::class)) { abort(400, 'Unknown exception'); } // // GOOD — restrict to the expected type with is_subclass_of
+throw new $class(); // TaintedCallable
+```
+
+> Note: even with `class_exists()`, without a type check any instantiatable class can be constructed. `is_subclass_of()` is the correct guard.
+
 ## Cross-function taint flows
 
 Taint flows across function/method boundaries:
@@ -233,9 +325,13 @@ Do **not** add taint suppressions to `psalm-baseline.xml` — inline `@psalm-sup
 - **Service provider / cloud API clients**: Apps that make authenticated HTTP calls to external APIs (Linode, Bitbucket, Stripe, fediverse/ActivityPub) will show `TaintedSSRF` for expected outgoing requests. Suppress with `@psalm-suppress TaintedSSRF` and a comment naming the target service.
 - **`Js::from()` with encrypted component state**: `TaintedUserSecret`/`TaintedSystemSecret` may fire when Filament (or similar) passes encrypted state to Alpine.js via `Js::from()`. `Js::from()` JSON-encodes the data safely but does not escape secret taint — this is a known plugin limitation. Suppress with `@psalm-suppress TaintedUserSecret TaintedSystemSecret`.
 
+- **Allowlist-protected file access**: `TaintedFile` is a false positive when user input is validated against an explicit allowlist (`in_array($path, $allowedPaths, true)`) before being passed to `Storage::get()` or similar. Read the surrounding code — if there's an allowlist check that aborts on mismatch, suppress it.
+- **Database-stored emails in mail headers**: `TaintedHeader` on `->cc($member->getEmail())` or similar notification methods is a false positive when the email is a database-stored model property, not a value passed through directly from a current request. The practical risk is near-zero for stored, validated emails.
+- **SSRF with `url` validation rule**: `TaintedSSRF` is a real issue even when `['url']` validation is applied — the rule only validates format, not destination. An internal-URL allowlist or private-IP block is required to make this safe.
+
 Potential low-risk taints:
-- **Cache**: considered as safe, but may contain user-controlled data. Plugin does not report about it to reduce noise. 
+- **Cache**: considered as safe, but may contain user-controlled data. Plugin does not report about it to reduce noise.
 
 ## Reporting false positives
 
-If you encounter a finding that looks like a plugin or Pslam bug  — ask the user to open an issue at https://github.com/psalm/psalm-plugin-laravel/issues with a minimal reproduction.
+If you encounter a finding that looks like a plugin or Psalm bug — ask the user to open an issue at https://github.com/psalm/psalm-plugin-laravel/issues with a minimal reproduction.
