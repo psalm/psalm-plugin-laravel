@@ -248,4 +248,108 @@ class FilesystemAdapter implements CloudFilesystemContract
      * @psalm-taint-sink file $directory
      */
     public function deleteDirectory($directory) {}
+
+    /**
+     * Get the visibility for the given path.
+     *
+     * @param  string  $path
+     * @return string
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function getVisibility($path) {}
+
+    /**
+     * Set the visibility for the given path.
+     *
+     * @param  string  $path
+     * @param  string  $visibility
+     * @return bool
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function setVisibility($path, $visibility) {}
+
+    /**
+     * Get the file size of a given file.
+     *
+     * @param  string  $path
+     * @return int
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function size($path) {}
+
+    /**
+     * Get the checksum for a file.
+     *
+     * @param  string  $path
+     * @param  array  $options
+     * @return string|false
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function checksum($path, array $options = []) {}
+
+    /**
+     * Get the mime-type of a given file.
+     *
+     * @param  string  $path
+     * @return string|false
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function mimeType($path) {}
+
+    /**
+     * Get the file's last modification time.
+     *
+     * @param  string  $path
+     * @return int
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function lastModified($path) {}
+
+    /**
+     * Get an array of all files in a directory.
+     *
+     * @param  string|null  $directory
+     * @param  bool  $recursive
+     * @return array
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function files($directory = null, $recursive = false) {}
+
+    /**
+     * Get all of the files from the given directory (recursive).
+     *
+     * @param  string|null  $directory
+     * @return array
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function allFiles($directory = null) {}
+
+    /**
+     * Get all of the directories within a given directory.
+     *
+     * @param  string|null  $directory
+     * @param  bool  $recursive
+     * @return array
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function directories($directory = null, $recursive = false) {}
+
+    /**
+     * Get all the directories within a given directory (recursive).
+     *
+     * @param  string|null  $directory
+     * @return array
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function allDirectories($directory = null) {}
 }
