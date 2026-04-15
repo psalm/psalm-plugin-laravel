@@ -350,7 +350,7 @@ class Filesystem
      *
      * @psalm-taint-sink file $directory
      */
-    public function allDirectories(string $directory): array {}
+    public function allDirectories($directory): array {}
 
     /**
      * Ensure a directory exists.

@@ -289,7 +289,7 @@ class FilesystemAdapter implements CloudFilesystemContract
      *
      * @psalm-taint-sink file $path
      */
-    public function checksum(string $path, array $options = []) {}
+    public function checksum($path, array $options = []) {}
 
     /**
      * Get the mime-type of a given file.
