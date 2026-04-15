@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776236484415,
+  "lastUpdate": 1776238941415,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1427,6 +1427,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.44,
             "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9f1863316e1d932dd45d812f10d5b4904d8b9eb1",
+          "message": "Add missing `@psalm-taint-sink file` methods to Filesystem/FilesystemAdapter stubs (#739)\n\n* taint: add missing file sink methods to Filesystem/FilesystemAdapter stubs\n\nAdds @psalm-taint-sink file annotations to ~30 methods that were missing\ncoverage for OWASP A01:2021 path traversal detection:\n\nFilesystem: relativeLink, type, mimeType, guessExtension, hasSameHash,\nsize, lastModified, glob, files, allFiles, directories, allDirectories,\nensureDirectoryExists, moveDirectory, copyDirectory, deleteDirectory,\ndeleteDirectories, cleanDirectory\n\nFilesystemAdapter: getVisibility, setVisibility, size, checksum, mimeType,\nlastModified, files, allFiles, directories, allDirectories\n\nAlso adds stubs/common/Filesystem/LockableFile.stubphp with __construct\nas a file sink (opens the file via fopen).\n\nCloses #565\n\n* fix: remove native string type hints from allDirectories and checksum\n\nConsistent with the rest of the stub where parameter types use docblock\nannotations only, not native type hints. Prevents MixedArgument false\npositives when mixed values from request input flow into these methods.",
+          "timestamp": "2026-04-15T09:39:27+02:00",
+          "tree_id": "ce22b48ebe17a10d76e0887ec7e52f72426f9c44",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9f1863316e1d932dd45d812f10d5b4904d8b9eb1"
+        },
+        "date": 1776238940535,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.2,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
