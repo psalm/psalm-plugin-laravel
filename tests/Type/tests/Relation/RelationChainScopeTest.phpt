@@ -73,7 +73,7 @@ function test_legacy_scope_on_belongsto(): void {
 
 // HasManyThrough: legacy scope WorkOrder::scopeUrgent() → urgent()
 // Customer::workOrders() returns HasManyThrough<WorkOrder, Vehicle, Customer>
-function test_legacy_scope_on_hasmanythough(): void {
+function test_legacy_scope_on_hasmanythrough(): void {
     /** @var HasManyThrough<\App\Models\WorkOrder, \App\Models\Vehicle, Customer> $r */
     $r = (new Customer())->workOrders();
     $_ = $r->urgent();
@@ -81,7 +81,7 @@ function test_legacy_scope_on_hasmanythough(): void {
 }
 
 // HasManyThrough + modern #[Scope] attribute: WorkOrder::completed()
-function test_attribute_scope_on_hasmanythough(): void {
+function test_attribute_scope_on_hasmanythrough(): void {
     /** @var HasManyThrough<\App\Models\WorkOrder, \App\Models\Vehicle, Customer> $r */
     $r = (new Customer())->workOrders();
     $_ = $r->completed();

@@ -281,7 +281,11 @@ final class MethodForwardingHandler implements
         $scopeKey = \strtolower($fqClassName) . '::' . $methodName;
 
         if (isset(self::$scopeParamsCache[$scopeKey])) {
-            return ModelMethodHandler::getScopeParams($codebase, self::$scopeParamsCache[$scopeKey], $methodName) ?? [];
+            // Use the scope's actual params when available; fall back to a permissive variadic
+            // signature (same as the dynamic-where fallback) rather than returning [] (zero params),
+            // which would emit misleading TooManyArguments for scopes that accept arguments.
+            return ModelMethodHandler::getScopeParams($codebase, self::$scopeParamsCache[$scopeKey], $methodName)
+                ?? [new FunctionLikeParameter('args', by_ref: false, type: Type::getMixed(), is_variadic: true)];
         }
 
         // Dynamic where{Column}: provide a variadic mixed signature so Psalm's magic-method
