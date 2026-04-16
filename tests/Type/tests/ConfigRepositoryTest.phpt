@@ -84,7 +84,7 @@ function test_collection_int_default_is_invalid(Repository $config): \Illuminate
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 2 of Illuminate\Config\Repository::array expects array<array-key, mixed>|impure-Closure():(array<array-key, mixed>|null)|null, but 'fallback' provided
-InvalidArgument on line %d: Argument 2 of Illuminate\Config\Repository::array expects array<array-key, mixed>|impure-Closure():(array<array-key, mixed>|null)|null, but 42 provided
-InvalidArgument on line %d: Argument 2 of Illuminate\Config\Repository::collection expects array<array-key, mixed>|impure-Closure():(array<array-key, mixed>|null)|null, but 'fallback' provided
-InvalidArgument on line %d: Argument 2 of Illuminate\Config\Repository::collection expects array<array-key, mixed>|impure-Closure():(array<array-key, mixed>|null)|null, but 42 provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Config\Repository::array expects Closure():(array<array-key, mixed>|null)|array<array-key, mixed>|null, but 'fallback' provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Config\Repository::array expects Closure():(array<array-key, mixed>|null)|array<array-key, mixed>|null, but 42 provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Config\Repository::collection expects Closure():(array<array-key, mixed>|null)|array<array-key, mixed>|null, but 'fallback' provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Config\Repository::collection expects Closure():(array<array-key, mixed>|null)|array<array-key, mixed>|null, but 42 provided

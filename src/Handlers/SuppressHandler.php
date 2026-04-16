@@ -257,22 +257,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         }
     }
 
-    private static function suppressByInterface(ClassLikeStorage $classStorage): void
-    {
-        if ($classStorage->class_implements === []) {
-            return;
-        }
-
-        foreach (self::CLASS_LEVEL_BY_INTERFACE as $issue => $interfaces) {
-            foreach ($interfaces as $interface) {
-                if (isset($classStorage->class_implements[\strtolower($interface)])) {
-                    self::suppress($issue, $classStorage);
-                    break;
-                }
-            }
-        }
-    }
-
     private static function suppressByUsedTraits(ClassLikeStorage $classStorage): void
     {
         if ($classStorage->used_traits === []) {
