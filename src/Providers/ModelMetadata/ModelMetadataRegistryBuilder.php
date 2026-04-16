@@ -41,11 +41,17 @@ final class ModelMetadataRegistryBuilder
      * than as `::class` so missing packages don't break plugin loading.
      */
     private const TRAIT_SOFT_DELETES_LC = 'illuminate\\database\\eloquent\\softdeletes';
+
     private const TRAIT_HAS_UUIDS_LC = 'illuminate\\database\\eloquent\\concerns\\hasuuids';
+
     private const TRAIT_HAS_ULIDS_LC = 'illuminate\\database\\eloquent\\concerns\\hasulids';
+
     private const TRAIT_HAS_FACTORY_LC = 'illuminate\\database\\eloquent\\factories\\hasfactory';
+
     private const TRAIT_NOTIFIABLE_LC = 'illuminate\\notifications\\notifiable';
+
     private const TRAIT_HAS_API_TOKENS_SANCTUM_LC = 'laravel\\sanctum\\hasapitokens';
+
     private const TRAIT_HAS_API_TOKENS_PASSPORT_LC = 'laravel\\passport\\hasapitokens';
 
     /**
@@ -59,7 +65,7 @@ final class ModelMetadataRegistryBuilder
      */
     public static function warmUp(Codebase $codebase, string $modelFqcn): void
     {
-        if (ModelMetadataRegistry::for($modelFqcn) !== null) {
+        if (ModelMetadataRegistry::for($modelFqcn) instanceof \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata) {
             return;
         }
 
@@ -74,7 +80,7 @@ final class ModelMetadataRegistryBuilder
             return;
         }
 
-        if ($metadata === null) {
+        if (!$metadata instanceof \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata) {
             return;
         }
 
@@ -127,7 +133,7 @@ final class ModelMetadataRegistryBuilder
 
         // §6.3 step 2: instantiate without constructor — matches ModelPropertyHandler
         $instance = self::instantiate($modelFqcn, $codebase);
-        if ($instance === null) {
+        if (!$instance instanceof \Illuminate\Database\Eloquent\Model) {
             return null;
         }
 
@@ -179,12 +185,12 @@ final class ModelMetadataRegistryBuilder
             }
 
             return $reflection->newInstanceWithoutConstructor();
-        } catch (\ReflectionException $e) {
+        } catch (\ReflectionException $reflectionException) {
             // The caller already verified is_a(..., Model::class) + storage presence,
             // so reflection failing here is unexpected — log at debug so --debug runs
             // surface what model lost its metadata and why.
             $codebase->progress->debug(
-                "Laravel plugin: ModelMetadataRegistry could not reflect '{$modelFqcn}': {$e->getMessage()}\n",
+                "Laravel plugin: ModelMetadataRegistry could not reflect '{$modelFqcn}': {$reflectionException->getMessage()}\n",
             );
 
             return null;
@@ -251,7 +257,7 @@ final class ModelMetadataRegistryBuilder
     private static function computeSchema(Model $instance): TableSchema
     {
         $schema = SchemaStateProvider::getSchema();
-        if ($schema === null) {
+        if (!$schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator) {
             return new TableSchema([]);
         }
 
@@ -265,6 +271,7 @@ final class ModelMetadataRegistryBuilder
             if ($columnName === '') {
                 continue;
             }
+
             $columns[\strtolower($columnName)] = self::buildColumnInfo($column);
         }
 
@@ -283,7 +290,7 @@ final class ModelMetadataRegistryBuilder
             name: $name,
             sqlType: $sqlType,
             nullable: $column->nullable,
-            hasDefault: $column->default !== null,
+            hasDefault: $column->default instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault,
             unsigned: $column->unsigned,
             options: \array_values($column->options),
         );
@@ -319,6 +326,7 @@ final class ModelMetadataRegistryBuilder
         if ($traits->hasUuids || $traits->hasUlids) {
             self::flipUsesUniqueIds($instance);
         }
+
         /** @var array<string, string> $instanceCasts */
         $instanceCasts = $instance->getCasts();
         $merged = \array_merge($merged, $instanceCasts);
@@ -342,7 +350,7 @@ final class ModelMetadataRegistryBuilder
             // Bake column nullability into CastInfo::$psalmType at build time so consumers
             // can read it directly without re-running CastResolver (see design §5.4).
             $column = $schema->column($columnName);
-            $nullable = $column !== null && $column->nullable;
+            $nullable = $column instanceof \Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo && $column->nullable;
             $result[\strtolower($columnName)] = self::buildCastInfo($columnName, $castString, $nullable);
         }
 
@@ -408,12 +416,7 @@ final class ModelMetadataRegistryBuilder
         $targetClass = null;
 
         if (
-            $baseLower === 'date'
-            || $baseLower === 'datetime'
-            || $baseLower === 'custom_datetime'
-            || $baseLower === 'immutable_date'
-            || $baseLower === 'immutable_datetime'
-            || $baseLower === 'immutable_custom_datetime'
+            in_array($baseLower, ['date', 'datetime', 'custom_datetime', 'immutable_date', 'immutable_datetime', 'immutable_custom_datetime'], true)
         ) {
             $shape = CastShape::DateTime;
         } elseif ($baseLower === 'collection') {
@@ -445,7 +448,6 @@ final class ModelMetadataRegistryBuilder
         return \str_contains($value, '\\') || \preg_match('/^[A-Z]/', $value) === 1;
     }
 
-    /** @return ($class is class-string ? bool : false) */
     private static function isEnumClass(string $class): bool
     {
         return (\class_exists($class) || \interface_exists($class)) && \enum_exists($class);
@@ -509,7 +511,6 @@ final class ModelMetadataRegistryBuilder
     {
         try {
             $property = new \ReflectionProperty($instance, $propertyName);
-            /** @var mixed $value */
             $value = $property->getValue($instance);
         } catch (\ReflectionException) {
             return [];
@@ -534,7 +535,6 @@ final class ModelMetadataRegistryBuilder
     {
         $constantName = $instance::class . '::DELETED_AT';
         if (\defined($constantName)) {
-            /** @var mixed $value */
             $value = \constant($constantName);
             if (\is_string($value) && $value !== '') {
                 return $value;

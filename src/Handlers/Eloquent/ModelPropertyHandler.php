@@ -106,7 +106,7 @@ final class ModelPropertyHandler
         }
 
         $metadata = ModelMetadataRegistry::for($fqClasslikeName);
-        if ($metadata === null) {
+        if (!$metadata instanceof \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata) {
             return null;
         }
 
@@ -115,6 +115,7 @@ final class ModelPropertyHandler
         if ($propertyName === '') {
             return null;
         }
+
         $lowered = \strtolower($propertyName);
 
         $column = $metadata->schema()->columnByLowerKey($lowered);
@@ -164,7 +165,7 @@ final class ModelPropertyHandler
     private static function schemaHasColumn(string $fqClasslikeName, string $propertyName): bool
     {
         $metadata = ModelMetadataRegistry::for($fqClasslikeName);
-        if ($metadata === null) {
+        if (!$metadata instanceof \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata) {
             return false;
         }
 

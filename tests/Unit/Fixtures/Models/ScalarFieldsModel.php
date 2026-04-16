@@ -16,9 +16,13 @@ use Illuminate\Database\Eloquent\Model;
 final class ScalarFieldsModel extends Model
 {
     protected $connection = 'reporting';
+
     protected $fillable = ['Name', 'EMAIL'];
+
     protected $guarded = ['Id'];
+
     protected $hidden = ['Password'];
+
     protected $appends = ['FullName'];
 
     /** @var list<string> */

@@ -67,7 +67,7 @@ final class ModelMetadataRegistryTest extends TestCase
     #[Test]
     public function for_returns_null_when_class_is_not_warmed_up(): void
     {
-        self::assertNull(ModelMetadataRegistry::for(WorkOrder::class));
+        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for(WorkOrder::class));
     }
 
     #[Test]
@@ -76,7 +76,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $codebase = $this->makeCodebase();
         ModelMetadataRegistryBuilder::warmUp($codebase, \stdClass::class);
 
-        self::assertNull(ModelMetadataRegistry::for(\stdClass::class));
+        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for(\stdClass::class));
     }
 
     #[Test]
@@ -85,7 +85,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $codebase = $this->makeCodebase();
         ModelMetadataRegistryBuilder::warmUp($codebase, 'NonExistent\\Model');
 
-        self::assertNull(ModelMetadataRegistry::for('NonExistent\\Model'));
+        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for('NonExistent\\Model'));
     }
 
     #[Test]
@@ -96,7 +96,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         ModelMetadataRegistryBuilder::warmUp($codebase, AbstractUuidModel::class);
 
-        self::assertNull(ModelMetadataRegistry::for(AbstractUuidModel::class));
+        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for(AbstractUuidModel::class));
     }
 
     #[Test]
@@ -106,7 +106,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         ModelMetadataRegistryBuilder::overrideForTesting(WorkOrder::class, $metadata);
 
-        self::assertSame($metadata, ModelMetadataRegistry::for(WorkOrder::class));
+        $this->assertSame($metadata, ModelMetadataRegistry::for(WorkOrder::class));
     }
 
     #[Test]
@@ -115,10 +115,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $metadata = $this->makeStubMetadata(WorkOrder::class);
         ModelMetadataRegistryBuilder::overrideForTesting(WorkOrder::class, $metadata);
 
-        self::assertSame(
-            ModelMetadataRegistry::for(WorkOrder::class),
-            ModelMetadataRegistry::for(WorkOrder::class),
-        );
+        $this->assertSame(ModelMetadataRegistry::for(WorkOrder::class), ModelMetadataRegistry::for(WorkOrder::class));
     }
 
     #[Test]
@@ -131,7 +128,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         ModelMetadataRegistryBuilder::reset();
 
-        self::assertNull(ModelMetadataRegistry::for(WorkOrder::class));
+        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for(WorkOrder::class));
     }
 
     #[Test]
@@ -151,8 +148,8 @@ final class ModelMetadataRegistryTest extends TestCase
             $keys[] = $fqcn;
         }
 
-        self::assertContains(WorkOrder::class, $keys);
-        self::assertContains(UuidModel::class, $keys);
+        $this->assertContains(WorkOrder::class, $keys);
+        $this->assertContains(UuidModel::class, $keys);
     }
 
     #[Test]
@@ -161,7 +158,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $progress = new VoidProgress();
         ModelMetadataRegistry::init($progress);
 
-        self::assertSame($progress, ModelMetadataRegistry::getProgress());
+        $this->assertSame($progress, ModelMetadataRegistry::getProgress());
     }
 
     // ---------------------------------------------------------------------
@@ -180,8 +177,8 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
         $second = ModelMetadataRegistry::for(WorkOrder::class);
 
-        self::assertNotNull($first);
-        self::assertSame($first, $second);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $first);
+        $this->assertSame($first, $second);
     }
 
     // ---------------------------------------------------------------------
@@ -197,11 +194,11 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, UuidModel::class);
 
         $metadata = ModelMetadataRegistry::for(UuidModel::class);
-        self::assertNotNull($metadata);
-        self::assertTrue($metadata->traits->hasUuids);
-        self::assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
-        self::assertFalse($metadata->primaryKey->incrementing);
-        self::assertSame(['id'], $metadata->primaryKey->uuidColumns);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertTrue($metadata->traits->hasUuids);
+        $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+        $this->assertSame(['id'], $metadata->primaryKey->uuidColumns);
     }
 
     #[Test]
@@ -213,10 +210,10 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, UlidModel::class);
 
         $metadata = ModelMetadataRegistry::for(UlidModel::class);
-        self::assertNotNull($metadata);
-        self::assertTrue($metadata->traits->hasUlids);
-        self::assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
-        self::assertFalse($metadata->primaryKey->incrementing);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertTrue($metadata->traits->hasUlids);
+        $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
+        $this->assertFalse($metadata->primaryKey->incrementing);
     }
 
     #[Test]
@@ -228,10 +225,10 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
 
         $metadata = ModelMetadataRegistry::for(Customer::class);
-        self::assertNotNull($metadata);
-        self::assertTrue($metadata->traits->hasSoftDeletes);
-        self::assertArrayHasKey('deleted_at', $metadata->casts());
-        self::assertSame(CastShape::DateTime, $metadata->casts()['deleted_at']->shape);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertTrue($metadata->traits->hasSoftDeletes);
+        $this->assertArrayHasKey('deleted_at', $metadata->casts());
+        $this->assertSame(CastShape::DateTime, $metadata->casts()['deleted_at']->shape);
     }
 
     #[Test]
@@ -243,8 +240,8 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
 
         $metadata = ModelMetadataRegistry::for(Customer::class);
-        self::assertNotNull($metadata);
-        self::assertTrue($metadata->traits->hasFactory);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertTrue($metadata->traits->hasFactory);
     }
 
     #[Test]
@@ -256,10 +253,10 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, CustomPkUuidModel::class);
 
         $metadata = ModelMetadataRegistry::for(CustomPkUuidModel::class);
-        self::assertNotNull($metadata);
-        self::assertSame('custom_pk', $metadata->primaryKey->name);
-        self::assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
-        self::assertSame(['custom_pk'], $metadata->primaryKey->uuidColumns);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertSame('custom_pk', $metadata->primaryKey->name);
+        $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
+        $this->assertSame(['custom_pk'], $metadata->primaryKey->uuidColumns);
     }
 
     // ---------------------------------------------------------------------
@@ -281,12 +278,12 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
 
         $metadata = ModelMetadataRegistry::for(WorkOrder::class);
-        self::assertNotNull($metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
 
         $schema = $metadata->schema();
-        self::assertTrue($schema->has('title'));
-        self::assertInstanceOf(ColumnInfo::class, $schema->column('published_at'));
-        self::assertTrue($schema->column('published_at')->nullable);
+        $this->assertTrue($schema->has('title'));
+        $this->assertInstanceOf(ColumnInfo::class, $schema->column('published_at'));
+        $this->assertTrue($schema->column('published_at')->nullable);
     }
 
     #[Test]
@@ -298,7 +295,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, SpecializationPivot::class);
 
         $metadata = ModelMetadataRegistry::for(SpecializationPivot::class);
-        self::assertNotNull($metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
     }
 
     #[Test]
@@ -313,8 +310,8 @@ final class ModelMetadataRegistryTest extends TestCase
             ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
 
             $metadata = ModelMetadataRegistry::for(WorkOrder::class);
-            self::assertNotNull($metadata);
-            self::assertSame('wo', $metadata->morphAlias);
+            $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+            $this->assertSame('wo', $metadata->morphAlias);
         } finally {
             Relation::morphMap([], merge: false);
         }
@@ -332,8 +329,8 @@ final class ModelMetadataRegistryTest extends TestCase
             ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
 
             $metadata = ModelMetadataRegistry::for(WorkOrder::class);
-            self::assertNotNull($metadata);
-            self::assertNull($metadata->morphAlias);
+            $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+            $this->assertNull($metadata->morphAlias);
         } finally {
             Relation::morphMap([], merge: false);
         }
@@ -348,17 +345,17 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, ScalarFieldsModel::class);
 
         $metadata = ModelMetadataRegistry::for(ScalarFieldsModel::class);
-        self::assertNotNull($metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
 
         // Values arrive lowercased per the §5.5 naming convention.
-        self::assertSame(['name', 'email'], $metadata->fillable);
-        self::assertSame(['id'], $metadata->guarded);
-        self::assertSame(['password'], $metadata->hidden);
-        self::assertSame(['fullname'], $metadata->appends);
-        self::assertSame(['author'], $metadata->with);
-        self::assertSame(['comments'], $metadata->withCount);
-        self::assertSame('reporting', $metadata->connection);
-        self::assertFalse($metadata->traits->usesTimestamps);
+        $this->assertSame(['name', 'email'], $metadata->fillable);
+        $this->assertSame(['id'], $metadata->guarded);
+        $this->assertSame(['password'], $metadata->hidden);
+        $this->assertSame(['fullname'], $metadata->appends);
+        $this->assertSame(['author'], $metadata->with);
+        $this->assertSame(['comments'], $metadata->withCount);
+        $this->assertSame('reporting', $metadata->connection);
+        $this->assertFalse($metadata->traits->usesTimestamps);
     }
 
     #[Test]
@@ -420,6 +417,7 @@ final class ModelMetadataRegistryTest extends TestCase
         foreach ($columns as $column) {
             $table->setColumn($column);
         }
+
         $schema->tables[$tableName] = $table;
 
         SchemaStateProvider::setSchema($schema);
