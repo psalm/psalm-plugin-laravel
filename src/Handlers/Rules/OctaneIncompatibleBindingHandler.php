@@ -345,6 +345,7 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
         ) {
             return true;
         }
+
         return $expr instanceof FuncCall
             && $expr->name instanceof Name
             && \in_array($expr->name->toLowerString(), ['app', 'resolve'], true)
