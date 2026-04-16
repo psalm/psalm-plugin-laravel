@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776330802711,
+  "lastUpdate": 1776350480210,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1497,6 +1497,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.14,
             "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "08e1db88b9397991577a2d929688877dfca774a7",
+          "message": "test: fix EXPECTF order for psalm-tester deterministic sort #0\n\npsalm-tester now sorts same-line errors alphabetically by type name;\nupdate 6 phpt files to match (TaintedFile<TaintedInclude,\nTaintedHeader<TaintedSSRF, TaintedHtml<TaintedSystemSecret<...).",
+          "timestamp": "2026-04-16T16:37:45+02:00",
+          "tree_id": "8c81e27af6f39564ea6f2c0084bfc46dcc9798eb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/08e1db88b9397991577a2d929688877dfca774a7"
+        },
+        "date": 1776350479807,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.79,
+            "range": "± 0.21",
             "unit": "s"
           },
           {
