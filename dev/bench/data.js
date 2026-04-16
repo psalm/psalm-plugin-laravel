@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776238941415,
+  "lastUpdate": 1776330802711,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1467,6 +1467,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1128,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "b1b11c35ede424bd00dbbad98e76778c1415d110",
+          "message": "feat: use compact output for AI scan to save tokens",
+          "timestamp": "2026-04-16T11:00:07+02:00",
+          "tree_id": "578c49e5924edecb489980059544664154b2337d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b1b11c35ede424bd00dbbad98e76778c1415d110"
+        },
+        "date": 1776330801818,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.14,
+            "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
             "unit": "MB"
           }
         ]
