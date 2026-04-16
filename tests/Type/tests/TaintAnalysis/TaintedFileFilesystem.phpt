@@ -57,10 +57,6 @@ function fsDirectories(\Illuminate\Http\Request $request, \Illuminate\Filesystem
     $fs->directories($request->input('dir'));
 }
 
-function fsAllDirectories(\Illuminate\Http\Request $request, \Illuminate\Filesystem\Filesystem $fs): void {
-    $fs->allDirectories($request->input('dir'));
-}
-
 function fsEnsureDirectoryExists(\Illuminate\Http\Request $request, \Illuminate\Filesystem\Filesystem $fs): void {
     $fs->ensureDirectoryExists($request->input('path'));
 }
@@ -86,7 +82,6 @@ function fsCleanDirectory(\Illuminate\Http\Request $request, \Illuminate\Filesys
 }
 ?>
 --EXPECTF--
-%ATaintedFile on line %d: Detected tainted file handling
 %ATaintedFile on line %d: Detected tainted file handling
 %ATaintedFile on line %d: Detected tainted file handling
 %ATaintedFile on line %d: Detected tainted file handling

@@ -1,3 +1,5 @@
+--SKIPIF--
+<?php if (version_compare(\Illuminate\Foundation\Application::VERSION, '12.0.0', '<')) { echo 'skip requires Laravel 12+'; }
 --FILE--
 <?php declare(strict_types=1);
 
