@@ -52,14 +52,14 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
      * class hit the Container rows.
      */
     private const UNSAFE_METHOD_IDS = [
-        'illuminate\\container\\container::singleton' => true,
-        'illuminate\\container\\container::singletonif' => true,
-        'illuminate\\container\\container::scoped' => true,
-        'illuminate\\container\\container::scopedif' => true,
-        'illuminate\\contracts\\container\\container::singleton' => true,
-        'illuminate\\contracts\\container\\container::singletonif' => true,
-        'illuminate\\contracts\\container\\container::scoped' => true,
-        'illuminate\\contracts\\container\\container::scopedif' => true,
+        \illuminate\container\container::class . '::singleton' => true,
+        \illuminate\container\container::class . '::singletonif' => true,
+        \illuminate\container\container::class . '::scoped' => true,
+        \illuminate\container\container::class . '::scopedif' => true,
+        \illuminate\contracts\container\container::class . '::singleton' => true,
+        \illuminate\contracts\container\container::class . '::singletonif' => true,
+        \illuminate\contracts\container\container::class . '::scoped' => true,
+        \illuminate\contracts\container\container::class . '::scopedif' => true,
     ];
 
     /**
