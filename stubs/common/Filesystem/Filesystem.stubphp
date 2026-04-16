@@ -313,12 +313,11 @@ class Filesystem
      *
      * @param  string  $directory
      * @param  bool  $hidden
-     * @param  array|string|int  $depth
      * @return \Symfony\Component\Finder\SplFileInfo[]
      *
      * @psalm-taint-sink file $directory
      */
-    public function files($directory, $hidden = false, array|string|int $depth = 0) {}
+    public function files($directory, $hidden = false) {}
 
     /**
      * Get all of the files from the given directory (recursive).
@@ -335,22 +334,11 @@ class Filesystem
      * Get all of the directories within a given directory.
      *
      * @param  string  $directory
-     * @param  array|string|int  $depth
      * @return array
      *
      * @psalm-taint-sink file $directory
      */
-    public function directories($directory, array|string|int $depth = 0) {}
-
-    /**
-     * Get all the directories within a given directory (recursive).
-     *
-     * @param  string  $directory
-     * @return array
-     *
-     * @psalm-taint-sink file $directory
-     */
-    public function allDirectories($directory): array {}
+    public function directories($directory) {}
 
     /**
      * Ensure a directory exists.

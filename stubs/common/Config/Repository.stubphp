@@ -18,14 +18,4 @@ class Repository
      */
     public function array(string $key, \Closure|array|null $default = null): array {}
 
-    /**
-     * Get the specified array configuration value as a collection.
-     *
-     * Same $default restriction as array(): collection() delegates to array(),
-     * so the same runtime throw applies for non-array, non-null, non-Closure defaults.
-     *
-     * @param  (\Closure():(array<array-key, mixed>|null))|array<array-key, mixed>|null  $default
-     * @return \Illuminate\Support\Collection<array-key, mixed>
-     */
-    public function collection(string $key, \Closure|array|null $default = null): \Illuminate\Support\Collection {}
 }

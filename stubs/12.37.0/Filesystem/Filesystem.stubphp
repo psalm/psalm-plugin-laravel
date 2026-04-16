@@ -1,0 +1,42 @@
+<?php
+
+namespace Illuminate\Filesystem;
+
+class Filesystem
+{
+    /**
+     * Get an array of all files in a directory.
+     * Added $depth parameter in Laravel 12.37.0.
+     *
+     * @param  string  $directory
+     * @param  bool  $hidden
+     * @param  array|string|int  $depth
+     * @return \Symfony\Component\Finder\SplFileInfo[]
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function files($directory, $hidden = false, array|string|int $depth = 0) {}
+
+    /**
+     * Get all of the directories within a given directory.
+     * Added $depth parameter in Laravel 12.37.0.
+     *
+     * @param  string  $directory
+     * @param  array|string|int  $depth
+     * @return array
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function directories($directory, array|string|int $depth = 0) {}
+
+    /**
+     * Get all the directories within a given directory (recursive).
+     * Introduced in Laravel 12.37.0.
+     *
+     * @param  string  $directory
+     * @return array
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function allDirectories($directory): array {}
+}
