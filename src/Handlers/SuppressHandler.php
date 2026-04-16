@@ -217,6 +217,44 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 }
             }
         }
+
+        if (\in_array('Illuminate\Database\Eloquent\Model', $parents, true)) {
+            self::suppressEloquentAccessorMethods($classStorage);
+        }
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod for legacy Eloquent accessor/mutator methods.
+     *
+     * Methods matching getXxxAttribute() and setXxxAttribute() are invoked via
+     * Eloquent's __get()/__set() magic when accessing $model->xxx — Psalm cannot
+     * see these call sites, so it incorrectly reports them as possibly unused.
+     *
+     * Note: method names are stored lowercase in ClassLikeStorage.
+     */
+    private static function suppressEloquentAccessorMethods(ClassLikeStorage $classStorage): void
+    {
+        foreach ($classStorage->methods as $methodName => $methodStorage) {
+            if (\preg_match('/^get.+attribute$/', $methodName) || \preg_match('/^set.+attribute$/', $methodName)) {
+                self::suppress('PossiblyUnusedMethod', $methodStorage);
+            }
+        }
+    }
+
+    private static function suppressByInterface(ClassLikeStorage $classStorage): void
+    {
+        if ($classStorage->class_implements === []) {
+            return;
+        }
+
+        foreach (self::CLASS_LEVEL_BY_INTERFACE as $issue => $interfaces) {
+            foreach ($interfaces as $interface) {
+                if (isset($classStorage->class_implements[\strtolower($interface)])) {
+                    self::suppress($issue, $classStorage);
+                    break;
+                }
+            }
+        }
     }
 
     private static function suppressByInterface(ClassLikeStorage $classStorage): void

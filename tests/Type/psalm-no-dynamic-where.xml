@@ -21,6 +21,7 @@
         </pluginClass>
     </plugins>
     <issueHandlers>
+        <MissingPureAnnotation errorLevel="info" />
         <PluginIssue name="NoEnvOutsideConfig" errorLevel="info" />
     </issueHandlers>
 </psalm>

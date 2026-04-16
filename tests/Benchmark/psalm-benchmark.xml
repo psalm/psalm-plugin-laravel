@@ -13,7 +13,10 @@
     </plugins>
     <!-- Suppress strict issues that add noise to benchmarks without affecting timing -->
     <issueHandlers>
+        <MissingPureAnnotation errorLevel="suppress" />
+        <MissingAbstractPureAnnotation errorLevel="suppress" />
         <MissingImmutableAnnotation errorLevel="suppress" />
+        <MissingInterfaceImmutableAnnotation errorLevel="suppress" />
         <MissingOverrideAttribute errorLevel="suppress" />
         <ClassMustBeFinal errorLevel="suppress" />
     </issueHandlers>

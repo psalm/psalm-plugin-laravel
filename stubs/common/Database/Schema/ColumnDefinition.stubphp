@@ -46,13 +46,13 @@ class ColumnDefinition
     public function from(int $startingValue): static {}
 
     /** Add a fulltext index. */
-    public function fulltext(bool|string $indexName = null): static {}
+    public function fulltext(bool|string|null $indexName = null): static {}
 
     /** Create a SQL compliant identity column (PostgreSQL). */
-    public function generatedAs(string|Expression $expression = null): static {}
+    public function generatedAs(string|Expression|null $expression = null): static {}
 
     /** Add an index. */
-    public function index(bool|string $indexName = null): static {}
+    public function index(bool|string|null $indexName = null): static {}
 
     /** Specify that algorithm=instant should be used for the column operation (MySQL). */
     public function instant(): static {}
@@ -77,7 +77,7 @@ class ColumnDefinition
     public function primary(bool $value = true): static {}
 
     /** Add a spatial index. */
-    public function spatialIndex(bool|string $indexName = null): static {}
+    public function spatialIndex(bool|string|null $indexName = null): static {}
 
     /** Set the starting value of an auto-incrementing field (MySQL/PostgreSQL). */
     public function startingValue(int $startingValue): static {}
@@ -89,7 +89,7 @@ class ColumnDefinition
     public function type(string $type): static {}
 
     /** Add a unique index. */
-    public function unique(bool|string $indexName = null): static {}
+    public function unique(bool|string|null $indexName = null): static {}
 
     /** Set the INTEGER column as UNSIGNED (MySQL). */
     public function unsigned(): static {}
@@ -101,7 +101,7 @@ class ColumnDefinition
     public function useCurrentOnUpdate(): static {}
 
     /** Add a vector index. */
-    public function vectorIndex(bool|string $indexName = null): static {}
+    public function vectorIndex(bool|string|null $indexName = null): static {}
 
     /** Create a virtual generated column (MySQL/PostgreSQL/SQLite). */
     public function virtualAs(string|Expression $expression): static {}

@@ -9,5 +9,5 @@ function renderCustomTemplate(\Illuminate\Http\Request $request, \Illuminate\Vie
 }
 ?>
 --EXPECTF--
-%ATaintedFile on line %d: Detected tainted file handling
 %ATaintedInclude on line %d: Detected tainted code passed to include or similar
+%ATaintedFile on line %d: Detected tainted file handling

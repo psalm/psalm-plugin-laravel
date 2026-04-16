@@ -397,4 +397,6 @@ function test_non_template_collection_all(): void
 }
 ?>
 --EXPECTF--
-%A
+InvalidStaticInvocation on line %d: Method App\Models\WorkOrder::completed is not static, but is called statically
+UndefinedMagicMethod on line %d: Magic method App\Builders\WorkOrderBuilder::completelyfakemethod does not exist
+UndefinedMagicMethod on line %d: Magic method App\Models\WorkOrder::completelyfakemethod does not exist

@@ -69,23 +69,6 @@ Security scanning runs automatically alongside type analysis — no extra config
 | Semgrep                  | Pro tier only       | Pattern-based      | Limited free tier  |
 | Snyk Code                | Generic             | Yes (generic)      | Freemium           |
 
-
-## Versions & Dependencies
-
-Maintained versions:
-
-| Laravel Psalm Plugin | PHP   | Laravel   | Psalm | Status |
-|----------------------|-------|-----------|-------|--------|
-| 4.x                  | ^8.2  | 12, 13    | 7     | Stable |
-| 3.x                  | ^8.2  | 11, 12    | 6     | Stable |
-| 2.12+                | ^8.0  | 9, 10, 11 | 5, 6  | Legacy |
-
-_(Older versions of Laravel, PHP, and Psalm were supported by version 1.x of the plugin, but they are no longer maintained)_
-
-See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
-Upgrading from v3? See the [v3 → v4 upgrade guide](docs/upgrade-v4.md).
-
-
 ## Quickstart
 
 ### Step 1: Install
@@ -94,30 +77,33 @@ Upgrading from v3? See the [v3 → v4 upgrade guide](docs/upgrade-v4.md).
 composer require --dev psalm/plugin-laravel
 ```
 
-### Step 2: Configure
-If you didn't use Psalm on the project before, you need to create a Psalm config:
+### Step 2: Set up Psalm
+
+Initialize a config and enable the plugin:
+
 ```bash
 ./vendor/bin/psalm --init
-```
-
-### Step 3: Enable the plugin:
-```bash
 ./vendor/bin/psalm-plugin enable psalm/plugin-laravel
 ```
 
-### Step 4: Run
-Run your usual Psalm command:
+Then add these recommended attributes to your `psalm.xml`:
+
+```xml
+<psalm
+    findUnusedCode="false"
+    ensureOverrideAttribute="false"
+/>
+```
+
+### Step 3: Run
+
 ```bash
 ./vendor/bin/psalm
 ```
 
-Security taint analysis runs automatically as part of the standard analysis in Psalm 7.
-No extra flags are needed.
+Security taint analysis runs automatically — no extra flags needed.
 
-### Step 5 (existing projects): Create a baseline
-
-On an existing codebase, the first run will likely report many issues.
-A [baseline file](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/#using-a-baseline-file) lets you suppress all current issues and focus only on new code:
+**Existing projects:** the first run will likely report many issues. Create a [baseline](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/#using-a-baseline-file) to suppress them and focus only on new code:
 
 ```bash
 ./vendor/bin/psalm --set-baseline=psalm-baseline.xml
@@ -137,12 +123,26 @@ See [docs/config.md](docs/config.md) for all configuration options.
 The plugin emits custom issues beyond Psalm's built-in checks:
 
 - [NoEnvOutsideConfig](docs/issues/NoEnvOutsideConfig.md) — `env()` called outside `config/` directory
-- [InvalidConsoleArgumentName](docs/issues/InvalidConsoleArgumentName.md) — `argument()` references undefined command argument
-- [InvalidConsoleOptionName](docs/issues/InvalidConsoleOptionName.md) — `option()` references undefined command option
+- [InvalidConsoleArgumentName](docs/issues/InvalidConsoleArgumentName.md) — `argument()` references undefined console command argument
+- [InvalidConsoleOptionName](docs/issues/InvalidConsoleOptionName.md) — `option()` references undefined console command option
 - [MissingView](docs/issues/MissingView.md) — `view()` references a non-existent Blade template (opt-in)
 - [MissingTranslation](docs/issues/MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
 - [ModelMakeDiscouraged](docs/issues/ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
 
+## Versions & Dependencies
+
+Maintained versions:
+
+| Laravel Psalm Plugin | PHP   | Laravel   | Psalm | Status |
+|----------------------|-------|-----------|-------|--------|
+| 4.x                  | ^8.2  | 12, 13    | 7     | Stable |
+| 3.x                  | ^8.2  | 11, 12    | 6     | Stable |
+| 2.12+                | ^8.0  | 9, 10, 11 | 5, 6  | Legacy |
+
+_(Older versions of Laravel, PHP, and Psalm were supported by version 1.x of the plugin, but they are no longer maintained)_
+
+See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
+Upgrading from v3? See the [v3 → v4 upgrade guide](docs/upgrade-v4.md).
 
 ## How it works
 

@@ -25,15 +25,16 @@ jobs:
       fail-fast: true
       matrix:
         php-version:
+          - '8.2'
           - '8.3'
           - '8.4'
           - '8.5'
         laravel-installer-version:
-          - '11.6.1'
           - '12.11.2'
+          - 'dev-master'
         exclude:
-          - php-version: '8.5'
-            laravel-installer-version: '11.6.1' # RuntimeException: PHP Error: Constant PDO::MYSQL_ATTR_SSL_CA is deprecated since 8.5, use Pdo\Mysql::ATTR_SSL_CA
+          - php-version: '8.2'
+            laravel-installer-version: 'dev-master'
 
     steps:
     - name: Checkout code

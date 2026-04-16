@@ -21,6 +21,7 @@
         </pluginClass>
     </plugins>
     <issueHandlers>
+        <MissingPureAnnotation errorLevel="info" />
         <!-- NoEnvOutsideConfig is a linting rule, not a type issue. psalm-tester runs
              Psalm on temp files in sys_get_temp_dir(), which don't match the /tests/
              pattern that NoEnvOutsideConfigHandler uses to auto-exclude test code, so

@@ -1,0 +1,16 @@
+<?php
+
+namespace Illuminate\Filesystem;
+
+class LockableFile
+{
+    /**
+     * Create a new LockableFile instance.
+     *
+     * @param  string  $path
+     * @param  string  $mode
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function __construct($path, $mode) {}
+}

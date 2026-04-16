@@ -244,11 +244,10 @@ final class ModelPropertyHandler
             SchemaColumn::TYPE_FLOAT => Type::getFloat(),
             SchemaColumn::TYPE_BOOL => Type::getBool(),
             SchemaColumn::TYPE_ENUM => self::mapEnumColumn($column),
-            SchemaColumn::TYPE_ARRAY => new Union([new Type\Atomic\TKeyedArray(
+            SchemaColumn::TYPE_ARRAY => new Union([Type\Atomic\TKeyedArray::make(
                 [Type::getFloat()],
-                null,
-                [Type::getInt(), Type::getFloat()],
-                true,
+                fallback_params: [Type::getInt(), Type::getFloat()],
+                is_list: true,
             )]),
             default => Type::getMixed(),
         };

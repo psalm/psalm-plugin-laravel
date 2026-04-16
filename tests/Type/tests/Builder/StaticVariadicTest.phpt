@@ -95,4 +95,5 @@ function test_relation_distinct_variadic(HasOne $r): void
 }
 ?>
 --EXPECTF--
-%A
+TooFewArguments on line %d: Too few arguments for App\Models\Customer::addselect - expecting column to be passed
+TooManyArguments on line %d: Too many arguments for App\Models\Customer::orderby - expecting 2 but saw 3
