@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Type;
 
+use AliesDev\PsalmTester\PsalmTester;
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use PHPyh\PsalmTester\PsalmTester;
 
 final class PsalmTest extends TestCase
 {
     /** @var array<string, string> */
     private static array $batchResults = [];
 
-    /** @var array<string, \PHPyh\PsalmTester\PsalmTest> */
+    /** @var array<string, \AliesDev\PsalmTester\PsalmTest> */
     private static array $testData = [];
 
     #[\Override]
@@ -27,7 +27,7 @@ final class PsalmTest extends TestCase
         $baseDir = self::baseDir();
 
         foreach (self::discoverPhptFiles($baseDir) as $absPath => $relPath) {
-            self::$testData[$relPath] = \PHPyh\PsalmTester\PsalmTest::fromPhptFile($absPath);
+            self::$testData[$relPath] = \AliesDev\PsalmTester\PsalmTest::fromPhptFile($absPath);
         }
 
         self::$batchResults = $tester->runBatch(self::$testData);
