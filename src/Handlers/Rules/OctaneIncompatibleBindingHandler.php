@@ -182,7 +182,7 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
      */
     private static function isContainerType(?Union $type): bool
     {
-        if ($type === null) {
+        if (!$type instanceof \Psalm\Type\Union) {
             return false;
         }
 
@@ -345,21 +345,14 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
         ) {
             return true;
         }
-
-        if ($expr instanceof FuncCall
+        return $expr instanceof FuncCall
             && $expr->name instanceof Name
             && \in_array($expr->name->toLowerString(), ['app', 'resolve'], true)
-            && $expr->getArgs() === []
-        ) {
-            return true;
-        }
-
-        return false;
+            && $expr->getArgs() === [];
     }
 
     private static function isAppFacade(Name $class): bool
     {
-        /** @var mixed $resolved */
         $resolved = $class->getAttribute('resolvedName');
 
         if (\is_string($resolved)) {
@@ -403,11 +396,9 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
             && $node->name instanceof Identifier
             && \strtolower($node->name->name) === 'class'
         ) {
-            /** @var mixed $resolved */
             $resolved = $node->class->getAttribute('resolvedName');
 
             if (\is_string($resolved) && isset(self::REQUEST_SCOPED_CLASSES[$resolved])) {
-                /** @var class-string */
                 return $resolved;
             }
 
