@@ -73,7 +73,10 @@ Security scanning runs automatically alongside type analysis — no extra config
 
 ### Step 1: Install
 
+Since [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta, allow dev (or beta) packages first:
+
 ```bash
+composer config minimum-stability dev && composer config prefer-stable true
 composer require --dev psalm/plugin-laravel
 ```
 

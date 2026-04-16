@@ -56,7 +56,7 @@ jobs:
         dependencies: [highest]
         exclude:
           - php: 8.5
-            laravel: ^11.35 # PDO::MYSQL_ATTR_SSL_CA deprecated in PHP 8.5, breaks testbench config
+            laravel: ^11.35
     name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Checkout code

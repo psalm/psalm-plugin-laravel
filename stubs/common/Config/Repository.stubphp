@@ -17,5 +17,4 @@ class Repository
      * @return array<array-key, mixed>
      */
     public function array(string $key, \Closure|array|null $default = null): array {}
-
 }
