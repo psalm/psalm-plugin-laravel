@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastsMethodParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
@@ -30,12 +29,6 @@ use Psalm\Type\Union;
  */
 final class ModelPropertyHandler
 {
-    /** @var array<string, string> model class → table name cache */
-    private static array $tableNameCache = [];
-
-    /** @var array<string, array<string, string>> model class → merged casts cache */
-    private static array $castsCache = [];
-
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -47,7 +40,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqClasslikeName */
+        /** @var class-string<Model> $fqClasslikeName */
         $fqClasslikeName = $event->getFqClasslikeName();
         $propertyName = $event->getPropertyName();
 
@@ -62,12 +55,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column instanceof SchemaColumn) {
-            return true;
-        }
-
-        return null;
+        return self::schemaHasColumn($fqClasslikeName, $propertyName) ? true : null;
     }
 
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
@@ -76,7 +64,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqClasslikeName */
+        /** @var class-string<Model> $fqClasslikeName */
         $fqClasslikeName = $event->getFqClasslikeName();
         $propertyName = $event->getPropertyName();
 
@@ -90,12 +78,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column instanceof SchemaColumn) {
-            return true;
-        }
-
-        return null;
+        return self::schemaHasColumn($fqClasslikeName, $propertyName) ? true : null;
     }
 
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
@@ -105,7 +88,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqClasslikeName */
+        /** @var class-string<Model> $fqClasslikeName */
         $fqClasslikeName = $event->getFqClasslikeName();
         $propertyName = $event->getPropertyName();
 
@@ -122,23 +105,40 @@ final class ModelPropertyHandler
             return null;
         }
 
-        $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if (!$column instanceof SchemaColumn) {
+        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
+        if ($metadata === null) {
             return null;
         }
 
-        // Check if there's a cast override
-        $casts = self::resolveCasts($codebase, $fqClasslikeName);
-        if (isset($casts[$propertyName])) {
-            return CastResolver::resolve($casts[$propertyName], $column->nullable);
+        // Lower once, reuse for both the schema column lookup and the cast map lookup.
+        // Empty property names can't match anything, so bail before touching the registry.
+        if ($propertyName === '') {
+            return null;
+        }
+        $lowered = \strtolower($propertyName);
+
+        $column = $metadata->schema()->columnByLowerKey($lowered);
+        if (!$column instanceof ColumnInfo) {
+            return null;
         }
 
-        // Map schema column type to Psalm type
-        return self::mapColumnType($column);
+        // Cast override wins over schema type. CastInfo::$psalmType already incorporates
+        // column nullability, so the consumer just returns it.
+        $casts = $metadata->casts();
+        if (isset($casts[$lowered])) {
+            return $casts[$lowered]->psalmType;
+        }
+
+        return self::mapSqlTypeToPsalmType($column);
     }
 
     /**
      * Resolve all migration-inferred columns for a model.
+     *
+     * Public for ModelRegistrationHandler::registerWriteTypesForColumns(), which runs
+     * during `AfterCodebasePopulated` — BEFORE the registry warm-up for the current
+     * model has completed. It therefore reads from {@see SchemaStateProvider} directly
+     * instead of via the registry.
      *
      * @return array<string, SchemaColumn>
      */
@@ -157,93 +157,62 @@ final class ModelPropertyHandler
         return $schema->tables[$tableName]->columns;
     }
 
-    private static function resolveColumn(string $fqClasslikeName, string $propertyName): ?SchemaColumn
+    /**
+     * @param class-string<Model> $fqClasslikeName
+     * @psalm-external-mutation-free
+     */
+    private static function schemaHasColumn(string $fqClasslikeName, string $propertyName): bool
     {
-        return self::resolveAllColumns($fqClasslikeName)[$propertyName] ?? null;
+        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
+        if ($metadata === null) {
+            return false;
+        }
+
+        return $metadata->schema()->has($propertyName);
     }
+
+    /** @var array<string, ?string> model class → table name cache (used only by resolveAllColumns). */
+    private static array $tableNameCache = [];
 
     private static function resolveTableName(string $fqClasslikeName): ?string
     {
-        if (isset(self::$tableNameCache[$fqClasslikeName])) {
+        if (\array_key_exists($fqClasslikeName, self::$tableNameCache)) {
             return self::$tableNameCache[$fqClasslikeName];
         }
 
         if (!\is_a($fqClasslikeName, Model::class, true)) {
-            return null;
+            return self::$tableNameCache[$fqClasslikeName] = null;
         }
 
         try {
             $reflection = new \ReflectionClass($fqClasslikeName);
             if ($reflection->isAbstract()) {
-                return null;
+                return self::$tableNameCache[$fqClasslikeName] = null;
             }
 
             $instance = $reflection->newInstanceWithoutConstructor();
-
             if (!$instance instanceof Model) {
-                return null;
+                return self::$tableNameCache[$fqClasslikeName] = null;
             }
 
             $tableName = $instance->getTable();
         } catch (\ReflectionException) {
-            return null;
+            return self::$tableNameCache[$fqClasslikeName] = null;
         }
 
-        self::$tableNameCache[$fqClasslikeName] = $tableName;
-
-        return $tableName;
+        return self::$tableNameCache[$fqClasslikeName] = $tableName;
     }
 
-    /**
-     * @return array<string, string>
-     */
-    private static function resolveCasts(\Psalm\Codebase $codebase, string $fqClasslikeName): array
+    private static function mapSqlTypeToPsalmType(ColumnInfo $column): Union
     {
-        if (isset(self::$castsCache[$fqClasslikeName])) {
-            return self::$castsCache[$fqClasslikeName];
-        }
-
-        $casts = [];
-
-        // 1. SoftDeletes trait → deleted_at: datetime (lowest priority)
-        $classStorage = $codebase->classlike_storage_provider->get($fqClasslikeName);
-        if (isset($classStorage->used_traits[\strtolower(SoftDeletes::class)])) {
-            $casts['deleted_at'] = 'datetime';
-        }
-
-        // 2. $casts property from the model instance
-        if (\is_a($fqClasslikeName, Model::class, true)) {
-            try {
-                $reflection = new \ReflectionClass($fqClasslikeName);
-                $instance = $reflection->newInstanceWithoutConstructor();
-
-                /** @var array<string, string> $instanceCasts */
-                $instanceCasts = $instance->getCasts();
-                $casts = \array_merge($casts, $instanceCasts);
-            } catch (\ReflectionException) {
-                // Can't instantiate model — skip instance casts
-            }
-        }
-
-        // 3. casts() method (AST-parsed, highest priority)
-        $methodCasts = CastsMethodParser::parse($codebase, $fqClasslikeName);
-        $casts = \array_merge($casts, $methodCasts);
-
-        self::$castsCache[$fqClasslikeName] = $casts;
-
-        return $casts;
-    }
-
-    private static function mapColumnType(SchemaColumn $column): Union
-    {
-        $type = match ($column->type) {
+        $type = match ($column->sqlType) {
             SchemaColumn::TYPE_INT => $column->unsigned
                 ? new Union([new Type\Atomic\TIntRange(0, null)])
                 : Type::getInt(),
             SchemaColumn::TYPE_STRING => Type::getString(),
             SchemaColumn::TYPE_FLOAT => Type::getFloat(),
             SchemaColumn::TYPE_BOOL => Type::getBool(),
-            SchemaColumn::TYPE_ENUM => self::mapEnumColumn($column),
+            SchemaColumn::TYPE_ENUM => self::enumLiterals($column->options),
             SchemaColumn::TYPE_ARRAY => new Union([Type\Atomic\TKeyedArray::make(
                 [Type::getFloat()],
                 fallback_params: [Type::getInt(), Type::getFloat()],
@@ -259,21 +228,35 @@ final class ModelPropertyHandler
         return $type;
     }
 
-    private static function mapEnumColumn(SchemaColumn $column): Union
+    /**
+     * Emit a literal-string union from an ENUM column's allowed values.
+     *
+     * Empty options falls back to `string` — matches the pre-registry behavior.
+     *
+     * @param list<string> $options
+     */
+    private static function enumLiterals(array $options): Union
     {
-        if ($column->options === []) {
+        if ($options === []) {
             return Type::getString();
         }
 
         $literals = [];
-        foreach ($column->options as $option) {
+        foreach ($options as $option) {
             $literals[] = Type\Atomic\TLiteralString::make($option);
         }
 
         return new Union($literals);
     }
 
-    /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
+    /**
+     * Nested cache for {@see hasNativeProperty()}: `[$fqcn][$propertyName] => bool`.
+     *
+     * Nested rather than flat-keyed to avoid a `$fqcn . '::' . $propertyName` string
+     * concat on every property access. Each access does two `isset()` probes instead.
+     *
+     * @var array<class-string, array<string, bool>>
+     */
     private static array $nativePropertyCache = [];
 
     /**
@@ -286,14 +269,12 @@ final class ModelPropertyHandler
      */
     private static function hasNativeProperty(string $fqcn, string $propertyName): bool
     {
-        $key = $fqcn . '::' . $propertyName;
-
-        if (\array_key_exists($key, self::$nativePropertyCache)) {
-            return self::$nativePropertyCache[$key];
+        if (isset(self::$nativePropertyCache[$fqcn][$propertyName])) {
+            return self::$nativePropertyCache[$fqcn][$propertyName];
         }
 
         $result = \property_exists($fqcn, $propertyName);
-        self::$nativePropertyCache[$key] = $result;
+        self::$nativePropertyCache[$fqcn][$propertyName] = $result;
 
         return $result;
     }

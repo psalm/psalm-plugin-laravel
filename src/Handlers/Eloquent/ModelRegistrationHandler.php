@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -75,6 +76,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             self::registerHandlersForModel($codebase, $storage);
+
+            // Piggy-back metadata warm-up on the existing iteration — no second pass.
+            // Builder::warmUp is idempotent and never throws. See design §6.2.
+            /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqcn */
+            $fqcn = $storage->name;
+            ModelMetadataRegistryBuilder::warmUp($codebase, $fqcn);
         }
     }
 

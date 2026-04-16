@@ -10,6 +10,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
+use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -41,6 +42,12 @@ final class Plugin implements PluginEntryPointInterface
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
             FacadeMapProvider::init($output);
+
+            // Registry of per-model metadata (schema + casts + traits + primary key + ...).
+            // init() only captures the Progress handle — actual model metadata is populated
+            // during AfterCodebasePopulated by ModelRegistrationHandler piggy-backing on its
+            // existing iteration. See docs/design/model-metadata-registry.md §6.
+            ModelMetadataRegistry::init($output);
 
             Handlers\Rules\NoEnvOutsideConfigHandler::init(
                 ApplicationProvider::getApp()->configPath(),
