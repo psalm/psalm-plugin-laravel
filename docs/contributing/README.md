@@ -207,7 +207,14 @@ flowchart LR
         ----
         expression AST, codebase
         ----
-        ModelMakeHandler, OctaneIncompatibleBindingHandler"]
+        ModelMakeHandler"]
+
+        A7["AfterMethodCallAnalysis
+        on each resolved method call
+        ----
+        expression, declaring method id
+        ----
+        OctaneIncompatibleBindingHandler"]
     end
 
     scanning --> populated --> analysis

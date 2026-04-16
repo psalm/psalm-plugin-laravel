@@ -11,7 +11,9 @@ use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Contracts\Auth\Guard;
+use Illuminate\Contracts\Config\Repository as ConfigRepositoryContract;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Routing\UrlGenerator as UrlGeneratorContract;
 use Illuminate\Contracts\Session\Session as SessionContract;
 use Illuminate\Cookie\CookieJar;
 use Illuminate\Http\Request;
@@ -130,35 +132,48 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton('svc.22', function (Application $app): MyService {
             return new MyService($app->make(Redirector::class));
         });
-
-        // Bad. Remaining aliases (coverage for REQUEST_SCOPED_ALIASES).
         $this->app->singleton('svc.23', function (Application $app): MyService {
-            return new MyService($app['auth']);
+            return new MyService($app->make(ConfigRepositoryContract::class));
         });
         $this->app->singleton('svc.24', function (Application $app): MyService {
-            return new MyService($app['auth.driver']);
+            return new MyService($app->make(UrlGeneratorContract::class));
         });
+
+        // Bad. Remaining aliases (coverage for REQUEST_SCOPED_ALIASES).
         $this->app->singleton('svc.25', function (Application $app): MyService {
-            return new MyService($app['session']);
+            return new MyService($app['auth']);
         });
         $this->app->singleton('svc.26', function (Application $app): MyService {
-            return new MyService($app['session.store']);
+            return new MyService($app['auth.driver']);
         });
         $this->app->singleton('svc.27', function (Application $app): MyService {
-            return new MyService($app['cookie']);
+            return new MyService($app['session']);
         });
         $this->app->singleton('svc.28', function (Application $app): MyService {
-            return new MyService($app['config']);
+            return new MyService($app['session.store']);
         });
         $this->app->singleton('svc.29', function (Application $app): MyService {
-            return new MyService($app['url']);
+            return new MyService($app['cookie']);
         });
         $this->app->singleton('svc.30', function (Application $app): MyService {
+            return new MyService($app['config']);
+        });
+        $this->app->singleton('svc.31', function (Application $app): MyService {
+            return new MyService($app['url']);
+        });
+        $this->app->singleton('svc.32', function (Application $app): MyService {
             return new MyService($app['redirect']);
         });
 
         // Good. bind() re-executes per resolution, so request-scoped resolution is fine.
         $this->app->bind('svc.ok1', function (Application $app): MyService {
+            return new MyService($app->make(Request::class));
+        });
+
+        // Good. Facade-form bindings (StaticCall) are out of scope: the hook receives
+        // both MethodCall and StaticCall but we filter the StaticCall branch out.
+        // This is a regression guard after the AfterExpressionAnalysis -> AfterMethodCallAnalysis refactor.
+        App::singleton('svc.ok.facade', function (Application $app): MyService {
             return new MyService($app->make(Request::class));
         });
 
@@ -226,6 +241,8 @@ OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Contracts\Sessi
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Config\Repository' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Routing\UrlGenerator' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Routing\Redirector' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Contracts\Config\Repository' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Contracts\Routing\UrlGenerator' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'auth' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'auth.driver' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'session' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.

@@ -171,7 +171,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function find_octane_incompatible_bindings_true(): void
+    public function find_octane_incompatible_binding_true(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="true" /></pluginClass>');
 
@@ -181,7 +181,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function find_octane_incompatible_bindings_false(): void
+    public function find_octane_incompatible_binding_false(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="false" /></pluginClass>');
 
@@ -191,7 +191,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function invalid_find_octane_incompatible_bindings_throws(): void
+    public function invalid_find_octane_incompatible_binding_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="yes" /></pluginClass>');
 

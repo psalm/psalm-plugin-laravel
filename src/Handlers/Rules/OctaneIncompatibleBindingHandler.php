@@ -33,8 +33,10 @@ use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
  * that instance alive for every subsequent request.
  *
  * Handler is opt-in: registered only when findOctaneIncompatibleBinding is set
- * in psalm.xml. When registered, the hook fires per resolved method call;
- * non-matching method IDs reject in O(1) via an isset() lookup.
+ * in psalm.xml. When registered, the hook fires for every resolved MethodCall
+ * and StaticCall; we reject StaticCall immediately (facade-form bindings like
+ * `App::singleton(...)` are out of scope) and match remaining calls in O(1) via
+ * an isset() lookup on the declaring method id.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
@@ -50,16 +52,20 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
      * points at whichever one is in scope for the receiver type. Users who type
      * $this->app as the contract hit the contract rows; users typing the concrete
      * class hit the Container rows.
+     *
+     * Keys are hard-coded lowercase strings (not ::class) so we can compare them
+     * directly against strtolower(getDeclaringMethodId()) without ever depending on
+     * PHP's case-preserved ::class resolution.
      */
     private const UNSAFE_METHOD_IDS = [
-        \illuminate\container\container::class . '::singleton' => true,
-        \illuminate\container\container::class . '::singletonif' => true,
-        \illuminate\container\container::class . '::scoped' => true,
-        \illuminate\container\container::class . '::scopedif' => true,
-        \illuminate\contracts\container\container::class . '::singleton' => true,
-        \illuminate\contracts\container\container::class . '::singletonif' => true,
-        \illuminate\contracts\container\container::class . '::scoped' => true,
-        \illuminate\contracts\container\container::class . '::scopedif' => true,
+        'illuminate\\container\\container::singleton' => true,
+        'illuminate\\container\\container::singletonif' => true,
+        'illuminate\\container\\container::scoped' => true,
+        'illuminate\\container\\container::scopedif' => true,
+        'illuminate\\contracts\\container\\container::singleton' => true,
+        'illuminate\\contracts\\container\\container::singletonif' => true,
+        'illuminate\\contracts\\container\\container::scoped' => true,
+        'illuminate\\contracts\\container\\container::scopedif' => true,
     ];
 
     /**
@@ -185,9 +191,11 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
     /**
      * Yield each (abstract, node) violation found inside the closure body.
      *
-     * We deliberately do not descend into nested closures / arrow functions: their
-     * bodies define a separate scope that Psalm will analyze in its own
-     * afterMethodCallAnalysis events, so re-emitting here would cause duplicates.
+     * We deliberately do not descend into nested closures / arrow functions. They
+     * define their own execution scope: resolutions performed inside them happen
+     * at invocation time of the inner closure, not during the outer shared-binding
+     * closure's one-and-only execution, so attributing them to the outer binding
+     * would be a false positive.
      *
      * @return \Generator<int, array{class-string|string, Node}>
      */
@@ -399,8 +407,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             $sub = $node->$name;
 
             if ($sub instanceof Closure || $sub instanceof ArrowFunction) {
-                // The nested closure itself is a Node, but we don't descend into its
-                // body. See findResolutions() docblock.
+                // Don't descend into nested closure bodies. See findResolutions() docblock.
                 continue;
             }
 

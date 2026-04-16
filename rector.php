@@ -13,6 +13,11 @@ use Rector\ValueObject\PhpVersion;
 return RectorConfig::configure()
     ->withPaths(['src', 'tests'])
     ->withSkipPath('tests/Unit/Handlers/Eloquent/Schema/migrations')
+    // UNSAFE_METHOD_IDS uses intentionally-lowercased "class::method" strings so we can
+    // match strtolower(getDeclaringMethodId()) without runtime normalization. Rector
+    // keeps trying to "upgrade" them to \Class::class concatenation, which would break
+    // the lookup (::class preserves source case and cannot be used in a const array).
+    ->withSkipPath('src/Handlers/Rules/OctaneIncompatibleBindingHandler.php')
     ->withPhpVersion(PhpVersion::PHP_82)
     ->withSets([PHPUnitSetList::PHPUNIT_120])
     ->withPreparedSets(deadCode: true, codingStyle: true, typeDeclarations: true, codeQuality: true, phpunitCodeQuality: true)
