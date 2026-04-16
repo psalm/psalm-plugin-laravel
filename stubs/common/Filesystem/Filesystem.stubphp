@@ -133,6 +133,18 @@ class Filesystem
     public function link($target, $link) {}
 
     /**
+     * Create a relative symlink to the target file or directory.
+     *
+     * @param  string  $target
+     * @param  string  $link
+     * @return void
+     *
+     * @psalm-taint-sink file $target
+     * @psalm-taint-sink file $link
+     */
+    public function relativeLink($target, $link) {}
+
+    /**
      * Determine if a file or directory exists.
      *
      * Not a taint sink: file_exists() is a read-only boolean check with
@@ -222,4 +234,178 @@ class Filesystem
      * @psalm-taint-sink file $path
      */
     public function replaceInFile($search, $replace, $path) {}
+
+    /**
+     * Get the file type of a given file.
+     *
+     * @param  string  $path
+     * @return string|false
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function type($path) {}
+
+    /**
+     * Get the MIME type of a given file.
+     *
+     * @param  string  $path
+     * @return string|false
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function mimeType($path) {}
+
+    /**
+     * Guess the file extension from the MIME type of a given file.
+     *
+     * @param  string  $path
+     * @return string|null
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function guessExtension($path) {}
+
+    /**
+     * Determine if two files are the same by comparing their hashes.
+     *
+     * @param  string  $firstFile
+     * @param  string  $secondFile
+     * @return bool
+     *
+     * @psalm-taint-sink file $firstFile
+     * @psalm-taint-sink file $secondFile
+     */
+    public function hasSameHash($firstFile, $secondFile) {}
+
+    /**
+     * Get the file size of a given file.
+     *
+     * @param  string  $path
+     * @return int
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function size($path) {}
+
+    /**
+     * Get the file's last modification time.
+     *
+     * @param  string  $path
+     * @return int
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function lastModified($path) {}
+
+    /**
+     * Find path names matching a given pattern.
+     *
+     * @param  string  $pattern
+     * @param  int  $flags
+     * @return array
+     *
+     * @psalm-taint-sink file $pattern
+     */
+    public function glob($pattern, $flags = 0) {}
+
+    /**
+     * Get an array of all files in a directory.
+     *
+     * @param  string  $directory
+     * @param  bool  $hidden
+     * @return \Symfony\Component\Finder\SplFileInfo[]
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function files($directory, $hidden = false) {}
+
+    /**
+     * Get all of the files from the given directory (recursive).
+     *
+     * @param  string  $directory
+     * @param  bool  $hidden
+     * @return \Symfony\Component\Finder\SplFileInfo[]
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function allFiles($directory, $hidden = false) {}
+
+    /**
+     * Get all of the directories within a given directory.
+     *
+     * @param  string  $directory
+     * @return array
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function directories($directory) {}
+
+    /**
+     * Ensure a directory exists.
+     *
+     * @param  string  $path
+     * @param  int  $mode
+     * @param  bool  $recursive
+     * @return void
+     *
+     * @psalm-taint-sink file $path
+     */
+    public function ensureDirectoryExists($path, $mode = 0755, $recursive = true) {}
+
+    /**
+     * Move a directory.
+     *
+     * @param  string  $from
+     * @param  string  $to
+     * @param  bool  $overwrite
+     * @return bool
+     *
+     * @psalm-taint-sink file $from
+     * @psalm-taint-sink file $to
+     */
+    public function moveDirectory($from, $to, $overwrite = false) {}
+
+    /**
+     * Copy a directory from one location to another.
+     *
+     * @param  string  $directory
+     * @param  string  $destination
+     * @param  int|null  $options
+     * @return bool
+     *
+     * @psalm-taint-sink file $directory
+     * @psalm-taint-sink file $destination
+     */
+    public function copyDirectory($directory, $destination, $options = null) {}
+
+    /**
+     * Recursively delete a directory.
+     *
+     * @param  string  $directory
+     * @param  bool  $preserve
+     * @return bool
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function deleteDirectory($directory, $preserve = false) {}
+
+    /**
+     * Remove all of the directories within a given directory.
+     *
+     * @param  string  $directory
+     * @return bool
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function deleteDirectories($directory) {}
+
+    /**
+     * Empty the specified directory of all files and folders.
+     *
+     * @param  string  $directory
+     * @return bool
+     *
+     * @psalm-taint-sink file $directory
+     */
+    public function cleanDirectory($directory) {}
 }

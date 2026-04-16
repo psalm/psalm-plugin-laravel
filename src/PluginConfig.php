@@ -12,18 +12,18 @@ use Psalm\Config;
  * Built once from the `<pluginClass>` XML element in psalm.xml,
  * then threaded through to handlers that need it.
  *
- * @psalm-immutable
  * @internal
  */
 final readonly class PluginConfig
 {
+    /** @psalm-mutation-free */
     private function __construct(
-        public ColumnFallback $columnFallback,
-        public bool $failOnInternalError,
+        public ColumnFallback $modelPropertiesColumnFallback,
+        public bool $resolveDynamicWhereClauses,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         public string $cachePath,
-        public bool $resolveDynamicWhereClauses,
+        public bool $failOnInternalError,
     ) {}
 
     public static function fromXml(?\SimpleXMLElement $config): self
@@ -48,18 +48,19 @@ final readonly class PluginConfig
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
 
         return new self(
-            columnFallback: $columnFallback,
-            failOnInternalError: $failOnInternalError,
+            modelPropertiesColumnFallback: $columnFallback,
+            resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             cachePath: self::resolveCachePath(),
-            resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
+            failOnInternalError: $failOnInternalError,
         );
     }
 
+    /** @psalm-mutation-free */
     public function shouldUseMigrations(): bool
     {
-        return $this->columnFallback === ColumnFallback::Migrations;
+        return $this->modelPropertiesColumnFallback === ColumnFallback::Migrations;
     }
 
     /**
@@ -105,11 +106,11 @@ final readonly class PluginConfig
         // the automatic Psalm cache directory instead
         $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
 
-        if ($env !== false && $env !== '') {
-            \fwrite(
-                \STDERR,
-                'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
-                    . "The plugin now uses Psalm's cache directory automatically.\n",
+        if (\is_string($env) && $env !== '') {
+            \trigger_error(
+                'PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
+                    . "The plugin now uses Psalm's cache directory automatically.",
+                \E_USER_DEPRECATED,
             );
             return \rtrim($env, \DIRECTORY_SEPARATOR);
         }

@@ -1,0 +1,21 @@
+<?php
+
+namespace Illuminate\Config;
+
+class Repository
+{
+    /**
+     * Get the specified array configuration value.
+     *
+     * Psalm tightens $default to reject plain scalar values (string, int, bool, etc.)
+     * because passing a non-array, non-null, non-Closure default guarantees an
+     * InvalidArgumentException at runtime when the key is absent (the method throws
+     * if the resolved value is not an array). Closures are accepted because
+     * Arr::get() invokes them via value() before the array check.
+     *
+     * @param  (\Closure():(array<array-key, mixed>|null))|array<array-key, mixed>|null  $default
+     * @return array<array-key, mixed>
+     */
+    public function array(string $key, \Closure|array|null $default = null): array {}
+
+}

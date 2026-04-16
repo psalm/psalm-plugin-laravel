@@ -20,7 +20,7 @@ For Psalm's upstream taint analysis documentation, see:
 ## Stub location
 
 Taint annotations live in `stubs/common/` alongside type stubs, organized by Laravel namespace.
-Psalm 7 runs taint analysis by default (`$run_taint_analysis = true`), so there is no need for a separate directory.
+Taint analysis is opt-in (`runTaintAnalysis="true"` in `psalm.xml`, or `--taint-analysis` CLI flag), so there is no need for a separate directory — the stubs apply whenever taint analysis is enabled.
 
 ## Annotations quick reference
 
@@ -307,10 +307,16 @@ The project's own `psalm.xml` cannot test taint stubs (the plugin can't analyze 
 mkdir -p /tmp/taint-test/app
 cat > /tmp/taint-test/psalm.xml << 'XMLEOF'
 <?xml version="1.0"?>
-<psalm errorLevel="1" findUnusedCode="false"
+<psalm errorLevel="1"
+    findUnusedCode="false"
+    runTaintAnalysis="true"
     xmlns="https://getpsalm.org/schema/config">
-    <projectFiles><directory name="app" /></projectFiles>
-    <plugins><pluginClass class="Psalm\LaravelPlugin\Plugin"/></plugins>
+    <projectFiles>
+        <directory name="app" />
+    </projectFiles>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin"/>
+    </plugins>
 </psalm>
 XMLEOF
 

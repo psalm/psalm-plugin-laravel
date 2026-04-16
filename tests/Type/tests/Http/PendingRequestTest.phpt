@@ -1,3 +1,5 @@
+--SKIPIF--
+<?php if (version_compare(\Illuminate\Foundation\Application::VERSION, '12.0.0', '<')) { echo 'skip requires Laravel 12+'; }
 --FILE--
 <?php declare(strict_types=1);
 
@@ -22,16 +24,19 @@ function test_sync(PendingRequest $request): void {
     /** @psalm-check-type-exact $_chained = Response */
 }
 
-// async() narrows to AsyncPendingRequest; HTTP method return types are version-specific:
-//   L < 12.42.0: GuzzleHttp\Promise\PromiseInterface
-//   L >= 12.42.0: Illuminate\Http\Client\Promises\LazyPromise
+// async() narrows to AsyncPendingRequest, HTTP methods return LazyPromise
 function test_async(PendingRequest $request): void {
     $_asyncRequest = $request->async();
     /** @psalm-check-type-exact $_asyncRequest = AsyncPendingRequest */
 
-    $request->async()->get('https://example.com');
-    $request->async()->post('https://example.com');
-    $request->async()->send('GET', 'https://example.com');
+    $_get = $request->async()->get('https://example.com');
+    /** @psalm-check-type-exact $_get = LazyPromise */
+
+    $_post = $request->async()->post('https://example.com');
+    /** @psalm-check-type-exact $_post = LazyPromise */
+
+    $_send = $request->async()->send('GET', 'https://example.com');
+    /** @psalm-check-type-exact $_send = LazyPromise */
 }
 
 // async(false) reverts to sync PendingRequest
@@ -42,7 +47,8 @@ function test_explicit_sync(PendingRequest $request): void {
 
 // Fluent chaining preserves async semantics
 function test_async_chaining(PendingRequest $request): void {
-    $request->async()->withUrlParameters(['id' => '1'])->get('https://example.com');
+    $_result = $request->async()->withUrlParameters(['id' => '1'])->get('https://example.com');
+    /** @psalm-check-type-exact $_result = LazyPromise */
 }
 ?>
 --EXPECTF--

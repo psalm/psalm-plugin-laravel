@@ -6,7 +6,8 @@ nav_order: 4
 
 # MissingView
 
-Emitted when `view()`, `Factory::make()` (e.g., `view()->make()`), or facade/alias calls such as `View::make()` reference a Blade template that does not exist on disk.
+Emitted when `view()` or `Factory::make()` (e.g., `view()->make()`) references a Blade template that does not exist on disk.
+Facade calls like `View::make()` are not currently detected (see [#591](https://github.com/psalm/psalm-plugin-laravel/issues/591)).
 
 ## Why this is a problem
 

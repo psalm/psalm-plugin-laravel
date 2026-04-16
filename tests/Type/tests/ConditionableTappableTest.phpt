@@ -1,3 +1,5 @@
+--SKIPIF--
+<?php if (version_compare(\Illuminate\Foundation\Application::VERSION, '12.0.0', '<')) { echo 'skip requires Laravel 12+'; }
 --FILE--
 <?php declare(strict_types=1);
 
@@ -166,10 +168,7 @@ function test_response_tap_with_callback(Response $response): void
     $_result = $response->tap(static function (Response $r): void {
         $r->status();
     });
-    // Psalm 6 + Laravel 11 resolves tap() to mixed due to conditional @return $this limitations.
-    // Psalm 6 + Laravel 12 resolves correctly to Response&static.
-    // Not asserting exact type here to support both versions.
-    \assert(true);
+    /** @psalm-check-type-exact $_result = Response&static */
 }
 ?>
 --EXPECTF--
