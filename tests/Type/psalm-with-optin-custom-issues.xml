@@ -17,6 +17,7 @@
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <failOnInternalError value="true" />
+            <findMissingViews value="true" />
             <findMissingTranslations value="true" />
         </pluginClass>
     </plugins>
