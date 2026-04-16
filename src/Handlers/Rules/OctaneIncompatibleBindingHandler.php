@@ -353,6 +353,7 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
 
     private static function isAppFacade(Name $class): bool
     {
+        /** @psalm-var mixed $resolved */
         $resolved = $class->getAttribute('resolvedName');
 
         if (\is_string($resolved)) {
@@ -396,9 +397,11 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
             && $node->name instanceof Identifier
             && \strtolower($node->name->name) === 'class'
         ) {
+            /** @psalm-var mixed $resolved */
             $resolved = $node->class->getAttribute('resolvedName');
 
             if (\is_string($resolved) && isset(self::REQUEST_SCOPED_CLASSES[$resolved])) {
+                /** @psalm-var class-string */
                 return $resolved;
             }
 
@@ -432,7 +435,7 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
         yield $node;
 
         foreach ($node->getSubNodeNames() as $name) {
-            /** @var mixed $sub */
+            /** @psalm-var mixed $sub */
             $sub = $node->$name;
 
             if ($sub instanceof Closure || $sub instanceof ArrowFunction) {
@@ -447,7 +450,7 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
             }
 
             if (\is_array($sub)) {
-                /** @var mixed $item */
+                /** @psalm-var mixed $item */
                 foreach ($sub as $item) {
                     if ($item instanceof Closure || $item instanceof ArrowFunction) {
                         continue;
@@ -470,8 +473,7 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
         IssueBuffer::accepts(
             new OctaneIncompatibleBinding(
                 \sprintf(
-                    "Resolving request-scoped '%s' inside %s() closure leaks state across requests under Octane. "
-                        . 'Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.',
+                    "Request-scoped '%s' resolved inside %s() closure — state leaks across Octane requests. Use bind() or resolve at call site.",
                     $abstract,
                     $methodName,
                 ),

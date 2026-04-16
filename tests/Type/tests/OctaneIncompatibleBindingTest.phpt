@@ -1,3 +1,5 @@
+--ARGS--
+--no-progress --no-diff --config=./tests/Type/psalm-find-octane-incompatible-bindings.xml
 --FILE--
 <?php declare(strict_types=1);
 
@@ -165,26 +167,26 @@ class MyService
 }
 ?>
 --EXPECTF--
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Http\Request' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Http\Request' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'request' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Session\Store' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Contracts\Auth\Authenticatable' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Contracts\Auth\Factory' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Http\Request' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Http\Request' inside scoped() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Http\Request' inside singletonIf() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Http\Request' inside scopedIf() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Http\Request' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Http\Request' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Http\Request' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Cookie\CookieJar' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Auth\AuthManager' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Contracts\Auth\Guard' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Session\SessionManager' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'Illuminate\Contracts\Session\Session' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'auth' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'auth.driver' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'session' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'session.store' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
-OctaneIncompatibleBinding on line %d: Resolving request-scoped 'cookie' inside singleton() closure leaks state across requests under Octane. Use bind() for per-resolution instances, or resolve the dependency inside the consuming method.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'request' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Session\Store' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Contracts\Auth\Authenticatable' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Contracts\Auth\Factory' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside scoped() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singletonIf() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside scopedIf() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Cookie\CookieJar' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Auth\AuthManager' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Contracts\Auth\Guard' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Session\SessionManager' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Contracts\Session\Session' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'auth' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'auth.driver' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'session' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'session.store' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'cookie' resolved inside singleton() closure — state leaks across Octane requests. Use bind() or resolve at call site.

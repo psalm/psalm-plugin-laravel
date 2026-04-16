@@ -24,6 +24,7 @@ Full config example:
         <resolveDynamicWhereClauses value="false" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
+        <findOctaneIncompatibleBindings value="true" />
         <failOnInternalError value="true" />
     </pluginClass>
 </plugins>
@@ -94,6 +95,22 @@ See [MissingView](issues/MissingView.md) for details.
 
 ```xml
 <findMissingViews value="true" />
+```
+
+## `findOctaneIncompatibleBindings`
+
+**default**: `false`
+
+When enabled, the plugin flags `singleton()` / `scoped()` / `singletonIf()` / `scopedIf()` binding closures that resolve request-scoped Laravel services (Request, Session, Auth, Cookie). Under Laravel Octane the application instance is reused across requests, so these captures leak state from the first resolving request into every subsequent one.
+
+Off by default because the rule is only relevant to Octane users; FPM-only projects get no benefit from it.
+
+See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details.
+
+### Example
+
+```xml
+<findOctaneIncompatibleBindings value="true" />
 ```
 
 ## Cache directory

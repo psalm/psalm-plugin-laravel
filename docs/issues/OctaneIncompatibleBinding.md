@@ -8,6 +8,8 @@ nav_order: 7
 
 Emitted when a `singleton()` / `scoped()` / `singletonIf()` / `scopedIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, or `Auth`.
 
+**Opt-in.** Enable via `<findOctaneIncompatibleBindings value="true" />` in `psalm.xml` — see [Configuration](../config.md#findoctaneincompatiblebindings).
+
 ## Why this is a problem
 
 Under traditional PHP-FPM, every request boots a fresh application instance, so even a "shared" binding is really re-created per request.

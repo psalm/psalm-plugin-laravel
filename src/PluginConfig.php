@@ -22,6 +22,7 @@ final readonly class PluginConfig
         public bool $resolveDynamicWhereClauses,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
+        public bool $findOctaneIncompatibleBindings,
         public string $cachePath,
         public bool $failOnInternalError,
     ) {}
@@ -45,6 +46,7 @@ final readonly class PluginConfig
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        $findOctaneIncompatibleBindings = self::xmlBoolAttr($config?->findOctaneIncompatibleBindings, 'findOctaneIncompatibleBindings');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
 
         return new self(
@@ -52,6 +54,7 @@ final readonly class PluginConfig
             resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
+            findOctaneIncompatibleBindings: $findOctaneIncompatibleBindings,
             cachePath: self::resolveCachePath(),
             failOnInternalError: $failOnInternalError,
         );
