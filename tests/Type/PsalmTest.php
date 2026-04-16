@@ -17,6 +17,9 @@ final class PsalmTest extends TestCase
     /** @var array<string, \AliesDev\PsalmTester\PsalmTest> */
     private static array $testData = [];
 
+    /** @var array<string, string> relPath => skip reason */
+    private static array $skipReasons = [];
+
     #[\Override]
     public static function setUpBeforeClass(): void
     {
@@ -27,6 +30,13 @@ final class PsalmTest extends TestCase
         $baseDir = self::baseDir();
 
         foreach (self::discoverPhptFiles($baseDir) as $absPath => $relPath) {
+            $skipReason = \AliesDev\PsalmTester\PsalmTest::getSkipReason($absPath);
+
+            if ($skipReason !== null) {
+                self::$skipReasons[$relPath] = $skipReason;
+                continue;
+            }
+
             self::$testData[$relPath] = \AliesDev\PsalmTester\PsalmTest::fromPhptFile($absPath);
         }
 
@@ -46,6 +56,10 @@ final class PsalmTest extends TestCase
     #[DataProvider('providePhptFiles')]
     public function testPhptFiles(string $relPath): void
     {
+        if (isset(self::$skipReasons[$relPath])) {
+            $this->markTestSkipped(self::$skipReasons[$relPath]);
+        }
+
         Assert::assertThat(
             self::$batchResults[$relPath],
             self::$testData[$relPath]->constraint,
