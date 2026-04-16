@@ -30,7 +30,11 @@ jobs:
           - '8.4'
           - '8.5'
         laravel-installer-version:
+          - '11.6.1'
           - '12.11.2'
+        exclude:
+          - php-version: '8.5'
+            laravel-installer-version: '11.6.1' # PDO::MYSQL_ATTR_SSL_CA deprecated in PHP 8.5, breaks testbench
 
     steps:
     - name: Checkout code
