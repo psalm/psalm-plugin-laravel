@@ -26,7 +26,6 @@
         <ClassMustBeFinal errorLevel="suppress" />
         <MissingImmutableAnnotation errorLevel="suppress" />
         <MissingOverrideAttribute errorLevel="suppress" />
-        <MissingPureAnnotation errorLevel="suppress" />
         <UnusedClass errorLevel="suppress" />
     </issueHandlers>
 </psalm>
