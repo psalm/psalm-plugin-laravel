@@ -31,10 +31,6 @@ jobs:
           - '8.5'
         laravel-installer-version:
           - '12.11.2'
-          - 'dev-master'
-        exclude:
-          - php-version: '8.2'
-            laravel-installer-version: 'dev-master'
 
     steps:
     - name: Checkout code

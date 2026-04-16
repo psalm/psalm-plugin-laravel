@@ -383,6 +383,18 @@ final class HigherOrderCollectionProxyTest
         /** @psalm-check-type-exact $_result = EloquentCollection<int, Customer> */
         $_result->values();
     }
+
+    /**
+     * Proxy method called with arguments must not emit TooManyArguments.
+     * The handler provides a variadic-mixed signature for all proxy method calls
+     * so that $collection->each->update(['key' => 'val']) works without errors.
+     * @param EloquentCollection<int, Customer> $users
+     */
+    public function proxyMethodWithArguments(EloquentCollection $users): void
+    {
+        // Multi-arg proxy call — must not emit TooManyArguments
+        $users->each->update(['status' => 'active', 'updated_at' => null]);
+    }
 }
 
 ?>

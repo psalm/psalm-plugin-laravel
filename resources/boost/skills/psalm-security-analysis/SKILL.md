@@ -50,7 +50,7 @@ echo "Exit: $?"
 
 ## Triage
 
-Use the compact stdout output to assess the scope. For individual findings, query the JSON — this avoids reading the entire report:
+Use the text stdout output to assess the scope. For individual findings, query the JSON — this avoids reading the entire report:
 
 ```bash
 # All taint issue types found
