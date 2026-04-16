@@ -42,7 +42,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
-        $this->assertFalse($config->findOctaneIncompatibleBindings);
+        $this->assertFalse($config->findOctaneIncompatibleBinding);
         $this->assertTrue($config->resolveDynamicWhereClauses);
     }
 
@@ -173,30 +173,30 @@ final class PluginConfigTest extends TestCase
     #[Test]
     public function find_octane_incompatible_bindings_true(): void
     {
-        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBindings value="true" /></pluginClass>');
+        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="true" /></pluginClass>');
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertTrue($config->findOctaneIncompatibleBindings);
+        $this->assertTrue($config->findOctaneIncompatibleBinding);
     }
 
     #[Test]
     public function find_octane_incompatible_bindings_false(): void
     {
-        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBindings value="false" /></pluginClass>');
+        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="false" /></pluginClass>');
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertFalse($config->findOctaneIncompatibleBindings);
+        $this->assertFalse($config->findOctaneIncompatibleBinding);
     }
 
     #[Test]
     public function invalid_find_octane_incompatible_bindings_throws(): void
     {
-        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBindings value="yes" /></pluginClass>');
+        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="yes" /></pluginClass>');
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("Invalid findOctaneIncompatibleBindings value 'yes'");
+        $this->expectExceptionMessage("Invalid findOctaneIncompatibleBinding value 'yes'");
 
         PluginConfig::fromXml($xml);
     }

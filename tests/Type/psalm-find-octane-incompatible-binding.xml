@@ -17,7 +17,7 @@
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <failOnInternalError value="true" />
-            <findOctaneIncompatibleBindings value="true" />
+            <findOctaneIncompatibleBinding value="true" />
         </pluginClass>
     </plugins>
     <issueHandlers>

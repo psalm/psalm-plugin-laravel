@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
-use Illuminate\Contracts\Container\Container;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\ArrayDimFetch;
@@ -22,10 +21,8 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
-use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
-use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
-use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\Union;
+use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
+use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
 
 /**
  * Flags request-scoped service resolutions inside shared-binding closures
@@ -35,38 +32,34 @@ use Psalm\Type\Union;
  * closure that resolves Request/Session/Auth during the first resolution keeps
  * that instance alive for every subsequent request.
  *
- * Handler is registered globally but short-circuits fast: it rejects 99%+ of
- * expressions on the MethodCall + method-name gates before touching the type
- * system.
+ * Handler is opt-in: registered only when findOctaneIncompatibleBinding is set
+ * in psalm.xml. When registered, the hook fires per resolved method call;
+ * non-matching method IDs reject in O(1) via an isset() lookup.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
  */
-final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisInterface
+final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisInterface
 {
     /**
-     * Container methods that register a single shared instance, reused across requests.
-     * bind()/bindIf() are safe — they re-execute the closure per resolution.
+     * Method IDs (declaring-class::method, lowercased) for container bindings that
+     * register a single shared instance reused across requests. bind()/bindIf() are
+     * safe: they re-execute the closure per resolution.
      *
-     * Keys are lowercased (PHP method names are case-insensitive).
+     * Covers both the concrete Container and the contract, because declaring_method_id
+     * points at whichever one is in scope for the receiver type. Users who type
+     * $this->app as the contract hit the contract rows; users typing the concrete
+     * class hit the Container rows.
      */
-    private const UNSAFE_METHODS = [
-        'singleton' => true,
-        'singletonif' => true,
-        'scoped' => true,
-        'scopedif' => true,
-    ];
-
-    /**
-     * Known container class names, used as a fast path before falling back to
-     * is_a() (which triggers autoloading on every miss). Covers the vast majority
-     * of real-world typings; custom subclasses fall through to the slow path.
-     */
-    private const KNOWN_CONTAINER_CLASSES = [
-        \Illuminate\Container\Container::class => true,
-        \Illuminate\Foundation\Application::class => true,
-        \Illuminate\Contracts\Container\Container::class => true,
-        \Illuminate\Contracts\Foundation\Application::class => true,
+    private const UNSAFE_METHOD_IDS = [
+        'illuminate\\container\\container::singleton' => true,
+        'illuminate\\container\\container::singletonif' => true,
+        'illuminate\\container\\container::scoped' => true,
+        'illuminate\\container\\container::scopedif' => true,
+        'illuminate\\contracts\\container\\container::singleton' => true,
+        'illuminate\\contracts\\container\\container::singletonif' => true,
+        'illuminate\\contracts\\container\\container::scoped' => true,
+        'illuminate\\contracts\\container\\container::scopedif' => true,
     ];
 
     /**
@@ -74,13 +67,15 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
      * binding closure captures state from the first resolving request and leaks it
      * into every subsequent request under Octane.
      *
-     * Entries mirror the class targets Laravel registers in
-     * {@see \Illuminate\Foundation\Application::registerCoreContainerAliases()} —
-     * both the Laravel class and the Symfony parent it also aliases, where applicable.
+     * Sources:
+     *  - {@see \Illuminate\Foundation\Application::registerCoreContainerAliases()}
+     *    for the alias -> class mapping (request, session, cookie, auth, config, url).
+     *  - {@see \Illuminate\Auth\AuthServiceProvider::register()} for Authenticatable,
+     *    which is bound at register time, not via the alias table.
      *
-     * Note: Illuminate\Routing\Route is intentionally NOT listed — it is a plain
-     * data object, not a container-bound service. The "current route" is accessed
-     * via the Router/facade, not by resolving Route::class.
+     * Illuminate\Routing\Route is intentionally NOT listed: it is a plain data object,
+     * not a container-bound service. The "current route" is accessed via the Router
+     * or facade, not by resolving Route::class.
      */
     private const REQUEST_SCOPED_CLASSES = [
         \Illuminate\Http\Request::class => true,
@@ -93,11 +88,16 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
         \Illuminate\Contracts\Auth\Factory::class => true,
         \Illuminate\Contracts\Auth\Guard::class => true,
         \Illuminate\Contracts\Auth\Authenticatable::class => true,
+        \Illuminate\Config\Repository::class => true,
+        \Illuminate\Contracts\Config\Repository::class => true,
+        \Illuminate\Routing\UrlGenerator::class => true,
+        \Illuminate\Contracts\Routing\UrlGenerator::class => true,
+        \Illuminate\Routing\Redirector::class => true,
     ];
 
     /**
-     * String aliases for request-scoped services — the keys Laravel registers in
-     * registerCoreContainerAliases(). Resolving via string alias is equivalent to
+     * String aliases for request-scoped services (keys Laravel registers in
+     * registerCoreContainerAliases()). Resolving via alias string is equivalent to
      * resolving via class-string.
      */
     private const REQUEST_SCOPED_ALIASES = [
@@ -107,6 +107,9 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
         'session' => true,
         'session.store' => true,
         'cookie' => true,
+        'config' => true,
+        'url' => true,
+        'redirect' => true,
     ];
 
     /**
@@ -121,86 +124,39 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
 
     /** @inheritDoc */
     #[\Override]
-    public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
+    public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
         $expr = $event->getExpr();
 
-        if (!$expr instanceof MethodCall || !$expr->name instanceof Identifier) {
-            return null;
+        // The event also fires for StaticCall. Facade-form bindings like
+        // `App::singleton(...)` are intentionally out of scope for this rule
+        // (they're much rarer than the `$this->app->singleton(...)` pattern).
+        if (!$expr instanceof MethodCall) {
+            return;
         }
 
-        // Fast reject on the first character — all UNSAFE_METHODS start with 's'.
-        // This rejects the vast majority of method calls without allocating a
-        // lowercase copy of the name string.
-        $rawName = $expr->name->name;
-
-        if ($rawName[0] !== 's' && $rawName[0] !== 'S') {
-            return null;
-        }
-
-        if (!isset(self::UNSAFE_METHODS[\strtolower($rawName)])) {
-            return null;
+        if (!isset(self::UNSAFE_METHOD_IDS[\strtolower($event->getDeclaringMethodId())])) {
+            return;
         }
 
         $args = $expr->getArgs();
 
         if (\count($args) < 2) {
-            return null;
+            return;
         }
 
-        // Check closure shape BEFORE the type lookup: singleton(X::class, X::class)
-        // is a common non-closure form, and a full getType() call is an order of
-        // magnitude more expensive than an instanceof.
         $closure = $args[1]->value;
 
         if (!$closure instanceof Closure && !$closure instanceof ArrowFunction) {
-            return null;
-        }
-
-        $callerType = $event->getStatementsSource()->getNodeTypeProvider()->getType($expr->var);
-
-        if (!self::isContainerType($callerType)) {
-            return null;
+            return;
         }
 
         $containerParamName = self::getFirstParamName($closure);
-        $methodName = $rawName;
+        $methodName = $expr->name instanceof Identifier ? $expr->name->name : 'singleton';
 
         foreach (self::findResolutions($closure, $containerParamName) as [$abstract, $node]) {
             self::emitIssue($event, $methodName, $abstract, $node);
         }
-
-        return null;
-    }
-
-    /**
-     * The call target must be a Container-like object.
-     * Application extends Container, so a single superclass check covers all cases.
-     * Fast path for common class names avoids autoloading via is_a().
-     *
-     * @psalm-mutation-free
-     */
-    private static function isContainerType(?Union $type): bool
-    {
-        if (!$type instanceof \Psalm\Type\Union) {
-            return false;
-        }
-
-        foreach ($type->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
-                continue;
-            }
-
-            if (isset(self::KNOWN_CONTAINER_CLASSES[$atomic->value])) {
-                return true;
-            }
-
-            if (\is_a($atomic->value, Container::class, true)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -229,9 +185,9 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
     /**
      * Yield each (abstract, node) violation found inside the closure body.
      *
-     * We deliberately do not descend into nested closures/arrow functions: their
+     * We deliberately do not descend into nested closures / arrow functions: their
      * bodies define a separate scope that Psalm will analyze in its own
-     * afterExpressionAnalysis event, so re-emitting here would cause duplicates.
+     * afterMethodCallAnalysis events, so re-emitting here would cause duplicates.
      *
      * @return \Generator<int, array{class-string|string, Node}>
      */
@@ -256,8 +212,11 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
      *   - app(X::class)                   / resolve(X::class)
      *   - App::make(X::class)             (facade)
      *
-     * Returns the resolved abstract (class-string or alias) + the AST node to report
-     * at, or null if the node is unrelated.
+     * Returns the resolved abstract (class-string or alias) plus the AST node to
+     * report at, or null if the node is unrelated.
+     *
+     * Known gap: `Container::getInstance()->make(...)` is not detected. Rare enough
+     * that the added complexity would not pay off.
      *
      * @return array{class-string|string, Node}|null
      */
@@ -305,9 +264,8 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
             return null;
         }
 
-        // App::make(X::class) — the facade. The facade resolves from the globally-bound
-        // container, which in a typical application is the same instance we are binding
-        // into (the one managed by Illuminate\Container\Container::setInstance()).
+        // App::make(X::class). The facade resolves from the globally-bound container,
+        // which in a typical application is the same instance we are binding into.
         if ($node instanceof StaticCall
             && $node->name instanceof Identifier
             && isset(self::RESOLVER_METHODS[\strtolower($node->name->name)])
@@ -361,15 +319,16 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
             return $resolved === \Illuminate\Support\Facades\App::class;
         }
 
-        // Fallback for root-namespace alias (the generated `class App extends \Illuminate\Support\Facades\App {}`
-        // alias stub means unqualified `App::make(...)` in application code resolves to the facade).
+        // Fallback for root-namespace alias. The generated
+        // `class App extends \Illuminate\Support\Facades\App {}` alias stub means
+        // unqualified `App::make(...)` in application code resolves to the facade.
         return $class->toString() === 'App';
     }
 
     /**
-     * From the args of make()/get()/app()/resolve(), extract the first positional
-     * argument only — that is the "abstract" in Laravel's container API. Extra
-     * arguments (parameters for makeWith) are not relevant to this rule.
+     * From the args of make() / get() / app() / resolve(), extract the first
+     * positional argument only, which is the "abstract" in Laravel's container API.
+     * Extra arguments (parameters for makeWith) are not relevant to this rule.
      *
      * @param array<array-key, Arg> $args
      * @return class-string|string|null
@@ -441,7 +400,7 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
 
             if ($sub instanceof Closure || $sub instanceof ArrowFunction) {
                 // The nested closure itself is a Node, but we don't descend into its
-                // body — see findResolutions() docblock.
+                // body. See findResolutions() docblock.
                 continue;
             }
 
@@ -466,7 +425,7 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
     }
 
     private static function emitIssue(
-        AfterExpressionAnalysisEvent $event,
+        AfterMethodCallAnalysisEvent $event,
         string $methodName,
         string $abstract,
         Node $node,
@@ -474,7 +433,7 @@ final class OctaneIncompatibleBindingHandler implements AfterExpressionAnalysisI
         IssueBuffer::accepts(
             new OctaneIncompatibleBinding(
                 \sprintf(
-                    "Request-scoped '%s' resolved inside %s() closure — state leaks across Octane requests. Use bind() or resolve at call site.",
+                    "Request-scoped '%s' resolved inside %s() closure. State leaks across Octane requests. Use bind() or resolve at call site.",
                     $abstract,
                     $methodName,
                 ),

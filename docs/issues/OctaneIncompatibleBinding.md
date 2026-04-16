@@ -6,15 +6,15 @@ nav_order: 7
 
 # OctaneIncompatibleBinding
 
-Emitted when a `singleton()` / `scoped()` / `singletonIf()` / `scopedIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, or `Auth`.
+Emitted when a `singleton()`, `scoped()`, `singletonIf()`, or `scopedIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, or `Auth`.
 
-**Opt-in.** Enable via `<findOctaneIncompatibleBindings value="true" />` in `psalm.xml` — see [Configuration](../config.md#findoctaneincompatiblebindings).
+**Opt-in.** Enable via `<findOctaneIncompatibleBinding value="true" />` in `psalm.xml`. See [Configuration](../config.md#findoctaneincompatiblebinding).
 
 ## Why this is a problem
 
 Under traditional PHP-FPM, every request boots a fresh application instance, so even a "shared" binding is really re-created per request.
 
-Under [Laravel Octane](https://laravel.com/docs/octane), the application instance is **reused across requests**. A shared binding closure runs once and the result is kept for the rest of the worker's lifetime. If that closure captures request-scoped state — a `Request`, the current `Auth` user, a `Session` — every subsequent request sees stale state from the first resolution.
+Under [Laravel Octane](https://laravel.com/docs/octane), the application instance is **reused across requests**. A shared binding closure runs once and the result is kept for the rest of the worker's lifetime. If that closure captures request-scoped state (a `Request`, the current `Auth` user, a `Session`), every subsequent request sees stale state from the first resolution.
 
 This is a [documented Octane caveat](https://laravel.com/docs/octane#dependency-injection-and-octane):
 
@@ -23,7 +23,7 @@ This is a [documented Octane caveat](https://laravel.com/docs/octane#dependency-
 ## Examples
 
 ```php
-// Bad — the Request is captured once and reused for every future request
+// Bad. The Request is captured once and reused for every future request.
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
@@ -36,22 +36,22 @@ class AppServiceProvider extends ServiceProvider
 ```
 
 ```php
-// Also bad — same issue, facade variant
+// Also bad. Same issue, facade variant.
 $this->app->singleton(MyService::class, function () {
     return new MyService(App::make(Request::class)); // OctaneIncompatibleBinding
 });
 ```
 
 ```php
-// Good — use bind() so the closure re-runs on every resolution
+// Good. Use bind() so the closure re-runs on every resolution.
 $this->app->bind(MyService::class, function ($app) {
     return new MyService($app->make(Request::class));
 });
 ```
 
 ```php
-// Also good — keep the singleton, but resolve the request-scoped service
-// at the point of use instead of constructor injection
+// Also good. Keep the singleton, but resolve the request-scoped service at the
+// point of use instead of constructor injection.
 class MyService
 {
     public function __construct(private \Illuminate\Contracts\Container\Container $container) {}
@@ -72,8 +72,17 @@ The following abstracts are treated as request-scoped:
 - `Illuminate\Session\Store`, `Illuminate\Session\SessionManager`, `Illuminate\Contracts\Session\Session`, aliases `'session'`, `'session.store'`
 - `Illuminate\Auth\AuthManager`, `Illuminate\Contracts\Auth\Factory`, `Illuminate\Contracts\Auth\Guard`, `Illuminate\Contracts\Auth\Authenticatable`, aliases `'auth'`, `'auth.driver'`
 - `Illuminate\Cookie\CookieJar`, alias `'cookie'`
+- `Illuminate\Config\Repository`, `Illuminate\Contracts\Config\Repository`, alias `'config'` (Octane clones config per request)
+- `Illuminate\Routing\UrlGenerator`, `Illuminate\Contracts\Routing\UrlGenerator`, alias `'url'`
+- `Illuminate\Routing\Redirector`, alias `'redirect'`
+
+## Known gaps
+
+- `Container::getInstance()->make(...)` inside a closure is not detected.
+- The rule does not trace transitive dependencies. Singleton A that depends on singleton B which captures `Request` is flagged only at B.
+- Named-argument call sites like `singleton(concrete: fn() => ..., abstract: X::class)` are missed (the second positional slot is read positionally).
 
 ## How to fix
 
-- Change `singleton()` / `scoped()` to `bind()` — the closure will re-run on every resolution.
+- Change `singleton()` or `scoped()` to `bind()`. The closure will re-run on every resolution.
 - Or keep the singleton and move the request-scoped resolution out of the constructor: inject the container and resolve lazily inside the method that actually uses it.
