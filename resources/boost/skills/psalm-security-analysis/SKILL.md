@@ -18,7 +18,7 @@ metadata:
 Determine which mode to use from the user's prompt before running anything:
 
 - **Incremental** ("any new issues?", "check for regressions", "did I break anything?") → baseline run
-- **Full audit** ("find vulnerabilities", "full scan", "audit security", "show all") → full run
+- **Full audit** ("find vulnerabilities", "full scan", "audit security", "show all" or `psalm-baseline.xml` file is not available in the project) → full run
 
 `--output-format` and `--report` are independent simultaneous channels — one run produces both a compact stdout summary and a structured JSON report with full taint traces, covering all triage needs.
 
@@ -28,7 +28,7 @@ Determine which mode to use from the user's prompt before running anything:
 
 ```bash
 ./vendor/bin/psalm --taint-analysis --no-cache --no-progress --no-suggestions \
-  --output-format=text \
+  --output-format=compact \
   --report=/tmp/psalm_taint.json
 echo "Exit: $?"
 ```
@@ -40,7 +40,7 @@ Exit 0 with no compact output = no new issues.
 ```bash
 ./vendor/bin/psalm --taint-analysis --no-cache --no-progress --no-suggestions \
   --ignore-baseline \
-  --output-format=text \
+  --output-format=compact \
   --report=/tmp/psalm_taint.json
 echo "Exit: $?"
 ```
