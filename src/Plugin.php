@@ -310,6 +310,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+        require_once __DIR__ . '/Handlers/Rules/OctaneIncompatibleBindingHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\OctaneIncompatibleBindingHandler::class);
         // NoEnvOutsideConfigHandler must be registered BEFORE EnvHandler.
         // Both handle 'env()' via FunctionReturnTypeProviderInterface; Psalm dispatches handlers
         // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler

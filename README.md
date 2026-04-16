@@ -131,6 +131,7 @@ The plugin emits custom issues beyond Psalm's built-in checks:
 - [MissingView](docs/issues/MissingView.md) — `view()` references a non-existent Blade template (opt-in)
 - [MissingTranslation](docs/issues/MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
 - [ModelMakeDiscouraged](docs/issues/ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
+- [OctaneIncompatibleBinding](docs/issues/OctaneIncompatibleBinding.md) — `singleton()`/`scoped()` closure resolves a request-scoped service (Request, Session, Auth)
 
 ## Versions & Dependencies
 

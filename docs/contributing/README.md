@@ -35,7 +35,7 @@ flowchart TD
         Helpers — CacheHandler, PathHandler, TransHandler
         Translations — TranslationKeyHandler
         Views — MissingViewHandler
-        Rules — NoEnvOutsideConfigHandler, ModelMakeHandler
+        Rules — NoEnvOutsideConfigHandler, ModelMakeHandler, OctaneIncompatibleBindingHandler
         Validation — ValidatedTypeHandler, ValidationTaintHandler
         SuppressHandler
     "]
@@ -207,7 +207,7 @@ flowchart LR
         ----
         expression AST, codebase
         ----
-        ModelMakeHandler"]
+        ModelMakeHandler, OctaneIncompatibleBindingHandler"]
     end
 
     scanning --> populated --> analysis
