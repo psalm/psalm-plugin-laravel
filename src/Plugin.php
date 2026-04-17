@@ -10,6 +10,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
+use Psalm\LaravelPlugin\Providers\PackageProviderRegistrar;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -30,6 +31,19 @@ final class Plugin implements PluginEntryPointInterface
 
         try {
             ApplicationProvider::bootApp();
+
+            // Register service providers declared by the analysed project (and its
+            // installed dependencies) into the Testbench app. Without this step,
+            // string-keyed bindings registered by the analysed package (e.g.
+            // `app('datatables.request')`) are unknown to the container and fall
+            // back to mixed. Runs before generateAliasStubs() and FacadeMapProvider
+            // so any facade aliases added by these providers are included in the
+            // generated alias stubs and the facade-to-service map. See issue #766.
+            PackageProviderRegistrar::register(
+                ApplicationProvider::getApp(),
+                self::resolveProjectRoot($registration),
+                $output,
+            );
 
             if ($pluginConfig->shouldUseMigrations()) {
                 $this->buildSchema($pluginConfig);
@@ -724,5 +738,23 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         return $output;
+    }
+
+    /**
+     * Resolve the analysed project's root directory.
+     *
+     * Prefer Psalm's own `Config::$base_dir` (the directory containing `psalm.xml`)
+     * over `getcwd()` because Psalm can be invoked from any cwd (IDE integrations,
+     * daemons, scripts) — falling through to getcwd() would then miss the project's
+     * composer.json / composer.lock. `base_dir` is the same anchor Psalm itself uses
+     * for <projectFiles> resolution.
+     */
+    private static function resolveProjectRoot(RegistrationInterface $registration): string
+    {
+        if ($registration instanceof \Psalm\PluginRegistrationSocket) {
+            return $registration->config->base_dir;
+        }
+
+        return \getcwd() ?: '.';
     }
 }
