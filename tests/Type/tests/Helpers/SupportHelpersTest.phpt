@@ -240,25 +240,25 @@ function blank_narrows_nullable_string_to_non_null(?string $value): string
     return 'fallback';
 }
 
-// Regression tests for https://github.com/psalm/psalm-plugin-laravel/issues/755.
-// Tighter guard narrowing: `if (filled($x))` with `?string` narrows to
-// `non-empty-string` (not just `string`), because `filled()` is false for
-// both `null` and `''`. The combined `!null` + `!=''` assertions deliver
-// the tighter type. A regression to only `!null` (pre-#755 behavior) would
-// leave `$value` as `string` inside the branch and fail the exact check.
-function filled_narrows_nullable_string_to_non_empty_string(?string $value): string
+// `if (filled($x))` on `?string` narrows `$x` to `string` (not
+// `non-empty-string`) via the `!null` assertion alone. An earlier
+// iteration added a `!=''` assertion to tighten this to `non-empty-string`,
+// but the loose-equality assertion was applied to every atomic of the
+// input type and broke `class-string<X>` and non-string inputs (see
+// https://github.com/psalm/psalm-plugin-laravel/issues/771). The
+// `non-empty-string` expectation is therefore intentionally not asserted.
+function filled_narrows_nullable_string_to_string(?string $value): string
 {
     if (filled($value)) {
-        /** @psalm-check-type-exact $value = non-empty-string */;
+        /** @psalm-check-type-exact $value = string */;
         return $value;
     }
     return 'fallback';
 }
 
-// `mixed` must not be over-narrowed. Psalm's loose-inequality reconciler
-// is effectively a no-op against `mixed` (there is no atomic to subtract
-// `''` from), so `mixed` stays `mixed` inside the true branch. `!null` is
-// also a no-op here because `mixed` already covers every possibility.
+// `mixed` must not be over-narrowed. `!null` is a no-op here because
+// `mixed` already covers every possibility, so `mixed` stays `mixed`
+// inside the true branch.
 function filled_does_not_over_narrow_mixed(mixed $value): mixed
 {
     if (filled($value)) {
@@ -269,57 +269,119 @@ function filled_does_not_over_narrow_mixed(mixed $value): mixed
 }
 
 /**
- * Mixed union: `null` drops out, `string` narrows to `non-empty-string`,
- * `int` and `array` survive. Verifies the new `!=''` assertion plays
- * correctly with the existing nested conditional return type for a union
- * that straddles multiple narrow clauses. The return type matches Psalm's
- * normalized form (`array<array-key, mixed>`) so that the check-type-exact
- * assertion and the declared return type are consistent.
+ * Mixed union: `null` drops out, `int`, `string`, and `array` survive
+ * (`string` is not narrowed to `non-empty-string` after the #771 revert).
+ * The return type matches Psalm's normalized form (`array<array-key, mixed>`)
+ * so that the check-type-exact assertion and the declared return type are
+ * consistent.
  *
  * @param  array|int|string|null  $value
- * @return array<array-key, mixed>|int|non-empty-string
+ * @return array<array-key, mixed>|int|string
  */
 function filled_narrows_union_input($value)
 {
     if (filled($value)) {
-        /** @psalm-check-type-exact $value = array<array-key, mixed>|int|non-empty-string */;
+        /** @psalm-check-type-exact $value = array<array-key, mixed>|int|string */;
         return $value;
     }
     return 0;
 }
 
-/**
- * Soundness regression lock-in: Laravel treats `false` as filled (`blank(false)
- * === false`), but PHP's `false == ''` is true, so a strict reading of the
- * `!=''` assertion would incorrectly subtract `false` from the input. The
- * current Psalm release applies `!=''` only to the string atomic, so `false`
- * survives inside the true branch. This test pins that behavior: if a future
- * Psalm release starts applying the loose-equality assertion to `false`, the
- * check-type-exact will fail and signal that the `!=''` line must be revised
- * to keep `filled(false) === true` sound.
- *
- * @param  false|string|null  $value
- */
-function filled_keeps_false_for_false_or_string_union($value): void
-{
-    if (filled($value)) {
-        /** @psalm-check-type-exact $value = false|non-empty-string */;
-    }
-}
-
-// `blank()` currently does not add a symmetric `!=''` if-false assertion
-// (see the `filled()` stub docblock for why), so `! blank($nullable)`
-// narrows only to `string`, not `non-empty-string`. This test documents
-// that limitation and will start failing if a future Psalm release lifts
-// the restriction, signaling the stub can be tightened.
-// @todo https://github.com/psalm/psalm-plugin-laravel/issues/755
-function blank_narrows_nullable_string_only_to_string(?string $value): string
+// Symmetric narrowing: `! blank($x)` and `filled($x)` both narrow `?string`
+// to `string` (not `non-empty-string`). See
+// https://github.com/psalm/psalm-plugin-laravel/issues/771.
+function blank_narrows_nullable_string_to_string(?string $value): string
 {
     if (! blank($value)) {
         /** @psalm-check-type-exact $value = string */;
         return $value;
     }
     return 'fallback';
+}
+
+// Regression tests for https://github.com/psalm/psalm-plugin-laravel/issues/771.
+// The previous `!=''` assertion on `filled()` collapsed `class-string<X>`
+// to `non-empty-string` (losing the template parameter) and raised
+// `RedundantCondition` / `TypeDoesNotContainType` on non-string inputs.
+// These tests pin that the revert restores the pre-regression behavior.
+
+/**
+ * @param  ?class-string<\Throwable>  $fqcn
+ */
+function filled_preserves_class_string_template_in_guard(?string $fqcn): void
+{
+    if (filled($fqcn)) {
+        /** @psalm-check-type-exact $fqcn = class-string<Throwable> */;
+    }
+}
+
+/**
+ * End-to-end reproducer from issue #771: invoking a static method on a
+ * `?class-string<X>` narrowed via `filled()`. With the `!=''` assertion
+ * in place `class-string<X>` collapsed to `non-empty-string` and this
+ * emitted `InvalidStringClass` on the static call site.
+ *
+ * @param  callable(): ?class-string<\DateTime>  $fetch
+ */
+function filled_guard_allows_static_method_on_class_string(callable $fetch): \DateTime|false|null
+{
+    if (filled($cls = $fetch())) {
+        return $cls::createFromFormat('Y-m-d', '2024-01-01');
+    }
+    return null;
+}
+
+/**
+ * `filled()` on a non-string atomic must not emit `RedundantCondition`.
+ * The EXPECTF block for this test file is empty, so any Psalm issue raised
+ * by the call site below would fail the test.
+ *
+ * @param  array<string, mixed>  $value
+ */
+function filled_on_array_does_not_emit_redundant_condition(array $value): bool
+{
+    return filled($value);
+}
+
+/**
+ * `filled()` on an object atomic must not emit `TypeDoesNotContainType`.
+ */
+function filled_on_object_does_not_emit_type_does_not_contain_type(\stdClass $value): bool
+{
+    return filled($value);
+}
+
+enum FilledTestStatus
+{
+    case Active;
+    case Inactive;
+}
+
+/**
+ * `filled()` on an enum instance must not emit `TypeDoesNotContainType`.
+ * Issue #771 reports 7 such diagnostics on enum/Model/Closure inputs.
+ */
+function filled_on_enum_instance_does_not_emit_issue(FilledTestStatus $value): bool
+{
+    return filled($value);
+}
+
+/**
+ * End-to-end reproducer from issue #771: `filled()` on a
+ * `?class-string<EnumClass>` must preserve the template parameter so
+ * that `$enum::cases()` resolves. With the `!=''` assertion in place the
+ * resulting type had a spurious `non-empty-string` atomic, which caused
+ * `UndefinedMethod` / `MixedArgument` on the `cases()` call site.
+ *
+ * @param  callable(): ?class-string<FilledTestStatus>  $fetch
+ * @return list<FilledTestStatus>
+ */
+function filled_guard_preserves_enum_class_string_for_cases(callable $fetch): array
+{
+    if (filled($enum = $fetch())) {
+        return $enum::cases();
+    }
+    return [];
 }
 
 function object_get_returns_first_arg_when_second_is_null(\stdClass $object): \stdClass
