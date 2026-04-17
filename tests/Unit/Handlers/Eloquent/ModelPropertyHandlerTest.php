@@ -13,6 +13,13 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyType;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\TableSchema;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\TraitFlags;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\StatementsSource;
@@ -38,12 +45,59 @@ final class ModelPropertyHandlerTest extends TestCase
 
         $this->classLikeStorageProvider = new ClassLikeStorageProvider();
         $this->classLikeStorageProvider->create(WorkOrder::class);
+
+        // The migrated handler reads via ModelMetadataRegistry. In a unit test we have
+        // no AfterCodebasePopulated event to drive warm-up, so seed directly.
+        ModelMetadataRegistryBuilder::overrideForTesting(
+            WorkOrder::class,
+            $this->makeWorkOrderMetadata(),
+        );
     }
 
     #[\Override]
     protected function tearDown(): void
     {
         $this->classLikeStorageProvider->remove(WorkOrder::class);
+        ModelMetadataRegistryBuilder::reset();
+    }
+
+    /**
+     * @return ModelMetadata<WorkOrder>
+     */
+    private function makeWorkOrderMetadata(): ModelMetadata
+    {
+        $schema = new TableSchema([
+            'id' => new ColumnInfo('id', 'int', nullable: false, hasDefault: false),
+            'title' => new ColumnInfo('title', 'string', nullable: false, hasDefault: false),
+            'published_at' => new ColumnInfo('published_at', 'string', nullable: true, hasDefault: false),
+        ]);
+
+        return new ModelMetadata(
+            fqcn: WorkOrder::class,
+            primaryKey: new PrimaryKeyInfo('id', PrimaryKeyType::Integer, incrementing: true, uuidColumns: []),
+            traits: new TraitFlags(
+                hasSoftDeletes: false,
+                hasUuids: false,
+                hasUlids: false,
+                hasFactory: false,
+                hasApiTokens: false,
+                hasNotifications: false,
+                hasGlobalScopes: false,
+                usesTimestamps: true,
+            ),
+            fillable: [],
+            guarded: [],
+            appends: [],
+            with: [],
+            withCount: [],
+            hidden: [],
+            connection: null,
+            morphAlias: null,
+            customBuilder: null,
+            customCollection: null,
+            schemaData: $schema,
+            castsData: [],
+        );
     }
 
     #[Test]
