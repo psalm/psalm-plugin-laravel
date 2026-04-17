@@ -146,14 +146,26 @@ final class ModelMetadataRegistryBuilder
 
         // §6.3 step 3: derive via Laravel's public methods
         $traits = self::computeTraitFlags($storage, $instance);
+
+        // HasUuids / HasUlids override getKeyType(), getIncrementing(), and uniqueIds()
+        // by reading `$this->usesUniqueIds`, which the trait initializer flips to true.
+        // `newInstanceWithoutConstructor()` skips that initializer; flip the flag here
+        // so every downstream Laravel getter (primary key, casts, etc.) sees the same
+        // state the runtime would. See #591 review notes.
+        if ($traits->hasUuids || $traits->hasUlids) {
+            self::flipUsesUniqueIds($instance);
+        }
+
         $primaryKey = self::computePrimaryKey($instance, $traits);
         $tableSchema = self::computeSchema($instance);
         $casts = self::computeCasts($codebase, $modelFqcn, $instance, $traits, $tableSchema);
 
-        $fillable = self::lowercaseList($instance->getFillable());
-        $guarded = self::lowercaseList($instance->getGuarded());
-        $appends = self::lowercaseList($instance->getAppends());
-        $hidden = self::lowercaseList($instance->getHidden());
+        // Preserve case — Laravel's isFillable / isGuarded / getHidden do exact-string
+        // comparisons, so lowercasing would diverge from runtime semantics.
+        $fillable = self::filterStringList($instance->getFillable());
+        $guarded = self::filterStringList($instance->getGuarded());
+        $appends = self::filterStringList($instance->getAppends());
+        $hidden = self::filterStringList($instance->getHidden());
         $with = self::readStringList($instance, 'with');
         $withCount = self::readStringList($instance, 'withCount');
 
@@ -224,37 +236,29 @@ final class ModelMetadataRegistryBuilder
     /**
      * Compute primary-key info.
      *
-     * HasUuids / HasUlids overrides `getKeyType()` / `getIncrementing()` — but the
-     * trait initializer that sets `$usesUniqueIds = true` is skipped by
-     * `newInstanceWithoutConstructor()`. Detect the trait directly instead of
-     * relying on the instance methods.
-     *
-     * @psalm-mutation-free
+     * HasUuids / HasUlids override `getKeyType()` / `getIncrementing()` / `uniqueIds()`
+     * by reading `$this->usesUniqueIds`. The caller in `compute()` has already flipped
+     * that flag for UUID/ULID models, so the instance getters return the runtime-correct
+     * values here (including any user override of `uniqueIds()` returning multiple cols).
      */
     private static function computePrimaryKey(Model $instance, TraitFlags $traits): PrimaryKeyInfo
     {
         /** @var non-empty-string $keyName */
         $keyName = $instance->getKeyName();
 
-        if ($traits->hasUuids || $traits->hasUlids) {
-            return new PrimaryKeyInfo(
-                name: $keyName,
-                type: PrimaryKeyType::String,
-                incrementing: false,
-                // `uniqueIds()` returns [$keyName] when usesUniqueIds is true — which trait
-                // initializers would set. We bypass the initializer, so mirror the default.
-                uuidColumns: [$keyName],
-            );
-        }
-
         $keyType = $instance->getKeyType();
         $type = $keyType === 'string' ? PrimaryKeyType::String : PrimaryKeyType::Integer;
+
+        $uuidColumns = [];
+        if ($traits->hasUuids || $traits->hasUlids) {
+            $uuidColumns = self::filterStringList($instance->uniqueIds());
+        }
 
         return new PrimaryKeyInfo(
             name: $keyName,
             type: $type,
             incrementing: $instance->getIncrementing(),
-            uuidColumns: [],
+            uuidColumns: $uuidColumns,
         );
     }
 
@@ -276,7 +280,8 @@ final class ModelMetadataRegistryBuilder
                 continue;
             }
 
-            $columns[\strtolower($columnName)] = self::buildColumnInfo($column);
+            // Preserve original-case keys — Eloquent attribute access is case-sensitive.
+            $columns[$columnName] = self::buildColumnInfo($column);
         }
 
         return new TableSchema($columns);
@@ -302,7 +307,7 @@ final class ModelMetadataRegistryBuilder
 
     /**
      * @param class-string<Model> $modelFqcn
-     * @return array<non-empty-lowercase-string, CastInfo>
+     * @return array<non-empty-string, CastInfo>
      */
     private static function computeCasts(
         Codebase $codebase,
@@ -322,15 +327,9 @@ final class ModelMetadataRegistryBuilder
         }
 
         // 2. $instance->getCasts() walks inheritance + merges $this->casts and static::casts().
-        //    HasUuids / HasUlids override getKeyType() / getIncrementing() by reading
-        //    $this->usesUniqueIds, which the trait initializer flips to true. Since
-        //    newInstanceWithoutConstructor() skips that, getIncrementing() falsely
-        //    returns true for UUID/ULID models and getCasts() injects a bogus
-        //    [keyName => 'int'] entry. Flip the flag reflectively to match runtime.
-        if ($traits->hasUuids || $traits->hasUlids) {
-            self::flipUsesUniqueIds($instance);
-        }
-
+        //    The caller already flipped $usesUniqueIds on HasUuids/HasUlids models, so
+        //    getIncrementing() / getKeyType() return the correct UUID/ULID values here
+        //    and getCasts() no longer injects a bogus [keyName => 'int'] entry.
         /** @var array<string, string> $instanceCasts */
         $instanceCasts = $instance->getCasts();
         $merged = \array_merge($merged, $instanceCasts);
@@ -355,7 +354,9 @@ final class ModelMetadataRegistryBuilder
             // can read it directly without re-running CastResolver (see design §5.4).
             $column = $schema->column($columnName);
             $nullable = $column instanceof \Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo && $column->nullable;
-            $result[\strtolower($columnName)] = self::buildCastInfo($columnName, $castString, $nullable);
+            // Preserve original-case column keys to match Eloquent's case-sensitive
+            // attribute semantics (callers pass the property name as written).
+            $result[$columnName] = self::buildCastInfo($columnName, $castString, $nullable);
         }
 
         return $result;
@@ -489,25 +490,6 @@ final class ModelMetadataRegistryBuilder
     }
 
     /**
-     * @param array<array-key, mixed> $values
-     * @return list<non-empty-lowercase-string>
-     * @psalm-pure
-     */
-    private static function lowercaseList(array $values): array
-    {
-        $out = [];
-        foreach ($values as $value) {
-            if (!\is_string($value) || $value === '') {
-                continue;
-            }
-
-            $out[] = \strtolower($value);
-        }
-
-        return $out;
-    }
-
-    /**
      * Read a protected array-of-string property from the model instance via reflection.
      *
      * Used for `$with` / `$withCount` — these have no public getters, but class-declared
@@ -602,12 +584,12 @@ final class ModelMetadataRegistryBuilder
 
     /**
      * @param array<array-key, mixed> $values
-     * @return list<string>
+     * @return list<non-empty-string>
      * @psalm-pure
      */
     private static function filterStringList(array $values): array
     {
-        /** @var list<string> */
+        /** @var list<non-empty-string> */
         return \array_values(\array_filter(
             $values,
             static fn(mixed $entry): bool => \is_string($entry) && $entry !== '',

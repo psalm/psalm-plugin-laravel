@@ -7,8 +7,9 @@ namespace Psalm\LaravelPlugin\Providers\ModelMetadata;
 /**
  * Immutable view of a model's database table columns.
  *
- * Keys are lowercased column names (the §5.5 naming convention);
- * {@see ColumnInfo::$name} preserves the original case.
+ * Keys preserve the original case produced by the migration parser, matching
+ * Eloquent's case-sensitive attribute semantics at runtime. Consumers that
+ * want case-insensitive lookup must normalize their query key themselves.
  *
  * @psalm-immutable
  * @psalm-api
@@ -17,7 +18,7 @@ namespace Psalm\LaravelPlugin\Providers\ModelMetadata;
 final readonly class TableSchema
 {
     /**
-     * @param array<non-empty-lowercase-string, ColumnInfo> $columns
+     * @param array<non-empty-string, ColumnInfo> $columns
      */
     public function __construct(private array $columns) {}
 
@@ -27,7 +28,7 @@ final readonly class TableSchema
             return false;
         }
 
-        return isset($this->columns[\strtolower($name)]);
+        return isset($this->columns[$name]);
     }
 
     public function column(string $name): ?ColumnInfo
@@ -36,35 +37,13 @@ final readonly class TableSchema
             return null;
         }
 
-        return $this->columns[\strtolower($name)] ?? null;
+        return $this->columns[$name] ?? null;
     }
 
     /**
-     * Fast-path existence check for callers that already hold a lowercased key.
+     * Iterate all columns keyed by their original-case name.
      *
-     * @param non-empty-lowercase-string $key
-     */
-    public function hasLowerKey(string $key): bool
-    {
-        return isset($this->columns[$key]);
-    }
-
-    /**
-     * Fast-path column lookup for callers that already hold a lowercased key
-     * (hot path in `ModelPropertyHandler::getPropertyType`, which lowercases
-     * once and reuses the result for both the schema and cast lookups).
-     *
-     * @param non-empty-lowercase-string $key
-     */
-    public function columnByLowerKey(string $key): ?ColumnInfo
-    {
-        return $this->columns[$key] ?? null;
-    }
-
-    /**
-     * Iterate all columns keyed by their lowercased name.
-     *
-     * @return array<non-empty-lowercase-string, ColumnInfo>
+     * @return array<non-empty-string, ColumnInfo>
      */
     public function all(): array
     {

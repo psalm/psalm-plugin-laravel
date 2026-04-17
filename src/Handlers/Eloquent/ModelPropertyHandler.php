@@ -115,10 +115,9 @@ final class ModelPropertyHandler
             return null;
         }
 
-        // Lower once, reuse for both the schema column lookup and the cast map lookup.
-        $lowered = \strtolower($propertyName);
-
-        $column = $metadata->schema()->columnByLowerKey($lowered);
+        // Exact-case lookup matches Eloquent's case-sensitive attribute semantics
+        // (and the pre-registry behavior this refactor preserves).
+        $column = $metadata->schema()->column($propertyName);
         if (!$column instanceof ColumnInfo) {
             return null;
         }
@@ -126,8 +125,8 @@ final class ModelPropertyHandler
         // Cast override wins over schema type. CastInfo::$psalmType already incorporates
         // column nullability, so the consumer just returns it.
         $casts = $metadata->casts();
-        if (isset($casts[$lowered])) {
-            return $casts[$lowered]->psalmType;
+        if (isset($casts[$propertyName])) {
+            return $casts[$propertyName]->psalmType;
         }
 
         return self::mapSqlTypeToPsalmType($column);

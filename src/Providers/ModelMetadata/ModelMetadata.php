@@ -31,16 +31,21 @@ use Illuminate\Database\Eloquent\Model;
 final readonly class ModelMetadata
 {
     /**
-     * @param class-string<T>                                               $fqcn
-     * @param list<non-empty-lowercase-string>                              $fillable
-     * @param list<non-empty-lowercase-string>                              $guarded
-     * @param list<non-empty-lowercase-string>                              $appends
-     * @param list<non-empty-lowercase-string>                              $hidden
-     * @param list<string>                                                  $with      Eager-load relation names from `$with`.
-     * @param list<string>                                                  $withCount Eager-load-count relation names from `$withCount`.
-     * @param class-string<Builder<T>>|null                                 $customBuilder
-     * @param class-string<EloquentCollection<int, T>>|null                 $customCollection
-     * @param array<non-empty-lowercase-string, CastInfo>                   $castsData Pre-computed cast map (column → CastInfo).
+     * Attribute-name fields (`fillable` / `guarded` / `appends` / `hidden`) preserve the
+     * exact case the user declared — Eloquent's `isFillable` / `isGuarded` / `getHidden`
+     * do case-sensitive string comparisons, and lowercasing would diverge from runtime.
+     * Same reason the `castsData` map is keyed by original-case column name.
+     *
+     * @param class-string<T>                               $fqcn
+     * @param list<non-empty-string>                        $fillable
+     * @param list<non-empty-string>                        $guarded
+     * @param list<non-empty-string>                        $appends
+     * @param list<non-empty-string>                        $hidden
+     * @param list<string>                                  $with      Eager-load relation names from `$with`.
+     * @param list<string>                                  $withCount Eager-load-count relation names from `$withCount`.
+     * @param class-string<Builder<T>>|null                 $customBuilder
+     * @param class-string<EloquentCollection<int, T>>|null $customCollection
+     * @param array<non-empty-string, CastInfo>             $castsData Pre-computed cast map (column → CastInfo).
      */
     public function __construct(
         public string $fqcn,
@@ -66,7 +71,7 @@ final readonly class ModelMetadata
     }
 
     /**
-     * @return array<non-empty-lowercase-string, CastInfo>  keyed by lowercased column name
+     * @return array<non-empty-string, CastInfo>  keyed by original-case column name
      */
     public function casts(): array
     {
