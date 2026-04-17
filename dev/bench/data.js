@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776430147684,
+  "lastUpdate": 1776434656162,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1747,6 +1747,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "53e67e32fb2c155dfeb1a6a51df50e6a88649414",
+          "message": "tighten `filled()` to narrow `?string` to `non-empty-string` (#762)\n\n* feat: tighten filled() guard to narrow ?string to non-empty-string\n\nFollow-up to #753. Adds `@psalm-assert-if-true !='' $value` alongside the\nexisting `!null` assertion on the `filled()` helper stub, so that\n`if (filled($x))` with `?string` input narrows `$x` to `non-empty-string`\ninside the true branch. This matches the intent of the helper (both null\nand the empty string count as \"blank\" in Laravel) and gives string-manipulation\ncode inside the guard a more useful type.\n\nPsalm rejects `!null|''` in a single assertion (union cannot follow a\nnegation prefix) and combining two `@psalm-assert-if-false` lines on\n`blank()` undoes earlier narrowing in the current Psalm release, so the\ntightening is applied asymmetrically: `filled()` only. The `blank()`\ndocblock cross-references the rationale; `! blank($x)` and `filled($x)`\nremain interchangeable per Laravel docs.\n\nAdds regression tests covering the new narrowing, confirming no\nover-narrowing for `mixed` and union inputs, and documenting the current\n`blank()` limitation so the stub can be tightened if a future Psalm\nrelease lifts the restriction.\n\nRefs #755.\n\n* tests: lock in soundness of filled() narrowing on false-in-union input\n\nAdd a regression test that pins the current Psalm behavior where\n`filled($v)` with `$v: false|string|null` narrows to `false|non-empty-string`\ninside the true branch. Laravel treats `false` as filled (`blank(false)\n=== false`), but PHP's `false == ''` is true, so a strict reading of the\nnew `!=''` assertion would incorrectly subtract `false`. The current\nPsalm release only applies `!=''` to the string atomic, keeping `false`.\n\nIf a future Psalm release starts applying the loose-equality assertion\nto other atomics, the check-type-exact will fail and signal that the\n`!=''` line must be revised to keep `filled(false) === true` sound.\n\nSuggested by Copilot on PR #762.",
+          "timestamp": "2026-04-17T15:01:28+01:00",
+          "tree_id": "00dbb0fcc399d127c063c2dcb3c83b5a325165b5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/53e67e32fb2c155dfeb1a6a51df50e6a88649414"
+        },
+        "date": 1776434655695,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28,
+            "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1095,
             "unit": "MB"
           }
         ]
