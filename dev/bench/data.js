@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776448803499,
+  "lastUpdate": 1776451041748,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1817,6 +1817,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1095,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9735870378c13a8615c72292958f30a6695c48db",
+          "message": "fix: skip anonymous Model subclasses in ModelRegistrationHandler (#769)\n\nPsalm assigns synthetic, non-autoloadable FQCNs to anonymous classes\n(e.g. `new class extends Model {}` in Algolia\\ScoutExtended\\Searchable\\Aggregator::__call`).\n`class_exists()` on those names fails, producing a misleading\n\"class could not be loaded by autoloader\" warning on real-world\nprojects that include Scout Extended.\n\nDetect Psalm's synthetic name format\n(`{sanitized_file_path}_{line}_{startFilePos}`, see\n`ClassAnalyzer::getAnonymousClassName()`) via `$storage->stmt_location`\nand skip those entries before the autoloader check. `$storage->location`\nis null for anonymous classes, so the correct field is `stmt_location`.\n\nCovered by a PHPUnit data-provider test (Algolia case, Unix/Windows paths,\nno-namespace, and several negatives) plus a PHPT smoke test.",
+          "timestamp": "2026-04-17T19:34:18+01:00",
+          "tree_id": "2cc5275888645880e182f83f796e97ac0496a517",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9735870378c13a8615c72292958f30a6695c48db"
+        },
+        "date": 1776451041439,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.08,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
