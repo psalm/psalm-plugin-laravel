@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776364893134,
+  "lastUpdate": 1776416042246,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1607,6 +1607,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1095,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "42bc4911b21de8102d0d1492882575ffc2311d46",
+          "message": "Shorten bug-report title and prevent vendorsrc path collapse in `IssueUrlGenerator` (#747)\n\n* fix: shorten bug-report title and prevent vendorsrc path collapse\n\n`IssueUrlGenerator::generate()` now runs the throwable message through\na new `sanitizeTitle()` before URL-encoding, stripping three fragments\nthat made auto-generated GitHub issue titles unwieldy and leak private\nfilesystem paths:\n\n- Psalm's trailing `for command with CLI args \"…\"` suffix.\n- ` in /absolute/path/File.php:123` path+line leaks.\n- A leading `PHP Error:` / `PHP Fatal error:` prefix that duplicates\n  the \"Plugin initialization error:\" prefix already prepended.\n\nThe full stack trace still goes into the issue body, so no debug info\nis lost; only the URL title is compressed. On the reported Introspect\nexample the title now matches what the reporter had to hand-edit.\n\n`sanitizeTrace()` also collapses two sequential `preg_replace` calls\ninto one with a `(vendor[/]|src[/])` alternation, a start/whitespace\nlookbehind, and a non-greedy middle segment. This prevents vendor\npaths containing an inner `src/` directory (e.g.\n`vendor/laravel/framework/src/...`) from being flattened to\n`vendorsrc/...`.\n\n* fix: handle Windows paths in title and quoted paths in trace\n\nAddress Copilot review on #747:\n\n- `sanitizeTitle()`: swap `\\S+` for non-greedy `.+?` in the\n  \" in FILE.php:LINE\" stripper so Windows paths containing spaces\n  (e.g. \"C:\\Users\\John Doe\\file.php:12\") are also removed. `.` does\n  not match newlines by default, so the match cannot escape the line.\n\n- `sanitizeTrace()`: widen the lookbehind to also accept `'`, `\"`,\n  and `(` as safe boundaries. PHP stack traces print stringified\n  argument paths inside quotes/parens\n  (`#0 /a.php(9): Foo->bar('/dev/some/path', 79)`), which were\n  previously not sanitized because the char preceding `/` was not\n  whitespace. All lookbehind alternatives remain single-char, so\n  PCRE2's fixed-width lookbehind rule is still satisfied.\n\n* fix: split sanitizeTrace into vendor+src passes to avoid src-in-home regression\n\nAddress Copilot review on #747: on a checkout like\n`/Users/alice/src/project/vendor/laravel/framework/src/...` the single\nregex with `(vendor[/]|src[/])` alternation and a non-greedy middle\nwould stop at the first `src/` inside the absolute prefix, rewriting\nthe path to `src/project/vendor/...` and leaking the `project/` segment.\n\nSplitting into a vendor pass followed by an src pass makes the vendor\nmatch consume the entire absolute prefix first. The src pass only\nfires when no `vendor/` segment exists, and its lookbehind\n(`\\s|^|'|\"|(`) prevents it from re-matching the `src/` inside an\nalready-relativised \"vendor/.../src/...\" path. Verified at runtime:\n\n- `/Users/alice/src/project/vendor/laravel/framework/src/F.php` →\n  `vendor/laravel/framework/src/F.php`\n- `/home/bob/psalm-plugin-laravel/src/Plugin.php` → `src/Plugin.php`\n- `C:\\Users\\carol\\src\\app\\vendor\\...\\src\\Foo.php` →\n  `vendor\\...\\src\\Foo.php`\n- `#0 /a/vendor/b.php(9): X->y(\"/dev/vendor/z.php\", 79)` →\n  `#0 vendor/b.php(9): X->y(\"vendor/z.php\", 79)`\n\n* test: add unit coverage for `IssueUrlGenerator`\n\nCovers the full behaviour of `generate()` and the private `sanitizeTrace()`\nhelper: URL shape, title stripping of absolute paths / CLI-args suffix /\n`PHP Error:` prefixes (Linux and Windows-with-spaces variants), the body's\nVersions block and fenced trace block, and all four trace regressions the\nPR has accumulated fixes for — `vendorsrc/` collapse, src-in-home checkout,\nquoted argument paths, and Windows backslash paths.\n\nWriting the Windows-backslash test surfaced a latent bug: the original\nsingle-quoted `'[\\\\/]'` PHP literal produces the PCRE pattern `[\\/]`,\nwhich only matches `/` and silently skips backslash paths. Fixed by\nextracting the path-separator character class into a named `$sep`\nconstant and escaping it as `'[\\\\\\\\/]'` so the PCRE pattern is `[\\\\/]`,\nmatching either separator. A comment at the declaration explains why\nthe extra escaping is load-bearing.\n\nTrace tests reach `sanitizeTrace()` directly via reflection — going\nthrough `generate()` would entangle each assertion with PHPUnit's own\nstack-frame-argument truncation, which rewrites the synthetic absolute\npaths (`/home/bob/ap...`) before the sanitizer can see a `vendor/` or\n`src/` segment.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix: prefer last src/vendor segment to collapse nested paths\n\nAddress Copilot review on #747: on `/Users/alice/src/project/src/Plugin.php`\n(no vendor segment, `src/` appearing twice in the absolute prefix) the\nnon-greedy middle would stop at the FIRST `src/` and leak\n\"project/src/Plugin.php\". Switching the middle from `*?` back to `*`\n(greedy) makes each pass prefer the LAST `vendor/` or `src/` segment,\nso the whole absolute prefix is consumed.\n\nGreedy matching does not re-introduce the `vendorsrc/` collapse that the\nearlier non-greedy fix avoided: splitting into two passes (vendor first,\nsrc second) is what prevents that — once the vendor pass has collapsed\n`/home/.../vendor/laravel/framework/src/...` to the relative form\n`vendor/laravel/framework/src/...`, the src pass's lookbehind (safe\nboundary before the leading path separator) prevents it from re-matching\nthe inner `src/`.\n\nAlso adds a regression test\n(`trace_collapses_nested_src_paths_without_vendor_segment`) for the\nnested case Copilot flagged.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix: call `invokeSanitizeTrace` through `$this->` in nested-src test\n\nCopilot review on #747: `trace_collapses_nested_src_paths_without_vendor_segment`\nwas calling the instance helper `invokeSanitizeTrace()` via `self::`, which on\nPHP 8.2+ is a deprecation warning and fails under the repo's\n`failOnWarning=\"true\"` PHPUnit config.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-17T09:51:17+01:00",
+          "tree_id": "cd0fce63ea51425a39a86c233ad5c94f9024903b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/42bc4911b21de8102d0d1492882575ffc2311d46"
+        },
+        "date": 1776416041458,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.98,
+            "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
             "unit": "MB"
           }
         ]
