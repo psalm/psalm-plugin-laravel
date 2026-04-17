@@ -105,17 +105,17 @@ final class ModelPropertyHandler
             return null;
         }
 
+        // Empty property names can't match anything — bail before touching the registry.
+        if ($propertyName === '') {
+            return null;
+        }
+
         $metadata = ModelMetadataRegistry::for($fqClasslikeName);
         if (!$metadata instanceof \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata) {
             return null;
         }
 
         // Lower once, reuse for both the schema column lookup and the cast map lookup.
-        // Empty property names can't match anything, so bail before touching the registry.
-        if ($propertyName === '') {
-            return null;
-        }
-
         $lowered = \strtolower($propertyName);
 
         $column = $metadata->schema()->columnByLowerKey($lowered);

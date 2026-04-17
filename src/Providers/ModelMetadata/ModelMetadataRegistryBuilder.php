@@ -61,7 +61,11 @@ final class ModelMetadataRegistryBuilder
      * Never throws: on any failure the method logs a warning through the
      * codebase's progress handle and returns without storing an entry.
      *
-     * @param class-string<Model> $modelFqcn
+     * Accepts any `class-string` (not narrowed to `class-string<Model>`): the
+     * runtime guard in `compute()` early-returns for non-Model classes, and
+     * unit-test fixtures pass non-Model FQCNs deliberately to exercise that path.
+     *
+     * @param class-string $modelFqcn
      */
     public static function warmUp(Codebase $codebase, string $modelFqcn): void
     {
@@ -84,6 +88,9 @@ final class ModelMetadataRegistryBuilder
             return;
         }
 
+        // compute() returns non-null only after `is_a(..., Model::class, true)` succeeds,
+        // so $modelFqcn is guaranteed to be a class-string<Model> at this point.
+        /** @var class-string<Model> $modelFqcn */
         ModelMetadataRegistry::store($modelFqcn, $metadata);
     }
 
@@ -114,7 +121,7 @@ final class ModelMetadataRegistryBuilder
     }
 
     /**
-     * @param class-string<Model> $modelFqcn
+     * @param class-string $modelFqcn
      * @return ModelMetadata<Model>|null
      */
     private static function compute(Codebase $codebase, string $modelFqcn): ?ModelMetadata
@@ -446,7 +453,10 @@ final class ModelMetadataRegistryBuilder
 
     private static function isEnumClass(string $class): bool
     {
-        return (\class_exists($class) || \interface_exists($class)) && \enum_exists($class);
+        // `enum_exists` already implies a class-like exists and that it's an enum —
+        // no need for the extra class_exists / interface_exists probes (which would
+        // trigger autoload twice on the miss path).
+        return \enum_exists($class);
     }
 
     /**
@@ -531,6 +541,7 @@ final class ModelMetadataRegistryBuilder
     {
         $constantName = $instance::class . '::DELETED_AT';
         if (\defined($constantName)) {
+            /** @var mixed $value */
             $value = \constant($constantName);
             if (\is_string($value) && $value !== '') {
                 return $value;
