@@ -1,8 +1,10 @@
 <?php
 
-namespace Illuminate\Support\Facades;
+namespace Illuminate\Cache;
 
-class Cache extends Facade
+use Closure;
+
+class Repository
 {
     /**
      * Get an item from the cache, or execute the given Closure and store the result.
@@ -16,7 +18,7 @@ class Cache extends Facade
      *
      * @psalm-flow ($callback) -> return
      */
-    public static function remember($key, $ttl, \Closure $callback) {}
+    public function remember($key, $ttl, Closure $callback) {}
 
     /**
      * Get an item from the cache, or execute the given Closure and store the result forever.
@@ -29,7 +31,7 @@ class Cache extends Facade
      *
      * @psalm-flow ($callback) -> return
      */
-    public static function rememberForever($key, \Closure $callback) {}
+    public function rememberForever($key, Closure $callback) {}
 
     /**
      * Get an item from the cache, or execute the given Closure and store the result forever.
@@ -42,7 +44,7 @@ class Cache extends Facade
      *
      * @psalm-flow ($callback) -> return
      */
-    public static function sear($key, \Closure $callback) {}
+    public function sear($key, Closure $callback) {}
 
     /**
      * Retrieve an item from the cache by key, refreshing it in the background if it is stale.
@@ -58,5 +60,5 @@ class Cache extends Facade
      *
      * @psalm-flow ($callback) -> return
      */
-    public static function flexible($key, $ttl, $callback, $lock = null, $alwaysDefer = false) {}
+    public function flexible($key, $ttl, $callback, $lock = null, $alwaysDefer = false) {}
 }
