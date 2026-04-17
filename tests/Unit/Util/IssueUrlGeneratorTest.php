@@ -9,13 +9,6 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
-use ReflectionMethod;
-
-use function parse_str;
-use function parse_url;
-use function strlen;
-
-use const PHP_URL_QUERY;
 
 #[CoversClass(IssueUrlGenerator::class)]
 final class IssueUrlGeneratorTest extends TestCase
@@ -25,18 +18,15 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $url = IssueUrlGenerator::generate(new \RuntimeException('boom'));
 
-        self::assertStringStartsWith(
-            'https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md',
-            $url,
-        );
+        $this->assertStringStartsWith('https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md', $url);
     }
 
     #[Test]
     public function title_prefixes_plugin_initialization_error(): void
     {
-        $title = self::titleFrom(IssueUrlGenerator::generate(new \RuntimeException('boom')));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('boom')));
 
-        self::assertSame('Plugin initialization error: boom', $title);
+        $this->assertSame('Plugin initialization error: boom', $title);
     }
 
     /**
@@ -51,12 +41,9 @@ final class IssueUrlGeneratorTest extends TestCase
             . '/Users/matthewdally/docker/business-directory/vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php:79'
             . ' for command with CLI args "./vendor/bin/psalm --no-cache --config=psalm.xml"';
 
-        $title = self::titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
 
-        self::assertSame(
-            'Plugin initialization error: Class "Introspect" not found',
-            $title,
-        );
+        $this->assertSame('Plugin initialization error: Class "Introspect" not found', $title);
     }
 
     #[Test]
@@ -64,9 +51,9 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $rawMessage = 'Class "Foo" not found in C:\\Users\\John Doe\\project\\src\\File.php:12';
 
-        $title = self::titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
 
-        self::assertSame('Plugin initialization error: Class "Foo" not found', $title);
+        $this->assertSame('Plugin initialization error: Class "Foo" not found', $title);
     }
 
     /** @return iterable<string, array{string, string}> */
@@ -83,17 +70,17 @@ final class IssueUrlGeneratorTest extends TestCase
     #[DataProvider('leadingPhpPrefixes')]
     public function title_strips_leading_php_level_prefix(string $rawMessage, string $expectedTail): void
     {
-        $title = self::titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
 
-        self::assertSame('Plugin initialization error: ' . $expectedTail, $title);
+        $this->assertSame('Plugin initialization error: ' . $expectedTail, $title);
     }
 
     #[Test]
     public function title_does_not_strip_non_php_colon_prefixes(): void
     {
-        $title = self::titleFrom(IssueUrlGenerator::generate(new \RuntimeException('Class not found: Foo')));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('Class not found: Foo')));
 
-        self::assertSame('Plugin initialization error: Class not found: Foo', $title);
+        $this->assertSame('Plugin initialization error: Class not found: Foo', $title);
     }
 
     /**
@@ -108,31 +95,31 @@ final class IssueUrlGeneratorTest extends TestCase
             . '/Users/matthewdally/docker/business-directory/vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php:79'
             . ' for command with CLI args "./vendor/bin/psalm --no-cache --config=psalm.xml"';
 
-        $title = self::titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
         $expectedTitle = 'Plugin initialization error: Class "Introspect" not found';
 
-        self::assertSame($expectedTitle, $title);
-        self::assertLessThan(strlen($rawMessage), strlen($expectedTitle));
+        $this->assertSame($expectedTitle, $title);
+        $this->assertLessThan(\strlen($rawMessage), \strlen($expectedTitle));
     }
 
     #[Test]
     public function body_includes_fenced_trace_block(): void
     {
-        $body = self::bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom')));
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom')));
 
-        self::assertStringContainsString("```\n", $body);
-        self::assertStringContainsString('RuntimeException', $body);
-        self::assertStringContainsString('boom', $body);
+        $this->assertStringContainsString("```\n", $body);
+        $this->assertStringContainsString('RuntimeException', $body);
+        $this->assertStringContainsString('boom', $body);
     }
 
     #[Test]
     public function body_lists_plugin_version_from_installed_versions(): void
     {
-        $body = self::bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom')));
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom')));
 
         // psalm/plugin-laravel is this very package — always resolvable during test runs.
-        self::assertStringContainsString('**Versions:**', $body);
-        self::assertStringContainsString('- psalm/plugin-laravel:', $body);
+        $this->assertStringContainsString('**Versions:**', $body);
+        $this->assertStringContainsString('- psalm/plugin-laravel:', $body);
     }
 
     /**
@@ -141,9 +128,9 @@ final class IssueUrlGeneratorTest extends TestCase
      * stack-frame-argument truncation, which otherwise rewrites them as `/foo/bar/ap...`
      * before the sanitizer can see a `vendor/` or `src/` segment.
      */
-    private static function invokeSanitizeTrace(string $input): string
+    private function invokeSanitizeTrace(string $input): string
     {
-        $method = new ReflectionMethod(IssueUrlGenerator::class, 'sanitizeTrace');
+        $method = new \ReflectionMethod(IssueUrlGenerator::class, 'sanitizeTrace');
 
         return (string) $method->invoke(null, $input);
     }
@@ -153,12 +140,9 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $input = '#0 /home/bob/app/vendor/vimeo/psalm/src/Foo.php(99): Bar->baz()';
 
-        $output = self::invokeSanitizeTrace($input);
+        $output = $this->invokeSanitizeTrace($input);
 
-        self::assertSame(
-            '#0 vendor/vimeo/psalm/src/Foo.php(99): Bar->baz()',
-            $output,
-        );
+        $this->assertSame('#0 vendor/vimeo/psalm/src/Foo.php(99): Bar->baz()', $output);
     }
 
     #[Test]
@@ -166,9 +150,9 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $input = '#0 /home/bob/psalm-plugin-laravel/src/Plugin.php(697): X->y()';
 
-        $output = self::invokeSanitizeTrace($input);
+        $output = $this->invokeSanitizeTrace($input);
 
-        self::assertSame('#0 src/Plugin.php(697): X->y()', $output);
+        $this->assertSame('#0 src/Plugin.php(697): X->y()', $output);
     }
 
     /**
@@ -182,12 +166,9 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $input = '#0 /Users/alice/src/project/vendor/laravel/framework/src/Illuminate/F.php(9): A->b()';
 
-        $output = self::invokeSanitizeTrace($input);
+        $output = $this->invokeSanitizeTrace($input);
 
-        self::assertSame(
-            '#0 vendor/laravel/framework/src/Illuminate/F.php(9): A->b()',
-            $output,
-        );
+        $this->assertSame('#0 vendor/laravel/framework/src/Illuminate/F.php(9): A->b()', $output);
     }
 
     /**
@@ -200,13 +181,10 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $input = '#0 /home/u/app/vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php(79): X->y()';
 
-        $output = self::invokeSanitizeTrace($input);
+        $output = $this->invokeSanitizeTrace($input);
 
-        self::assertSame(
-            '#0 vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php(79): X->y()',
-            $output,
-        );
-        self::assertStringNotContainsString('vendorsrc', $output);
+        $this->assertSame('#0 vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php(79): X->y()', $output);
+        $this->assertStringNotContainsString('vendorsrc', $output);
     }
 
     #[Test]
@@ -214,12 +192,9 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $input = "#0 /a/vendor/b.php(9): X->y('/dev/vendor/z.php', 79)";
 
-        $output = self::invokeSanitizeTrace($input);
+        $output = $this->invokeSanitizeTrace($input);
 
-        self::assertSame(
-            "#0 vendor/b.php(9): X->y('vendor/z.php', 79)",
-            $output,
-        );
+        $this->assertSame("#0 vendor/b.php(9): X->y('vendor/z.php', 79)", $output);
     }
 
     #[Test]
@@ -227,12 +202,9 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $input = '#0 C:\\Users\\carol\\src\\app\\vendor\\laravel\\framework\\src\\Foo.php(1): X->y()';
 
-        $output = self::invokeSanitizeTrace($input);
+        $output = $this->invokeSanitizeTrace($input);
 
-        self::assertSame(
-            '#0 vendor\\laravel\\framework\\src\\Foo.php(1): X->y()',
-            $output,
-        );
+        $this->assertSame('#0 vendor\\laravel\\framework\\src\\Foo.php(1): X->y()', $output);
     }
 
     #[Test]
@@ -241,9 +213,9 @@ final class IssueUrlGeneratorTest extends TestCase
         // When no vendor/ segment exists, the src pass handles the rewrite.
         $input = '#0 /home/u/project/src/Plugin.php(42): X->y()';
 
-        $output = self::invokeSanitizeTrace($input);
+        $output = $this->invokeSanitizeTrace($input);
 
-        self::assertSame('#0 src/Plugin.php(42): X->y()', $output);
+        $this->assertSame('#0 src/Plugin.php(42): X->y()', $output);
     }
 
     #[Test]
@@ -251,35 +223,35 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $input = '#0 vendor/already/relative.php(1): X->y()';
 
-        $output = self::invokeSanitizeTrace($input);
+        $output = $this->invokeSanitizeTrace($input);
 
-        self::assertSame($input, $output);
+        $this->assertSame($input, $output);
     }
 
-    private static function titleFrom(string $url): string
+    private function titleFrom(string $url): string
     {
-        $query = parse_url($url, PHP_URL_QUERY);
-        self::assertIsString($query);
+        $query = \parse_url($url, \PHP_URL_QUERY);
+        $this->assertIsString($query);
 
         $params = [];
-        parse_str($query, $params);
+        \parse_str($query, $params);
 
-        self::assertArrayHasKey('title', $params);
-        self::assertIsString($params['title']);
+        $this->assertArrayHasKey('title', $params);
+        $this->assertIsString($params['title']);
 
         return $params['title'];
     }
 
-    private static function bodyFrom(string $url): string
+    private function bodyFrom(string $url): string
     {
-        $query = parse_url($url, PHP_URL_QUERY);
-        self::assertIsString($query);
+        $query = \parse_url($url, \PHP_URL_QUERY);
+        $this->assertIsString($query);
 
         $params = [];
-        parse_str($query, $params);
+        \parse_str($query, $params);
 
-        self::assertArrayHasKey('body', $params);
-        self::assertIsString($params['body']);
+        $this->assertArrayHasKey('body', $params);
+        $this->assertIsString($params['body']);
 
         return $params['body'];
     }
