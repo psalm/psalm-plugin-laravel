@@ -68,18 +68,39 @@ final class IssueUrlGenerator
      * e.g. "/home/user/project/vendor/psalm/..." → "vendor/psalm/..."
      *      "/home/user/project/src/Plugin.php"   → "src/Plugin.php"
      *
-     * The path prefix is anchored to a safe boundary (start-of-line, whitespace, or one of
-     * the quote/paren characters that PHP stack traces use around stringified arguments,
-     * e.g. `#0 /path/File.php(79): Foo->bar('/dev/some/path', 79)`). The middle segment is
-     * non-greedy so that vendor paths containing an inner "src/" directory
-     * (e.g. "vendor/laravel/framework/src/...") are not collapsed into "vendorsrc/...".
+     * Runs two passes — vendor first, then src — instead of one alternation. On a
+     * checkout like "/Users/alice/src/project/vendor/laravel/framework/src/..." the
+     * single-regex alternation `(vendor/|src/)` with a non-greedy middle would stop
+     * at the *first* `src/` in the absolute prefix and leak "project/vendor/...".
+     * Collapsing vendor first lets the greedy-enough middle consume the whole
+     * absolute prefix up to `vendor/`; the subsequent src pass only fires when no
+     * `vendor/` segment exists, and its lookbehind prevents it from re-matching the
+     * `src/` inside an already-relativised "vendor/laravel/framework/src/..." path.
+     *
+     * Each path prefix is anchored to a safe boundary (start-of-line, whitespace, or
+     * one of the quote/paren characters that PHP stack traces use around stringified
+     * arguments, e.g. `#0 /path/File.php(79): Foo->bar('/dev/some/path', 79)`). The
+     * middle segment is non-greedy so that vendor paths containing an inner "src/"
+     * directory are not collapsed into "vendorsrc/...".
      *
      * @psalm-pure
      */
     private static function sanitizeTrace(string $trace): string
     {
+        $boundary = '(?<=\s|^|\'|"|\()';
+
+        // Vendor pass: collapses any absolute prefix up to "vendor/".
+        $trace = (string) \preg_replace(
+            '#' . $boundary . '[A-Za-z]?:?[\\/](?:[^\s:()]*?[\\/])?(vendor[\\/])#u',
+            '$1',
+            $trace,
+        );
+
+        // Src pass: collapses any absolute prefix up to "src/".
+        // Won't re-match an already-relativised "vendor/.../src/..." because the
+        // lookbehind requires a safe boundary before the leading path separator.
         return (string) \preg_replace(
-            '#(?<=\s|^|\'|"|\()[A-Za-z]?:?[\\/](?:[^\s:()]*?[\\/])?(vendor[\\/]|src[\\/])#u',
+            '#' . $boundary . '[A-Za-z]?:?[\\/](?:[^\s:()]*?[\\/])?(src[\\/])#u',
             '$1',
             $trace,
         );
