@@ -70,18 +70,24 @@ final class IssueUrlGenerator
      *
      * Runs two passes — vendor first, then src — instead of one alternation. On a
      * checkout like "/Users/alice/src/project/vendor/laravel/framework/src/..." the
-     * single-regex alternation `(vendor/|src/)` with a non-greedy middle would stop
-     * at the *first* `src/` in the absolute prefix and leak "project/vendor/...".
-     * Collapsing vendor first lets the greedy-enough middle consume the whole
-     * absolute prefix up to `vendor/`; the subsequent src pass only fires when no
-     * `vendor/` segment exists, and its lookbehind prevents it from re-matching the
-     * `src/` inside an already-relativised "vendor/laravel/framework/src/..." path.
+     * single-regex alternation `(vendor/|src/)` would stop at the *first* `src/` in
+     * the absolute prefix and leak "project/vendor/...". Splitting into two passes
+     * lets the vendor pass consume the whole absolute prefix up to `vendor/`, and
+     * the subsequent src pass only fires when no `vendor/` segment exists.
+     *
+     * The middle segment is **greedy**, so each pass prefers the LAST `vendor/` or
+     * `src/` segment in an absolute path. That matters for paths like
+     * "/Users/alice/src/project/src/Plugin.php" (no vendor, `src/` twice): a
+     * non-greedy middle would match the first `src/` and leak "project/src/…",
+     * whereas the greedy middle collapses the whole prefix down to `src/Plugin.php`.
+     * Vendor paths containing an inner `src/` (e.g. "vendor/laravel/framework/src/…")
+     * are still safe because the src pass's lookbehind requires a boundary before
+     * the leading path separator — and once vendor has been collapsed, nothing in
+     * the relative "vendor/.../src/..." path is preceded by one.
      *
      * Each path prefix is anchored to a safe boundary (start-of-line, whitespace, or
      * one of the quote/paren characters that PHP stack traces use around stringified
-     * arguments, e.g. `#0 /path/File.php(79): Foo->bar('/dev/some/path', 79)`). The
-     * middle segment is non-greedy so that vendor paths containing an inner "src/"
-     * directory are not collapsed into "vendorsrc/...".
+     * arguments, e.g. `#0 /path/File.php(79): Foo->bar('/dev/some/path', 79)`).
      *
      * @psalm-pure
      */
@@ -98,7 +104,7 @@ final class IssueUrlGenerator
 
         // Vendor pass: collapses any absolute prefix up to "vendor/".
         $trace = (string) \preg_replace(
-            '#' . $boundary . '[A-Za-z]?:?' . $sep . '(?:[^\s:()]*?' . $sep . ')?(vendor' . $sep . ')#u',
+            '#' . $boundary . '[A-Za-z]?:?' . $sep . '(?:[^\s:()]*' . $sep . ')?(vendor' . $sep . ')#u',
             '$1',
             $trace,
         );
@@ -107,7 +113,7 @@ final class IssueUrlGenerator
         // Won't re-match an already-relativised "vendor/.../src/..." because the
         // lookbehind requires a safe boundary before the leading path separator.
         return (string) \preg_replace(
-            '#' . $boundary . '[A-Za-z]?:?' . $sep . '(?:[^\s:()]*?' . $sep . ')?(src' . $sep . ')#u',
+            '#' . $boundary . '[A-Za-z]?:?' . $sep . '(?:[^\s:()]*' . $sep . ')?(src' . $sep . ')#u',
             '$1',
             $trace,
         );

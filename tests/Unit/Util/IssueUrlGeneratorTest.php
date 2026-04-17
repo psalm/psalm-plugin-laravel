@@ -207,6 +207,22 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertSame('#0 vendor\\laravel\\framework\\src\\Foo.php(1): X->y()', $output);
     }
 
+    /**
+     * Regression: nested `.../src/.../src/...` paths with no vendor segment.
+     * A non-greedy middle in the src pass would stop at the first `src/` in the
+     * absolute prefix and leak "project/src/...". The greedy middle prefers the
+     * last `src/` segment and collapses the whole prefix.
+     */
+    #[Test]
+    public function trace_collapses_nested_src_paths_without_vendor_segment(): void
+    {
+        $input = '#0 /Users/alice/src/project/src/Plugin.php(42): X->y()';
+
+        $output = self::invokeSanitizeTrace($input);
+
+        self::assertSame('#0 src/Plugin.php(42): X->y()', $output);
+    }
+
     #[Test]
     public function trace_only_collapses_src_when_no_vendor_segment_exists(): void
     {
