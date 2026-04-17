@@ -54,13 +54,10 @@ final class PackageProviderRegistrarTest extends TestCase
 
         PackageProviderRegistrar::register($app, $this->projectRoot, new VoidProgress());
 
-        self::assertTrue(
-            $app->bound(TestStringAliasServiceProvider::STRING_KEY),
-            'String binding from the project\'s own composer.json should be registered in the app',
-        );
+        $this->assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY), "String binding from the project's own composer.json should be registered in the app");
 
         $resolved = $app->make(TestStringAliasServiceProvider::STRING_KEY);
-        self::assertInstanceOf(TestStringAliasTarget::class, $resolved);
+        $this->assertInstanceOf(TestStringAliasTarget::class, $resolved);
     }
 
     #[Test]
@@ -83,7 +80,7 @@ final class PackageProviderRegistrarTest extends TestCase
 
         PackageProviderRegistrar::register($app, $this->projectRoot, new VoidProgress());
 
-        self::assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY));
+        $this->assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY));
     }
 
     #[Test]
@@ -106,7 +103,7 @@ final class PackageProviderRegistrarTest extends TestCase
 
         PackageProviderRegistrar::register($app, $this->projectRoot, new VoidProgress());
 
-        self::assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY));
+        $this->assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY));
     }
 
     #[Test]
@@ -128,10 +125,7 @@ final class PackageProviderRegistrarTest extends TestCase
         PackageProviderRegistrar::register($app, $this->projectRoot, new VoidProgress());
 
         // BrokenServiceProvider must not crash the iteration — the good one after it must still register.
-        self::assertTrue(
-            $app->bound(TestStringAliasServiceProvider::STRING_KEY),
-            'Registrar must continue past a broken provider and still register subsequent ones',
-        );
+        $this->assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY), 'Registrar must continue past a broken provider and still register subsequent ones');
     }
 
     #[Test]
@@ -180,7 +174,7 @@ final class PackageProviderRegistrarTest extends TestCase
         PackageProviderRegistrar::register($app, $this->projectRoot, new VoidProgress());
 
         // Only the string provider registers — non-strings are filtered out before register().
-        self::assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY));
+        $this->assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY));
     }
 
     #[Test]
@@ -201,7 +195,7 @@ final class PackageProviderRegistrarTest extends TestCase
 
             PackageProviderRegistrar::register($app, $this->projectRoot, new VoidProgress());
 
-            self::assertFalse($app->bound(TestStringAliasServiceProvider::STRING_KEY));
+            $this->assertFalse($app->bound(TestStringAliasServiceProvider::STRING_KEY));
         }
     }
 
@@ -234,10 +228,7 @@ final class PackageProviderRegistrarTest extends TestCase
 
         PackageProviderRegistrar::register($app, $this->projectRoot, new VoidProgress());
 
-        self::assertFalse(
-            $app->bound(TestStringAliasServiceProvider::STRING_KEY),
-            "Provider from a package listed in root composer.json's extra.laravel.dont-discover must not be registered",
-        );
+        $this->assertFalse($app->bound(TestStringAliasServiceProvider::STRING_KEY), "Provider from a package listed in root composer.json's extra.laravel.dont-discover must not be registered");
     }
 
     #[Test]
@@ -264,10 +255,7 @@ final class PackageProviderRegistrarTest extends TestCase
 
         PackageProviderRegistrar::register($app, $this->projectRoot, new VoidProgress());
 
-        self::assertFalse(
-            $app->bound(TestStringAliasServiceProvider::STRING_KEY),
-            'dont-discover ["*"] must suppress both composer.json and composer.lock providers',
-        );
+        $this->assertFalse($app->bound(TestStringAliasServiceProvider::STRING_KEY), 'dont-discover ["*"] must suppress both composer.json and composer.lock providers');
     }
 
     #[Test]
@@ -291,7 +279,7 @@ final class PackageProviderRegistrarTest extends TestCase
         // to reason about downstream and cheaper. This test covers that expectation.
         PackageProviderRegistrar::register($app, $this->projectRoot, new VoidProgress());
 
-        self::assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY));
+        $this->assertTrue($app->bound(TestStringAliasServiceProvider::STRING_KEY));
     }
 
     /**

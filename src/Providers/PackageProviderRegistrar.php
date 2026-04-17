@@ -112,7 +112,6 @@ final class PackageProviderRegistrar
             $composerLock = self::readJsonFile($composerLockPath, $progress);
             if ($composerLock !== null) {
                 foreach (['packages', 'packages-dev'] as $section) {
-                    /** @var mixed $packages */
                     $packages = $composerLock[$section] ?? null;
 
                     if (!\is_array($packages)) {
@@ -125,7 +124,6 @@ final class PackageProviderRegistrar
                             continue;
                         }
 
-                        /** @var mixed $packageName */
                         $packageName = $package['name'] ?? null;
                         if (\is_string($packageName) && \in_array($packageName, $dontDiscover, true)) {
                             // Package explicitly opted out by the root composer.json.
@@ -158,8 +156,8 @@ final class PackageProviderRegistrar
         try {
             /** @var mixed $decoded */
             $decoded = \json_decode($content, true, 512, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException $e) {
-            $progress->warning("Laravel plugin: could not parse '{$path}': {$e->getMessage()}");
+        } catch (\JsonException $jsonException) {
+            $progress->warning("Laravel plugin: could not parse '{$path}': {$jsonException->getMessage()}");
             return null;
         }
 
@@ -187,19 +185,16 @@ final class PackageProviderRegistrar
             return [];
         }
 
-        /** @var mixed $extra */
         $extra = $data['extra'] ?? null;
         if (!\is_array($extra)) {
             return [];
         }
 
-        /** @var mixed $laravel */
         $laravel = $extra['laravel'] ?? null;
         if (!\is_array($laravel)) {
             return [];
         }
 
-        /** @var mixed $values */
         $values = $laravel[$key] ?? null;
         if (!\is_array($values)) {
             return [];

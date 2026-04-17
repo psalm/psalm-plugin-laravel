@@ -41,7 +41,7 @@ final class Plugin implements PluginEntryPointInterface
             // generated alias stubs and the facade-to-service map. See issue #766.
             PackageProviderRegistrar::register(
                 ApplicationProvider::getApp(),
-                self::resolveProjectRoot($registration),
+                $this->resolveProjectRoot($registration),
                 $output,
             );
 
@@ -749,7 +749,7 @@ final class Plugin implements PluginEntryPointInterface
      * composer.json / composer.lock. `base_dir` is the same anchor Psalm itself uses
      * for <projectFiles> resolution.
      */
-    private static function resolveProjectRoot(RegistrationInterface $registration): string
+    private function resolveProjectRoot(RegistrationInterface $registration): string
     {
         if ($registration instanceof \Psalm\PluginRegistrationSocket) {
             return $registration->config->base_dir;
