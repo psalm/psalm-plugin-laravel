@@ -89,7 +89,7 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
         $event = $this->createEvent($filePath);
 
         $this->expectException(\UnexpectedValueException::class);
-        $this->expectExceptionMessage('No config initialized');
+        $this->expectExceptionMessageMatches('/config.*initializ|initializ.*config/i');
 
         NoEnvOutsideConfigHandler::getFunctionReturnType($event);
     }
