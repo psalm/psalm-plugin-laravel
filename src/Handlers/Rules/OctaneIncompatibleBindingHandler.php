@@ -30,12 +30,17 @@ use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
 
 /**
- * Flags request-scoped service resolutions inside shared-binding closures
- * (singleton, singletonIf, scoped, scopedIf).
+ * Flags request-scoped service resolutions inside long-lived binding closures
+ * (singleton, singletonIf).
  *
  * Under Laravel Octane, the application instance is reused across requests, so a
  * closure that resolves Request/Session/Auth during the first resolution keeps
  * that instance alive for every subsequent request.
+ *
+ * scoped()/scopedIf() bindings are NOT flagged: Octane calls
+ * {@see \Illuminate\Container\Container::forgetScopedInstances()} between requests,
+ * so scoped captures are re-created per request. They are the Octane-safe
+ * alternative to singleton() and are out of scope for this rule.
  *
  * Handler is opt-in: registered only when findOctaneIncompatibleBinding is set
  * in psalm.xml. When registered, the hook fires for every resolved MethodCall
@@ -50,8 +55,11 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 {
     /**
      * Method IDs (declaring-class::method, lowercased) for container bindings that
-     * register a single shared instance reused across requests. bind()/bindIf() are
-     * safe: they re-execute the closure per resolution.
+     * register a single shared instance reused across requests.
+     *
+     *  - bind()/bindIf() are safe: they re-execute the closure per resolution.
+     *  - scoped()/scopedIf() are safe under Octane: flushed between requests via
+     *    Container::forgetScopedInstances(). Not flagged.
      *
      * Covers both the concrete Container and the contract, because declaring_method_id
      * points at whichever one is in scope for the receiver type. Users who type
@@ -67,12 +75,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
     private const UNSAFE_METHOD_IDS = [
         'illuminate\\container\\container::singleton' => true,
         'illuminate\\container\\container::singletonif' => true,
-        'illuminate\\container\\container::scoped' => true,
-        'illuminate\\container\\container::scopedif' => true,
         'illuminate\\contracts\\container\\container::singleton' => true,
         'illuminate\\contracts\\container\\container::singletonif' => true,
-        'illuminate\\contracts\\container\\container::scoped' => true,
-        'illuminate\\contracts\\container\\container::scopedif' => true,
     ];
 
     /**

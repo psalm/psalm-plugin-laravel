@@ -65,18 +65,8 @@ class AppServiceProvider extends ServiceProvider
             return new MyService(App::make(Request::class));
         });
 
-        // Bad. scoped() has the same caveat as singleton().
-        $this->app->scoped('svc.7', function (Application $app): MyService {
-            return new MyService($app->make(Request::class));
-        });
-
         // Bad. singletonIf() (case-insensitive method name).
         $this->app->singletonIf('svc.8', function (Application $app): MyService {
-            return new MyService($app->make(Request::class));
-        });
-
-        // Bad. scopedIf() (the fourth UNSAFE_METHOD_IDS entry).
-        $this->app->scopedIf('svc.9', function (Application $app): MyService {
             return new MyService($app->make(Request::class));
         });
 
@@ -182,6 +172,18 @@ class AppServiceProvider extends ServiceProvider
             return new MyService($app->make(Request::class));
         });
 
+        // Good. scoped() bindings are flushed between requests by Octane via
+        // Container::forgetScopedInstances(), so request-scoped captures do not leak.
+        // scoped() is the Octane-safe alternative to singleton().
+        $this->app->scoped('svc.ok.scoped', function (Application $app): MyService {
+            return new MyService($app->make(Request::class));
+        });
+
+        // Good. scopedIf() has the same per-request semantics as scoped().
+        $this->app->scopedIf('svc.ok.scopedIf', function (Application $app): MyService {
+            return new MyService($app->make(Request::class));
+        });
+
         // Good. singleton with no request-scoped resolution.
         $this->app->singleton('svc.ok3', function (): MyService {
             return new MyService(null);
@@ -240,9 +242,7 @@ OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Session\Store' 
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Contracts\Auth\Authenticatable' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Contracts\Auth\Factory' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
-OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside scoped() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singletonIf() closure. State leaks across Octane requests. Use bind() or resolve at call site.
-OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside scopedIf() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Http\Request' resolved inside singleton() closure. State leaks across Octane requests. Use bind() or resolve at call site.

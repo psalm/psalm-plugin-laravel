@@ -6,9 +6,14 @@ nav_order: 7
 
 # OctaneIncompatibleBinding
 
-Emitted when a `singleton()`, `scoped()`, `singletonIf()`, or `scopedIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, or `Auth`.
+Emitted when a `singleton()` or `singletonIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, or `Auth`.
 
 **Opt-in.** Enable via `<findOctaneIncompatibleBinding value="true" />` in `psalm.xml`. See [Configuration](../config.md#findoctaneincompatiblebinding).
+
+`bind()`, `bindIf()`, `scoped()`, and `scopedIf()` are NOT flagged:
+
+- `bind()` / `bindIf()` re-execute the closure on every resolution.
+- `scoped()` / `scopedIf()` are flushed between requests under Octane (via `Container::forgetScopedInstances()`), so captured state does not leak across requests. These are the Octane-safe alternative to `singleton()`.
 
 ## Why this is a problem
 
@@ -84,5 +89,6 @@ The following abstracts are treated as request-scoped:
 
 ## How to fix
 
-- Change `singleton()` or `scoped()` to `bind()`. The closure will re-run on every resolution.
+- Change `singleton()` to `scoped()`. Octane flushes scoped instances between requests, so the closure runs once per request instead of once per worker.
+- Or change `singleton()` to `bind()`. The closure will re-run on every resolution (simpler but no intra-request caching).
 - Or keep the singleton and move the request-scoped resolution out of the constructor: inject the container and resolve lazily inside the method that actually uses it.

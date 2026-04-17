@@ -101,7 +101,7 @@ See [MissingView](issues/MissingView.md) for details.
 
 **default**: `false`
 
-When enabled, the plugin flags `singleton()`, `scoped()`, `singletonIf()`, and `scopedIf()` binding closures that resolve request-scoped Laravel services (Request, Session, Auth, Cookie, Config, UrlGenerator, Redirector). Under Laravel Octane the application instance is reused across requests, so these captures leak state from the first resolving request into every subsequent one.
+When enabled, the plugin flags `singleton()` and `singletonIf()` binding closures that resolve request-scoped Laravel services (Request, Session, Auth, Cookie, Config, UrlGenerator, Redirector). Under Laravel Octane the application instance is reused across requests, so these captures leak state from the first resolving request into every subsequent one. `scoped()` / `scopedIf()` bindings are not flagged: Octane flushes them between requests.
 
 Off by default because the rule is only relevant to Octane users. FPM-only projects get no benefit from it.
 
