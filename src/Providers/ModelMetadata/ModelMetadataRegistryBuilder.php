@@ -173,9 +173,6 @@ final class ModelMetadataRegistryBuilder
     /**
      * @param class-string<Model> $modelFqcn
      */
-    /**
-     * @param class-string<Model> $modelFqcn
-     */
     private static function instantiate(string $modelFqcn, Codebase $codebase): ?Model
     {
         try {
@@ -363,8 +360,7 @@ final class ModelMetadataRegistryBuilder
      *
      * `$nullable` controls only {@see CastInfo::$psalmType} — the discriminator shape is
      * nullability-independent.
-     */
-    /**
+     *
      * @param non-empty-string $columnName
      * @param non-empty-string $castString
      */

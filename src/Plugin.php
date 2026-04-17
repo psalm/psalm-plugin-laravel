@@ -46,7 +46,7 @@ final class Plugin implements PluginEntryPointInterface
             // Registry of per-model metadata (schema + casts + traits + primary key + ...).
             // init() only captures the Progress handle — actual model metadata is populated
             // during AfterCodebasePopulated by ModelRegistrationHandler piggy-backing on its
-            // existing iteration. See docs/design/model-metadata-registry.md §6.
+            // existing iteration.
             ModelMetadataRegistry::init($output);
 
             Handlers\Rules\NoEnvOutsideConfigHandler::init(
