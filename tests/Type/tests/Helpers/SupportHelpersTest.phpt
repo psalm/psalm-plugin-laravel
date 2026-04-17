@@ -240,6 +240,69 @@ function blank_narrows_nullable_string_to_non_null(?string $value): string
     return 'fallback';
 }
 
+// Regression tests for https://github.com/psalm/psalm-plugin-laravel/issues/755.
+// Tighter guard narrowing: `if (filled($x))` with `?string` narrows to
+// `non-empty-string` (not just `string`), because `filled()` is false for
+// both `null` and `''`. The combined `!null` + `!=''` assertions deliver
+// the tighter type. A regression to only `!null` (pre-#755 behavior) would
+// leave `$value` as `string` inside the branch and fail the exact check.
+function filled_narrows_nullable_string_to_non_empty_string(?string $value): string
+{
+    if (filled($value)) {
+        /** @psalm-check-type-exact $value = non-empty-string */;
+        return $value;
+    }
+    return 'fallback';
+}
+
+// `mixed` must not be over-narrowed. Psalm's loose-inequality reconciler
+// is effectively a no-op against `mixed` (there is no atomic to subtract
+// `''` from), so `mixed` stays `mixed` inside the true branch. `!null` is
+// also a no-op here because `mixed` already covers every possibility.
+function filled_does_not_over_narrow_mixed(mixed $value): mixed
+{
+    if (filled($value)) {
+        /** @psalm-check-type-exact $value = mixed */;
+        return $value;
+    }
+    return null;
+}
+
+/**
+ * Mixed union: `null` drops out, `string` narrows to `non-empty-string`,
+ * `int` and `array` survive. Verifies the new `!=''` assertion plays
+ * correctly with the existing nested conditional return type for a union
+ * that straddles multiple narrow clauses. The return type matches Psalm's
+ * normalized form (`array<array-key, mixed>`) so that the check-type-exact
+ * assertion and the declared return type are consistent.
+ *
+ * @param  array|int|string|null  $value
+ * @return array<array-key, mixed>|int|non-empty-string
+ */
+function filled_narrows_union_input($value)
+{
+    if (filled($value)) {
+        /** @psalm-check-type-exact $value = array<array-key, mixed>|int|non-empty-string */;
+        return $value;
+    }
+    return 0;
+}
+
+// `blank()` currently does not add a symmetric `!=''` if-false assertion
+// (see the `filled()` stub docblock for why), so `! blank($nullable)`
+// narrows only to `string`, not `non-empty-string`. This test documents
+// that limitation and will start failing if a future Psalm release lifts
+// the restriction, signaling the stub can be tightened.
+// @todo https://github.com/psalm/psalm-plugin-laravel/issues/755
+function blank_narrows_nullable_string_only_to_string(?string $value): string
+{
+    if (! blank($value)) {
+        /** @psalm-check-type-exact $value = string */;
+        return $value;
+    }
+    return 'fallback';
+}
+
 function object_get_returns_first_arg_when_second_is_null(\stdClass $object): \stdClass
 {
     return object_get($object, null);
