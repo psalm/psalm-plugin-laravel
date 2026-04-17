@@ -33,7 +33,7 @@
         "vimeo/psalm": "^6.16.1"
     },
     "require-dev": {
-        "alies-dev/psalm-tester": "dev-main",
+        "alies-dev/psalm-tester": "dev-feature/parallel-batch",
         "friendsofphp/php-cs-fixer": "^3.94",
         "laravel/framework": "^11.35 || ^12.0",
         "phpunit/phpunit": "^11.5 || ^12.5",

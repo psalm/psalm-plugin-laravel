@@ -1,5 +1,5 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm-find-views.xml
+--no-progress --no-diff --config=./tests/Type/psalm-with-optin-custom-issues.xml
 --FILE--
 <?php declare(strict_types=1);
 
