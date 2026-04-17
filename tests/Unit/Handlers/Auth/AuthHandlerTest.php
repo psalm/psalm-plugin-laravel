@@ -113,4 +113,37 @@ final class AuthHandlerTest extends TestCase
 
         $this->assertNull($params);
     }
+
+    /**
+     * For AuthManager / Factory the methods are real PHP (or routed via @mixin
+     * Guard/StatefulGuard), so Psalm can resolve their parameter types from source.
+     * Returning our facade-oriented overrides there would narrow `guard()`'s
+     * \UnitEnum|string|null parameter down to string|null and flag valid enum calls
+     * as InvalidArgument. See {@see AuthHandler::getMethodParams}.
+     *
+     * @return \Iterator<string, array{class-string, string}>
+     */
+    public static function nonFacadeReceiversProvider(): \Iterator
+    {
+        $methods = ['user', 'getuser', 'authenticate', 'getlastattempted', 'guard', 'logoutotherdevices', 'loginusingid', 'onceusingid'];
+
+        foreach ($methods as $method) {
+            yield "AuthManager::{$method}" => [\Illuminate\Auth\AuthManager::class, $method];
+            yield "Factory::{$method}" => [\Illuminate\Contracts\Auth\Factory::class, $method];
+        }
+    }
+
+    /**
+     * @param class-string $fqClassLikeName
+     */
+    #[DataProvider('nonFacadeReceiversProvider')]
+    public function testGetMethodParamsReturnsNullForNonFacadeReceivers(string $fqClassLikeName, string $method): void
+    {
+        $event = new MethodParamsProviderEvent($fqClassLikeName, $method);
+
+        $this->assertNull(
+            AuthHandler::getMethodParams($event),
+            "getMethodParams() must return null for {$fqClassLikeName}::{$method} so Psalm uses the native signature",
+        );
+    }
 }

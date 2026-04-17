@@ -51,5 +51,89 @@ $_guardNull = \Illuminate\Support\Facades\Auth::guard(null);
 
 $_guardApi = \Illuminate\Support\Facades\Auth::guard('api');
 /** @psalm-check-type-exact $_guardApi = \Illuminate\Auth\TokenGuard */
+
+// DI-injected AuthManager — same narrowing as the facade (see issue #765)
+function _diAuthManager(\Illuminate\Auth\AuthManager $authManager): void {
+    $_amGuardWeb = $authManager->guard('web');
+    /** @psalm-check-type-exact $_amGuardWeb = \Illuminate\Auth\SessionGuard */
+
+    $_amGuardApi = $authManager->guard('api');
+    /** @psalm-check-type-exact $_amGuardApi = \Illuminate\Auth\TokenGuard */
+
+    $_amGuardNoArg = $authManager->guard();
+    /** @psalm-check-type-exact $_amGuardNoArg = \Illuminate\Auth\SessionGuard */
+
+    $_amGuardNull = $authManager->guard(null);
+    // null is equivalent to no argument — narrows to the default guard's concrete class
+    /** @psalm-check-type-exact $_amGuardNull = \Illuminate\Auth\SessionGuard */
+
+    $_amGuardUnknown = $authManager->guard('nonexistent-guard');
+    // unknown guard name — falls back to the declared union type
+    /** @psalm-check-type-exact $_amGuardUnknown = \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard */
+
+    $_amUser = $authManager->user();
+    /** @psalm-check-type-exact $_amUser = \Illuminate\Foundation\Auth\User|null */
+
+    $_amLoginUsingId = $authManager->loginUsingId(1);
+    /** @psalm-check-type-exact $_amLoginUsingId = \Illuminate\Foundation\Auth\User|false */
+
+    $_amOnceUsingId = $authManager->onceUsingId(1);
+    /** @psalm-check-type-exact $_amOnceUsingId = \Illuminate\Foundation\Auth\User|false */
+
+    // Chained calls — the acceptance example from issue #765
+    $_amChainedUser = $authManager->guard('web')->user();
+    /** @psalm-check-type-exact $_amChainedUser = \Illuminate\Foundation\Auth\User|null */
+
+    $_amChainedLogin = $authManager->guard('web')->loginUsingId(1);
+    /** @psalm-check-type-exact $_amChainedLogin = \Illuminate\Foundation\Auth\User|false */
+
+    // dynamic guard name — falls back to the declared union type
+    /** @var string $dynamic */
+    $dynamic = 'web';
+    $_amGuardDynamic = $authManager->guard($dynamic);
+    /** @psalm-check-type-exact $_amGuardDynamic = \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard */
+}
+
+// DI-injected by the Factory contract — narrowing applies through the interface too
+function _diAuthFactory(\Illuminate\Contracts\Auth\Factory $factory): void {
+    $_fGuardWeb = $factory->guard('web');
+    /** @psalm-check-type-exact $_fGuardWeb = \Illuminate\Auth\SessionGuard */
+
+    $_fGuardApi = $factory->guard('api');
+    /** @psalm-check-type-exact $_fGuardApi = \Illuminate\Auth\TokenGuard */
+}
+
+// Direct concrete-guard DI — GuardHandler registers the concrete classes so that calls
+// resolving to the concrete class (not the interface) still receive narrowing.
+function _diSessionGuard(\Illuminate\Auth\SessionGuard $guard): void {
+    $_sgUser = $guard->user();
+    /** @psalm-check-type-exact $_sgUser = \Illuminate\Foundation\Auth\User|null */
+
+    $_sgLogin = $guard->loginUsingId(1);
+    /** @psalm-check-type-exact $_sgLogin = \Illuminate\Foundation\Auth\User|false */
+
+    $_sgOnce = $guard->onceUsingId(1);
+    /** @psalm-check-type-exact $_sgOnce = \Illuminate\Foundation\Auth\User|false */
+}
+
+function _diTokenGuard(\Illuminate\Auth\TokenGuard $guard): void {
+    $_tgUser = $guard->user();
+    /** @psalm-check-type-exact $_tgUser = \Illuminate\Foundation\Auth\User|null */
+}
+
+function _diRequestGuard(\Illuminate\Auth\RequestGuard $guard): void {
+    $_rgUser = $guard->user();
+    /** @psalm-check-type-exact $_rgUser = \Illuminate\Foundation\Auth\User|null */
+}
+
+// DI-injected by the StatefulGuard contract — covers cases where @mixin routes AuthManager
+// methods here, but also direct usage if someone types against the interface.
+function _diStatefulGuard(\Illuminate\Contracts\Auth\StatefulGuard $guard): void {
+    $_stUser = $guard->user();
+    /** @psalm-check-type-exact $_stUser = \Illuminate\Foundation\Auth\User|null */
+
+    $_stLogin = $guard->loginUsingId(1);
+    /** @psalm-check-type-exact $_stLogin = \Illuminate\Foundation\Auth\User|false */
+}
 ?>
 --EXPECT--
