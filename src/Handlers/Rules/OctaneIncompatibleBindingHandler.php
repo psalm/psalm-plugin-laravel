@@ -15,9 +15,14 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\FunctionLike;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Stmt\Class_;
+use PhpParser\Node\Stmt\Enum_;
+use PhpParser\Node\Stmt\Interface_;
+use PhpParser\Node\Stmt\Trait_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
@@ -408,8 +413,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             /** @psalm-var mixed $sub */
             $sub = $node->$name;
 
-            if ($sub instanceof Closure || $sub instanceof ArrowFunction) {
-                // Don't descend into nested closure bodies. See findResolutions() docblock.
+            if (self::isScopeBoundary($sub)) {
+                // Do not descend into nested execution scopes. See findResolutions() docblock.
                 continue;
             }
 
@@ -421,7 +426,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             if (\is_array($sub)) {
                 /** @psalm-var mixed $item */
                 foreach ($sub as $item) {
-                    if ($item instanceof Closure || $item instanceof ArrowFunction) {
+                    if (self::isScopeBoundary($item)) {
                         continue;
                     }
 
@@ -431,6 +436,26 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
                 }
             }
         }
+    }
+
+    /**
+     * Nodes whose bodies form a separate execution scope: their statements do not
+     * run during the outer shared-binding closure's resolution.
+     *
+     *   - FunctionLike covers Closure, ArrowFunction, Function_, ClassMethod.
+     *   - Class_, Trait_, Interface_, Enum_ cover anonymous / nested class-like
+     *     declarations inside the closure; method bodies inside them are lazy.
+     *
+     * @psalm-pure
+     * @psalm-assert-if-true FunctionLike|Class_|Trait_|Interface_|Enum_ $node
+     */
+    private static function isScopeBoundary(mixed $node): bool
+    {
+        return $node instanceof FunctionLike
+            || $node instanceof Class_
+            || $node instanceof Trait_
+            || $node instanceof Interface_
+            || $node instanceof Enum_;
     }
 
     private static function emitIssue(

@@ -207,6 +207,21 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton('svc.ok6', function (Application $app) use ($class): MyService {
             return new MyService($app->make($class));
         });
+
+        // Good. Anonymous class methods form a separate execution scope: the
+        // $app->make(Request::class) call inside handle() runs on method invocation,
+        // not during singleton resolution. The outer singleton's constructor line
+        // creates the anonymous class instance without resolving Request.
+        $this->app->singleton('svc.ok7', function (Application $app): object {
+            return new class ($app) {
+                public function __construct(private Application $app) {}
+
+                public function handle(): Request
+                {
+                    return $this->app->make(Request::class);
+                }
+            };
+        });
     }
 }
 
