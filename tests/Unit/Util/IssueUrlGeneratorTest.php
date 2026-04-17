@@ -218,7 +218,7 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $input = '#0 /Users/alice/src/project/src/Plugin.php(42): X->y()';
 
-        $output = self::invokeSanitizeTrace($input);
+        $output = $this->invokeSanitizeTrace($input);
 
         $this->assertSame('#0 src/Plugin.php(42): X->y()', $output);
     }
