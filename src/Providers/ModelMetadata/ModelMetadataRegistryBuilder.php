@@ -133,6 +133,13 @@ final class ModelMetadataRegistryBuilder
 
         $storageProvider = $codebase->classlike_storage_provider;
         if (!$storageProvider->has($modelFqcn)) {
+            // Caller (ModelRegistrationHandler) iterates classlike_storage_provider::getAll(),
+            // so missing storage here is unexpected — trace it so --debug runs reveal why a
+            // model dropped out. Stays a null return (no user-visible failure).
+            $codebase->progress->debug(
+                "Laravel plugin: ModelMetadataRegistry skipped '{$modelFqcn}': storage provider has no entry\n",
+            );
+
             return null;
         }
 
@@ -420,7 +427,7 @@ final class ModelMetadataRegistryBuilder
         $targetClass = null;
 
         if (
-            in_array($baseLower, ['date', 'datetime', 'custom_datetime', 'immutable_date', 'immutable_datetime', 'immutable_custom_datetime'], true)
+            \in_array($baseLower, ['date', 'datetime', 'custom_datetime', 'immutable_date', 'immutable_datetime', 'immutable_custom_datetime'], true)
         ) {
             $shape = CastShape::DateTime;
         } elseif ($baseLower === 'collection') {

@@ -269,9 +269,9 @@ final class ModelPropertyHandler
      */
     private static function hasNativeProperty(string $fqcn, string $propertyName): bool
     {
-        // `array_key_exists` (not `isset`) — we cache `false` for properties that don't
-        // exist, and `isset` would return false for the sentinel and re-run the probe.
-        if (isset(self::$nativePropertyCache[$fqcn]) && \array_key_exists($propertyName, self::$nativePropertyCache[$fqcn])) {
+        // isset() returns true for cached false values (since false !== null), so it
+        // correctly distinguishes "not probed yet" from "probed and absent".
+        if (isset(self::$nativePropertyCache[$fqcn][$propertyName])) {
             return self::$nativePropertyCache[$fqcn][$propertyName];
         }
 

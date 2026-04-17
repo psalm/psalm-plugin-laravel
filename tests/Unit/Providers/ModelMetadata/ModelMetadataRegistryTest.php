@@ -37,6 +37,7 @@ use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\Progress\VoidProgress;
 use Psalm\Storage\ClassLikeStorage;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
@@ -199,6 +200,47 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertFalse($metadata->primaryKey->incrementing);
         $this->assertSame(['id'], $metadata->primaryKey->uuidColumns);
+    }
+
+    #[Test]
+    public function has_uuids_does_not_inject_bogus_int_cast_on_primary_key(): void
+    {
+        // Regression: before the $usesUniqueIds reflective flip, $instance->getCasts()
+        // returned [id => 'int'] for HasUuids models because getIncrementing() fell through
+        // to the Model default. The registry must not reflect that bogus entry.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(UuidModel::class, [HasUuids::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, UuidModel::class);
+
+        $metadata = ModelMetadataRegistry::for(UuidModel::class);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+
+        $casts = $metadata->casts();
+        if (isset($casts['id'])) {
+            $this->fail(
+                "HasUuids model 'id' column should not carry an auto-injected cast. "
+                . "Got shape: {$casts['id']->shape->value}.",
+            );
+        }
+    }
+
+    #[Test]
+    public function soft_deletes_honors_deleted_at_class_constant_override(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(CustomDeletedAtModel::class, [SoftDeletes::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, CustomDeletedAtModel::class);
+
+        $metadata = ModelMetadataRegistry::for(CustomDeletedAtModel::class);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+
+        $casts = $metadata->casts();
+        $this->assertArrayHasKey('archived_at', $casts);
+        $this->assertSame(CastShape::DateTime, $casts['archived_at']->shape);
+        // And the default 'deleted_at' key must not appear for this model.
+        $this->assertArrayNotHasKey('deleted_at', $casts);
     }
 
     #[Test]
