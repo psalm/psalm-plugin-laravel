@@ -288,6 +288,25 @@ function filled_narrows_union_input($value)
     return 0;
 }
 
+/**
+ * Soundness regression lock-in: Laravel treats `false` as filled (`blank(false)
+ * === false`), but PHP's `false == ''` is true, so a strict reading of the
+ * `!=''` assertion would incorrectly subtract `false` from the input. The
+ * current Psalm release applies `!=''` only to the string atomic, so `false`
+ * survives inside the true branch. This test pins that behavior: if a future
+ * Psalm release starts applying the loose-equality assertion to `false`, the
+ * check-type-exact will fail and signal that the `!=''` line must be revised
+ * to keep `filled(false) === true` sound.
+ *
+ * @param  false|string|null  $value
+ */
+function filled_keeps_false_for_false_or_string_union($value): void
+{
+    if (filled($value)) {
+        /** @psalm-check-type-exact $value = false|non-empty-string */;
+    }
+}
+
 // `blank()` currently does not add a symmetric `!=''` if-false assertion
 // (see the `filled()` stub docblock for why), so `! blank($nullable)`
 // narrows only to `string`, not `non-empty-string`. This test documents
