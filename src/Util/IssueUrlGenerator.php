@@ -30,7 +30,9 @@ final class IssueUrlGenerator
         $message = (string) \preg_replace('/\s+for command with CLI args\s+".*$/s', '', $message);
 
         // Drop " in /absolute/path/to/file.php:123" fragments that leak the reporter's filesystem.
-        $message = (string) \preg_replace('/\s+in\s+\S+\.php:\d+/u', '', $message);
+        // Non-greedy match (`.+?`) instead of `\S+` so Windows paths containing spaces
+        // (e.g. "C:\Users\John Doe\file.php:12") are also handled.
+        $message = (string) \preg_replace('/\s+in\s+.+?\.php:\d+/u', '', $message);
 
         // Strip a leading "PHP (Fatal error|Error|Warning|Notice): " prefix that duplicates context.
         $message = (string) \preg_replace('/^PHP\s+(?:Fatal\s+error|Error|Warning|Notice):\s+/i', '', $message);
@@ -66,17 +68,18 @@ final class IssueUrlGenerator
      * e.g. "/home/user/project/vendor/psalm/..." → "vendor/psalm/..."
      *      "/home/user/project/src/Plugin.php"   → "src/Plugin.php"
      *
-     * The path prefix is anchored to start-of-line or whitespace (via lookbehind),
-     * and the middle segment is non-greedy so that vendor paths containing an
-     * inner "src/" directory (e.g. "vendor/laravel/framework/src/...") are not
-     * collapsed into "vendorsrc/...".
+     * The path prefix is anchored to a safe boundary (start-of-line, whitespace, or one of
+     * the quote/paren characters that PHP stack traces use around stringified arguments,
+     * e.g. `#0 /path/File.php(79): Foo->bar('/dev/some/path', 79)`). The middle segment is
+     * non-greedy so that vendor paths containing an inner "src/" directory
+     * (e.g. "vendor/laravel/framework/src/...") are not collapsed into "vendorsrc/...".
      *
      * @psalm-pure
      */
     private static function sanitizeTrace(string $trace): string
     {
         return (string) \preg_replace(
-            '#(?<=\s|^)[A-Za-z]?:?[\\/](?:[^\s:()]*?[\\/])?(vendor[\\/]|src[\\/])#u',
+            '#(?<=\s|^|\'|"|\()[A-Za-z]?:?[\\/](?:[^\s:()]*?[\\/])?(vendor[\\/]|src[\\/])#u',
             '$1',
             $trace,
         );
