@@ -26,10 +26,10 @@ final class ScalarFieldsModel extends Model
     protected $appends = ['FullName'];
 
     /** @var list<string> */
-    protected $with = ['author'];
+    protected $with = ['primaryAuthor'];
 
     /** @var list<string> */
-    protected $withCount = ['comments'];
+    protected $withCount = ['approvedComments'];
 
     /** @var bool */
     public $timestamps = false;

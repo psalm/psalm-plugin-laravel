@@ -347,13 +347,15 @@ final class ModelMetadataRegistryTest extends TestCase
         $metadata = ModelMetadataRegistry::for(ScalarFieldsModel::class);
         $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
 
-        // Values arrive lowercased per the §5.5 naming convention.
+        // Attribute-name lists (fillable/guarded/appends/hidden) are lowercased per
+        // the §5.5 convention. Relation-method lists (with/withCount) preserve case,
+        // since relation method names are case-sensitive PHP identifiers.
         $this->assertSame(['name', 'email'], $metadata->fillable);
         $this->assertSame(['id'], $metadata->guarded);
         $this->assertSame(['password'], $metadata->hidden);
         $this->assertSame(['fullname'], $metadata->appends);
-        $this->assertSame(['author'], $metadata->with);
-        $this->assertSame(['comments'], $metadata->withCount);
+        $this->assertSame(['primaryAuthor'], $metadata->with);
+        $this->assertSame(['approvedComments'], $metadata->withCount);
         $this->assertSame('reporting', $metadata->connection);
         $this->assertFalse($metadata->traits->usesTimestamps);
     }
