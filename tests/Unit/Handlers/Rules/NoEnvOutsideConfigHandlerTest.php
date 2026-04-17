@@ -15,7 +15,6 @@ use Psalm\Context;
 use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\StatementsSource;
-use Psalm\Type\Union;
 
 #[CoversClass(NoEnvOutsideConfigHandler::class)]
 final class NoEnvOutsideConfigHandlerTest extends TestCase
@@ -47,9 +46,11 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     }
 
     /**
-     * Files inside any config/ segment or tests/ directory should not trigger the issue.
-     * If the handler incorrectly tried to emit an issue, it would throw because no Psalm
-     * runtime is initialized in unit tests.
+     * The handler always returns null — it only emits an issue as a side effect.
+     * For allowed files, no issue is emitted, so the return value is null and
+     * downstream EnvHandler runs afterwards to narrow the return type.
+     * If the handler incorrectly tried to emit an issue here, IssueBuffer::accepts()
+     * would throw because no Psalm runtime is initialized in unit tests.
      */
     #[Test]
     #[DataProvider('allowedFileProvider')]
@@ -57,7 +58,7 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     {
         $event = $this->createEvent($filePath);
 
-        $this->assertNotInstanceOf(Union::class, NoEnvOutsideConfigHandler::getFunctionReturnType($event));
+        $this->assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($event));
     }
 
     /**
