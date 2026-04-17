@@ -31,10 +31,28 @@ class NullObject {
 /**
  * Determine if the given value is "blank".
  *
+ * The conditional branches are nested (not unioned) to avoid a Psalm
+ * over-narrowing edge case. A unioned clause such as
+ * `$value is (null|''|array<never, never>)` collapses the whole
+ * conditional to the narrow branch for an input that only partially
+ * overlaps with the union (e.g. `string` intersects `''` but is not a
+ * subtype of the union), making `blank(?string)` infer literal `true`.
+ * Splitting each literal into its own `is null`, `is ''`,
+ * `is array<never, never>` check keeps non-matching inputs flowing
+ * through to `bool`. See
+ * https://github.com/psalm/psalm-plugin-laravel/issues/751.
+ *
  * @param  mixed  $value
+ * @psalm-assert-if-false !null $value
  * @psalm-return ($value is (bool|numeric|non-empty-array)
  *  ? false
- *  : ($value is (null|''|array<never, never>) ? true : bool)
+ *  : ($value is null
+ *      ? true
+ *      : ($value is ''
+ *          ? true
+ *          : ($value is array<never, never> ? true : bool)
+ *      )
+ *    )
  * )
  */
 function blank($value) {}
@@ -76,10 +94,19 @@ function e($value, $doubleEncode = true) {}
 /**
  * Determine if a value is "filled".
  *
+ * See {@see blank()} for the rationale behind the nested conditional shape.
+ *
  * @param  mixed  $value
+ * @psalm-assert-if-true !null $value
  * @psalm-return ($value is (bool|numeric|non-empty-array)
  *  ? true
- *  : ($value is (null|''|array<never, never>) ? false : bool)
+ *  : ($value is null
+ *      ? false
+ *      : ($value is ''
+ *          ? false
+ *          : ($value is array<never, never> ? false : bool)
+ *      )
+ *    )
  * )
  */
 function filled($value) {}

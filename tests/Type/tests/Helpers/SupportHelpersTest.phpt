@@ -154,6 +154,92 @@ function non_empty_string_is_unknown_filled_or_not(): bool
     return filled('  ');
 }
 
+// Regression tests for https://github.com/psalm/psalm-plugin-laravel/issues/751.
+// Conditional return types must not collapse to literal `true`/`false` for
+// wider input types that only partially overlap with the narrow clauses.
+// These use @psalm-check-type-exact so a regression to the old stub (which
+// returned literal `false`/`true` here) fails the test. A plain `: bool`
+// return would silently accept the literal subtype.
+function nullable_string_is_unknown_filled_or_not(?string $value): bool
+{
+    $result = filled($value);
+    /** @psalm-check-type-exact $result = bool */;
+    return $result;
+}
+
+function nullable_string_is_unknown_blank_or_not(?string $value): bool
+{
+    $result = blank($value);
+    /** @psalm-check-type-exact $result = bool */;
+    return $result;
+}
+
+function string_is_unknown_filled_or_not(string $value): bool
+{
+    $result = filled($value);
+    /** @psalm-check-type-exact $result = bool */;
+    return $result;
+}
+
+function array_is_unknown_blank_or_not(array $value): bool
+{
+    $result = blank($value);
+    /** @psalm-check-type-exact $result = bool */;
+    return $result;
+}
+
+function mixed_is_unknown_filled_or_not(mixed $value): bool
+{
+    $result = filled($value);
+    /** @psalm-check-type-exact $result = bool */;
+    return $result;
+}
+
+/**
+ * Union that straddles multiple narrow clauses (`string` overlaps with `''`,
+ * `array` overlaps with `array<never, never>`). Exercises the nested-conditional
+ * rationale from the stub comment.
+ *
+ * @param string|array $value
+ */
+function string_or_array_union_is_unknown_filled_or_not($value): bool
+{
+    $result = filled($value);
+    /** @psalm-check-type-exact $result = bool */;
+    return $result;
+}
+
+/**
+ * The exact reproduction from the issue: assignment inside the condition.
+ *
+ * @param callable(): ?string $fetch
+ */
+function filled_guard_with_assignment_in_condition(callable $fetch): string
+{
+    if (filled($handler = $fetch())) {
+        return $handler . '(';
+    }
+    return 'fallback';
+}
+
+// Assertion-based narrowing: `if (filled($nullable))` narrows the nullable
+// away, which makes the idiomatic guard pattern `filled($x)` work end-to-end.
+function filled_narrows_nullable_string_to_non_null(?string $value): string
+{
+    if (filled($value)) {
+        return $value;
+    }
+    return 'fallback';
+}
+
+function blank_narrows_nullable_string_to_non_null(?string $value): string
+{
+    if (! blank($value)) {
+        return $value;
+    }
+    return 'fallback';
+}
+
 function object_get_returns_first_arg_when_second_is_null(\stdClass $object): \stdClass
 {
     return object_get($object, null);
