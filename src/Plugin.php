@@ -236,8 +236,8 @@ final class Plugin implements PluginEntryPointInterface
             return;
         }
 
-        $translatorVariant = self::symfonyTranslatorHasReturnType() ? 'Strong' : 'Weak';
-        $formatterVariant = self::symfonyMessageFormatterFirstParamHasType() ? 'Strong' : 'Weak';
+        $translatorVariant = $this->symfonyTranslatorHasReturnType() ? 'Strong' : 'Weak';
+        $formatterVariant = $this->symfonyMessageFormatterFirstParamHasType() ? 'Strong' : 'Weak';
 
         $lazyStubs = [
             // Carbon\DatePeriodBase — picked at CarbonPeriod.php:50 via `PHP_VERSION < 8.2`.
@@ -268,7 +268,7 @@ final class Plugin implements PluginEntryPointInterface
      * class. We reflect the same class so our stub choice stays in lockstep with Carbon's runtime
      * pick even when translation-contracts is pinned at an older major than symfony/translation.
      */
-    private static function symfonyTranslatorHasReturnType(): bool
+    private function symfonyTranslatorHasReturnType(): bool
     {
         try {
             if (\class_exists(\Symfony\Component\Translation\Translator::class)) {
@@ -289,7 +289,7 @@ final class Plugin implements PluginEntryPointInterface
      * Mirror of Carbon\MessageFormatter\MessageFormatterMapper.php:23 — picks the "strong type"
      * variant when Symfony's MessageFormatterInterface::format() first parameter is typed.
      */
-    private static function symfonyMessageFormatterFirstParamHasType(): bool
+    private function symfonyMessageFormatterFirstParamHasType(): bool
     {
         try {
             if (! \interface_exists(\Symfony\Component\Translation\Formatter\MessageFormatterInterface::class)) {
