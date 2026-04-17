@@ -694,8 +694,14 @@ final class Plugin implements PluginEntryPointInterface
     {
         $dir = $pluginConfig->cachePath;
 
-        if (!\is_dir($dir) && !\mkdir($dir, 0777, true) && !\is_dir($dir)) {
-            throw new \RuntimeException("Cache directory '{$dir}' does not exist and could not be created.");
+        // `@` suppresses the E_WARNING from a concurrent-mkdir race: Psalm's error
+        // handler promotes unsuppressed warnings to exceptions, which crashes parallel
+        // runners. The trailing `is_dir()` still catches real failures (e.g. EACCES).
+        if (!\is_dir($dir) && !@\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+            $error = \error_get_last();
+            $reason = $error['message'] ?? 'unknown error';
+
+            throw new \RuntimeException("Cache directory '{$dir}' does not exist and could not be created: {$reason}.");
         }
 
         return $dir;
