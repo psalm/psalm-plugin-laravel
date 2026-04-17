@@ -62,8 +62,8 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     }
 
     /**
-     * Sanity check for the structural matcher: paths without a literal `/config/`
-     * segment (including substring look-alikes like `configuration/` and `.config/`)
+     * Sanity check for the structural matcher: paths without a path segment named
+     * `config` (including substring look-alikes like `configuration/` and `.config/`)
      * should be treated as outside the config directory.
      *
      * Reaching the emit branch calls IssueBuffer::accepts(), which delegates to
