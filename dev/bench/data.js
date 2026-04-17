@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776434656162,
+  "lastUpdate": 1776448803499,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1777,6 +1777,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28,
             "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1095,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7d191a5ca01faf3028bf32a7c47a1aaff8bef2af",
+          "message": "Stop `NoEnvOutsideConfig` from firing inside analysed project's config/ (#767)\n\n* fix: stop NoEnvOutsideConfig from firing inside analysed project's config/ (#756)\n\nThe previous path check initialised `$configPath` from\n`ApplicationProvider::getApp()->configPath()`, which returns Orchestra\nTestbench's config path under the plugin's own vendor tree. That path\nnever matches the analysed project's files, so every Laravel package or\napplication got `NoEnvOutsideConfig` false positives on its own\n`config/*.php` files.\n\nReplace the prefix check with a structural match:\n`str_contains($filePath, DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR)`.\nMirrors the existing `isTestFile()` helper; covers apps, published\npackages, monorepo sub-packages, and vendor dirs. Removes the now-dead\n`init()`, `$configPath` field, and the corresponding Plugin.php wiring.\n\nTests updated: paths built from `DIRECTORY_SEPARATOR`, `rejects_non_config_files`\npins the specific exception path through `IssueBuffer::accepts`, and\nsubstring-lookalike cases (`configuration/`, `myconfig/`, `.config/`) guard\nagainst regressions in the segment matcher.\n\n* Update tests/Unit/Handlers/Rules/NoEnvOutsideConfigHandlerTest.php\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>\n\n* tests: use assertNull over assertNotInstanceOf for handler return\n\ngetFunctionReturnType() is typed as ?Union, so asserting the non-issue\npath returns null is more direct than asserting \"not a Union instance\".\nAlso unused the Union import.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* docs: rephrase rejectedFileProvider comment to be OS-neutral\n\n* tests: use assertNull and skip Rector rule that reverts it\n\n`getFunctionReturnType()` returns `?Union`, so `assertNull` is the\ndirect and strictest assertion — `assertNotInstanceOf(Union::class, ...)`\nalso passes for scalars, arrays, and unrelated objects, which is too\npermissive for a unit test.\n\nThe previous `assertNull` change was reverted by a CI auto-fix step\nrunning `AssertEmptyNullableObjectToAssertInstanceofRector` from the\nPHPUnit code-quality set. Skip that rule project-wide since its\nassumption (\"you meant: object absent\") loses the null-only precision\nthat tests care about.\n\n---------\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-17T18:57:00+01:00",
+          "tree_id": "084c0a72dc4898b55429aad797b0bc9dc21c6582",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7d191a5ca01faf3028bf32a7c47a1aaff8bef2af"
+        },
+        "date": 1776448801885,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.2,
+            "range": "± 0.14",
             "unit": "s"
           },
           {
