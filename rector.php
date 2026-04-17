@@ -7,6 +7,7 @@ use Rector\CodingStyle\Rector\If_\NullableCompareToNullRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPrivateMethodRector;
 use Rector\Php55\Rector\String_\StringClassNameToClassConstantRector;
+use Rector\PHPUnit\CodeQuality\Rector\MethodCall\AssertEmptyNullableObjectToAssertInstanceofRector;
 use Rector\PHPUnit\Set\PHPUnitSetList;
 use Rector\ValueObject\PhpVersion;
 
@@ -23,4 +24,5 @@ return RectorConfig::configure()
         EncapsedStringsToSprintfRector::class,
         SplitDoubleAssignRector::class,
         StringClassNameToClassConstantRector::class, // analyzed classes are not always auto-loaded
+        AssertEmptyNullableObjectToAssertInstanceofRector::class, // prefer assertNull over assertNotInstanceOf for ?Object returns (more explicit)
     ]);

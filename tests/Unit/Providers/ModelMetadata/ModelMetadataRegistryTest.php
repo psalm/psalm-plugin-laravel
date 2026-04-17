@@ -67,7 +67,7 @@ final class ModelMetadataRegistryTest extends TestCase
     #[Test]
     public function for_returns_null_when_class_is_not_warmed_up(): void
     {
-        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for(WorkOrder::class));
+        $this->assertNull(ModelMetadataRegistry::for(WorkOrder::class));
     }
 
     #[Test]
@@ -76,7 +76,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $codebase = $this->makeCodebase();
         ModelMetadataRegistryBuilder::warmUp($codebase, \stdClass::class);
 
-        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for(\stdClass::class));
+        $this->assertNull(ModelMetadataRegistry::for(\stdClass::class));
     }
 
     #[Test]
@@ -85,7 +85,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $codebase = $this->makeCodebase();
         ModelMetadataRegistryBuilder::warmUp($codebase, 'NonExistent\\Model');
 
-        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for('NonExistent\\Model'));
+        $this->assertNull(ModelMetadataRegistry::for('NonExistent\\Model'));
     }
 
     #[Test]
@@ -96,7 +96,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         ModelMetadataRegistryBuilder::warmUp($codebase, AbstractUuidModel::class);
 
-        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for(AbstractUuidModel::class));
+        $this->assertNull(ModelMetadataRegistry::for(AbstractUuidModel::class));
     }
 
     #[Test]
@@ -128,7 +128,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         ModelMetadataRegistryBuilder::reset();
 
-        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, ModelMetadataRegistry::for(WorkOrder::class));
+        $this->assertNull(ModelMetadataRegistry::for(WorkOrder::class));
     }
 
     #[Test]

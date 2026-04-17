@@ -430,7 +430,12 @@ final class ModelMetadataRegistryBuilder
             $targetClass = $base;
         } elseif (
             self::looksLikeClassName($base)
-            && \class_exists($base)
+            // autoload: false — classifyCast is best-effort shape metadata. Skipping
+            // autoload here avoids eager file includes during warm-up for casts whose
+            // target class isn't loaded yet. CastResolver::resolve (separate call) is
+            // the authoritative path for $psalmType and keeps its existing autoload
+            // behavior for backwards compatibility with pre-registry resolution.
+            && \class_exists($base, false)
             && \is_a($base, \Illuminate\Contracts\Database\Eloquent\CastsAttributes::class, true)
         ) {
             /** @var class-string $base */
@@ -453,10 +458,11 @@ final class ModelMetadataRegistryBuilder
 
     private static function isEnumClass(string $class): bool
     {
-        // `enum_exists` already implies a class-like exists and that it's an enum —
-        // no need for the extra class_exists / interface_exists probes (which would
-        // trigger autoload twice on the miss path).
-        return \enum_exists($class);
+        // autoload: false — best-effort shape detection only. If the enum hasn't
+        // already been loaded by the time we warm up, classifyCast falls back to
+        // Primitive, and `CastResolver::resolve` (called separately by buildCastInfo)
+        // still produces the authoritative `$psalmType`.
+        return \enum_exists($class, false);
     }
 
     /**
@@ -541,6 +547,7 @@ final class ModelMetadataRegistryBuilder
     {
         $constantName = $instance::class . '::DELETED_AT';
         if (\defined($constantName)) {
+            /** @psalm-var mixed $value */
             $value = \constant($constantName);
             if (\is_string($value) && $value !== '') {
                 return $value;
