@@ -9,6 +9,7 @@ use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
@@ -193,6 +194,8 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $registration->addStubFile(self::getAliasStubLocation($pluginConfig));
+
+        CarbonStubProvider::register($registration, $output);
     }
 
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
