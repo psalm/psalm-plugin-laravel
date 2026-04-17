@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776416042246,
+  "lastUpdate": 1776416482515,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1637,6 +1637,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 21.98,
             "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "fa76de086415eccf4219e14585316ec815779e92",
+          "message": "fix: survive broken AliasLoader entries in FacadeMapProvider (#745) (#746)\n\nWhen an installed package registers a self-referential alias (e.g.\nmateffy/laravel-introspect registers 'Introspect' => 'Introspect'),\ncalling is_subclass_of() on the facade class triggers Laravel's\nAliasLoader autoloader, which invokes class_alias('Introspect',\n'Introspect'). That warns \"Class not found\", and Psalm's error handler\npromotes the warning to a RuntimeException, disabling the plugin.\n\nMove the is_subclass_of() check inside the existing try/catch so\nbroken aliases are skipped with a debug message instead of aborting.",
+          "timestamp": "2026-04-17T10:56:23+02:00",
+          "tree_id": "621cba1aa81b19427f6a51c43688e08ae5ee5295",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fa76de086415eccf4219e14585316ec815779e92"
+        },
+        "date": 1776416482203,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.59,
+            "range": "± 0.31",
             "unit": "s"
           },
           {
