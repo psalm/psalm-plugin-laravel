@@ -58,7 +58,7 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     {
         $event = $this->createEvent($filePath);
 
-        $this->assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(\Psalm\Type\Union::class, NoEnvOutsideConfigHandler::getFunctionReturnType($event));
     }
 
     /**
