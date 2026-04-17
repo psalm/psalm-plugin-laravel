@@ -31,10 +31,35 @@ class NullObject {
 /**
  * Determine if the given value is "blank".
  *
+ * The conditional branches are nested (not unioned) to avoid a Psalm
+ * over-narrowing edge case. A unioned clause such as
+ * `$value is (null|''|array<never, never>)` collapses the whole
+ * conditional to the narrow branch for an input that only partially
+ * overlaps with the union (e.g. `string` intersects `''` but is not a
+ * subtype of the union), making `blank(?string)` infer literal `true`.
+ * Splitting each literal into its own `is null`, `is ''`,
+ * `is array<never, never>` check keeps non-matching inputs flowing
+ * through to `bool`. See
+ * https://github.com/psalm/psalm-plugin-laravel/issues/751.
+ *
+ * `blank()` carries only `@psalm-assert-if-false !null` and not a matching
+ * `!=''` line. Adding a second if-false assertion for the same variable
+ * undoes the earlier null narrowing in the current Psalm release, so this
+ * stub does not mirror the tighter assertion pair on `filled()`. See
+ * {@see filled()} for the rationale and
+ * https://github.com/psalm/psalm-plugin-laravel/issues/755 for context.
+ *
  * @param  mixed  $value
+ * @psalm-assert-if-false !null $value
  * @psalm-return ($value is (bool|numeric|non-empty-array)
  *  ? false
- *  : ($value is (null|''|array<never, never>) ? true : bool)
+ *  : ($value is null
+ *      ? true
+ *      : ($value is ''
+ *          ? true
+ *          : ($value is array<never, never> ? true : bool)
+ *      )
+ *    )
  * )
  */
 function blank($value) {}
@@ -76,10 +101,47 @@ function e($value, $doubleEncode = true) {}
 /**
  * Determine if a value is "filled".
  *
+ * See {@see blank()} for the rationale behind the nested conditional shape.
+ *
+ * The two assertions combine so that `if (filled($x))` with `?string`
+ * narrows `$x` to `non-empty-string` inside the true branch. `!null` is a
+ * strict-type assertion; `!=''` is a loose-equality assertion (Psalm rejects
+ * `!null|''` because union types cannot follow a negation prefix in docblock
+ * assertions, so the two constraints are spelled on separate lines). Both
+ * are sound for the nullable-string case this stub targets: `filled($x)
+ * === true` on `?string` input implies `$x !== null` and `$x !== ''`.
+ * For wider `mixed`/union inputs the assertions are a best-effort narrowing;
+ * in the current Psalm release the `!=''` assertion is not applied beyond
+ * the string atomic, so values like `false` (which Laravel treats as
+ * filled and which is loosely equal to `''`) are not incorrectly removed.
+ * This is an implementation detail; if a future Psalm release starts
+ * applying the loose-equality assertion to other atomics, the `!=''` line
+ * may need to be dropped or replaced. Whitespace-only strings like
+ * `'   '` are blank at runtime but are not captured here; this is an
+ * accepted imprecision, already present in the conditional return type.
+ *
+ * `blank()` cannot mirror the `!=''` if-false assertion because the current
+ * Psalm release drops earlier if-false assertions when a loose-equality
+ * one is added alongside them, undoing the existing null narrowing. The
+ * two helpers are idiomatic inverses in Laravel; this stub asymmetry is a
+ * Psalm-specific workaround, not a recommendation. When a caller
+ * specifically wants `non-empty-string` narrowing, `filled($x)` delivers
+ * it; for all other cases `! blank($x)` and `filled($x)` remain
+ * interchangeable per Laravel's own docs. See
+ * https://github.com/psalm/psalm-plugin-laravel/issues/755.
+ *
  * @param  mixed  $value
+ * @psalm-assert-if-true !null $value
+ * @psalm-assert-if-true !='' $value
  * @psalm-return ($value is (bool|numeric|non-empty-array)
  *  ? true
- *  : ($value is (null|''|array<never, never>) ? false : bool)
+ *  : ($value is null
+ *      ? false
+ *      : ($value is ''
+ *          ? false
+ *          : ($value is array<never, never> ? false : bool)
+ *      )
+ *    )
  * )
  */
 function filled($value) {}

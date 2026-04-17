@@ -117,6 +117,22 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             );
         }
 
+        // For base-Builder models: register trait-declared builder methods (e.g., SoftDeletes::withTrashed)
+        // with BuilderScopeHandler so builder instance calls like Customer::query()->withTrashed() resolve.
+        // At runtime these are macros registered via global scopes (SoftDeletingScope::extend).
+        // BuilderScopeHandler needs both the return type and the params to avoid crashing Psalm's
+        // checkMethodArgs when it looks up Builder::withTrashed params.
+        // Scan every base-Builder model: different models may carry different builder-returning trait
+        // methods, so we must not stop early. The += merge keeps the first-seen signature for any
+        // given method name, which is correct since trait signatures are uniform across models.
+        // See https://github.com/psalm/psalm-plugin-laravel/issues/635
+        if ($customBuilder === null) {
+            $traitMethods = self::extractBuilderReturningMethods($storage);
+            if ($traitMethods !== []) {
+                BuilderScopeHandler::registerBaseBuilderTraitMethods($traitMethods);
+            }
+        }
+
         // Detect custom collection class via #[CollectedBy] attribute or newCollection() override.
         // Class is already loaded by autoloader above, so runtime reflection works.
         self::detectCustomCollection($codebase, $className);
@@ -163,13 +179,27 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             ModelRelationshipPropertyHandler::getPropertyType(...),
         );
 
-        // 2. Factory property ($model::factory())
+        // 2. Aggregate accessor properties (e.g. $label->contacts_count via withCount())
+        $properties->property_existence_provider->registerClosure(
+            $className,
+            ModelAggregatePropertyHandler::doesPropertyExist(...),
+        );
+        $properties->property_visibility_provider->registerClosure(
+            $className,
+            ModelAggregatePropertyHandler::isPropertyVisible(...),
+        );
+        $properties->property_type_provider->registerClosure(
+            $className,
+            ModelAggregatePropertyHandler::getPropertyType(...),
+        );
+
+        // 3. Factory property ($model::factory())
         $properties->property_type_provider->registerClosure(
             $className,
             ModelFactoryTypeProvider::getPropertyType(...),
         );
 
-        // 3. Accessor properties (e.g. $user->full_name via attribute accessor)
+        // 4. Accessor properties (e.g. $user->full_name via attribute accessor)
         $properties->property_existence_provider->registerClosure(
             $className,
             ModelPropertyAccessorHandler::doesPropertyExist(...),
@@ -183,7 +213,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             ModelPropertyAccessorHandler::getPropertyType(...),
         );
 
-        // 4. Column properties from migrations (e.g. $user->email)
+        // 5. Column properties from migrations (e.g. $user->email)
         if (self::$useMigrations) {
             $properties->property_existence_provider->registerClosure(
                 $className,

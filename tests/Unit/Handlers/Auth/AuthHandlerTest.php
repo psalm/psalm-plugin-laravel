@@ -87,6 +87,21 @@ final class AuthHandlerTest extends TestCase
         $this->assertFalse($params[0]->is_optional);
     }
 
+    public function testGetMethodParamsForGuard(): void
+    {
+        $event = new MethodParamsProviderEvent(
+            \Illuminate\Support\Facades\Auth::class,
+            'guard',
+        );
+
+        $params = AuthHandler::getMethodParams($event);
+
+        $this->assertNotNull($params, "getMethodParams() must not return null for 'guard' — Psalm 7 crashes on null for @method-annotated facade methods");
+        $this->assertCount(1, $params);
+        $this->assertSame('name', $params[0]->name);
+        $this->assertTrue($params[0]->is_optional);
+    }
+
     public function testGetMethodParamsForUnknownMethod(): void
     {
         $event = new MethodParamsProviderEvent(

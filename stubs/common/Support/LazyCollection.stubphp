@@ -1,0 +1,67 @@
+<?php
+
+namespace Illuminate\Support;
+
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
+use Illuminate\Support\Traits\EnumeratesValues;
+
+/**
+ * @template TKey of array-key
+ * @template-covariant TValue
+ * @implements \Illuminate\Support\Enumerable<TKey, TValue>
+ *
+ * Psalm does not resolve @property-read from trait template parameters when using @use bindings.
+ * These annotations are declared directly here so that TKey/TValue resolve to the class-level
+ * template parameters and higher-order proxy method calls are properly typed.
+ *
+ * The list mirrors EnumeratesValues::$proxies exactly — do not edit without checking that array.
+ * Note: $hasMany here is a collection method (not an Eloquent relationship).
+ *
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $average
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $avg
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $contains
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $doesntContain
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $each
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $every
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $filter
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $first
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $flatMap
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $groupBy
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasMany
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasSole
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $keyBy
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $last
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $map
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $max
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $min
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $partition
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $percentage
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $reject
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipUntil
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipWhile
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $some
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortBy
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortByDesc
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $sum
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeUntil
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeWhile
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $unique
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $unless
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $until
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $when
+ */
+class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
+{
+    /**
+     * @use \Illuminate\Support\Traits\EnumeratesValues<TKey, TValue>
+     */
+    use EnumeratesValues;
+
+    /**
+     * Create a new instance with no items.
+     *
+     * @psalm-mutation-free
+     * @return static<never, never>
+     */
+    public static function empty() {}
+}

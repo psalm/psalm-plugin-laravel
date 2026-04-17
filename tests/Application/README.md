@@ -16,7 +16,6 @@ The test app models a vehicle repair shop where **Customers** bring **Vehicles**
 - **Supplier** — provides parts to the shop
 - **Invoice** — billing document for a completed work order
 - **DamageReport** — damage assessment (polymorphic: vehicle, work order)
-- **Bookmark** — admin quick-access link (polymorphic m2m: customer, mechanic, supplier)
 - **MechanicSpecialization** — mechanic skill area (engine, transmission, electrical)
 
 ### Relationship map
@@ -45,14 +44,16 @@ WorkOrder -- BelongsToMany --> Part (pivot: quantity, unit_price)
 WorkOrder -- MorphMany --> DamageReport
 
 Invoice -- BelongsTo --> WorkOrder
+Invoice -- MorphTo --> Customer | Supplier (billable)
 
 Supplier -- HasMany --> Part
 Supplier -- MorphedByMany --> Admin (bookmarks)
 
-Admin -- MorphToMany --> Customer, Mechanic, Supplier (bookmarkable)
+Admin -- MorphToMany --> Customer, Mechanic, Supplier, WorkOrder (bookmarkable)
 
 Part -- BelongsTo --> Supplier
 Part -- BelongsToMany --> WorkOrder
+Part -- MorphTo --> Supplier | WorkOrder (orderedBy)
 
 DamageReport -- MorphTo --> Vehicle | WorkOrder
 MechanicSpecialization -- BelongsToMany --> Mechanic
@@ -73,8 +74,8 @@ MechanicSpecialization -- BelongsToMany --> Mechanic
 | MorphOneOfMany | Vehicle -> DamageReport (most severe)                      |
 | MorphMany      | Vehicle -> DamageReports, WorkOrder -> DamageReports       |
 | MorphTo        | DamageReport -> reportable                                 |
-| MorphToMany    | Admin -> Customers/Mechanics/Suppliers (bookmarkable)      |
-| MorphedByMany  | Customer -> Admins, Mechanic -> Admins, Supplier -> Admins |
+| MorphToMany    | Admin -> Customers/Mechanics/Suppliers/WorkOrders (bookmarkable) |
+| MorphedByMany  | Customer/Mechanic/Supplier -> Admins (bookmarkable)        |
 
 ### Custom builders and collections
 
@@ -87,6 +88,8 @@ MechanicSpecialization -- BelongsToMany --> Mechanic
 
 Three builder registration patterns and three collection registration patterns ensure the plugin handles all variants.
 
+Additionally, **InvoiceBuilder** and **InvoiceCollection** extend their base classes with concrete model types (`extends Builder<Invoice>`, `extends Collection<int, Invoice>`) instead of declaring `@template` parameters. This tests that the plugin returns a plain `TNamedObject` instead of `TGenericObject`, avoiding `TooManyTemplateParams` errors.
+
 ### Scopes
 
 - Legacy `scope*()` methods: `Vehicle::scopeByMake($query, string $make)`, `Mechanic::scopeExperienced($query)`
@@ -95,7 +98,7 @@ Three builder registration patterns and three collection registration patterns e
 ### Accessors and mutators
 
 On Customer (Authenticatable model):
-- Legacy accessor: `getFullNameAttribute()`
+- Legacy accessor: `getFirstNameUsingLegacyAccessorAttribute()`
 - Legacy mutator: `setNicknameAttribute()`
 - Modern `Attribute` accessor: `firstName` (get + set)
 - Read-only `Attribute`: `displayName` (get only)
@@ -111,6 +114,7 @@ These models test specific Psalm plugin features (PK types, traits) and are not 
 | `UlidModel`         | `HasUlids` trait (string PK)                                          |
 | `CustomPkUuidModel` | `HasUuids` with custom `$primaryKey`                                  |
 | `Secret`            | Extends abstract UUID model + custom collection via `newCollection()` |
+| `Shop`              | Non-generic relationship resolution testing (#497)                    |
 
 ### Contributing
 

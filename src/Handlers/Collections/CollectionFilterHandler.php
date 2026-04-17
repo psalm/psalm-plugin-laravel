@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
+use PhpParser\Node\Expr\ConstFetch;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic;
@@ -19,19 +20,25 @@ use Psalm\Type\Atomic\TString;
 use Psalm\Type\Union;
 
 /**
- * Narrows Collection::filter() return type when called without a callback.
+ * Narrows Collection::filter() and Collection::whereNotNull() return types.
  *
- * Laravel's filter() with no arguments calls array_filter(), which removes all
- * falsy values. The most impactful narrowing is removing `null` and `false` from
- * TValue, covering the vast majority of real-world usage (e.g., ->map()->filter()).
+ * filter() without a callback:
+ *   Calls array_filter(), removing all falsy values. Removes `null` and `false` from
+ *   TValue and narrows `string` → `non-falsy-string`, `array` → `non-empty-array`.
+ *
+ * whereNotNull() without a key argument:
+ *   Removes only `null` from TValue (does not narrow other falsy types).
  *
  * Not covered (intentionally, 80/20):
  * - Numeric falsy types (0, 0.0) are not narrowed — Psalm has no `non-zero-int` atomic
  *   type, so the complexity of constructing `int<min, -1>|int<1, max>` isn't worth it.
  * - `Enumerable` type-hints — the handler only fires for Collection and LazyCollection
  *   concrete types, not the Enumerable interface.
+ * - whereNotNull($key) with a string key — we don't narrow TValue when filtering by a
+ *   nested field key, since the item type itself is unchanged.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/441
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/706
  */
 final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
 {
@@ -49,13 +56,25 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        if ($event->getMethodNameLowercase() !== 'filter') {
-            return null;
+        $method = $event->getMethodNameLowercase();
+
+        if ($method === 'filter') {
+            return self::handleFilter($event);
         }
 
+        if ($method === 'wherenotnull') {
+            return self::handleWhereNotNull($event);
+        }
+
+        return null;
+    }
+
+    /** @psalm-mutation-free */
+    private static function handleFilter(MethodReturnTypeProviderEvent $event): ?Union
+    {
         // Only narrow when called with no arguments (or explicit null).
         // With a callback, we can't know what it filters — let Psalm use the default.
-        if (! self::isCalledWithoutCallback($event)) {
+        if (! self::isCalledWithoutArgOrNull($event)) {
             return null;
         }
 
@@ -68,24 +87,65 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         $tValue = $templateTypeParameters[1];
 
         $narrowed = self::removeFalsyTypes($tValue);
-        if (!$narrowed instanceof \Psalm\Type\Union) {
+        if (! $narrowed instanceof Union) {
             return null; // nothing to narrow, or would become empty
         }
 
-        // Return the same Collection subclass with narrowed TValue.
-        // is_static: true preserves the `&static` intersection, matching filter()'s `return static`.
+        return self::buildNarrowedReturn($event, $tKey, $narrowed);
+    }
+
+    /** @psalm-mutation-free */
+    private static function handleWhereNotNull(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        // Only narrow when called with no key (or explicit null key).
+        // With a string key, whereNotNull filters by a nested field — TValue type is unchanged.
+        if (! self::isCalledWithoutArgOrNull($event)) {
+            return null;
+        }
+
+        $templateTypeParameters = $event->getTemplateTypeParameters();
+        if ($templateTypeParameters === null || \count($templateTypeParameters) < 2) {
+            return null;
+        }
+
+        $tKey = $templateTypeParameters[0];
+        $tValue = $templateTypeParameters[1];
+
+        $narrowed = self::removeNullType($tValue);
+        if (! $narrowed instanceof Union) {
+            return null; // nothing to narrow, or would become empty
+        }
+
+        return self::buildNarrowedReturn($event, $tKey, $narrowed);
+    }
+
+    /**
+     * Build the narrowed return type with the same Collection subclass and is_static.
+     * @psalm-mutation-free
+     */
+    private static function buildNarrowedReturn(
+        MethodReturnTypeProviderEvent $event,
+        Union $tKey,
+        Union $narrowedValue,
+    ): Union {
+        // is_static: true preserves the `&static` intersection, matching `return static`.
         $className = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
 
         return new Union([
-            new TGenericObject($className, [$tKey, $narrowed], is_static: true),
+            new TGenericObject($className, [$tKey, $narrowedValue], is_static: true),
         ]);
     }
 
     /**
-     * Check if filter() was called with no arguments or with an explicit null literal.
+     * Check if the method was called with no arguments or with an explicit null literal.
+     *
+     * Both filter(null) and whereNotNull(null) treat an explicit null argument as
+     * equivalent to no argument — it means "no callback" and "filter by value itself",
+     * respectively.
+     *
      * @psalm-mutation-free
      */
-    private static function isCalledWithoutCallback(MethodReturnTypeProviderEvent $event): bool
+    private static function isCalledWithoutArgOrNull(MethodReturnTypeProviderEvent $event): bool
     {
         $args = $event->getCallArgs();
 
@@ -93,11 +153,11 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             return true;
         }
 
-        // filter(null) — explicit null is equivalent to no callback
+        // Explicit null literal is equivalent to no argument for both filter() and whereNotNull()
         if (\count($args) === 1) {
             $argValue = $args[0]->value;
-            if ($argValue instanceof \PhpParser\Node\Expr\ConstFetch
-                && \strtolower($argValue->name->toString()) === 'null') {
+            if ($argValue instanceof ConstFetch
+                && \strtolower((string) $argValue->name) === 'null') {
                 return true;
             }
         }
@@ -106,10 +166,41 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
+     * Remove only `null` from the union type. Used for whereNotNull() narrowing.
+     *
+     * Unlike removeFalsyTypes(), this does not remove `false` or narrow strings/arrays,
+     * since whereNotNull() only guarantees items are !== null.
+     *
+     * Returns null if nothing changed or narrowing would leave the union empty.
+     * @psalm-mutation-free
+     */
+    private static function removeNullType(Union $type): ?Union
+    {
+        $atomics = $type->getAtomicTypes();
+        $filtered = [];
+        $changed = false;
+
+        foreach ($atomics as $atomic) {
+            if ($atomic instanceof TNull) {
+                $changed = true;
+                continue;
+            }
+
+            $filtered[] = $atomic;
+        }
+
+        if (! $changed || $filtered === []) {
+            return null;
+        }
+
+        return new Union($filtered);
+    }
+
+    /**
      * Remove falsy types and narrow remaining types to their non-empty variants.
      *
      * - Removes `null` and `false` entirely
-     * - Narrows `string` → `non-empty-string`, `array` → `non-empty-array`
+     * - Narrows `string` → `non-falsy-string`, `array` → `non-empty-array`
      *
      * Returns null if nothing changed or narrowing would leave the union empty.
      * @psalm-mutation-free
