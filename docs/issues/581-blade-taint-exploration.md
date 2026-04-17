@@ -97,18 +97,49 @@ This is the long term target. C is a staging point towards D.
 
 Separate binary that scans `.blade.php` files. Not recommended: taint context is what makes this plugin valuable, so splitting it off forfeits the main advantage.
 
+### F. Pre-compile via `php artisan view:cache`, run Psalm on the output
+
+A tempting variant that surfaces every few discussions: run Laravel's own compiler up front, then analyse the generated PHP.
+
+```
+"php artisan view:cache",
+"@php -d memory_limit=-1 vendor/bin/psalm -c psalm-views.xml --no-suggestions",
+"php artisan view:clear"
+```
+
+The appeal is real: compiled templates contain `echo e($var)` (safe) versus `echo $var` (raw), so Psalm's built-in `echo` sink does the safe / unsafe classification for free. No regex scanner, no approach-C machinery. This is essentially how Bladestan handles Blade for type checking.
+
+**Why it doesn't work for taint analysis as shown:**
+
+1. **No call-site to template link.** Compiled views look like `extract($__data); echo $var;`. Psalm sees disjoint files. There is no flow from `view('foo', ['x' => $tainted])` in a controller to the compiled counterpart of `resources/views/foo.blade.php`. Without a bridging layer, taint does not propagate across the call boundary. Bladestan solves this by generating wrapper files that tie each `view()` call's data array to the compiled template via `@var` pins. Adding that layer turns approach F into approach D under a different name, not a shortcut to it.
+2. **Error locations are useless.** Issues land at `storage/framework/views/{hash}.php:42`. Mapping back to `resources/views/user/show.blade.php:18` needs a line map (Bladestan maintains one, and Blade's own `# line` comments are inconsistent across versions).
+3. **Shared data and composers invisible.** `View::share()` and view composers inject variables at runtime that are not in the `$data` array at the call site. Static analysis needs explicit stubs for them.
+4. **Undefined-variable flood.** Compiled files reference `$__env`, `$__data`, `$__vars`, `$component`, component slot locals, and so on. Without stubs, Psalm emits thousands of `UndefinedVariable` and `MixedArgument` issues that users have to baseline before anything useful surfaces.
+
+**UX costs of the three-command wrapper:**
+
+- Requires a bootable Artisan (writable `storage/`, a configured app). Library projects that don't boot a full Laravel cannot use it.
+- `view:clear` at the end wipes the developer's local compiled-view cache on every run, disrupting the normal dev loop.
+- Psalm's own cache is invalidated on every run because the compiled-view filenames rotate (they are hashes over source paths and mtime).
+
+**Where the idea becomes useful:**
+
+As an input to approach C's scanner, not a replacement for it. Walking the compiled PHP via `nikic/php-parser` and looking for `echo` versus `echo e(...)` handles `@include`, `@extends`, and components for free (they are already expanded in the compiled output). This eliminates approach C's "cross-file flow is out of scope" limitation without doing full wrapper generation. The bootable-Artisan dependency and the error-mapping problem remain, though, so it's a v2 upgrade of the scanner rather than a v1 strategy.
+
+**Verdict:** approach F is approach D with the hard part (call-site bridging, line map, stubs for runtime-injected data) still to be built. The appealing three-line Composer script hides that work instead of removing it.
+
 ### Conservative fallback
 
 Any template whose scanner analysis is uncertain (unresolved `@include` targets, unrecognised directives, parse errors) should be treated as "all keys unsafe" and revert to the whole-array sink for that template only. This preserves the correctness guarantee of the original (FP-heavy) annotation for templates the scanner can't reason about, while still reducing FPs for the majority of safe templates. The fallback is an explicit code path, not a silent one, and must be tested.
 
 ## Recommendation
 
-**C, then D.**
+**C, then D.** Approach F (pre-compile via `view:cache`) is not a shortcut; if we ever pursue it, it should be as a v2 input to C's scanner (walk compiled PHP instead of raw `.blade.php`), not as a replacement for the call-site bridging work D requires.
 
 C delivers meaningful XSS coverage in weeks and preserves low FP behaviour on the common case. Its `template to unsafe keys` map is the same primitive D needs (for per call sink dispatch), so the work is not throwaway. The scanner can be incrementally upgraded:
 
 - **v1**: top level variables in `{!! !!}` and `@php`. Ignore includes.
-- **v2**: follow `@include('child', [...])` data flows. Propagate unsafe keys from child to parent when the parent passes a variable through.
+- **v2**: follow `@include('child', [...])` data flows. Propagate unsafe keys from child to parent when the parent passes a variable through. Optionally read compiled output from `view:cache` to get `@include` / `@extends` expansion for free.
 - **v3**: `@extends`, `@section`, components. At this point, compilation (D) is probably simpler than pattern extension.
 
 D without C means shipping nothing for months. C without D means a permanent accuracy ceiling. Both together means a 2 to 4 week delivery with a credible path forward.
