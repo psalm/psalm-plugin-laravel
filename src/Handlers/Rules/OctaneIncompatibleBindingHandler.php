@@ -202,11 +202,16 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
     /**
      * Yield each (abstract, node) violation found inside the closure body.
      *
-     * We deliberately do not descend into nested closures / arrow functions. They
-     * define their own execution scope: resolutions performed inside them happen
-     * at invocation time of the inner closure, not during the outer shared-binding
-     * closure's one-and-only execution, so attributing them to the outer binding
-     * would be a false positive.
+     * We deliberately do not descend into nested closures / arrow functions. In the
+     * common case, resolutions performed inside them happen only when the inner
+     * closure is invoked later, not during the outer shared-binding closure's
+     * one-and-only execution, so attributing them to the outer binding would be a
+     * false positive.
+     *
+     * Known limitation: immediately-invoked closures / arrow functions (IIFEs) are
+     * also skipped by this traversal, so resolutions inside them can be missed
+     * (false negatives). Detecting IIFEs reliably is an AST-pattern problem we
+     * consider out of scope for this rule.
      *
      * @return \Generator<int, array{class-string|string, Node}>
      */
