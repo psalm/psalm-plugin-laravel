@@ -61,7 +61,7 @@ final class ContainerResolver
         }
 
         $firstArgType = $nodeTypeProvider->getType($call_args[0]->value);
-        if ($firstArgType === null) {
+        if (!$firstArgType instanceof \Psalm\Type\Union) {
             return null;
         }
 
@@ -115,7 +115,7 @@ final class ContainerResolver
     private static function resolveFromClassString(TClassString $atomic): ?Union
     {
         $asType = $atomic->as_type;
-        if ($asType === null) {
+        if (!$asType instanceof \Psalm\Type\Atomic\TNamedObject) {
             // Bare `class-string` (no constraint). We cannot narrow further.
             return null;
         }
