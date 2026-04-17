@@ -541,7 +541,6 @@ final class ModelMetadataRegistryBuilder
     {
         $constantName = $instance::class . '::DELETED_AT';
         if (\defined($constantName)) {
-            /** @var mixed $value */
             $value = \constant($constantName);
             if (\is_string($value) && $value !== '') {
                 return $value;
