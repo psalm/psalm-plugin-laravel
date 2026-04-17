@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776416482515,
+  "lastUpdate": 1776429884621,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1672,6 +1672,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.59,
             "range": "± 0.31",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9bea7f2952f229a0465e575552bbb7bb65562bd",
+          "message": "fix: narrow `app(static::class, ...)` and `class-string<Foo>` arguments (#754)\n\n* fix: narrow `app(static::class, ...)` and `class-string<Foo>` arguments (#750)\n\n`ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs()`\npreviously only matched literal strings, so the idiomatic\n`app(static::class, [...])` / `resolve(static::class, [...])` pattern\nused by Filament, Livewire, Nova, and many Spatie packages returned\n`mixed`, cascading into `MixedAssignment` and `MixedMethodCall` across\ndownstream call sites.\n\nThe resolver now also accepts single `TClassString` atomics. For\n`static::class` (which Psalm encodes as\n`TClassString($fq, TNamedObject($fq, is_static: true))` via\n`ClassConstAnalyzer`), the existing `as_type` is returned unchanged,\npreserving the `Foo&static` late-static-binding rendering. For plain\n`class-string<Foo>` variables, the `as_type` is returned directly.\n`class-string<T>` template parameters fall back to `mixed` to avoid\nmasking legitimate template-tracking issues at T-returning call sites.\n\nThe type test covers all four routes through the resolver\n(`app()`, `resolve()`, `Application::make()`, `Application::makeWith()`,\n`$container[...]`) and pins the template-parameter fallback behavior.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-17T13:41:50+01:00",
+          "tree_id": "1e87b660753004f0223a399c445cde5d3410a669",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b9bea7f2952f229a0465e575552bbb7bb65562bd"
+        },
+        "date": 1776429883791,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.82,
+            "range": "± 0.06",
             "unit": "s"
           },
           {
