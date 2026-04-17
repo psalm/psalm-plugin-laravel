@@ -166,13 +166,22 @@ function test_scope_attribute_on_custom_builder_via_query(): void
 }
 
 /**
- * Known limitation: #[Scope] methods work at runtime via __callStatic -> query() -> Builder,
- * but Psalm sees them as real instance methods and reports InvalidStaticInvocation.
- * Same behavior as Customer::verified() in StaticBuilderMethodsTest.
+ * Modern #[Scope] attribute called statically on custom builder: works at runtime via
+ * __callStatic -> query() -> Builder. ScopeStaticCallHandler suppresses the false positive.
+ * Only protected #[Scope] methods are suppressed — public ones cause PHP Fatal Error in PHP 8.0+.
  */
-function test_scope_attribute_static_is_invalid_on_custom_builder(): void
+function test_scope_attribute_static_on_custom_builder(): void
 {
-    $_result = WorkOrder::completed();
+    WorkOrder::completed();
+}
+
+/**
+ * Negative: public non-scope method on a custom-builder Model called statically must still
+ * report InvalidStaticInvocation. Confirms ScopeStaticCallHandler does not over-suppress.
+ */
+function test_non_scope_static_invocation_not_suppressed_on_custom_builder(): void
+{
+    WorkOrder::vehicle();
 }
 
 /** Scope with parameters via builder instance — exercises getScopeParams path. */
@@ -397,6 +406,6 @@ function test_non_template_collection_all(): void
 }
 ?>
 --EXPECTF--
-InvalidStaticInvocation on line %d: Method App\Models\WorkOrder::completed is not static, but is called statically
+InvalidStaticInvocation on line %d: Method App\Models\WorkOrder::vehicle is not static, but is called statically
 UndefinedMagicMethod on line %d: Magic method App\Builders\WorkOrderBuilder::completelyfakemethod does not exist
 UndefinedMagicMethod on line %d: Magic method App\Models\WorkOrder::completelyfakemethod does not exist

@@ -70,9 +70,6 @@ function test_static_legacy_scope(): void
  * and BuilderScopeHandler cannot safely provide a return type here without also providing
  * params (which require knowing the model class — unavailable in the params provider event).
  * Custom-builder models don't have this limitation (CustomBuilderMethodHandler handles them).
- *
- * Calling Customer::verified() statically triggers InvalidStaticInvocation because
- * it's a real instance method — see test_scope_attribute_static_is_invalid below.
  */
 /** @return Builder<Customer> */
 function test_scope_attribute_via_builder(): Builder
@@ -81,12 +78,22 @@ function test_scope_attribute_via_builder(): Builder
 }
 
 /**
- * Known limitation: #[Scope] methods work at runtime via __callStatic -> query() -> Builder,
- * but Psalm sees them as real instance methods and reports InvalidStaticInvocation.
+ * Modern #[Scope] attribute called statically: works at runtime via __callStatic -> query() -> Builder.
+ * ScopeStaticCallHandler suppresses the InvalidStaticInvocation false positive.
+ * Only protected #[Scope] methods are suppressed — public ones cause PHP Fatal Error in PHP 8.0+.
  */
-function test_scope_attribute_static_is_invalid(): void
+function test_scope_attribute_static(): void
 {
-    $_result = Customer::verified();
+    Customer::verified();
+}
+
+/**
+ * Negative: public non-scope method on a Model called statically must still report InvalidStaticInvocation.
+ * Confirms ScopeStaticCallHandler does not over-suppress.
+ */
+function test_non_scope_static_invocation_not_suppressed(): void
+{
+    Customer::getFirstNameUsingLegacyAccessorAttribute();
 }
 
 // -----------------------------------------------------------------------
@@ -174,7 +181,7 @@ function test_nonexistent_method(): void
 ?>
 --EXPECTF--
 MixedReturnStatement on line %d: Could not infer a return type
-InvalidStaticInvocation on line %d: Method App\Models\Customer::verified is not static, but is called statically
+InvalidStaticInvocation on line %d: Method App\Models\Customer::getFirstNameUsingLegacyAccessorAttribute is not static, but is called statically
 MixedReturnStatement on line %d: Could not infer a return type
 UndefinedMagicMethod on line %d: Magic method App\Builders\VehicleBuilder::withtrashed does not exist
 UndefinedMagicMethod on line %d: Magic method App\Models\Customer::completelyfakemethod does not exist

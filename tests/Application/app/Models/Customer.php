@@ -103,9 +103,12 @@ class Customer extends Authenticatable
 
     /**
      * Modern scope using #[Scope] attribute (Laravel 12+): called as Customer::query()->verified().
+     *
+     * Must be protected: public #[Scope] methods bypass __callStatic and cause a PHP Fatal Error
+     * when called statically in PHP 8.0+. Only protected methods route through __callStatic.
      */
     #[Scope]
-    public function verified(Builder $query): void
+    protected function verified(Builder $query): void
     {
         $query->whereNotNull('email_verified_at');
     }
