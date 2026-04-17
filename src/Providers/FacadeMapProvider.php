@@ -38,15 +38,38 @@ final class FacadeMapProvider
         $aliases = AliasLoader::getInstance()->getAliases();
 
         foreach ($aliases as $alias => $facadeClass) {
-            if (!\is_subclass_of($facadeClass, Facade::class)) {
-                continue;
-            }
-
             try {
+                // is_subclass_of() invokes the autoloader for unknown classes.
+                // For entries in AliasLoader's registry, that routes back through
+                // AliasLoader::load(), which calls class_alias($target, $alias).
+                //
+                // Some published packages ship a misconfigured self-referential
+                // entry: mateffy/laravel-introspect declares
+                //   "aliases": { "Introspect": "Introspect" }
+                // in composer.json (extra.laravel.aliases). Laravel's package
+                // discovery registers this verbatim, so AliasLoader tries
+                // class_alias('Introspect', 'Introspect'). No real class named
+                // 'Introspect' exists in the global namespace (the actual Facade
+                // is Mateffy\Introspect\Facades\Introspect), so PHP emits a
+                // "Class not found" warning.
+                //
+                // Under Psalm, that warning is promoted to a RuntimeException by
+                // Psalm\Internal\ErrorHandler, which without this guard propagates
+                // out of __invoke() and disables the plugin for the whole run.
+                // Catching it lets the iteration skip the broken entry and
+                // continue mapping the remaining (valid) facades. See issue #745.
+                if (!\is_subclass_of($facadeClass, Facade::class)) {
+                    continue;
+                }
+
                 $root = $facadeClass::getFacadeRoot();
             } catch (\Throwable $e) {
-                // BindingResolutionException is normal for unbound facades.
-                // \Error can occur for missing classes (e.g. optional Symfony packages).
+                // Catches both:
+                //  - errors raised while autoloading $facadeClass above (broken
+                //    aliases, parse errors in the target file, missing parents)
+                //  - BindingResolutionException or \Error from getFacadeRoot()
+                //    when the facade's container binding is absent or depends on
+                //    optional packages (e.g. Symfony components not installed).
                 $progress->debug("Laravel plugin: FacadeMapProvider skipped {$facadeClass}: {$e->getMessage()}\n");
                 continue;
             }
