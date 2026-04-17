@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776429884621,
+  "lastUpdate": 1776430147684,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1707,6 +1707,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 21.82,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "13e4c0d75ef343341a788de0d8354d07166b2fdc",
+          "message": "fix: stop filled()/blank() from over-narrowing to literal false/true for ?string (#751) (#753)\n\nThe conditional return types used `$value is (null|''|array<never, never>)`\nas the narrow clause. For `string|null` inputs, Psalm treated that union\ncheck as matching (because `''` overlaps with `string`) and collapsed the\nwhole conditional to the narrow branch, so `filled(?string)` inferred\nliteral `false` and `blank(?string)` inferred literal `true`. That\ntriggered `DocblockTypeContradiction` on the idiomatic\n`if (filled($nullableString)) { ... }` guard pattern.\n\nNest the narrow clause into per-literal `is null` / `is ''` /\n`is array<never, never>` checks so partially overlapping inputs fall\nthrough to `bool`. Add `@psalm-assert-if-true !null $value` on `filled()`\nand `@psalm-assert-if-false !null $value` on `blank()` so the guard\npattern also narrows `?string` to `string` inside the true branch.\n\nAdds regression tests covering `?string`, `string`, `array`, `mixed`,\n`string|array`, the assignment-in-condition reproduction from the issue,\nand the narrowing behavior. Tests use `@psalm-check-type-exact` so a\nfuture regression to the old unioned clause fails loudly.",
+          "timestamp": "2026-04-17T13:46:03+01:00",
+          "tree_id": "3c39ba9c2620c62c036c08ca5c8516641dcec111",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/13e4c0d75ef343341a788de0d8354d07166b2fdc"
+        },
+        "date": 1776430146780,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.67,
+            "range": "± 0.39",
             "unit": "s"
           },
           {
