@@ -7,8 +7,9 @@ namespace Psalm\LaravelPlugin\Providers\ModelMetadata;
 /**
  * Snapshot of a single database column inferred from migration schema.
  *
- * Keeps the original-case `$name` for diagnostic messages; the parent
- * {@see TableSchema} indexes by the lowercased key.
+ * {@see TableSchema} indexes entries by the original-case column name
+ * (matching Eloquent's case-sensitive runtime attribute lookup); `$name`
+ * stays available for diagnostic messages that need to quote the exact key.
  *
  * @psalm-immutable
  * @psalm-api
