@@ -320,6 +320,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Helpers/EnvHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\EnvHandler::class);
 
+        require_once __DIR__ . '/Handlers/Rules/TimingUnsafeComparisonHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\TimingUnsafeComparisonHandler::class);
+
         // Unlike TranslationKeyHandler (which always runs for type narrowing),
         // MissingViewHandler provides no type information — skip entirely when disabled
         if ($pluginConfig->findMissingViews) {
