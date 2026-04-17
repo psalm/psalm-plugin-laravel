@@ -62,6 +62,19 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 continue;
             }
 
+            // Anonymous Model subclasses (e.g. `new class extends Model {}`) get a
+            // synthetic FQCN from Psalm that no autoloader can resolve, so skip them
+            // before class_exists() to avoid a misleading warning. Psalm leaves
+            // $storage->location null for anonymous classes (there is no name node
+            // to locate); stmt_location carries the `class { ... }` position and is
+            // the correct source of the declaring file path.
+            if (
+                $storage->stmt_location !== null
+                && self::isSyntheticAnonymousClassName($storage->name, $storage->stmt_location->file_path)
+            ) {
+                continue;
+            }
+
             // Force-load the class via Composer's autoloader so that runtime
             // reflection works in property handlers (e.g. getTable(), getCasts())
             try {
@@ -76,6 +89,36 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
             self::registerHandlersForModel($codebase, $storage);
         }
+    }
+
+    /**
+     * Detects the synthetic FQCN Psalm assigns to anonymous classes. Psalm builds
+     * them as `{sanitized_file_path}_{line}_{startFilePos}` (prefixed by the
+     * surrounding namespace), and they are never autoloadable.
+     *
+     * @see \Psalm\Internal\Analyzer\ClassAnalyzer::getAnonymousClassName()
+     * @psalm-pure
+     */
+    private static function isSyntheticAnonymousClassName(string $fqcn, string $filePath): bool
+    {
+        if ($filePath === '') {
+            return false;
+        }
+
+        $lastSeparator = \strrpos($fqcn, '\\');
+        $shortName = $lastSeparator === false ? $fqcn : \substr($fqcn, $lastSeparator + 1);
+
+        // Quick reject: every synthetic anonymous name ends in `_<line>_<startFilePos>`.
+        // Real model class names (User, Post, ...) fail this in O(1), letting us skip
+        // the more expensive path-sanitisation below for ~all real classlikes.
+        if (\preg_match('/_\d+_\d+$/', $shortName) !== 1) {
+            return false;
+        }
+
+        // Mirrors the sanitisation in ClassAnalyzer::getAnonymousClassName().
+        $sanitizedPath = \preg_replace('/[^A-Za-z0-9]/', '_', $filePath) ?? '';
+
+        return \str_starts_with($shortName, $sanitizedPath . '_');
     }
 
     private static function registerHandlersForModel(Codebase $codebase, ClassLikeStorage $storage): void
