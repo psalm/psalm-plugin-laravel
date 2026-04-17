@@ -53,9 +53,11 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
      * $this->app as the contract hit the contract rows; users typing the concrete
      * class hit the Container rows.
      *
-     * Keys are hard-coded lowercase strings (not ::class) so we can compare them
-     * directly against strtolower(getDeclaringMethodId()) without ever depending on
-     * PHP's case-preserved ::class resolution.
+     * Keys are hard-coded lowercase strings. ::class is allowed in const arrays on
+     * PHP 8.3+, but it preserves the source-code casing verbatim: a mis-cased
+     * `\Illuminate\container\Container::class` at the declaration site would silently
+     * produce a key that never matches strtolower(getDeclaringMethodId()). Literal
+     * lowercase strings eliminate that trap.
      */
     private const UNSAFE_METHOD_IDS = [
         'illuminate\\container\\container::singleton' => true,

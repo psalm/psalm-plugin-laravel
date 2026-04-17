@@ -15,8 +15,10 @@ return RectorConfig::configure()
     ->withSkipPath('tests/Unit/Handlers/Eloquent/Schema/migrations')
     // UNSAFE_METHOD_IDS uses intentionally-lowercased "class::method" strings so we can
     // match strtolower(getDeclaringMethodId()) without runtime normalization. Rector
-    // keeps trying to "upgrade" them to \Class::class concatenation, which would break
-    // the lookup (::class preserves source case and cannot be used in a const array).
+    // keeps "upgrading" them to \Class::class concatenation, which silently breaks the
+    // lookup: ::class preserves source-code casing, so a mis-cased FQN produces a key
+    // that never matches the lowercase method id. (::class IS valid in const arrays on
+    // PHP 8.3+; the problem is the casing, not the const-context.)
     ->withSkipPath('src/Handlers/Rules/OctaneIncompatibleBindingHandler.php')
     ->withPhpVersion(PhpVersion::PHP_82)
     ->withSets([PHPUnitSetList::PHPUNIT_120])
