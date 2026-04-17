@@ -256,6 +256,9 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertTrue($metadata->traits->hasUlids);
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertFalse($metadata->primaryKey->incrementing);
+        // Same bogus-cast guard as the HasUuids test: flipUsesUniqueIds keeps
+        // getCasts() from injecting [id => 'int'] on ULID models too.
+        $this->assertArrayNotHasKey('id', $metadata->casts());
     }
 
     #[Test]
@@ -400,6 +403,12 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame(['approvedComments'], $metadata->withCount);
         $this->assertSame('reporting', $metadata->connection);
         $this->assertFalse($metadata->traits->usesTimestamps);
+
+        // Casts map preserves the original-case column key — regression guard against
+        // anyone re-introducing strtolower() in the computeCasts path.
+        $casts = $metadata->casts();
+        $this->assertArrayHasKey('CreatedAt', $casts);
+        $this->assertArrayNotHasKey('createdat', $casts);
     }
 
     #[Test]

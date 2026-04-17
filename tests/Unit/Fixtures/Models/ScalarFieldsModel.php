@@ -25,6 +25,12 @@ final class ScalarFieldsModel extends Model
 
     protected $appends = ['FullName'];
 
+    // Mixed-case cast key locks the case-preservation invariant on the cast map.
+    /** @var array<string, string> */
+    protected $casts = [
+        'CreatedAt' => 'datetime',
+    ];
+
     /** @var list<string> */
     protected $with = ['primaryAuthor'];
 

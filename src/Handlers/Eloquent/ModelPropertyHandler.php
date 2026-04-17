@@ -115,8 +115,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        // Exact-case lookup matches Eloquent's case-sensitive attribute semantics
-        // (and the pre-registry behavior this refactor preserves).
+        // Exact-case lookup matches Eloquent's case-sensitive attribute semantics.
         $column = $metadata->schema()->column($propertyName);
         if (!$column instanceof ColumnInfo) {
             return null;
@@ -230,8 +229,7 @@ final class ModelPropertyHandler
 
     /**
      * Emit a literal-string union from an ENUM column's allowed values.
-     *
-     * Empty options falls back to `string` — matches the pre-registry behavior.
+     * Empty options yields plain `string` (no literals to union over).
      *
      * @param list<string> $options
      */

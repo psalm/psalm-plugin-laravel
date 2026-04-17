@@ -20,7 +20,15 @@ enum CastShape: string
     /** date, datetime, immutable_date, immutable_datetime */
     case DateTime = 'datetime';
 
-    /** Cast target is a BackedEnum subclass */
+    /**
+     * Cast target is a BackedEnum subclass.
+     *
+     * Best-effort detection — if Psalm scanned the enum file but the class wasn't
+     * autoloaded at warm-up time, the classifier falls back to `Primitive`. Consumers
+     * that branch on this case should treat a `Primitive` classification with a
+     * class-like cast string as potentially "unresolved enum" and fall back to
+     * `CastInfo::$psalmType` (which goes through `CastResolver` and autoloads).
+     */
     case BackedEnum = 'backed_enum';
 
     /** `AsEnumCollection::of(Status::class)` */
@@ -31,6 +39,12 @@ enum CastShape: string
     case AsStringable = 'as_stringable';
     case AsEncrypted = 'as_encrypted';
 
-    /** User class implementing CastsAttributes */
+    /**
+     * User class implementing CastsAttributes.
+     *
+     * Same best-effort caveat as {@see self::BackedEnum}: classification depends on
+     * the class being autoloaded at warm-up time. `CastInfo::$psalmType` is always
+     * authoritative.
+     */
     case CustomCastsAttributes = 'custom';
 }
