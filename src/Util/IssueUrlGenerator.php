@@ -89,9 +89,16 @@ final class IssueUrlGenerator
     {
         $boundary = '(?<=\s|^|\'|"|\()';
 
+        // Path-separator character class. `[\\\\/]` in this single-quoted PHP string
+        // becomes the two-char PCRE pattern `[\\/]`, which matches one backslash OR
+        // one forward slash. Writing `[\\/]` in the source would instead produce the
+        // PCRE pattern `[\/]` — that only matches `/` and silently skips Windows
+        // backslash paths, so the extra escaping is load-bearing.
+        $sep = '[\\\\/]';
+
         // Vendor pass: collapses any absolute prefix up to "vendor/".
         $trace = (string) \preg_replace(
-            '#' . $boundary . '[A-Za-z]?:?[\\/](?:[^\s:()]*?[\\/])?(vendor[\\/])#u',
+            '#' . $boundary . '[A-Za-z]?:?' . $sep . '(?:[^\s:()]*?' . $sep . ')?(vendor' . $sep . ')#u',
             '$1',
             $trace,
         );
@@ -100,7 +107,7 @@ final class IssueUrlGenerator
         // Won't re-match an already-relativised "vendor/.../src/..." because the
         // lookbehind requires a safe boundary before the leading path separator.
         return (string) \preg_replace(
-            '#' . $boundary . '[A-Za-z]?:?[\\/](?:[^\s:()]*?[\\/])?(src[\\/])#u',
+            '#' . $boundary . '[A-Za-z]?:?' . $sep . '(?:[^\s:()]*?' . $sep . ')?(src' . $sep . ')#u',
             '$1',
             $trace,
         );
