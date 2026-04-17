@@ -42,10 +42,6 @@ final class Plugin implements PluginEntryPointInterface
             // to also register for facade/alias classes that proxy to their service.
             FacadeMapProvider::init($output);
 
-            Handlers\Rules\NoEnvOutsideConfigHandler::init(
-                ApplicationProvider::getApp()->configPath(),
-            );
-
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled
             $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations);

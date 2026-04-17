@@ -15,15 +15,11 @@ use Psalm\Context;
 use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\StatementsSource;
+use Psalm\Type\Union;
 
 #[CoversClass(NoEnvOutsideConfigHandler::class)]
 final class NoEnvOutsideConfigHandlerTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        NoEnvOutsideConfigHandler::init('/project/config');
-    }
-
     #[Test]
     public function returns_env_function_id(): void
     {
@@ -31,20 +27,29 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     }
 
     /**
+     * Paths are built from DIRECTORY_SEPARATOR to stay consistent with the handler,
+     * which uses DIRECTORY_SEPARATOR for its segment match. Psalm normalizes file
+     * paths to the host separator before dispatching to plugins.
+     *
      * @return iterable<string, array{string}>
      */
     public static function allowedFileProvider(): iterable
     {
-        yield 'config file' => ['/project/config/app.php'];
-        yield 'config subdirectory' => ['/project/config/services/api.php'];
-        yield 'test file' => ['/project/tests/Unit/MyTest.php'];
-        yield 'feature test' => ['/project/tests/Feature/MyTest.php'];
+        $s = \DIRECTORY_SEPARATOR;
+
+        yield 'app config file' => ["{$s}project{$s}config{$s}app.php"];
+        yield 'app config subdirectory' => ["{$s}project{$s}config{$s}services{$s}api.php"];
+        yield 'package config' => ["{$s}home{$s}dev{$s}spatie{$s}laravel-backup{$s}config{$s}backup.php"];
+        yield 'monorepo sub-package config' => ["{$s}monorepo{$s}packages{$s}forms{$s}config{$s}forms.php"];
+        yield 'vendor package config' => ["{$s}project{$s}vendor{$s}spatie{$s}laravel-backup{$s}config{$s}backup.php"];
+        yield 'test file' => ["{$s}project{$s}tests{$s}Unit{$s}MyTest.php"];
+        yield 'feature test' => ["{$s}project{$s}tests{$s}Feature{$s}MyTest.php"];
     }
 
     /**
-     * Files inside config/ or tests/ should not trigger the issue.
-     * If the handler incorrectly tried to emit an issue, it would throw
-     * because no Psalm runtime is initialized in unit tests.
+     * Files inside any config/ segment or tests/ directory should not trigger the issue.
+     * If the handler incorrectly tried to emit an issue, it would throw because no Psalm
+     * runtime is initialized in unit tests.
      */
     #[Test]
     #[DataProvider('allowedFileProvider')]
@@ -52,17 +57,41 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     {
         $event = $this->createEvent($filePath);
 
-        $this->assertNotInstanceOf(\Psalm\Type\Union::class, NoEnvOutsideConfigHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, NoEnvOutsideConfigHandler::getFunctionReturnType($event));
+    }
+
+    /**
+     * Sanity check for the structural matcher: paths without a literal `/config/`
+     * segment (including substring look-alikes like `configuration/` and `.config/`)
+     * should be treated as outside the config directory.
+     *
+     * Reaching the emit branch calls IssueBuffer::accepts(), which delegates to
+     * Config::getInstance() and throws UnexpectedValueException('No config initialized')
+     * when Psalm isn't bootstrapped. We assert that specific exception to confirm the
+     * handler actually reached issue emission, rather than throwing somewhere earlier.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function rejectedFileProvider(): iterable
+    {
+        $s = \DIRECTORY_SEPARATOR;
+
+        yield 'application code' => ["{$s}project{$s}app{$s}Services{$s}PaymentService.php"];
+        yield 'substring-not-segment (prefix)' => ["{$s}project{$s}app{$s}configuration{$s}Foo.php"];
+        yield 'substring-not-segment (suffix)' => ["{$s}project{$s}app{$s}myconfig{$s}Foo.php"];
+        yield 'hidden config dir' => ["{$s}project{$s}.config{$s}foo.php"];
     }
 
     #[Test]
-    public function trailing_separator_in_config_path_is_normalized(): void
+    #[DataProvider('rejectedFileProvider')]
+    public function rejects_non_config_files(string $filePath): void
     {
-        NoEnvOutsideConfigHandler::init('/project/config/');
+        $event = $this->createEvent($filePath);
 
-        $event = $this->createEvent('/project/config/app.php');
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage('No config initialized');
 
-        $this->assertNotInstanceOf(\Psalm\Type\Union::class, NoEnvOutsideConfigHandler::getFunctionReturnType($event));
+        NoEnvOutsideConfigHandler::getFunctionReturnType($event);
     }
 
     private function createEvent(string $filePath): FunctionReturnTypeProviderEvent
