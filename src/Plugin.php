@@ -269,6 +269,12 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelMethodHandler::class);
+
+        // Factory template guard: prevents TooManyTemplateParams on Factory subclasses
+        // that bind the parent template via @extends but declare no own template params.
+        require_once __DIR__ . '/Handlers/Eloquent/FactoryReturnTypeProvider.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\FactoryReturnTypeProvider::class);
+
         require_once __DIR__ . '/Util/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderScopeHandler::class);
