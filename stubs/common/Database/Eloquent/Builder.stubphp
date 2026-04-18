@@ -81,7 +81,7 @@ class Builder implements BuilderContract
     /**
      * Add a basic where clause to the query.
      *
-     * @param  (\Closure(static): void)|(\Closure(static): static)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  (\Closure(self<TModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed   $operator
      * @param  mixed   $value
      * @param  string  $boolean
@@ -378,7 +378,7 @@ class Builder implements BuilderContract
     public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}
 
     /**
-     * @param  (\Closure(static): void)|(\Closure(static): static)|non-empty-string|list<non-empty-string>|int, mixed>|\Illuminate\Database\Query\Expression  $column
+     * @param  (\Closure(self<TModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  string  $boolean
      * @psalm-return TModel|null
      *
@@ -669,7 +669,7 @@ class Builder implements BuilderContract
     /**
      * Add a basic "where not" clause to the query.
      *
-     * @param  (\Closure(static): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  (\Closure(self<TModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @param  string  $boolean
@@ -684,7 +684,7 @@ class Builder implements BuilderContract
     /**
      * Add an "or where not" clause to the query.
      *
-     * @param  (\Closure(static): mixed)|array|string|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  (\Closure(self<TModel>): mixed)|array|string|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return self<TModel>

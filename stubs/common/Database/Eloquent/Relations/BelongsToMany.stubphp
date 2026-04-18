@@ -176,11 +176,16 @@ class BelongsToMany extends Relation
     public function firstOr($columns = ['*'], \Closure $callback = null) {}
 
     /**
-     * @param  (\Closure(static): void)|(\Closure(static): static)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @param  string  $boolean
      * @return (TRelatedModel&object{pivot: TPivotModel})|null
+     *
+     * @psalm-taint-sink sql $column
+     * @psalm-taint-escape sql
+     * @psalm-flow ($operator, $value) -> return
+     * @psalm-taint-specialize
      */
     public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
 
