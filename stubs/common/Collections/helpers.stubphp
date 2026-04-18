@@ -13,7 +13,7 @@
  * stubbed to widen generics on their return so fluent chains propagate concrete types.
  *
  * Accepts `scalar|\UnitEnum|null` too and narrows them to `Collection<int, $value>` on the result;
- * see `Collection::make()` in this stubs directory for the rationale behind the conditional ordering.
+ * see {@see \Illuminate\Support\Collection::make()} for the rationale behind the conditional ordering.
  *
  * @template TKey of array-key
  * @template TValue

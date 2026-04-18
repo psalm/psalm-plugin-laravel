@@ -70,8 +70,8 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      *
      * Preserves Laravel's full param list for `LazyCollection::make()` (including
      * `Closure(): Generator` and `self`, the idiomatic lazy-generator pattern) and adds the
-     * `scalar|\UnitEnum|null` widening. See `Collection::make()` in this stubs directory for
-     * the rationale behind the conditional return type ordering.
+     * `scalar|\UnitEnum|null` widening. See {@see \Illuminate\Support\Collection::make()}
+     * for the rationale behind the conditional return type ordering.
      *
      * @psalm-mutation-free
      *
