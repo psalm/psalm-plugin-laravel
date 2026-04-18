@@ -309,6 +309,14 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+        // Opt-in: only register the Octane-compatibility check when explicitly enabled
+        // via `<findOctaneIncompatibleBinding value="true" />`. The rule is narrow to
+        // Octane users; keeping it off by default avoids noise for FPM-only projects.
+        if ($pluginConfig->findOctaneIncompatibleBinding) {
+            require_once __DIR__ . '/Handlers/Rules/OctaneIncompatibleBindingHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\OctaneIncompatibleBindingHandler::class);
+        }
+
         // NoEnvOutsideConfigHandler must be registered BEFORE EnvHandler.
         // Both handle 'env()' via FunctionReturnTypeProviderInterface; Psalm dispatches handlers
         // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler

@@ -42,6 +42,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->findOctaneIncompatibleBinding);
         $this->assertTrue($config->resolveDynamicWhereClauses);
     }
 
@@ -165,6 +166,37 @@ final class PluginConfigTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("Invalid findMissingViews value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function find_octane_incompatible_binding_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findOctaneIncompatibleBinding);
+    }
+
+    #[Test]
+    public function find_octane_incompatible_binding_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findOctaneIncompatibleBinding);
+    }
+
+    #[Test]
+    public function invalid_find_octane_incompatible_binding_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findOctaneIncompatibleBinding value 'yes'");
 
         PluginConfig::fromXml($xml);
     }

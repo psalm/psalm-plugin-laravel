@@ -22,6 +22,7 @@ final readonly class PluginConfig
         public bool $resolveDynamicWhereClauses,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
+        public bool $findOctaneIncompatibleBinding,
         public string $cachePath,
         public bool $failOnInternalError,
     ) {}
@@ -45,6 +46,7 @@ final readonly class PluginConfig
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        $findOctaneIncompatibleBinding = self::xmlBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
 
         return new self(
@@ -52,6 +54,7 @@ final readonly class PluginConfig
             resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
+            findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),
             failOnInternalError: $failOnInternalError,
         );
@@ -106,7 +109,7 @@ final readonly class PluginConfig
         // the automatic Psalm cache directory instead
         $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
 
-        if (is_string($env) && $env !== '') {
+        if (\is_string($env) && $env !== '') {
             \trigger_error(
                 'PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
                     . "The plugin now uses Psalm's cache directory automatically.",
