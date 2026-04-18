@@ -14,7 +14,7 @@ set -o pipefail
 set -u
 
 # See https://github.com/laravel/laravel/tags for Laravel versions
-LARAVEL_INSTALLER_VERSION="${LARAVEL_INSTALLER_VERSION:-13.1.0}"
+LARAVEL_INSTALLER_VERSION="${LARAVEL_INSTALLER_VERSION:-dev-master}"
 
 # Terminal colors
 RED='\033[0;31m'
@@ -189,7 +189,7 @@ if [ "$UPDATE_BASELINE" = true ]; then
 else
     info "Running Psalm analysis"
     # set -e ensures script exits on failure, so cleanup below only runs on success
-    ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE"
+    ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --show-info=true --stats
 fi
 
 echo
