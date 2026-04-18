@@ -38,9 +38,9 @@ jobs:
           - '8.3'
           - '8.4'
           - '8.5'
-        laravel-installer-version:
+        laravel-installer-version: # see https://github.com/laravel/laravel/releases
+          - '11.6.0'
           - '12.12.2'
-          - 'dev-master'
         exclude:
           - php-version: '8.2'
             laravel-installer-version: 'dev-master'
