@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776501766207,
+  "lastUpdate": 1776503615935,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1887,6 +1887,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "62136013282588989f25882c040eaf4e4cf0ed32",
+          "message": "revert: drop `!=''` assertion from filled() to restore class-string narrowing (#771) (#772)\n\nReverts the `@psalm-assert-if-true !='' $value` line added to `filled()`\nin #762. Psalm applies that loose-equality assertion to every atomic of\nthe input type, which caused regressions on real-world code:\n\n- `class-string<X>` gains a spurious `non-empty-string` atomic in the\n  resulting union, so call sites like `$classString::method()` emit\n  `InvalidStringClass`.\n- `TypeDoesNotContainType` / `RedundantCondition` diagnostics on\n  non-string atomics (arrays, enums, objects, Closures).\n\nBenchmark on Filament v4.8.3 to v4.8.4 showed +35 new issues directly\nattributable to the assertion. Reverting it restores the pre-#762\n`?string` to `string` narrowing from the `!null` assertion alone, which\nwas already sufficient for the null-guard idiom.\n\nAdds regression tests for the distinct failure modes in #771:\n`class-string<X>` template preservation, static method call on a\nnarrowed class-string, enum instance input, and `$enum::cases()` on a\nnarrowed `class-string<EnumClass>`.\n\nCloses #771.",
+          "timestamp": "2026-04-18T10:10:31+01:00",
+          "tree_id": "99f3068a3af7b917616aa7772d64ceddb6d7e227",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/62136013282588989f25882c040eaf4e4cf0ed32"
+        },
+        "date": 1776503615370,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.86,
+            "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
