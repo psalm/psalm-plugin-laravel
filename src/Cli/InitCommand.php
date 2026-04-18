@@ -35,7 +35,7 @@ final class InitCommand extends Command
         >
             <projectFiles>
                 <directory name="."/>
-                <ignoreFiles>
+                <ignoreFiles allowMissingFiles="true">
                     <directory name="vendor"/>
                     <directory name="storage"/>
                     <directory name="bootstrap/cache"/>
