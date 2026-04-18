@@ -117,7 +117,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 ## Upgrade steps
 
 ```bash
-# 1. Update PHP to 8.3+ and Laravel to 12+ if needed
+# 1. Update PHP to 8.2+ and Laravel to 12+ if needed
 
 # 2. Upgrade Psalm to v7
 composer require --dev vimeo/psalm:^7.0.0-beta17
