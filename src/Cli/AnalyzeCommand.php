@@ -19,6 +19,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'analyze',
+    aliases: ['analyse'],
     description: 'Run Psalm analysis on the current project.',
 )]
 final class AnalyzeCommand extends Command

@@ -47,4 +47,14 @@ final class AnalyzeCommandTest extends TestCase
         $this->assertStringContainsString('Could not find', $tester->getDisplay());
         $this->assertStringContainsString('vendor/bin/psalm', \str_replace(\DIRECTORY_SEPARATOR, '/', $tester->getDisplay()));
     }
+
+    #[Test]
+    public function analyse_is_registered_as_an_alias(): void
+    {
+        $application = new Application();
+        $application->addCommand(new AnalyzeCommand($this->tempDir));
+
+        // Application::find() accepts both the canonical name and any alias.
+        $this->assertSame($application->find('analyze'), $application->find('analyse'));
+    }
 }
