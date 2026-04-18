@@ -218,6 +218,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/CustomCollectionHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/FactoryTemplateParamHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\FactoryTemplateParamHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         if ($pluginConfig->shouldUseMigrations()) {
             require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';

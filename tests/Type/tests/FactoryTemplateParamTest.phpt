@@ -9,10 +9,8 @@ class Task extends Model
 }
 
 /**
- * Standard Laravel pattern: extend Factory without specifying the template.
- * Laravel resolves the target model via naming convention at runtime
- * (TaskFactory → Task). The plugin should suppress MissingTemplateParam
- * for this common case.
+ * With `$model` declared, the plugin auto-injects `@extends Factory<Task>`
+ * so `createOne()`/`makeOne()` return the right model type — no annotation needed.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/780
  */
@@ -28,9 +26,12 @@ class TaskFactory extends Factory
     }
 }
 
+$_resolved = (new TaskFactory())->makeOne();
+/** @psalm-check-type-exact $_resolved = Task */;
+
 /**
- * Explicit template binding still works — users who want type-safe
- * create()/make() calls can opt in with @extends Factory<ConcreteModel>.
+ * Explicit template binding still works — users can always opt in with
+ * `@extends Factory<ConcreteModel>`.
  *
  * @extends Factory<Task>
  */
@@ -45,5 +46,8 @@ class ExplicitTaskFactory extends Factory
         return [];
     }
 }
+
+$_explicit = (new ExplicitTaskFactory())->makeOne();
+/** @psalm-check-type-exact $_explicit = Task */;
 ?>
 --EXPECTF--
