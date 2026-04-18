@@ -59,4 +59,18 @@ class Builder
      * @psalm-taint-sink sql $to
      */
     public function rename($from, $to) {}
+
+    /**
+     * Determine if the given table exists.
+     *
+     * Widened from Laravel's `string` to also accept \Stringable. The runtime call
+     * chain (parseSchemaAndTable -> getTablePrefix . $table) performs string
+     * concatenation, which coerces via __toString.
+     *
+     * @param  string|\Stringable  $table
+     * @return bool
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public function hasTable($table) {}
 }

@@ -31,10 +31,28 @@ class NullObject {
 /**
  * Determine if the given value is "blank".
  *
+ * The conditional branches are nested (not unioned) to avoid a Psalm
+ * over-narrowing edge case. A unioned clause such as
+ * `$value is (null|''|array<never, never>)` collapses the whole
+ * conditional to the narrow branch for an input that only partially
+ * overlaps with the union (e.g. `string` intersects `''` but is not a
+ * subtype of the union), making `blank(?string)` infer literal `true`.
+ * Splitting each literal into its own `is null`, `is ''`,
+ * `is array<never, never>` check keeps non-matching inputs flowing
+ * through to `bool`. See
+ * https://github.com/psalm/psalm-plugin-laravel/issues/751.
+ *
  * @param  mixed  $value
+ * @psalm-assert-if-false !null $value
  * @psalm-return ($value is (bool|numeric|non-empty-array)
  *  ? false
- *  : ($value is (null|''|array<never, never>) ? true : bool)
+ *  : ($value is null
+ *      ? true
+ *      : ($value is ''
+ *          ? true
+ *          : ($value is array<never, never> ? true : bool)
+ *      )
+ *    )
  * )
  */
 function blank($value) {}
@@ -76,10 +94,38 @@ function e($value, $doubleEncode = true) {}
 /**
  * Determine if a value is "filled".
  *
+ * See {@see blank()} for the rationale behind the nested conditional shape.
+ *
+ * Only `@psalm-assert-if-true !null` is applied, narrowing `?string` to
+ * `string` (not `non-empty-string`) inside the true branch. A previous
+ * iteration (#762) added `@psalm-assert-if-true !='' $value` to tighten
+ * the narrowing to `non-empty-string`, but Psalm applies that
+ * loose-equality assertion to every atomic of the input type, which
+ * caused:
+ *
+ * 1. `class-string<X>` gaining a spurious `non-empty-string` atomic in
+ *    the resulting union (the template atomic is preserved, but the
+ *    added `non-empty-string` makes `$classString::method()` call sites
+ *    report `InvalidStringClass`).
+ * 2. `TypeDoesNotContainType` and `RedundantCondition` diagnostics on
+ *    non-string inputs like arrays, enums, and objects.
+ *
+ * See https://github.com/psalm/psalm-plugin-laravel/issues/771 for the
+ * regression report and benchmark evidence (35 new issues on Filament
+ * v4.8.4). The tighter `?string` to `non-empty-string` narrowing can be
+ * reintroduced if Psalm grows input-type-guarded docblock assertions.
+ *
  * @param  mixed  $value
+ * @psalm-assert-if-true !null $value
  * @psalm-return ($value is (bool|numeric|non-empty-array)
  *  ? true
- *  : ($value is (null|''|array<never, never>) ? false : bool)
+ *  : ($value is null
+ *      ? false
+ *      : ($value is ''
+ *          ? false
+ *          : ($value is array<never, never> ? false : bool)
+ *      )
+ *    )
  * )
  */
 function filled($value) {}
@@ -132,7 +178,11 @@ function retry($times, callable $callback, $sleepMilliseconds = 0, $when = null)
 /**
  * Get a new stringable object from the given string.
  *
- * @param  string|null  $string
+ * Widened from Laravel's `string|null` to also accept \Stringable. `str()` forwards to
+ * Str::of() which wraps the value with `new Stringable($value)`; PHP's __toString
+ * coercion makes any stringable object safe here.
+ *
+ * @param  string|\Stringable|null  $string
  * @return (func_num_args() is 0
  *  ? (stringable-object&\Illuminate\Support\Str)
  *  : \Illuminate\Support\Stringable

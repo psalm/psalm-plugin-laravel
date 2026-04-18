@@ -26,13 +26,30 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
     use ExtractsGuardNameFromCallLike;
 
     /**
-     * @inheritDoc
+     * Psalm dispatches return-type providers by exact class name, so the handler has to list
+     * each distinct class it wants to intercept. Beyond the Guard contract we also register:
+     *
+     *  - StatefulGuard — AuthManager's `@mixin StatefulGuard` directs calls like
+     *    `$authManager->loginUsingId(...)` into this interface.
+     *  - SessionGuard / TokenGuard / RequestGuard — concrete guard drivers Laravel ships with.
+     *    These classes declare their own user()/loginUsingId()/onceUsingId() (not inherited
+     *    from the interface), so calls on them resolve to the concrete class and would
+     *    otherwise miss narrowing. SessionGuard/TokenGuard back the standard config drivers
+     *    (see {@see AuthConfigAnalyzer::getGuardFQCN()}); RequestGuard backs `viaRequest()`.
+     *
+     * @return list<string>
      * @psalm-pure
      */
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [\Illuminate\Contracts\Auth\Guard::class];
+        return [
+            \Illuminate\Contracts\Auth\Guard::class,
+            \Illuminate\Contracts\Auth\StatefulGuard::class,
+            \Illuminate\Auth\SessionGuard::class,
+            \Illuminate\Auth\TokenGuard::class,
+            \Illuminate\Auth\RequestGuard::class,
+        ];
     }
 
     /** @inheritDoc */

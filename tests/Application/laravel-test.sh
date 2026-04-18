@@ -4,7 +4,7 @@
 # This script sets up a fresh Laravel installation and runs Psalm analysis
 # examples:
 #   bash tests/Application/laravel-test.sh
-#   LARAVEL_INSTALLER_VERSION=12.11.2 bash tests/Application/laravel-test.sh
+#   LARAVEL_INSTALLER_VERSION=12.12.2 bash tests/Application/laravel-test.sh
 
 # Exit on error. Append "|| true" if you expect an error.
 set -e
@@ -14,7 +14,7 @@ set -o pipefail
 set -u
 
 # See https://github.com/laravel/laravel/tags for Laravel versions
-LARAVEL_INSTALLER_VERSION="${LARAVEL_INSTALLER_VERSION:-12.11.2}"
+LARAVEL_INSTALLER_VERSION="${LARAVEL_INSTALLER_VERSION:-12.12.2}"
 
 # Terminal colors
 RED='\033[0;31m'
@@ -42,7 +42,7 @@ Options:
     -r, --remove   Remove Laravel project directory after execution
 
 Environment variables:
-    LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 12.11.2)
+    LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 12.12.2)
     COMPOSER_MEMORY_LIMIT        Memory limit for Composer (default: -1)
 EOF
 }
@@ -119,40 +119,59 @@ fi
 RELATIVE_PATH="${APP_INSTALLATION_PATH#"$PROJECT_ROOT"/}"
 info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} at ${RELATIVE_PATH} ..."
 info "Tip: set LARAVEL_INSTALLER_VERSION to test against a different Laravel version"
-composer create-project --quiet --prefer-dist laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
+# --no-security-blocking: laravel/laravel's pinned phpunit/phpunit range can become
+# fully covered by a fresh advisory, which would otherwise make `composer create-project`
+# fail to resolve. Advisories are still reported. This is a test-only scaffold.
+composer create-project --quiet --prefer-dist --no-security-blocking laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
 cd "$APP_INSTALLATION_PATH"
 
 info "Making different types of classes for Laravel to analyze them using Psalm"
-./artisan make:cast ExampleCast
-./artisan make:channel ExampleChannel
-./artisan make:component ExampleComponent
-./artisan make:command ExampleCommand
-./artisan make:controller ExampleController
-./artisan make:event ExampleEvent
-./artisan make:exception ExampleException
-./artisan make:factory ExampleFactory
-./artisan make:job ExampleJob
-./artisan make:listener ExampleListener
-./artisan make:mail ExampleMail
-./artisan make:middleware ExampleMiddleware
-./artisan make:model Example
-./artisan make:notification ExampleNotification
-./artisan make:observer ExampleObserver
-./artisan make:policy ExamplePolicy
-./artisan make:provider ExampleProvider
-./artisan make:request ExampleRequest
-./artisan make:resource ExampleResource
-./artisan make:rule ExampleRule
-./artisan make:scope ExampleScope
-./artisan make:seeder ExampleSeeder
-./artisan make:class Services/ExampleServiceClass
-./artisan make:interface Services/ExampleServiceInterface
-#./artisan make:migration
-./artisan make:enum Enums/UserRole
-./artisan make:job-middleware ExampleJobMiddleware
-./artisan make:test NewExampleTest
-./artisan make:trait Traits/ExampleTrait
-./artisan make:view example-view
+# Invoke every generator inside a single bootstrapped Laravel process — spawning
+# ~30 separate `./artisan` invocations is ~16× slower (~10s vs ~0.6s locally).
+php -r '
+require __DIR__."/vendor/autoload.php";
+$app = require __DIR__."/bootstrap/app.php";
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$output = new Symfony\Component\Console\Output\ConsoleOutput();
+$cmds = [
+    ["make:cast", "ExampleCast"],
+    ["make:channel", "ExampleChannel"],
+    ["make:component", "ExampleComponent"],
+    ["make:command", "ExampleCommand"],
+    ["make:controller", "ExampleController"],
+    ["make:event", "ExampleEvent"],
+    ["make:exception", "ExampleException"],
+    ["make:factory", "ExampleFactory"],
+    ["make:job", "ExampleJob"],
+    ["make:listener", "ExampleListener"],
+    ["make:mail", "ExampleMail"],
+    ["make:middleware", "ExampleMiddleware"],
+    ["make:model", "Example"],
+    ["make:notification", "ExampleNotification"],
+    ["make:observer", "ExampleObserver"],
+    ["make:policy", "ExamplePolicy"],
+    ["make:provider", "ExampleProvider"],
+    ["make:request", "ExampleRequest"],
+    ["make:resource", "ExampleResource"],
+    ["make:rule", "ExampleRule"],
+    ["make:scope", "ExampleScope"],
+    ["make:seeder", "ExampleSeeder"],
+    ["make:class", "Services/ExampleServiceClass"],
+    ["make:interface", "Services/ExampleServiceInterface"],
+    ["make:enum", "Enums/UserRole"],
+    ["make:job-middleware", "ExampleJobMiddleware"],
+    ["make:test", "NewExampleTest"],
+    ["make:trait", "Traits/ExampleTrait"],
+    ["make:view", "example-view"],
+];
+foreach ($cmds as [$cmd, $name]) {
+    $exit = Illuminate\Support\Facades\Artisan::call($cmd, ["name" => $name], $output);
+    if ($exit !== 0) {
+        fwrite(STDERR, "artisan {$cmd} {$name} failed (exit {$exit})\n");
+        exit($exit);
+    }
+}
+' | awk 'NF'
 
 info "Adding package from source"
 composer config repositories.0 '{"type": "path", "url": "../../"}'
@@ -170,7 +189,7 @@ if [ "$UPDATE_BASELINE" = true ]; then
 else
     info "Running Psalm analysis"
     # set -e ensures script exits on failure, so cleanup below only runs on success
-    ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE"
+    ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --show-info=true --stats
 fi
 
 echo

@@ -83,4 +83,34 @@ class Stringable implements JsonSerializable, ArrayAccess, BaseStringable
      * @psalm-flow ($replace) -> return
      */
     public function substrReplace($replace, $offset = 0, $length = null) {}
+
+    /**
+     * Determine if a given string contains a given substring.
+     *
+     * Widened from Laravel's `string|iterable<string>` to also accept \Stringable in the
+     * iterable form only. A scalar \Stringable needle is NOT accepted: Str::contains
+     * normalises via `(array) $needles`, which casts an object to its public properties
+     * rather than wrapping the object in a one-element array — so a plain \Stringable
+     * yields `[]` and contains() silently returns false. Wrap in `[$stringable]` or cast
+     * to string at the call site instead. (Illuminate\Support\Stringable happens to work
+     * because of its protected `$value` property, but that's a fragile implementation
+     * accident and not reliable for arbitrary \Stringable implementations.)
+     *
+     * @param  string|iterable<string|\Stringable>  $needles
+     * @param  bool  $ignoreCase
+     * @return bool
+     */
+    public function contains($needles, $ignoreCase = false) {}
+
+    /**
+     * Determine if a given string matches a given pattern.
+     *
+     * Widened from Laravel's `string|iterable<string>` to also accept \Stringable.
+     * Runtime: Str::is() casts pattern via `(string) $pattern`.
+     *
+     * @param  string|\Stringable|iterable<string|\Stringable>  $pattern
+     * @param  bool  $ignoreCase
+     * @return bool
+     */
+    public function is($pattern, $ignoreCase = false) {}
 }

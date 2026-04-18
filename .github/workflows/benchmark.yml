@@ -1,15 +1,12 @@
-name: Performance Benchmark
+name: Benchmark
 
-# Four triggers:
-# 1. Label "pr:benchmark-ready" added to a PR — compares PR vs base
-# 2. Comment "/benchmark" or "/pr:benchmark" on a PR — same comparison
-# 3. Push to master — stores baseline for historical trend tracking
-# 4. Manual dispatch — runs baseline on the selected branch
+# Three triggers:
+# 1. Comment "/benchmark" on a PR, compares PR vs base.
+# 2. Push to master, stores result for historical trend tracking.
+# 3. Manual dispatch, runs benchmark on the selected branch.
 
 on:
   workflow_dispatch:
-  pull_request:
-    types: [labeled]
   issue_comment:
     types: [created]
   push:
@@ -19,10 +16,10 @@ on:
       - 'stubs/**'
       - 'tests/Benchmark/**'
       - 'composer.json'
-      - '.github/workflows/perf.yml'
+      - '.github/workflows/benchmark.yml'
 
 concurrency:
-  group: benchmark-${{ github.event.pull_request.number || github.event.issue.number || github.ref_name }}
+  group: benchmark-${{ github.event.issue.number || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -30,7 +27,7 @@ permissions:
 
 env:
   # Pinned Monica release for reproducible benchmarks.
-  # Monica is a real-world Laravel app (~700 PHP files, Laravel 12).
+  # Monica is a real-world Laravel app (~700 PHP files, Laravel 12) https://github.com/monicahq/monica.
   MONICA_REPO: monicahq/monica
   MONICA_REF: "v5.0.0-beta.5"
   PHP_VERSION: "8.3"
@@ -38,17 +35,13 @@ env:
 
 jobs:
 
-  # ── PR benchmark: triggered by label or "/benchmark" comment ─────────
+  # ── PR benchmark: triggered by "/benchmark" comment ──────────────────
   pr-benchmark:
     if: >-
-      (github.event_name == 'pull_request'
-       && github.event.action == 'labeled'
-       && github.event.label.name == 'pr:benchmark-ready')
-      || (github.event_name == 'issue_comment'
-       && github.event.issue.pull_request
-       && (startsWith(github.event.comment.body, '/benchmark')
-        || startsWith(github.event.comment.body, '/pr:benchmark'))
-       && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association))
+      github.event_name == 'issue_comment'
+      && github.event.issue.pull_request
+      && startsWith(github.event.comment.body, '/benchmark')
+      && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -58,7 +51,6 @@ jobs:
     steps:
 
       - name: React to comment
-        if: github.event_name == 'issue_comment'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -70,7 +62,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
+          PR_NUMBER="${{ github.event.issue.number }}"
           PR_JSON=$(gh pr view "$PR_NUMBER" \
             --repo ${{ github.repository }} \
             --json headRefOid,baseRefOid,headRefName,number,headRepository)
@@ -105,12 +97,30 @@ jobs:
           tools: composer:v2
 
       - name: Install hyperfine
-        run: sudo apt-get update -qq && sudo apt-get install -yqq hyperfine
+        # GitHub-hosted runner images ship a recent apt cache, so skip `apt-get update`.
+        # Fall back to update+install only if the cached index is stale.
+        run: sudo apt-get install -yqq hyperfine || (sudo apt-get update -qq && sudo apt-get install -yqq hyperfine)
 
       - name: Clone Monica
         run: |
           git clone --depth 1 --branch "$MONICA_REF" \
             "https://github.com/$MONICA_REPO" /tmp/monica-source
+
+      # Cache Monica's vendor once on the shared source so both variants inherit it via `cp -a`.
+      # Key is safe to pin to MONICA_REF + PHP_VERSION because the ref points at a tag
+      # with an immutable composer.lock.
+      - name: Cache Monica vendor
+        uses: actions/cache@v4
+        with:
+          path: /tmp/monica-source/vendor
+          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
+
+      - name: Prime Monica vendor
+        run: |
+          if [ ! -d /tmp/monica-source/vendor ]; then
+            cd /tmp/monica-source
+            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+          fi
 
       - name: Setup benchmark projects
         run: |
@@ -118,7 +128,6 @@ jobs:
             local dir=$1 plugin_path=$2
             cp -a /tmp/monica-source "$dir"
             cd "$dir"
-            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
             composer config repositories.plugin \
               '{"type": "path", "url": "'"$plugin_path"'", "options": {"symlink": true}}'
             composer config minimum-stability dev
@@ -138,8 +147,9 @@ jobs:
           > /tmp/mem-base.txt && > /tmp/mem-pr.txt
           > /tmp/issues-base.txt && > /tmp/issues-pr.txt
           > /tmp/stats-base.txt && > /tmp/stats-pr.txt
+          # No warmup: this job measures the diff between base and PR, both pay the same
+          # first-run page-cache tax, so the comparison stays directionally correct.
           hyperfine \
-            --warmup 1 \
             --runs "$HYPERFINE_RUNS" \
             --command-name base "bash \"$HARNESS\" /tmp/monica-base psalm-benchmark.xml /tmp/mem-base.txt /tmp/issues-base.txt /tmp/stats-base.txt" \
             --command-name pr   "bash \"$HARNESS\" /tmp/monica-pr   psalm-benchmark.xml /tmp/mem-pr.txt /tmp/issues-pr.txt /tmp/stats-pr.txt" \
@@ -179,8 +189,8 @@ jobs:
             --body "$BODY"
 
 
-  # ── Master baseline: stores result + historical trend ────────────────
-  master-baseline:
+  # ── Master benchmark: stores result + historical trend ───────────────
+  master-benchmark:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -200,17 +210,27 @@ jobs:
           tools: composer:v2
 
       - name: Install hyperfine
-        run: sudo apt-get update -qq && sudo apt-get install -yqq hyperfine
+        # GitHub-hosted runner images ship a recent apt cache, so skip `apt-get update`.
+        # Fall back to update+install only if the cached index is stale.
+        run: sudo apt-get install -yqq hyperfine || (sudo apt-get update -qq && sudo apt-get install -yqq hyperfine)
 
       - name: Clone Monica
         run: |
           git clone --depth 1 --branch "$MONICA_REF" \
             "https://github.com/$MONICA_REPO" /tmp/monica
 
-      - name: Setup project
+      - name: Cache Monica vendor
+        uses: actions/cache@v4
+        with:
+          path: /tmp/monica/vendor
+          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
+
+      - name: Setup benchmark project
         run: |
           cd /tmp/monica
-          COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+          if [ ! -d vendor ]; then
+            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+          fi
           composer config repositories.plugin \
             '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true}}'
           composer config minimum-stability dev
@@ -257,10 +277,10 @@ jobs:
           ' > /tmp/benchmark-trend.json
           cat /tmp/benchmark-trend.json
 
-      - name: Upload baseline artifact
+      - name: Upload benchmark artifact
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-baseline-${{ github.sha }}
+          name: benchmark-${{ github.sha }}
           path: |
             /tmp/hyperfine.json
             /tmp/benchmark-trend.json

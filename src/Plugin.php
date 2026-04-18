@@ -9,6 +9,7 @@ use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
@@ -41,10 +42,6 @@ final class Plugin implements PluginEntryPointInterface
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
             FacadeMapProvider::init($output);
-
-            Handlers\Rules\NoEnvOutsideConfigHandler::init(
-                ApplicationProvider::getApp()->configPath(),
-            );
 
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled
@@ -197,6 +194,8 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $registration->addStubFile(self::getAliasStubLocation($pluginConfig));
+
+        CarbonStubProvider::register($registration, $output);
     }
 
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
