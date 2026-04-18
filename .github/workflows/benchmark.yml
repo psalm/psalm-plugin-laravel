@@ -97,12 +97,30 @@ jobs:
           tools: composer:v2
 
       - name: Install hyperfine
-        run: sudo apt-get update -qq && sudo apt-get install -yqq hyperfine
+        # GitHub-hosted runner images ship a recent apt cache, so skip `apt-get update`.
+        # Fall back to update+install only if the cached index is stale.
+        run: sudo apt-get install -yqq hyperfine || (sudo apt-get update -qq && sudo apt-get install -yqq hyperfine)
 
       - name: Clone Monica
         run: |
           git clone --depth 1 --branch "$MONICA_REF" \
             "https://github.com/$MONICA_REPO" /tmp/monica-source
+
+      # Cache Monica's vendor once on the shared source so both variants inherit it via `cp -a`.
+      # Key is safe to pin to MONICA_REF + PHP_VERSION because the ref points at a tag
+      # with an immutable composer.lock.
+      - name: Cache Monica vendor
+        uses: actions/cache@v4
+        with:
+          path: /tmp/monica-source/vendor
+          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
+
+      - name: Prime Monica vendor
+        run: |
+          if [ ! -d /tmp/monica-source/vendor ]; then
+            cd /tmp/monica-source
+            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+          fi
 
       - name: Setup benchmark projects
         run: |
@@ -110,7 +128,6 @@ jobs:
             local dir=$1 plugin_path=$2
             cp -a /tmp/monica-source "$dir"
             cd "$dir"
-            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
             composer config repositories.plugin \
               '{"type": "path", "url": "'"$plugin_path"'", "options": {"symlink": true}}'
             composer config minimum-stability dev
@@ -192,17 +209,27 @@ jobs:
           tools: composer:v2
 
       - name: Install hyperfine
-        run: sudo apt-get update -qq && sudo apt-get install -yqq hyperfine
+        # GitHub-hosted runner images ship a recent apt cache, so skip `apt-get update`.
+        # Fall back to update+install only if the cached index is stale.
+        run: sudo apt-get install -yqq hyperfine || (sudo apt-get update -qq && sudo apt-get install -yqq hyperfine)
 
       - name: Clone Monica
         run: |
           git clone --depth 1 --branch "$MONICA_REF" \
             "https://github.com/$MONICA_REPO" /tmp/monica
 
+      - name: Cache Monica vendor
+        uses: actions/cache@v4
+        with:
+          path: /tmp/monica/vendor
+          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
+
       - name: Setup benchmark project
         run: |
           cd /tmp/monica
-          COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+          if [ ! -d vendor ]; then
+            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
+          fi
           composer config repositories.plugin \
             '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true}}'
           composer config minimum-stability dev
