@@ -39,7 +39,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function url_points_to_new_issue_form_with_bug_report_template(): void
     {
-        $url = IssueUrlGenerator::generate(new \RuntimeException('boom'), self::defaultConfig());
+        $url = IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig());
 
         $this->assertStringStartsWith('https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md', $url);
     }
@@ -47,7 +47,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function title_prefixes_plugin_initialization_error(): void
     {
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), self::defaultConfig()));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: boom', $title);
     }
@@ -64,7 +64,7 @@ final class IssueUrlGeneratorTest extends TestCase
             . '/Users/matthewdally/docker/business-directory/vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php:79'
             . ' for command with CLI args "./vendor/bin/psalm --no-cache --config=psalm.xml"';
 
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), self::defaultConfig()));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: Class "Introspect" not found', $title);
     }
@@ -74,7 +74,7 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $rawMessage = 'Class "Foo" not found in C:\\Users\\John Doe\\project\\src\\File.php:12';
 
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), self::defaultConfig()));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: Class "Foo" not found', $title);
     }
@@ -93,7 +93,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[DataProvider('leadingPhpPrefixes')]
     public function title_strips_leading_php_level_prefix(string $rawMessage, string $expectedTail): void
     {
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), self::defaultConfig()));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: ' . $expectedTail, $title);
     }
@@ -101,7 +101,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function title_does_not_strip_non_php_colon_prefixes(): void
     {
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('Class not found: Foo'), self::defaultConfig()));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('Class not found: Foo'), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: Class not found: Foo', $title);
     }
@@ -118,7 +118,7 @@ final class IssueUrlGeneratorTest extends TestCase
             . '/Users/matthewdally/docker/business-directory/vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php:79'
             . ' for command with CLI args "./vendor/bin/psalm --no-cache --config=psalm.xml"';
 
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), self::defaultConfig()));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), $this->defaultConfig()));
         $expectedTitle = 'Plugin initialization error: Class "Introspect" not found';
 
         $this->assertSame($expectedTitle, $title);
@@ -128,7 +128,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function body_includes_fenced_trace_block(): void
     {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), self::defaultConfig()));
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         $this->assertStringContainsString("```\n", $body);
         $this->assertStringContainsString('RuntimeException', $body);
@@ -138,7 +138,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function body_lists_plugin_version_from_installed_versions(): void
     {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), self::defaultConfig()));
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         // psalm/plugin-laravel is this very package — always resolvable during test runs.
         $this->assertStringContainsString('**Versions:**', $body);
@@ -148,7 +148,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function body_includes_plugin_configuration_section_with_default_values(): void
     {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), self::defaultConfig()));
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         $this->assertStringContainsString('**Plugin configuration:**', $body);
         $this->assertStringContainsString('- modelPropertiesColumnFallback: migrations', $body);
@@ -200,7 +200,7 @@ final class IssueUrlGeneratorTest extends TestCase
     public function body_sanitises_cache_path_under_cwd_prefix(): void
     {
         $cwd = \getcwd();
-        self::assertIsString($cwd);
+        $this->assertIsString($cwd);
         $cachePath = $cwd . \DIRECTORY_SEPARATOR . '.psalm-cache' . \DIRECTORY_SEPARATOR . 'plugin-laravel';
 
         $body = $this->bodyFromCachePath($cachePath);
@@ -259,9 +259,9 @@ final class IssueUrlGeneratorTest extends TestCase
             $publicProperties[] = $property->getName();
         }
 
-        self::assertNotEmpty($publicProperties, 'PluginConfig should expose at least one public property');
+        $this->assertNotEmpty($publicProperties, 'PluginConfig should expose at least one public property');
 
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), self::defaultConfig()));
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         foreach ($publicProperties as $name) {
             $this->assertStringContainsString("- {$name}: ", $body, "Plugin configuration section is missing '{$name}'");
@@ -271,7 +271,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function body_renders_plugin_configuration_between_versions_and_trace(): void
     {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), self::defaultConfig()));
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         $versionsPos = \strpos($body, '**Versions:**');
         $configPos = \strpos($body, '**Plugin configuration:**');
@@ -406,7 +406,7 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertSame($input, $output);
     }
 
-    private static function defaultConfig(): PluginConfig
+    private function defaultConfig(): PluginConfig
     {
         return PluginConfig::fromXml(null);
     }
