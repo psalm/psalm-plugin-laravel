@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776505362233,
+  "lastUpdate": 1776511199888,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1987,6 +1987,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.23,
             "range": "± 0.02",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa843a8ac906b962baf4d4bee1f41dcfbe02ee63",
+          "message": "fix: widen Stringable-accepting stubs to cut ImplicitToStringCast false positives (#774) (#775)\n\nReal Laravel apps (Filament flagged ~26 occurrences in v4.8.4) pass\n`Illuminate\\Support\\Stringable` into helpers stubbed as `string`. Psalm\ncorrectly raises `ImplicitToStringCast` per the stub, but the runtime\naccepts stringable input, so the diagnostics are noise.\n\nWidened where runtime is safe:\n- `Stringable::contains` / `::is` — added methods with iterable support\n  for `\\Stringable`. `contains` scalar intentionally stays `string` only\n  because `Str::contains` uses `(array) $needles` which would yield `[]`\n  for a plain `\\Stringable` and silently return `false`.\n- `Str::plural`, `singular`, `slug` — internal coercion happens via\n  pluralizer / `strtolower` / `preg_match`.\n- `str()` helper — forwards to `Str::of()` → `new Stringable(...)`.\n- `Builder::hasTable` and `Schema::hasTable` facade — table prefix is\n  string-concatenated, coercing via `__toString`.\n\nDeliberately NOT widened: `Str::camel`, `::studly`, `::snake` use `$value`\nas an array cache key (`static::$camelCache[$value]` etc.), so a\n`\\Stringable` triggers `Illegal offset type` at runtime.\n\nSchema facade uses dual mechanism: class-level `@method static` widens\nthe pseudo-method (required to override Laravel's narrower\n`@method static bool hasTable(string $table)`), plus a concrete static\nmethod carrying `@psalm-taint-sink sql` (required because `@method static`\ndoesn't carry taint annotations).\n\nTests cover the widening path plus taint-sink firing through both the\nfacade and Builder instance call paths.",
+          "timestamp": "2026-04-18T12:17:22+01:00",
+          "tree_id": "fb438df052658a5d98648a85472efbbf51996e99",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fa843a8ac906b962baf4d4bee1f41dcfbe02ee63"
+        },
+        "date": 1776511199014,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.67,
+            "range": "± 0.23",
             "unit": "s"
           },
           {
