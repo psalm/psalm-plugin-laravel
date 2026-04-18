@@ -1,0 +1,31 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * Facade overrides combine two mechanisms:
+ *
+ * 1. `@method static` tag (widens parameter types). Psalm resolves facade calls via
+ *    `__callStatic` against the facade's pseudo-method table, populated from class-level
+ *    `@method static` tags. Only a pseudo-method entry can overwrite Laravel's narrower
+ *    `@method static bool hasTable(string $table)` declared in vendor source.
+ * 2. Explicit static method (carries `@psalm-taint-sink`). `@method static` tags do not
+ *    carry taint annotations; an explicit concrete stub method does.
+ *
+ * We need both: the `@method static` widens the type, the concrete method carries the sink.
+ *
+ * Runtime: Builder::hasTable string-concatenates the table prefix with `$table`, which
+ * coerces any stringable object via __toString.
+ *
+ * @method static bool hasTable(string|\Stringable $table)
+ */
+class Schema extends Facade
+{
+    /**
+     * @param  string|\Stringable  $table
+     * @return bool
+     *
+     * @psalm-taint-sink sql $table
+     */
+    public static function hasTable($table) {}
+}
