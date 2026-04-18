@@ -115,7 +115,7 @@ final class FactoryTemplateParamHandler implements AfterCodebasePopulatedInterfa
      */
     private static function extractClassName(?Union $type): ?string
     {
-        if ($type === null) {
+        if (!$type instanceof \Psalm\Type\Union) {
             return null;
         }
 
