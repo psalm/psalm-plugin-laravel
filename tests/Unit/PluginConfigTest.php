@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\ColumnFallback;
@@ -201,6 +202,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function cache_path_uses_env_var(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-custom');
@@ -211,6 +213,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function cache_path_trims_trailing_separator(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-custom/');
@@ -243,6 +246,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function get_cache_location_creates_and_returns_dir(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-cache-loc');
@@ -254,6 +258,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function get_alias_stub_location_ends_with_filename(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-cache');
@@ -265,6 +270,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function full_config(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test');
