@@ -9,17 +9,21 @@ on:
       - '**.phpt'
       - '**.yml'
       - 'composer.json'
-      - 'tests.yml'
   pull_request:
     paths:
       - '**.php'
       - '**.stubphp'
       - '**.phpt'
       - 'composer.json'
-      - 'tests.yml'
+      - '.github/workflows/tests.yml'
   schedule:
     # Weekly on Friday at 06:00 UTC
     - cron: "0 6 * * 5"
+
+# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
 
