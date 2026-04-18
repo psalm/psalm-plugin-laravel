@@ -5,16 +5,17 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Util;
 
 use Composer\InstalledVersions;
+use Psalm\LaravelPlugin\PluginConfig;
 
 /** @internal */
 final class IssueUrlGenerator
 {
-    public static function generate(\Throwable $throwable): string
+    public static function generate(\Throwable $throwable, PluginConfig $pluginConfig): string
     {
         return \sprintf(
             'https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md&title=%s&body=%s',
             \urlencode('Plugin initialization error: ' . self::sanitizeTitle($throwable->getMessage())),
-            \urlencode(self::buildBody($throwable)),
+            \urlencode(self::buildBody($throwable, $pluginConfig)),
         );
     }
 
@@ -40,7 +41,7 @@ final class IssueUrlGenerator
         return \trim($message);
     }
 
-    private static function buildBody(\Throwable $throwable): string
+    private static function buildBody(\Throwable $throwable, PluginConfig $pluginConfig): string
     {
         $versions = self::collectVersions();
         $trace = self::sanitizeTrace($throwable->__toString());
@@ -56,9 +57,94 @@ final class IssueUrlGenerator
             $body .= "\n";
         }
 
+        $body .= "**Plugin configuration:**\n";
+        foreach (self::pluginConfigLines($pluginConfig) as $line) {
+            $body .= "{$line}\n";
+        }
+
+        $body .= "\n";
+
         $body .= "```\n{$trace}\n```";
 
         return $body;
+    }
+
+    /**
+     * Serialise PluginConfig's public fields into human-readable bullet lines.
+     *
+     * cachePath passes through sanitizeCachePath() rather than the trace sanitizer
+     * because typical cache paths (e.g. "/Users/alice/.psalm-cache/plugin-laravel",
+     * "/var/folders/…/T/psalm-laravel-…") don't contain a "vendor/" or "src/"
+     * segment, so sanitizeTrace() would leave them untouched and leak the user's
+     * home directory into the bug-report body.
+     *
+     * @return list<string>
+     */
+    private static function pluginConfigLines(PluginConfig $pluginConfig): array
+    {
+        return [
+            "- modelPropertiesColumnFallback: {$pluginConfig->modelPropertiesColumnFallback->value}",
+            '- resolveDynamicWhereClauses: ' . self::formatBool($pluginConfig->resolveDynamicWhereClauses),
+            '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
+            '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
+            '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
+            '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
+        ];
+    }
+
+    /** @psalm-pure */
+    private static function formatBool(bool $value): string
+    {
+        return $value ? 'true' : 'false';
+    }
+
+    /**
+     * Anonymise an absolute cache path so the bug-report body doesn't leak the
+     * reporter's home directory or username.
+     *
+     * First-match wins, in order of specificity:
+     *   1. under getcwd()              → "./<rest>"
+     *   2. under sys_get_temp_dir()    → "<tmp>/<rest>"
+     *   3. under $HOME / $USERPROFILE  → "~/<rest>"
+     *   4. otherwise fall back to sanitizeTrace(), which handles vendor/src
+     *      segments for the uncommon case where cache sits inside a checkout.
+     *
+     * Not marked @psalm-pure — getenv/getcwd/sys_get_temp_dir are impure.
+     */
+    private static function sanitizeCachePath(string $path): string
+    {
+        $prefixes = [];
+
+        $cwd = \getcwd();
+        if (\is_string($cwd)) {
+            $prefixes[] = ['.', $cwd];
+        }
+
+        $tmp = \sys_get_temp_dir();
+        if ($tmp !== '') {
+            $prefixes[] = ['<tmp>', $tmp];
+        }
+
+        foreach (['HOME', 'USERPROFILE'] as $var) {
+            $home = \getenv($var);
+            if (\is_string($home) && $home !== '') {
+                $prefixes[] = ['~', $home];
+                break;
+            }
+        }
+
+        foreach ($prefixes as [$replacement, $prefix]) {
+            if ($path === $prefix) {
+                return $replacement;
+            }
+
+            $prefixWithSep = \rtrim($prefix, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
+            if (\str_starts_with($path, $prefixWithSep)) {
+                return $replacement . \DIRECTORY_SEPARATOR . \substr($path, \strlen($prefixWithSep));
+            }
+        }
+
+        return self::sanitizeTrace($path);
     }
 
     /**
