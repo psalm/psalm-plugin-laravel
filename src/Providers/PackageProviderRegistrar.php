@@ -124,9 +124,7 @@ final class PackageProviderRegistrar
                             continue;
                         }
 
-                        $packageName = $package['name'] ?? null;
-                        if (\is_string($packageName) && \in_array($packageName, $dontDiscover, true)) {
-                            // Package explicitly opted out by the root composer.json.
+                        if (self::isIgnoredPackage($package, $dontDiscover)) {
                             continue;
                         }
 
@@ -139,6 +137,24 @@ final class PackageProviderRegistrar
         }
 
         return \array_values(\array_unique($providers));
+    }
+
+    /**
+     * Whether a composer.lock package entry is opted out via the root `dont-discover` list.
+     *
+     * Encapsulates the typed extraction so the caller stays free of `mixed` shuffling.
+     *
+     * @param array<array-key, mixed> $package
+     * @param list<string>            $dontDiscover
+     *
+     * @psalm-pure
+     */
+    private static function isIgnoredPackage(array $package, array $dontDiscover): bool
+    {
+        /** @var mixed $name */
+        $name = $package['name'] ?? null;
+
+        return \is_string($name) && \in_array($name, $dontDiscover, true);
     }
 
     /**
