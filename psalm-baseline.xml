@@ -1,3 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="7.0.0-beta17@a7f96f911fc869c40c48ec977e21f01a8ca534bd">
+<files psalm-version="7.0.0-beta19@7e751c06a756fa64dc4c759c09fe4a173afcb433">
+  <file src="bin/psalm-laravel">
+    <DeprecatedMethod>
+      <code><![CDATA[add]]></code>
+    </DeprecatedMethod>
+  </file>
 </files>

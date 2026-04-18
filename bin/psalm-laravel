@@ -1,0 +1,33 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Psalm\LaravelPlugin\Cli\InitCommand;
+use Symfony\Component\Console\Application;
+
+$autoloadCandidates = [
+    // Installed as a dependency: vendor/psalm/plugin-laravel/bin/psalm-laravel
+    __DIR__ . '/../../../autoload.php',
+    // Running from a clone of this repo
+    __DIR__ . '/../vendor/autoload.php',
+];
+
+foreach ($autoloadCandidates as $candidate) {
+    if (file_exists($candidate)) {
+        require_once $candidate;
+        break;
+    }
+}
+
+if (! class_exists(InitCommand::class)) {
+    fwrite(STDERR, "psalm-laravel: could not locate Composer autoloader. Run `composer install` first.\n");
+    exit(1);
+}
+
+$application = new Application('psalm-laravel');
+// Application::add() is soft-deprecated in Symfony 7.4 in favor of addCommand(),
+// but addCommand() doesn't exist on 7.2/7.3. Keep add() until the minimum
+// supported Symfony Console version reaches 7.4.
+$application->add(new InitCommand());
+$application->run();
