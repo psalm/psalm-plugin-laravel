@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776503615935,
+  "lastUpdate": 1776504064284,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1922,6 +1922,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "8680f18122387ccb2843bb153adac11d52d85027",
+          "message": "ci: simplify benchmark trigger and unify naming #0\n\nOnly the `/benchmark` PR comment triggers the PR benchmark now;\nthe `pr:benchmark-ready` label and `/pr:benchmark` alias are gone.\nWorkflow, job, and step names are aligned around \"benchmark\".",
+          "timestamp": "2026-04-18T11:17:55+02:00",
+          "tree_id": "113d06667cc6937be580583c14107f9ebbc523b7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8680f18122387ccb2843bb153adac11d52d85027"
+        },
+        "date": 1776504063832,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.13,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
