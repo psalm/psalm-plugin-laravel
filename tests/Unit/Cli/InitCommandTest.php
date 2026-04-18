@@ -29,6 +29,7 @@ final class InitCommandTest extends TestCase
         if (\file_exists($target)) {
             \unlink($target);
         }
+
         \rmdir($this->tempDir);
     }
 
@@ -39,19 +40,19 @@ final class InitCommandTest extends TestCase
 
         $exit = $tester->execute([]);
 
-        self::assertSame(Command::SUCCESS, $exit);
+        $this->assertSame(Command::SUCCESS, $exit);
         $target = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        self::assertFileExists($target);
+        $this->assertFileExists($target);
 
         $contents = \file_get_contents($target);
-        self::assertIsString($contents);
-        self::assertStringContainsString('errorLevel="3"', $contents);
-        self::assertStringContainsString('findUnusedCode="false"', $contents);
-        self::assertStringContainsString('ensureOverrideAttribute="false"', $contents);
-        self::assertStringContainsString('<pluginClass class="Psalm\\LaravelPlugin\\Plugin"/>', $contents);
-        self::assertStringContainsString('<directory name="vendor"/>', $contents);
-        self::assertStringContainsString('<directory name="storage"/>', $contents);
-        self::assertStringContainsString('<directory name="bootstrap/cache"/>', $contents);
+        $this->assertIsString($contents);
+        $this->assertStringContainsString('errorLevel="3"', $contents);
+        $this->assertStringContainsString('findUnusedCode="false"', $contents);
+        $this->assertStringContainsString('ensureOverrideAttribute="false"', $contents);
+        $this->assertStringContainsString('<pluginClass class="Psalm\\LaravelPlugin\\Plugin"/>', $contents);
+        $this->assertStringContainsString('<directory name="vendor"/>', $contents);
+        $this->assertStringContainsString('<directory name="storage"/>', $contents);
+        $this->assertStringContainsString('<directory name="bootstrap/cache"/>', $contents);
     }
 
     #[Test]
@@ -62,13 +63,13 @@ final class InitCommandTest extends TestCase
 
         $target = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
         $contents = \file_get_contents($target);
-        self::assertIsString($contents);
+        $this->assertIsString($contents);
 
         $previous = \libxml_use_internal_errors(true);
         try {
             $xml = \simplexml_load_string($contents);
-            self::assertNotFalse($xml, 'Generated psalm.xml must be well-formed XML.');
-            self::assertSame('psalm', $xml->getName());
+            $this->assertNotFalse($xml, 'Generated psalm.xml must be well-formed XML.');
+            $this->assertSame('psalm', $xml->getName());
         } finally {
             \libxml_clear_errors();
             \libxml_use_internal_errors($previous);
@@ -86,8 +87,8 @@ final class InitCommandTest extends TestCase
 
         $exit = $tester->execute([]);
 
-        self::assertSame(Command::SUCCESS, $exit);
-        self::assertSame('<existing/>', \file_get_contents($target));
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertSame('<existing/>', \file_get_contents($target));
     }
 
     #[Test]
@@ -101,8 +102,8 @@ final class InitCommandTest extends TestCase
 
         $exit = $tester->execute([]);
 
-        self::assertSame(Command::SUCCESS, $exit);
-        self::assertStringContainsString('pluginClass', (string) \file_get_contents($target));
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringContainsString('pluginClass', (string) \file_get_contents($target));
     }
 
     #[Test]
@@ -115,8 +116,8 @@ final class InitCommandTest extends TestCase
 
         $exit = $tester->execute(['--force' => true]);
 
-        self::assertSame(Command::SUCCESS, $exit);
-        self::assertStringContainsString('pluginClass', (string) \file_get_contents($target));
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringContainsString('pluginClass', (string) \file_get_contents($target));
     }
 
     /**
@@ -128,7 +129,7 @@ final class InitCommandTest extends TestCase
     public function falls_back_to_getcwd_when_no_working_directory_is_injected(): void
     {
         $originalCwd = \getcwd();
-        self::assertIsString($originalCwd);
+        $this->assertIsString($originalCwd);
 
         \chdir($this->tempDir);
 
@@ -140,8 +141,8 @@ final class InitCommandTest extends TestCase
 
             $exit = $tester->execute([]);
 
-            self::assertSame(Command::SUCCESS, $exit);
-            self::assertFileExists($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+            $this->assertSame(Command::SUCCESS, $exit);
+            $this->assertFileExists($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
         } finally {
             \chdir($originalCwd);
         }
