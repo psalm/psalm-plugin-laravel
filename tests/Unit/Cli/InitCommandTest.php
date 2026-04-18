@@ -124,6 +124,30 @@ final class InitCommandTest extends TestCase
         $this->assertStringContainsString('pluginClass', (string) \file_get_contents($target));
     }
 
+    #[Test]
+    public function writes_custom_error_level(): void
+    {
+        $tester = $this->makeTester();
+
+        $exit = $tester->execute(['--level' => '1']);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $target = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
+        $this->assertStringContainsString('errorLevel="1"', (string) \file_get_contents($target));
+    }
+
+    #[Test]
+    public function rejects_invalid_error_level(): void
+    {
+        $tester = $this->makeTester();
+
+        $exit = $tester->execute(['--level' => '9']);
+
+        $this->assertSame(Command::FAILURE, $exit);
+        $this->assertFileDoesNotExist($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('Invalid --level', $tester->getDisplay());
+    }
+
     /**
      * Exercises the production code path where no workingDirectory is injected —
      * the command must fall back to getcwd(). We chdir() into the temp dir so
