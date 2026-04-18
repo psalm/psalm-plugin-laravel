@@ -17,11 +17,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * execs it, passing the child's exit code through. Does not boot Psalm or
  * Laravel itself — the child process owns analysis.
  */
-#[AsCommand(
-    name: 'analyze',
-    aliases: ['analyse'],
-    description: 'Run Psalm analysis on the current project.',
-)]
+#[AsCommand(name: 'analyze', description: 'Run Psalm analysis on the current project.', aliases: ['analyse'])]
 final class AnalyzeCommand extends Command
 {
     /**
