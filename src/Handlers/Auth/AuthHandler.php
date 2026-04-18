@@ -26,25 +26,33 @@ use Psalm\Type;
  * name is a known string literal and its driver is a standard Laravel driver (session/token):
  * @see \Illuminate\Support\Facades\Auth::guard() returns Guard|StatefulGuard (narrowed when possible)
  *
- * There are also Methods that return Guard instance (handled in {@see \Psalm\LaravelPlugin\Handlers\Auth\GuardHandler}):
- * @see \Illuminate\Support\Facades\Auth::createSessionDriver()
- * @see \Illuminate\Support\Facades\Auth::createTokenDriver()
- * @see \Illuminate\Support\Facades\Auth::setRememberDuration()
- * @see \Illuminate\Support\Facades\Auth::setRequest()
- * @see \Illuminate\Support\Facades\Auth::forgetUser()
+ * The same narrowing applies to non-static calls on DI-injected AuthManager instances and to
+ * code typed against the \Illuminate\Contracts\Auth\Factory contract, since all three surfaces
+ * proxy to the same underlying manager. See issue #765.
+ *
+ * Subsequent calls on the returned Guard instance (e.g. `Auth::guard('web')->user()`) are
+ * narrowed by {@see \Psalm\LaravelPlugin\Handlers\Auth\GuardHandler}.
  */
 final class AuthHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
     use ExtractsGuardNameFromCallLike;
 
     /**
+     * Register for the Auth facade, the concrete AuthManager (common DI target), and the
+     * Factory contract (DI by interface). The handler body below is class-agnostic — it
+     * matches on method name only, so all three surfaces receive the same narrowing.
+     *
      * @return list<string>
      * @psalm-pure
      */
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [\Illuminate\Support\Facades\Auth::class];
+        return [
+            \Illuminate\Support\Facades\Auth::class,
+            \Illuminate\Auth\AuthManager::class,
+            \Illuminate\Contracts\Auth\Factory::class,
+        ];
     }
 
     /** @inheritDoc */
@@ -130,11 +138,21 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
      * @method annotations on facades causes an UnexpectedValueException crash. We must return
      * explicit params for every method we handle.
      *
+     * This override is scoped to the Auth facade only. For AuthManager and the Factory contract
+     * the methods are real (or come from @mixin Guard/StatefulGuard), so Psalm can derive
+     * parameter types from the source without our help. Returning our overrides there would
+     * narrow signatures (e.g. guard()'s \UnitEnum|string|null parameter down to string|null)
+     * and produce false positives on valid calls.
+     *
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/454
      */
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
+        if ($event->getFqClasslikeName() !== \Illuminate\Support\Facades\Auth::class) {
+            return null;
+        }
+
         $method_name_lowercase = $event->getMethodNameLowercase();
 
         return match ($method_name_lowercase) {
