@@ -8,15 +8,38 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\PluginConfig;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 
 #[CoversClass(IssueUrlGenerator::class)]
 final class IssueUrlGeneratorTest extends TestCase
 {
+    private ?string $originalCachePathEnv = null;
+
+    protected function setUp(): void
+    {
+        $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
+        $this->originalCachePathEnv = $env !== false ? $env : null;
+
+        // Start each test from a known-clean baseline; a developer-exported value
+        // otherwise leaks into `defaultConfig()` and silently changes what the
+        // body_includes_plugin_configuration_section_* tests actually assert.
+        \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->originalCachePathEnv !== null) {
+            \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=' . $this->originalCachePathEnv);
+        } else {
+            \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
+        }
+    }
+
     #[Test]
     public function url_points_to_new_issue_form_with_bug_report_template(): void
     {
-        $url = IssueUrlGenerator::generate(new \RuntimeException('boom'));
+        $url = IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig());
 
         $this->assertStringStartsWith('https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md', $url);
     }
@@ -24,7 +47,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function title_prefixes_plugin_initialization_error(): void
     {
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('boom')));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: boom', $title);
     }
@@ -41,7 +64,7 @@ final class IssueUrlGeneratorTest extends TestCase
             . '/Users/matthewdally/docker/business-directory/vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php:79'
             . ' for command with CLI args "./vendor/bin/psalm --no-cache --config=psalm.xml"';
 
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: Class "Introspect" not found', $title);
     }
@@ -51,7 +74,7 @@ final class IssueUrlGeneratorTest extends TestCase
     {
         $rawMessage = 'Class "Foo" not found in C:\\Users\\John Doe\\project\\src\\File.php:12';
 
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: Class "Foo" not found', $title);
     }
@@ -70,7 +93,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[DataProvider('leadingPhpPrefixes')]
     public function title_strips_leading_php_level_prefix(string $rawMessage, string $expectedTail): void
     {
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: ' . $expectedTail, $title);
     }
@@ -78,7 +101,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function title_does_not_strip_non_php_colon_prefixes(): void
     {
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('Class not found: Foo')));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('Class not found: Foo'), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: Class not found: Foo', $title);
     }
@@ -95,7 +118,7 @@ final class IssueUrlGeneratorTest extends TestCase
             . '/Users/matthewdally/docker/business-directory/vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php:79'
             . ' for command with CLI args "./vendor/bin/psalm --no-cache --config=psalm.xml"';
 
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage)));
+        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), $this->defaultConfig()));
         $expectedTitle = 'Plugin initialization error: Class "Introspect" not found';
 
         $this->assertSame($expectedTitle, $title);
@@ -105,7 +128,7 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function body_includes_fenced_trace_block(): void
     {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom')));
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         $this->assertStringContainsString("```\n", $body);
         $this->assertStringContainsString('RuntimeException', $body);
@@ -115,11 +138,150 @@ final class IssueUrlGeneratorTest extends TestCase
     #[Test]
     public function body_lists_plugin_version_from_installed_versions(): void
     {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom')));
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         // psalm/plugin-laravel is this very package — always resolvable during test runs.
         $this->assertStringContainsString('**Versions:**', $body);
         $this->assertStringContainsString('- psalm/plugin-laravel:', $body);
+    }
+
+    #[Test]
+    public function body_includes_plugin_configuration_section_with_default_values(): void
+    {
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
+
+        $this->assertStringContainsString('**Plugin configuration:**', $body);
+        $this->assertStringContainsString('- modelPropertiesColumnFallback: migrations', $body);
+        $this->assertStringContainsString('- resolveDynamicWhereClauses: true', $body);
+        $this->assertStringContainsString('- findMissingTranslations: false', $body);
+        $this->assertStringContainsString('- findMissingViews: false', $body);
+        $this->assertStringContainsString('- cachePath:', $body);
+        $this->assertStringContainsString('- failOnInternalError: false', $body);
+    }
+
+    #[Test]
+    public function body_reflects_overridden_plugin_configuration_values(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<modelProperties columnFallback="none" />'
+            . '<resolveDynamicWhereClauses value="false" />'
+            . '<findMissingTranslations value="true" />'
+            . '<findMissingViews value="true" />'
+            . '<failOnInternalError value="true" />'
+            . '</pluginClass>',
+        );
+        $config = PluginConfig::fromXml($xml);
+
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $config));
+
+        $this->assertStringContainsString('- modelPropertiesColumnFallback: none', $body);
+        $this->assertStringContainsString('- resolveDynamicWhereClauses: false', $body);
+        $this->assertStringContainsString('- findMissingTranslations: true', $body);
+        $this->assertStringContainsString('- findMissingViews: true', $body);
+        $this->assertStringContainsString('- failOnInternalError: true', $body);
+    }
+
+    /**
+     * Vendor fallback: an absolute prefix containing a vendor/ segment collapses
+     * to a relative vendor/... path — useful for the uncommon case where the
+     * cache sits inside a checkout rather than under cwd / tmp / HOME.
+     */
+    #[Test]
+    public function body_sanitises_cache_path_under_vendor_prefix(): void
+    {
+        $body = $this->bodyFromCachePath('/nowhere/project/vendor/psalm-cache/plugin-laravel');
+
+        $this->assertStringContainsString('- cachePath: vendor/psalm-cache/plugin-laravel', $body);
+        $this->assertStringNotContainsString('/nowhere/project', $body);
+    }
+
+    #[Test]
+    public function body_sanitises_cache_path_under_cwd_prefix(): void
+    {
+        $cwd = \getcwd();
+        $this->assertIsString($cwd);
+        $cachePath = $cwd . \DIRECTORY_SEPARATOR . '.psalm-cache' . \DIRECTORY_SEPARATOR . 'plugin-laravel';
+
+        $body = $this->bodyFromCachePath($cachePath);
+
+        $expected = '- cachePath: .' . \DIRECTORY_SEPARATOR . '.psalm-cache' . \DIRECTORY_SEPARATOR . 'plugin-laravel';
+        $this->assertStringContainsString($expected, $body);
+    }
+
+    #[Test]
+    public function body_sanitises_cache_path_under_temp_dir_prefix(): void
+    {
+        $tmp = \sys_get_temp_dir();
+        $cachePath = \rtrim($tmp, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . 'psalm-laravel-unit-test';
+
+        $body = $this->bodyFromCachePath($cachePath);
+
+        $this->assertStringContainsString('- cachePath: <tmp>' . \DIRECTORY_SEPARATOR . 'psalm-laravel-unit-test', $body);
+    }
+
+    /**
+     * Path under $HOME (but not under cwd) collapses to "~/..." so the reporter's
+     * username does not leak into the bug-report body. This covers the realistic
+     * default when Psalm's cache directory resolves outside the project root
+     * (e.g. global cache under the user's home).
+     */
+    #[Test]
+    public function body_sanitises_cache_path_under_home_prefix(): void
+    {
+        $home = \getenv('HOME');
+        if (!\is_string($home) || $home === '') {
+            self::markTestSkipped('$HOME is not available on this platform');
+        }
+
+        // Choose a sibling of the project root so cwd does NOT also match — the
+        // cwd check would otherwise fire first and produce "./..." instead of "~/...".
+        $cachePath = \rtrim($home, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . '.psalm-laravel-test-cache';
+
+        $body = $this->bodyFromCachePath($cachePath);
+
+        $this->assertStringContainsString('- cachePath: ~' . \DIRECTORY_SEPARATOR . '.psalm-laravel-test-cache', $body);
+    }
+
+    /**
+     * Reflection-backed guard: every public property on PluginConfig must appear
+     * as a bullet in the rendered Plugin-configuration section. Catches the
+     * scenario where a future PluginConfig field is added but the renderer in
+     * IssueUrlGenerator::pluginConfigLines() is not updated, silently omitting
+     * plugin-relevant state from bug reports.
+     */
+    #[Test]
+    public function body_renders_every_public_plugin_config_field(): void
+    {
+        $reflection = new \ReflectionClass(PluginConfig::class);
+        $publicProperties = [];
+        foreach ($reflection->getProperties(\ReflectionProperty::IS_PUBLIC) as $property) {
+            $publicProperties[] = $property->getName();
+        }
+
+        $this->assertNotEmpty($publicProperties, 'PluginConfig should expose at least one public property');
+
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
+
+        foreach ($publicProperties as $name) {
+            $this->assertStringContainsString("- {$name}: ", $body, "Plugin configuration section is missing '{$name}'");
+        }
+    }
+
+    #[Test]
+    public function body_renders_plugin_configuration_between_versions_and_trace(): void
+    {
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
+
+        $versionsPos = \strpos($body, '**Versions:**');
+        $configPos = \strpos($body, '**Plugin configuration:**');
+        $fencePos = \strpos($body, '```');
+
+        $this->assertIsInt($versionsPos);
+        $this->assertIsInt($configPos);
+        $this->assertIsInt($fencePos);
+        $this->assertLessThan($configPos, $versionsPos);
+        $this->assertLessThan($fencePos, $configPos);
     }
 
     /**
@@ -242,6 +404,22 @@ final class IssueUrlGeneratorTest extends TestCase
         $output = $this->invokeSanitizeTrace($input);
 
         $this->assertSame($input, $output);
+    }
+
+    private function defaultConfig(): PluginConfig
+    {
+        return PluginConfig::fromXml(null);
+    }
+
+    /**
+     * Pin `cachePath` via the env var (the only writable path since PluginConfig's
+     * constructor is private) and return the URL body for a throwaway throwable.
+     */
+    private function bodyFromCachePath(string $cachePath): string
+    {
+        \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=' . $cachePath);
+
+        return $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), PluginConfig::fromXml(null)));
     }
 
     private function titleFrom(string $url): string
