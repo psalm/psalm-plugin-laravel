@@ -47,6 +47,19 @@ final class InitCommand extends Command
             <plugins>
                 <pluginClass class="Psalm\LaravelPlugin\Plugin"/>
             </plugins>
+
+            <issueHandlers>
+                <ClassMustBeFinal errorLevel="suppress"/>
+                <MissingAbstractPureAnnotation errorLevel="suppress"/>
+                <MissingClosureReturnType errorLevel="suppress"/>
+                <MissingImmutableAnnotation errorLevel="suppress"/>
+                <MissingInterfaceImmutableAnnotation errorLevel="suppress"/>
+                <MissingOverrideAttribute errorLevel="suppress"/>
+                <MissingPureAnnotation errorLevel="suppress"/>
+                <RedundantCast errorLevel="suppress"/>
+                <RedundantCondition errorLevel="suppress"/>
+                <UnnecessaryVarAnnotation errorLevel="suppress"/>
+            </issueHandlers>
         </psalm>
 
         XML;

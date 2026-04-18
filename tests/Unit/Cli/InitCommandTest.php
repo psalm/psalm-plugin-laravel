@@ -57,6 +57,9 @@ final class InitCommandTest extends TestCase
         $this->assertStringContainsString('<directory name="vendor"/>', $contents);
         $this->assertStringContainsString('<directory name="storage"/>', $contents);
         $this->assertStringContainsString('<directory name="bootstrap/cache"/>', $contents);
+        $this->assertStringContainsString('<ClassMustBeFinal errorLevel="suppress"/>', $contents);
+        $this->assertStringContainsString('<MissingOverrideAttribute errorLevel="suppress"/>', $contents);
+        $this->assertStringContainsString('<UnnecessaryVarAnnotation errorLevel="suppress"/>', $contents);
     }
 
     #[Test]
