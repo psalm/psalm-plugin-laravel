@@ -9,16 +9,17 @@ on:
       - '**.phpt'
       - '**.yml'
       - 'composer.json'
-      - '.github/workflows/test.yml'
+      - 'tests.yml'
   pull_request:
     paths:
       - '**.php'
       - '**.stubphp'
       - '**.phpt'
       - 'composer.json'
-      - '.github/workflows/test.yml'
+      - 'tests.yml'
   schedule:
-    - cron: "0 6 * * *"
+    # Weekly on Friday at 06:00 UTC
+    - cron: "0 6 * * 5"
 
 jobs:
 
@@ -46,14 +47,14 @@ jobs:
         run: composer test:unit
 
 
-  acceptance_tests:
+  type_tests:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
       matrix:
-        php: [8.5, 8.4, 8.3, 8.2]
-        laravel: [^13.0, ^12.0]
-        dependencies: [highest]
+        php: [ 8.5, 8.4, 8.3, 8.2 ]
+        laravel: [ ^13.0, ^12.0 ]
+        dependencies: [ highest ]
         exclude:
           - php: 8.2
             laravel: ^13.0
