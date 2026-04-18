@@ -147,8 +147,9 @@ jobs:
           > /tmp/mem-base.txt && > /tmp/mem-pr.txt
           > /tmp/issues-base.txt && > /tmp/issues-pr.txt
           > /tmp/stats-base.txt && > /tmp/stats-pr.txt
+          # No warmup: this job measures the diff between base and PR, both pay the same
+          # first-run page-cache tax, so the comparison stays directionally correct.
           hyperfine \
-            --warmup 1 \
             --runs "$HYPERFINE_RUNS" \
             --command-name base "bash \"$HARNESS\" /tmp/monica-base psalm-benchmark.xml /tmp/mem-base.txt /tmp/issues-base.txt /tmp/stats-base.txt" \
             --command-name pr   "bash \"$HARNESS\" /tmp/monica-pr   psalm-benchmark.xml /tmp/mem-pr.txt /tmp/issues-pr.txt /tmp/stats-pr.txt" \
