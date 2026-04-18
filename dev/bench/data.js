@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776511199888,
+  "lastUpdate": 1776526385646,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2021,6 +2021,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Wall time",
             "value": 30.67,
+            "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bae46fe98aa54b4dba918434cf455b708797d60f",
+          "message": "Include plugin configuration in bug-report issue body (#781)\n\n* feat: include plugin configuration in bug-report issue body\n\n`IssueUrlGenerator::generate()` now accepts a `PluginConfig` instance\nand renders a `**Plugin configuration:**` section in the GitHub issue\nbody so bug reports show the relevant toggles (column fallback, dynamic\nwhere resolution, find-missing-translations/views, cachePath,\nfailOnInternalError) alongside versions and stack trace.\n\n`cachePath` is anonymised (cwd/tmp/HOME prefix stripping, with a\nsanitizeTrace vendor/src fallback) so the reporter's home directory\nand username do not leak into the body.\n\n`Plugin::handleInternalError()` now wraps the URL generation in a\ntry/catch so a secondary failure in the URL generator cannot shadow\nthe original init error; the secondary throwable is surfaced as its\nown warning for regression visibility.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-18T16:30:24+01:00",
+          "tree_id": "c4bacb837b499eeb9aa5ec06e8b03edf276003ec",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bae46fe98aa54b4dba918434cf455b708797d60f"
+        },
+        "date": 1776526385299,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.29,
             "range": "± 0.23",
             "unit": "s"
           },
