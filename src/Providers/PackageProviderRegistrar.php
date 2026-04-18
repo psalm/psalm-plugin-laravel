@@ -151,7 +151,6 @@ final class PackageProviderRegistrar
      */
     private static function isIgnoredPackage(array $package, array $dontDiscover): bool
     {
-        /** @var mixed $name */
         $name = $package['name'] ?? null;
 
         return \is_string($name) && \in_array($name, $dontDiscover, true);
