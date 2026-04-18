@@ -21,14 +21,6 @@ use Psalm\Type\Union;
  */
 final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInterface
 {
-    private static string $configPath = '';
-
-    /** @psalm-external-mutation-free */
-    public static function init(string $configPath): void
-    {
-        self::$configPath = \rtrim($configPath, \DIRECTORY_SEPARATOR);
-    }
-
     /**
      * @inheritDoc
      * @psalm-pure
@@ -61,15 +53,15 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
         return null;
     }
 
-    /** @psalm-external-mutation-free */
+    /**
+     * Match any path with a `config` directory segment.
+     * Covers apps, published packages, vendor dirs, and monorepo sub-packages.
+     *
+     * @psalm-pure
+     */
     private static function isInsideConfigDirectory(string $filePath): bool
     {
-        if (self::$configPath === '') {
-            return false;
-        }
-
-        return \str_starts_with($filePath, self::$configPath . \DIRECTORY_SEPARATOR)
-            || $filePath === self::$configPath;
+        return \str_contains($filePath, \DIRECTORY_SEPARATOR . 'config' . \DIRECTORY_SEPARATOR);
     }
 
     /** @psalm-pure */
