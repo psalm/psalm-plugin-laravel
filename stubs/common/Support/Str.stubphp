@@ -32,4 +32,55 @@ class Str
      * @return ($subject is \Traversable ? array<TKey, string> : TSubject)
      */
     public static function replace($search, $replace, $subject, $caseSensitive = true) {}
+
+    /**
+     * Get the plural form of an English word.
+     *
+     * Widened from Laravel's `string` to also accept \Stringable; Pluralizer::plural
+     * accepts untyped input and casts internally.
+     *
+     * Note: no `@psalm-flow` / `@psalm-taint-specialize` pair is added here. Two security
+     * reviews flagged the omission as a potential XSS gap (plural preserves payload
+     * substrings rather than sanitising), but adding the annotations in this project's
+     * self-test harness did not cause `Str::plural($tainted)` to propagate taint to a
+     * downstream HTML sink — Laravel's own method body is analysed and appears to break
+     * the flow. Tracked separately; do not add these annotations until a TaintedHtmlStrPlural
+     * PHPT test in tests/Type/tests/TaintAnalysis/ actually fires.
+     *
+     * @param  string|\Stringable  $value
+     * @param  int|array|\Countable  $count
+     * @param  bool  $prependCount
+     * @return string
+     */
+    public static function plural($value, $count = 2, $prependCount = false) {}
+
+    /**
+     * Get the singular form of an English word.
+     *
+     * Widened from Laravel's `string` to also accept \Stringable.
+     *
+     * @param  string|\Stringable  $value
+     * @return string
+     */
+    public static function singular($value) {}
+
+    /**
+     * Generate a URL friendly "slug" from a given string.
+     *
+     * Widened from Laravel's `string` to also accept \Stringable for $title.
+     *
+     * @param  string|\Stringable  $title
+     * @param  string  $separator
+     * @param  string|null  $language
+     * @param  array<string, string>  $dictionary
+     * @return string
+     */
+    public static function slug($title, $separator = '-', $language = 'en', $dictionary = ['@' => 'at']) {}
+
+    // Intentionally NOT widened: Str::camel, Str::studly, Str::snake.
+    // These three methods use $value as an array key for internal memoization
+    // (static::$camelCache[$value], static::$snakeCache[$key][$delimiter],
+    // static::$studlyCache[$key]). A \Stringable object would raise a TypeError
+    // ("Illegal offset type") at runtime, so Laravel's `string` parameter type
+    // reflects a real constraint and must not be relaxed.
 }
