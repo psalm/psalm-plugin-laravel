@@ -7,12 +7,11 @@ use Illuminate\Support\LazyCollection;
 
 /**
  * `Collection::make` / `LazyCollection::make` / `collect()` accept scalars, UnitEnums, and null
- * at runtime via `getArrayableItems()` → `Arr::wrap()`. The stubs widen the parameter so those
- * calls type-check instead of raising InvalidArgument.
+ * at runtime via `getArrayableItems()` → `Arr::wrap()`, and the widened stubs narrow those
+ * inputs to `Collection<int, TScalar>` (matching the runtime `[$value]` wrapping).
  *
- * Scalar inputs intentionally do NOT narrow to `Collection<int, TScalar>`: that pattern pollutes
- * the return type for the common Arrayable/iterable path (see the Collection stub for details).
- * The `check-type-exact` assertions below are the regression-guard line for the supported shapes.
+ * Template inference for `Arrayable<K,V>` / `iterable<K,V>` is preserved because the conditional
+ * return type checks for those interfaces FIRST; see the Collection stub for the ordering note.
  */
 enum TestMakeColor: string
 {
@@ -21,37 +20,40 @@ enum TestMakeColor: string
 
 final class CollectionMakeTest
 {
-    /**
-     * Scalar inputs deliberately collapse to the generic form rather than narrowing to
-     * `Collection<int, 'some'>`: the narrower signature polluted the common
-     * Arrayable/iterable path (see the stub docblock). The exact-type assertion below
-     * is the guard so nobody re-introduces the narrowing without understanding the tradeoff.
-     */
-    public function scalarInputsResolveToGenericCollection(): void
+    public function scalarStringYieldsSingleElementCollection(): void
     {
-        $_s = Collection::make('some');
-        /** @psalm-check-type-exact $_s = Collection<array-key, mixed> */
-
-        $_i = Collection::make(42);
-        /** @psalm-check-type-exact $_i = Collection<array-key, mixed> */
-
-        $_b = Collection::make(true);
-        /** @psalm-check-type-exact $_b = Collection<array-key, mixed> */
-
-        $_f = Collection::make(1.5);
-        /** @psalm-check-type-exact $_f = Collection<array-key, mixed> */
+        $_c = Collection::make('some');
+        /** @psalm-check-type-exact $_c = Collection<int, 'some'> */
     }
 
-    public function unitEnumResolvesToGenericCollection(): void
+    public function scalarIntYieldsSingleElementCollection(): void
     {
-        $_e = Collection::make(TestMakeColor::Red);
-        /** @psalm-check-type-exact $_e = Collection<array-key, mixed> */
+        $_c = Collection::make(42);
+        /** @psalm-check-type-exact $_c = Collection<int, 42> */
     }
 
-    public function nullResolvesToGenericCollection(): void
+    public function scalarFloatYieldsSingleElementCollection(): void
     {
-        $_n = Collection::make(null);
-        /** @psalm-check-type-exact $_n = Collection<array-key, mixed> */
+        $_c = Collection::make(42.2);
+        /** @psalm-check-type-exact $_c = Collection<int, 42.2> */
+    }
+
+    public function scalarBoolYieldsSingleElementCollection(): void
+    {
+        $_c = Collection::make(true);
+        /** @psalm-check-type-exact $_c = Collection<int, true> */
+    }
+
+    public function unitEnumYieldsSingleElementCollection(): void
+    {
+        $_c = Collection::make(TestMakeColor::Red);
+        /** @psalm-check-type-exact $_c = Collection<int, TestMakeColor::Red> */
+    }
+
+    public function nullYieldsEmptyCollection(): void
+    {
+        $_c = Collection::make(null);
+        /** @psalm-check-type-exact $_c = Collection<never, never> */
     }
 
     public function listArrayPreservesKeyAndValueTypes(): void
@@ -67,8 +69,8 @@ final class CollectionMakeTest
     }
 
     /**
-     * Regression guard: previously the widened stub polluted this case with a spurious
-     * scalar-branch union like `Collection<int, scalar|\UnitEnum> | Collection<int, stdClass>`.
+     * Regression guard: a naive conditional would pollute this with a spurious
+     * `Collection<int, scalar|UnitEnum>` branch. The Arrayable|iterable-first ordering prevents that.
      *
      * @param iterable<int, \stdClass> $items
      */
@@ -78,49 +80,30 @@ final class CollectionMakeTest
         /** @psalm-check-type-exact $_c = Collection<int, stdClass> */
     }
 
-    /**
-     * Same regression guard for the `Arrayable` branch: the scalar widening must not
-     * leak into the inferred value type when the input is a typed Arrayable.
-     *
-     * @param Arrayable<int, string> $items
-     */
+    /** @param Arrayable<int, string> $items */
     public function typedArrayablePreservesItsTemplates(Arrayable $items): void
     {
         $_c = Collection::make($items);
         /** @psalm-check-type-exact $_c = Collection<int, string> */
     }
 
-    /**
-     * Passing an existing Collection: it implements Arrayable, so the Arrayable branch
-     * applies and the input templates are preserved.
-     *
-     * @param Collection<int, \stdClass> $items
-     */
+    /** @param Collection<int, \stdClass> $items */
     public function typedCollectionPreservesItsTemplates(Collection $items): void
     {
         $_c = Collection::make($items);
         /** @psalm-check-type-exact $_c = Collection<int, stdClass> */
     }
 
-    public function lazyCollectionScalarResolvesToGenericCollection(): void
+    public function lazyCollectionMakeScalarYieldsSingleElement(): void
     {
-        $_s = LazyCollection::make('some');
-        /** @psalm-check-type-exact $_s = LazyCollection<array-key, mixed> */
-
-        $_n = LazyCollection::make(null);
-        /** @psalm-check-type-exact $_n = LazyCollection<array-key, mixed> */
+        $_c = LazyCollection::make('some');
+        /** @psalm-check-type-exact $_c = LazyCollection<int, 'some'> */
     }
 
-    /**
-     * The `self<TMakeKey, TMakeValue>` alternative in the LazyCollection::make param union
-     * (distinct from the Arrayable/iterable branches used by `Collection::make`).
-     *
-     * @param LazyCollection<int, string> $items
-     */
-    public function lazyCollectionMakeSelfPreservesTemplates(LazyCollection $items): void
+    public function lazyCollectionMakeNullYieldsEmpty(): void
     {
-        $_c = LazyCollection::make($items);
-        /** @psalm-check-type-exact $_c = LazyCollection<int, string> */
+        $_c = LazyCollection::make(null);
+        /** @psalm-check-type-exact $_c = LazyCollection<never, never> */
     }
 
     public function lazyCollectionMakeListPreservesTypes(): void
@@ -142,12 +125,41 @@ final class CollectionMakeTest
         /** @psalm-check-type-exact $_c = LazyCollection<int, 1|2> */
     }
 
-    public function collectHelperScalarTypeChecks(): void
+    /** @param LazyCollection<int, string> $items */
+    public function lazyCollectionMakeSelfPreservesTemplates(LazyCollection $items): void
     {
-        collect('some');
-        collect(42);
-        collect(null);
-        collect(TestMakeColor::Red);
+        $_c = LazyCollection::make($items);
+        /** @psalm-check-type-exact $_c = LazyCollection<int, string> */
+    }
+
+    public function collectHelperScalarYieldsSingleElement(): void
+    {
+        $_c = collect('some');
+        /** @psalm-check-type-exact $_c = Collection<int, 'some'> */
+    }
+
+    public function collectHelperIntYieldsSingleElement(): void
+    {
+        $_c = collect(42);
+        /** @psalm-check-type-exact $_c = Collection<int, 42> */
+    }
+
+    public function collectHelperFloatYieldsSingleElement(): void
+    {
+        $_c = collect(42.2);
+        /** @psalm-check-type-exact $_c = Collection<int, 42.2> */
+    }
+
+    public function collectHelperNullYieldsEmpty(): void
+    {
+        $_c = collect(null);
+        /** @psalm-check-type-exact $_c = Collection<never, never> */
+    }
+
+    public function collectHelperUnitEnumYieldsSingleElement(): void
+    {
+        $_c = collect(TestMakeColor::Red);
+        /** @psalm-check-type-exact $_c = Collection<int, TestMakeColor::Red> */
     }
 
     public function collectHelperListPreservesTypes(): void

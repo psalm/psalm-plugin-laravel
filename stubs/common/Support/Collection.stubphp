@@ -73,14 +73,13 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Laravel's native docblock only types `Arrayable|iterable|null`, but the runtime accepts
      * scalars and UnitEnums too: `getArrayableItems()` wraps those via `Arr::wrap()` into a
      * single-element array (or `[]` for `null`). Widening the stub lets calls like
-     * `Collection::make('some')` type-check instead of triggering InvalidArgument.
+     * `Collection::make('some')` type-check instead of triggering InvalidArgument, and the
+     * conditional return preserves the exact scalar/enum value type on the result.
      *
-     * A narrower conditional return type (yielding `Collection<int, $items>` for the scalar
-     * branch) was tried and reverted: when the param union mixes templated alternatives with
-     * `scalar|\UnitEnum`, Psalm evaluates every branch of the conditional and emits a
-     * polluted union such as `Collection<int, scalar|\UnitEnum> | Collection<int, string>`
-     * for ordinary `Arrayable` / `iterable` inputs. The simple non-conditional return avoids
-     * that regression at the cost of slightly less tight scalar narrowing.
+     * The conditional is structured with the Arrayable|iterable check FIRST so that typed
+     * iterables keep their template parameters intact. Reversing the order (testing scalar
+     * first) causes Psalm to evaluate both branches for ordinary iterable inputs and emits
+     * a polluted union like `Collection<int, scalar|UnitEnum> | Collection<int, string>`.
      *
      * @psalm-mutation-free
      *
@@ -88,7 +87,13 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @template TMakeValue
      *
      * @param \Illuminate\Contracts\Support\Arrayable<TMakeKey, TMakeValue>|iterable<TMakeKey, TMakeValue>|scalar|\UnitEnum|null $items
-     * @return static<TMakeKey, TMakeValue>
+     * @return (
+     *     $items is \Illuminate\Contracts\Support\Arrayable|iterable
+     *     ? static<TMakeKey, TMakeValue>
+     *     : ($items is null
+     *         ? static<never, never>
+     *         : static<int, $items>)
+     * )
      */
     public static function make($items = []) {}
 
