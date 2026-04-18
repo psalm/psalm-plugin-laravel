@@ -178,7 +178,11 @@ function retry($times, callable $callback, $sleepMilliseconds = 0, $when = null)
 /**
  * Get a new stringable object from the given string.
  *
- * @param  string|null  $string
+ * Widened from Laravel's `string|null` to also accept \Stringable. `str()` forwards to
+ * Str::of() which wraps the value with `new Stringable($value)`; PHP's __toString
+ * coercion makes any stringable object safe here.
+ *
+ * @param  string|\Stringable|null  $string
  * @return (func_num_args() is 0
  *  ? (stringable-object&\Illuminate\Support\Str)
  *  : \Illuminate\Support\Stringable
