@@ -26,8 +26,5 @@ if (! class_exists(InitCommand::class)) {
 }
 
 $application = new Application('psalm-laravel');
-// Application::add() is soft-deprecated in Symfony 7.4 in favor of addCommand(),
-// but addCommand() doesn't exist on 7.2/7.3. Keep add() until the minimum
-// supported Symfony Console version reaches 7.4.
-$application->add(new InitCommand());
+$application->addCommand(new InitCommand());
 $application->run();

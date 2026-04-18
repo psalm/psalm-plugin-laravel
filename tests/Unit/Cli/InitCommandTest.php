@@ -140,7 +140,7 @@ final class InitCommandTest extends TestCase
         try {
             $command = new InitCommand();
             $application = new Application();
-            $application->add($command);
+            $application->addCommand($command);
             $tester = new CommandTester($application->find('init'));
 
             $exit = $tester->execute([]);
@@ -156,7 +156,7 @@ final class InitCommandTest extends TestCase
     {
         $command = new InitCommand($this->tempDir);
         $application = new Application();
-        $application->add($command);
+        $application->addCommand($command);
 
         return new CommandTester($application->find('init'));
     }
