@@ -4,7 +4,7 @@
 # This script sets up a fresh Laravel installation and runs Psalm analysis
 # examples:
 #   bash tests/Application/laravel-test.sh
-#   LARAVEL_INSTALLER_VERSION=12.11.2 bash tests/Application/laravel-test.sh
+#   LARAVEL_INSTALLER_VERSION=12.12.2 bash tests/Application/laravel-test.sh
 
 # Exit on error. Append "|| true" if you expect an error.
 set -e
@@ -42,7 +42,7 @@ Options:
     -r, --remove   Remove Laravel project directory after execution
 
 Environment variables:
-    LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 12.11.2)
+    LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 12.12.2)
     COMPOSER_MEMORY_LIMIT        Memory limit for Composer (default: -1)
 EOF
 }
