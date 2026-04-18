@@ -12,10 +12,13 @@
  * because `never` is the bottom type (subtype of everything), and methods like `merge()` / `push()` are
  * stubbed to widen generics on their return so fluent chains propagate concrete types.
  *
+ * Also accepts `scalar|\UnitEnum|null`; see `Collection::make()` in this stubs directory for the
+ * rationale behind the widening.
+ *
  * @template TKey of array-key
  * @template TValue
  *
- * @param  \Illuminate\Contracts\Support\Arrayable<TKey, TValue>|iterable<TKey, TValue>|null  $value
+ * @param  \Illuminate\Contracts\Support\Arrayable<TKey, TValue>|iterable<TKey, TValue>|scalar|\UnitEnum|null  $value
  * @psalm-return \Illuminate\Support\Collection<TKey, TValue>
  */
 function collect($value = []) {}

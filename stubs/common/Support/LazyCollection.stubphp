@@ -64,4 +64,22 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @return static<never, never>
      */
     public static function empty() {}
+
+    /**
+     * Create a new collection instance.
+     *
+     * Preserves Laravel's full param list for `LazyCollection::make()` (including
+     * `Closure(): Generator` and `self`, the idiomatic lazy-generator pattern) and adds the
+     * `scalar|\UnitEnum|null` widening. See `Collection::make()` in this stubs directory for
+     * the rationale behind the widening and why no conditional return type is used.
+     *
+     * @psalm-mutation-free
+     *
+     * @template TMakeKey of array-key
+     * @template TMakeValue
+     *
+     * @param \Illuminate\Contracts\Support\Arrayable<TMakeKey, TMakeValue>|iterable<TMakeKey, TMakeValue>|(\Closure(): \Generator<TMakeKey, TMakeValue, mixed, void>)|self<TMakeKey, TMakeValue>|scalar|\UnitEnum|null $items
+     * @return static<TMakeKey, TMakeValue>
+     */
+    public static function make($items = []) {}
 }
