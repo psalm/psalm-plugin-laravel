@@ -19,7 +19,7 @@ on:
       - 'stubs/**'
       - 'tests/Benchmark/**'
       - 'composer.json'
-      - '.github/workflows/perf.yml'
+      - '.github/workflows/benchmark.yml'
 
 concurrency:
   group: benchmark-${{ github.event.pull_request.number || github.event.issue.number || github.ref_name }}

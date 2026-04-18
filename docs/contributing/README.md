@@ -71,7 +71,7 @@ composer test:unit     # PHPUnit unit tests only
 composer test:type     # type tests only (psalm-tester)
 composer psalm         # self-analysis of plugin source
 composer test:app      # creates a fresh Laravel project, scaffolds common class types (`make:xxx`), installs the plugin, and runs Psalm on the result
-LARAVEL_INSTALLER_VERSION=12.11.2 composer test:app # run over a specific Laravel version
+LARAVEL_INSTALLER_VERSION=12.12.2 composer test:app # run over a specific Laravel version
 
 # single test file
 ./vendor/bin/phpunit tests/Unit/Handlers/Auth/AuthHandlerTest.php
