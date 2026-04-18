@@ -121,16 +121,10 @@ and/or [cli parameters](https://psalm.dev/docs/running_psalm/command_line_usage/
 
 See [docs/config.md](docs/config.md) for all configuration options.
 
-## Custom issues
+## Custom checks
 
-The plugin emits custom issues beyond Psalm's built-in checks:
-
-- [NoEnvOutsideConfig](docs/issues/NoEnvOutsideConfig.md) — `env()` called outside `config/` directory
-- [InvalidConsoleArgumentName](docs/issues/InvalidConsoleArgumentName.md) — `argument()` references undefined console command argument
-- [InvalidConsoleOptionName](docs/issues/InvalidConsoleOptionName.md) — `option()` references undefined console command option
-- [MissingView](docs/issues/MissingView.md) — `view()` references a non-existent Blade template (opt-in)
-- [MissingTranslation](docs/issues/MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
-- [ModelMakeDiscouraged](docs/issues/ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
+The plugin ships advanced Laravel-aware static analysis checks that extend Psalm's built-in diagnostics.
+See [docs/issues/index.md](docs/issues/index.md) for the full catalog.
 
 ## Versions & Dependencies
 
