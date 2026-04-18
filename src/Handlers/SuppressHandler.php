@@ -28,6 +28,14 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             'Illuminate\Support\ServiceProvider',
             'Illuminate\View\Component',
         ],
+        // Factory has @template TModel, but typical Laravel factories extend
+        // Factory directly without the annotation — Laravel resolves the
+        // target model via naming convention at runtime (TaskFactory → Task).
+        // Suppress the noise. Users who want type-safe create()/make() calls
+        // can opt in with @extends Factory<ConcreteModel>.
+        'MissingTemplateParam' => [
+            'Illuminate\Database\Eloquent\Factories\Factory',
+        ],
     ];
 
     /** @var array<string, list<string>> */
