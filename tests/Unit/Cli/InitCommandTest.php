@@ -20,17 +20,21 @@ final class InitCommandTest extends TestCase
     protected function setUp(): void
     {
         $this->tempDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-init-' . \uniqid('', true);
-        \mkdir($this->tempDir);
+        if (! \mkdir($this->tempDir) && ! \is_dir($this->tempDir)) {
+            throw new \RuntimeException(\sprintf('Failed to create temp directory %s', $this->tempDir));
+        }
     }
 
     protected function tearDown(): void
     {
         $target = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        if (\file_exists($target)) {
-            \unlink($target);
+        if (\file_exists($target) && ! @\unlink($target)) {
+            return;
         }
 
-        \rmdir($this->tempDir);
+        if (\is_dir($this->tempDir)) {
+            @\rmdir($this->tempDir);
+        }
     }
 
     #[Test]
