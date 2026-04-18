@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776504064284,
+  "lastUpdate": 1776505362233,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -1957,6 +1957,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "a8468ff1f7781ca3291436aae15eeb615b105a6d",
+          "message": "ci: optimize Benchmark\n\n- PR job: warmup removed. Saves ~32s per run; the base/PR diff stays correct because both commands pay the same cold-cache tax.\n  - Master job: warmup kept. Trend chart needs stable absolute numbers, and the cost is paid once per push to master.",
+          "timestamp": "2026-04-18T11:39:41+02:00",
+          "tree_id": "9b19777aa34f23f39ffd99fea7b1cfdb1352220f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a8468ff1f7781ca3291436aae15eeb615b105a6d"
+        },
+        "date": 1776505361794,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.23,
+            "range": "± 0.02",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
