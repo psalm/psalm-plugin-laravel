@@ -38,6 +38,7 @@ final class AnalyzeCommandTest extends TestCase
         $command = new AnalyzeCommand($this->tempDir);
         $application = new Application();
         $application->addCommand($command);
+
         $tester = new CommandTester($application->find('analyze'));
 
         $exit = $tester->execute([]);
