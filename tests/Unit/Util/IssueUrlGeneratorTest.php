@@ -6,6 +6,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Util;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\PluginConfig;
@@ -188,6 +189,7 @@ final class IssueUrlGeneratorTest extends TestCase
      * cache sits inside a checkout rather than under cwd / tmp / HOME.
      */
     #[Test]
+    #[IgnoreDeprecations]
     public function body_sanitises_cache_path_under_vendor_prefix(): void
     {
         $body = $this->bodyFromCachePath('/nowhere/project/vendor/psalm-cache/plugin-laravel');
@@ -197,6 +199,7 @@ final class IssueUrlGeneratorTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function body_sanitises_cache_path_under_cwd_prefix(): void
     {
         $cwd = \getcwd();
@@ -210,6 +213,7 @@ final class IssueUrlGeneratorTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function body_sanitises_cache_path_under_temp_dir_prefix(): void
     {
         $tmp = \sys_get_temp_dir();
@@ -227,6 +231,7 @@ final class IssueUrlGeneratorTest extends TestCase
      * (e.g. global cache under the user's home).
      */
     #[Test]
+    #[IgnoreDeprecations]
     public function body_sanitises_cache_path_under_home_prefix(): void
     {
         $home = \getenv('HOME');
