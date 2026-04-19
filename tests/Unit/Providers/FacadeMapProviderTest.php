@@ -65,4 +65,5 @@ final class FacadeMapProviderTest extends TestCase
             $aliasLoader->setAliases($originalAliases);
         }
     }
+
 }

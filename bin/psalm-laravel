@@ -1,0 +1,39 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Psalm\LaravelPlugin\Cli\AnalyzeCommand;
+use Psalm\LaravelPlugin\Cli\InitCommand;
+use Symfony\Component\Console\Application;
+
+$autoloadCandidates = [
+    // Installed as a dependency: vendor/psalm/plugin-laravel/bin/psalm-laravel
+    __DIR__ . '/../../../autoload.php',
+    // Running from a clone of this repo
+    __DIR__ . '/../vendor/autoload.php',
+];
+
+foreach ($autoloadCandidates as $candidate) {
+    if (file_exists($candidate)) {
+        require_once $candidate;
+        break;
+    }
+}
+
+if (! class_exists(InitCommand::class)) {
+    fwrite(STDERR, "psalm-laravel: could not locate Composer autoloader. Run `composer install` first.\n");
+    exit(1);
+}
+
+$application = new Application('psalm-laravel');
+$application->addCommand(new InitCommand());
+$application->addCommand(new AnalyzeCommand());
+
+// When invoked with no command, pick one based on workspace state: `init` if
+// psalm.xml is missing (first-run setup), otherwise `analyze` (everyday use).
+$cwd = getcwd();
+$hasPsalmConfig = is_string($cwd) && file_exists($cwd . DIRECTORY_SEPARATOR . 'psalm.xml');
+$application->setDefaultCommand($hasPsalmConfig ? 'analyze' : 'init');
+
+$application->run();
