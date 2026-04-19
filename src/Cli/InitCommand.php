@@ -196,6 +196,7 @@ final class InitCommand extends Command
         foreach ($decisions->confirmations as $note) {
             $io->writeln(\sprintf('  [+] %s', $note));
         }
+
         foreach ($decisions->hints as $hint) {
             $io->writeln($hint);
         }

@@ -94,8 +94,8 @@ final class ComposerInspector
         try {
             /** @var mixed $data */
             $data = \json_decode($contents, true, 512, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException $exception) {
-            return [[], \sprintf('%s is not valid JSON: %s', $path, $exception->getMessage())];
+        } catch (\JsonException $jsonException) {
+            return [[], \sprintf('%s is not valid JSON: %s', $path, $jsonException->getMessage())];
         }
 
         if (! \is_array($data)) {
@@ -108,6 +108,7 @@ final class ComposerInspector
             if (! \is_array($packages)) {
                 continue;
             }
+
             foreach (\array_keys($packages) as $package) {
                 if (\is_string($package)) {
                     $declared[$package] = true;

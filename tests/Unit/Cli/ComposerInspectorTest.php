@@ -169,7 +169,7 @@ final class ComposerInspectorTest extends TestCase
         );
 
         foreach ($iterator as $fileInfo) {
-            \assert($fileInfo instanceof \SplFileInfo);
+            $this->assertInstanceOf(\SplFileInfo::class, $fileInfo);
             if ($fileInfo->isDir()) {
                 @\rmdir($fileInfo->getPathname());
             } else {

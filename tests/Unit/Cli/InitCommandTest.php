@@ -338,6 +338,7 @@ final class InitCommandTest extends TestCase
             foreach ($xml->plugins->pluginClass as $entry) {
                 $classes[] = (string) $entry['class'];
             }
+
             $this->assertEqualsCanonicalizing(
                 [
                     'Psalm\\LaravelPlugin\\Plugin',
@@ -450,7 +451,7 @@ final class InitCommandTest extends TestCase
         );
 
         foreach ($iterator as $fileInfo) {
-            \assert($fileInfo instanceof \SplFileInfo);
+            $this->assertInstanceOf(\SplFileInfo::class, $fileInfo);
             if ($fileInfo->isDir()) {
                 @\rmdir($fileInfo->getPathname());
             } else {
