@@ -7,8 +7,9 @@ use Illuminate\Support\LazyCollection;
 
 /**
  * `Collection::make` / `LazyCollection::make` / `collect()` accept scalars, UnitEnums, and null
- * at runtime via `getArrayableItems()` → `Arr::wrap()`, and the widened stubs narrow those
- * inputs to `Collection<int, TScalar>` (matching the runtime `[$value]` wrapping).
+ * at runtime via `getArrayableItems()` → `Arr::wrap()`: scalars and UnitEnums are wrapped as
+ * `[$value]` and the widened stubs narrow them to `Collection<int, TScalar>`, while `null` is
+ * wrapped to `[]` and yields an empty `Collection<never, never>`.
  *
  * Template inference for `Arrayable<K,V>` / `iterable<K,V>` is preserved because the conditional
  * return type checks for those interfaces FIRST; see the Collection stub for the ordering note.
