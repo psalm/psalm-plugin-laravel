@@ -69,6 +69,14 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             return;
         }
 
+        // Mirror the skip-list in afterCodebasePopulated() — first-party Illuminate facades
+        // do declare `@see` targets (e.g. Cache → CacheManager + Repository), so without this
+        // check we'd reflect + queue their underlying classes during scan even though
+        // afterCodebasePopulated() later drops them from registration.
+        if (self::isSkippedFacade($storage->name)) {
+            return;
+        }
+
         $rootClasses = FacadeMethodHandler::resolveSeeTargetsFromStorage($storage->name, $storage);
 
         if ($rootClasses === []) {
@@ -101,17 +109,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                 continue;
             }
 
-            // First-party facades are already covered by stubs and FacadeMapProvider.
-            if (\str_starts_with($storage->name, 'Illuminate\\')) {
-                continue;
-            }
-
-            // Defensive skip-list for base classes that are very unlikely to be user-authored
-            // facades. Keeps us from accidentally registering against Mockery/PHPUnit test doubles.
-            if (
-                \str_starts_with($storage->name, 'Mockery\\')
-                || \str_starts_with($storage->name, 'PHPUnit\\')
-            ) {
+            if (self::isSkippedFacade($storage->name)) {
                 continue;
             }
 
@@ -181,6 +179,21 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
         foreach (FacadeMethodHandler::resolveSeeTargets($codebase, $facadeClass) as $rootClass) {
             FacadeMapProvider::registerCustomFacade($rootClass, $facadeClass);
         }
+    }
+
+    /**
+     * Facades we never register against. First-party `Illuminate\` facades already ship with
+     * `@method` catalogues (and are covered by {@see FacadeMapProvider::init()} for the alias
+     * path); `Mockery\` / `PHPUnit\` are defensive defaults against test doubles that happen
+     * to extend `Facade` transitively.
+     *
+     * @psalm-pure
+     */
+    private static function isSkippedFacade(string $fqcn): bool
+    {
+        return \str_starts_with($fqcn, 'Illuminate\\')
+            || \str_starts_with($fqcn, 'Mockery\\')
+            || \str_starts_with($fqcn, 'PHPUnit\\');
     }
 
     /**

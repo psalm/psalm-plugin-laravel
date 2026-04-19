@@ -187,7 +187,11 @@ final class FacadeMethodHandler
         try {
             /** @var class-string $facadeClass — caller has already invoked class_exists() / is a scanned classlike */
             $reflection = new \ReflectionClass($facadeClass);
-        } catch (\ReflectionException) {
+        } catch (\Throwable) {
+            // ReflectionClass invokes the autoloader; a broken target can throw arbitrary
+            // Error/Exception types (parse errors, missing parents, etc.) beyond
+            // ReflectionException. During the scan-phase visit these would otherwise
+            // propagate and abort analysis of the whole file.
             return self::$seeCache[$facadeClass] = [];
         }
 
