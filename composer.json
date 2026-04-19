@@ -31,8 +31,12 @@
         "nikic/php-parser": "^5.0",
         "orchestra/testbench-core": "^10.0 || ^11.0",
         "psalm/psalm-plugin-api": "^0.1.0",
+        "symfony/console": "^7.4 || ^8.0",
         "vimeo/psalm": "^7.0.0-beta19 || dev-master"
     },
+    "bin": [
+        "bin/psalm-laravel"
+    ],
     "require-dev": {
         "alies-dev/psalm-tester": "dev-feature/parallel-batch",
         "friendsofphp/php-cs-fixer": "^3.94",
@@ -104,6 +108,6 @@
             "Composer\\Config::disableProcessTimeout",
             "phpunit --testsuite=type"
         ],
-        "test:unit": "phpunit --testsuite=unit --display-notices --display-phpunit-notices"
+        "test:unit": "phpunit --testsuite=unit --display-deprecations --display-notices --display-phpunit-notices"
     }
 }

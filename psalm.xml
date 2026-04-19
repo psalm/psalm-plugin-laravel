@@ -10,6 +10,7 @@
 >
     <projectFiles>
         <directory name="src" />
+        <file name="bin/psalm-laravel" />
         <ignoreFiles allowMissingFiles="true">
             <directory name="vendor"/>
             <directory name="tests-app"/>

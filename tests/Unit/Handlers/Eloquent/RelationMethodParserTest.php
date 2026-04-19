@@ -215,7 +215,6 @@ final class RelationMethodParserTest extends TestCase
     private function callPrivate(string $method, mixed ...$args): mixed
     {
         $ref = new \ReflectionMethod(RelationMethodParser::class, $method);
-        $ref->setAccessible(true);
 
         return $ref->invoke(null, ...$args);
     }
@@ -231,7 +230,6 @@ final class RelationMethodParserTest extends TestCase
     private function callCollectUseStatements(\PhpParser\Node\Stmt $stmt, array &$map): void
     {
         $ref = new \ReflectionMethod(RelationMethodParser::class, 'collectUseStatements');
-        $ref->setAccessible(true);
 
         $args = [$stmt, &$map];
         $ref->invokeArgs(null, $args);

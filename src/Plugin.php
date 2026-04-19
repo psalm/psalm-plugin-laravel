@@ -54,7 +54,7 @@ final class Plugin implements PluginEntryPointInterface
             $this->registerHandlers($registration, $pluginConfig);
             $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
-            $this->handleInternalError($throwable, $output, $pluginConfig->failOnInternalError);
+            $this->handleInternalError($throwable, $output, $pluginConfig);
         }
     }
 
@@ -306,6 +306,15 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
         $registration->registerHooksFromClass(Handlers\Jobs\DispatchableHandler::class);
+
+        // App-owned Facade subclasses: enumerate after codebase population and register
+        // per-class method providers that resolve methods via a `getFacadeRoot()` runtime
+        // probe. Covers the gap where FacadeMapProvider cannot discover a facade whose
+        // accessor is a class-string or a container-resolvable binding that AliasLoader
+        // never sees. See https://github.com/psalm/psalm-plugin-laravel/issues/787.
+        require_once __DIR__ . '/Handlers/Facades/FacadeMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
@@ -701,12 +710,26 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /** @throws \Throwable */
-    private function handleInternalError(\Throwable $throwable, \Psalm\Progress\Progress $output, bool $failOnInternalError): void
+    private function handleInternalError(\Throwable $throwable, \Psalm\Progress\Progress $output, PluginConfig $pluginConfig): void
     {
         $output->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
-        $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . IssueUrlGenerator::generate($throwable));
 
-        if ($failOnInternalError) {
+        // URL generation is best-effort — a secondary failure here (e.g. a
+        // throwable with a broken __toString(), a corrupt composer installed.php)
+        // must never shadow the original init error that the user actually cares
+        // about, so we fall back to a plain issue-tracker link. The secondary
+        // error is still surfaced as a separate warning so plugin maintainers can
+        // spot regressions in the URL generator during self-analysis.
+        try {
+            $url = IssueUrlGenerator::generate($throwable, $pluginConfig);
+        } catch (\Throwable $urlGenerationFailure) {
+            $output->warning("Laravel plugin failed to build a detailed report URL: {$urlGenerationFailure->getMessage()}");
+            $url = 'https://github.com/psalm/psalm-plugin-laravel/issues';
+        }
+
+        $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $url);
+
+        if ($pluginConfig->failOnInternalError) {
             throw $throwable;
         }
     }
