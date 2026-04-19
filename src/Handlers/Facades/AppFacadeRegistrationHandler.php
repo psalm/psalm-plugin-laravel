@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Facades;
 
+use Illuminate\Support\Facades\Facade;
 use Psalm\Codebase;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
@@ -12,6 +13,7 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Progress\Progress;
 use Psalm\Type\Union;
 
 /**
@@ -27,7 +29,11 @@ use Psalm\Type\Union;
  *
  * First-party `Illuminate\` facades are skipped — Laravel's framework source already
  * ships rich `@method` catalogues on those classes, and {@see \Psalm\LaravelPlugin\Providers\FacadeMapProvider::init()}
- * covers the alias path. Vendor-package facades (`Mockery\`, `PHPUnit\`) are skipped defensively.
+ * covers the alias path. `Laravel\` sub-packages (Cashier, Horizon, Telescope, Pulse,
+ * Octane, Pennant) ship their own facades whose bindings live in package service providers
+ * that may not run in Testbench — autoloading their root class would chain into
+ * `BindingResolutionException`. `Mockery\` / `PHPUnit\` are defensive defaults against
+ * test doubles that happen to extend `Facade` transitively.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/787
  * @internal
@@ -37,6 +43,16 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
     private const FACADE_FQCN = 'Illuminate\\Support\\Facades\\Facade';
 
     private const FACADE_FQCN_LOWER = 'illuminate\\support\\facades\\facade';
+
+    /**
+     * Set of facade classes whose `getFacadeRoot()` probe has already thrown. Prevents
+     * re-running a user service provider factory across the two probe sites
+     * (scan phase + populate phase) — Laravel's own `Facade::$resolvedInstance` only
+     * caches on success, so without this, a throwing accessor runs twice per facade.
+     *
+     * @var array<string, true>
+     */
+    private static array $failedFacades = [];
 
     /**
      * Probe `Facade::getFacadeRoot()` at scan time and queue the resolved root class for
@@ -69,12 +85,10 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             return;
         }
 
-        $rootClass = FacadeMethodHandler::tryGetFacadeRootClass($storage->name);
+        $progress = $event->getCodebase()->progress;
+        $rootClass = self::tryGetFacadeRootClass($storage->name, $progress);
 
         if ($rootClass === null) {
-            $event->getCodebase()->progress->debug(
-                "Laravel plugin: skipping facade '{$storage->name}' at scan phase: getFacadeRoot() returned no object\n",
-            );
             return;
         }
 
@@ -85,6 +99,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
         $codebase = $event->getCodebase();
+        $progress = $codebase->progress;
 
         foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
             // Abstract classes include the base Facade itself and user-defined abstract
@@ -116,31 +131,83 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                     // warning (not debug) — debug is a no-op in the default progress, and a user
                     // facade silently losing method resolution is exactly the class of failure
                     // issue #787 was filed to fix. Match ModelRegistrationHandler's convention.
-                    $codebase->progress->warning(
+                    $progress->warning(
                         "Laravel plugin: skipping facade '{$storage->name}': class could not be loaded by autoloader",
                     );
                     continue;
                 }
             } catch (\Error|\Exception $error) {
-                $codebase->progress->warning(
+                $progress->warning(
                     "Laravel plugin: skipping facade '{$storage->name}': {$error->getMessage()}",
                 );
                 continue;
             }
 
-            // Probe once here (Laravel caches the resolved instance in Facade::$resolvedInstance,
-            // so probing a second time is free even though afterClassLikeVisit may have already
-            // probed for direct-parent facades). Facades whose accessor can't be resolved in
-            // Testbench (user-provider-only bindings) are skipped — Psalm's native `@method`
-            // handling still covers them.
-            $rootClass = FacadeMethodHandler::tryGetFacadeRootClass($storage->name);
+            // Probe once more here. For direct-parent facades seen in afterClassLikeVisit,
+            // Laravel's `Facade::$resolvedInstance` cache makes this call effectively free
+            // in the main process. When scanning forks, worker processes inherit the cache
+            // via copy-on-write memory but their writes don't propagate back — so the main
+            // process may re-probe; `$failedFacades` below prevents user-provider factories
+            // from running a second time in that case.
+            $rootClass = self::tryGetFacadeRootClass($storage->name, $progress);
 
             if ($rootClass === null) {
+                $progress->debug(
+                    "Laravel plugin: skipping facade '{$storage->name}': getFacadeRoot() returned no object\n",
+                );
                 continue;
             }
 
             self::registerHandlersForFacade($codebase, $storage->name, $rootClass);
         }
+    }
+
+    /**
+     * Resolve the facade's container-bound root object and return its class.
+     *
+     * Called by both {@see self::afterClassLikeVisit()} (to queue the result for scanning)
+     * and {@see self::afterCodebasePopulated()} (to register method providers). Laravel's
+     * `Facade` caches the resolved instance in `static::$resolvedInstance` within a single
+     * process, so the second call in the main process is free; in forked-scanner topologies
+     * the worker's cache is discarded on exit, and {@see self::$failedFacades} prevents a
+     * throwing user-provider factory from re-running in the main process.
+     *
+     * Works when:
+     * - The accessor is a class-string (e.g. `protected static function getFacadeAccessor()
+     *   { return MyService::class; }`) — the container auto-wires it via reflection.
+     * - The accessor is a string alias bound in our Testbench container (first-party
+     *   services like `'cache'`, `'router'`, package bindings registered via discovered
+     *   providers).
+     *
+     * Returns null when the accessor is a string alias bound only by a user service
+     * provider that does not run in Testbench — nothing we can do at this layer.
+     *
+     * @return ?class-string
+     */
+    public static function tryGetFacadeRootClass(string $facadeClass, ?Progress $progress = null): ?string
+    {
+        if (isset(self::$failedFacades[$facadeClass])) {
+            return null;
+        }
+
+        // is_subclass_of() invokes the autoloader; guard per FacadeMapProvider::init().
+        try {
+            if (!\is_subclass_of($facadeClass, Facade::class)) {
+                self::$failedFacades[$facadeClass] = true;
+                return null;
+            }
+
+            /** @var mixed $root — getFacadeRoot() is untyped and container bindings can resolve to anything */
+            $root = $facadeClass::getFacadeRoot();
+        } catch (\Throwable $e) {
+            self::$failedFacades[$facadeClass] = true;
+            $progress?->debug(
+                "Laravel plugin: getFacadeRoot() failed for '{$facadeClass}': {$e->getMessage()}\n",
+            );
+            return null;
+        }
+
+        return \is_object($root) ? \get_class($root) : null;
     }
 
     /** @param class-string $rootClass */
@@ -171,14 +238,18 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
     /**
      * Facades we never register against. First-party `Illuminate\` facades already ship with
      * `@method` catalogues (and are covered by {@see \Psalm\LaravelPlugin\Providers\FacadeMapProvider::init()}
-     * for the alias path); `Mockery\` / `PHPUnit\` are defensive defaults against test doubles
-     * that happen to extend `Facade` transitively.
+     * for the alias path). `Laravel\` sub-packages (Cashier, Horizon, Telescope, Pulse,
+     * Octane, Pennant) register their accessors via package service providers that may not
+     * run in our Testbench boot — probing them would autoload classes that immediately throw
+     * `BindingResolutionException`. `Mockery\` / `PHPUnit\` guard against test doubles that
+     * happen to extend `Facade` transitively.
      *
      * @psalm-pure
      */
     private static function isSkippedFacade(string $fqcn): bool
     {
         return \str_starts_with($fqcn, 'Illuminate\\')
+            || \str_starts_with($fqcn, 'Laravel\\')
             || \str_starts_with($fqcn, 'Mockery\\')
             || \str_starts_with($fqcn, 'PHPUnit\\');
     }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Facades;
 
-use Illuminate\Support\Facades\Facade;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
@@ -29,10 +28,10 @@ use Psalm\Type\Union;
  *   Our return_type_provider would otherwise fire BEFORE `checkPseudoMethod`, so
  *   {@see resolveMethod()} short-circuits when the facade (or any ancestor) declares
  *   a matching `@method` tag.
- * - Container-resolved root class — {@see AppFacadeRegistrationHandler} calls
- *   `Facade::getFacadeRoot()` while the Testbench app is known alive, binds the
- *   resolved class into per-facade closures, and registers them with Psalm. Methods
- *   present on that class are forwarded to the facade.
+ * - Container-resolved root class — {@see AppFacadeRegistrationHandler::tryGetFacadeRootClass()}
+ *   is called while the Testbench app is known alive; the resolved class is bound into
+ *   per-facade provider closures registered with Psalm. Methods present on that class
+ *   are forwarded to the facade.
  *
  * @internal
  */
@@ -51,43 +50,7 @@ final class FacadeMethodHandler
      */
     private static array $pseudoMethodCache = [];
 
-    /**
-     * Resolve the facade's container-bound root object and return its class.
-     *
-     * Called by {@see AppFacadeRegistrationHandler} once per facade — during scan to
-     * queue the result for scanning, and during populate to register method providers.
-     * Laravel's `Facade` caches the resolved instance in `static::$resolvedInstance`,
-     * so the second call is free.
-     *
-     * Works when:
-     * - The accessor is a class-string (e.g. `protected static function getFacadeAccessor()
-     *   { return MyService::class; }`) — the container auto-wires it via reflection.
-     * - The accessor is a string alias bound in our Testbench container (first-party
-     *   services like `'cache'`, `'router'`, package bindings registered via discovered
-     *   providers).
-     *
-     * Returns null when the accessor is a string alias bound only by a user service
-     * provider that does not run in Testbench — nothing we can do at this layer.
-     *
-     * @return ?class-string
-     */
-    public static function tryGetFacadeRootClass(string $facadeClass): ?string
-    {
-        // is_subclass_of() invokes the autoloader; guard per FacadeMapProvider::init().
-        try {
-            if (!\is_subclass_of($facadeClass, Facade::class)) {
-                return null;
-            }
-
-            /** @var mixed $root — getFacadeRoot() is untyped and container bindings can resolve to anything */
-            $root = $facadeClass::getFacadeRoot();
-        } catch (\Throwable) {
-            return null;
-        }
-
-        return \is_object($root) ? \get_class($root) : null;
-    }
-
+    /** @param class-string $rootClass */
     public static function doesMethodExist(MethodExistenceProviderEvent $event, string $rootClass): ?bool
     {
         $source = $event->getSource();
@@ -96,17 +59,20 @@ final class FacadeMethodHandler
             return null;
         }
 
-        // Null (not false) so other resolution paths keep firing — returning false
-        // would actively assert the method does NOT exist and suppress @method/@mixin.
-        return self::resolveMethod(
+        $resolved = self::resolveMethod(
             $source->getCodebase(),
             $event->getFqClasslikeName(),
             $event->getMethodNameLowercase(),
             $rootClass,
-        ) instanceof MethodStorage ? true : null;
+        );
+
+        // Null (not false) so other resolution paths keep firing — returning false
+        // would actively assert the method does NOT exist and suppress @method/@mixin.
+        return $resolved instanceof MethodStorage ? true : null;
     }
 
     /**
+     * @param class-string $rootClass
      * @return list<FunctionLikeParameter>|null
      */
     public static function getMethodParams(MethodParamsProviderEvent $event, string $rootClass): ?array
@@ -127,6 +93,7 @@ final class FacadeMethodHandler
         return $storage?->params;
     }
 
+    /** @param class-string $rootClass */
     public static function getReturnType(MethodReturnTypeProviderEvent $event, string $rootClass): ?Union
     {
         $storage = self::resolveMethod(
@@ -148,7 +115,10 @@ final class FacadeMethodHandler
         return $storage->return_type ?? Type::getMixed();
     }
 
-    /** @psalm-external-mutation-free */
+    /**
+     * @param class-string $rootClass
+     * @psalm-external-mutation-free
+     */
     private static function resolveMethod(
         Codebase $codebase,
         string $facadeClass,
@@ -206,6 +176,10 @@ final class FacadeMethodHandler
         try {
             $storage = $codebase->classlike_storage_provider->get($facadeClass);
         } catch (\InvalidArgumentException) {
+            // Facade storage missing — Psalm didn't scan this class. Nothing we can do;
+            // a debug log would require dropping the `@psalm-external-mutation-free`
+            // annotation chain, and a missing facade here means downstream analysis has
+            // already surfaced its own errors.
             return [];
         }
 
@@ -217,6 +191,9 @@ final class FacadeMethodHandler
             try {
                 $ancestorStorage = $codebase->classlike_storage_provider->get($ancestorLower);
             } catch (\InvalidArgumentException) {
+                // Ancestor storage may be missing (e.g. vendor class outside projectFiles).
+                // Psalm's own Populator already merged the pseudo methods it had access to
+                // into the child storage, so skipping here just drops the defensive walk.
                 continue;
             }
 
