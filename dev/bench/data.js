@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776593887968,
+  "lastUpdate": 1776595366415,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2127,6 +2127,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.48,
             "range": "± 0.32",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3526da60ae91b1ed731e58c33e773d9300b3b94d",
+          "message": "Ship `vendor/bin/psalm-laravel` with init subcommand (#786)\n\n* feat: ship vendor/bin/psalm-laravel with init subcommand (#785)\n\nAdds a dedicated Symfony Console binary that generates a Laravel-tailored\npsalm.xml, cutting setup from six steps to one. The binary does not boot\nPsalm or Laravel, so it remains safe to run when psalm.xml is missing or\nbroken (the moment users need help most).\n\nPhase 1 ships `init` only. `doctor`, `baseline`, and AI-tooling\nsubcommands are tracked separately.\n\nThe generated config pre-wires `<pluginClass>`, sets `errorLevel=\"3\"`,\ndisables `findUnusedCode` and `ensureOverrideAttribute`, and excludes\n`vendor/`, `storage/`, and `bootstrap/cache/` from `<projectFiles>`.\n`init` prompts before overwriting an existing `psalm.xml`; `--force`\nbypasses the prompt for CI usage.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix(cli): add allowMissingFiles=\"true\" to generated psalm.xml ignoreFiles\n\nWithout it, Psalm errors when the listed directories don't exist (storage\nor bootstrap/cache may be absent in non-standard Laravel layouts),\nundermining the one-step-init goal. This mirrors the plugin's own\npsalm.xml.\n\n* test(cli): harden setUp/tearDown against mkdir/rmdir warnings\n\nPHPUnit is configured with failOnWarning=\"true\", so an unchecked\nmkdir/rmdir that trips a warning (temp dir races, Windows file-handle\ndelays, permission issues on CI) fails the suite without surfacing the\nactual cause. setUp now throws with a descriptive message on mkdir\nfailure; tearDown suppresses cleanup warnings, which are noise once the\ntest itself has passed.\n\n* fix(cli): use Application::addCommand() and bump symfony/console to ^7.4\n\nCI installed symfony/console v8.0.x, which removed the deprecated add()\nmethod — Psalm reported UndefinedMethod on bin/psalm-laravel:32. The\nprevious ^7.2 || ^8.0 range had no single method that exists across all\nsupported versions (add() is removed in 8.0, addCommand() doesn't exist\nbefore 7.4).\n\nBump the minimum to ^7.4 so addCommand() is always available. Laravel 12\nalready allows symfony/console ^7.2.0 which permits 7.4+, so this\ndoesn't constrain plugin users beyond what Laravel itself does.\n\nClears the DeprecatedMethod baseline entry that was only there to cover\nadd() on Symfony 7.4.\n\n* feat(cli): add --level option, analyze command, and auto-routing\n\ninit now accepts --level/-l (1-8), defaulting to 3. Invalid values are\nrejected before any file is written.\n\nanalyze is a thin wrapper that locates vendor/bin/psalm relative to the\nworking directory and execs it, passing the exit code through.\n\nWhen psalm-laravel is invoked with no subcommand, the binary picks one\nbased on workspace state: init if psalm.xml is missing (first-run\nsetup), analyze otherwise (everyday use). Explicit subcommands are\nunaffected.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* feat(cli): register 'analyse' as an alias of 'analyze'\n\nPrimary name stays American ('analyze') to match broader SW convention\nand Symfony's own command style. 'analyse' is accepted as an alias so\nPHPStan users (who reach for 'analyse') don't hit a dead end.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* feat(cli): pre-suppress common Laravel noise issues in generated psalm.xml\n\nLaravel application code is typically not written to Psalm's strictest\nconventions (final classes, override attributes, pure/immutable\nannotations, redundant-cast narrowing). Users who run Psalm on a fresh\nLaravel project drown in issues that have nothing to do with their own\ncode quality. Pre-suppressing these gives a usable baseline out of the\nbox; users can flip any of them back on if they want the stricter check.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-19T11:40:43+01:00",
+          "tree_id": "1a8c53cb98461556a71182548be2787147fea714",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3526da60ae91b1ed731e58c33e773d9300b3b94d"
+        },
+        "date": 1776595365590,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.77,
+            "range": "± 0.25",
             "unit": "s"
           },
           {
