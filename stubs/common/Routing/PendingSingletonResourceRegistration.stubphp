@@ -1,0 +1,26 @@
+<?php
+
+namespace Illuminate\Routing;
+
+class PendingSingletonResourceRegistration
+{
+    /**
+     * Set the methods the controller should apply to.
+     *
+     * @param  array<string>|string  $methods
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function only($methods) {}
+
+    /**
+     * Set the methods the controller should exclude.
+     *
+     * @param  array<string>|string  $methods
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function except($methods) {}
+}
