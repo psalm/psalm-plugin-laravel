@@ -199,10 +199,10 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
 
             /** @var mixed $root — getFacadeRoot() is untyped and container bindings can resolve to anything */
             $root = $facadeClass::getFacadeRoot();
-        } catch (\Throwable $e) {
+        } catch (\Throwable $throwable) {
             self::$failedFacades[$facadeClass] = true;
             $progress?->debug(
-                "Laravel plugin: getFacadeRoot() failed for '{$facadeClass}': {$e->getMessage()}\n",
+                "Laravel plugin: getFacadeRoot() failed for '{$facadeClass}': {$throwable->getMessage()}\n",
             );
             return null;
         }
