@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776595366415,
+  "lastUpdate": 1776599574114,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2162,6 +2162,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 21.77,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "8017a1dc08630aaaab224f65d3ef61ca67c1c6aa",
+          "message": "feat(stubs): type only()/except() variadic on singleton resource #0\n\nPendingSingletonResourceRegistration::only() and ::except() accept\nvariadic method names via func_get_args(), so `->except('show', 'destroy')`\nis valid but was rejected as TooManyArguments without a stub.",
+          "timestamp": "2026-04-19T13:49:32+02:00",
+          "tree_id": "2294b92cdb4e2fc823d2e6c151f7a14eed3d119d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8017a1dc08630aaaab224f65d3ef61ca67c1c6aa"
+        },
+        "date": 1776599573793,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.02,
+            "range": "± 0.32",
             "unit": "s"
           },
           {
