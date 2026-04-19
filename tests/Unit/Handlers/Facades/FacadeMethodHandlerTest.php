@@ -23,7 +23,7 @@ final class FacadeMethodHandlerTest extends TestCase
     {
         $docblock = "/**\n * @see \\App\\Services\\LicenseService\n */";
 
-        self::assertSame(['\\App\\Services\\LicenseService'], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame(['\\App\\Services\\LicenseService'], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
@@ -31,7 +31,7 @@ final class FacadeMethodHandlerTest extends TestCase
     {
         $docblock = "/** @see LicenseService */";
 
-        self::assertSame(['LicenseService'], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame(['LicenseService'], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
@@ -39,7 +39,7 @@ final class FacadeMethodHandlerTest extends TestCase
     {
         $docblock = "/** @see \\App\\Foo::bar */";
 
-        self::assertSame(['\\App\\Foo'], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame(['\\App\\Foo'], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
@@ -47,7 +47,7 @@ final class FacadeMethodHandlerTest extends TestCase
     {
         $docblock = "/** @see \\App\\Foo::\$baz */";
 
-        self::assertSame(['\\App\\Foo'], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame(['\\App\\Foo'], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
@@ -55,7 +55,7 @@ final class FacadeMethodHandlerTest extends TestCase
     {
         $docblock = "/** @see https://laravel.com/docs */";
 
-        self::assertSame([], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame([], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
@@ -63,7 +63,7 @@ final class FacadeMethodHandlerTest extends TestCase
     {
         $docblock = "/** @see {@link \\App\\Foo} */";
 
-        self::assertSame([], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame([], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
@@ -72,7 +72,7 @@ final class FacadeMethodHandlerTest extends TestCase
         // Only the first non-whitespace token after `@see` is captured, per PHPDoc convention.
         $docblock = "/** @see \\App\\Foo describes the underlying service */";
 
-        self::assertSame(['\\App\\Foo'], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame(['\\App\\Foo'], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
@@ -86,7 +86,7 @@ final class FacadeMethodHandlerTest extends TestCase
  */
 DOC;
 
-        self::assertSame(['\\App\\Foo', '\\App\\Bar'], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame(['\\App\\Foo', '\\App\\Bar'], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
@@ -94,28 +94,25 @@ DOC;
     {
         $docblock = "/** @method static bool isPlus() */";
 
-        self::assertSame([], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame([], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
     public function returns_empty_when_docblock_is_empty(): void
     {
-        self::assertSame([], FacadeMethodHandler::extractSeeCandidates(''));
+        $this->assertSame([], FacadeMethodHandler::extractSeeCandidates(''));
     }
 
     #[Test]
     public function resolve_fqcn_returns_existing_class(): void
     {
-        self::assertSame(
-            \DateTimeImmutable::class,
-            FacadeMethodHandler::resolveRelativeName('\\' . \DateTimeImmutable::class, [], null),
-        );
+        $this->assertSame(\DateTimeImmutable::class, FacadeMethodHandler::resolveRelativeName('\\' . \DateTimeImmutable::class, [], null));
     }
 
     #[Test]
     public function resolve_fqcn_returns_null_for_missing_class(): void
     {
-        self::assertNull(FacadeMethodHandler::resolveRelativeName('\\App\\NotAClass', [], null));
+        $this->assertNull(FacadeMethodHandler::resolveRelativeName('\\App\\NotAClass', [], null));
     }
 
     #[Test]
@@ -125,10 +122,7 @@ DOC;
         // resolves through the use-import before namespace-relative resolution.
         $uses = ['stampedat' => \DateTimeImmutable::class];
 
-        self::assertSame(
-            \DateTimeImmutable::class,
-            FacadeMethodHandler::resolveRelativeName('StampedAt', $uses, 'Foo'),
-        );
+        $this->assertSame(\DateTimeImmutable::class, FacadeMethodHandler::resolveRelativeName('StampedAt', $uses, 'Foo'));
     }
 
     #[Test]
@@ -141,29 +135,26 @@ DOC;
         // The resulting candidate `DateTime\NotAClass` does not exist, so null is returned —
         // this specifically exercises the "use-import prefix + rest" branch without requiring
         // a real multi-segment class to exist in the test environment.
-        self::assertNull(FacadeMethodHandler::resolveRelativeName('DateTime\\NotAClass', $uses, null));
+        $this->assertNull(FacadeMethodHandler::resolveRelativeName('DateTime\\NotAClass', $uses, null));
     }
 
     #[Test]
     public function resolve_namespace_relative(): void
     {
         // No use-import matches; namespace concatenation falls back to the current namespace.
-        self::assertNull(FacadeMethodHandler::resolveRelativeName('NotAClass', [], 'App'));
+        $this->assertNull(FacadeMethodHandler::resolveRelativeName('NotAClass', [], 'App'));
     }
 
     #[Test]
     public function resolve_bare_global_class_without_leading_slash(): void
     {
-        self::assertSame(
-            \DateTimeImmutable::class,
-            FacadeMethodHandler::resolveRelativeName(\DateTimeImmutable::class, [], null),
-        );
+        $this->assertSame(\DateTimeImmutable::class, FacadeMethodHandler::resolveRelativeName(\DateTimeImmutable::class, [], null));
     }
 
     #[Test]
     public function resolve_empty_name_returns_null(): void
     {
-        self::assertNull(FacadeMethodHandler::resolveRelativeName('', [], null));
+        $this->assertNull(FacadeMethodHandler::resolveRelativeName('', [], null));
     }
 
     #[Test]
@@ -173,10 +164,7 @@ DOC;
         // DateTimeImmutable (use-import), not App\Foo (namespace-relative).
         $uses = ['foo' => \DateTimeImmutable::class];
 
-        self::assertSame(
-            \DateTimeImmutable::class,
-            FacadeMethodHandler::resolveRelativeName('Foo', $uses, 'App'),
-        );
+        $this->assertSame(\DateTimeImmutable::class, FacadeMethodHandler::resolveRelativeName('Foo', $uses, 'App'));
     }
 
     /** @return iterable<string, array{0: string}> */
@@ -191,6 +179,6 @@ DOC;
     #[Test]
     public function extractSeeCandidates_drops_various_url_schemes(string $url): void
     {
-        self::assertSame([], FacadeMethodHandler::extractSeeCandidates("/** @see {$url} */"));
+        $this->assertSame([], FacadeMethodHandler::extractSeeCandidates("/** @see {$url} */"));
     }
 }

@@ -96,7 +96,7 @@ final class FacadeMethodHandler
             $source->getCodebase(),
             $event->getFqClasslikeName(),
             $event->getMethodNameLowercase(),
-        ) !== null ? true : null;
+        ) instanceof \Psalm\Storage\MethodStorage ? true : null;
     }
 
     /**
@@ -127,7 +127,7 @@ final class FacadeMethodHandler
             $event->getMethodNameLowercase(),
         );
 
-        if ($storage === null) {
+        if (!$storage instanceof \Psalm\Storage\MethodStorage) {
             return null;
         }
 
@@ -180,7 +180,7 @@ final class FacadeMethodHandler
         }
 
         // Anonymous classes and synthetic names have no usable name-resolution context.
-        if ($storage->aliases === null) {
+        if (!$storage->aliases instanceof \Psalm\Aliases) {
             return self::$seeCache[$facadeClass] = [];
         }
 
@@ -347,7 +347,7 @@ final class FacadeMethodHandler
         foreach (self::resolveSeeTargets($codebase, $facadeClass) as $rootClass) {
             $resolved = self::lookupPublicMethod($codebase, $rootClass, $methodNameLower);
 
-            if ($resolved !== null) {
+            if ($resolved instanceof \Psalm\Storage\MethodStorage) {
                 return self::$methodCache[$key] = $resolved;
             }
         }
@@ -360,7 +360,7 @@ final class FacadeMethodHandler
         if ($rootClass !== null) {
             $resolved = self::lookupPublicMethod($codebase, $rootClass, $methodNameLower);
 
-            if ($resolved !== null) {
+            if ($resolved instanceof \Psalm\Storage\MethodStorage) {
                 return self::$methodCache[$key] = $resolved;
             }
         }

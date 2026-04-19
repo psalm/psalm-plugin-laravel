@@ -83,17 +83,14 @@ final class FacadeMapProviderTest extends TestCase
         $serviceClass = 'App\\Services\\TestRegisterCustomFacade\\Svc';
         $facadeClass = 'App\\Facades\\TestRegisterCustomFacade\\Fac';
 
-        self::assertSame([], FacadeMapProvider::getFacadeClasses($serviceClass));
+        $this->assertSame([], FacadeMapProvider::getFacadeClasses($serviceClass));
 
         FacadeMapProvider::registerCustomFacade($serviceClass, $facadeClass);
 
-        self::assertSame([$facadeClass], FacadeMapProvider::getFacadeClasses($serviceClass));
+        $this->assertSame([$facadeClass], FacadeMapProvider::getFacadeClasses($serviceClass));
 
         // Case-insensitivity on the lookup key (service classes in Laravel are always
         // stored/compared via lowercase FQCN).
-        self::assertSame(
-            [$facadeClass],
-            FacadeMapProvider::getFacadeClasses(\strtoupper($serviceClass)),
-        );
+        $this->assertSame([$facadeClass], FacadeMapProvider::getFacadeClasses(\strtoupper($serviceClass)));
     }
 }
