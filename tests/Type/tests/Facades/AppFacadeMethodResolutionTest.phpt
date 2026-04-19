@@ -4,44 +4,45 @@
 namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
 use App\Facades\BrokenSeeFacade;
-use App\Facades\License;
+use App\Facades\Diagnostic;
 
 /**
- * Koel repro verbatim (https://github.com/psalm/psalm-plugin-laravel/issues/787):
- * `getStatus` is NOT in the facade's `@method` catalogue but IS a public method on the
- * `@see`-referenced `App\Services\LicenseService`. Resolver path 3 wins.
+ * Car repair shop domain, modelled after the koel repro of
+ * https://github.com/psalm/psalm-plugin-laravel/issues/787:
+ * `getReport` is NOT in the facade's `@method` catalogue but IS a public method on
+ * the `@see`-referenced `App\Services\DiagnosticService`. Resolver path 3 wins.
  */
 function test_see_resolves_method_not_in_method_catalogue(): string
 {
-    /** @psalm-check-type-exact $status = string */
-    $status = License::getStatus(checkCache: false);
+    /** @psalm-check-type-exact $report = string */
+    $report = Diagnostic::getReport(checkCache: false);
 
-    return $status;
+    return $report;
 }
 
 /**
- * `@method` takes precedence over `@see`. The facade declares `@method static bool isPlus()`
- * but `LicenseService::isPlus()` returns `string` at runtime — the facade's declaration wins
- * because FacadeMethodHandler explicitly short-circuits when `pseudo_static_methods` contains
- * the method (without the short-circuit, our return_type_provider would fire before
+ * `@method` takes precedence over `@see`. The facade declares `@method static bool isCritical()`
+ * but `DiagnosticService::isCritical()` returns `string` at runtime — the facade's declaration
+ * wins because FacadeMethodHandler explicitly short-circuits when `pseudo_static_methods`
+ * contains the method (without the short-circuit, our return_type_provider would fire before
  * `checkPseudoMethod` at AtomicStaticCallAnalyzer.php:639 and override the @method return).
  */
 function test_method_annotation_wins_over_see(): bool
 {
-    /** @psalm-check-type-exact $plus = bool */
-    $plus = License::isPlus();
+    /** @psalm-check-type-exact $critical = bool */
+    $critical = Diagnostic::isCritical();
 
-    return $plus;
+    return $critical;
 }
 
 /**
  * Non-public methods on the underlying class must NOT be surfaced on the facade.
- * `LicenseService::internalCheck()` is protected, so `License::internalCheck()` should
+ * `DiagnosticService::internalCheck()` is protected, so `Diagnostic::internalCheck()` should
  * still emit UndefinedMagicMethod — mirroring runtime `__callStatic` behaviour.
  */
 function test_protected_method_is_not_exposed(): void
 {
-    License::internalCheck();
+    Diagnostic::internalCheck();
 }
 
 /**
@@ -51,7 +52,7 @@ function test_protected_method_is_not_exposed(): void
  */
 function test_method_absent_everywhere_still_errors(): void
 {
-    License::definitelyNotAMethod();
+    Diagnostic::definitelyNotAMethod();
 }
 
 /**
@@ -61,10 +62,10 @@ function test_method_absent_everywhere_still_errors(): void
  */
 function test_named_parameter_call_resolves(): string
 {
-    /** @psalm-check-type-exact $status = string */
-    $status = License::getStatus(checkCache: true);
+    /** @psalm-check-type-exact $report = string */
+    $report = Diagnostic::getReport(checkCache: true);
 
-    return $status;
+    return $report;
 }
 
 /**
@@ -78,6 +79,6 @@ function test_broken_see_target_falls_through(): void
 }
 ?>
 --EXPECTF--
-UndefinedMagicMethod on line %d: Magic method App\Facades\License::internalcheck does not exist
-UndefinedMagicMethod on line %d: Magic method App\Facades\License::definitelynotamethod does not exist
+UndefinedMagicMethod on line %d: Magic method App\Facades\Diagnostic::internalcheck does not exist
+UndefinedMagicMethod on line %d: Magic method App\Facades\Diagnostic::definitelynotamethod does not exist
 UndefinedMagicMethod on line %d: Magic method App\Facades\BrokenSeeFacade::anymethod does not exist

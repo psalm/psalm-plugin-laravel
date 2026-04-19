@@ -7,9 +7,9 @@ namespace App\Facades;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * Test fixture: the `@see` points at a class that does not exist. The resolver must
- * fall through gracefully (no fatal, no false-positive method resolution) so the
- * caller still sees the standard UndefinedMagicMethod.
+ * Test fixture: the `@see` points at a class that does not exist in the car repair
+ * shop codebase. The resolver must fall through gracefully (no fatal, no false-positive
+ * method resolution) so the caller still sees the standard UndefinedMagicMethod.
  *
  * @see \App\Services\DefinitelyDoesNotExist
  */
