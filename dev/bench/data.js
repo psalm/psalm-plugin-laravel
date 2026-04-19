@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776599574114,
+  "lastUpdate": 1776624932611,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2202,6 +2202,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9617018e176b43fc7c9625deb3a825ff0c0f6569",
+          "message": "Fix `InvalidArgument` on arrow-function closures in `Builder::where` family (#776) (#784)\n\n* fix: accept arrow-function closures in Builder::where and siblings (#776)\n\nIssue #776: `Builder::where(fn ($q) => $q->where(...))` raised\nInvalidArgument because the stub required the closure to return\neither void or static, neither of which matches an arrow function's\nimplicit mixed return. Laravel discards the return value, so `mixed`\nis the correct constraint.\n\nFive stubs updated to `\\Closure(self<TModel>): mixed` (or\n`Closure(Builder<TRelatedModel>): mixed` on the relation):\n- Builder::where, Builder::firstWhere, Builder::whereNot,\n  Builder::orWhereNot, BelongsToMany::firstWhere\n\nAlso:\n- Collapse malformed `@param` on Builder::firstWhere (a broken\n  generic fragment `int, mixed>` was causing Psalm to silently\n  drop the type) and align the signature with where(), which is\n  correct since firstWhere is `$this->where(...)->first()`.\n- Add missing SQL taint annotations to BelongsToMany::firstWhere\n  (pre-existing gap: tainted column names were not flagged).\n\nSubstituting `self<TModel>` for Laravel's `static` is intentional:\nPsalm 7 does not specialize `static` inside closure param positions\nagainst the receiver's generic binding, which is what caused the\nbug for arrow functions. The trade-off is that custom Builder\nsubclasses with typed closure parameters lose late-static-binding\nprecision; in practice, nearly all `where` closures are untyped.\n\n* fix: document `$operator` and `$value` on `Builder::firstWhere`\n\nAligns the firstWhere docblock with where(): both methods now declare\n@param mixed $operator and @param mixed $value explicitly. The\n@psalm-flow annotation already referenced these parameters by name\n(taint sinks bind by parameter name, not @param), so this is purely a\ndocblock-clarity fix with no analysis behavior change.",
+          "timestamp": "2026-04-19T19:53:01+01:00",
+          "tree_id": "5e2e9f34213a455c496cf9e1ec46f1b5bce6da51",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9617018e176b43fc7c9625deb3a825ff0c0f6569"
+        },
+        "date": 1776624931976,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.69,
+            "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
