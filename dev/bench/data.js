@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776543967992,
+  "lastUpdate": 1776593887968,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2092,6 +2092,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.77,
             "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "56973471c046dbdc8bdefcb171fb8016521e2c5f",
+          "message": "Resolve methods on app-owned Facade subclasses (#789)\n\n* feat: resolve methods on app-owned Facade subclasses via `@see` (#787)\n\nApp-owned `Facade` subclasses whose accessor is bound by a user service\nprovider (e.g. `class License extends Facade { getFacadeAccessor() { return\n'License'; } }`) could not be recovered by `FacadeMapProvider` — the binding\nis absent from our Testbench app. Calls like `License::getStatus()` emitted\n`UndefinedMagicMethod` for every method not enumerated in the facade's\n`@method` catalogue.\n\nAdd `AppFacadeRegistrationHandler` that enumerates non-Illuminate Facade\nsubclasses (via `AfterCodebasePopulated`) and registers per-class method\nproviders backed by `FacadeMethodHandler`. The resolver consults a\ndocblock `@see` pointer (path 3) and falls back to a runtime `getFacadeRoot()`\nprobe when the accessor happens to bind in Testbench (path 4). A scan-phase\nvisit hook queues `@see`-referenced classes for scanning so the resolver\nsees their `MethodStorage`.\n\n`@method` precedence is preserved by an explicit short-circuit: Psalm's\nstatic-call analyzer runs return_type_providers before `checkPseudoMethod`,\nso without the gate a `@see`-resolved type would override a declared\n`@method` return. `@mixin` is delegated to Psalm's native mixin walk.\n\nAlso extends `FacadeMapProvider::registerCustomFacade()` so handlers keyed\non the service class see app-owned facades via `@see`-resolved roots.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* test: update fixtures to car repair shop domain (License -> Diagnostic)\n\n* test: update fixtures to car repair shop domain (License -> Diagnostic)\n\n* fix: address PR #789 review comments\n\n- Widen ReflectionClass catch from `ReflectionException` to `Throwable`.\n  `new ReflectionClass($fqcn)` invokes the autoloader; a broken target can\n  throw arbitrary Error/Exception types (parse errors, missing parents)\n  that would otherwise abort the whole scan-phase analysis.\n- Apply the same Illuminate/Mockery/PHPUnit skip-list in afterClassLikeVisit\n  that afterCodebasePopulated already uses, and extract it to a shared\n  `isSkippedFacade()` helper. First-party facades do declare `@see` targets\n  (Cache → CacheManager + Repository) so without the guard we'd reflect\n  and queue framework classes during scan for facades we later drop.\n\n* refactor: drop @see path, rely on @method + getFacadeRoot() runtime probe\n\nReplaces the @see docblock parser and relative-name resolver with a\nper-facade Facade::getFacadeRoot() runtime probe. The @method precedence\ngate is preserved so user-declared static methods still win over the\nresolved underlying type.\n\n- FacadeMethodHandler: remove @see parsing, name resolution, and caches\n  that supported it; resolveMethod takes $rootClass as an arg so no\n  cross-phase static state is needed\n- AppFacadeRegistrationHandler: scan-phase hook probes once and queues\n  the root class for scanning; populate-phase hook probes again (free,\n  Laravel caches the instance) and registers per-facade provider closures\n- FacadeMapProvider: drop registerCustomFacade (no remaining callers)\n- Add UnboundAccessorFacade fixture + phpt case for the fall-through\n  behavior; delete BrokenSeeFacade and the @see-parser unit tests\n\nNet −512 LoC. Follow-ups #790 (real-time facades) and #791 (assert* via\n*Fake classes) will plug into this same resolver.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* refactor: address PR review findings on facade resolver\n\nError visibility:\n- tryGetFacadeRootClass now accepts a Progress sink and emits\n  progress->debug when the probe throws. Previously \\Throwable was\n  swallowed silently, making UndefinedMethod indistinguishable from\n  a typo.\n- Add $failedFacades cache so a throwing user-provider factory doesn't\n  re-run across scan + populate phases (Laravel's $resolvedInstance\n  only caches on success).\n- afterCodebasePopulated null-probe branch now logs as well — matches\n  the scan-phase branch.\n\nSkip-list:\n- Include Laravel\\ sub-packages (Cashier, Horizon, Telescope, Pulse,\n  Octane, Pennant). Their accessors bind in package service providers\n  that may not run in Testbench, so probing them autoloads classes\n  that immediately throw BindingResolutionException.\n\nArchitecture:\n- Move tryGetFacadeRootClass from FacadeMethodHandler to\n  AppFacadeRegistrationHandler. It was the sole caller, and runtime\n  probing is a discovery-time concern; breaks the bidirectional\n  dependency between the two classes.\n\nDocs:\n- Rephrase the populate-phase \"free second probe\" comment to correctly\n  describe forked-scanner behaviour.\n- Note that ancestor-storage misses in collectPseudoStaticMethods are\n  expected for vendor classes outside projectFiles.\n\nTests, composer psalm, composer test:app all clean.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-19T11:15:45+01:00",
+          "tree_id": "3158f69ab0c8a38bd3d270e8bd5d55e32a221a83",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/56973471c046dbdc8bdefcb171fb8016521e2c5f"
+        },
+        "date": 1776593887674,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.48,
+            "range": "± 0.32",
             "unit": "s"
           },
           {
