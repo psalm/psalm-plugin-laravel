@@ -16,11 +16,8 @@ use Illuminate\Support\Facades\Facade;
  * to their service class so they can register for those names too.
  *
  * Seeded at plugin init from the booted app's AliasLoader + `Facade::getFacadeRoot()`
- * ({@see self::init()}). Augmented later during `AfterCodebasePopulated` for app-owned
- * facades resolved through `@see` docblocks ({@see self::registerCustomFacade()}). The
- * map is consumed at analysis time by handlers that call {@see self::getFacadeClasses()} —
- * handlers that consume the map in `getClassLikeNames()` (hook-registration time) only
- * see the init-time entries, not the augmentation.
+ * ({@see self::init()}). Consumed at analysis time by handlers that call
+ * {@see self::getFacadeClasses()}.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/591
  */
@@ -115,25 +112,5 @@ final class FacadeMapProvider
     public static function getFacadeClasses(string $serviceClass): array
     {
         return self::$serviceToFacades[\strtolower($serviceClass)] ?? [];
-    }
-
-    /**
-     * Augment the service-to-facade map with an app-owned facade whose root class was
-     * resolved outside the AliasLoader path — typically via a `@see` docblock pointer on
-     * a user-authored Facade subclass.
-     *
-     * Called by {@see \Psalm\LaravelPlugin\Handlers\Facades\AppFacadeRegistrationHandler}
-     * during `AfterCodebasePopulated`, after {@see self::init()} has already run.
-     *
-     * @param class-string $serviceClass underlying service class (e.g. App\Services\LicenseService)
-     * @param class-string $facadeClass  the Facade subclass (e.g. App\Facades\License)
-     * @psalm-external-mutation-free
-     */
-    public static function registerCustomFacade(string $serviceClass, string $facadeClass): void
-    {
-        /** @var lowercase-string $key */
-        $key = \strtolower($serviceClass);
-
-        self::$serviceToFacades[$key][] = $facadeClass;
     }
 }

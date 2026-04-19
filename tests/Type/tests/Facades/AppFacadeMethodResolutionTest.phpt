@@ -3,16 +3,16 @@
 
 namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
-use App\Facades\BrokenSeeFacade;
 use App\Facades\Diagnostic;
+use App\Facades\UnboundAccessorFacade;
 
 /**
- * Car repair shop domain, modelled after the koel repro of
- * https://github.com/psalm/psalm-plugin-laravel/issues/787:
- * `getReport` is NOT in the facade's `@method` catalogue but IS a public method on
- * the `@see`-referenced `App\Services\DiagnosticService`. Resolver path 3 wins.
+ * The facade's accessor is `DiagnosticService::class`, so the runtime probe
+ * (`Facade::getFacadeRoot()` + container auto-wiring) returns a DiagnosticService
+ * instance. `getReport` is not in the `@method` catalogue but is public on the
+ * resolved class — the runtime-probe path wins.
  */
-function test_see_resolves_method_not_in_method_catalogue(): string
+function test_runtime_probe_resolves_method_not_in_method_catalogue(): string
 {
     /** @psalm-check-type-exact $report = string */
     $report = Diagnostic::getReport(checkCache: false);
@@ -21,13 +21,14 @@ function test_see_resolves_method_not_in_method_catalogue(): string
 }
 
 /**
- * `@method` takes precedence over `@see`. The facade declares `@method static bool isCritical()`
- * but `DiagnosticService::isCritical()` returns `string` at runtime — the facade's declaration
- * wins because FacadeMethodHandler explicitly short-circuits when `pseudo_static_methods`
- * contains the method (without the short-circuit, our return_type_provider would fire before
- * `checkPseudoMethod` at AtomicStaticCallAnalyzer.php:639 and override the @method return).
+ * `@method` takes precedence over the runtime probe. The facade declares
+ * `@method static bool isCritical()` but `DiagnosticService::isCritical()` returns
+ * `string` at runtime — the facade's declaration wins because FacadeMethodHandler
+ * explicitly short-circuits when `pseudo_static_methods` contains the method.
+ * Without the short-circuit, our return_type_provider would fire before
+ * `checkPseudoMethod` in AtomicStaticCallAnalyzer and override the @method return.
  */
-function test_method_annotation_wins_over_see(): bool
+function test_method_annotation_wins_over_runtime_probe(): bool
 {
     /** @psalm-check-type-exact $critical = bool */
     $critical = Diagnostic::isCritical();
@@ -37,8 +38,8 @@ function test_method_annotation_wins_over_see(): bool
 
 /**
  * Non-public methods on the underlying class must NOT be surfaced on the facade.
- * `DiagnosticService::internalCheck()` is protected, so `Diagnostic::internalCheck()` should
- * still emit UndefinedMagicMethod — mirroring runtime `__callStatic` behaviour.
+ * `DiagnosticService::internalCheck()` is protected, so `Diagnostic::internalCheck()`
+ * should still emit UndefinedMagicMethod — mirroring runtime `__callStatic` behaviour.
  */
 function test_protected_method_is_not_exposed(): void
 {
@@ -69,16 +70,16 @@ function test_named_parameter_call_resolves(): string
 }
 
 /**
- * `@see` pointing at a non-existent class must fall through cleanly to UndefinedMagicMethod.
- * Verifies the resolver handles broken user docblocks without throwing and without
- * spuriously resolving methods on an unrelated class.
+ * When the facade's accessor cannot be resolved (no binding in Testbench), the resolver
+ * returns null cleanly and method calls fall through to UndefinedMagicMethod — no fatal,
+ * no spurious cross-facade method resolution.
  */
-function test_broken_see_target_falls_through(): void
+function test_unbound_accessor_falls_through(): void
 {
-    BrokenSeeFacade::anyMethod();
+    UnboundAccessorFacade::anyMethod();
 }
 ?>
 --EXPECTF--
 UndefinedMagicMethod on line %d: Magic method App\Facades\Diagnostic::internalcheck does not exist
 UndefinedMagicMethod on line %d: Magic method App\Facades\Diagnostic::definitelynotamethod does not exist
-UndefinedMagicMethod on line %d: Magic method App\Facades\BrokenSeeFacade::anymethod does not exist
+UndefinedMagicMethod on line %d: Magic method App\Facades\UnboundAccessorFacade::anymethod does not exist

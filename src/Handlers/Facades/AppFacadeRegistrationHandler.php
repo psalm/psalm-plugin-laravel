@@ -4,18 +4,20 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Facades;
 
-use Illuminate\Support\Facades\Facade;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
+use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
+use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
+use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Type\Union;
 
 /**
  * Discovers app-owned Facade subclasses from Psalm's scanned codebase and registers
- * per-class method providers so calls like `App\Facades\License::getStatus()` resolve
- * when the method exists on a `@see`-referenced concrete class.
+ * per-class method providers so calls like `App\Facades\Diagnostic::getReport()` resolve
+ * when the facade's accessor is container-resolvable at runtime.
  *
  * Why a registration handler (like {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler}):
  * Psalm's method-provider lookup is keyed on the exact FQCN being called. Registering
@@ -24,7 +26,7 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  * callbacks to each one.
  *
  * First-party `Illuminate\` facades are skipped — Laravel's framework source already
- * ships rich `@method` catalogues on those classes, and {@see FacadeMapProvider::init()}
+ * ships rich `@method` catalogues on those classes, and {@see \Psalm\LaravelPlugin\Providers\FacadeMapProvider::init()}
  * covers the alias path. Vendor-package facades (`Mockery\`, `PHPUnit\`) are skipped defensively.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/787
@@ -32,62 +34,50 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  */
 final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface, AfterCodebasePopulatedInterface
 {
-    /**
-     * Lowercase FQCN of `Illuminate\Support\Facades\Facade`. Pre-computed to avoid running
-     * `strtolower()` on a compile-time-known string per class visited during scan.
-     */
+    private const FACADE_FQCN = 'Illuminate\\Support\\Facades\\Facade';
     private const FACADE_FQCN_LOWER = 'illuminate\\support\\facades\\facade';
 
     /**
-     * Queue `@see`-referenced classes for scanning while the scan phase is still in progress.
+     * Probe `Facade::getFacadeRoot()` at scan time and queue the resolved root class for
+     * scanning. We can't do this in {@see self::afterCodebasePopulated()} because by then
+     * the scanner has stopped — a root class not already pulled in via other references
+     * would be missing its classlike storage when providers look it up.
      *
-     * Psalm's scanner reaches referenced classes through type annotations, parent/interface
-     * declarations, and expressions — but NOT through `@see` tags. Without this hook the
-     * referenced service class is typically invisible to Psalm by the time
-     * {@see self::afterCodebasePopulated()} runs, so the method resolver would fail.
-     *
-     * We check direct `extends` only (via `$stmt->extends`) because full `parent_classes`
-     * chains aren't computed until the populate phase. Indirect subclasses (user-defined
-     * base facade) are handled later in afterCodebasePopulated's registration pass — if the
-     * `@see` target is unscanned for those, the resolver falls through to path 4 or null.
+     * Direct-parent match only: during scan phase, only `$storage->parent_class` is set;
+     * the full `parent_classes` chain is built later by the populator. Indirect subclasses
+     * (`class X extends CustomBase extends Facade`) fall through to afterCodebasePopulated,
+     * where their root class can still be probed but is scanned best-effort (via other
+     * references in the project, or not at all).
      */
     #[\Override]
     public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
     {
         $storage = $event->getStorage();
 
-        // During scan phase, only $storage->parent_class (direct parent) is set; the full
-        // parent_classes chain is built later by the populator. Match against the direct
-        // parent for the common case (class X extends Facade); indirect cases
-        // (class X extends CustomBase extends Facade) are handled gracefully by the
-        // resolver falling through to null — an acceptable limitation for v1.
         if ($storage->parent_class === null) {
             return;
         }
 
-        if (\strtolower($storage->parent_class) !== self::FACADE_FQCN_LOWER) {
+        // strcasecmp avoids allocating a lowercased copy per class visited (~10k+ calls
+        // on a mid-size project). $storage->parent_class is stored in declared case.
+        if (\strcasecmp($storage->parent_class, self::FACADE_FQCN) !== 0) {
             return;
         }
 
-        // Mirror the skip-list in afterCodebasePopulated() — first-party Illuminate facades
-        // do declare `@see` targets (e.g. Cache → CacheManager + Repository), so without this
-        // check we'd reflect + queue their underlying classes during scan even though
-        // afterCodebasePopulated() later drops them from registration.
         if (self::isSkippedFacade($storage->name)) {
             return;
         }
 
-        $rootClasses = FacadeMethodHandler::resolveSeeTargetsFromStorage($storage->name, $storage);
+        $rootClass = FacadeMethodHandler::tryGetFacadeRootClass($storage->name);
 
-        if ($rootClasses === []) {
+        if ($rootClass === null) {
+            $event->getCodebase()->progress->debug(
+                "Laravel plugin: skipping facade '{$storage->name}' at scan phase: getFacadeRoot() returned no object\n",
+            );
             return;
         }
 
-        $scanner = $event->getCodebase()->scanner;
-
-        foreach ($rootClasses as $rootClass) {
-            $scanner->queueClassLikeForScanning($rootClass);
-        }
+        $event->getCodebase()->scanner->queueClassLikeForScanning($rootClass);
     }
 
     #[\Override]
@@ -96,12 +86,9 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
         $codebase = $event->getCodebase();
 
         foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
+            // Abstract classes include the base Facade itself and user-defined abstract
+            // base facades — neither should receive method providers.
             if ($storage->abstract) {
-                continue;
-            }
-
-            // Skip the base Facade class itself.
-            if (\strtolower($storage->name) === self::FACADE_FQCN_LOWER) {
                 continue;
             }
 
@@ -140,52 +127,51 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                 continue;
             }
 
-            self::registerHandlersForFacade($codebase, $storage->name);
+            // Probe once here (Laravel caches the resolved instance in Facade::$resolvedInstance,
+            // so probing a second time is free even though afterClassLikeVisit may have already
+            // probed for direct-parent facades). Facades whose accessor can't be resolved in
+            // Testbench (user-provider-only bindings) are skipped — Psalm's native `@method`
+            // handling still covers them.
+            $rootClass = FacadeMethodHandler::tryGetFacadeRootClass($storage->name);
+
+            if ($rootClass === null) {
+                continue;
+            }
+
+            self::registerHandlersForFacade($codebase, $storage->name, $rootClass);
         }
     }
 
-    private static function registerHandlersForFacade(Codebase $codebase, string $facadeClass): void
-    {
+    /** @param class-string $rootClass */
+    private static function registerHandlersForFacade(
+        Codebase $codebase,
+        string $facadeClass,
+        string $rootClass,
+    ): void {
         $methods = $codebase->methods;
 
         $methods->existence_provider->registerClosure(
             $facadeClass,
-            FacadeMethodHandler::doesMethodExist(...),
+            static fn(MethodExistenceProviderEvent $event): ?bool
+                => FacadeMethodHandler::doesMethodExist($event, $rootClass),
         );
         $methods->params_provider->registerClosure(
             $facadeClass,
-            FacadeMethodHandler::getMethodParams(...),
+            static fn(MethodParamsProviderEvent $event): ?array
+                => FacadeMethodHandler::getMethodParams($event, $rootClass),
         );
         $methods->return_type_provider->registerClosure(
             $facadeClass,
-            FacadeMethodHandler::getReturnType(...),
+            static fn(MethodReturnTypeProviderEvent $event): ?Union
+                => FacadeMethodHandler::getReturnType($event, $rootClass),
         );
-
-        // If `@see` resolved statically, extend the service-to-facade map so other
-        // handlers keyed on the service class (e.g. MissingViewHandler) also see
-        // this facade. Runtime-resolved roots (path 4) are intentionally NOT
-        // eagerly registered here — `getFacadeRoot()` is only invoked lazily during
-        // method analysis, keeping per-registration cost bounded.
-        //
-        // Note: downstream handlers that consume `FacadeMapProvider::getFacadeClasses()`
-        // at hook-registration time (`getClassLikeNames()`) will NOT see these late-added
-        // entries, because their class-name lists are frozen before AfterCodebasePopulated
-        // fires. Only analysis-time consumers benefit.
-        //
-        // Scanning of the `@see`-referenced classes is queued earlier during
-        // {@see self::afterClassLikeVisit()}; post-populate is too late for the scanner
-        // to pick it up.
-        /** @var class-string $facadeClass The caller already guards with class_exists() */
-        foreach (FacadeMethodHandler::resolveSeeTargets($codebase, $facadeClass) as $rootClass) {
-            FacadeMapProvider::registerCustomFacade($rootClass, $facadeClass);
-        }
     }
 
     /**
      * Facades we never register against. First-party `Illuminate\` facades already ship with
-     * `@method` catalogues (and are covered by {@see FacadeMapProvider::init()} for the alias
-     * path); `Mockery\` / `PHPUnit\` are defensive defaults against test doubles that happen
-     * to extend `Facade` transitively.
+     * `@method` catalogues (and are covered by {@see \Psalm\LaravelPlugin\Providers\FacadeMapProvider::init()}
+     * for the alias path); `Mockery\` / `PHPUnit\` are defensive defaults against test doubles
+     * that happen to extend `Facade` transitively.
      *
      * @psalm-pure
      */

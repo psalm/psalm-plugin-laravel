@@ -66,31 +66,4 @@ final class FacadeMapProviderTest extends TestCase
         }
     }
 
-    /**
-     * `registerCustomFacade()` augments the map for facades resolved after init — used by
-     * {@see \Psalm\LaravelPlugin\Handlers\Facades\AppFacadeRegistrationHandler} when a
-     * user-authored facade declares `@see \App\Services\X`. Verifies the service→facade
-     * lookup reflects the augmentation (case-insensitive, per the stored lowercase keying).
-     */
-    #[Test]
-    public function register_custom_facade_extends_the_service_to_facade_map(): void
-    {
-        ApplicationProvider::bootApp();
-        FacadeMapProvider::init(new VoidProgress());
-
-        // Unique marker namespaces so this test doesn't collide with any real app classes
-        // also present in the map from init().
-        $serviceClass = 'App\\Services\\TestRegisterCustomFacade\\Svc';
-        $facadeClass = 'App\\Facades\\TestRegisterCustomFacade\\Fac';
-
-        $this->assertSame([], FacadeMapProvider::getFacadeClasses($serviceClass));
-
-        FacadeMapProvider::registerCustomFacade($serviceClass, $facadeClass);
-
-        $this->assertSame([$facadeClass], FacadeMapProvider::getFacadeClasses($serviceClass));
-
-        // Case-insensitivity on the lookup key (service classes in Laravel are always
-        // stored/compared via lowercase FQCN).
-        $this->assertSame([$facadeClass], FacadeMapProvider::getFacadeClasses(\strtoupper($serviceClass)));
-    }
 }
