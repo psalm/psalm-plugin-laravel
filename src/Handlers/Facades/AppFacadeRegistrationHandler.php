@@ -35,6 +35,7 @@ use Psalm\Type\Union;
 final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface, AfterCodebasePopulatedInterface
 {
     private const FACADE_FQCN = 'Illuminate\\Support\\Facades\\Facade';
+
     private const FACADE_FQCN_LOWER = 'illuminate\\support\\facades\\facade';
 
     /**
