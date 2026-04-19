@@ -21,17 +21,17 @@ final class FacadeMethodHandlerTest extends TestCase
     #[Test]
     public function extracts_single_see_tag_fqcn(): void
     {
-        $docblock = "/**\n * @see \\App\\Services\\LicenseService\n */";
+        $docblock = "/**\n * @see \\App\\Services\\DiagnosticService\n */";
 
-        $this->assertSame(['\\App\\Services\\LicenseService'], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame(['\\App\\Services\\DiagnosticService'], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
     public function extracts_relative_see_tag(): void
     {
-        $docblock = "/** @see LicenseService */";
+        $docblock = "/** @see DiagnosticService */";
 
-        $this->assertSame(['LicenseService'], FacadeMethodHandler::extractSeeCandidates($docblock));
+        $this->assertSame(['DiagnosticService'], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
 
     #[Test]
@@ -92,7 +92,7 @@ DOC;
     #[Test]
     public function returns_empty_when_no_see_tag(): void
     {
-        $docblock = "/** @method static bool isPlus() */";
+        $docblock = "/** @method static bool isCritical() */";
 
         $this->assertSame([], FacadeMethodHandler::extractSeeCandidates($docblock));
     }
