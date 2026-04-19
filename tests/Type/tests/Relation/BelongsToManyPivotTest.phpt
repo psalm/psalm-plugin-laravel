@@ -86,5 +86,17 @@ function test_model_method_with_4_params_returns_correctly(): BelongsToMany
 {
     return (new Mechanic())->specializationsWithPivot();
 }
+
+/**
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/776
+ * Arrow-function closure on BelongsToMany::firstWhere must not raise InvalidArgument.
+ *
+ * @param BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'pivot'> $relation
+ */
+function test_belongsToMany_firstWhere_arrow_closure(BelongsToMany $relation): void
+{
+    $_ = $relation->firstWhere(fn ($q) => $q->where('name', 'x'));
+    /** @psalm-check-type-exact $_ = MechanicSpecialization&object{pivot: SpecializationPivot}|null */
+}
 ?>
 --EXPECTF--
