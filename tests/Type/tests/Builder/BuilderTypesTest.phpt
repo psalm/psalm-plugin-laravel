@@ -121,6 +121,36 @@ function test_whereDateWithInt(Builder $builder): Builder
 {
     return $builder->whereDate('created_at', '>', 1);
 }
+
+/**
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/776
+ * Arrow-function closure returns the chained Builder (`mixed`-compatible),
+ * not `void` or `static`. Must not raise InvalidArgument.
+ */
+function test_where_arrow_closure(): Builder
+{
+    return Customer::query()->where(fn ($q) => $q->where('email', 'x')->orWhere('name', 'y'));
+}
+
+/**
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/776
+ * Long-form closure with explicit `void` return must remain accepted.
+ */
+function test_where_long_form_closure(): Builder
+{
+    return Customer::query()->where(function ($q): void {
+        $q->where('email', 'x')->orWhere('name', 'y');
+    });
+}
+
+/**
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/776
+ * Same closure shape on firstWhere (a sibling stub fixed in the same PR).
+ */
+function test_firstWhere_arrow_closure(): ?Customer
+{
+    return Customer::query()->firstWhere(fn ($q) => $q->where('email', 'x'));
+}
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface|null|string, but 1 provided
