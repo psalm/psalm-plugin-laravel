@@ -307,6 +307,15 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
         $registration->registerHooksFromClass(Handlers\Jobs\DispatchableHandler::class);
 
+        // App-owned Facade subclasses: enumerate after codebase population and register
+        // per-class method providers that resolve methods via a `getFacadeRoot()` runtime
+        // probe. Covers the gap where FacadeMapProvider cannot discover a facade whose
+        // accessor is a class-string or a container-resolvable binding that AliasLoader
+        // never sees. See https://github.com/psalm/psalm-plugin-laravel/issues/787.
+        require_once __DIR__ . '/Handlers/Facades/FacadeMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
         // NoEnvOutsideConfigHandler must be registered BEFORE EnvHandler.
