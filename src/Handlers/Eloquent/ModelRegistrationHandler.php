@@ -98,8 +98,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      *
      * @see \Psalm\Internal\Analyzer\ClassAnalyzer::getAnonymousClassName()
      * @psalm-pure
+     *
+     * @internal exposed for reuse by other plugin handlers (e.g. StatsHandler)
      */
-    private static function isSyntheticAnonymousClassName(string $fqcn, string $filePath): bool
+    public static function isSyntheticAnonymousClassName(string $fqcn, string $filePath): bool
     {
         if ($filePath === '') {
             return false;
