@@ -67,12 +67,12 @@ final class CiTargetRegistryTest extends TestCase
         try {
             $registry->resolve('bitbucket', \sys_get_temp_dir());
             $this->fail('Expected UnknownCiTargetException was not thrown.');
-        } catch (UnknownCiTargetException $e) {
-            $this->assertSame('bitbucket', $e->name);
-            $this->assertSame(['github'], $e->supportedIds);
-            $this->assertStringContainsString('github', $e->getMessage());
-            $this->assertStringContainsString('bitbucket', $e->getMessage());
-            $this->assertStringContainsString('ci', $e->getMessage());
+        } catch (UnknownCiTargetException $unknownCiTargetException) {
+            $this->assertSame('bitbucket', $unknownCiTargetException->name);
+            $this->assertSame(['github'], $unknownCiTargetException->supportedIds);
+            $this->assertStringContainsString('github', $unknownCiTargetException->getMessage());
+            $this->assertStringContainsString('bitbucket', $unknownCiTargetException->getMessage());
+            $this->assertStringContainsString('ci', $unknownCiTargetException->getMessage());
         }
     }
 

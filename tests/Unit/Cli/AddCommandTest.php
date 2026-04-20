@@ -202,6 +202,7 @@ final class AddCommandTest extends TestCase
         if (\DIRECTORY_SEPARATOR === '\\') {
             $this->markTestSkipped('POSIX mode bits are required to force file_put_contents failure.');
         }
+
         if (\function_exists('posix_geteuid') && \posix_geteuid() === 0) {
             $this->markTestSkipped('Running as root bypasses directory write permissions.');
         }
@@ -341,6 +342,7 @@ final class AddCommandTest extends TestCase
         if (! \is_dir($dir)) {
             \mkdir($dir, 0755, true);
         }
+
         \file_put_contents($dir . \DIRECTORY_SEPARATOR . 'psalm.yml', $contents);
     }
 
@@ -365,6 +367,7 @@ final class AddCommandTest extends TestCase
             if ($entry === '.' || $entry === '..') {
                 continue;
             }
+
             $this->removeRecursively($path . \DIRECTORY_SEPARATOR . $entry);
         }
 

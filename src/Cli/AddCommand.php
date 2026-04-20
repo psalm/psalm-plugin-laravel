@@ -88,17 +88,17 @@ final class AddCommand extends Command
 
         try {
             $ciTarget = $registry->resolve($target, $cwd);
-        } catch (UnknownCiTargetException $e) {
-            $io->error($e->getMessage());
+        } catch (UnknownCiTargetException $unknownCiTargetException) {
+            $io->error($unknownCiTargetException->getMessage());
             return Command::FAILURE;
         }
 
         try {
             $plan = $ciTarget->plan($cwd);
-        } catch (\RuntimeException $e) {
+        } catch (\RuntimeException $runtimeException) {
             // Surfaces a corrupt plugin install (missing bundled template);
             // keep the original message because it already names the offending path.
-            $io->error($e->getMessage());
+            $io->error($runtimeException->getMessage());
             return Command::FAILURE;
         }
 

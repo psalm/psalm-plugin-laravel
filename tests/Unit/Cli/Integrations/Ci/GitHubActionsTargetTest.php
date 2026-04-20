@@ -151,6 +151,7 @@ final class GitHubActionsTargetTest extends TestCase
             if ($entry === '.' || $entry === '..') {
                 continue;
             }
+
             $this->removeRecursively($path . \DIRECTORY_SEPARATOR . $entry);
         }
 
