@@ -45,6 +45,7 @@ final class CiTargetRegistry
                     $target::class,
                 ));
             }
+
             $byId[$id] = $target;
         }
 

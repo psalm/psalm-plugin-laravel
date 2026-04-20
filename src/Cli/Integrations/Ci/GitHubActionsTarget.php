@@ -91,6 +91,7 @@ final class GitHubActionsTarget implements CiTargetInterface
                 $reason,
             ));
         }
+
         if ($contents === '') {
             throw new \RuntimeException(\sprintf(
                 'Bundled GitHub Actions template at %s is empty',
