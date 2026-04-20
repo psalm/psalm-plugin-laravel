@@ -309,4 +309,61 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * )
      */
     public function sum($callback = null) {}
+
+    /**
+     * Determine if an item exists in the collection by key.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  TKey|array<array-key, TKey>  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function has($key) {}
+
+    /**
+     * Determine if an item is not contained in the collection.
+     *
+     * Accepts extra positional args beyond ($key, $operator, $value); they are
+     * forwarded to contains() via func_get_args().
+     *
+     * @param  (callable(TValue, TKey): bool)|TValue|array-key  $key
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function doesntContain($key, $operator = null, $value = null) {}
+
+    /**
+     * Determine if an item is not contained in the collection using strict comparison.
+     *
+     * Accepts extra positional args beyond ($key, $operator, $value) and forwards
+     * them to containsStrict() via func_get_args(). The third parameter mirrors
+     * Laravel's signature even though containsStrict() only consumes two.
+     *
+     * @param  (callable(TValue, TKey): bool)|TValue|array-key  $key
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function doesntContainStrict($key, $operator = null, $value = null) {}
+
+    /**
+     * Zip the collection together with one or more arrays.
+     *
+     * Accepts variadic iterables via func_get_args().
+     *
+     * @template TZipValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  $items
+     * @return static<int, static<int, TValue|TZipValue>>
+     *
+     * @psalm-variadic
+     */
+    public function zip($items) {}
 }

@@ -145,10 +145,13 @@ class FilesystemAdapter implements CloudFilesystemContract
     /**
      * Delete the file at a given path.
      *
+     * Accepts an array of paths or variadic string arguments via func_get_args().
+     *
      * @param  string|array  $paths
      * @return bool
      *
      * @psalm-taint-sink file $paths
+     * @psalm-variadic
      */
     public function delete($paths) {}
 

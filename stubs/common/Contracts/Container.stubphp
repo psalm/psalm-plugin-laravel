@@ -22,4 +22,19 @@ interface Container extends ContainerInterface, \ArrayAccess
      * @since 5.0.0
      */
     public function offsetSet($offset, $value);
+
+    /**
+     * Assign a set of tags to a given binding.
+     *
+     * Tag names are collected from the second argument onward via
+     * array_slice(func_get_args(), 1). Accepts variadic string arguments
+     * after $abstracts.
+     *
+     * @param  array<string>|string  $abstracts
+     * @param  array<string>|string  $tags
+     * @return void
+     *
+     * @psalm-variadic
+     */
+    public function tag($abstracts, $tags);
 }

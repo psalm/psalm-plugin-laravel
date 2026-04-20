@@ -234,22 +234,41 @@ trait InteractsWithInput
     /**
      * Get a subset containing the provided keys with values from the input data.
      *
+     * Accepts an array of keys or variadic string arguments via func_get_args().
+     *
      * @param  string[]|string  $keys
      * @return array
      *
      * @psalm-taint-source input
+     * @psalm-variadic
      */
     public function only($keys) {}
 
     /**
      * Get all of the input except for a specified array of items.
      *
+     * Accepts an array of keys or variadic string arguments via func_get_args().
+     *
      * @param  string[]|string  $keys
      * @return array
      *
      * @psalm-taint-source input
+     * @psalm-variadic
      */
     public function except($keys) {}
+
+    /**
+     * Dump the request input as a debug helper.
+     *
+     * Accepts an array of keys or variadic string arguments via func_get_args().
+     * When no arguments are given, dumps the entire input bag.
+     *
+     * @param  array<string>|string  $keys
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function dump($keys = []) {}
 
     /**
      * Retrieve old input for the given key.
