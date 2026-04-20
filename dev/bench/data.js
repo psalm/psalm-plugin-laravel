@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776701378402,
+  "lastUpdate": 1776707398307,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2412,6 +2412,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "39b5299d5995f3f2aa0e8d6a2e8bbcbff96d247e",
+          "message": "Add StatsHandler to report plugin-level counts under --stats (#817)\n\n* Add StatsHandler to report plugin-level counts under --stats\n\nEmits \"Models discovered\" and \"Tables in schema\" after Psalm analysis\nwhen invoked with --stats. Detects the flag by sniffing $_SERVER['argv']\nsince Psalm does not expose it via Config/Codebase.\n\nModel count mirrors ModelRegistrationHandler's filter (abstract skip,\nparent_classes[Model] gate, synthetic-anonymous-class guard) so the\nreported number matches the set the plugin actually registers handlers\nfor. `isSyntheticAnonymousClassName` is promoted to public static to\nenable reuse; the class_exists() gate is intentionally skipped to avoid\nduplicate autoload warnings at analysis end.\n\nOutput is routed through the progress stream (typically STDERR) to keep\nSTDOUT clean for machine-readable report consumers; under --no-progress\nthe VoidProgress no-op matches the user's intent to suppress progress\noutput.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-20T18:47:16+01:00",
+          "tree_id": "807d7762895a6a06ef2f0382bfee6a7439c258aa",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/39b5299d5995f3f2aa0e8d6a2e8bbcbff96d247e"
+        },
+        "date": 1776707397353,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.09,
+            "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
