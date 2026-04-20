@@ -44,5 +44,17 @@ function test_query_override_no_args(): void
     $_result = ScopedSong::query();
     /** @psalm-check-type-exact $_result = ScopedSongBuilder */
 }
+
+/**
+ * Pseudos without a real-method counterpart must survive the shadow sweep.
+ * The trait declares `@method static Builder traitOnlyHelper()` which has no
+ * matching declaring_method_ids entry, so Psalm should still resolve the call
+ * via the pseudo rather than reporting UndefinedMagicMethod.
+ */
+function test_unshadowed_pseudo_preserved(): void
+{
+    $_result = ScopedSong::traitOnlyHelper();
+    /** @psalm-check-type-exact $_result = \Illuminate\Database\Eloquent\Builder */
+}
 ?>
 --EXPECT--
