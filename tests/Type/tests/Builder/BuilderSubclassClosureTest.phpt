@@ -33,19 +33,25 @@ final class FooEloquentBuilder extends Builder
     /** @return Builder<Customer> */
     public function publishedOnlySelfTyped(): Builder
     {
-        return $this->where(static fn (self $q): self => $q->whereNotNull('published_at'));
+        $result = $this->where(static fn (self $q): self => $q->whereNotNull('published_at'));
+        /** @psalm-check-type-exact $result = Builder<Customer> */
+        return $result;
     }
 
     /** @return Builder<Customer> */
     public function namedOnly(): Builder
     {
-        return $this->where(static fn (FooEloquentBuilder $q): FooEloquentBuilder => $q->whereNotNull('name'));
+        $result = $this->where(static fn (FooEloquentBuilder $q): FooEloquentBuilder => $q->whereNotNull('name'));
+        /** @psalm-check-type-exact $result = Builder<Customer> */
+        return $result;
     }
 
     /** @return Builder<Customer> */
     public function untypedArrow(): Builder
     {
-        return $this->where(static fn ($q) => $q->whereNotNull('email'));
+        $result = $this->where(static fn ($q) => $q->whereNotNull('email'));
+        /** @psalm-check-type-exact $result = Builder<Customer> */
+        return $result;
     }
 
     /** @return Builder<Customer> */
@@ -86,7 +92,9 @@ final class FooEloquentBuilder extends Builder
 // doesn't silently regress bidirectional inference on untyped arrow closures.
 function test_base_builder_untyped_arrow(): Builder
 {
-    return Customer::query()->where(fn ($q) => $q->where('email', 'x'));
+    $result = Customer::query()->where(fn ($q) => $q->where('email', 'x'));
+    /** @psalm-check-type-exact $result = Builder<Customer> */
+    return $result;
 }
 
 // orWhere got the same two-branch union in this PR (was previously a bare
@@ -94,7 +102,9 @@ function test_base_builder_untyped_arrow(): Builder
 // typed branch now drives bidirectional inference here too.
 function test_base_builder_orWhere_untyped_arrow(): Builder
 {
-    return Customer::query()->orWhere(fn ($q) => $q->where('email', 'x'));
+    $result = Customer::query()->orWhere(fn ($q) => $q->where('email', 'x'));
+    /** @psalm-check-type-exact $result = Builder<Customer> */
+    return $result;
 }
 
 ?>

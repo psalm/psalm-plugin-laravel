@@ -112,10 +112,11 @@ final class MechanicSpecializationBuilder extends Builder {}
  * Closure(Builder<TRelatedModel>) branch, which would trip ArgumentTypeCoercion
  * on contravariance without the untyped \Closure branch added by the fix.
  *
- * (Using a Builder subclass rather than a BelongsToMany subclass sidesteps the
- * __call forwarding path that BelongsToMany uses for Builder's where-family
- * methods — see the failed round-1 attempt. The Builder subclass is the
- * minimal reproducer of the contravariance pattern fixed here.)
+ * Uses a Builder subclass (not a BelongsToMany subclass) as the closure param:
+ * where-family methods on BelongsToMany are reached at runtime through __call
+ * forwarding, so a self-typed closure on a BelongsToMany subclass would fail
+ * Psalm inside the closure body for reasons unrelated to #815. The Builder
+ * subclass is the minimal reproducer of the contravariance pattern fixed here.
  *
  * @param BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'pivot'> $relation
  */
