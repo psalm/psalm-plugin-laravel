@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776677016398,
+  "lastUpdate": 1776689732340,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2337,6 +2337,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.06,
             "range": "± 0.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7aca2bedbf55d5844fa0621b76f828f309c9f6e6",
+          "message": "Add `psalm-laravel add` subcommand for GitHub Actions workflow (#814)\n\n* Add `psalm-laravel add` subcommand for GitHub Actions workflow\n\nWires `vendor/bin/psalm-laravel add ci` and `add github` to drop a\n`.github/workflows/psalm.yml` with two jobs: type analysis and taint\nanalysis with SARIF upload to GitHub Code Scanning.\n\nThe adapter layer (`CiTargetInterface`, `CiTargetRegistry`,\n`GitHubActionsTarget`, `CiPlan`) is the extension seam for follow-up\nCI providers (GitLab, Bitbucket). The `ci` name resolves via\nauto-detect and falls back to the first registered adapter.\n\nWrites are atomic (tmp file + rename) with cleanup on both write and\nrename failures so a killed process cannot leave a half-written\nworkflow that would break CI on the next push.\n\nRefs #811\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* Address PR review: registry guards, SARIF guard, template error split\n\n* `CiTargetRegistry` now throws on duplicate target ids, matching the\n  existing \"reserved `ci` id\" and \"empty list\" guards. Silent last-wins\n  would mask registration bugs and make auto-detect order sequence-\n  dependent.\n* `GitHubActionsTarget::plan()` splits the \"unreadable\" and \"empty\n  template\" branches so the empty-file message does not append a stale\n  `error_get_last()` message left over from earlier @-suppressed calls.\n* Workflow template: guards the SARIF upload with `hashFiles(...)` so a\n  Psalm crash before report generation does not fail the job, and adds\n  `actions: read` to the security job's permissions for GHAS edge\n  cases.\n* Drops the unused `use InvalidArgumentException;` in\n  `UnknownCiTargetException`; the class already references the parent\n  via FQN, matching the project's import convention.\n\nSkipped: the Windows-rename overwrite suggestion weakens atomicity and\nPHP 7.3+ already uses `MOVEFILE_REPLACE_EXISTING` for rename().\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* Remove --dry-run option from add command\n\nA CI-workflow install writes a single file to a well-known path. The\nsuccess message names the written path; a user who wants to preview\ncan run the command and inspect/discard the result via git. Dropping\nthe option simplifies the CLI surface and the test matrix.\n\nAlso removes the two dry-run unit tests.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-20T13:53:02+01:00",
+          "tree_id": "89343a67c3e5216c51e564bb59d0a5a463679909",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7aca2bedbf55d5844fa0621b76f828f309c9f6e6"
+        },
+        "date": 1776689732004,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.12,
+            "range": "± 0.09",
             "unit": "s"
           },
           {
