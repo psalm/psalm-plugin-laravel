@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776675484428,
+  "lastUpdate": 1776677016398,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2307,6 +2307,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "998820616b26898542e0aa96c372ef2e64644545",
+          "message": "Fix `Model::query()` override shadowed by trait @method pseudos (#795) (#807)\n\n* fix: unshadow Model::query() overrides from trait @method pseudos (#795)\n\nTraits that declare `@method static Builder query()` (e.g. Koel's\nSupportsDeleteWhereValueNotIn) inject a zero-param pseudo into every\nmodel that uses them. Psalm's AtomicStaticCallAnalyzer checks\npseudo_static_methods first for argument validation, so the pseudo\nrejected `Song::query(type: $t, user: $u)` with TooManyArguments and\nInvalidNamedArgument even though Song declared its own query() with\nthose parameters.\n\nThe previous AfterClassLikeVisit hook was a no-op because\nPopulator::populateDataFromTrait() merges trait pseudos into the\nmodel's storage after the scan phase. Move the removal into\nAfterCodebasePopulated and drop any pseudo whose name matches a real\ndeclaration (via declaring_method_ids), which also covers on(),\nonWriteConnection(), with() and other Model static helpers.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix: qualify array_keys and add preservation test (#795)\n\nReview follow-up:\n- Add leading backslash to array_keys() to match the file's convention\n  (every other global function call is qualified).\n- Add a pseudo-preservation test case: trait declares `traitOnlyHelper()`\n  with no real-method counterpart, asserting the pseudo still resolves\n  rather than being dropped by the new shadow sweep.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-20T10:21:04+01:00",
+          "tree_id": "62f862228fdb05feb32616c4325fdf3193db9817",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/998820616b26898542e0aa96c372ef2e64644545"
+        },
+        "date": 1776677016095,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.06,
+            "range": "± 0.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
