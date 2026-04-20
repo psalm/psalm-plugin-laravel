@@ -184,7 +184,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     }
 
     #[Test]
-    public function url_rule_keeps_all_taint(): void
+    public function url_rule_removes_only_header_and_cookie_taint(): void
     {
         $rule = $this->resolve('url');
 
@@ -192,7 +192,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     }
 
     #[Test]
-    public function ip_rule_keeps_all_taint(): void
+    public function ip_rule_removes_all_input_taint_except_ssrf(): void
     {
         $rule = $this->resolve('ip');
 
@@ -200,7 +200,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     }
 
     #[Test]
-    public function email_rule_keeps_all_taint(): void
+    public function email_rule_removes_only_header_and_cookie_taint(): void
     {
         $rule = $this->resolve('email');
 
