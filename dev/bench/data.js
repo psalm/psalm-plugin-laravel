@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776624932611,
+  "lastUpdate": 1776673154718,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2237,6 +2237,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "66292a8662fc42a4963462f421da89724f83f449",
+          "message": "fix(stubs): @psalm-variadic for Rule::in, notIn, contains, doesntContain #798 (#806)\n\nLaravel's `Illuminate\\Validation\\Rule` declares these four static methods\nwith a single `$values` parameter but reads variadic arguments at runtime\nvia `func_get_args()`. Without `@psalm-variadic`, Psalm reports\nTooManyArguments on the common idiom `Rule::in('asc', 'desc', 'rand')`.\n\nSame class of fix as #518 for Builder::select() and ResponseTrait::cookie().\n\nCovers all four methods in Rule.php that share the\n`is_array($values) ? $values : func_get_args()` idiom.",
+          "timestamp": "2026-04-20T09:16:41+01:00",
+          "tree_id": "5964d163e05d9009e1bc19d9a1f79cbe8cc38f58",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/66292a8662fc42a4963462f421da89724f83f449"
+        },
+        "date": 1776673154214,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.3,
+            "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
