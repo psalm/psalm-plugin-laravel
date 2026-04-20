@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776673154718,
+  "lastUpdate": 1776675484428,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2272,6 +2272,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18a04d2762499986e5c33879c51e7c2d075e8d37",
+          "message": "Widen `Collection::make`/`LazyCollection::make`/`collect()` for scalar inputs (#783)\n\n* fix: widen Collection::make, LazyCollection::make, collect() to accept scalar/UnitEnum/null\n\nLaravel's Collection constructors delegate to getArrayableItems(), which wraps\nscalar/UnitEnum/null via Arr::wrap() into a single-element array (or [] for null).\nLaravel's own docblock, however, only types Arrayable|iterable|null, so idiomatic\ncalls like Collection::make('some') raise false-positive InvalidArgument under Psalm.\n\nWiden the stubs to match runtime acceptance. Keep LazyCollection::make's Closure(): Generator\nand self alternatives for the lazy-generator pattern. Scalar inputs intentionally resolve\nto the generic Collection<array-key, mixed>: a narrower conditional return type was tried\nbut polluted the return type for the common Arrayable/iterable path (see the stub docblock\nfor the full rationale).\n\n* fix: narrow Collection::make scalar inputs to Collection<int, TScalar>\n\nReorder the conditional return type to check Arrayable|iterable|Closure FIRST, so typed\niterable inputs keep their template params, and scalar/UnitEnum inputs fall through to the\nprecise `static<int, $items>` branch. Matches runtime Arr::wrap() which wraps scalar/enum\ninto `[$value]`, so `collect(42) => Collection<int, 42>` instead of the generic fallback.\n\nPreviously the stub dropped the conditional entirely after an earlier attempt polluted the\nunion for Arrayable/iterable inputs. The positive-check-first ordering gets both behaviours.\n\n* docs: fix cross-refs in Collection make stubs to use FQCN {@see}\n\n* docs: clarify null vs scalar behavior in Collection make wording",
+          "timestamp": "2026-04-20T09:55:19+01:00",
+          "tree_id": "a61e5df619d4ff903eb3d294ebf66fb1fca2e8e7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/18a04d2762499986e5c33879c51e7c2d075e8d37"
+        },
+        "date": 1776675483511,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.7,
+            "range": "± 0.47",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
