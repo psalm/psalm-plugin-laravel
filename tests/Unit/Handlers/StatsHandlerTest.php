@@ -9,7 +9,6 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\StatsHandler;
-use ReflectionMethod;
 
 #[CoversClass(StatsHandler::class)]
 final class StatsHandlerTest extends TestCase
@@ -61,7 +60,7 @@ final class StatsHandlerTest extends TestCase
             $_SERVER['argv'] = $argv;
         }
 
-        $method = new ReflectionMethod(StatsHandler::class, 'statsRequested');
+        $method = new \ReflectionMethod(StatsHandler::class, 'statsRequested');
 
         $this->assertSame($expected, $method->invoke(null));
     }
