@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776713987316,
+  "lastUpdate": 1776717239011,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2482,6 +2482,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d5a9d70e273f8bc5e1c207fd5253fee3bfcbe8ea",
+          "message": "fix(#558) better taint escape for Validation Rules (#819)",
+          "timestamp": "2026-04-20T21:31:33+01:00",
+          "tree_id": "e42e245622d2382897eb77f3fd8d559ba3d02c1c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d5a9d70e273f8bc5e1c207fd5253fee3bfcbe8ea"
+        },
+        "date": 1776717238022,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.48,
+            "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
             "unit": "MB"
           }
         ]
