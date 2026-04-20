@@ -127,6 +127,28 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $properties = $codebase->properties;
         $methods = $codebase->methods;
 
+        // Drop pseudo_static_methods that shadow real method declarations. Traits can declare
+        // `@method static Builder query()` (e.g. Koel's SupportsDeleteWhereValueNotIn); this
+        // injects a zero-param pseudo into every model that uses the trait. Psalm's static
+        // call analyzer checks pseudo_static_methods first for argument validation, so the
+        // pseudo rejects Song::query(type: $t, user: $u) with TooManyArguments even though
+        // Song declares `public static function query(?PlayableType $t, ?User $u)`. The same
+        // shadowing applies to Model's other static helpers (on, onWriteConnection, with, ...),
+        // so drop any pseudo whose name also corresponds to a real declaration on the class
+        // (declared here, inherited from Model, or imported via another trait); declaring_method_ids
+        // lists every such real declaration.
+        //
+        // Runs here (post-populator) rather than in an AfterClassLikeVisit hook because
+        // Populator::populateDataFromTrait() merges trait pseudo_static_methods into the
+        // model's storage AFTER the scan phase, so earlier removal is a no-op.
+        //
+        // Issue: https://github.com/psalm/psalm-plugin-laravel/issues/795
+        foreach (\array_keys($storage->pseudo_static_methods) as $methodName) {
+            if (isset($storage->declaring_method_ids[$methodName])) {
+                unset($storage->pseudo_static_methods[$methodName]);
+            }
+        }
+
         // Detect custom builder class via attribute, method override, or $builder property.
         // Class is already loaded by autoloader above.
         /** @var class-string<Model> $className — verified by parent_classes check in caller */
