@@ -81,7 +81,27 @@ class Builder implements BuilderContract
     /**
      * Add a basic where clause to the query.
      *
-     * @param  (\Closure(self<TModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * The closure parameter is a two-branch union by design:
+     *
+     *   1. `\Closure(self<TModel>): mixed` drives Psalm's bidirectional
+     *      inference for untyped arrow fns — `fn ($q) => $q->where(...)` (#776).
+     *      `self<TModel>` resolves to `Builder<TModel>` inside the stub, so `$q`
+     *      is typed and chained calls type-check.
+     *   2. `\Closure` (untyped) catches closures whose parameter type is more
+     *      specific than `Builder<TModel>` — e.g. a Builder subclass passing
+     *      `fn (self $q): self => ...` (#815). A typed `Closure(self<TModel>)`
+     *      branch alone would reject these on contravariance, since the
+     *      subclass is narrower than `Builder<TModel>`. `Closure(static)` would
+     *      express the right constraint, but Psalm 7 does not unify `static`
+     *      against `TModel` in closure parameter positions, so it cannot drive
+     *      bidirectional inference for branch 1.
+     *
+     * Psalm does not collapse these branches even though the second is a
+     * supertype of the first: closure signatures with a known shape remain
+     * addressable for bidirectional inference, and the untyped `\Closure`
+     * provides the fallback.
+     *
+     * @param  (\Closure(self<TModel>): mixed)|\Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed   $operator
      * @param  mixed   $value
      * @param  string  $boolean
@@ -103,7 +123,11 @@ class Builder implements BuilderContract
     public function whereDate($column, $operator, $value = null, $boolean = 'and') {}
 
     /**
-     * @param  \Closure|array|string  $column
+     * Add an "or where" clause to the query.
+     *
+     * See where(): same closure-branch rationale applies.
+     *
+     * @param  (\Closure(self<TModel>): mixed)|\Closure|array|string|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return self<TModel>
@@ -378,7 +402,9 @@ class Builder implements BuilderContract
     public function firstOrCreate(array $attributes = [], \Closure|array $values = []) {}
 
     /**
-     * @param  (\Closure(self<TModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * See where(): same closure-branch rationale applies.
+     *
+     * @param  (\Closure(self<TModel>): mixed)|\Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed   $operator
      * @param  mixed   $value
      * @param  string  $boolean
@@ -671,7 +697,9 @@ class Builder implements BuilderContract
     /**
      * Add a basic "where not" clause to the query.
      *
-     * @param  (\Closure(self<TModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * See where(): same closure-branch rationale applies.
+     *
+     * @param  (\Closure(self<TModel>): mixed)|\Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @param  string  $boolean
@@ -686,7 +714,9 @@ class Builder implements BuilderContract
     /**
      * Add an "or where not" clause to the query.
      *
-     * @param  (\Closure(self<TModel>): mixed)|array|string|\Illuminate\Contracts\Database\Query\Expression  $column
+     * See where(): same closure-branch rationale applies.
+     *
+     * @param  (\Closure(self<TModel>): mixed)|\Closure|array|string|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return self<TModel>

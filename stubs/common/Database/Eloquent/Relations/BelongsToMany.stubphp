@@ -176,7 +176,13 @@ class BelongsToMany extends Relation
     public function firstOr($columns = ['*'], \Closure $callback = null) {}
 
     /**
-     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * Closure param is a two-branch union for the same reason as
+     * Builder::where — see that method's docblock for the full rationale.
+     * Short version: typed branch enables bidirectional inference for
+     * arrow fns, untyped `\Closure` branch accepts Builder-subclass
+     * typed closures without tripping contravariance.
+     *
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|\Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @param  string  $boolean

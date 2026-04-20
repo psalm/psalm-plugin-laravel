@@ -4,6 +4,7 @@
 use App\Models\Mechanic;
 use App\Models\MechanicSpecialization;
 use App\Models\SpecializationPivot;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 
@@ -96,6 +97,31 @@ function test_model_method_with_4_params_returns_correctly(): BelongsToMany
 function test_belongsToMany_firstWhere_arrow_closure(BelongsToMany $relation): void
 {
     $_ = $relation->firstWhere(fn ($q) => $q->where('name', 'x'));
+    /** @psalm-check-type-exact $_ = MechanicSpecialization&object{pivot: SpecializationPivot}|null */
+}
+
+/**
+ * @extends Builder<MechanicSpecialization>
+ */
+final class MechanicSpecializationBuilder extends Builder {}
+
+/**
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/815
+ *
+ * A closure typed to a Builder subclass is narrower than the stub's declared
+ * Closure(Builder<TRelatedModel>) branch, which would trip ArgumentTypeCoercion
+ * on contravariance without the untyped \Closure branch added by the fix.
+ *
+ * (Using a Builder subclass rather than a BelongsToMany subclass sidesteps the
+ * __call forwarding path that BelongsToMany uses for Builder's where-family
+ * methods — see the failed round-1 attempt. The Builder subclass is the
+ * minimal reproducer of the contravariance pattern fixed here.)
+ *
+ * @param BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'pivot'> $relation
+ */
+function test_belongsToMany_firstWhere_builder_subclass_typed(BelongsToMany $relation): void
+{
+    $_ = $relation->firstWhere(static fn (MechanicSpecializationBuilder $q): MechanicSpecializationBuilder => $q->whereNotNull('name'));
     /** @psalm-check-type-exact $_ = MechanicSpecialization&object{pivot: SpecializationPivot}|null */
 }
 ?>
