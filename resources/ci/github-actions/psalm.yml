@@ -47,8 +47,10 @@ jobs:
   security:
     name: Psalm security analysis
     runs-on: ubuntu-latest
-    # security-events: write is required for the SARIF upload below.
+    # security-events: write is required for the SARIF upload; actions: read
+    # covers SARIF-upload edge cases when GitHub Advanced Security is in use.
     permissions:
+      actions: read
       contents: read
       security-events: write
     steps:
@@ -69,8 +71,10 @@ jobs:
         run: ./vendor/bin/psalm --taint-analysis --report=psalm-security.sarif --output-format=github --no-progress --no-cache --threads=2
         continue-on-error: true
 
+      # Guard with hashFiles so the step skips (rather than fails) when Psalm
+      # crashed before writing the report or when the repo has no findings yet.
       - name: Upload SARIF to GitHub Code Scanning
-        if: always()
+        if: ${{ always() && hashFiles('psalm-security.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: psalm-security.sarif

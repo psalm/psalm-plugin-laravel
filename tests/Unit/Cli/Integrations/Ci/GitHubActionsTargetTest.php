@@ -125,7 +125,7 @@ final class GitHubActionsTargetTest extends TestCase
         \file_put_contents($emptyTemplate, '');
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('unreadable or empty');
+        $this->expectExceptionMessage('is empty');
 
         (new GitHubActionsTarget($emptyTemplate))->plan($this->tempDir);
     }

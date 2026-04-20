@@ -85,6 +85,31 @@ final class CiTargetRegistryTest extends TestCase
         new CiTargetRegistry([]);
     }
 
+    #[Test]
+    public function duplicate_target_ids_are_rejected_at_construction(): void
+    {
+        // Silently last-wins would mask a registration bug and make detection
+        // order dependent on construction sequence. Fail loudly instead.
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Duplicate CI target id "github"');
+
+        new CiTargetRegistry([
+            $this->makeTarget('github', detects: false),
+            $this->makeTarget('github', detects: true),
+        ]);
+    }
+
+    #[Test]
+    public function reserved_ci_id_is_rejected_at_construction(): void
+    {
+        // `ci` is the auto-detect alias in resolve(); adapter using it would
+        // be unreachable via the CLI.
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('reserved for the auto-detect alias');
+
+        new CiTargetRegistry([$this->makeTarget('ci', detects: false)]);
+    }
+
     /**
      * Minimal in-memory target used purely as a registry placeholder. The
      * production registry never inspects plan()/displayName() while resolving

@@ -75,18 +75,26 @@ final class GitHubActionsTarget implements CiTargetInterface
         $templatePath = $this->resolveTemplatePath();
 
         // file_get_contents returns false on failure instead of throwing.
-        // An empty string is technically a successful read, but an empty
-        // workflow file would break CI on the next push with a confusing
-        // "invalid workflow" error; treat it as failure too. Both cases point
-        // at a broken plugin install, which is what the caller needs to know.
+        // An empty string is a successful read of a zero-byte file, but we
+        // still reject it because an empty workflow would break CI on the
+        // next push with a confusing "invalid workflow" error. Split the two
+        // branches: only the `false` case has a meaningful error_get_last();
+        // for `''` it could be a stale message from an earlier @-suppressed
+        // call anywhere in the process.
         $contents = @\file_get_contents($templatePath);
-        if ($contents === false || $contents === '') {
+        if ($contents === false) {
             $error = \error_get_last();
             $reason = isset($error['message']) ? ': ' . $error['message'] : '';
             throw new \RuntimeException(\sprintf(
-                'Bundled GitHub Actions template at %s is unreadable or empty%s',
+                'Bundled GitHub Actions template at %s is unreadable%s',
                 $templatePath,
                 $reason,
+            ));
+        }
+        if ($contents === '') {
+            throw new \RuntimeException(\sprintf(
+                'Bundled GitHub Actions template at %s is empty',
+                $templatePath,
             ));
         }
 

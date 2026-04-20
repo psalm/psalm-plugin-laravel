@@ -32,7 +32,20 @@ final class CiTargetRegistry
     {
         $byId = [];
         foreach ($targets as $target) {
-            $byId[$target->id()] = $target;
+            $id = $target->id();
+            if (isset($byId[$id])) {
+                // Silently overwriting would mask the misconfiguration and
+                // make auto-detection order depend on registration sequence
+                // in subtle ways. Fail loudly with both implementation names
+                // so the caller can see which adapter they need to drop.
+                throw new \RuntimeException(\sprintf(
+                    'Duplicate CI target id "%s" registered by %s and %s.',
+                    $id,
+                    $byId[$id]::class,
+                    $target::class,
+                ));
+            }
+            $byId[$id] = $target;
         }
 
         if ($byId === []) {

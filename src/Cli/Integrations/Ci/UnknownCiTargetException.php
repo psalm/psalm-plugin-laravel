@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Cli\Integrations\Ci;
 
-use InvalidArgumentException;
-
 /**
  * Raised by CiTargetRegistry when an unknown target name is requested.
  *
- * Subclassing InvalidArgumentException keeps it idiomatic (the user-supplied
+ * Subclassing \InvalidArgumentException keeps it idiomatic (the user-supplied
  * argument is wrong) while giving AddCommand a dedicated type to catch without
- * swallowing unrelated InvalidArgumentExceptions from console parsing. The
+ * swallowing unrelated \InvalidArgumentExceptions from console parsing. The
  * $name and $supportedIds properties are retained (rather than only the
  * formatted message) so downstream handlers can format friendlier errors or
  * suggest a close-match target without re-parsing the message.
