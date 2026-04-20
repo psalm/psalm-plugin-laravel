@@ -9,13 +9,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
-use PhpParser\Node\Stmt\Class_;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
-use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
-use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -34,7 +31,6 @@ use Psalm\Type\Union;
  * 2. Method visibility — confirms magic methods are public
  * 3. Method params — provides parameter definitions for argument checking
  * 4. Return types — proxies calls to Builder<TModel> for type inference
- * 5. afterClassLikeVisit — removes pseudo static methods so the plugin can handle them
  *
  * Existence, visibility, params, and return type providers for concrete Model subclasses are
  * registered dynamically per-model by {@see ModelRegistrationHandler} because Psalm's
@@ -47,7 +43,7 @@ use Psalm\Type\Union;
  * Builder-instance handlers (trait methods and scopes on custom builders) are in
  * {@see CustomBuilderMethodHandler}.
  */
-final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
+final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 {
     /**
      * Cache for isUnresolvedBuilderMethod results.
@@ -481,21 +477,4 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         return $params;
     }
 
-    /** @inheritDoc */
-    #[\Override]
-    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
-    {
-        $storage = $event->getStorage();
-        if (
-            $event->getStmt() instanceof Class_
-            && !$storage->abstract
-            && isset($storage->parent_classes[\strtolower(Model::class)])
-        ) {
-            unset(
-                $storage->pseudo_static_methods['newmodelquery'],
-                $storage->pseudo_static_methods['newquery'],
-                $storage->pseudo_static_methods['query'],
-            );
-        }
-    }
 }
