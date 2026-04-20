@@ -197,8 +197,10 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                 return null;
             }
 
-            /** @var mixed $root — getFacadeRoot() is untyped and container bindings can resolve to anything */
-            $root = $facadeClass::getFacadeRoot();
+            // getFacadeRoot() is untyped (`@return mixed`) and container bindings can
+            // resolve to anything; route through the typed helper so the caller does
+            // not observe a mixed value directly.
+            return self::classOfFacadeRoot($facadeClass::getFacadeRoot());
         } catch (\Throwable $throwable) {
             self::$failedFacades[$facadeClass] = true;
             $progress?->debug(
@@ -206,7 +208,19 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             );
             return null;
         }
+    }
 
+    /**
+     * Narrow the untyped `Facade::getFacadeRoot()` result to a class-string of its
+     * runtime object, or null for any non-object value. The `mixed` parameter is a
+     * deliberate boundary: it contains the untyped value inside this helper so the
+     * caller's local types stay precise (keeps project-wide Psalm type coverage at 100%).
+     *
+     * @return ?class-string
+     * @psalm-pure
+     */
+    private static function classOfFacadeRoot(mixed $root): ?string
+    {
         return \is_object($root) ? \get_class($root) : null;
     }
 
