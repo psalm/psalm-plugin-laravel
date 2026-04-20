@@ -158,28 +158,28 @@ final class ValidationRuleAnalyzer
     private static function ruleToType(string $rule, ?string $param): ?Union
     {
         return match ($rule) {
-            'string'                           => Type::getString(),
-            'integer'                          => new Union([new TInt(), new TNumericString()]),
-            'numeric'                          => new Union([new TInt(), new TFloat(), new TNumericString()]),
+            'string' => Type::getString(),
+            'integer' => new Union([new TInt(), new TNumericString()]),
+            'numeric' => new Union([new TInt(), new TFloat(), new TNumericString()]),
             'decimal',
-            'digits', 'digits_between'         => new Union([new TNumericString()]),
+            'digits', 'digits_between' => new Union([new TNumericString()]),
             // Laravel's boolean rule accepts: true, false, 0, 1, '0', '1'
-            'boolean'                          => self::booleanRuleType(),
+            'boolean' => self::booleanRuleType(),
             // Laravel's accepted rule accepts: 'yes', 'on', 1, '1', true
-            'accepted', 'accepted_if'          => self::acceptedRuleType(),
+            'accepted', 'accepted_if' => self::acceptedRuleType(),
             // Laravel's declined rule accepts: 'no', 'off', 0, '0', false
-            'declined', 'declined_if'          => self::declinedRuleType(),
-            'array'                            => new Union([
+            'declined', 'declined_if' => self::declinedRuleType(),
+            'array' => new Union([
                 new TArray([Type::getArrayKey(), Type::getMixed()]),
             ]),
-            'list'                             => new Union([
+            'list' => new Union([
                 Type::getListAtomic(Type::getMixed()),
             ]),
             'file', 'image',
-            'mimes', 'mimetypes'               => new Union([
+            'mimes', 'mimetypes' => new Union([
                 new TNamedObject(\Illuminate\Http\UploadedFile::class),
             ]),
-            'in'                               => self::inRuleToLiteralUnion($param),
+            'in' => self::inRuleToLiteralUnion($param),
             'uuid', 'ulid',
             'alpha', 'alpha_num', 'alpha_dash',
             'hex_color', 'mac_address',
@@ -190,8 +190,8 @@ final class ValidationRuleAnalyzer
             'timezone',
             'email', 'url', 'active_url',
             'ip', 'ipv4', 'ipv6',
-            'json'                             => Type::getString(),
-            default                            => null,
+            'json' => Type::getString(),
+            default => null,
         };
     }
 
@@ -206,6 +206,8 @@ final class ValidationRuleAnalyzer
     private static function ruleToRemovedTaints(string $rule): int
     {
         return match ($rule) {
+            // Strictly character-constrained — values cannot contain any meta-characters
+            // that matter to known input sinks, so we escape every INPUT_* kind.
             'integer', 'numeric', 'boolean',
             'decimal', 'digits', 'digits_between',
             'accepted', 'accepted_if',
@@ -218,10 +220,34 @@ final class ValidationRuleAnalyzer
             'after', 'after_or_equal',
             'date_equals',
             'timezone',
-            'in'                                    => TaintKind::ALL_INPUT,
+            'in' => TaintKind::ALL_INPUT,
+
+            // IP literals: restricted to digits / dots / colons / hex letters.
+            // Safe everywhere except SSRF — a syntactically valid IP can still
+            // resolve to an internal host (169.254.169.254, 127.0.0.1, ::1, etc.).
+            'ip', 'ipv4', 'ipv6' => TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF,
+
+            // Emails: Laravel's email validators reject raw whitespace and control
+            // characters, which is sufficient to prevent CRLF header injection in
+            // practice. We only escape header (and cookie, which is header-framed)
+            // taint — RFC 5322 quoted local parts can still embed quotes, angle
+            // brackets and shell meta, so SQL / HTML / LDAP / XPath / SHELL / SSRF
+            // taint is preserved.
+            // Caveat: RFCValidation technically permits folding whitespace (CRLF+WSP)
+            // inside quoted-strings; if that matters, switch the rule to
+            // `email:strict` or `email:filter`. The plugin does not yet distinguish
+            // these modes, so we take the pragmatic stance.
+            'email' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
+
+            // URLs: filter_var / RFC validation rejects CRLF and raw whitespace,
+            // so it's safe for header/cookie sinks. A validated URL is still the
+            // primary SSRF vector, and path / query components may carry HTML,
+            // SQL, shell, or XPath payloads — those taints are preserved.
+            'url', 'active_url' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
+
             // file, image, mimes, mimetypes → keep taint (file names/paths/contents are user-controlled)
-            // string, email, url, ip, json, regex, required, max, min, etc. → keep all taint
-            default                                 => 0,
+            // string, json, regex, required, max, min, etc. → keep all taint
+            default => 0,
         };
     }
 
@@ -361,7 +387,7 @@ final class ValidationRuleAnalyzer
      *   'items.*' → wraps in list<T>
      *   'items.*.name' → builds list<array{name: T}>
      *
-     * @param array<string, list<string>> $rawRules  field => rule segments
+     * @param array<string, list<string>> $rawRules field => rule segments
      * @return array<string, ResolvedRule>
      */
     private static function resolveRules(array $rawRules): array
