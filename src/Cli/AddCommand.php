@@ -54,12 +54,6 @@ final class AddCommand extends Command
             'What to install: "ci" (auto-detect) or an explicit provider name such as "github".',
         );
         $this->addOption(
-            'dry-run',
-            null,
-            InputOption::VALUE_NONE,
-            'Print the plan and exit without writing any files.',
-        );
-        $this->addOption(
             'force',
             'f',
             InputOption::VALUE_NONE,
@@ -105,11 +99,6 @@ final class AddCommand extends Command
         $io->section(\sprintf('Target: %s', $ciTarget->displayName()));
         $action = $plan->targetExists ? 'UPDATE' : 'CREATE';
         $io->writeln(\sprintf('  %s %s', $action, $plan->path));
-
-        if ($input->getOption('dry-run') === true) {
-            $io->note('Dry run: no files were written.');
-            return Command::SUCCESS;
-        }
 
         if ($plan->targetExists && $input->getOption('force') !== true) {
             $overwrite = $io->confirm(

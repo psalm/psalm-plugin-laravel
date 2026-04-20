@@ -71,35 +71,6 @@ final class AddCommandTest extends TestCase
     }
 
     #[Test]
-    public function dry_run_prints_plan_without_writing(): void
-    {
-        $tester = $this->makeTester();
-
-        $exit = $tester->execute(['target' => 'github', '--dry-run' => true]);
-
-        $this->assertSame(Command::SUCCESS, $exit);
-        $this->assertFileDoesNotExist($this->workflowPath());
-        $display = $tester->getDisplay();
-        $this->assertStringContainsString('CREATE', $display);
-        $this->assertStringContainsString('Dry run', $display);
-    }
-
-    #[Test]
-    public function dry_run_reports_update_when_file_exists(): void
-    {
-        $this->preexistingWorkflow('name: preexisting');
-
-        $tester = $this->makeTester();
-
-        $exit = $tester->execute(['target' => 'github', '--dry-run' => true]);
-
-        $this->assertSame(Command::SUCCESS, $exit);
-        $this->assertStringContainsString('UPDATE', $tester->getDisplay());
-        // Dry run must not mutate the existing file.
-        $this->assertSame('name: preexisting', \file_get_contents($this->workflowPath()));
-    }
-
-    #[Test]
     public function refuses_to_overwrite_when_user_answers_no(): void
     {
         $this->preexistingWorkflow('name: preexisting');
