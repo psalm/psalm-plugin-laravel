@@ -3,6 +3,7 @@
 
 declare(strict_types=1);
 
+use Psalm\LaravelPlugin\Cli\AddCommand;
 use Psalm\LaravelPlugin\Cli\AnalyzeCommand;
 use Psalm\LaravelPlugin\Cli\InitCommand;
 use Symfony\Component\Console\Application;
@@ -29,6 +30,7 @@ if (! class_exists(InitCommand::class)) {
 $application = new Application('psalm-laravel');
 $application->addCommand(new InitCommand());
 $application->addCommand(new AnalyzeCommand());
+$application->addCommand(new AddCommand());
 
 // When invoked with no command, pick one based on workspace state: `init` if
 // psalm.xml is missing (first-run setup), otherwise `analyze` (everyday use).
