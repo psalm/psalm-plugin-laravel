@@ -143,7 +143,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // model's storage AFTER the scan phase, so earlier removal is a no-op.
         //
         // Issue: https://github.com/psalm/psalm-plugin-laravel/issues/795
-        foreach ($storage->pseudo_static_methods as $methodName => $_) {
+        foreach (array_keys($storage->pseudo_static_methods) as $methodName) {
             if (isset($storage->declaring_method_ids[$methodName])) {
                 unset($storage->pseudo_static_methods[$methodName]);
             }
