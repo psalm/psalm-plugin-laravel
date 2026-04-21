@@ -145,20 +145,26 @@ trait InteractsWithData
     /**
      * Get a subset containing the provided keys with values from the instance data.
      *
+     * Accepts an array of keys, a single key, or variadic string keys via func_get_args().
+     *
      * @param  string[]|string  $keys
      * @return array
      *
      * @psalm-taint-source input
+     * @psalm-variadic
      */
     public function only($keys) {}
 
     /**
      * Get all of the data except for a specified array of items.
      *
+     * Accepts an array of keys, a single key, or variadic string keys via func_get_args().
+     *
      * @param  string[]|string  $keys
      * @return array
      *
      * @psalm-taint-source input
+     * @psalm-variadic
      */
     public function except($keys) {}
 }

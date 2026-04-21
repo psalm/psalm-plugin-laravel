@@ -10,7 +10,7 @@
  * Illuminate\Support\Traits\InteractsWithData in Laravel 11+.
  */
 function renderCollectRequestData(\Illuminate\Http\Request $request): void {
-    echo json_encode($request->collect('name'));
+    echo $request->collect('name')->first();
 }
 ?>
 --EXPECTF--
