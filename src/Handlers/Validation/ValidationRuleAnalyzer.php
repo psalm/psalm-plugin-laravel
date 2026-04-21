@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
 use PhpParser\Node;
+use Psalm\DocComment;
+use Psalm\Exception\DocblockParseException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\Type;
 use Psalm\Type\Atomic\TArray;
@@ -29,8 +31,25 @@ use Psalm\Type\Union;
  */
 final class ValidationRuleAnalyzer
 {
+    /**
+     * Synthetic segment prefix used by extractRulePairsFromArrayNode to encode
+     * a custom Rule object (e.g. `new EmailWithDnsRule()` or `X::make(...)`)
+     * as a string segment consumable by resolveRuleSegments. Rule names in
+     * Laravel cannot contain a colon followed by a backslash-separated FQN,
+     * so there is no collision risk with real rule names.
+     */
+    private const CLASS_SEGMENT_PREFIX = 'class:';
+
     /** @var array<string, array<string, ResolvedRule>|null> */
     private static array $cache = [];
+
+    /**
+     * Per-class cache of the OR-ed `@psalm-taint-escape` bitmask read from a
+     * Rule class's own docblock. Keyed by lowercase FQN.
+     *
+     * @var array<string, int>
+     */
+    private static array $classTaintCache = [];
 
     /**
      * Get resolved rules for a FormRequest subclass by reading its rules() method from AST.
@@ -102,6 +121,17 @@ final class ValidationRuleAnalyzer
             $segment = \trim($segment);
 
             if ($segment === '') {
+                continue;
+            }
+
+            // Synthetic segment for a custom Rule object. Contributes only to
+            // the taint escape bitmask — the rule's runtime behavior (type,
+            // nullable, required) is opaque to the plugin.
+            if (\str_starts_with($segment, self::CLASS_SEGMENT_PREFIX)) {
+                $removedTaints |= self::classRuleRemovedTaints(
+                    \substr($segment, \strlen(self::CLASS_SEGMENT_PREFIX)),
+                );
+
                 continue;
             }
 
@@ -651,8 +681,10 @@ final class ValidationRuleAnalyzer
      *   'field' => 'required|string'       → ['field' => ['required', 'string']]
      *   'field' => ['required', 'string']  → ['field' => ['required', 'string']]
      *
+     * Not `@psalm-mutation-free` because resolving a Rule object's class name
+     * reads `resolvedName` attributes via PhpParser's impure `getAttribute()`.
+     *
      * @return array<string, list<string>>|null
-     * @psalm-mutation-free
      */
     private static function extractRulePairsFromArrayNode(Node\Expr\Array_ $array): ?array
     {
@@ -686,9 +718,18 @@ final class ValidationRuleAnalyzer
                         continue;
                     }
 
-                    // Only handle string literal rule segments (skip Rule objects)
                     if ($ruleItem->value instanceof Node\Scalar\String_) {
                         $segments[] = $ruleItem->value->value;
+
+                        continue;
+                    }
+
+                    // Custom Rule object — capture the class FQN so resolveRuleSegments
+                    // can OR the class's own @psalm-taint-escape bits into removedTaints.
+                    $ruleClassFqn = self::resolveRuleObjectClassName($ruleItem->value);
+
+                    if ($ruleClassFqn !== null) {
+                        $segments[] = self::CLASS_SEGMENT_PREFIX . $ruleClassFqn;
                     }
                 }
 
@@ -699,9 +740,170 @@ final class ValidationRuleAnalyzer
                 continue;
             }
 
-            // Value is a variable, function call, or Rule object — cannot resolve statically
+            // Value is a variable, function call, or unsupported Rule expression — cannot resolve statically
         }
 
         return $rules !== [] ? $rules : null;
+    }
+
+    /**
+     * Resolve the class FQN of a Rule object expression in a rules() array.
+     *
+     * Recognises two patterns (matching the issue's scope — #822):
+     *   - `new App\Rules\X()` → `App\Rules\X`
+     *   - `App\Rules\X::make(...)` (or any other static factory) → `App\Rules\X`
+     *
+     * For static calls we read the docblock of the **named** class (the left
+     * side of `::`), not of whatever class the method actually returns. This
+     * is sound when `X::make()` returns `new self()` / `new static()` — the
+     * common user-authored factory pattern. It is unsound for Laravel's own
+     * fluent factories like `Rule::email()` which return `Illuminate\Validation\Rules\Email`
+     * rather than `Rule`; that's acceptable because built-in rule escape
+     * behaviour is handled by the string-rule path in {@see ruleToRemovedTaints()}.
+     * Dynamic (`new $class()`) or chained expressions are out of scope, matching
+     * the parser limits elsewhere in {@see extractRulePairsFromArrayNode()}.
+     */
+    private static function resolveRuleObjectClassName(Node\Expr $expr): ?string
+    {
+        if ($expr instanceof Node\Expr\New_ && $expr->class instanceof Node\Name) {
+            /** @var mixed $resolved */
+            $resolved = $expr->class->getAttribute('resolvedName');
+
+            return \is_string($resolved) ? $resolved : null;
+        }
+
+        if ($expr instanceof Node\Expr\StaticCall && $expr->class instanceof Node\Name) {
+            /** @var mixed $resolved */
+            $resolved = $expr->class->getAttribute('resolvedName');
+
+            return \is_string($resolved) ? $resolved : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Read `@psalm-taint-escape <kind>` annotations from a Rule class's own
+     * docblock and return the OR-ed bitmask of TaintKind bits they cover.
+     *
+     * Psalm stores `removed_taints` on FunctionLikeStorage only — class-level
+     * escapes are not part of ClassLikeStorage — so we parse the class's raw
+     * docblock here. Only the bare form (`@psalm-taint-escape header`) is
+     * honoured; the conditional form (`@psalm-taint-escape (...)`) is ignored
+     * because it is defined per-parameter and has no meaning at class scope.
+     *
+     * Unknown kinds map to 0 and are silently dropped. Unlike Psalm's own
+     * `Codebase::getOrRegisterTaint()` (used in FunctionLikeDocblockScanner),
+     * which registers unfamiliar names as custom taint kinds, this lookup
+     * honours only the built-in `TaintKind::TAINT_NAMES` set. A mistyped kind
+     * (e.g. `heder` instead of `header`) contributes no escape, which is a
+     * false-negative direction — double-check spellings against the kind
+     * table in `docs/contributing/taint-analysis.md`.
+     *
+     * The FQN is treated as an opaque string — if the class does not exist in
+     * the codebase, the storage lookup below fails and we return 0.
+     */
+    private static function classRuleRemovedTaints(string $classFqn): int
+    {
+        $cacheKey = \strtolower($classFqn);
+
+        if (\array_key_exists($cacheKey, self::$classTaintCache)) {
+            return self::$classTaintCache[$cacheKey];
+        }
+
+        try {
+            $codebase = ProjectAnalyzer::getInstance()->getCodebase();
+        } catch (\RuntimeException|\Error) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        try {
+            $storage = $codebase->classlike_storage_provider->get($cacheKey);
+        } catch (\InvalidArgumentException) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        $filePath = $storage->location?->file_path;
+
+        if ($filePath === null) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        try {
+            $statements = $codebase->getStatementsForFile($filePath);
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        $classNode = self::findClassNode($statements, $storage->name);
+
+        if ($classNode === null) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        $docComment = $classNode->getDocComment();
+
+        if ($docComment === null) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        try {
+            $parsed = DocComment::parsePreservingLength($docComment, true);
+        } catch (DocblockParseException) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        $escapeTags = $parsed->tags['psalm-taint-escape'] ?? [];
+
+        $bits = 0;
+
+        foreach ($escapeTags as $tagLine) {
+            $kind = \trim($tagLine);
+
+            if ($kind === '' || $kind[0] === '(') {
+                // Conditional form is parameter-scoped; has no meaning on a class.
+                continue;
+            }
+
+            // Psalm's parser keeps only the first whitespace-separated token.
+            $kind = \explode(' ', $kind)[0];
+
+            $bits |= TaintKind::TAINT_NAMES[$kind] ?? 0;
+        }
+
+        return self::$classTaintCache[$cacheKey] = $bits;
+    }
+
+    /**
+     * Locate the class AST node for a known FQN inside the given file's statements.
+     *
+     * @param list<Node\Stmt> $statements
+     * @psalm-mutation-free
+     */
+    private static function findClassNode(array $statements, string $className): ?Node\Stmt\Class_
+    {
+        foreach ($statements as $stmt) {
+            if ($stmt instanceof Node\Stmt\Namespace_) {
+                $namespaceName = $stmt->name?->toString() ?? '';
+
+                foreach ($stmt->stmts as $nsStmt) {
+                    if ($nsStmt instanceof Node\Stmt\Class_
+                        && self::classNameMatches($nsStmt, $className, $namespaceName)
+                    ) {
+                        return $nsStmt;
+                    }
+                }
+
+                continue;
+            }
+
+            if ($stmt instanceof Node\Stmt\Class_
+                && self::classNameMatches($stmt, $className, '')
+            ) {
+                return $stmt;
+            }
+        }
+
+        return null;
     }
 }
