@@ -796,9 +796,10 @@ final class ValidationRuleAnalyzer
      * `Codebase::getOrRegisterTaint()` (used in FunctionLikeDocblockScanner),
      * which registers unfamiliar names as custom taint kinds, this lookup
      * honours only the built-in `TaintKind::TAINT_NAMES` set. A mistyped kind
-     * (e.g. `heder` instead of `header`) contributes no escape, which is a
-     * false-negative direction — double-check spellings against the kind
-     * table in `docs/contributing/taint-analysis.md`.
+     * (e.g. `heder` instead of `header`) contributes no escape and therefore
+     * leaves taint intact, which produces extra reports (the false-positive
+     * direction) — double-check spellings against the kind table in
+     * `docs/contributing/taint-analysis.md`.
      *
      * The FQN is treated as an opaque string — if the class does not exist in
      * the codebase, the storage lookup below fails and we return 0.

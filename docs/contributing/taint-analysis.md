@@ -292,7 +292,7 @@ This differs from **escape functions** like `e()`, where `@psalm-taint-specializ
 
 The plugin already escapes taint for built-in rules used as strings (e.g. `'email'` escapes `header` and `cookie`). Application code can extend that escape to **custom Rule classes** by placing `@psalm-taint-escape <kind>` on the class docblock.
 
-When `ValidationRuleAnalyzer` encounters a Rule object in a `rules()` array, it resolves the class FQN, reads the class's own `@psalm-taint-escape` tags, and OR's those kinds into the field's removed-taints bitmask alongside any string rule escapes.
+When `ValidationRuleAnalyzer` encounters a Rule object in a `rules()` array, it resolves the class FQN, reads the class's own `@psalm-taint-escape` tags, and ORs those kinds into the field's removed-taints bitmask alongside any string rule escapes.
 
 ```php
 use Closure;
