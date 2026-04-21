@@ -8,11 +8,9 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Known limitation: safe()->input('body') does not propagate taint.
- * The ValidatedTypeHandler provides a return type for input(), which causes
- * Psalm to skip the stub's @psalm-taint-source annotation on ValidatedInput::input().
- * Same root cause as the validated() variable assignment limitation.
- * TODO: if https://github.com/vimeo/psalm/issues/11765 is fixed, this test should expect TaintedHtml.
+ * safe()->input('body') — rule is 'string', so no per-kind taint is escaped.
+ * ValidationTaintHandler compensates for the type-provider override by re-adding
+ * the taint source, so the echo sink still fires.
  */
 class SafeRequest extends FormRequest
 {
@@ -23,7 +21,9 @@ class SafeRequest extends FormRequest
 }
 
 function renderSafeInput(SafeRequest $request): void {
-    echo $request->safe()->input('body'); // No taint reported — known limitation
+    echo $request->safe()->input('body');
 }
 ?>
 --EXPECTF--
+%ATaintedHtml on line %d: Detected tainted HTML
+%ATaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
