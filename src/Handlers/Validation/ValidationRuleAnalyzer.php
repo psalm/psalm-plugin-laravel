@@ -766,14 +766,12 @@ final class ValidationRuleAnalyzer
     private static function resolveRuleObjectClassName(Node\Expr $expr): ?string
     {
         if ($expr instanceof Node\Expr\New_ && $expr->class instanceof Node\Name) {
-            /** @var mixed $resolved */
             $resolved = $expr->class->getAttribute('resolvedName');
 
             return \is_string($resolved) ? $resolved : null;
         }
 
         if ($expr instanceof Node\Expr\StaticCall && $expr->class instanceof Node\Name) {
-            /** @var mixed $resolved */
             $resolved = $expr->class->getAttribute('resolvedName');
 
             return \is_string($resolved) ? $resolved : null;
@@ -837,13 +835,13 @@ final class ValidationRuleAnalyzer
 
         $classNode = self::findClassNode($statements, $storage->name);
 
-        if ($classNode === null) {
+        if (!$classNode instanceof \PhpParser\Node\Stmt\Class_) {
             return self::$classTaintCache[$cacheKey] = 0;
         }
 
         $docComment = $classNode->getDocComment();
 
-        if ($docComment === null) {
+        if (!$docComment instanceof \PhpParser\Comment\Doc) {
             return self::$classTaintCache[$cacheKey] = 0;
         }
 
