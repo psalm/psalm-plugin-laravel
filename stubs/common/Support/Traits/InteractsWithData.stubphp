@@ -131,4 +131,34 @@ trait InteractsWithData
      * @psalm-taint-source input
      */
     public function array($key = null) {}
+
+    /**
+     * Retrieve data from the instance as a collection.
+     *
+     * @param  array|string|null  $key
+     * @return \Illuminate\Support\Collection
+     *
+     * @psalm-taint-source input
+     */
+    public function collect($key = null) {}
+
+    /**
+     * Get a subset containing the provided keys with values from the instance data.
+     *
+     * @param  string[]|string  $keys
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function only($keys) {}
+
+    /**
+     * Get all of the data except for a specified array of items.
+     *
+     * @param  string[]|string  $keys
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function except($keys) {}
 }

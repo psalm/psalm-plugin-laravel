@@ -17,16 +17,6 @@ trait InteractsWithInput
     public function input($key = null, $default = null) {}
 
     /**
-     * Retrieve input from the request as a collection.
-     *
-     * @param  string[]|string|null  $key
-     * @return \Illuminate\Support\Collection
-     *
-     * @psalm-taint-source input
-     */
-    public function collect($key = null) {}
-
-    /**
      * Get all of the input and files for the request.
      *
      * @param  string[]|string|null  $keys
@@ -143,34 +133,9 @@ trait InteractsWithInput
     public function fluent($key = null, array $default = []) {}
 
     // Note: str(), string(), integer(), float(), boolean(), clamp(), date(),
-    // enum(), enums(), array() live on Illuminate\Support\Traits\InteractsWithData
-    // in Laravel 11+ (stubbed at stubs/common/Support/Traits/InteractsWithData.stubphp).
-
-    /**
-     * Get a subset containing the provided keys with values from the input data.
-     *
-     * Accepts an array of keys or variadic string arguments via func_get_args().
-     *
-     * @param  string[]|string  $keys
-     * @return array
-     *
-     * @psalm-taint-source input
-     * @psalm-variadic
-     */
-    public function only($keys) {}
-
-    /**
-     * Get all of the input except for a specified array of items.
-     *
-     * Accepts an array of keys or variadic string arguments via func_get_args().
-     *
-     * @param  string[]|string  $keys
-     * @return array
-     *
-     * @psalm-taint-source input
-     * @psalm-variadic
-     */
-    public function except($keys) {}
+    // enum(), enums(), array(), collect(), only(), except() live on
+    // Illuminate\Support\Traits\InteractsWithData in Laravel 11+
+    // (stubbed at stubs/common/Support/Traits/InteractsWithData.stubphp).
 
     /**
      * Dump the request input as a debug helper.
