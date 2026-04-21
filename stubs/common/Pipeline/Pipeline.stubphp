@@ -1,0 +1,30 @@
+<?php
+
+namespace Illuminate\Pipeline;
+
+class Pipeline
+{
+    /**
+     * Set the array of pipes.
+     *
+     * Accepts an array of pipes or variadic pipe arguments via func_get_args().
+     *
+     * @param  array<\Closure|callable|string>|\Closure|callable|string  $pipes
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function through($pipes) {}
+
+    /**
+     * Push additional pipes onto the pipeline.
+     *
+     * Accepts an array of pipes or variadic pipe arguments via func_get_args().
+     *
+     * @param  array<\Closure|callable|string>|\Closure|callable|string  $pipes
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function pipe($pipes) {}
+}

@@ -95,4 +95,52 @@ class Store implements \Illuminate\Contracts\Session\Session
      * @psalm-taint-source input
      */
     public function previousUrl() {}
+
+    /**
+     * Checks if a key exists in the session.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \UnitEnum|string|array  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function exists($key) {}
+
+    /**
+     * Determine if any of the given keys are present and not null in the session.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \UnitEnum|string|array  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function has($key) {}
+
+    /**
+     * Determine if any of the given keys are present and not null.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \UnitEnum|string|array  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function hasAny($key) {}
+
+    /**
+     * Reflash a subset of the current flash data.
+     *
+     * Accepts an array of keys, null (reflash all), or variadic key arguments via func_get_args().
+     *
+     * @param  string|array|null  $keys
+     * @return void
+     *
+     * @psalm-variadic
+     */
+    public function keep($keys = null) {}
 }
