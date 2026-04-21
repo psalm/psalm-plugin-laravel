@@ -58,7 +58,7 @@ use Psalm\Type\Union;
  *     these read from a specific transport rather than the validated merge,
  *     so a rule on 'team_email' does not necessarily describe $req->query('team_email').
  *   - integer/float/boolean/date/enum:
- *     cast methods are not taint sources (see InteractsWithInput.stubphp).
+ *     cast methods are not taint sources (see InteractsWithData.stubphp).
  *
  * Upstream workaround for Psalm dropping the stub source on override:
  *   https://github.com/vimeo/psalm/issues/11765
@@ -154,6 +154,14 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         $args = $expr->getArgs();
 
         if ($args === []) {
+            return null;
+        }
+
+        // A default argument (input('key', $default)) can carry its own taint.
+        // The rule for 'key' describes the validated value, not the default,
+        // so applying the rule's escape would wrongly clean taint that comes
+        // from the default expression. Bail out — taint is preserved.
+        if (isset($args[1])) {
             return null;
         }
 
