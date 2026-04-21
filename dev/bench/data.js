@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776785216915,
+  "lastUpdate": 1776790274534,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2547,6 +2547,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.83,
             "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b1b9fdc3bd603d7f738bc13b6f7fb685f60f9cc0",
+          "message": "Extend rule-based taint escape to FormRequest input/string/str accessors (#821)\n\n* feat: extend rule-based taint escape to FormRequest input/string/str accessors\n\nTaint escape on validated fields was only applied to `$req->validated('key')`.\nExtend it to the accessors that read from the same pool:\n\n- `$req->input('key')`, `->string('key')`, `->str('key')` on a FormRequest.\n- `$req->safe()->input/string/str('key')` on `ValidatedInput<TRequest>`.\n\nAlso re-introduces taint on `safe()->input('key')` where it was previously\nlost (ValidatedTypeHandler narrows the return type, so Psalm drops the stub's\n`@psalm-taint-source`). The class docblock now documents the narrow scenarios\nwhere the escape can still be a false negative (passedValidation/merge,\noverridden validationData(), precognition, pre-validation callers).\n\nNot escaped: query/post/json/cookie/server/header/file (these bypass the\nvalidated merge) and integer/float/boolean/date/enum (not taint sources).\n\nThe variable-assignment limitation (upstream vimeo/psalm#11765) is unchanged.\n\n* fix(stubs): relocate str/string/integer/float/boolean/clamp/date/enum/enums/array to InteractsWithData\n\nThese methods live on `Illuminate\\Support\\Traits\\InteractsWithData` in\nLaravel 11+, not on `Illuminate\\Http\\Concerns\\InteractsWithInput` where the\nstubs were declared. With the stubs at the wrong trait, the\n`@psalm-taint-source` annotations on `str()` / `string()` / `array()` never\nactually applied to the real methods — meaning FormRequest::string('x') calls\nproduced no taint at all.\n\nConsequence for the previous commit: the rule-based taint escape on\nFormRequest::string()/str() was unobservable because the source side was\nmissing. After this fix the escape is real, demonstrated by the new\nTaintedHtmlFormRequestString.phpt (string rule → TaintedHtml fires) and the\npre-existing SafeFormRequestIntegerNoTaint.phpt (integer rule → escape\nremoves all input taint).\n\nNot moved in this commit (to keep scope narrow; separate follow-up):\nonly(), except(), collect() — also on InteractsWithData and also carry\n`@psalm-taint-source`, but relocating them may surface new findings in\nexisting codebases and deserves its own PR.\n\n* fix(psalm): guard array access in removeTaints\n\n`$rules[$match['key']]->removedTaints ?? 0` is insufficient because\n$rules[$match['key']] may be undefined, making the property access itself\ninvalid before the ?? kicks in. Psalm 7 flags this as InvalidNullableReturnType\n/ NullableReturnStatement at CI level (my local self-analysis missed it due to\na stale cache).\n\nRestore the explicit isset() guard that the first review round already had.\n\n* fix(psalm): split nullable checks to narrow $rules explicitly\n\nCI-side Psalm reported PossiblyNullArrayAccess/PossiblyNullPropertyFetch\neven with `$rules === null || !isset($rules[$key])` — the || branch\nwas apparently not narrowing $rules to non-null at the return statement.\nSplit into two if blocks + a local variable for the narrowed rule.\n\n* fix: address round-2 Copilot review — default-arg guard, docblock ref, missing accessor tests\n\n- matchKeyedAccess now bails when input/string/str is called with a default\n  argument. The rule describes the validated value, not the default; applying\n  the rule's escape to a tainted default expression was a false-negative.\n  Locked in by TaintedHtmlInputWithTaintedDefault.phpt.\n\n- Fix docblock stub reference: integer/float/boolean/date/enum stubs live on\n  InteractsWithData (post previous commit's relocation), not InteractsWithInput.\n\n- Add regression tests for the two accessor entry points that existing PHPTs\n  did not cover: FormRequest::input('key') direct path, and FormRequest::str('key').",
+          "timestamp": "2026-04-21T17:48:29+01:00",
+          "tree_id": "6435d50a5a984bb38443dced3db0fcf0f1b3ed35",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b1b9fdc3bd603d7f738bc13b6f7fb685f60f9cc0"
+        },
+        "date": 1776790274011,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.8,
+            "range": "± 0.38",
             "unit": "s"
           },
           {
