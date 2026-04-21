@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776803538475,
+  "lastUpdate": 1776808422729,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2622,6 +2622,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d2069f033853807c0c9fd902c35e90b849fa48e1",
+          "message": "Relocate `only`/`except`/`collect`/`old` to correct traits (#825)\n\n* fix(stubs): relocate only/except/collect to InteractsWithData (#823)\n\nFollow-up to #821. Three more input methods were stubbed on\nIlluminate\\Http\\Concerns\\InteractsWithInput, but in Laravel 11+ they\nlive on Illuminate\\Support\\Traits\\InteractsWithData. Because the methods\ndon't exist on the claimed trait in the real framework, Psalm drops the\n@psalm-taint-source input annotation at resolve time, so calls like\n$req->only([...]) / $req->except([...]) / $req->collect('key') produced\nno taint on their return value.\n\nCut the three declarations (docblocks included) out of\nstubs/common/Http/Concerns/InteractsWithInput.stubphp and paste them\ninto stubs/common/Support/Traits/InteractsWithData.stubphp. Align\ncollect()'s @param $key with sibling array() and Laravel's source\n(array|string|null). only()/except() preserve the pre-existing\nstring[]|string narrowing from InteractsWithInput.stubphp — same\ntightening also applied to all() — it catches obvious misuse without\nintroducing new false positives for the scoped-relocation PR.\n\nAdd positive regression tests in tests/Type/tests/TaintAnalysis/:\nTaintedHtmlRequestOnly, TaintedHtmlRequestExcept, TaintedHtmlRequestCollect.\nThey assert TaintedHtml/TaintedTextWithQuotes fire when Request input\nflows from these methods into an echo sink, locking the fix in.\n\nBehaviour callout for release notes: downstream codebases that use\nonly()/except()/collect() on Request/FormRequest and pipe the result\ninto HTML/SQL/shell sinks will now surface real taint findings.\n\nThe rule-based escape from #821 (KEYED_ACCESSOR_METHODS) does not yet\ncover these three; that is a separate follow-up.\n\n* fix(stubs): relocate old() to InteractsWithFlashData (#824)\n\nExtends the relocation in the parent commit to cover old(), the remaining\nmethod from #824. Laravel declares old() on Illuminate\\Http\\Concerns\\\nInteractsWithFlashData (new stub file), not on InteractsWithInput. As with\nonly/except/collect, the misplaced @psalm-taint-source was silently ignored.\n\nAlso, while the PR touches only()/except() anyway:\n\n- Add @psalm-variadic on only()/except() in InteractsWithData.stubphp.\n  Laravel accepts '$request->only('a', 'b', 'c')' via func_get_args();\n  without the annotation Psalm reported TooManyArguments on 3+ arg calls.\n  Matches the pattern introduced in #806 for Validation\\Rule.\n- Tighten TaintedHtmlRequestCollect.phpt: sink via ->first() instead of\n  json_encode() so the test directly asserts Collection taint propagation.\n- Add TaintedHtmlFormRequestOnly.phpt to guard the FormRequest trait\n  composition chain specifically (FormRequest → Request → InteractsWithInput\n  → InteractsWithData). Mirrors TaintedHtmlFormRequestString.phpt from #821.",
+          "timestamp": "2026-04-21T22:51:03+01:00",
+          "tree_id": "a259cbea2cd8c8d452af8727567e4b671541e15c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d2069f033853807c0c9fd902c35e90b849fa48e1"
+        },
+        "date": 1776808421776,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.89,
+            "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
             "unit": "MB"
           }
         ]
