@@ -414,4 +414,36 @@ final class ValidationRuleAnalyzerTest extends TestCase
 
         $this->assertSame('string', $rule->type->getId());
     }
+
+    // --- Custom Rule class segments (#822) ---
+
+    #[Test]
+    public function class_segment_for_unknown_class_removes_no_taint(): void
+    {
+        // Without a Psalm analysis context, the class storage lookup in
+        // classRuleRemovedTaints fails and the segment contributes 0. The
+        // segment must still be tolerated (no crash) and must not affect
+        // the type or presence flags derived from the other segments.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'string', 'class:App\\Rules\\NonExistent'],
+        );
+
+        $this->assertSame('string', $rule->type->getId());
+        $this->assertSame(0, $rule->removedTaints);
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function class_segment_is_not_a_type_bearing_rule(): void
+    {
+        // A `class:` segment alone never narrows the type — the handler
+        // cannot introspect the Rule's runtime output, only its declared
+        // taint escape set.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['class:App\\Rules\\NonExistent'],
+        );
+
+        $this->assertTrue($rule->type->isMixed());
+        $this->assertFalse($rule->required);
+    }
 }
