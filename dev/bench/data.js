@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776808422729,
+  "lastUpdate": 1776809383253,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2652,6 +2652,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.89,
             "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ecb021cef11c20db3877d7020ba889e0451f7db0",
+          "message": "Honour class-level `@psalm-taint-escape` on custom Rule classes (#826)\n\n* feat(#822) honour class-level `@psalm-taint-escape` on custom Rule classes\n\nWhen a FormRequest's `rules()` array contains a custom Rule object (via\n`new X()` or `X::make(...)`), `ValidationRuleAnalyzer` now resolves the\nclass FQN, reads the class's own `@psalm-taint-escape` tags, and unions\nthose kinds into the field's removed-taints bitmask alongside any string\nrule escapes. This lets developers assert at the class level that a rule\nguarantees the validated value is safe for specific sink families, e.g.\na custom email rule declaring `@psalm-taint-escape header` to suppress\nTaintedHeader on `redirect()->to($request->safe()->input('team_email'))`.\n\nThe escape contributes only to `removedTaints` — not type, not nullable,\nnot required — since the plugin cannot introspect the rule's runtime\noutput. Conditional form `(kind)` is parameter-scoped and ignored; only\nbuilt-in kinds from `TaintKind::TAINT_NAMES` are honoured (user-registered\ncustom taints are out of scope, unlike Psalm's own escape handling).\n\nDocs: new \"Per-rule escape on custom Rule classes\" section in\ndocs/contributing/taint-analysis.md covering scope, the static-factory\ncaveat, no-inheritance semantics, and the trust model.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix(#822) narrow resolvedName @var to string|null for MixedAssignment\n\nThe  annotation on  did not\nprevent Psalm's MixedAssignment check in CI. Switch to the\npattern used elsewhere in the codebase (RelationMethodParser, CastsMethodParser),\nwhich matches PhpParser's actual runtime type and lets Psalm narrow via the\nis_string guard.\n\n* docs(#822) fix Copilot-flagged wording\n\n- Code comment: typo'd kind leaves taint intact, so extra reports (false positive), not false negative.\n- Docs prose: 'ORs' without apostrophe (non-possessive plural).\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-04-21T23:07:04+01:00",
+          "tree_id": "d7dd23d28c57d27d428a00af0d9d20216a8eaa45",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ecb021cef11c20db3877d7020ba889e0451f7db0"
+        },
+        "date": 1776809382333,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.58,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
