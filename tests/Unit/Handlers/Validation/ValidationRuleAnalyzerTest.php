@@ -446,4 +446,114 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $this->assertTrue($rule->type->isMixed());
         $this->assertFalse($rule->required);
     }
+
+    // --- First-party Illuminate\Validation\Rules\* segments (#828) ---
+
+    #[Test]
+    public function class_segment_for_rules_email_removes_header_and_cookie_taint(): void
+    {
+        // The authoritative FIRST_PARTY_RULE_ESCAPES table short-circuits the
+        // docblock lookup, so this resolves even without a Psalm analysis
+        // context. The bits mirror the 'email' string rule.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'string', 'class:Illuminate\\Validation\\Rules\\Email'],
+        );
+
+        $this->assertSame(
+            TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
+            $rule->removedTaints,
+        );
+        $this->assertSame('string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function class_segment_for_rules_numeric_removes_all_input_taint(): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'class:Illuminate\\Validation\\Rules\\Numeric'],
+        );
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function class_segment_for_rules_in_removes_all_input_taint(): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'class:Illuminate\\Validation\\Rules\\In'],
+        );
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function class_segment_for_rules_date_removes_all_input_taint(): void
+    {
+        // The 'date' string rule escapes ALL_INPUT; the object form must be
+        // in parity since Rules\Date::__toString() always emits 'date' or
+        // 'date_format:...' as the first constraint.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'class:Illuminate\\Validation\\Rules\\Date'],
+        );
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function class_segment_for_rules_notin_removes_no_taint(): void
+    {
+        // NotIn is deliberately not in FIRST_PARTY_RULE_ESCAPES: rejecting a
+        // blocklist of values does not constrain the accepted set to a safe
+        // shape. In unit-test context ProjectAnalyzer::getInstance() throws,
+        // so the function returns 0 without touching the docblock path.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'class:Illuminate\\Validation\\Rules\\NotIn'],
+        );
+
+        $this->assertSame(0, $rule->removedTaints);
+    }
+
+    /**
+     * Defensive guard: classes in RULE_FACADE_METHOD_RETURN_CLASS whose
+     * fluent builders return value-shape-unsafe content (user-controlled
+     * file uploads, dev-chosen enum cases with runtime-defined string
+     * backing) must NOT be in FIRST_PARTY_RULE_ESCAPES. If a future refactor
+     * added them, this test would flip to a non-zero expectation and fail.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function provideNonEscapingMappedRuleClasses(): iterable
+    {
+        yield 'Enum' => ['Illuminate\\Validation\\Rules\\Enum'];
+        yield 'File' => ['Illuminate\\Validation\\Rules\\File'];
+        yield 'ImageFile' => ['Illuminate\\Validation\\Rules\\ImageFile'];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('provideNonEscapingMappedRuleClasses')]
+    public function mapped_rule_class_outside_escape_table_removes_no_taint(string $fqn): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'string', 'class:' . $fqn],
+        );
+
+        $this->assertSame(0, $rule->removedTaints);
+    }
+
+    #[Test]
+    public function class_segment_for_rules_email_is_case_insensitive(): void
+    {
+        // ValidationRuleAnalyzer lower-cases the FQN for cache/table lookup,
+        // so mixed-case input (e.g. from a `resolvedName` that preserves the
+        // `use` statement's casing) must still hit the escape table.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['class:illuminate\\validation\\rules\\EMAIL'],
+        );
+
+        $this->assertSame(
+            TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
+            $rule->removedTaints,
+        );
+    }
 }
