@@ -77,6 +77,20 @@ class Str
      */
     public static function slug($title, $separator = '-', $language = 'en', $dictionary = ['@' => 'at']) {}
 
+    /**
+     * Convert the given string to lower-case.
+     *
+     * Mirrors Laravel's conditional return type so callers get a literal `''`
+     * when the input is empty, and a non-empty lowercase string otherwise.
+     * @see https://github.com/vimeo/psalm/issues/11821
+     *
+     * @template TValue of string
+     *
+     * @param  TValue  $value
+     * @return (TValue is '' ? '' : non-empty-lowercase-string)
+     */
+    public static function lower($value) {}
+
     // Intentionally NOT widened: Str::camel, Str::studly, Str::snake.
     // These three methods use $value as an array key for internal memoization
     // (static::$camelCache[$value], static::$snakeCache[$key][$delimiter],
