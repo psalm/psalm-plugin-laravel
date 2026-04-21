@@ -268,6 +268,11 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelMethodHandler::class);
+        // Position is not load-bearing: AfterMethodCallAnalysis handlers all run
+        // unconditionally, unlike *ReturnTypeProvider chains where order decides
+        // which handler wins. Grouped with the other Eloquent handlers for discoverability.
+        require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeInvalidationHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelAttributeInvalidationHandler::class);
         require_once __DIR__ . '/Util/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderScopeHandler::class);
