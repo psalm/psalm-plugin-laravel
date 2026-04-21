@@ -132,28 +132,6 @@ trait InteractsWithInput
     public function bearerToken() {}
 
     /**
-     * Retrieve input from the request as a Stringable instance.
-     *
-     * @param  string  $key
-     * @param  mixed  $default
-     * @return \Illuminate\Support\Stringable
-     *
-     * @psalm-taint-source input
-     */
-    public function str($key, $default = null) {}
-
-    /**
-     * Retrieve input from the request as a Stringable instance.
-     *
-     * @param  string  $key
-     * @param  mixed  $default
-     * @return \Illuminate\Support\Stringable
-     *
-     * @psalm-taint-source input
-     */
-    public function string($key, $default = null) {}
-
-    /**
      * Retrieve input from the request as a Fluent object instance.
      *
      * @param  array|string|null  $key
@@ -164,72 +142,9 @@ trait InteractsWithInput
      */
     public function fluent($key = null, array $default = []) {}
 
-    /**
-     * Retrieve input as an integer value.
-     *
-     * Not a taint source: (int) cast cannot produce an injection payload.
-     * e.g. (int) "1; DROP TABLE users" → 1
-     *
-     * @param  string  $key
-     * @param  int  $default
-     * @return int
-     */
-    public function integer($key, $default = 0) {}
-
-    /**
-     * Retrieve input as a float value.
-     *
-     * Not a taint source: (float) cast cannot produce an injection payload.
-     * e.g. (float) "<script>alert(1)</script>" → 0.0
-     *
-     * @param  string  $key
-     * @param  float  $default
-     * @return float
-     */
-    public function float($key, $default = 0.0) {}
-
-    /**
-     * Retrieve input from the request as a boolean value.
-     *
-     * Returns strict true/false via filter_var(FILTER_VALIDATE_BOOLEAN).
-     * Not a taint source: a boolean cannot carry injectable content.
-     *
-     * @param  string|null  $key
-     * @param  bool  $default
-     * @return bool
-     */
-    public function boolean($key = null, $default = false) {}
-
-    /**
-     * Retrieve input from the request as a Carbon instance.
-     *
-     * Not a taint source: Date::parse()/createFromFormat() validates input
-     * into a structured Carbon object. The string representation is a
-     * formatted date, not raw user input.
-     *
-     * @param  string  $key
-     * @param  string|null  $format
-     * @param  \UnitEnum|string|null  $tz
-     * @return \Illuminate\Support\Carbon|null
-     */
-    public function date($key, $format = null, $tz = null) {}
-
-    /**
-     * Retrieve input from the request as an enum.
-     *
-     * Not a taint source: BackedEnum::tryFrom() is a strict whitelist —
-     * the return value can only be one of the developer-defined enum cases
-     * (or the $default).
-     *
-     * @template TEnum of \BackedEnum
-     * @template TDefault of TEnum|null
-     *
-     * @param  string  $key
-     * @param  class-string<TEnum>  $enumClass
-     * @param  TDefault  $default
-     * @return TEnum|TDefault
-     */
-    public function enum($key, $enumClass, $default = null) {}
+    // Note: str(), string(), integer(), float(), boolean(), clamp(), date(),
+    // enum(), enums(), array() live on Illuminate\Support\Traits\InteractsWithData
+    // in Laravel 11+ (stubbed at stubs/common/Support/Traits/InteractsWithData.stubphp).
 
     /**
      * Get a subset containing the provided keys with values from the input data.
