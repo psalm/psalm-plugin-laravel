@@ -766,12 +766,14 @@ final class ValidationRuleAnalyzer
     private static function resolveRuleObjectClassName(Node\Expr $expr): ?string
     {
         if ($expr instanceof Node\Expr\New_ && $expr->class instanceof Node\Name) {
+            /** @var string|null $resolved */
             $resolved = $expr->class->getAttribute('resolvedName');
 
             return \is_string($resolved) ? $resolved : null;
         }
 
         if ($expr instanceof Node\Expr\StaticCall && $expr->class instanceof Node\Name) {
+            /** @var string|null $resolved */
             $resolved = $expr->class->getAttribute('resolvedName');
 
             return \is_string($resolved) ? $resolved : null;
