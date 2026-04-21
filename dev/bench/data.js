@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776717239011,
+  "lastUpdate": 1776785216915,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2517,6 +2517,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "3ec8741e7e9a1d504983b6d42f6d80cfab8d8d71",
+          "message": "fix(stub) Str::lower",
+          "timestamp": "2026-04-21T17:24:12+02:00",
+          "tree_id": "8416449e5c11ad7f262619a1067e28f79bdcee3f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3ec8741e7e9a1d504983b6d42f6d80cfab8d8d71"
+        },
+        "date": 1776785216538,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.83,
+            "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
