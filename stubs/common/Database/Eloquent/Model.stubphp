@@ -57,6 +57,18 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
     public static function all($columns = ['*']) {}
 
     /**
+     * Begin querying a model with eager loading.
+     *
+     * Accepts an array of relation names or variadic string arguments via func_get_args().
+     *
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return \Illuminate\Database\Eloquent\Builder<static>
+     *
+     * @psalm-variadic
+     */
+    public static function with($relations) {}
+
+    /**
      * @return \Illuminate\Database\Eloquent\Builder<static>
      */
     public static function query() {}
