@@ -12,7 +12,13 @@
     "authors": [
         {
             "name": "Matthew Brown",
-            "email": "github@muglug.com"
+            "email": "github@muglug.com",
+            "role": "Original Author"
+        },
+        {
+            "name": "Alies Lapatsin",
+            "email": "github@alies.dev",
+            "role": "Maintainer"
         }
     ],
     "homepage": "https://github.com/psalm/psalm-plugin-laravel",

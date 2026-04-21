@@ -304,6 +304,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/SuppressHandler.php';
         $registration->registerHooksFromClass(Handlers\SuppressHandler::class);
 
+        require_once __DIR__ . '/Handlers/StatsHandler.php';
+        $registration->registerHooksFromClass(Handlers\StatsHandler::class);
+
         require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
         $registration->registerHooksFromClass(Handlers\Jobs\DispatchableHandler::class);
 
