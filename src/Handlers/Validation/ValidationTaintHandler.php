@@ -118,11 +118,11 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
 
         $rules = ValidationRuleAnalyzer::getRulesForFormRequest($match['class']);
 
-        if ($rules === null) {
+        if ($rules === null || !isset($rules[$match['key']])) {
             return 0;
         }
 
-        return $rules[$match['key']]->removedTaints ?? 0;
+        return $rules[$match['key']]->removedTaints;
     }
 
     /**
