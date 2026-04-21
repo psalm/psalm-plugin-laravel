@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776790274534,
+  "lastUpdate": 1776803538475,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2582,6 +2582,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.8,
             "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8132f5d26a2cd276e55431566b56e5011aa8adf",
+          "message": "feat(stubs): add @psalm-variadic across HIGH and MEDIUM priority Laravel methods (#809)\n\nMany Laravel public methods accept an array or variadic arguments via\nfunc_get_args() but their type signatures only declare the first named\nparameter. Calling them with multiple positional args (the documented\nalternative) was rejected by Psalm as TooManyArguments.\n\nThis follows the pattern established in #0 for singleton resource\nonly()/except() and extends it to the HIGH and MEDIUM buckets documented\nin .alies/docs/variadic-stubs.md.\n\nStubs updated:\n- Support/Collection: has, doesntContain, doesntContainStrict, zip\n- Database/Eloquent/Model: static with (load/loadCount already annotated)\n- Http/Concerns/InteractsWithInput: only, except, dump\n- Session/Store: exists, has, hasAny, keep\n- Filesystem/Filesystem + FilesystemAdapter: delete\n- Contracts/Container + Container/Container: tag\n- Cache/Repository (new): tags\n- Http/RedirectResponse (new): onlyInput, exceptInput\n- Routing/PendingResourceRegistration (new): only, except\n- Routing/ControllerMiddlewareOptions (new): only, except\n- Pipeline/Pipeline (new): through, pipe\n\nEvery @psalm-variadic placement was verified against Laravel 13.5 source.\nBuilder::find / findOrFail were explicitly audited and excluded: their\nsecond $columns parameter would be consumed by variadic args, so the doc's\nlisting of them was incorrect.\n\nTests: 12 new PHPT files under tests/Type/tests/Variadic/, including\nNegativeTest.phpt that verifies TooFewArguments is still raised when\nmandatory parameters are omitted (arity preservation guarantee).",
+          "timestamp": "2026-04-21T21:29:40+01:00",
+          "tree_id": "e0cb7a8b43fcc1169df80f69881013f5a4d13d23",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d8132f5d26a2cd276e55431566b56e5011aa8adf"
+        },
+        "date": 1776803537645,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.58,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
