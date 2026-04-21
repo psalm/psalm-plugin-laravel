@@ -96,14 +96,19 @@ final class ModelAttributeInvalidationHandler implements AfterMethodCallAnalysis
         $context = $event->getContext();
 
         foreach ($modelStorages as $storage) {
-            // Pseudo-property keys are stored as "$<name>". Parent and trait
-            // declarations are merged into the child's storage by Psalm's Populator,
-            // so iterating the receiver's storage alone covers the inheritance chain.
-            // Both get_types and set_types are unioned to also cover properties
-            // declared only as @property-write or @property-read.
-            $pseudoKeys = $storage->pseudo_property_get_types + $storage->pseudo_property_set_types;
-
-            foreach ($pseudoKeys as $pseudoKey => $_) {
+            // Only user-declared `@property` / `@property-read` annotations —
+            // the very set #818 reports as stale. Pseudo-property keys are
+            // stored as "$<name>"; parent and trait declarations are merged
+            // into the child's storage by Psalm's Populator, so iterating the
+            // receiver's storage alone covers the inheritance chain.
+            //
+            // `pseudo_property_set_types` is intentionally NOT iterated:
+            // ModelRegistrationHandler injects plugin-owned set types there
+            // for relationships, legacy mutators, and columns without
+            // `@property`. Invalidating those would wipe narrowings for
+            // slots that aren't backed by the raw attributes array
+            // (e.g. relationship assignments), broader than this fix's scope.
+            foreach ($storage->pseudo_property_get_types as $pseudoKey => $_) {
                 if (!\str_starts_with($pseudoKey, '$')) {
                     continue;
                 }

@@ -4,6 +4,8 @@
 namespace Tests\Psalm\LaravelPlugin\Sandbox;
 
 use App\Models\Customer;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Methods that mass-assign or replace the underlying attributes array
@@ -80,6 +82,28 @@ function test_non_mutating_method_preserves_narrowing(Customer $customer): strin
     $id = $customer->id;
     /** @psalm-check-type-exact $id = 'specific-id' */
     return $id;
+}
+
+/**
+ * Plugin-injected pseudo-properties (relationships, legacy mutators, columns
+ * without @property) live in `pseudo_property_set_types` but NOT in
+ * `pseudo_property_get_types`. The handler only iterates get_types, so these
+ * slots must be left alone — `vehicles` is a HasMany relationship not declared
+ * via @property on Customer.
+ *
+ * The assignment narrows `$customer->vehicles` to `Collection<array-key, Model>`
+ * (from the generic `$vehicles` parameter). If the handler wrongly invalidated
+ * this slot, the read below would instead go through ModelRelationshipPropertyHandler
+ * and return `Collection<array-key, Vehicle>`. Asserting the generic-Model type
+ * proves the narrowing survives fill().
+ */
+function test_plugin_injected_relationship_not_invalidated(Customer $customer, Collection $vehicles): Collection
+{
+    $customer->vehicles = $vehicles;
+    $customer->fill(['name' => 'Alice']);
+    $after = $customer->vehicles;
+    /** @psalm-check-type-exact $after = Collection<array-key, Model> */
+    return $after;
 }
 
 /**
