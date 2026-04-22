@@ -1,0 +1,55 @@
+<?php
+
+namespace Illuminate\Support;
+
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Contracts\Support\MessageBag as MessageBagContract;
+use Illuminate\Contracts\Support\MessageProvider;
+use JsonSerializable;
+use Stringable;
+
+/**
+ * Interface list mirrors Laravel's source declaration. Psalm wipes the reflected
+ * class_implements list when a stub declares the class, so the clause must be
+ * repeated verbatim or interface relationships (MessageBagContract, etc.) break
+ * for any caller typed on those contracts.
+ */
+class MessageBag implements Jsonable, JsonSerializable, MessageBagContract, MessageProvider, Stringable
+{
+    /**
+     * Determine if messages exist for all of the given keys.
+     *
+     * Accepts an array of keys or variadic string key arguments via func_get_args().
+     * Passing null falls through to any() (not variadic).
+     *
+     * @param  array<string>|string|null  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function has($key) {}
+
+    /**
+     * Determine if messages exist for any of the given keys.
+     *
+     * Accepts an array of keys or variadic string key arguments via func_get_args().
+     *
+     * @param  array<string>|string|null  $keys
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function hasAny($keys = []) {}
+
+    /**
+     * Determine if messages don't exist for all of the given keys.
+     *
+     * Accepts an array of keys or variadic string key arguments via func_get_args().
+     *
+     * @param  array<string>|string|null  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function missing($key) {}
+}

@@ -1,0 +1,30 @@
+<?php
+
+namespace Illuminate\Http;
+
+class RedirectResponse
+{
+    /**
+     * Flash an array of input to the session.
+     *
+     * Keys are read entirely from func_get_args() and forwarded to Request::only().
+     * Laravel's source declares no formal parameters.
+     *
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function onlyInput() {}
+
+    /**
+     * Flash a subset of the input to the session, excluding the given keys.
+     *
+     * Keys are read entirely from func_get_args() and forwarded to Request::except().
+     * Laravel's source declares no formal parameters.
+     *
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function exceptInput() {}
+}

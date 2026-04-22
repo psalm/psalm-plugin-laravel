@@ -1,0 +1,21 @@
+<?php
+
+namespace Illuminate\Container;
+
+class Container
+{
+    /**
+     * Assign a set of tags to a given binding.
+     *
+     * Tag names are collected from the second argument onward via
+     * array_slice(func_get_args(), 1). Accepts variadic string arguments
+     * after $abstracts.
+     *
+     * @param  array<string>|string  $abstracts
+     * @param  array<string>|string  $tags
+     * @return void
+     *
+     * @psalm-variadic
+     */
+    public function tag($abstracts, $tags) {}
+}

@@ -1,0 +1,20 @@
+<?php
+
+namespace Illuminate\Cache;
+
+class Repository
+{
+    /**
+     * Begin executing a new tags operation if the store supports it.
+     *
+     * Accepts an array of tag names or variadic string arguments via func_get_args().
+     *
+     * @param  array<string>|string  $names
+     * @return \Illuminate\Cache\TaggedCache
+     *
+     * @throws \BadMethodCallException
+     *
+     * @psalm-variadic
+     */
+    public function tags($names) {}
+}
