@@ -12,6 +12,9 @@ use Illuminate\Routing\ControllerMiddlewareOptions;
 use Illuminate\Routing\PendingResourceRegistration;
 use Illuminate\Session\Store as SessionStore;
 use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
+use Illuminate\Support\MessageBag;
+use Illuminate\Support\ServiceProvider;
 
 /**
  * @psalm-variadic must not swallow arity checks. The annotation allows extra
@@ -103,6 +106,51 @@ function request_except_too_few(Request $r): void
 {
     $r->except();
 }
+
+/** @param LazyCollection<array-key, mixed> $c */
+function lazy_collection_has_too_few(LazyCollection $c): void
+{
+    $c->has();
+}
+
+/** @param LazyCollection<array-key, mixed> $c */
+function lazy_collection_has_any_too_few(LazyCollection $c): void
+{
+    $c->hasAny();
+}
+
+/** @param LazyCollection<array-key, mixed> $c */
+function lazy_collection_doesnt_contain_too_few(LazyCollection $c): void
+{
+    $c->doesntContain();
+}
+
+/** @param LazyCollection<array-key, mixed> $c */
+function lazy_collection_doesnt_contain_strict_too_few(LazyCollection $c): void
+{
+    $c->doesntContainStrict();
+}
+
+/** @param LazyCollection<array-key, mixed> $c */
+function lazy_collection_zip_too_few(LazyCollection $c): void
+{
+    $c->zip();
+}
+
+function message_bag_has_too_few(MessageBag $bag): void
+{
+    $bag->has();
+}
+
+function message_bag_missing_too_few(MessageBag $bag): void
+{
+    $bag->missing();
+}
+
+function service_provider_commands_too_few(ServiceProvider $sp): void
+{
+    $sp->commands();
+}
 ?>
 --EXPECTF--
 TooFewArguments on line %d: Too few arguments for Illuminate\Container\Container::tag - expecting tags to be passed
@@ -137,3 +185,19 @@ TooFewArguments on line %d: Too few arguments for Illuminate\Http\Request::only 
 TooFewArguments on line %d: Too few arguments for method Illuminate\Support\Traits\InteractsWithData::only saw 0
 TooFewArguments on line %d: Too few arguments for Illuminate\Http\Request::except - expecting keys to be passed
 TooFewArguments on line %d: Too few arguments for method Illuminate\Support\Traits\InteractsWithData::except saw 0
+TooFewArguments on line %d: Too few arguments for Illuminate\Support\LazyCollection::has - expecting key to be passed
+TooFewArguments on line %d: Too few arguments for method Illuminate\Support\LazyCollection::has saw 0
+TooFewArguments on line %d: Too few arguments for Illuminate\Support\LazyCollection::hasAny - expecting key to be passed
+TooFewArguments on line %d: Too few arguments for method Illuminate\Support\LazyCollection::hasany saw 0
+TooFewArguments on line %d: Too few arguments for Illuminate\Support\LazyCollection::doesntContain - expecting key to be passed
+TooFewArguments on line %d: Too few arguments for method Illuminate\Support\LazyCollection::doesntcontain saw 0
+TooFewArguments on line %d: Too few arguments for Illuminate\Support\LazyCollection::doesntContainStrict - expecting key to be passed
+TooFewArguments on line %d: Too few arguments for method Illuminate\Support\LazyCollection::doesntcontainstrict saw 0
+TooFewArguments on line %d: Too few arguments for Illuminate\Support\LazyCollection::zip - expecting items to be passed
+TooFewArguments on line %d: Too few arguments for method Illuminate\Support\LazyCollection::zip saw 0
+TooFewArguments on line %d: Too few arguments for Illuminate\Support\MessageBag::has - expecting key to be passed
+TooFewArguments on line %d: Too few arguments for method Illuminate\Support\MessageBag::has saw 0
+TooFewArguments on line %d: Too few arguments for Illuminate\Support\MessageBag::missing - expecting key to be passed
+TooFewArguments on line %d: Too few arguments for method Illuminate\Support\MessageBag::missing saw 0
+TooFewArguments on line %d: Too few arguments for Illuminate\Support\ServiceProvider::commands - expecting commands to be passed
+TooFewArguments on line %d: Too few arguments for method Illuminate\Support\ServiceProvider::commands saw 0
