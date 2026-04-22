@@ -103,23 +103,14 @@ use Psalm\Type\Union;
  * first-seen values — they're opaque to the taint query, which only reads
  * `removedTaints`.
  */
+/**
+ * @internal public-static API is a cross-handler contract with
+ * {@see ValidationTaintHandler}; not intended for third-party consumption.
+ */
 final class InlineValidateRulesCollector implements
     AfterExpressionAnalysisInterface,
     AfterFunctionLikeAnalysisInterface
 {
-    /**
-     * Methods that trigger validation on the Request data pool. Keys are
-     * lowercased method names; values are the zero-based index of the rules
-     * argument.
-     *
-     *   $req->validate(['key' => 'email'])           // rules at arg[0]
-     *   $req->validateWithBag('bag', ['key' => ...]) // rules at arg[1]
-     */
-    private const VALIDATE_METHODS_TO_RULES_INDEX = [
-        'validate' => 0,
-        'validatewithbag' => 1,
-    ];
-
     /**
      * Rules collected per enclosing FunctionLikeAnalyzer and caller
      * variable name.
@@ -144,9 +135,17 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        $rulesArgIndex = self::VALIDATE_METHODS_TO_RULES_INDEX[$expr->name->toLowerString()] ?? null;
+        // Canonical Laravel casing — direct string comparison avoids a
+        // strtolower() allocation on every MethodCall in the project. PHP
+        // method names are technically case-insensitive, but callers of
+        // these Laravel macros always write them in canonical camelCase.
+        $rawName = $expr->name->name;
 
-        if ($rulesArgIndex === null) {
+        if ($rawName === 'validate') {
+            $rulesArgIndex = 0;
+        } elseif ($rawName === 'validateWithBag') {
+            $rulesArgIndex = 1;
+        } else {
             return null;
         }
 
@@ -161,10 +160,11 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        // Slice starts at the rules argument index; getRulesFromValidateArgs
-        // expects the rules array to be at position 0 of the list it receives.
-        $allArgs = \array_values($expr->getArgs());
-        $rulesArgs = \array_slice($allArgs, $rulesArgIndex);
+        // array_values normalises Psalm's inferred `array<array-key, Arg>` to
+        // `list<Arg>` (getArgs()'s docblock doesn't promise list-indexing).
+        // array_slice at index 0 returns the list verbatim for `validate` and
+        // trims the bag-name arg for `validateWithBag`.
+        $rulesArgs = \array_values(\array_slice($expr->getArgs(), $rulesArgIndex));
         $rules = ValidationRuleAnalyzer::getRulesFromValidateArgs($rulesArgs);
 
         if ($rules === null) {
@@ -238,6 +238,8 @@ final class InlineValidateRulesCollector implements
      *
      * @return array<string, ResolvedRule>|null
      *
+     * @internal shared only with {@see ValidationTaintHandler}.
+     *
      * @psalm-external-mutation-free
      */
     public static function getRulesForVariable(int $functionId, string $variableName): ?array
@@ -255,14 +257,16 @@ final class InlineValidateRulesCollector implements
      *
      * Returns `null` for code that is not inside a function-like (e.g. file
      * top-level statements), which are not a valid scope for the escape.
+     *
+     * @internal shared only with {@see ValidationTaintHandler}.
      */
     public static function getFunctionLikeId(StatementsSource $source): ?int
     {
-        // Short bounded walk: StatementsAnalyzer → FunctionLikeAnalyzer is
-        // typically one hop; nested StatementsAnalyzer chains add a few more.
-        // A fixed iteration cap avoids pathological loops without allocating
-        // a seen-set on the hot path.
-        for ($i = 0; $i < 8; $i++) {
+        // The chain terminates naturally: FileAnalyzer sets $this->source = $this,
+        // so the top of every source chain has getSource() === $this. Real chains
+        // are shallow (StatementsAnalyzer → FunctionLikeAnalyzer is usually one
+        // hop), and the self-reference check is the sole required safeguard.
+        while (true) {
             if ($source instanceof FunctionLikeAnalyzer) {
                 return \spl_object_id($source);
             }
@@ -275,8 +279,6 @@ final class InlineValidateRulesCollector implements
 
             $source = $parent;
         }
-
-        return null;
     }
 
     /**

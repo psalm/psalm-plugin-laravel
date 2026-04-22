@@ -255,13 +255,20 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return null;
         }
 
-        if (self::resolveCallerClass($event, \Illuminate\Http\Request::class) === null) {
-            return null;
-        }
-
+        // Cheap check first: top-level code has no enclosing function-like,
+        // so the cache lookup would be pointless and the classExtends walk
+        // would be wasted.
         $functionId = InlineValidateRulesCollector::getFunctionLikeId($event->getStatementsSource());
 
         if ($functionId === null) {
+            return null;
+        }
+
+        // Only inspect the cache when the caller is (or extends) Request —
+        // avoids reading stale entries for a variable of the same name in
+        // an unrelated scope (defence in depth; the collector also filters
+        // on populate).
+        if (self::resolveCallerClass($event, \Illuminate\Http\Request::class) === null) {
             return null;
         }
 
