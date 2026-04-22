@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776852356614,
+  "lastUpdate": 1776869961598,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2727,6 +2727,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1095,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3eb7d7518d56d499f26be2c0719a9f19103e595f",
+          "message": "feat(stubs): add @psalm-variadic across LOW priority Laravel methods (#832)\n\nCloses #813. Extends the @psalm-variadic pattern from #809 to the LOW\npriority bucket documented in .alies/docs/variadic-stubs.md.\n\nStubs updated:\n- Support/LazyCollection: has, hasAny\n- Support/MessageBag (new): has, hasAny, missing — implements clause\n  mirrors Laravel source (Jsonable, JsonSerializable, MessageBagContract,\n  MessageProvider, Stringable) so Psalm does not wipe the reflected\n  interface list when the class is re-declared\n- Support/ServiceProvider (new): commands — typed as\n  class-string<Command>|Command (array or variadic) to match Artisan::resolve()\n\nExplicitly audited and rejected (same principle as Builder::find in #809):\n- Stringable::trim/ltrim/rtrim — Str::trim is 2-arg fixed; extras silently ignored\n- FailoverStore::* — proxies to fixed-arity Store/LockProvider contracts\n- LazyCollection::merge/intersect/union/diff — Collection counterparts take one arg\n\nTests: 4 new PHPT files under tests/Type/tests/Variadic/ plus extended\nNegativeTest.phpt. AuditRejectionsTest.phpt guards against future drift by\nasserting the rejected methods still emit TooManyArguments with extras.",
+          "timestamp": "2026-04-22T15:57:09+01:00",
+          "tree_id": "17055cbded22e2e7ade79f324b9b33eb60cff5e8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3eb7d7518d56d499f26be2c0719a9f19103e595f"
+        },
+        "date": 1776869960276,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.14,
+            "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
