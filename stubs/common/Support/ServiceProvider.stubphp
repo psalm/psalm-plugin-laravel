@@ -1,0 +1,20 @@
+<?php
+
+namespace Illuminate\Support;
+
+abstract class ServiceProvider
+{
+    /**
+     * Register the package's custom Artisan commands.
+     *
+     * Accepts an array of commands or variadic command arguments via func_get_args().
+     * Each entry is either a Command class-string (resolved through the container)
+     * or a Command instance; the `Artisan::resolve()` call site supports both.
+     *
+     * @param  array<class-string<\Illuminate\Console\Command>|\Illuminate\Console\Command>|class-string<\Illuminate\Console\Command>|\Illuminate\Console\Command  $commands
+     * @return void
+     *
+     * @psalm-variadic
+     */
+    public function commands($commands) {}
+}

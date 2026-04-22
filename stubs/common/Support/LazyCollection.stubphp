@@ -64,4 +64,28 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @return static<never, never>
      */
     public static function empty() {}
+
+    /**
+     * Determine if an item exists in the enumerable by key.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  TKey|array<array-key, TKey>  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function has($key) {}
+
+    /**
+     * Determine if any of the keys exist in the enumerable.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  TKey|array<array-key, TKey>  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function hasAny($key) {}
 }

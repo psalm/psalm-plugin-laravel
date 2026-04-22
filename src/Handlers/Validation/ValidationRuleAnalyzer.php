@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
 use PhpParser\Node;
+use Psalm\DocComment;
+use Psalm\Exception\DocblockParseException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\Type;
 use Psalm\Type\Atomic\TArray;
@@ -29,8 +31,87 @@ use Psalm\Type\Union;
  */
 final class ValidationRuleAnalyzer
 {
+    /**
+     * Synthetic segment prefix used by extractRulePairsFromArrayNode to encode
+     * a custom Rule object (e.g. `new EmailWithDnsRule()` or `X::make(...)`)
+     * as a string segment consumable by resolveRuleSegments. Rule names in
+     * Laravel cannot contain a colon followed by a backslash-separated FQN,
+     * so there is no collision risk with real rule names.
+     */
+    private const CLASS_SEGMENT_PREFIX = 'class:';
+
+    /**
+     * Authoritative taint-escape table for first-party Laravel rule classes
+     * whose object form carries the same safety guarantees as their string-rule
+     * equivalent in {@see ruleToRemovedTaints()}. Consulted before any class
+     * docblock lookup — Laravel's own Rule classes do not and should not carry
+     * `@psalm-taint-escape` annotations.
+     *
+     * Keys are lowercase FQNs (matching {@see classRuleRemovedTaints()}'s
+     * cache-key convention). Any class not listed here falls through to the
+     * user-authored docblock path and contributes 0 unless annotated.
+     */
+    private const FIRST_PARTY_RULE_ESCAPES = [
+        // Mirrors the 'email' string rule: Laravel's email validators reject
+        // raw whitespace and control characters, so the value is safe for
+        // header/cookie sinks. Other taints (HTML, SQL, …) are preserved.
+        'illuminate\\validation\\rules\\email'
+            => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
+        // Mirrors the 'numeric' string rule: the value contains no meta-chars.
+        'illuminate\\validation\\rules\\numeric' => TaintKind::ALL_INPUT,
+        // Mirrors the 'in:' string rule: whitelist-bounded values.
+        'illuminate\\validation\\rules\\in' => TaintKind::ALL_INPUT,
+        // Mirrors the 'date' / 'date_format' string rules: the object form
+        // always emits at least one of those via Rules\Date::__toString(),
+        // and every fluent method on Rules\Date (format, past, future,
+        // beforeToday, between, …) returns $this and only adds
+        // before/after/before_or_equal/after_or_equal constraints — all of
+        // which are themselves ALL_INPUT-escaped in ruleToRemovedTaints().
+        'illuminate\\validation\\rules\\date' => TaintKind::ALL_INPUT,
+    ];
+
+    /**
+     * Map from {@see \Illuminate\Validation\Rule} facade method name to the
+     * concrete `Illuminate\Validation\Rules\*` class it returns. Drives the
+     * fluent-builder resolution in {@see resolveRuleObjectClassName()}.
+     *
+     * Only methods whose return class is a single, stable `Rules\*` type are
+     * listed. `Rule::when()`, `Rule::unique()`, `Rule::exists()`,
+     * `Rule::dimensions()`, etc. are intentionally excluded because their
+     * output has no value-shape guarantee that would warrant taint escape.
+     *
+     * Method-name keys are lowercased (PHP method lookup is case-insensitive).
+     * Values are stored as exact-case FQNs; the lowercase form used by
+     * {@see FIRST_PARTY_RULE_ESCAPES} is derived in {@see classRuleRemovedTaints()}.
+     */
+    private const RULE_FACADE_METHOD_RETURN_CLASS = [
+        'email' => \Illuminate\Validation\Rules\Email::class,
+        'in' => \Illuminate\Validation\Rules\In::class,
+        'notin' => \Illuminate\Validation\Rules\NotIn::class,
+        'numeric' => \Illuminate\Validation\Rules\Numeric::class,
+        'date' => \Illuminate\Validation\Rules\Date::class,
+        'enum' => \Illuminate\Validation\Rules\Enum::class,
+        'file' => \Illuminate\Validation\Rules\File::class,
+        'imagefile' => \Illuminate\Validation\Rules\ImageFile::class,
+    ];
+
+    /**
+     * Lowercased FQN of the Rule facade, pre-computed to avoid calling
+     * {@see \strtolower()} on a class constant for every resolved static call.
+     * Kept as a companion to {@see RULE_FACADE_METHOD_RETURN_CLASS}.
+     */
+    private const RULE_FACADE_LOWER_FQN = 'illuminate\\validation\\rule';
+
     /** @var array<string, array<string, ResolvedRule>|null> */
     private static array $cache = [];
+
+    /**
+     * Per-class cache of the OR-ed `@psalm-taint-escape` bitmask read from a
+     * Rule class's own docblock. Keyed by lowercase FQN.
+     *
+     * @var array<string, int>
+     */
+    private static array $classTaintCache = [];
 
     /**
      * Get resolved rules for a FormRequest subclass by reading its rules() method from AST.
@@ -102,6 +183,17 @@ final class ValidationRuleAnalyzer
             $segment = \trim($segment);
 
             if ($segment === '') {
+                continue;
+            }
+
+            // Synthetic segment for a custom Rule object. Contributes only to
+            // the taint escape bitmask — the rule's runtime behavior (type,
+            // nullable, required) is opaque to the plugin.
+            if (\str_starts_with($segment, self::CLASS_SEGMENT_PREFIX)) {
+                $removedTaints |= self::classRuleRemovedTaints(
+                    \substr($segment, \strlen(self::CLASS_SEGMENT_PREFIX)),
+                );
+
                 continue;
             }
 
@@ -651,8 +743,10 @@ final class ValidationRuleAnalyzer
      *   'field' => 'required|string'       → ['field' => ['required', 'string']]
      *   'field' => ['required', 'string']  → ['field' => ['required', 'string']]
      *
+     * Not `@psalm-mutation-free` because resolving a Rule object's class name
+     * reads `resolvedName` attributes via PhpParser's impure `getAttribute()`.
+     *
      * @return array<string, list<string>>|null
-     * @psalm-mutation-free
      */
     private static function extractRulePairsFromArrayNode(Node\Expr\Array_ $array): ?array
     {
@@ -686,9 +780,18 @@ final class ValidationRuleAnalyzer
                         continue;
                     }
 
-                    // Only handle string literal rule segments (skip Rule objects)
                     if ($ruleItem->value instanceof Node\Scalar\String_) {
                         $segments[] = $ruleItem->value->value;
+
+                        continue;
+                    }
+
+                    // Custom Rule object — capture the class FQN so resolveRuleSegments
+                    // can OR the class's own @psalm-taint-escape bits into removedTaints.
+                    $ruleClassFqn = self::resolveRuleObjectClassName($ruleItem->value);
+
+                    if ($ruleClassFqn !== null) {
+                        $segments[] = self::CLASS_SEGMENT_PREFIX . $ruleClassFqn;
                     }
                 }
 
@@ -699,9 +802,227 @@ final class ValidationRuleAnalyzer
                 continue;
             }
 
-            // Value is a variable, function call, or Rule object — cannot resolve statically
+            // Value is a variable, function call, or unsupported Rule expression — cannot resolve statically
         }
 
         return $rules !== [] ? $rules : null;
+    }
+
+    /**
+     * Resolve the class FQN of a Rule object expression in a rules() array.
+     *
+     * Recognises, in order:
+     *   - `new App\Rules\X()` → `App\Rules\X`
+     *   - `App\Rules\X::make(...)` (user-authored static factory) → `App\Rules\X`
+     *   - `Illuminate\Validation\Rule::email()` and the other Rule-facade
+     *     fluent builders → the concrete `Rules\*` class from
+     *     {@see RULE_FACADE_METHOD_RETURN_CLASS}.
+     *   - Any chain of the form `<root>->fluent()->fluent()` (including the
+     *     nullsafe variant `?->`) where `<root>` is one of the above, by
+     *     unwrapping the outer method-call nodes. Laravel's first-party
+     *     fluent builders (`Email::preventSpoofing`, `Numeric::between`, …)
+     *     return `$this`, so the chain's top-level value is always an
+     *     instance of the root's class. User-authored `X::make()->y()`
+     *     chains remain best-effort: if `y()` returns a different class
+     *     (decorator pattern) the analyzer will read `X`'s docblock, which
+     *     is the same soundness caveat as the existing `X::make()` path.
+     *
+     * For a user-authored `X::make(...)` we read the docblock of `X` itself,
+     * which is sound for the common `new self()` / `new static()` factory
+     * pattern. The Rule-facade special case bypasses that assumption because
+     * `Rule::email()` returns `Rules\Email`, not `Rule` itself.
+     *
+     * Unmapped Rule-facade methods (`Rule::unique()`, `Rule::exists()`, …)
+     * fall back to the `Rule` class itself: the docblock path then finds no
+     * `@psalm-taint-escape` and contributes 0 bits. This preserves the
+     * presence of the field in the rules map so downstream type inference
+     * still narrows `validated()` output for fields guarded only by these
+     * builders.
+     *
+     * Dynamic (`new $class()`) or other unhandled expressions return null,
+     * matching the parser limits elsewhere in {@see extractRulePairsFromArrayNode()}.
+     */
+    private static function resolveRuleObjectClassName(Node\Expr $expr): ?string
+    {
+        // Unwrap outer fluent calls (standard and nullsafe): chained calls
+        // like `Rule::email()->preventSpoofing()` or `Rule::email()?->strict()`
+        // resolve to the class of the innermost receiver.
+        while ($expr instanceof Node\Expr\MethodCall
+            || $expr instanceof Node\Expr\NullsafeMethodCall
+        ) {
+            $expr = $expr->var;
+        }
+
+        if ($expr instanceof Node\Expr\New_ && $expr->class instanceof Node\Name) {
+            /** @var string|null $resolved */
+            $resolved = $expr->class->getAttribute('resolvedName');
+
+            return \is_string($resolved) ? $resolved : null;
+        }
+
+        if ($expr instanceof Node\Expr\StaticCall && $expr->class instanceof Node\Name) {
+            /** @var string|null $resolved */
+            $resolved = $expr->class->getAttribute('resolvedName');
+
+            if (!\is_string($resolved)) {
+                return null;
+            }
+
+            // Laravel's Rule facade: translate `Rule::email()` to the concrete
+            // `Rules\Email` class, so the escape table can match. Unmapped
+            // methods on Rule (unique, exists, dimensions, when, …) fall back
+            // to Rule itself so the field still surfaces as a rule segment;
+            // the docblock path then contributes 0 bits since Rule carries no
+            // `@psalm-taint-escape` annotation.
+            if (\strtolower($resolved) === self::RULE_FACADE_LOWER_FQN) {
+                if (!$expr->name instanceof Node\Identifier) {
+                    return $resolved;
+                }
+
+                return self::RULE_FACADE_METHOD_RETURN_CLASS[\strtolower($expr->name->name)]
+                    ?? $resolved;
+            }
+
+            return $resolved;
+        }
+
+        return null;
+    }
+
+    /**
+     * Read `@psalm-taint-escape <kind>` annotations from a Rule class's own
+     * docblock and return the OR-ed bitmask of TaintKind bits they cover.
+     *
+     * Psalm stores `removed_taints` on FunctionLikeStorage only — class-level
+     * escapes are not part of ClassLikeStorage — so we parse the class's raw
+     * docblock here. Only the bare form (`@psalm-taint-escape header`) is
+     * honoured; the conditional form (`@psalm-taint-escape (...)`) is ignored
+     * because it is defined per-parameter and has no meaning at class scope.
+     *
+     * Unknown kinds map to 0 and are silently dropped. Unlike Psalm's own
+     * `Codebase::getOrRegisterTaint()` (used in FunctionLikeDocblockScanner),
+     * which registers unfamiliar names as custom taint kinds, this lookup
+     * honours only the built-in `TaintKind::TAINT_NAMES` set. A mistyped kind
+     * (e.g. `heder` instead of `header`) contributes no escape and therefore
+     * leaves taint intact, which produces extra reports (the false-positive
+     * direction) — double-check spellings against the kind table in
+     * `docs/contributing/taint-analysis.md`.
+     *
+     * The FQN is treated as an opaque string — if the class does not exist in
+     * the codebase, the storage lookup below fails and we return 0.
+     */
+    private static function classRuleRemovedTaints(string $classFqn): int
+    {
+        $cacheKey = \strtolower($classFqn);
+
+        if (\array_key_exists($cacheKey, self::$classTaintCache)) {
+            return self::$classTaintCache[$cacheKey];
+        }
+
+        // First-party Laravel rule classes: short-circuit the docblock lookup.
+        // Laravel's own `Illuminate\Validation\Rules\*` classes carry no
+        // `@psalm-taint-escape` annotation, so without this authoritative
+        // table the object form of a built-in rule (`new Rules\Email()`,
+        // `Rule::numeric()`, …) would silently lose the taint-escape that
+        // its string equivalent ('email', 'numeric') already provides.
+        if (isset(self::FIRST_PARTY_RULE_ESCAPES[$cacheKey])) {
+            return self::$classTaintCache[$cacheKey]
+                = self::FIRST_PARTY_RULE_ESCAPES[$cacheKey];
+        }
+
+        try {
+            $codebase = ProjectAnalyzer::getInstance()->getCodebase();
+        } catch (\RuntimeException|\Error) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        try {
+            $storage = $codebase->classlike_storage_provider->get($cacheKey);
+        } catch (\InvalidArgumentException) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        $filePath = $storage->location?->file_path;
+
+        if ($filePath === null) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        try {
+            $statements = $codebase->getStatementsForFile($filePath);
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        $classNode = self::findClassNode($statements, $storage->name);
+
+        if (!$classNode instanceof \PhpParser\Node\Stmt\Class_) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        $docComment = $classNode->getDocComment();
+
+        if (!$docComment instanceof \PhpParser\Comment\Doc) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        try {
+            $parsed = DocComment::parsePreservingLength($docComment, true);
+        } catch (DocblockParseException) {
+            return self::$classTaintCache[$cacheKey] = 0;
+        }
+
+        $escapeTags = $parsed->tags['psalm-taint-escape'] ?? [];
+
+        $bits = 0;
+
+        foreach ($escapeTags as $tagLine) {
+            $kind = \trim($tagLine);
+
+            if ($kind === '' || $kind[0] === '(') {
+                // Conditional form is parameter-scoped; has no meaning on a class.
+                continue;
+            }
+
+            // Psalm's parser keeps only the first whitespace-separated token.
+            $kind = \explode(' ', $kind)[0];
+
+            $bits |= TaintKind::TAINT_NAMES[$kind] ?? 0;
+        }
+
+        return self::$classTaintCache[$cacheKey] = $bits;
+    }
+
+    /**
+     * Locate the class AST node for a known FQN inside the given file's statements.
+     *
+     * @param list<Node\Stmt> $statements
+     * @psalm-mutation-free
+     */
+    private static function findClassNode(array $statements, string $className): ?Node\Stmt\Class_
+    {
+        foreach ($statements as $stmt) {
+            if ($stmt instanceof Node\Stmt\Namespace_) {
+                $namespaceName = $stmt->name?->toString() ?? '';
+
+                foreach ($stmt->stmts as $nsStmt) {
+                    if ($nsStmt instanceof Node\Stmt\Class_
+                        && self::classNameMatches($nsStmt, $className, $namespaceName)
+                    ) {
+                        return $nsStmt;
+                    }
+                }
+
+                continue;
+            }
+
+            if ($stmt instanceof Node\Stmt\Class_
+                && self::classNameMatches($stmt, $className, '')
+            ) {
+                return $stmt;
+            }
+        }
+
+        return null;
     }
 }
