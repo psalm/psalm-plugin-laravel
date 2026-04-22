@@ -288,9 +288,28 @@ public static function of($string) {}
 
 This differs from **escape functions** like `e()`, where `@psalm-taint-specialize` is not needed because the escape annotation removes the dangerous taint kind regardless of call site. Pure flow-through functions (no escape/unescape) must always pair `@psalm-taint-specialize` with `@psalm-flow`.
 
-## Per-rule escape on custom Rule classes
+## Per-rule escape on Rule objects
 
-The plugin already escapes taint for built-in rules used as strings (e.g. `'email'` escapes `header` and `cookie`). Application code can extend that escape to **custom Rule classes** by placing `@psalm-taint-escape <kind>` on the class docblock.
+The plugin already escapes taint for built-in rules used as strings (e.g. `'email'` escapes `header` and `cookie`). The escape also applies when the same rule is expressed as a first-party Laravel rule object, and can be extended to application-defined Rule classes.
+
+### Built-in Laravel rule classes
+
+`Illuminate\Validation\Rules\*` objects and the matching `Illuminate\Validation\Rule::*()` fluent builders are recognised automatically, with escape bits that mirror the string-rule equivalents:
+
+| Usage | Escape |
+|---|---|
+| `new Rules\Email()`, `Rule::email()` | `header`, `cookie` |
+| `new Rules\Numeric()`, `Rule::numeric()` | all input |
+| `new Rules\In([...])`, `Rule::in([...])` | all input |
+| `new Rules\Date()`, `Rule::date()` | all input |
+
+Chained fluent calls (including the nullsafe form `?->`) resolve to the root class, so `Rule::email()->preventSpoofing()->rfcCompliant(strict: true)` still escapes `header` and `cookie`.
+
+Other `Rule::*()` methods (`unique`, `exists`, `dimensions`, `when`, `notIn`, `file`, `imageFile`, `enum`, …) contribute no taint escape, because the value either depends on runtime arguments (e.g. the column passed to `Rule::unique`) or is not bounded to a safe character set. The field still surfaces in the validator's inferred shape, so type narrowing on `validated()` continues to apply.
+
+### Custom Rule classes
+
+Application code can extend the escape to **custom Rule classes** by placing `@psalm-taint-escape <kind>` on the class docblock.
 
 When `ValidationRuleAnalyzer` encounters a Rule object in a `rules()` array, it resolves the class FQN, reads the class's own `@psalm-taint-escape` tags, and ORs those kinds into the field's removed-taints bitmask alongside any string rule escapes.
 
@@ -330,7 +349,7 @@ final class EmailWithDnsRule implements ValidationRule
 - Rule objects constructed via `new X()` or a static factory `X::method(...)`. Dynamic class names (`new $class()`) and runtime-built rule arrays are out of scope, matching the parser limits elsewhere in `ValidationRuleAnalyzer`.
 - **The annotation is read from the class that appears literally in `rules()`.** Subclassing an annotated rule does NOT inherit its escape. Re-declare the annotation on the subclass if you need it. This keeps the taint contract explicit and reviewable from the Rule class alone.
 
-**Static factory caveat.** For `X::make(...)` the plugin reads the docblock of `X`, not of whatever object the method returns. This is sound for the common user-authored pattern (`public static function make(): static { return new static(); }`) but NOT for Laravel's own builder `Rule::email()`, which returns a different class. Built-in Laravel rule semantics are already handled by the string-rule path (`'email'`), so the mismatch has no practical effect.
+**Static factory caveat.** For an application `X::make(...)` the plugin reads the docblock of `X`, not of whatever object the method returns. This is sound for the common user-authored pattern (`public static function make(): static { return new static(); }`) where `X` and the returned class coincide. Laravel's own `Rule::*()` fluent builders do not match this heuristic (they return a different class), so they are handled via the dedicated method map described above rather than by reading `Rule`'s docblock.
 
 **Base class agnostic.** The handler reads the docblock on whatever class you instantiate. Any of `Illuminate\Contracts\Validation\ValidationRule`, `Illuminate\Contracts\Validation\InvokableRule`, or the deprecated `Illuminate\Contracts\Validation\Rule` works. Custom base classes or community packages (e.g. Spatie's `CompositeRule`) work as well, since no `instanceof` check is performed.
 
