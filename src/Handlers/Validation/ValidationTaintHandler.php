@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\AddTaintsInterface;
@@ -31,7 +32,10 @@ use Psalm\Type\Union;
  *    (e.g. 'email' rule → safe for 'header' and 'cookie').
  *    Covers keyed accessors that read from the same data pool as validation:
  *            FormRequest::validated/input/string/str('key'),
- *            ValidatedInput::input/string/str('key').
+ *            ValidatedInput::input/string/str('key'),
+ *            Request::input/string/str('key') after an in-controller
+ *            `$request->validate([...])` in the same function — rules come
+ *            from {@see InlineValidateRulesCollector}.
  *
  * Design assumption: when a typed FormRequest is injected into a controller,
  * Laravel runs validation before the controller method executes (via
@@ -102,42 +106,64 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
     }
 
     /**
-     * Remove taint kinds that the declared rule guarantees cannot occur in
-     * the validated value. Applies to all keyed accessors in
-     * KEYED_ACCESSOR_METHODS whose caller resolves to either a FormRequest
-     * subclass or ValidatedInput<FormRequest>.
+     * Remove taint kinds that the declared validation rule guarantees cannot
+     * occur in the value. Applies to keyed accessors in
+     * KEYED_ACCESSOR_METHODS whose caller resolves to a FormRequest subclass,
+     * ValidatedInput<FormRequest>, or a plain Request that already passed an
+     * inline `$request->validate([...])` in the same function body.
+     *
+     * FormRequest and inline-validate paths OR their escape bits: if both
+     * contribute a rule for the same field, the value has been constrained
+     * by both and is safe for every kind either rule escapes.
      */
     #[\Override]
     public static function removeTaints(AddRemoveTaintsEvent $event): int
     {
-        $match = self::matchKeyedAccess($event);
+        $accessor = self::matchKeyedAccessor($event);
 
-        if ($match === null) {
+        if ($accessor === null) {
             return 0;
         }
 
-        $rules = ValidationRuleAnalyzer::getRulesForFormRequest($match['class']);
+        $removed = 0;
 
-        if ($rules === null) {
-            return 0;
+        // FormRequest::rules() path — covers both direct FormRequest callers
+        // and ValidatedInput<FormRequest> callers.
+        $formRequestClass = self::resolveFormRequestForAccessor($event, $accessor['method']);
+
+        if ($formRequestClass !== null) {
+            $rules = ValidationRuleAnalyzer::getRulesForFormRequest($formRequestClass);
+
+            if ($rules !== null && isset($rules[$accessor['key']])) {
+                $removed |= $rules[$accessor['key']]->removedTaints;
+            }
         }
 
-        $rule = $rules[$match['key']] ?? null;
+        // Inline `$request->validate([...])` path — applies to any caller
+        // variable typed as Illuminate\Http\Request (which includes every
+        // FormRequest subclass, so a FormRequest with both `rules()` AND an
+        // inline validate gets escape bits from both sources).
+        $inlineRules = self::lookupInlineValidateRules($event, $accessor['expr']);
 
-        if ($rule === null) {
-            return 0;
+        if ($inlineRules !== null && isset($inlineRules[$accessor['key']])) {
+            $removed |= $inlineRules[$accessor['key']]->removedTaints;
         }
 
-        return $rule->removedTaints;
+        return $removed;
     }
 
     /**
-     * Match a keyed accessor call and resolve the backing FormRequest class,
-     * whether the call is on the FormRequest itself or on ValidatedInput<FormRequest>.
+     * Common bail-out chain for every keyed accessor lookup:
+     *   - expression is a MethodCall named validated|input|string|str,
+     *   - a single first argument that resolves to a literal string,
+     *   - no second (default) argument that could carry independent taint.
      *
-     * @return array{class: class-string, key: string}|null
+     * Returns the method name, the literal field key, and the underlying
+     * MethodCall node so callers can reuse the already-validated AST.
+     *
+     * @return array{method: string, key: string, expr: MethodCall}|null
      */
-    private static function matchKeyedAccess(AddRemoveTaintsEvent $event): ?array
+    private static function matchKeyedAccessor(AddRemoveTaintsEvent $event): ?array
     {
         $expr = $event->getExpr();
 
@@ -177,27 +203,69 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return null;
         }
 
-        $fieldKey = $firstArgType->getSingleStringLiteral()->value;
+        return [
+            'method' => $methodName,
+            'key' => $firstArgType->getSingleStringLiteral()->value,
+            'expr' => $expr,
+        ];
+    }
 
+    /**
+     * Resolve the FormRequest class backing an accessor call, either directly
+     * on the FormRequest or on a ValidatedInput<FormRequest>.
+     *
+     * @return class-string|null
+     */
+    private static function resolveFormRequestForAccessor(
+        AddRemoveTaintsEvent $event,
+        string $methodName,
+    ): ?string {
         // Direct FormRequest caller: $req->validated|input|string|str('key')
         $formRequestClass = self::resolveCallerClass($event, \Illuminate\Foundation\Http\FormRequest::class);
 
         if ($formRequestClass !== null) {
-            return ['class' => $formRequestClass, 'key' => $fieldKey];
+            return $formRequestClass;
         }
 
         // ValidatedInput<FormRequest> caller: $req->safe()->input|string|str('key').
         // validated() does not exist on ValidatedInput, so this branch applies
         // only to input/string/str.
         if ($methodName !== 'validated') {
-            $formRequestClass = self::extractFormRequestFromValidatedInput($event);
-
-            if ($formRequestClass !== null) {
-                return ['class' => $formRequestClass, 'key' => $fieldKey];
-            }
+            return self::extractFormRequestFromValidatedInput($event);
         }
 
         return null;
+    }
+
+    /**
+     * Look up inline-validate rules populated by
+     * {@see InlineValidateRulesCollector} for this accessor call site.
+     *
+     * Requires a plain `$variable->method(...)` caller (so the variable name
+     * is the cache lookup key) typed as or extending Illuminate\Http\Request,
+     * and an enclosing function-like (so the cache scope is well-defined).
+     *
+     * @return array<string, ResolvedRule>|null
+     */
+    private static function lookupInlineValidateRules(
+        AddRemoveTaintsEvent $event,
+        MethodCall $expr,
+    ): ?array {
+        if (!$expr->var instanceof Variable || !\is_string($expr->var->name)) {
+            return null;
+        }
+
+        if (self::resolveCallerClass($event, \Illuminate\Http\Request::class) === null) {
+            return null;
+        }
+
+        $functionId = InlineValidateRulesCollector::getFunctionLikeId($event->getStatementsSource());
+
+        if ($functionId === null) {
+            return null;
+        }
+
+        return InlineValidateRulesCollector::getRulesForVariable($functionId, $expr->var->name);
     }
 
     /**
