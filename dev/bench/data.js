@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776809383253,
+  "lastUpdate": 1776852356614,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2692,6 +2692,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "280b205573d154b65188a5e4860e3e1be49c26bf",
+          "message": "Extend taint escape to first-party `Rule` objects and `Rule::*()` builders (#829)\n\n* Extend taint escape to first-party Rule objects and Rule::*() builders\n\nCloses #828.\n\n`ValidationRuleAnalyzer` now recognises taint-escape semantics for the\nobject form of built-in Laravel validation rules and the fluent\n`Illuminate\\Validation\\Rule::*()` builders, mirroring what the string-rule\npath already does:\n\n- `new Rules\\Email()`, `Rule::email()` escape `header` and `cookie`\n- `new Rules\\Numeric()`, `Rule::numeric()` escape all input taint\n- `new Rules\\In([...])`, `Rule::in([...])` escape all input taint\n- `new Rules\\Date()`, `Rule::date()->past()` (and other date chains)\n  escape all input taint, matching the `'date'` / `'date_format'` /\n  `before:` / `after:` string rules\n\nTwo internal tables drive the resolution:\n\n- `FIRST_PARTY_RULE_ESCAPES` is an authoritative FQN-to-bitmask map for\n  Rule classes whose object output carries the same safety guarantees as\n  their string-rule equivalent. Consulted before any docblock lookup.\n- `RULE_FACADE_METHOD_RETURN_CLASS` maps each `Rule::*()` builder method\n  to its concrete `Rules\\*` return type. `resolveRuleObjectClassName()`\n  unwraps chained `MethodCall` / `NullsafeMethodCall` nodes to the root\n  receiver, then translates the base `StaticCall` through this map.\n\nUnmapped Rule facade methods (`Rule::unique`, `Rule::exists`,\n`Rule::dimensions`, `Rule::when`, …) fall back to the `Rule` FQN itself\nso the field still surfaces in the rules map (keeping `validated()` type\ninference intact); the Rule class carries no escape annotation, so\nnothing is unioned into `removedTaints`.\n\n### Tests\n\n- 10 new PHPT tests in `tests/Type/tests/TaintAnalysis/`:\n  - Direct instantiation for Email (header/cookie), Numeric, In\n  - Fluent `Rule::email()`, `Rule::numeric()`, `Rule::in()`, `Rule::date()`\n  - Chained `Rule::email()->preventSpoofing()->rfcCompliant(strict: true)`\n  - Negative `Rule::notIn()` and `Rule::unique()` preserve taint\n- 6 new unit tests in `ValidationRuleAnalyzerTest`, including a data\n  provider that guards `Enum`, `File`, `ImageFile` against accidental\n  inclusion in the escape table.\n\n### Docs\n\n`docs/contributing/taint-analysis.md` now introduces \"Per-rule escape on\nRule objects\" with two subsections: built-in Laravel rule classes (with\nthe table above) and custom application Rule classes (unchanged\nbehaviour from #826). The static-factory caveat is updated to describe\nthe dedicated Rule-facade method map.\n\n* Clarify defensive-guard docblock wording\n\nCopilot review flagged runtime-defined as misleading for backed enum\nvalues, which are in fact developer-defined string literals. Rewrite the\ndocblock to separate the two distinct reasons each class is excluded\nfrom the escape table.",
+          "timestamp": "2026-04-22T11:03:25+01:00",
+          "tree_id": "68c61a20e654c4e5c11ac850fa50c8175bb6338d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/280b205573d154b65188a5e4860e3e1be49c26bf"
+        },
+        "date": 1776852355754,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.99,
+            "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1095,
             "unit": "MB"
           }
         ]
