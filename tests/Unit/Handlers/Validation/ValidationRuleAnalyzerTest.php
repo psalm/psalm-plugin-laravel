@@ -515,11 +515,13 @@ final class ValidationRuleAnalyzerTest extends TestCase
     }
 
     /**
-     * Defensive guard: classes in RULE_FACADE_METHOD_RETURN_CLASS whose
-     * fluent builders return value-shape-unsafe content (user-controlled
-     * file uploads, dev-chosen enum cases with runtime-defined string
-     * backing) must NOT be in FIRST_PARTY_RULE_ESCAPES. If a future refactor
-     * added them, this test would flip to a non-zero expectation and fail.
+     * Defensive guard: these classes are mapped in RULE_FACADE_METHOD_RETURN_CLASS
+     * but deliberately omitted from FIRST_PARTY_RULE_ESCAPES. File/ImageFile
+     * carry user-controlled filename/mime/contents; Enum is a plausible
+     * candidate for a future escape (backing values are developer-defined
+     * string literals) but is intentionally out of scope for the initial PR.
+     * If a future refactor added any of them, this test would flip to a
+     * non-zero expectation and fail, forcing a deliberate decision.
      *
      * @return iterable<string, array{string}>
      */
