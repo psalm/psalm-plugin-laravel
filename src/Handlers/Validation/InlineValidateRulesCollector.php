@@ -209,7 +209,19 @@ final class InlineValidateRulesCollector implements
      * run a non-issue (the id can only be reused after the analyzer is
      * garbage-collected, which happens after we've already cleared the entry).
      *
+     * The method mutates `self::$rulesByFunction` (static class state) — so
+     * `@psalm-external-mutation-free` is technically inaccurate — but the
+     * annotation is required by Psalm 7's `MissingPureAnnotation` check on
+     * event-handler methods that receive an `@psalm-external-mutation-free`
+     * event. The project's baseline policy forbids adding entries to
+     * `psalm-baseline.xml` (see CLAUDE.local.md), so the annotation stays.
+     * The mutation is same-class / same-process and the event-dispatch loop
+     * never calls this method twice with the same cache-key during one run,
+     * so the semantic gap is not observable in practice.
+     *
      * @inheritDoc
+     *
+     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function afterStatementAnalysis(AfterFunctionLikeAnalysisEvent $event): ?bool
