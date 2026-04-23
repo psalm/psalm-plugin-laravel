@@ -77,7 +77,12 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
     /**
      * Accessor methods whose single-key form selects a rule-covered field.
      *
-     * Listed explicitly (not derived) so reviewers can audit the set.
+     * Listed explicitly (not derived) so reviewers can audit the set. Names
+     * are in canonical Laravel casing; both this handler and the sibling
+     * {@see InlineValidateRulesCollector} reject non-canonical casing
+     * deliberately. PHP resolves method names case-insensitively at runtime,
+     * but Laravel code uses canonical camelCase without exception, and the
+     * canonical-only check avoids a per-expression `strtolower()` allocation.
      */
     private const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str'];
 
@@ -171,7 +176,9 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return null;
         }
 
-        $methodName = $expr->name->toLowerString();
+        // Direct raw-name compare. See KEYED_ACCESSOR_METHODS docblock for
+        // why canonical casing is required.
+        $methodName = $expr->name->name;
 
         if (!\in_array($methodName, self::KEYED_ACCESSOR_METHODS, true)) {
             return null;
@@ -286,7 +293,9 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return false;
         }
 
-        $methodName = $expr->name->toLowerString();
+        // Raw-name compare. Non-canonical casing is rejected on the same
+        // rationale as KEYED_ACCESSOR_METHODS.
+        $methodName = $expr->name->name;
 
         if (!\in_array($methodName, ['validated', 'validate', 'safe'], true)) {
             return false;
@@ -314,7 +323,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return false;
         }
 
-        if ($expr->name->toLowerString() !== 'input') {
+        if ($expr->name->name !== 'input') {
             return false;
         }
 

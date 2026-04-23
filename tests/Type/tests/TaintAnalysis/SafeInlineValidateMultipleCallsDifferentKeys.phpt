@@ -7,21 +7,19 @@ use Illuminate\Http\Request;
 
 /**
  * Two successive `$request->validate([...])` calls on the same variable,
- * each covering a different field with a DIFFERENT escape bitmask. This
- * proves the cache keeps independent rule entries per field — a buggy
+ * each covering a different field with a DIFFERENT escape bitmask. Proves
+ * the cache keeps independent rule entries per field — a buggy
  * implementation that shared one entry across keys would fail at least
  * one assertion.
  *
- *   'count' -> 'integer' rule  -> escapes ALL_INPUT (including HTML)
- *   'slug'  -> 'alpha' rule    -> escapes ALL_INPUT too, but the test
- *                                  deliberately uses it AFTER switching
- *                                  one key to a narrower-escape rule so
- *                                  the bitmasks genuinely differ.
+ *   'count' -> 'integer' rule -> escapes ALL_INPUT (including HTML)
+ *   'addr'  -> 'email' rule   -> escapes header/cookie only, preserves HTML
  *
- * Wait, to differentiate clearly: use 'count' => 'integer' (ALL_INPUT)
- * and 'addr' => 'email' (header/cookie only). Echoing the 'count' value
- * is safe; echoing 'addr' must still report TaintedHtml because 'email'
- * preserves HTML taint.
+ * Echoing 'count' is therefore safe; echoing 'addr' still reports
+ * TaintedHtml because 'email' does not escape HTML. If the cache wrongly
+ * shared 'count's ALL_INPUT escape with 'addr', this echo would be silently
+ * clean — so the asserted TaintedHtml on the second echo is what proves
+ * per-key isolation.
  */
 /** @psalm-suppress MixedArgument */
 function dumpMultiKeys(Request $request): void {

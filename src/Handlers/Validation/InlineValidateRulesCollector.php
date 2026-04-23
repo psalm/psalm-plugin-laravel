@@ -102,8 +102,7 @@ use Psalm\Type\Union;
  * safe for that kind). Type / nullable / required modifiers keep their
  * first-seen values — they're opaque to the taint query, which only reads
  * `removedTaints`.
- */
-/**
+ *
  * @internal public-static API is a cross-handler contract with
  * {@see ValidationTaintHandler}; not intended for third-party consumption.
  */
