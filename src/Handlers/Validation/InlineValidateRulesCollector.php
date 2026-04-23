@@ -98,6 +98,14 @@ use Psalm\Type\Union;
  *     read sees unvalidated data but still gets the rule's escape applied.
  *     Realistic anti-pattern in defensive code; prefer not to swallow
  *     `ValidationException` at all, or use a typed FormRequest.
+ *   - `$request->merge([...])` between `validate()` and `input()`. Laravel's
+ *     `validate()` macro does not write the validated snapshot back into
+ *     the Request's input bag; `$request->all()` / `input()` keep reading
+ *     the live bag. A `merge()` call between the two therefore overwrites
+ *     a rule-covered key with raw, un-revalidated data, but the collector's
+ *     cache still carries the original rule's escape. Prefer the return
+ *     value of `validate()` (or `$request->validated()` on a FormRequest)
+ *     for security-sensitive reads that happen after a `merge()`.
  *   - `request()->validate([...])` (the `request()` helper) is not
  *     recognised — the caller is a `FuncCall`, not a `Variable`, so there
  *     is no source-level name to key the cache by. Fail-safe: taint is
