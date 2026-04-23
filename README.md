@@ -1,17 +1,19 @@
+# Psalm plugin for Laravel
+
+Laravel static analysis with built-in security scanning.
+
 [![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
 [![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
 [![Type coverage](https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg)](https://shepherd.dev/github/psalm/psalm-plugin-laravel)
 [![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml)
 [![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel-app.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel-app.yml)
 
-# Psalm plugin for Laravel
-
-Laravel static analysis with built-in security scanning.
-
 The only free tool that combines deep Laravel type analysis with taint-based vulnerability detection.
 Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redirects — without running your code.
 
-> Already using Larastan? psalm-plugin-laravel **complements** it with security analysis that PHPStan cannot provide.
+> [!NOTE]
+> Already using Larastan? psalm-laravel **complements** it with security analysis that PHPStan cannot provide.
+
 
 ![Screenshot](/docs/assets/screenshot.png)
 
@@ -22,7 +24,7 @@ Plugin ships Laravel-specific taint stubs that track user input from source to s
 Unlike pattern-matching tools, Psalm follows dataflow across function boundaries — catching vulnerabilities that simpler scanners miss.
 
 ```php
-// psalm-plugin-laravel catches this:
+// psalm-laravel catches this:
 Route::get('/search', function (Request $request) {
     $query = $request->input('q');
     DB::statement("SELECT * FROM users WHERE name = '$query'");
@@ -60,14 +62,13 @@ Security scanning runs automatically alongside type analysis — no extra config
 
 ### How it compares
 
-| Tool                     | Laravel-aware types | Taint analysis     | Free               |
-|--------------------------|---------------------|--------------------|--------------------|
-| **psalm-plugin-laravel** | Yes                 | Yes (dataflow)     | Yes                |
-| Larastan                 | Yes                 | No (PHPStan can't) | Yes                |
-| Enlightn Pro             | Partial             | No (rule-based)    | $99+/project       |
-| SonarQube                | Generic PHP         | Yes (generic)      | Paid editions only |
-| Semgrep                  | Pro tier only       | Pattern-based      | Limited free tier  |
-| Snyk Code                | Generic             | Yes (generic)      | Freemium           |
+| Tool              | Laravel-aware types | Taint analysis     | Free               |
+|-------------------|---------------------|--------------------|--------------------|
+| **psalm-laravel** | Yes                 | Yes (dataflow)     | Yes                |
+| Larastan          | Yes                 | No (PHPStan can't) | Yes                |
+| SonarQube         | Generic PHP         | Yes (generic)      | Paid editions only |
+| Semgrep           | Pro tier only       | Pattern-based      | Limited free tier  |
+| Snyk Code         | Generic             | Yes (generic)      | Freemium           |
 
 ## Quickstart
 
@@ -148,12 +149,12 @@ Under the hood it reads Laravel's native `@method` annotations on facade classes
 It also parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types in your database models.
 
 
-## psalm-plugin-laravel or Larastan?
+## Psalm-Laravel or Larastan?
 
 **Use both.** They solve different problems:
 
 - **Larastan** excels at Laravel-specific type rules: `model-property` validation, `view-string` checks, and 17+ custom rules.
-- **psalm-plugin-laravel** in addition to type checks, it provides taint-based security analysis that PHPStan structurally [cannot offer](https://github.com/phpstan/phpstan/issues/8038), plus deep type support for auth guards, Eloquent attributes, scopes, attributes, etc.
+- **Psalm-Laravel** in addition to type checks, it provides taint-based security analysis that PHPStan structurally [cannot offer](https://github.com/phpstan/phpstan/issues/8038), plus deep type support for auth guards, Eloquent attributes, scopes, attributes, etc.
 
 Psalm and PHPStan use almost the same annotation syntax, so they work side by side without conflicts.
 
@@ -163,7 +164,6 @@ Psalm and PHPStan use almost the same annotation syntax, so they work side by si
 ## Contributing
 
 Maintained by [@alies-dev](https://github.com/sponsors/alies-dev).
-PRs and issues welcome — first-time contributors too.
 There are [contributing docs](docs/contributing/README.md) that may help you (and your agents) with contributions.
 
 Areas where help is especially needed:
