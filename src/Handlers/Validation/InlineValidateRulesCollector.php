@@ -210,8 +210,6 @@ final class InlineValidateRulesCollector implements
      * garbage-collected, which happens after we've already cleared the entry).
      *
      * @inheritDoc
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function afterStatementAnalysis(AfterFunctionLikeAnalysisEvent $event): ?bool

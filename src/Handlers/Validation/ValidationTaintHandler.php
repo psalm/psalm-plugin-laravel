@@ -262,24 +262,30 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return null;
         }
 
-        // Cheap check first: top-level code has no enclosing function-like,
-        // so the cache lookup would be pointless and the classExtends walk
-        // would be wasted.
+        // Cheap checks first. For the 99% of accessor calls in functions
+        // that never ran validate(), the cache lookup returns null and we
+        // skip the expensive classExtends walk entirely.
         $functionId = InlineValidateRulesCollector::getFunctionLikeId($event->getStatementsSource());
 
         if ($functionId === null) {
             return null;
         }
 
-        // Only inspect the cache when the caller is (or extends) Request —
-        // avoids reading stale entries for a variable of the same name in
-        // an unrelated scope (defence in depth; the collector also filters
-        // on populate).
+        $rules = InlineValidateRulesCollector::getRulesForVariable($functionId, $expr->var->name);
+
+        if ($rules === null) {
+            return null;
+        }
+
+        // Cache hit — now pay for the defence-in-depth type check. The
+        // collector filters on populate; this second check guards against
+        // an unrelated scope reusing the same variable name with an
+        // entirely different type (a rare pathological case).
         if (self::resolveCallerClass($event, \Illuminate\Http\Request::class) === null) {
             return null;
         }
 
-        return InlineValidateRulesCollector::getRulesForVariable($functionId, $expr->var->name);
+        return $rules;
     }
 
     /**
