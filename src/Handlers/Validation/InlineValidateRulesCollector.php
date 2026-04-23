@@ -92,6 +92,16 @@ use Psalm\Type\Union;
  *     trait on a controller) is not recognised — the caller is `$this`, not
  *     a Request. Users on that pattern should prefer `$request->validate(...)`
  *     or a typed FormRequest.
+ *   - Swallowed `ValidationException` — flow-insensitivity's worst case.
+ *     A `validate()` wrapped in `try { ... } catch (ValidationException) {}`
+ *     populates the cache even on the thrown path, so a later `input()`
+ *     read sees unvalidated data but still gets the rule's escape applied.
+ *     Realistic anti-pattern in defensive code; prefer not to swallow
+ *     `ValidationException` at all, or use a typed FormRequest.
+ *   - `request()->validate([...])` (the `request()` helper) is not
+ *     recognised — the caller is a `FuncCall`, not a `Variable`, so there
+ *     is no source-level name to key the cache by. Fail-safe: taint is
+ *     preserved on subsequent `request()->input('key')` reads.
  *
  * ## Merge policy for repeated keys
  *
@@ -209,15 +219,12 @@ final class InlineValidateRulesCollector implements
      * run a non-issue (the id can only be reused after the analyzer is
      * garbage-collected, which happens after we've already cleared the entry).
      *
-     * The method mutates `self::$rulesByFunction` (static class state) — so
-     * `@psalm-external-mutation-free` is technically inaccurate — but the
-     * annotation is required by Psalm 7's `MissingPureAnnotation` check on
-     * event-handler methods that receive an `@psalm-external-mutation-free`
-     * event. The project's baseline policy forbids adding entries to
-     * `psalm-baseline.xml` (see CLAUDE.local.md), so the annotation stays.
-     * The mutation is same-class / same-process and the event-dispatch loop
-     * never calls this method twice with the same cache-key during one run,
-     * so the semantic gap is not observable in practice.
+     * `@psalm-external-mutation-free` is correct here: Psalm's own
+     * `Mutations::LEVEL_INTERNAL_READ_WRITE` explicitly permits writes to
+     * same-class static properties (see `vendor/vimeo/psalm/src/Psalm/
+     * Storage/Mutations.php`), and the annotation is required by Psalm 7's
+     * `MissingPureAnnotation` check on event-handler methods that consume
+     * an `@psalm-external-mutation-free` event.
      *
      * @inheritDoc
      *
