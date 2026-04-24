@@ -83,8 +83,14 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      * deliberately. PHP resolves method names case-insensitively at runtime,
      * but Laravel code uses canonical camelCase without exception, and the
      * canonical-only check avoids a per-expression `strtolower()` allocation.
+     *
+     * `public` so {@see InlineValidateRulesCollector} can reuse the list
+     * without risking drift — the variable-binding cache is the same data
+     * flow with one extra hop, and both sites must stay in sync.
+     *
+     * @internal shared only with {@see InlineValidateRulesCollector}.
      */
-    private const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str'];
+    public const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str'];
 
     /**
      * Add taint to validation method calls whose return type we narrow.
@@ -112,18 +118,40 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
 
     /**
      * Remove taint kinds that the declared validation rule guarantees cannot
-     * occur in the value. Applies to keyed accessors in
-     * KEYED_ACCESSOR_METHODS whose caller resolves to a FormRequest subclass,
-     * ValidatedInput<FormRequest>, or a plain Request that already passed an
-     * inline `$request->validate([...])` in the same function body.
+     * occur in the value.
      *
-     * FormRequest and inline-validate paths OR their escape bits: if both
-     * contribute a rule for the same field, the value has been constrained
-     * by both and is safe for every kind either rule escapes.
+     * Two expression shapes are handled:
+     *
+     *   - Keyed accessor calls in `KEYED_ACCESSOR_METHODS` whose caller
+     *     resolves to a `FormRequest` subclass, `ValidatedInput<FormRequest>`,
+     *     or a plain `Request` that already passed an inline
+     *     `$request->validate([...])` in the same function body.
+     *   - A bare `Variable` whose binding was previously cached by
+     *     {@see InlineValidateRulesCollector::beforeExpressionAnalysis}.
+     *     This covers the one-hop case (`$v = $request->input('k');
+     *     sink($v);`) where `MethodCallReturnTypeFetcher` and
+     *     `AssignmentAnalyzer` create separate edges and the escape would
+     *     otherwise be lost on the variable indirection (issue #834).
+     *
+     * Within the keyed-accessor shape, the FormRequest and inline-validate
+     * paths OR their escape bits: if both contribute a rule for the same
+     * field, the value has been constrained by both and is safe for every
+     * kind either rule escapes.
      */
     #[\Override]
     public static function removeTaints(AddRemoveTaintsEvent $event): int
     {
+        $expr = $event->getExpr();
+
+        // Variable case (issue #834): `$v = $req->input('k'); sink($v)`.
+        // The cache was populated in `beforeExpressionAnalysis` so it is
+        // visible to every subsequent removeTaints firing — including the
+        // LHS event for the binding itself, which lets the rule's escape
+        // also be applied to the assignment edge for free.
+        if ($expr instanceof Variable && \is_string($expr->name)) {
+            return self::lookupInlineValidateVariableEscape($event, $expr->name);
+        }
+
         $accessor = self::matchKeyedAccessor($event);
 
         if ($accessor === null) {
@@ -155,6 +183,37 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         }
 
         return $removed;
+    }
+
+    /**
+     * Look up the cached escape mask for a local variable previously bound
+     * to a tracked accessor read on a validated Request (`$v =
+     * $request->input('k')`). Returns 0 when no such binding is in scope.
+     *
+     * The binding is tracked per enclosing function-like; closures and
+     * nested functions are separate scopes.
+     */
+    private static function lookupInlineValidateVariableEscape(
+        AddRemoveTaintsEvent $event,
+        string $variableName,
+    ): int {
+        // Fast bail-out for the common case where no function in the
+        // current worker has populated the cache. `removeTaints` fires
+        // for every bare Variable expression under taint analysis, and
+        // most projects have far more variable reads than they have
+        // cached inline-validate bindings — so this check is taken very
+        // often and cheaply avoids the `getFunctionLikeId` walk.
+        if (!InlineValidateRulesCollector::hasAnyVariableBindings()) {
+            return 0;
+        }
+
+        $functionId = InlineValidateRulesCollector::getFunctionLikeId($event->getStatementsSource());
+
+        if ($functionId === null) {
+            return 0;
+        }
+
+        return InlineValidateRulesCollector::getEscapeForVariable($functionId, $variableName) ?? 0;
     }
 
     /**
