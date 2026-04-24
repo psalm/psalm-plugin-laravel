@@ -170,7 +170,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             if ($rules !== null) {
                 $rule = ValidationRuleAnalyzer::lookupRuleByKey($rules, $accessor['key']);
 
-                if ($rule !== null) {
+                if ($rule instanceof \Psalm\LaravelPlugin\Handlers\Validation\ResolvedRule) {
                     $removed |= $rule->removedTaints;
                 }
             }
@@ -185,7 +185,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         if ($inlineRules !== null) {
             $rule = ValidationRuleAnalyzer::lookupRuleByKey($inlineRules, $accessor['key']);
 
-            if ($rule !== null) {
+            if ($rule instanceof \Psalm\LaravelPlugin\Handlers\Validation\ResolvedRule) {
                 $removed |= $rule->removedTaints;
             }
         }
