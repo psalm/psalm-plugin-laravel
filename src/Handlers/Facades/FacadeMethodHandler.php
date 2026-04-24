@@ -212,6 +212,11 @@ final class FacadeMethodHandler
         try {
             $storage = $codebase->classlike_storage_provider->get($className);
         } catch (\InvalidArgumentException) {
+            // Root class storage missing — Psalm didn't scan the facade's resolved root
+            // (e.g. vendor package outside projectFiles that we queued at scan time but
+            // whose storage never landed). Silent on purpose: a warning would fire for
+            // every method call on every such facade, and the facade's own @method tags
+            // remain the authoritative fallback for user-visible typing.
             return null;
         }
 
@@ -224,6 +229,11 @@ final class FacadeMethodHandler
         try {
             $methodStorage = $codebase->methods->getStorage($declaringId);
         } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            // Declaring method id points at a method storage that is missing (\InvalidArgumentException)
+            // or inconsistently indexed (\UnexpectedValueException — Psalm throws this when
+            // declaring_method_ids and method storage disagree). Both indicate Psalm's own
+            // populator dropped the method; nothing the plugin can do beyond treating the
+            // method as unknown and letting @method/native resolution take over.
             return null;
         }
 

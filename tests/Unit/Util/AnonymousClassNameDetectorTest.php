@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent;
+namespace Tests\Psalm\LaravelPlugin\Unit\Util;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
+use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
 
 /**
  * Tests that Psalm's synthetic FQCNs for anonymous classes (e.g. `new class extends Model {}`)
@@ -17,8 +17,8 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
  *
  * @see \Psalm\Internal\Analyzer\ClassAnalyzer::getAnonymousClassName()
  */
-#[CoversClass(ModelRegistrationHandler::class)]
-final class AnonymousClassDetectionTest extends TestCase
+#[CoversClass(AnonymousClassNameDetector::class)]
+final class AnonymousClassNameDetectorTest extends TestCase
 {
     #[Test]
     #[DataProvider('anonymousNames')]
@@ -100,8 +100,6 @@ final class AnonymousClassDetectionTest extends TestCase
 
     private function call(string $fqcn, string $filePath): bool
     {
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'isSyntheticAnonymousClassName');
-
-        return (bool) $method->invoke(null, $fqcn, $filePath);
+        return AnonymousClassNameDetector::isSynthetic($fqcn, $filePath);
     }
 }

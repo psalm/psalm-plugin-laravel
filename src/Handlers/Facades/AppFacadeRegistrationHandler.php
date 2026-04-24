@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Facades;
 
 use Illuminate\Support\Facades\Facade;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
@@ -121,7 +122,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             // parse, so there is nothing for our resolver to do.
             if (
                 $storage->stmt_location !== null
-                && self::isSyntheticAnonymousClassName($storage->name, $storage->stmt_location->file_path)
+                && AnonymousClassNameDetector::isSynthetic($storage->name, $storage->stmt_location->file_path)
             ) {
                 continue;
             }
@@ -146,15 +147,13 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             // Probe once more here. For direct-parent facades seen in afterClassLikeVisit,
             // Laravel's `Facade::$resolvedInstance` cache makes this call effectively free
             // in the main process. When scanning forks, worker processes inherit the cache
-            // via copy-on-write memory but their writes don't propagate back — so the main
+            // via copy-on-write memory but their writes don't propagate back, so the main
             // process may re-probe; `$failedFacades` below prevents user-provider factories
-            // from running a second time in that case.
+            // from running a second time in that case. `tryGetFacadeRootClass()` emits its
+            // own warning on first failure, so we simply `continue` here.
             $rootClass = self::tryGetFacadeRootClass($storage->name, $progress);
 
             if ($rootClass === null) {
-                $progress->debug(
-                    "Laravel plugin: skipping facade '{$storage->name}': getFacadeRoot() returned no object\n",
-                );
                 continue;
             }
 
@@ -186,6 +185,10 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      */
     public static function tryGetFacadeRootClass(string $facadeClass, ?Progress $progress = null): ?string
     {
+        // $failedFacades gates both the short-circuit return AND the warning emission,
+        // so each failure reason is surfaced to the user exactly once per facade across
+        // scan-phase + populate-phase invocations (issue #787: silent losses of method
+        // resolution must be visible, not swallowed by the default progress sink).
         if (isset(self::$failedFacades[$facadeClass])) {
             return null;
         }
@@ -194,17 +197,30 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
         try {
             if (!\is_subclass_of($facadeClass, Facade::class)) {
                 self::$failedFacades[$facadeClass] = true;
+                $progress?->warning(
+                    "Laravel plugin: skipping facade '{$facadeClass}': not a subclass of " . Facade::class,
+                );
                 return null;
             }
 
             // getFacadeRoot() is untyped (`@return mixed`) and container bindings can
             // resolve to anything; route through the typed helper so the caller does
             // not observe a mixed value directly.
-            return self::classOfFacadeRoot($facadeClass::getFacadeRoot());
+            $rootClass = self::classOfFacadeRoot($facadeClass::getFacadeRoot());
+
+            if ($rootClass === null) {
+                self::$failedFacades[$facadeClass] = true;
+                $progress?->warning(
+                    "Laravel plugin: skipping facade '{$facadeClass}': getFacadeRoot() returned a non-object value",
+                );
+                return null;
+            }
+
+            return $rootClass;
         } catch (\Throwable $throwable) {
             self::$failedFacades[$facadeClass] = true;
-            $progress?->debug(
-                "Laravel plugin: getFacadeRoot() failed for '{$facadeClass}': {$throwable->getMessage()}\n",
+            $progress?->warning(
+                "Laravel plugin: getFacadeRoot() failed for '{$facadeClass}': {$throwable->getMessage()}",
             );
             return null;
         }
@@ -268,33 +284,4 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             || \str_starts_with($fqcn, 'PHPUnit\\');
     }
 
-    /**
-     * Detects the synthetic FQCN Psalm assigns to anonymous classes. Psalm builds
-     * them as `{sanitized_file_path}_{line}_{startFilePos}` (prefixed by the
-     * surrounding namespace), and they are never autoloadable.
-     *
-     * Duplicated from {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler}
-     * because both registration handlers use it independently and neither owns a
-     * shared utility location; consolidation can come with a third caller.
-     *
-     * @see \Psalm\Internal\Analyzer\ClassAnalyzer::getAnonymousClassName()
-     * @psalm-pure
-     */
-    private static function isSyntheticAnonymousClassName(string $fqcn, string $filePath): bool
-    {
-        if ($filePath === '') {
-            return false;
-        }
-
-        $lastSeparator = \strrpos($fqcn, '\\');
-        $shortName = $lastSeparator === false ? $fqcn : \substr($fqcn, $lastSeparator + 1);
-
-        if (\preg_match('/_\d+_\d+$/', $shortName) !== 1) {
-            return false;
-        }
-
-        $sanitizedPath = \preg_replace('/[^A-Za-z0-9]/', '_', $filePath) ?? '';
-
-        return \str_starts_with($shortName, $sanitizedPath . '_');
-    }
 }
