@@ -380,7 +380,7 @@ final class InlineValidateRulesCollector implements
 
         self::evictForeachTarget($stmt->valueVar, $functionId);
 
-        if ($stmt->keyVar !== null) {
+        if ($stmt->keyVar instanceof \PhpParser\Node\Expr) {
             self::evictForeachTarget($stmt->keyVar, $functionId);
         }
 
@@ -430,7 +430,7 @@ final class InlineValidateRulesCollector implements
      */
     private static function evictDestructuredItem(?ArrayItem $item, int $functionId): void
     {
-        if ($item === null) {
+        if (!$item instanceof \PhpParser\Node\ArrayItem) {
             return;
         }
 
