@@ -2,7 +2,14 @@
 
 namespace Illuminate\Http;
 
-class RedirectResponse
+use Symfony\Component\HttpFoundation\RedirectResponse as BaseRedirectResponse;
+
+/**
+ * Class declaration mirrors Laravel's source. Psalm resets inheritance
+ * metadata when a stub re-declares the class, so the `extends` clause must
+ * be repeated verbatim or callers typed on the Symfony parent break.
+ */
+class RedirectResponse extends BaseRedirectResponse
 {
     /**
      * Flash an array of input to the session.
