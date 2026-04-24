@@ -2,7 +2,15 @@
 
 namespace Illuminate\Config;
 
-class Repository
+use ArrayAccess;
+use Illuminate\Contracts\Config\Repository as ConfigContract;
+
+/**
+ * Class declaration mirrors Laravel's source. Psalm wipes the reflected
+ * class_implements list when a stub re-declares the class, so the clause
+ * must be repeated verbatim or callers typed on the contracts break.
+ */
+class Repository implements ArrayAccess, ConfigContract
 {
     /**
      * Get the specified array configuration value.
