@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777027352074,
+  "lastUpdate": 1777035173081,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2797,6 +2797,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1094,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "f5fb71d046ef6084952b4d53617c86279f9a0c60",
+          "message": "docs: add psalm-laravel CLI quickstart; drop em-dash prose #0\n\nREADME Quickstart now leads with the one-command setup\n(psalm-laravel init / analyze / add github) instead of the legacy\npsalm-plugin enable flow, and docs/github-actions.md points at\npsalm-laravel add github so readers can choose the generator before\nreading the hand-rolled workflow reference.\n\nAlso removed em-dashes and \" -- \" as punctuation from README and\nthe taint-analysis authoring guide per project docs convention;\ncode blocks are left untouched.",
+          "timestamp": "2026-04-24T14:48:45+02:00",
+          "tree_id": "3cd396fedd2bf1d1be9e9bddf6d37f4b030d717e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f5fb71d046ef6084952b4d53617c86279f9a0c60"
+        },
+        "date": 1777035172745,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.88,
+            "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
