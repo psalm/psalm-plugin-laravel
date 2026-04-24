@@ -6,8 +6,8 @@ namespace Psalm\LaravelPlugin\Handlers;
 
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
+use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterAnalysisEvent;
 
@@ -52,8 +52,8 @@ final class StatsHandler implements AfterAnalysisInterface
 
     /**
      * Counts concrete Model subclasses using the same filter as
-     * {@see ModelRegistrationHandler::afterCodebasePopulated()} so the stat
-     * mirrors the set the plugin actually registers handlers for.
+     * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler::afterCodebasePopulated()}
+     * so the stat mirrors the set the plugin actually registers handlers for.
      *
      * The class_exists() gate from ModelRegistrationHandler is deliberately
      * skipped here: init-time already warned on unloadable classes, and
@@ -82,7 +82,7 @@ final class StatsHandler implements AfterAnalysisInterface
 
             if (
                 $storage->stmt_location !== null
-                && ModelRegistrationHandler::isSyntheticAnonymousClassName($storage->name, $storage->stmt_location->file_path)
+                && AnonymousClassNameDetector::isSynthetic($storage->name, $storage->stmt_location->file_path)
             ) {
                 continue;
             }
