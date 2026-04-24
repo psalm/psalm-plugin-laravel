@@ -144,7 +144,7 @@ final class CiTargetRegistryTest extends TestCase
             #[\Override]
             public function plan(string $projectRoot): CiPlan
             {
-                return new CiPlan($projectRoot . '/test.yml', '', false);
+                return new CiPlan($projectRoot . '/test.yml', "stub: fixture\n", false);
             }
         };
     }
