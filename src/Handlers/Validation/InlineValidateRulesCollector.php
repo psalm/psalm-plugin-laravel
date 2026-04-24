@@ -227,12 +227,14 @@ final class InlineValidateRulesCollector implements
      * run a non-issue (the id can only be reused after the analyzer is
      * garbage-collected, which happens after we've already cleared the entry).
      *
-     * `@psalm-external-mutation-free` is correct here: Psalm's own
-     * `Mutations::LEVEL_INTERNAL_READ_WRITE` explicitly permits writes to
-     * same-class static properties (see `vendor/vimeo/psalm/src/Psalm/
-     * Storage/Mutations.php`), and the annotation is required by Psalm 7's
-     * `MissingPureAnnotation` check on event-handler methods that consume
-     * an `@psalm-external-mutation-free` event.
+     * Annotation note: `@psalm-external-mutation-free` is a slight overclaim
+     * per `docs/contributing/types.md` (which says the marker permits
+     * $this-only mutation), because this method mutates a `self::$` static.
+     * Psalm 7's `MissingPureAnnotation` check nevertheless demands it here
+     * (security-analysis optimisation tied to the event being marked
+     * `@psalm-external-mutation-free`), and the project policy forbids
+     * new entries in `psalm-baseline.xml`, so the annotation stays with
+     * this disclaimer rather than a baseline suppress.
      *
      * @inheritDoc
      *
