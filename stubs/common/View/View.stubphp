@@ -10,7 +10,7 @@ use Stringable;
 /**
  * Class declaration mirrors Laravel's source. Psalm wipes the reflected
  * class_implements list when a stub re-declares the class, so the clause
- * must be repeated verbatim or callers typed on the contracts break.
+ * must be repeated verbatim or callers typed on the contracts breaks.
  */
 class View implements ArrayAccess, Htmlable, Stringable, ViewContract
 {
