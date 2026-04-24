@@ -5,18 +5,27 @@ use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Contracts\Auth\StatefulGuard;
 use Illuminate\Contracts\Auth\SupportsBasicAuth;
 use Illuminate\Contracts\Cache\Repository as CacheContract;
+use Illuminate\Contracts\Config\Repository as ConfigContract;
 use Illuminate\Contracts\Console\Kernel as KernelContract;
 use Illuminate\Contracts\Container\Container as ContainerContract;
+use Illuminate\Contracts\Database\Eloquent\Builder as EloquentBuilderContract;
+use Illuminate\Contracts\Database\Eloquent\SupportsPartialRelations;
 use Illuminate\Contracts\Database\Query\Builder as BuilderContract;
 use Illuminate\Contracts\Encryption\Encrypter as EncrypterContract;
 use Illuminate\Contracts\Encryption\StringEncrypter;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Filesystem\Cloud as CloudFilesystemContract;
+use Illuminate\Contracts\Hashing\Hasher;
 use Illuminate\Contracts\Mail\Mailable as MailableContract;
 use Illuminate\Contracts\Pipeline\Pipeline as PipelineContract;
+use Illuminate\Contracts\Redis\Connection as RedisConnectionContract;
 use Illuminate\Contracts\Routing\ResponseFactory as FactoryContract;
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Contracts\Support\ValidatedData;
+use Illuminate\Contracts\Validation\ValidatesWhenResolved;
+use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\ConnectionInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse as BaseRedirectResponse;
 
@@ -157,6 +166,78 @@ final class StubInterfaceTest
     public function redirectResponseExtendsSymfony(\Illuminate\Http\RedirectResponse $r): BaseRedirectResponse
     {
         return $r;
+    }
+
+    public function configRepositoryImplementsContract(\Illuminate\Config\Repository $r): ConfigContract
+    {
+        return $r;
+    }
+
+    /** @param \Illuminate\Config\Repository $r */
+    public function configRepositoryImplementsArrayAccess($r): \ArrayAccess
+    {
+        return $r;
+    }
+
+    public function hashManagerImplementsHasher(\Illuminate\Hashing\HashManager $h): Hasher
+    {
+        return $h;
+    }
+
+    public function mailMessageImplementsRenderable(\Illuminate\Notifications\Messages\MailMessage $m): Renderable
+    {
+        return $m;
+    }
+
+    public function phpRedisConnectionImplementsContract(\Illuminate\Redis\Connections\PhpRedisConnection $c): RedisConnectionContract
+    {
+        return $c;
+    }
+
+    public function formRequestImplementsValidatesWhenResolved(\Illuminate\Foundation\Http\FormRequest $f): ValidatesWhenResolved
+    {
+        return $f;
+    }
+
+    public function belongsToImplementsEloquentBuilderContract(\Illuminate\Database\Eloquent\Relations\BelongsTo $r): EloquentBuilderContract
+    {
+        return $r;
+    }
+
+    public function morphOneImplementsSupportsPartialRelations(\Illuminate\Database\Eloquent\Relations\MorphOne $m): SupportsPartialRelations
+    {
+        return $m;
+    }
+
+    public function hasOneImplementsSupportsPartialRelations(\Illuminate\Database\Eloquent\Relations\HasOne $h): SupportsPartialRelations
+    {
+        return $h;
+    }
+
+    public function hasOneThroughImplementsSupportsPartialRelations(\Illuminate\Database\Eloquent\Relations\HasOneThrough $h): SupportsPartialRelations
+    {
+        return $h;
+    }
+
+    public function viewImplementsContract(\Illuminate\View\View $v): ViewContract
+    {
+        return $v;
+    }
+
+    public function viewImplementsHtmlable(\Illuminate\View\View $v): Htmlable
+    {
+        return $v;
+    }
+
+    /** @param \Illuminate\View\View $v */
+    public function viewImplementsArrayAccess($v): \ArrayAccess
+    {
+        return $v;
+    }
+
+    public function lengthAwarePaginatorImplementsCanBeEscaped(\Illuminate\Pagination\LengthAwarePaginator $p): CanBeEscapedWhenCastToString
+    {
+        return $p;
     }
 }
 ?>
