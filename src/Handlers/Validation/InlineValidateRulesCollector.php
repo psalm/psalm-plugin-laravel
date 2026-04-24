@@ -9,14 +9,11 @@ use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
-use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\AfterFunctionLikeAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
 use Psalm\StatementsSource;
-use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\Union;
 
 /**
  * Collects rule maps from `$request->validate([...])` and
@@ -318,37 +315,11 @@ final class InlineValidateRulesCollector implements
         StatementsSource $source,
         Codebase $codebase,
     ): bool {
-        if (!$source instanceof StatementsAnalyzer) {
-            return false;
-        }
-
-        $callerType = $source->node_data->getType($expr->var);
-
-        if (!$callerType instanceof Union) {
-            return false;
-        }
-
-        foreach ($callerType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
-                continue;
-            }
-
-            /** @var class-string $className */
-            $className = $atomic->value;
-
-            if ($className === \Illuminate\Http\Request::class) {
-                return true;
-            }
-
-            try {
-                if ($codebase->classExtends($className, \Illuminate\Http\Request::class)) {
-                    return true;
-                }
-            } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
-                continue;
-            }
-        }
-
-        return false;
+        return ValidationCallerResolver::resolveCallerClass(
+            $expr,
+            $source,
+            $codebase,
+            \Illuminate\Http\Request::class,
+        ) !== null;
     }
 }
