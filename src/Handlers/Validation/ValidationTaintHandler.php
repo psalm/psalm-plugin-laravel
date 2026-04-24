@@ -425,37 +425,11 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return null;
         }
 
-        $statementsAnalyzer = $event->getStatementsSource();
-
-        if (!$statementsAnalyzer instanceof StatementsAnalyzer) {
-            return null;
-        }
-
-        $callerType = $statementsAnalyzer->node_data->getType($expr->var);
-
-        if (!$callerType instanceof Union) {
-            return null;
-        }
-
-        $codebase = $event->getCodebase();
-
-        foreach ($callerType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
-                continue;
-            }
-
-            /** @var class-string $className */
-            $className = $atomic->value;
-
-            try {
-                if ($className === $baseClass || $codebase->classExtends($className, $baseClass)) {
-                    return $className;
-                }
-            } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
-                continue;
-            }
-        }
-
-        return null;
+        return ValidationCallerResolver::resolveCallerClass(
+            $expr,
+            $event->getStatementsSource(),
+            $event->getCodebase(),
+            $baseClass,
+        );
     }
 }
