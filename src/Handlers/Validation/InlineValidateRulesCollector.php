@@ -4,15 +4,27 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
+use PhpParser\Node\ArrayItem;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\AssignRef;
+use PhpParser\Node\Expr\List_;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Stmt\Foreach_;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\AfterFunctionLikeAnalysisInterface;
+use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
+use Psalm\Plugin\EventHandler\BeforeStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
+use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
+use Psalm\Plugin\EventHandler\Event\BeforeStatementAnalysisEvent;
 use Psalm\StatementsSource;
 
 /**
@@ -20,7 +32,9 @@ use Psalm\StatementsSource;
  * `$request->validateWithBag(...)` calls in a controller body, so
  * {@see ValidationTaintHandler} can apply the per-field taint-escape bitmask
  * to later `$request->input('key')` reads on the same variable in the same
- * function-like scope.
+ * function-like scope. Also tracks local-variable bindings of those reads
+ * (`$v = $request->input('key')`) so the escape survives the one-hop
+ * variable indirection — see issue #834.
  *
  * Why this exists (gap the FormRequest path doesn't cover):
  *
@@ -31,6 +45,10 @@ use Psalm\StatementsSource;
  *                                                         // @psalm-taint-escape header
  *       ]);
  *       return redirect()->to($request->input('email')); // should be safe, not TaintedHeader
+ *
+ *       // Equally, after binding to a local variable:
+ *       $email = $request->input('email');
+ *       return redirect()->to($email);                    // also safe
  *   }
  *
  * The FormRequest path ({@see ValidationRuleAnalyzer::getRulesForFormRequest()})
@@ -39,13 +57,21 @@ use Psalm\StatementsSource;
  *
  * ## Scope and ordering
  *
- * Psalm walks a function body top-down. Each expression finishes analysis
- * (firing `AfterExpressionAnalysisEvent`) before the next statement's
- * expressions fire their `AddRemoveTaintsEvent`. That means by the time
- * `removeTaints` sees `$request->input('email')`, every prior
- * `$request->validate([...])` in the same function has already populated
- * this collector. The cache is queried lazily; no separate walk of the AST
- * is needed.
+ * Psalm walks a function body top-down, statement by statement. Each statement
+ * finishes analysis (with its AfterExpressionAnalysisEvents fired) before the
+ * next statement's expressions fire their `AddRemoveTaintsEvent`. So by the time
+ * `removeTaints` sees `$request->input('email')`, every `$request->validate([...])`
+ * that lives in an *earlier statement* in the same function has already populated
+ * this collector. The cache is queried lazily; no separate walk of the AST is
+ * needed.
+ *
+ * Intra-statement caveat: the guarantee is statement-level, not expression-level.
+ * If a single compound expression contains both a `validate(...)` and an
+ * `input(...)` (e.g. `[$request->validate([...]), $request->input('k')]`), the
+ * sub-expression evaluation order inside a statement is Psalm-internal and not
+ * relied upon here; in such constructions the escape may not apply. This does
+ * not affect idiomatic code where `validate()` and `input()` live on separate
+ * statements.
  *
  * Why `AfterExpressionAnalysisInterface` and not `AfterMethodCallAnalysis`:
  * Laravel declares `Request::validate()` / `validateWithBag()` via `@method`
@@ -56,13 +82,29 @@ use Psalm\StatementsSource;
  *
  * ## Cache lifecycle
  *
- * Entries are keyed by `spl_object_id()` of the enclosing FunctionLikeAnalyzer
- * (closure / method / function), then by caller variable name, then by field.
- * Eviction happens on `AfterFunctionLikeAnalysisEvent` for that same
+ * Two caches share the same lifecycle: the rule map (`$rulesByFunction`) and
+ * the per-variable escape mask (`$inputVariablesByFunction`). Entries are
+ * keyed by `spl_object_id()` of the enclosing FunctionLikeAnalyzer
+ * (closure / method / function); inner keys are the caller variable name
+ * (rules) or the bound local variable name (input variables). Both caches
+ * are evicted in one shot on `AfterFunctionLikeAnalysisEvent` for that same
  * function-like: once Psalm is done with the body, no later handler can still
- * need its rules. That keeps the cache bounded by the current analyzer's live
- * function-likes and sidesteps any `spl_object_id` reuse concern that would
- * otherwise appear when analyzers are garbage-collected mid-run.
+ * need its entries. That keeps the cache bounded by the current analyzer's
+ * live function-likes and sidesteps any `spl_object_id` reuse concern that
+ * would otherwise appear when analyzers are garbage-collected mid-run.
+ *
+ * The variable-binding cache is updated in `beforeExpressionAnalysis`, not
+ * `afterExpressionAnalysis`. The reason is ordering: `AssignmentAnalyzer`
+ * fires the LHS `removeTaints` event for `$v` *during* the assignment's
+ * own analysis (see `AssignmentAnalyzer::analyzeAssignValueDataFlow`),
+ * which is before any post-expression hook fires. Updating from
+ * `afterExpressionAnalysis` would leave a stale cache entry visible to
+ * the in-flight LHS event for a reassignment like
+ * `$v = $request->input('k'); $v = $_POST['raw'];` — the second LHS event
+ * would silently apply the cached header/cookie escape to the raw input
+ * source, masking a real `TaintedHeader`. Doing the population (and
+ * eviction-by-default) in `beforeExpressionAnalysis` ensures the cache is
+ * up-to-date before any LHS event for the new binding fires.
  *
  * ## Soundness caveats
  *
@@ -107,6 +149,28 @@ use Psalm\StatementsSource;
  *     recognised — the caller is a `FuncCall`, not a `Variable`, so there
  *     is no source-level name to key the cache by. Fail-safe: taint is
  *     preserved on subsequent `request()->input('key')` reads.
+ *   - Variable bindings only *populate* the cache for `$v =
+ *     $request->input('key')`-style direct assignments. Pattern variants
+ *     like `$v = $request->input('k') ?? 'default'` or chains other than
+ *     the recognised accessor methods don't populate the cache, so the
+ *     binding keeps the original taint and a `header` sink on `$v` still
+ *     fires. Reassignment via `Expr\Assign` (`$v = $_POST['raw']`),
+ *     `Expr\AssignRef` (`$v = &$other`), list / array destructuring
+ *     (`[$a, $v] = ...`, `list($a, $v) = ...`), and `foreach (... as $v)`
+ *     all correctly *evict* a stale cache entry for the rebound name
+ *     (see `beforeExpressionAnalysis` for the Assign / AssignRef /
+ *     destructuring forms and `beforeStatementAnalysis` for foreach),
+ *     so a subsequent reassignment to raw user input via these paths
+ *     does NOT silently inherit the previous escape. Eviction does not
+ *     repopulate from these paths — the new value comes from a
+ *     container or reference target, not a tracked accessor call.
+ *   - A tracked binding wrapped in a nested assignment whose outer LHS
+ *     is the same variable (`$v = foo($v = $request->input('k'))`) may
+ *     temporarily expose the inner population to the outer LHS event;
+ *     this pattern is exotic enough that the trade-off favours simpler
+ *     code, and the eviction at the *next* `Expr\Assign` to `$v`
+ *     restores correctness. Prefer a typed FormRequest for security-
+ *     sensitive paths if the binding pattern is non-trivial.
  *
  * ## Merge policy for repeated keys
  *
@@ -123,8 +187,26 @@ use Psalm\StatementsSource;
  */
 final class InlineValidateRulesCollector implements
     AfterExpressionAnalysisInterface,
-    AfterFunctionLikeAnalysisInterface
+    AfterFunctionLikeAnalysisInterface,
+    BeforeExpressionAnalysisInterface,
+    BeforeStatementAnalysisInterface
 {
+    /**
+     * Accessor methods on the validated `Request` whose single literal-key
+     * read can be bound to a local variable while keeping the rule's
+     * taint-escape attached to that variable.
+     *
+     * Must stay in sync with the corresponding list in
+     * {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS}; the variable
+     * binding is the same data flow with one extra hop. Names are in
+     * canonical Laravel casing — non-canonical casing is rejected for
+     * consistency with the sibling handler (PHP resolves method names
+     * case-insensitively at runtime, but Laravel code uses canonical
+     * camelCase, and the canonical-only check avoids a per-expression
+     * `strtolower()` allocation).
+     */
+    private const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str'];
+
     /**
      * Rules collected per enclosing FunctionLikeAnalyzer and caller
      * variable name.
@@ -136,6 +218,236 @@ final class InlineValidateRulesCollector implements
      * @var array<int, array<string, array<string, ResolvedRule>>>
      */
     private static array $rulesByFunction = [];
+
+    /**
+     * Per-variable taint-escape masks for variables bound to a
+     * rule-covered accessor read on a tracked Request.
+     *
+     * Outer key: `spl_object_id()` of the enclosing FunctionLikeAnalyzer.
+     * Inner key: source-level variable name (without `$`). Value: the
+     * `removedTaints` bitmask of the rule covering the field that the
+     * variable was bound to.
+     *
+     * Populated and evicted in `beforeExpressionAnalysis` so the cache
+     * state is correct *before* `AssignmentAnalyzer` fires the LHS
+     * `removeTaints` event for the new binding — see "Cache lifecycle"
+     * below for why ordering matters.
+     *
+     * @var array<int, array<string, int>>
+     */
+    private static array $inputVariablesByFunction = [];
+
+    /**
+     * Maintain the per-variable escape cache for `$v = $req->input('key')`
+     * bindings. Runs before the assignment is analyzed so the cache is
+     * up-to-date before `AssignmentAnalyzer` fires the LHS `removeTaints`
+     * event (see the "Cache lifecycle" section in the class docblock for
+     * why ordering matters).
+     *
+     * Default action on every plain-variable assignment is eviction. The
+     * binding is re-populated only when the RHS is a recognised keyed
+     * accessor on a tracked Request variable with a literal key matching
+     * an already-collected rule. Anything else clears the slot.
+     *
+     * @inheritDoc
+     */
+    #[\Override]
+    public static function beforeExpressionAnalysis(BeforeExpressionAnalysisEvent $event): ?bool
+    {
+        $expr = $event->getExpr();
+
+        // `AssignRef` (`$v = &$other`) rebinds `$v` to a reference. Psalm
+        // doesn't propagate taint through reference aliases, but the LHS
+        // event later fires for `$v` as a bare Variable on subsequent
+        // reads at sinks — and a stale cache entry would silently strip
+        // the rule's escape from the new (raw) source. Treat AssignRef
+        // as eviction-only: the RHS is a reference target, not a tracked
+        // accessor call, so there is no repopulation case to handle.
+        if (!$expr instanceof Assign && !$expr instanceof AssignRef) {
+            return null;
+        }
+
+        // Fast bail-out: if no rules have been collected anywhere AND no
+        // variable bindings exist, there's nothing to populate (no RHS can
+        // match) and nothing to evict. Skip the `getFunctionLikeId` walk
+        // entirely. On a large codebase the vast majority of functions
+        // never call `$request->validate([...])`, so both static caches
+        // stay empty for entire files and this guard is usually taken.
+        if (self::$rulesByFunction === [] && self::$inputVariablesByFunction === []) {
+            return null;
+        }
+
+        $functionId = self::getFunctionLikeId($event->getStatementsSource());
+
+        if ($functionId === null) {
+            return null;
+        }
+
+        // AssignRef takes the eviction path only. Walk the LHS Variable;
+        // anything else (`$obj->prop = &$other`, list-ref destructure, etc.)
+        // doesn't bind a named local slot we'd track.
+        if ($expr instanceof AssignRef) {
+            if ($expr->var instanceof Variable && \is_string($expr->var->name)) {
+                unset(self::$inputVariablesByFunction[$functionId][$expr->var->name]);
+            }
+
+            return null;
+        }
+
+        // List / array destructuring (`[$a, $v] = $src` or `list($a, $v) = $src`)
+        // reassigns each named item. The AssignmentAnalyzer dispatches the LHS
+        // `removeTaints` event for every inner Variable, so any stale cache
+        // entry for the same name would strip the rule's escape from the raw
+        // source on the destructured edge. Walk the item list and evict each
+        // named Variable (keyed destructuring `[$key => $v] = ...` puts the
+        // bound variable in the item's `value`, not its `key`). No
+        // repopulation: destructuring assigns from a container, not from a
+        // tracked accessor call.
+        //
+        // Note on `Array_`: nikic/php-parser's `fixupArrayDestructuring` rewrites
+        // both `[$a, $v] = ...` (short form) and `list($a, $v) = ...` (long form)
+        // to `Expr\List_`, so the `instanceof Array_` branch is defensive
+        // against a future parser change rather than a currently reachable
+        // shape. Keep it — the cost is one extra `instanceof` and the
+        // robustness is worth it for a security-relevant code path.
+        if ($expr->var instanceof List_ || $expr->var instanceof Array_) {
+            foreach ($expr->var->items as $item) {
+                self::evictDestructuredItem($item, $functionId);
+            }
+
+            return null;
+        }
+
+        // Only plain `$v = ...` continues from here. Chained LHS like
+        // `$obj->prop = ...` doesn't create a named local binding, so there's
+        // nothing to cache or evict.
+        if (!$expr->var instanceof Variable || !\is_string($expr->var->name)) {
+            return null;
+        }
+
+        $variableName = $expr->var->name;
+
+        // Default action: evict. The reassignment severs the binding to any
+        // previously cached escape, so the slot must be cleared even if the
+        // RHS doesn't match the keyed-accessor pattern below — otherwise a
+        // subsequent reassignment to raw user input would silently inherit
+        // the previous escape and mask a real taint at the sink (#834).
+        unset(self::$inputVariablesByFunction[$functionId][$variableName]);
+
+        $escape = self::resolveEscapeFromAccessorRhs($expr->expr, $functionId);
+
+        if ($escape === null) {
+            return null;
+        }
+
+        self::$inputVariablesByFunction[$functionId][$variableName] = $escape;
+
+        return null;
+    }
+
+    /**
+     * `foreach ($iter as [$k =>] $v)` reassigns `$v` (and optionally `$k`)
+     * without going through `ExpressionAnalyzer::analyze` for the binding,
+     * so `beforeExpressionAnalysis` never fires for the loop-variable
+     * assignment. `AssignmentAnalyzer` still dispatches the LHS
+     * `removeTaints` event for those variables, and without an eviction
+     * here a stale `$v` cache entry would strip the rule's escape from the
+     * raw iterable element on the loop-variable edge — a real false
+     * negative at downstream sinks.
+     *
+     * @inheritDoc
+     */
+    #[\Override]
+    public static function beforeStatementAnalysis(BeforeStatementAnalysisEvent $event): ?bool
+    {
+        $stmt = $event->getStmt();
+
+        if (!$stmt instanceof Foreach_) {
+            return null;
+        }
+
+        // Nothing to evict when no variable bindings have been cached.
+        // Same fast bail-out rationale as `beforeExpressionAnalysis`.
+        if (self::$inputVariablesByFunction === []) {
+            return null;
+        }
+
+        $functionId = self::getFunctionLikeId($event->getStatementsSource());
+
+        if ($functionId === null) {
+            return null;
+        }
+
+        self::evictForeachTarget($stmt->valueVar, $functionId);
+
+        if ($stmt->keyVar !== null) {
+            self::evictForeachTarget($stmt->keyVar, $functionId);
+        }
+
+        return null;
+    }
+
+    /**
+     * Evict the cache entry for a foreach binding target. Handles the plain
+     * `foreach (... as $v)` case (plain Variable) and the destructured
+     * `foreach (... as [$a, $v])` case (List / Array). Anything else (a
+     * property fetch `foreach (... as $this->x)`, or a variable variable
+     * `$$name`) is left alone — those patterns can't occupy a named slot
+     * in the per-variable cache.
+     *
+     * `@psalm-external-mutation-free` is the same self-`static` overclaim
+     * disclaimed on `afterStatementAnalysis`; Psalm 7's
+     * `MissingPureAnnotation` check demands it here too.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function evictForeachTarget(Expr $target, int $functionId): void
+    {
+        if ($target instanceof Variable && \is_string($target->name)) {
+            unset(self::$inputVariablesByFunction[$functionId][$target->name]);
+
+            return;
+        }
+
+        if ($target instanceof List_ || $target instanceof Array_) {
+            foreach ($target->items as $item) {
+                self::evictDestructuredItem($item, $functionId);
+            }
+        }
+    }
+
+    /**
+     * Evict the cache entry for the variable named by a destructuring item.
+     * Handles the nested case recursively (`[$a, [$b, $c]] = ...`).
+     * Null items (skipped slots, `[, $v] = ...`) and non-Variable items
+     * are ignored — no named slot to evict.
+     *
+     * `@psalm-external-mutation-free` is the same self-`static` overclaim
+     * disclaimed on `afterStatementAnalysis`; Psalm 7's
+     * `MissingPureAnnotation` check demands it here too.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function evictDestructuredItem(?ArrayItem $item, int $functionId): void
+    {
+        if ($item === null) {
+            return;
+        }
+
+        $value = $item->value;
+
+        if ($value instanceof Variable && \is_string($value->name)) {
+            unset(self::$inputVariablesByFunction[$functionId][$value->name]);
+
+            return;
+        }
+
+        if ($value instanceof List_ || $value instanceof Array_) {
+            foreach ($value->items as $nested) {
+                self::evictDestructuredItem($nested, $functionId);
+            }
+        }
+    }
 
     /** @inheritDoc */
     #[\Override]
@@ -218,11 +530,12 @@ final class InlineValidateRulesCollector implements
     }
 
     /**
-     * Evict the rule cache for a function-like once Psalm has finished its
-     * body. Nothing later in the run needs the entry; clearing it keeps the
-     * cache bounded and makes `spl_object_id` reuse across a long analysis
-     * run a non-issue (the id can only be reused after the analyzer is
-     * garbage-collected, which happens after we've already cleared the entry).
+     * Evict both per-function caches once Psalm has finished the body.
+     * Nothing later in the run needs the entries; clearing them keeps the
+     * caches bounded and makes `spl_object_id` reuse across a long
+     * analysis run a non-issue (the id can only be reused after the
+     * analyzer is garbage-collected, which happens after we've already
+     * cleared the entry).
      *
      * Annotation note: `@psalm-external-mutation-free` is a slight overclaim
      * per `docs/contributing/types.md` (which says the marker permits
@@ -243,7 +556,11 @@ final class InlineValidateRulesCollector implements
         // The event's statements source IS the FunctionLikeAnalyzer itself
         // (see FunctionLikeAnalyzer::analyze()), so its spl_object_id matches
         // the one used as the cache key in afterExpressionAnalysis.
-        unset(self::$rulesByFunction[\spl_object_id($event->getStatementsSource())]);
+        $functionId = \spl_object_id($event->getStatementsSource());
+        unset(
+            self::$rulesByFunction[$functionId],
+            self::$inputVariablesByFunction[$functionId],
+        );
 
         return null;
     }
@@ -268,6 +585,42 @@ final class InlineValidateRulesCollector implements
     public static function getRulesForVariable(int $functionId, string $variableName): ?array
     {
         return self::$rulesByFunction[$functionId][$variableName] ?? null;
+    }
+
+    /**
+     * Look up the cached escape mask for a local variable that was bound
+     * to a tracked `$req->{input|string|str|validated}('key')` read.
+     *
+     * Returns `null` when the variable was never bound to such a read in
+     * this scope, or has since been reassigned to anything else (the
+     * eviction in `beforeExpressionAnalysis` clears the slot on every
+     * fresh assignment to the same name).
+     *
+     * @internal shared only with {@see ValidationTaintHandler}.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function getEscapeForVariable(int $functionId, string $variableName): ?int
+    {
+        return self::$inputVariablesByFunction[$functionId][$variableName] ?? null;
+    }
+
+    /**
+     * Cheap check: are there any cached variable-escape bindings at all?
+     *
+     * Lets {@see ValidationTaintHandler::lookupInlineValidateVariableEscape}
+     * skip the `getFunctionLikeId` analyzer-chain walk for every bare
+     * Variable expression in the project when no function has populated
+     * the cache yet. The check is a single hash-table-emptiness test and
+     * is safe to call on every `removeTaints` firing.
+     *
+     * @internal shared only with {@see ValidationTaintHandler}.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function hasAnyVariableBindings(): bool
+    {
+        return self::$inputVariablesByFunction !== [];
     }
 
     /**
@@ -302,6 +655,71 @@ final class InlineValidateRulesCollector implements
 
             $source = $parent;
         }
+    }
+
+    /**
+     * Inspect an Assign RHS and return the rule's `removedTaints` mask if
+     * the RHS is a `$req->{input|string|str|validated}('key')` call where
+     * `$req` already has rules cached for this scope and `'key'` is one
+     * of those rule-covered fields.
+     *
+     * Pattern requirements (mirrors {@see ValidationTaintHandler::matchKeyedAccessor},
+     * with the difference that the type-based caller check is replaced by
+     * a name-based lookup against the rule cache — type inference for the
+     * RHS hasn't run yet at the `BeforeExpressionAnalysis` callsite):
+     *
+     *   - `MethodCall` with a recognised accessor method name
+     *   - exactly one argument (a default arg can carry independent taint
+     *     and would be stripped by the rule's escape, masking real taint —
+     *     bail out)
+     *   - first argument is a literal string at the AST level (matches the
+     *     simple-string case; constants resolved by Psalm's type inference
+     *     are deliberately not handled here, as type info isn't available
+     *     before the expression has been analyzed)
+     *   - caller is a plain `Variable` whose name has rules collected by a
+     *     prior `validate()` in this same scope
+     *   - the literal key matches one of those rules
+     */
+    private static function resolveEscapeFromAccessorRhs(Expr $rhs, int $functionId): ?int
+    {
+        if (!$rhs instanceof MethodCall || !$rhs->name instanceof Identifier) {
+            return null;
+        }
+
+        if (!\in_array($rhs->name->name, self::KEYED_ACCESSOR_METHODS, true)) {
+            return null;
+        }
+
+        $args = $rhs->getArgs();
+
+        // Empty: nothing to look up. Has-second-arg: see method docblock.
+        if ($args === [] || isset($args[1])) {
+            return null;
+        }
+
+        if (!$rhs->var instanceof Variable || !\is_string($rhs->var->name)) {
+            return null;
+        }
+
+        $callerRules = self::$rulesByFunction[$functionId][$rhs->var->name] ?? null;
+
+        if ($callerRules === null) {
+            return null;
+        }
+
+        $keyArg = $args[0]->value;
+
+        if (!$keyArg instanceof String_) {
+            return null;
+        }
+
+        $rule = $callerRules[$keyArg->value] ?? null;
+
+        if ($rule === null) {
+            return null;
+        }
+
+        return $rule->removedTaints;
     }
 
     /**
