@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777036971283,
+  "lastUpdate": 1777046936238,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2867,6 +2867,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1095,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e23ff3ad1eff48928150b84ea7f90fc7346a49d",
+          "message": "Restate implements in 11 more stubs that were wiping metadata (#836)\n\n* fix(stubs): restate implements in 11 more stubs to prevent class_implements wipe\n\nExtends #835 to 11 additional stubs that redeclared their Laravel classes\nwithout the implements clause. Psalm's ClassLikeNodeScanner resets\nclass_implements (and parent_interfaces) when a stub re-declares a class,\nso callers typed on the missing contract were silently losing those\nrelationships.\n\nEach added regression test fires when the corresponding implements clause\nis reverted.\n\n* Update stubs/common/View/View.stubphp\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>\n\n* Update tests/Type/tests/StubInterfaceTest.phpt\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>\n\n---------\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+          "timestamp": "2026-04-24T17:06:04+01:00",
+          "tree_id": "a39756f0791304f7ff4960217f9b15e2cfa604d8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5e23ff3ad1eff48928150b84ea7f90fc7346a49d"
+        },
+        "date": 1777046935238,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.96,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
