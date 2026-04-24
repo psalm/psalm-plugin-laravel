@@ -9,7 +9,7 @@ Laravel static analysis with built-in security scanning.
 [![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel-app.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel-app.yml)
 
 The only free tool that combines deep Laravel type analysis with taint-based vulnerability detection.
-Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redirects — without running your code.
+Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redirects, without running your code.
 
 > [!NOTE]
 > Already using Larastan? psalm-laravel **complements** it with security analysis that PHPStan cannot provide.
@@ -21,7 +21,7 @@ Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redi
 ## Security scanning
 
 Plugin ships Laravel-specific taint stubs that track user input from source to sink across your entire codebase.
-Unlike pattern-matching tools, Psalm follows dataflow across function boundaries — catching vulnerabilities that simpler scanners miss.
+Unlike pattern-matching tools, Psalm follows dataflow across function boundaries, catching vulnerabilities that simpler scanners miss.
 
 ```php
 // psalm-laravel catches this:
@@ -58,7 +58,7 @@ Route::get('/users', function (Request $request) {
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 
-Security scanning runs automatically alongside type analysis — no extra configuration needed.
+Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
 ### How it compares
 
@@ -81,31 +81,21 @@ composer config minimum-stability dev && composer config prefer-stable true
 composer require --dev psalm/plugin-laravel
 ```
 
-### Step 2: Set up Psalm
-
-Initialize a config and enable the plugin:
+### Step 2: Generate a Laravel-tailored `psalm.xml`
 
 ```bash
-./vendor/bin/psalm --init
-./vendor/bin/psalm-plugin enable psalm/plugin-laravel
+./vendor/bin/psalm-laravel init
 ```
 
-Then add these recommended attributes to your `psalm.xml`:
-
-```xml
-<psalm
-    findUnusedCode="false"
-    ensureOverrideAttribute="false"
-/>
-```
+This writes a `psalm.xml` at the project root with the plugin already enabled, sensible `errorLevel`, and Laravel-friendly issue handler defaults. Pass `--level 1` (strictest) through `--level 8` (most lenient) to pick a starting strictness. Pass `--force` to overwrite an existing `psalm.xml` without prompting.
 
 ### Step 3: Run
 
 ```bash
-./vendor/bin/psalm
+./vendor/bin/psalm-laravel analyze
 ```
 
-Security taint analysis runs automatically — no extra flags needed.
+`analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can also invoke `./vendor/bin/psalm` directly. Security taint analysis runs automatically, no extra flags needed.
 
 **Existing projects:** the first run will likely report many issues. Create a [baseline](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/#using-a-baseline-file) to suppress them and focus only on new code:
 
@@ -114,6 +104,14 @@ Security taint analysis runs automatically — no extra flags needed.
 ```
 
 From here, gradually increase `errorLevel` (start at `4`, work toward `1`) and shrink the baseline over time.
+
+### Optional: wire up CI in one command
+
+```bash
+./vendor/bin/psalm-laravel add github
+```
+
+Writes a ready-to-commit `.github/workflows/psalm.yml` that runs the plugin on every push and pull request. See [docs/github-actions.md](docs/github-actions.md) for what the generated workflow does and how to customize it.
 
 ## Configuration
 
@@ -167,6 +165,6 @@ Maintained by [@alies-dev](https://github.com/sponsors/alies-dev).
 There are [contributing docs](docs/contributing/README.md) that may help you (and your agents) with contributions.
 
 Areas where help is especially needed:
-- **Taint analysis coverage** — adding a stub is 5–15 lines of annotations and protects thousands of apps. See the [authoring guide](docs/contributing/taint-analysis.md).
-- **Type inference** for Laravel magic (Eloquent, Facades, Collections)
-- **New checks** that enforce Laravel best practices
+- **Taint analysis coverage**: adding a stub is 5 to 15 lines of annotations and protects thousands of apps. See the [authoring guide](docs/contributing/taint-analysis.md).
+- **Type inference** for Laravel magic (Eloquent, Facades, Collections).
+- **New checks** that enforce Laravel best practices.
