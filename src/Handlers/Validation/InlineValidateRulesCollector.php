@@ -773,7 +773,7 @@ final class InlineValidateRulesCollector implements
         // `'email.*'` rule (issue #838).
         $rule = ValidationRuleAnalyzer::lookupRuleByKey($callerRules, $keyArg->value);
 
-        if ($rule === null) {
+        if (!$rule instanceof \Psalm\LaravelPlugin\Handlers\Validation\ResolvedRule) {
             return null;
         }
 
