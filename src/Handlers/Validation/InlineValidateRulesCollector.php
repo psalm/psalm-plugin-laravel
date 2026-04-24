@@ -171,6 +171,18 @@ use Psalm\StatementsSource;
  *     code, and the eviction at the *next* `Expr\Assign` to `$v`
  *     restores correctness. Prefer a typed FormRequest for security-
  *     sensitive paths if the binding pattern is non-trivial.
+ *   - Variable-binding population needs a literal-string accessor key at
+ *     the AST level (`$v = $request->input('k')`). A constant reference
+ *     (`$v = $request->input(self::KEY)`) is not resolved, because
+ *     `beforeExpressionAnalysis` runs before the RHS type inference that
+ *     the sibling MethodCall path uses to unwrap constants. The inline
+ *     form (`$request->input(self::KEY)` used directly in a sink call)
+ *     still benefits from the rule's escape via the existing
+ *     ArgumentAnalyzer dispatch; only the variable-bound form loses it
+ *     here. Fail-safe: the binding keeps the original taint, so a
+ *     `header` sink on `$v` still fires. A future enhancement could
+ *     populate from `afterExpressionAnalysis` with resolved types for
+ *     downstream use sites, at the cost of added complexity.
  *
  * ## Merge policy for repeated keys
  *
@@ -196,16 +208,13 @@ final class InlineValidateRulesCollector implements
      * read can be bound to a local variable while keeping the rule's
      * taint-escape attached to that variable.
      *
-     * Must stay in sync with the corresponding list in
-     * {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS}; the variable
-     * binding is the same data flow with one extra hop. Names are in
-     * canonical Laravel casing — non-canonical casing is rejected for
-     * consistency with the sibling handler (PHP resolves method names
-     * case-insensitively at runtime, but Laravel code uses canonical
-     * camelCase, and the canonical-only check avoids a per-expression
-     * `strtolower()` allocation).
+     * Sourced from {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS}
+     * so the two handlers share a single definition for the same data
+     * flow — the variable binding is the same flow with one extra hop.
+     * Names are in canonical Laravel casing; non-canonical casing is
+     * rejected for consistency with the sibling handler.
      */
-    private const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str'];
+    private const KEYED_ACCESSOR_METHODS = ValidationTaintHandler::KEYED_ACCESSOR_METHODS;
 
     /**
      * Rules collected per enclosing FunctionLikeAnalyzer and caller
