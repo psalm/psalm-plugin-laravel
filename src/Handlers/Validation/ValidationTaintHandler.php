@@ -167,8 +167,12 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         if ($formRequestClass !== null) {
             $rules = ValidationRuleAnalyzer::getRulesForFormRequest($formRequestClass);
 
-            if ($rules !== null && isset($rules[$accessor['key']])) {
-                $removed |= $rules[$accessor['key']]->removedTaints;
+            if ($rules !== null) {
+                $rule = ValidationRuleAnalyzer::lookupRuleByKey($rules, $accessor['key']);
+
+                if ($rule !== null) {
+                    $removed |= $rule->removedTaints;
+                }
             }
         }
 
@@ -178,8 +182,12 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         // inline validate gets escape bits from both sources).
         $inlineRules = self::lookupInlineValidateRules($event, $accessor['expr']);
 
-        if ($inlineRules !== null && isset($inlineRules[$accessor['key']])) {
-            $removed |= $inlineRules[$accessor['key']]->removedTaints;
+        if ($inlineRules !== null) {
+            $rule = ValidationRuleAnalyzer::lookupRuleByKey($inlineRules, $accessor['key']);
+
+            if ($rule !== null) {
+                $removed |= $rule->removedTaints;
+            }
         }
 
         return $removed;

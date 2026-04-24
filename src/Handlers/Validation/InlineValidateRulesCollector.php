@@ -722,7 +722,11 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        $rule = $callerRules[$keyArg->value] ?? null;
+        // Share the wildcard-suffix fallback with the direct-call path in
+        // ValidationTaintHandler so `$v = $request->input('email.0')` binds
+        // the same escape as `$request->input('email.0')` on a validated
+        // `'email.*'` rule (issue #838).
+        $rule = ValidationRuleAnalyzer::lookupRuleByKey($callerRules, $keyArg->value);
 
         if ($rule === null) {
             return null;
