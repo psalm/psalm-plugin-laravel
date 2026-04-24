@@ -9,18 +9,18 @@ nav_order: 5
 This guide covers how to write and review taint analysis stubs for psalm-plugin-laravel.
 
 For Psalm's upstream taint analysis documentation, see:
-- [Security Analysis overview](https://psalm.dev/docs/security_analysis/) -- how taint sources, sinks, and types work
-- [Taint annotations reference](https://psalm.dev/docs/security_analysis/annotations/) -- `@psalm-taint-source`, `@psalm-taint-sink`, `@psalm-taint-escape`, `@psalm-taint-unescape`, `@psalm-taint-specialize`, `@psalm-flow`
-- [Avoiding false positives](https://psalm.dev/docs/security_analysis/avoiding_false_positives/) -- `@psalm-taint-escape`, `@psalm-taint-specialize`, ignoring files
-- [Avoiding false negatives](https://psalm.dev/docs/security_analysis/avoiding_false_negatives/) -- `@psalm-taint-unescape`
-- [Custom taint sources](https://psalm.dev/docs/security_analysis/custom_taint_sources/) -- `@psalm-taint-source` annotation and plugin API
-- [Custom taint sinks](https://psalm.dev/docs/security_analysis/custom_taint_sinks/) -- `@psalm-taint-sink` annotation
-- [Taint flow](https://psalm.dev/docs/security_analysis/taint_flow/) -- `@psalm-flow` proxy and return hints
+- [Security Analysis overview](https://psalm.dev/docs/security_analysis/): how taint sources, sinks, and types work
+- [Taint annotations reference](https://psalm.dev/docs/security_analysis/annotations/): `@psalm-taint-source`, `@psalm-taint-sink`, `@psalm-taint-escape`, `@psalm-taint-unescape`, `@psalm-taint-specialize`, `@psalm-flow`
+- [Avoiding false positives](https://psalm.dev/docs/security_analysis/avoiding_false_positives/): `@psalm-taint-escape`, `@psalm-taint-specialize`, ignoring files
+- [Avoiding false negatives](https://psalm.dev/docs/security_analysis/avoiding_false_negatives/): `@psalm-taint-unescape`
+- [Custom taint sources](https://psalm.dev/docs/security_analysis/custom_taint_sources/): `@psalm-taint-source` annotation and plugin API
+- [Custom taint sinks](https://psalm.dev/docs/security_analysis/custom_taint_sinks/): `@psalm-taint-sink` annotation
+- [Taint flow](https://psalm.dev/docs/security_analysis/taint_flow/): `@psalm-flow` proxy and return hints
 
 ## Stub location
 
 Taint annotations live in `stubs/common/` alongside type stubs, organized by Laravel namespace.
-Taint analysis is opt-in (`runTaintAnalysis="true"` in `psalm.xml`, or `--taint-analysis` CLI flag), so there is no need for a separate directory — the stubs apply whenever taint analysis is enabled.
+Taint analysis is opt-in (`runTaintAnalysis="true"` in `psalm.xml`, or `--taint-analysis` CLI flag), so there is no need for a separate directory. The stubs apply whenever taint analysis is enabled.
 
 ## Annotations quick reference
 
@@ -28,16 +28,16 @@ There are six taint-related annotations. The first four are the ones you'll use 
 
 | Annotation                          | Purpose                                              | Needs `@psalm-flow`?                                                                                |
 |-------------------------------------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| `@psalm-taint-source <kind>`        | Marks return value as producing tainted data         | No -- sources create new taint                                                                      |
-| `@psalm-taint-sink <kind> <$param>` | Marks a parameter as dangerous if tainted            | No -- sinks are endpoints                                                                           |
-| `@psalm-taint-escape <kind>`        | Removes a specific taint kind from the return value  | **Yes** -- see [critical rule](#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow) below |
-| `@psalm-flow (<$params>) -> return` | Declares that taint propagates from params to return | N/A -- this IS the flow declaration                                                                 |
-| `@psalm-taint-unescape <kind>`      | Re-adds a taint kind (reverses an earlier escape)    | Yes -- same pattern as escape                                                                       |
+| `@psalm-taint-source <kind>`        | Marks return value as producing tainted data         | No. Sources create new taint.                                                                       |
+| `@psalm-taint-sink <kind> <$param>` | Marks a parameter as dangerous if tainted            | No. Sinks are endpoints.                                                                            |
+| `@psalm-taint-escape <kind>`        | Removes a specific taint kind from the return value  | **Yes**. See [critical rule](#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow) below.  |
+| `@psalm-flow (<$params>) -> return` | Declares that taint propagates from params to return | N/A (this IS the flow declaration)                                                                  |
+| `@psalm-taint-unescape <kind>`      | Re-adds a taint kind (reverses an earlier escape)    | Yes (same pattern as escape)                                                                        |
 | `@psalm-taint-specialize`           | Tracks taints per call-site instead of globally      | No                                                                                                  |
 
 ## Critical rule: always pair `@psalm-taint-escape` with `@psalm-flow`
 
-`@psalm-taint-escape` alone makes the return value **fully untainted** -- it drops ALL taint kinds, not just the one specified. This creates dangerous false negatives.
+`@psalm-taint-escape` alone makes the return value **fully untainted**. It drops ALL taint kinds, not just the one specified. This creates dangerous false negatives.
 
 To remove only specific taint kinds while preserving others, you **must** add `@psalm-flow`:
 
@@ -60,13 +60,13 @@ function e($value, $doubleEncode = true) {}
 function e($value, $doubleEncode = true) {}
 ```
 
-The same rule applies to `@psalm-taint-unescape` -- always pair it with `@psalm-flow`.
+The same rule applies to `@psalm-taint-unescape`: always pair it with `@psalm-flow`.
 
-Psalm's own stubs follow this pattern -- see `urlencode()`/`strip_tags()` in `vendor/vimeo/psalm/stubs/CoreGenericFunctions.phpstub`.
+Psalm's own stubs follow this pattern (see `urlencode()`/`strip_tags()` in `vendor/vimeo/psalm/stubs/CoreGenericFunctions.phpstub`).
 
 ### When `@psalm-flow` is NOT needed
 
-**Sinks** don't need `@psalm-flow` because they are endpoints -- they consume tainted data, they don't produce output:
+**Sinks** don't need `@psalm-flow` because they are endpoints: they consume tainted data, they don't produce output.
 
 ```php
 /**
@@ -84,7 +84,7 @@ public function unprepared($query) {}
 public function input($key = null, $default = null) {}
 ```
 
-**Exception -- sink-only escapes**: If a function's return value is never used for taint-sensitive operations (e.g., `Hash::make()` returns a hash that's safe by nature), `@psalm-taint-escape` without `@psalm-flow` is acceptable because there's no meaningful taint to preserve on the return value.
+**Exception (sink-only escapes)**: If a function's return value is never used for taint-sensitive operations (e.g., `Hash::make()` returns a hash that's safe by nature), `@psalm-taint-escape` without `@psalm-flow` is acceptable because there's no meaningful taint to preserve on the return value.
 
 ## Taint kinds
 
@@ -98,8 +98,8 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 | `has_quotes`    | Attribute injection via unquoted strings  | `echo` inside HTML attributes                 | `e()`, `urlencode()`                          |
 | `sql`           | SQL injection                             | `Connection::unprepared()`                    | `Connection::escape()`, parameterized queries |
 | `shell`         | Command injection                         | `Process::run()`                              | `escapeshellarg()`                            |
-| `ssrf`          | Server-side request forgery               | `Http::get($url)`                             | --                                            |
-| `file`          | Path traversal                            | `Filesystem::get()`, `response()->download()` | --                                            |
+| `ssrf`          | Server-side request forgery               | `Http::get($url)`                             | N/A                                           |
+| `file`          | Path traversal                            | `Filesystem::get()`, `response()->download()` | N/A                                           |
 | `user_secret`   | Password/token exposure in logs or output | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
 | `system_secret` | Internal secret exposure                  | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
 
@@ -202,12 +202,12 @@ function inputOutputHandler(string $value, string ...$items): string {}
 
 ## PDO parameterized queries
 
-Eloquent and the Query Builder use PDO prepared statements for WHERE conditions, HAVING clauses, and primary-key lookups. When a value is passed to `where('col', $value)`, Laravel stores it in `$this->bindings['where'][]` via `addBinding()` and the grammar compiles it as a `?` placeholder — the value never enters the SQL string. PDO binds it at execution time, making SQL injection impossible regardless of content.
+Eloquent and the Query Builder use PDO prepared statements for WHERE conditions, HAVING clauses, and primary-key lookups. When a value is passed to `where('col', $value)`, Laravel stores it in `$this->bindings['where'][]` via `addBinding()` and the grammar compiles it as a `?` placeholder. The value never enters the SQL string. PDO binds it at execution time, making SQL injection impossible regardless of content.
 
 This creates two distinct annotation responsibilities:
 
-- **Column names** (`$column`) — interpolated literally into the SQL identifier (e.g., `WHERE {$column} = ?`), so user-controlled column names are a real injection risk. Mark with `@psalm-taint-sink sql $column`.
-- **Values** (`$value`, `$operator` in 2-arg form, `$id`) — PDO-bound, never interpolated. Use `@psalm-taint-escape sql` to suppress false-positive `TaintedSql` warnings, paired with `@psalm-flow` to preserve other taint kinds.
+- **Column names** (`$column`): interpolated literally into the SQL identifier (e.g., `WHERE {$column} = ?`), so user-controlled column names are a real injection risk. Mark with `@psalm-taint-sink sql $column`.
+- **Values** (`$value`, `$operator` in 2-arg form, `$id`): PDO-bound, never interpolated. Use `@psalm-taint-escape sql` to suppress false-positive `TaintedSql` warnings, paired with `@psalm-flow` to preserve other taint kinds.
 
 ### Pattern for where-family methods
 
@@ -220,7 +220,7 @@ This creates two distinct annotation responsibilities:
 public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 ```
 
-Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argument form** (`where('col', $userValue)`), Laravel's `prepareValueAndOperator()` moves the second argument into the `$value` position (the original `$value = null` is discarded) — so user input may arrive via `$operator` at the call site, even though it is always PDO-bound.
+Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argument form** (`where('col', $userValue)`), Laravel's `prepareValueAndOperator()` moves the second argument into the `$value` position (the original `$value = null` is discarded), so user input may arrive via `$operator` at the call site, even though it is always PDO-bound.
 
 The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, and `orHaving()`.
 
@@ -235,13 +235,13 @@ The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()
 public function find($id, $columns = ['*']) {}
 ```
 
-`@psalm-taint-specialize` is required here. Without it, a single `find($taintedId)` call anywhere in the codebase would mark ALL `find()` return values as tainted globally — including `find(1)` with a safe literal. See [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the general rule.
+`@psalm-taint-specialize` is required here. Without it, a single `find($taintedId)` call anywhere in the codebase would mark ALL `find()` return values as tainted globally (including `find(1)` with a safe literal). See [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the general rule.
 
 This specialize + escape pattern applies to `find()`, `findMany()`, `findOrFail()`, `findOrNew()`, and `findSole()`.
 
 `firstWhere()` is a hybrid: it also accepts a `$column` argument that is interpolated into SQL, so it additionally needs `@psalm-taint-sink sql $column` and `@psalm-flow ($operator, $value)`. Do not treat it as a pure find-family method.
 
-Note that `where()` does NOT need `@psalm-taint-specialize` because it returns `$this` (the fluent builder) — a value that is chained further rather than consumed at the call site. Per-call-site isolation matters for concrete return values (models, scalars), not for method-chaining builders.
+Note that `where()` does NOT need `@psalm-taint-specialize` because it returns `$this` (the fluent builder), a value that is chained further rather than consumed at the call site. Per-call-site isolation matters for concrete return values (models, scalars), not for method-chaining builders.
 
 ### Raw methods must not get the escape
 
@@ -260,7 +260,7 @@ Never add `@psalm-taint-escape sql` to `whereRaw()`, `orWhereRaw()`, `selectRaw(
 
 ### `$this` is not supported as a flow source
 
-`@psalm-flow ($this) -> return` **does not work**. Psalm's flow parser only matches named method parameters — `$this` is never in that list. The annotation is silently ignored with no error.
+`@psalm-flow ($this) -> return` **does not work**. Psalm's flow parser only matches named method parameters, and `$this` is never in that list. The annotation is silently ignored with no error.
 
 This means you cannot declare taint flow from an object instance to a method's return value via stubs. For fluent/builder classes like `Stringable`, taint entering via `Str::of($tainted)` will not automatically propagate through chained methods like `->trim()->lower()->toString()`.
 
@@ -360,13 +360,13 @@ final class EmailWithDnsRule implements ValidationRule
 ## Stub authoring checklist
 
 1. **Verify the function's actual behavior** against Laravel source in `vendor/laravel/framework/`
-2. **For database methods, check whether values are PDO-bound or raw SQL** -- see [PDO parameterized queries](#pdo-parameterized-queries). Column names go into SQL identifiers (sink); values go into bindings (escape).
+2. **For database methods, check whether values are PDO-bound or raw SQL**. See [PDO parameterized queries](#pdo-parameterized-queries). Column names go into SQL identifiers (sink); values go into bindings (escape).
 3. **Choose the correct annotation type**: source, sink, escape, or flow
 4. **If using `@psalm-taint-escape` or `@psalm-taint-unescape`**: always add `@psalm-flow` to preserve other taint kinds (unless the return value's other taints are truly irrelevant)
-5. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution — this applies whether or not `@psalm-taint-escape` is also present
-6. **Match parameter types exactly** to Laravel's signatures -- do not narrow types
+5. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution. This applies whether or not `@psalm-taint-escape` is also present
+6. **Match parameter types exactly** to Laravel's signatures. Do not narrow types.
 7. **Place in `stubs/common/`** under a path matching the Laravel namespace
-8. **Keep taint and type annotations together** -- if a method already has type stubs, add taint annotations to the same file (see [Stub merging](README.md#stub-merging-how-psalm-combines-annotations))
+8. **Keep taint and type annotations together**. If a method already has type stubs, add taint annotations to the same file (see [Stub merging](README.md#stub-merging-how-psalm-combines-annotations))
 
 ## Testing taint stubs
 
