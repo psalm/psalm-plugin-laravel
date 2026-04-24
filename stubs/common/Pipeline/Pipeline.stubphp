@@ -2,7 +2,14 @@
 
 namespace Illuminate\Pipeline;
 
-class Pipeline
+use Illuminate\Contracts\Pipeline\Pipeline as PipelineContract;
+
+/**
+ * Class declaration mirrors Laravel's source. Psalm wipes the reflected
+ * class_implements list when a stub re-declares the class, so the clause
+ * must be repeated verbatim or callers typed on the contract break.
+ */
+class Pipeline implements PipelineContract
 {
     /**
      * Set the array of pipes.
