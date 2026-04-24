@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776869961598,
+  "lastUpdate": 1777027352074,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2762,6 +2762,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d4565142fd3b3d43d6e91a333785369033b6deef",
+          "message": "Apply rule taint-escape to inline `$request->validate([...])` calls (#831)\n\n* Extend rule-based taint escape to in-controller `$request->validate([...])`\n\nBefore this change, `@psalm-taint-escape` on a custom ValidationRule class\napplied only when the rule was declared in a typed FormRequest's `rules()`\nmethod. The same rule used inline (`$request->validate(['k' => [new X()]])`)\nin a controller produced false-positive TaintedHeader on subsequent\n`$request->input('k')` reads, because there was no type or source link\nbetween the two calls.\n\nA new `InlineValidateRulesCollector` implements `AfterExpressionAnalysisInterface`\nto capture rule maps as each `$var->validate([...])` or `$var->validateWithBag(...)`\nexpression finishes analysis, keyed by the enclosing FunctionLikeAnalyzer's\n`spl_object_id` and the caller variable name. `AfterFunctionLikeAnalysisInterface`\nevicts the entry when the body analysis ends, keeping the cache bounded and\nsidestepping `spl_object_id` recycling. `ValidationTaintHandler::removeTaints`\nOR-merges the bits from the collector with the existing FormRequest path.\n\nCloses #830.\n\n* Address round 3 review: hot-path, @internal, caveat tests\n\n- Fast-path method-name dispatch: direct string compare against canonical\n  `validate` / `validateWithBag` instead of a `toLowerString()` allocation\n  on every MethodCall in the project.\n- `getFunctionLikeId` drops the iteration cap; the `$parent === $source`\n  self-reference terminator is the sole required safeguard.\n- `InlineValidateRulesCollector` and its two public static methods marked\n  `@internal` — the public surface is a cross-handler contract with\n  `ValidationTaintHandler`, not a third-party API.\n- `lookupInlineValidateRules` orders the cheap enclosing-function check\n  before the `classExtends` walk.\n- Two new PHPT tests pin down the documented soundness caveats:\n  variable reassignment (name-keyed cache) and conditional `validate()`\n  (flow-insensitive within a function). Future work can tighten these\n  deliberately.\n\n* Round 4 review: merge docblocks, align method-name casing, tidy test\n\n- Merge the orphaned `@internal` docblock into the class-level block on\n  `InlineValidateRulesCollector` (two stacked docblocks → only the second\n  was reflected by PHP; the large design note was silently dropped).\n- Align method-name casing between populate and consume paths: both now\n  compare against canonical names via `$expr->name->name`, not\n  `toLowerString()`. Document the policy on `KEYED_ACCESSOR_METHODS` —\n  Laravel code uses canonical camelCase without exception, so the\n  canonical-only check is the right default AND avoids a per-expression\n  allocation.\n- Clean up editorial prose in `SafeInlineValidateMultipleCallsDifferentKeys`\n  test docblock (remaining \"Wait, to differentiate...\" draft text).\n\n* Round 5 review: fix hot-path order, drop inaccurate purity annotation, cover OR-merge\n\n- Remove `@psalm-external-mutation-free` from `afterStatementAnalysis`.\n  The method mutates `self::$rulesByFunction`, so the annotation was a\n  semantic lie — Psalm currently misses the mutation because its\n  `StaticPropertyAssignmentAnalyzer` doesn't emit the ImpureStaticProperty\n  check on the write side, but tightening the check later would break\n  self-analysis. `MissingPureAnnotation` is now baselined for this one\n  method per project policy.\n- Reorder `lookupInlineValidateRules`: peek the cache before the\n  `classExtends` walk. For the 99% of accessor calls in functions that\n  never ran validate(), the O(1) cache miss now short-circuits before\n  the expensive type-chain walk. The defence-in-depth type check still\n  runs on cache hit.\n- Add `SafeInlineValidateSameKeyOrMergesEscape.phpt` — two validate()\n  calls on the same variable with the SAME field but DIFFERENT escape\n  bitmasks (header-only + sql-only). Asserts the OR-merge survives:\n  redirect() reports only TaintedSSRF (header bit retained), DB::select()\n  is silent (sql bit retained). A mutation of `|` to `&` or an\n  overwrite-last-wins merge would surface TaintedHeader or TaintedSql.\n\n* Revert baseline entry; keep `@psalm-external-mutation-free` on evict\n\nProject policy (CLAUDE.local.md) forbids new entries in psalm-baseline.xml.\nThe `@psalm-external-mutation-free` on `afterStatementAnalysis()` is\nsemantically imperfect — the method mutates `self::$rulesByFunction` —\nbut Psalm 7's MissingPureAnnotation check requires it on handler methods\nthat consume `@psalm-external-mutation-free` events. Annotation stays;\ncomment records the gap for future reviewers.\n\n* Round 6 review: try/catch caveat, test rename, fix evict docblock\n\n- New: `SafeInlineValidateCaughtValidationExceptionKnownLimitation.phpt`\n  locks the most attack-relevant flow-insensitivity case — when\n  `$request->validate([...])` is wrapped in a `try` block that swallows\n  `ValidationException`, the cache is populated on the thrown path too,\n  so subsequent `input()` reads see unvalidated data but still get the\n  rule's escape. Class docblock caveat list updated.\n- Rename `SafeInlineValidateMultipleCallsDifferentKeys.phpt` ->\n  `TaintedHtmlInlineValidateMultipleCallsDifferentKeys.phpt`. Per the\n  test tree's convention, `Safe*` = empty EXPECTF; this file's EXPECTF\n  expects TaintedHtml + TaintedTextWithQuotes, so it's Tainted*.\n- Add `TaintedHeaderInlineValidateChainedCallerNotRecognised.phpt`:\n  chained caller (`$factory->make()->validate(...)`) must bail — locks\n  the `$expr->var instanceof Variable` guard.\n- Add `TaintedHeaderInlineValidateNonRequestCallerIgnored.phpt`: an\n  unrelated class that happens to declare its own `validate(array)`\n  method must be rejected — locks the `callerIsRequest` branch.\n- Also document the `request()->validate(...)` helper caveat in the\n  class docblock (FuncCall caller, fail-safe).\n- Correct the `afterStatementAnalysis` docblock: the annotation is\n  semantically correct (Psalm's `Mutations::LEVEL_INTERNAL_READ_WRITE`\n  permits same-class static writes), not \"technically inaccurate\" as\n  previously claimed.\n\n* Document `$request->merge()` laundering caveat\n\n`$request->validate([...])` does not write the validated snapshot back\ninto the Request's input bag — `input()` / `all()` keep reading the live\nbag. A `$request->merge([...])` between `validate()` and `input()`\ntherefore overwrites a rule-covered key with un-revalidated data, but\nthe collector's cache still carries the original rule's escape. A\nsubsequent `input('key')` is read as safe.\n\nAdded caveat bullet and\n`SafeInlineValidateMergeBetweenValidateAndInputKnownLimitation.phpt`\ntest pinning the current (unsafe, documented) behaviour so a future\ntightening (e.g. invalidating the cache entry on merge() calls) is a\ndeliberate, reviewed change.\n\nSame shape as the FormRequest-path caveat about subclass\n`passedValidation()` calling `merge()`, but more user-likely in\ncontroller bodies.\n\n* Acknowledge `@psalm-external-mutation-free` slight-overclaim on evict\n\nThe annotation on `afterStatementAnalysis` is strictly tighter than the\nmethod does (project docs define it as $this-only, this mutates a static).\nPsalm 7's `MissingPureAnnotation` check nevertheless demands it on this\nhandler because the event class is marked `@psalm-external-mutation-free`,\nand project policy forbids new entries in `psalm-baseline.xml`. Comment\non the method now records the tension explicitly.\n\nRe: remote review finding about the collector not being registered —\nthat finding is factually incorrect. Plugin.php lines 299-300 register\nit alongside `ValidationTaintHandler`; the `SafeInlineValidateCustomRuleEscapesHeader.phpt`\nregression test covers the motivating example (custom Rule class with\n`@psalm-taint-escape header`, inline validate, `redirect()->to($request->input())`\nexpects only TaintedSSRF).",
+          "timestamp": "2026-04-24T11:40:12+01:00",
+          "tree_id": "aba72c4d0dd7aa8f83ca72cdf79adc1b302d4e7f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d4565142fd3b3d43d6e91a333785369033b6deef"
+        },
+        "date": 1777027350967,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.09,
+            "range": "± 0.22",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1094,
             "unit": "MB"
           }
         ]
