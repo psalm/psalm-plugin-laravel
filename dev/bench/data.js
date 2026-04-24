@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777035173081,
+  "lastUpdate": 1777036971283,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2832,6 +2832,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ea84cee3978af813f57b47d29050b774ad5ccf0c",
+          "message": "fix(stubs): restate implements/extends in 4 stubs that were wiping metadata (#835)\n\nContainer, Pipeline, Cache/Repository and Http/RedirectResponse stubs\nredeclared their respective Laravel classes without the full implements\nor extends clause. Psalm's ClassLikeNodeScanner resets class_implements\nand parent_interfaces on stub redeclaration and repopulates them only\nfrom the stub's own clauses, so callers typed on the contracts\n(ContainerContract, PipelineContract, CacheContract) or on Symfony's\nRedirectResponse parent were silently losing those relationships.\n\nAdded 6 regression cases to tests/Type/tests/StubInterfaceTest.phpt\n(the canonical home for this class of bug). Verified empirically that\nremoving an implements clause makes the new case fire with\nInvalidReturnType / InvalidReturnStatement.",
+          "timestamp": "2026-04-24T14:20:14+01:00",
+          "tree_id": "1d0cb36f8302136ad3648f119008b3c8e28313b7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ea84cee3978af813f57b47d29050b774ad5ccf0c"
+        },
+        "date": 1777036970724,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.68,
+            "range": "± 0.54",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1095,
             "unit": "MB"
           }
         ]
