@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777046936238,
+  "lastUpdate": 1777063736525,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2902,6 +2902,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ca8fe906bf2e9d6dcff1cd488b41fe3587f06e6b",
+          "message": "Merge pull request #837 from psalm/worktree-834-inline-validate-via-variable\n\nApply inline `$request->validate()` taint-escape through variable bindings (#834)",
+          "timestamp": "2026-04-24T21:46:33+01:00",
+          "tree_id": "fb9897bdd7edb2650593a4b41537d520e92900be",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ca8fe906bf2e9d6dcff1cd488b41fe3587f06e6b"
+        },
+        "date": 1777063736043,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.36,
+            "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
