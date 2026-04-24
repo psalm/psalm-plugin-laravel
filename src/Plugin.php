@@ -289,6 +289,15 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
+        // Collector populates its cache via AfterExpressionAnalysisEvent on
+        // $request->validate([...]) and evicts it via AfterFunctionLikeAnalysisEvent.
+        // ValidationTaintHandler::removeTaints consults the cache during
+        // AddRemoveTaintsEvent on subsequent $request->input('key') reads.
+        // Registration order between the two is not functionally significant —
+        // they subscribe to different event types — but the two stay together
+        // here to keep the feed/consume relationship obvious to readers.
+        require_once __DIR__ . '/Handlers/Validation/InlineValidateRulesCollector.php';
+        $registration->registerHooksFromClass(Handlers\Validation\InlineValidateRulesCollector::class);
         require_once __DIR__ . '/Handlers/Validation/ValidationTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidationTaintHandler::class);
 
