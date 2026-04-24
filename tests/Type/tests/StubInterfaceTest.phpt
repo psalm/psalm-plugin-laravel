@@ -199,7 +199,7 @@ final class StubInterfaceTest
         return $f;
     }
 
-    public function belongsToImplementsBuilderContract(\Illuminate\Database\Eloquent\Relations\BelongsTo $r): EloquentBuilderContract
+    public function belongsToImplementsEloquentBuilderContract(\Illuminate\Database\Eloquent\Relations\BelongsTo $r): EloquentBuilderContract
     {
         return $r;
     }
