@@ -31,19 +31,25 @@ use Psalm\Type\Union;
  *    value in a way that makes it safe for a specific sink family
  *    (e.g. 'email' rule → safe for 'header' and 'cookie').
  *    Covers keyed accessors that read from the same data pool as validation:
- *            FormRequest::validated/input/string/str('key'),
- *            ValidatedInput::input/string/str('key'),
- *            Request::input/string/str('key') after an in-controller
+ *            FormRequest::validated/input/string/str/array/collect('key'),
+ *            ValidatedInput::input/string/str/array/collect('key'),
+ *            Request::input/string/str/array/collect('key') after an in-controller
  *            `$request->validate([...])` in the same function — rules come
  *            from {@see InlineValidateRulesCollector}.
+ *            (The `array`/`collect` accessors are bulk-input forms that read
+ *            the same pool as `input()`; see issue #840. Note: the current
+ *            `ValidatedInput` stub omits `array()`, so that branch is dead
+ *            code today — kept here for symmetry with `Request` because the
+ *            handler path is identical and a future stub fix is the only
+ *            change needed to exercise it.)
  *
  * Design assumption: when a typed FormRequest is injected into a controller,
  * Laravel runs validation before the controller method executes (via
- * ValidatesWhenResolvedTrait). So any input/string/str read from that
+ * ValidatesWhenResolvedTrait). So any keyed accessor read from that
  * FormRequest carries a value that already passed rules() — the rule's taint
  * escape applies even when the caller uses input() instead of validated().
  *
- * Caveat: the escape on input()/string()/str() assumes validation has run
+ * Caveat: the escape on the keyed accessors assumes validation has run
  * against the same data pool these accessors read. That assumption can break
  * in a few (rare) scenarios:
  *   - a subclass's passedValidation() calls $this->merge(...) with raw content
@@ -90,7 +96,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      *
      * @internal shared only with {@see InlineValidateRulesCollector}.
      */
-    public const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str'];
+    public const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str', 'array', 'collect'];
 
     /**
      * Add taint to validation method calls whose return type we narrow.
@@ -127,11 +133,14 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      *     or a plain `Request` that already passed an inline
      *     `$request->validate([...])` in the same function body.
      *   - A bare `Variable` whose binding was previously cached by
-     *     {@see InlineValidateRulesCollector::beforeExpressionAnalysis}.
-     *     This covers the one-hop case (`$v = $request->input('k');
-     *     sink($v);`) where `MethodCallReturnTypeFetcher` and
-     *     `AssignmentAnalyzer` create separate edges and the escape would
-     *     otherwise be lost on the variable indirection (issue #834).
+     *     {@see InlineValidateRulesCollector::beforeExpressionAnalysis} (for
+     *     `$v = $request->input('k')`-style assignments, issue #834) or
+     *     by `beforeStatementAnalysis` (for
+     *     `foreach ($request->array('k') as $v)`-style direct foreach
+     *     iteration, issue #840). These cover indirection cases where
+     *     `MethodCallReturnTypeFetcher` and `AssignmentAnalyzer` /
+     *     `arrayvalue-fetch` create separate edges and the escape would
+     *     otherwise be lost on the variable hop.
      *
      * Within the keyed-accessor shape, the FormRequest and inline-validate
      * paths OR their escape bits: if both contribute a rule for the same
