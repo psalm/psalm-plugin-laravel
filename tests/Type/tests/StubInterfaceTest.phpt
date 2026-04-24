@@ -4,17 +4,21 @@
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Contracts\Auth\StatefulGuard;
 use Illuminate\Contracts\Auth\SupportsBasicAuth;
+use Illuminate\Contracts\Cache\Repository as CacheContract;
 use Illuminate\Contracts\Console\Kernel as KernelContract;
+use Illuminate\Contracts\Container\Container as ContainerContract;
 use Illuminate\Contracts\Database\Query\Builder as BuilderContract;
 use Illuminate\Contracts\Encryption\Encrypter as EncrypterContract;
 use Illuminate\Contracts\Encryption\StringEncrypter;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Filesystem\Cloud as CloudFilesystemContract;
 use Illuminate\Contracts\Mail\Mailable as MailableContract;
+use Illuminate\Contracts\Pipeline\Pipeline as PipelineContract;
 use Illuminate\Contracts\Routing\ResponseFactory as FactoryContract;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\Support\ValidatedData;
 use Illuminate\Database\ConnectionInterface;
+use Symfony\Component\HttpFoundation\RedirectResponse as BaseRedirectResponse;
 
 /**
  * Stubs must declare the same `implements` clauses as the real Laravel classes.
@@ -121,6 +125,38 @@ final class StubInterfaceTest
     public function stringableImplementsBaseStringable(\Illuminate\Support\Stringable $s): \Stringable
     {
         return $s;
+    }
+
+    public function cacheRepositoryImplementsContract(\Illuminate\Cache\Repository $r): CacheContract
+    {
+        return $r;
+    }
+
+    /** @param \Illuminate\Cache\Repository $r */
+    public function cacheRepositoryImplementsArrayAccess($r): \ArrayAccess
+    {
+        return $r;
+    }
+
+    public function containerImplementsContract(\Illuminate\Container\Container $c): ContainerContract
+    {
+        return $c;
+    }
+
+    /** @param \Illuminate\Container\Container $c */
+    public function containerImplementsArrayAccess($c): \ArrayAccess
+    {
+        return $c;
+    }
+
+    public function pipelineImplementsContract(\Illuminate\Pipeline\Pipeline $p): PipelineContract
+    {
+        return $p;
+    }
+
+    public function redirectResponseExtendsSymfony(\Illuminate\Http\RedirectResponse $r): BaseRedirectResponse
+    {
+        return $r;
     }
 }
 ?>

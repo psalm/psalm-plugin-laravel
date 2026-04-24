@@ -2,7 +2,15 @@
 
 namespace Illuminate\Container;
 
-class Container
+use ArrayAccess;
+use Illuminate\Contracts\Container\Container as ContainerContract;
+
+/**
+ * Class declaration mirrors Laravel's source. Psalm wipes the reflected
+ * class_implements list when a stub re-declares the class, so the clause
+ * must be repeated verbatim or callers typed on the contracts break.
+ */
+class Container implements ArrayAccess, ContainerContract
 {
     /**
      * Assign a set of tags to a given binding.
