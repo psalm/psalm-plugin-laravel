@@ -83,8 +83,14 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      * deliberately. PHP resolves method names case-insensitively at runtime,
      * but Laravel code uses canonical camelCase without exception, and the
      * canonical-only check avoids a per-expression `strtolower()` allocation.
+     *
+     * `public` so {@see InlineValidateRulesCollector} can reuse the list
+     * without risking drift — the variable-binding cache is the same data
+     * flow with one extra hop, and both sites must stay in sync.
+     *
+     * @internal shared only with {@see InlineValidateRulesCollector}.
      */
-    private const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str'];
+    public const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str'];
 
     /**
      * Add taint to validation method calls whose return type we narrow.
