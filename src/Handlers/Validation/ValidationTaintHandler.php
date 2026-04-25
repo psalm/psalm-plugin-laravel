@@ -32,16 +32,16 @@ use Psalm\Type\Union;
  *    (e.g. 'email' rule → safe for 'header' and 'cookie').
  *    Covers keyed accessors that read from the same data pool as validation:
  *            FormRequest::validated/input/string/str/array/collect('key'),
- *            ValidatedInput::input/string/str/array/collect('key'),
+ *            ValidatedInput::input/string/str/collect('key'),
  *            Request::input/string/str/array/collect('key') after an in-controller
  *            `$request->validate([...])` in the same function — rules come
  *            from {@see InlineValidateRulesCollector}.
  *            (The `array`/`collect` accessors are bulk-input forms that read
- *            the same pool as `input()`; see issue #840. Note: the current
- *            `ValidatedInput` stub omits `array()`, so that branch is dead
- *            code today — kept here for symmetry with `Request` because the
- *            handler path is identical and a future stub fix is the only
- *            change needed to exercise it.)
+ *            the same pool as `input()`; see issue #840. The shared
+ *            `KEYED_ACCESSOR_METHODS` list also matches `ValidatedInput::array`
+ *            in principle, but the current `ValidatedInput` stub omits
+ *            `array()` so Psalm never sees that call shape — stub gap, not
+ *            handler gap.)
  *
  * Design assumption: when a typed FormRequest is injected into a controller,
  * Laravel runs validation before the controller method executes (via
