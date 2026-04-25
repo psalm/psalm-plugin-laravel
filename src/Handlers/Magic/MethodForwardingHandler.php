@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Magic;
 
 use PhpParser\Node\Expr\MethodCall;
-use PhpParser\Node\Expr\StaticCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
@@ -18,7 +17,6 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
-use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
@@ -50,14 +48,6 @@ final class MethodForwardingHandler implements
     MethodReturnTypeProviderInterface,
     MethodParamsProviderInterface
 {
-    private const BUILDER_FQN = \Illuminate\Database\Eloquent\Builder::class;
-
-    private const BUILDER_FQN_LOWER = 'illuminate\\database\\eloquent\\builder';
-
-    private const MODEL_FQN = \Illuminate\Database\Eloquent\Model::class;
-
-    private const MODEL_FQN_LOWER = 'illuminate\\database\\eloquent\\model';
-
     private static ?ForwardingRule $rule = null;
 
     /** @var array<lowercase-string, bool> Indexed source classes for O(1) lookup */
@@ -100,13 +90,6 @@ final class MethodForwardingHandler implements
      */
     private static array $scopeParamsCache = [];
 
-    /**
-     * Cache: class name → whether it is an Eloquent model.
-     *
-     * @var array<string, bool>
-     */
-    private static array $modelClassCache = [];
-
     /** @psalm-external-mutation-free */
     public static function init(ForwardingRule $rule): void
     {
@@ -114,7 +97,6 @@ final class MethodForwardingHandler implements
         self::$sourceClassIndex = [];
         self::$searchClassIndex = [];
         self::$scopeParamsCache = [];
-        self::$modelClassCache = [];
 
         foreach ($rule->allSourceClasses() as $class) {
             self::$sourceClassIndex[\strtolower($class)] = true;
@@ -344,18 +326,6 @@ final class MethodForwardingHandler implements
             ? $source->getNodeTypeProvider()->getType($stmt->var)
             : null;
 
-        $modelBuilderResult = self::resolveModelBuilderMixinInterception(
-            $event,
-            $mixinTargetClass,
-            $methodName,
-            $codebase,
-            $callerType,
-        );
-
-        if ($modelBuilderResult instanceof Union) {
-            return $modelBuilderResult;
-        }
-
         if (!$stmt instanceof MethodCall) {
             return null;
         }
@@ -430,104 +400,6 @@ final class MethodForwardingHandler implements
         }
 
         return null;
-    }
-
-    /**
-     * Intercept Model's @mixin Builder<static> fluent calls after Builder stubs use $this/static.
-     *
-     * Psalm binds $this/static in mixin-reached methods to the mixin host, so without this
-     * Customer::where() and (new Customer())->where() would be typed as Customer&static.
-     *
-     * @psalm-external-mutation-free
-     */
-    private static function resolveModelBuilderMixinInterception(
-        MethodReturnTypeProviderEvent $event,
-        string $mixinTargetClass,
-        string $methodName,
-        Codebase $codebase,
-        ?Union $callerType,
-    ): ?Union {
-        if (\strtolower($mixinTargetClass) !== self::BUILDER_FQN_LOWER) {
-            return null;
-        }
-
-        if (!ReturnTypeResolver::targetClassMethodReturnsSelf($codebase, self::BUILDER_FQN, $methodName)) {
-            return null;
-        }
-
-        $modelClass = self::extractModelClassFromMixinCaller($event, $codebase, $callerType);
-
-        if ($modelClass === null) {
-            return null;
-        }
-
-        return new Union([ModelMethodHandler::resolvedBuilderTypeFor($modelClass, $codebase)]);
-    }
-
-    /**
-     * @return class-string<\Illuminate\Database\Eloquent\Model>|null
-     * @psalm-external-mutation-free
-     */
-    private static function extractModelClassFromMixinCaller(
-        MethodReturnTypeProviderEvent $event,
-        Codebase $codebase,
-        ?Union $callerType,
-    ): ?string {
-        $stmt = $event->getStmt();
-
-        if ($stmt instanceof StaticCall) {
-            $calledClass = $event->getCalledFqClasslikeName();
-
-            if (\is_string($calledClass) && self::isModelClass($codebase, $calledClass)) {
-                return $calledClass;
-            }
-
-            return null;
-        }
-
-        if (!$callerType instanceof Union) {
-            return null;
-        }
-
-        foreach ($callerType->getAtomicTypes() as $atomicType) {
-            if (!$atomicType instanceof TNamedObject) {
-                continue;
-            }
-
-            if (isset(self::$sourceClassIndex[\strtolower($atomicType->value)])) {
-                continue;
-            }
-
-            if (self::isModelClass($codebase, $atomicType->value)) {
-                return $atomicType->value;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @psalm-assert-if-true class-string<\Illuminate\Database\Eloquent\Model> $className
-     * @psalm-external-mutation-free
-     */
-    private static function isModelClass(Codebase $codebase, string $className): bool
-    {
-        $classNameLower = \strtolower($className);
-
-        if (\array_key_exists($classNameLower, self::$modelClassCache)) {
-            return self::$modelClassCache[$classNameLower];
-        }
-
-        if ($classNameLower === self::MODEL_FQN_LOWER) {
-            return self::$modelClassCache[$classNameLower] = true;
-        }
-
-        try {
-            return self::$modelClassCache[$classNameLower] = $codebase->classOrInterfaceExists($className)
-                && $codebase->classExtends($className, self::MODEL_FQN);
-        } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
-            return self::$modelClassCache[$classNameLower] = false;
-        }
     }
 
     /**
