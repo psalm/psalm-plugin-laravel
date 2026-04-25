@@ -105,7 +105,7 @@ final class ReturnTypeResolver
      *
      * @psalm-external-mutation-free
      */
-    public static function targetMethodReturnsSelf(
+    private static function targetMethodReturnsSelf(
         Codebase $codebase,
         string $methodNameLowercase,
     ): bool {
@@ -163,31 +163,25 @@ final class ReturnTypeResolver
      */
     private static function returnTypeIndicatesSelf(Union $returnType): bool
     {
-        $indicatesSelf = false;
-
         foreach ($returnType->getAtomicTypes() as $atomicType) {
             if (!$atomicType instanceof TNamedObject) {
-                return false;
+                continue;
             }
 
             // Check 1: @return $this / @return static
             // Psalm stores these as TNamedObject(value="static", is_static=false),
             // NOT as is_static=true. Match the literal "static" value.
             if ($atomicType->value === 'static' || $atomicType->is_static) {
-                $indicatesSelf = true;
-                continue;
+                return true;
             }
 
             // Check 2: class name matches selfReturnIndicators (e.g., Builder)
             if (isset(self::$indicatorsLower[\strtolower($atomicType->value)])) {
-                $indicatesSelf = true;
-                continue;
+                return true;
             }
-
-            return false;
         }
 
-        return $indicatesSelf;
+        return false;
     }
 
     /**

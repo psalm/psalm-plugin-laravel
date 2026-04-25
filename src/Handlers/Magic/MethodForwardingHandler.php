@@ -496,7 +496,10 @@ final class MethodForwardingHandler implements
         return null;
     }
 
-    /** @psalm-external-mutation-free */
+    /**
+     * @psalm-assert-if-true class-string<\Illuminate\Database\Eloquent\Model> $className
+     * @psalm-external-mutation-free
+     */
     private static function isModelClass(Codebase $codebase, string $className): bool
     {
         $classNameLower = \strtolower($className);
@@ -505,12 +508,16 @@ final class MethodForwardingHandler implements
             return self::$modelClassCache[$classNameLower];
         }
 
-        if (\strtolower($className) === \strtolower(\Illuminate\Database\Eloquent\Model::class)) {
+        if ($classNameLower === \strtolower(\Illuminate\Database\Eloquent\Model::class)) {
             return self::$modelClassCache[$classNameLower] = true;
         }
 
-        return self::$modelClassCache[$classNameLower] = $codebase->classOrInterfaceExists($className)
-            && $codebase->classExtends($className, \Illuminate\Database\Eloquent\Model::class);
+        try {
+            return self::$modelClassCache[$classNameLower] = $codebase->classOrInterfaceExists($className)
+                && $codebase->classExtends($className, \Illuminate\Database\Eloquent\Model::class);
+        } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
+            return self::$modelClassCache[$classNameLower] = false;
+        }
     }
 
     /**

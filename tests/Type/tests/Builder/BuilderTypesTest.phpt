@@ -4,6 +4,7 @@
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use App\Models\Customer;
+use App\Models\Vehicle;
 
 final class EloquentBuilderCustomerRepository
 {
@@ -91,6 +92,12 @@ final class EloquentBuilderCustomerRepository
       $query = Customer::where($attributes);
       /** @psalm-check-type-exact $query = Builder<Customer> */
       return $query;
+    }
+
+    public function setModelChangesBuilderTemplate(): void
+    {
+        $_result = Customer::query()->setModel(new Vehicle());
+        /** @psalm-check-type-exact $_result = Builder<Vehicle>&static */
     }
 
 //    /** @return Collection<int, Customer> */
