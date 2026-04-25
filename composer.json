@@ -56,6 +56,10 @@
         {
             "type": "vcs",
             "url": "https://github.com/alies-dev/psalm-tester"
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/alies-dev/psalm-tester"
         }
     ],
     "minimum-stability": "dev",
