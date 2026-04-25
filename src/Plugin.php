@@ -233,6 +233,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Magic/ForwardingRule.php';
         require_once __DIR__ . '/Handlers/Magic/ReturnTypeResolver.php';
         require_once __DIR__ . '/Handlers/Magic/MethodForwardingHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelBuilderMixinHandler.php';
         Handlers\Magic\MethodForwardingHandler::init(new Handlers\Magic\ForwardingRule(
             sourceClass: \Illuminate\Database\Eloquent\Relations\Relation::class,
             searchClasses: [
@@ -264,9 +266,13 @@ final class Plugin implements PluginEntryPointInterface
             Handlers\Magic\MethodForwardingHandler::enableDynamicWhere();
         }
 
+        // Eloquent's Model -> Builder @mixin host correction is intentionally separate
+        // from the rule-driven forwarding handler. If another forwarding domain needs
+        // the same hook, this could become an optional ForwardingRule callback instead.
+        Handlers\Eloquent\ModelBuilderMixinHandler::init();
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelBuilderMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Magic\MethodForwardingHandler::class);
 
-        require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelMethodHandler::class);
         require_once __DIR__ . '/Util/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
