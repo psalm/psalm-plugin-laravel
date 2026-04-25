@@ -50,6 +50,14 @@ final class MethodForwardingHandler implements
     MethodReturnTypeProviderInterface,
     MethodParamsProviderInterface
 {
+    private const BUILDER_FQN = \Illuminate\Database\Eloquent\Builder::class;
+
+    private const BUILDER_FQN_LOWER = 'illuminate\\database\\eloquent\\builder';
+
+    private const MODEL_FQN = \Illuminate\Database\Eloquent\Model::class;
+
+    private const MODEL_FQN_LOWER = 'illuminate\\database\\eloquent\\model';
+
     private static ?ForwardingRule $rule = null;
 
     /** @var array<lowercase-string, bool> Indexed source classes for O(1) lookup */
@@ -332,13 +340,16 @@ final class MethodForwardingHandler implements
         }
 
         $stmt = $event->getStmt();
+        $callerType = $stmt instanceof MethodCall
+            ? $source->getNodeTypeProvider()->getType($stmt->var)
+            : null;
 
         $modelBuilderResult = self::resolveModelBuilderMixinInterception(
-            $source,
             $event,
             $mixinTargetClass,
             $methodName,
             $codebase,
+            $callerType,
         );
 
         if ($modelBuilderResult instanceof Union) {
@@ -352,8 +363,6 @@ final class MethodForwardingHandler implements
         // Get the ORIGINAL caller's type from the node type provider.
         // $stmt->var type is set BEFORE mixin resolution
         // (confirmed in MethodCallAnalyzer.php lines 67-69).
-        $callerType = $source->getNodeTypeProvider()->getType($stmt->var);
-
         if (!$callerType instanceof \Psalm\Type\Union) {
             return null;
         }
@@ -428,38 +437,41 @@ final class MethodForwardingHandler implements
      *
      * Psalm binds $this/static in mixin-reached methods to the mixin host, so without this
      * Customer::where() and (new Customer())->where() would be typed as Customer&static.
+     *
+     * @psalm-external-mutation-free
      */
     private static function resolveModelBuilderMixinInterception(
-        StatementsAnalyzer $source,
         MethodReturnTypeProviderEvent $event,
         string $mixinTargetClass,
         string $methodName,
         Codebase $codebase,
+        ?Union $callerType,
     ): ?Union {
-        if (\strtolower($mixinTargetClass) !== \strtolower(\Illuminate\Database\Eloquent\Builder::class)) {
+        if (\strtolower($mixinTargetClass) !== self::BUILDER_FQN_LOWER) {
             return null;
         }
 
-        $modelClass = self::extractModelClassFromMixinCaller($source, $event, $codebase);
+        if (!ReturnTypeResolver::targetClassMethodReturnsSelf($codebase, self::BUILDER_FQN, $methodName)) {
+            return null;
+        }
+
+        $modelClass = self::extractModelClassFromMixinCaller($event, $codebase, $callerType);
 
         if ($modelClass === null) {
             return null;
         }
 
-        if (!ReturnTypeResolver::targetClassMethodReturnsSelf($codebase, \Illuminate\Database\Eloquent\Builder::class, $methodName)) {
-            return null;
-        }
-
-        return new Union([ModelMethodHandler::builderTypeForModel($modelClass, $codebase)]);
+        return new Union([ModelMethodHandler::resolvedBuilderTypeFor($modelClass, $codebase)]);
     }
 
     /**
      * @return class-string<\Illuminate\Database\Eloquent\Model>|null
+     * @psalm-external-mutation-free
      */
     private static function extractModelClassFromMixinCaller(
-        StatementsAnalyzer $source,
         MethodReturnTypeProviderEvent $event,
         Codebase $codebase,
+        ?Union $callerType,
     ): ?string {
         $stmt = $event->getStmt();
 
@@ -472,8 +484,6 @@ final class MethodForwardingHandler implements
 
             return null;
         }
-
-        $callerType = $source->getNodeTypeProvider()->getType($stmt->var);
 
         if (!$callerType instanceof Union) {
             return null;
@@ -508,13 +518,13 @@ final class MethodForwardingHandler implements
             return self::$modelClassCache[$classNameLower];
         }
 
-        if ($classNameLower === \strtolower(\Illuminate\Database\Eloquent\Model::class)) {
+        if ($classNameLower === self::MODEL_FQN_LOWER) {
             return self::$modelClassCache[$classNameLower] = true;
         }
 
         try {
             return self::$modelClassCache[$classNameLower] = $codebase->classOrInterfaceExists($className)
-                && $codebase->classExtends($className, \Illuminate\Database\Eloquent\Model::class);
+                && $codebase->classExtends($className, self::MODEL_FQN);
         } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
             return self::$modelClassCache[$classNameLower] = false;
         }

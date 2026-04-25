@@ -57,6 +57,15 @@ function test_mixin_only_preserves_relation_type(): void {
     /** @psalm-check-type-exact $_ = HasOne<Invoice, WorkOrder> */
 }
 
+// Builder::scopes() returns static|mixed. The fluent detector must match any
+// self-like atomic in the union, not fail on the mixed branch.
+function test_scopes_preserves_relation_type(): void {
+    /** @var HasOne<Invoice, WorkOrder> $r */
+    $r = (new WorkOrder())->invoice();
+    $_ = $r->scopes('urgent');
+    /** @psalm-check-type-exact $_ = HasOne<Invoice, WorkOrder> */
+}
+
 // Different Relation subclass: BelongsToMany (verifies template params work beyond HasOne)
 function test_belongsToMany_where_preserves_relation_type(): void {
     /** @var BelongsToMany<Part, WorkOrder, Pivot, 'pivot'> $r */
