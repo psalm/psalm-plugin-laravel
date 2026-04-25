@@ -206,23 +206,22 @@ Eloquent and the Query Builder use PDO prepared statements for WHERE conditions,
 
 This creates two distinct annotation responsibilities:
 
-- **Column names** (`$column`): interpolated literally into the SQL identifier (e.g., `WHERE {$column} = ?`), so user-controlled column names are a real injection risk. Mark with `@psalm-taint-sink sql $column`.
 - **Values** (`$value`, `$operator` in 2-arg form, `$id`): PDO-bound, never interpolated. Use `@psalm-taint-escape sql` to suppress false-positive `TaintedSql` warnings, paired with `@psalm-flow` to preserve other taint kinds.
+- **Raw SQL identifiers** (e.g. `$column` in `orderBy()`, `$sql` in raw methods): interpolated literally into the query string, so user-controlled values are a real injection risk. Mark with `@psalm-taint-sink sql`.
 
 ### Pattern for where-family methods
 
 ```php
 /**
- * @psalm-taint-sink sql $column           -- column names go into SQL identifiers; warn if tainted
  * @psalm-taint-escape sql                 -- values are PDO-bound; strip sql taint from return value
  * @psalm-flow ($operator, $value) -> return  -- preserve other taint kinds (html, shell, etc.)
  */
 public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 ```
 
-Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argument form** (`where('col', $userValue)`), Laravel's `prepareValueAndOperator()` moves the second argument into the `$value` position (the original `$value = null` is discarded), so user input may arrive via `$operator` at the call site, even though it is always PDO-bound.
+`@psalm-taint-sink sql $column` is intentionally **absent** from `where()`, `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, and `orHaving()`. The `$column` parameter accepts `\Closure|string|array` — when the array form is used (`where(['col' => $tainted])`), the entire array (including PDO-bound values) lands in `$column`. Marking `$column` as a sink would cause false-positive `TaintedSql` warnings for safe parameterized values. Column identifiers in WHERE/HAVING clauses are always developer-written literals or Eloquent expression objects, not user input.
 
-The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, and `orHaving()`.
+Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argument form** (`where('col', $userValue)`), Laravel's `prepareValueAndOperator()` moves the second argument into the `$value` position (the original `$value = null` is discarded), so user input may arrive via `$operator` at the call site, even though it is always PDO-bound.
 
 ### Pattern for find-family methods
 
