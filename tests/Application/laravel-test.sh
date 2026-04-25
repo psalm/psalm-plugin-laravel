@@ -65,6 +65,29 @@ debug() {
     fi
 }
 
+# Run a noisy command silently. Captures stdout+stderr to a temp file and only
+# surfaces it on failure (or when --verbose is set). Keeps the script readable
+# for humans and cheap for AI agents to consume.
+quiet_run() {
+    local label="$1"
+    shift
+    if [ "$VERBOSE" = true ]; then
+        "$@"
+        return
+    fi
+    local log_file
+    log_file=$(mktemp)
+    if "$@" >"$log_file" 2>&1; then
+        rm -f "$log_file"
+    else
+        local exit_code=$?
+        echo -e "${RED}${label} failed (exit ${exit_code}). Captured output:${NC}" >&2
+        cat "$log_file" >&2
+        rm -f "$log_file"
+        exit "$exit_code"
+    fi
+}
+
 # Cleanup function
 cleanup() {
     if [ -d "$APP_INSTALLATION_PATH" ]; then
@@ -110,6 +133,14 @@ APP_INSTALLATION_PATH="$PROJECT_ROOT/tests-app/laravel-example"
 
 trap cleanup EXIT
 
+# Silencing flags for noisy tools — emptied when --verbose so the user sees
+# composer's full lockfile/install output and artisan's per-class INFO lines.
+if [ "$VERBOSE" = true ]; then
+    COMPOSER_QUIET=()
+else
+    COMPOSER_QUIET=(--quiet)
+fi
+
 if [ -d "$APP_INSTALLATION_PATH" ]; then
     info "Removing previous installation..."
     rm -rf "$APP_INSTALLATION_PATH"
@@ -117,22 +148,28 @@ if [ -d "$APP_INSTALLATION_PATH" ]; then
 fi
 
 RELATIVE_PATH="${APP_INSTALLATION_PATH#"$PROJECT_ROOT"/}"
-info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} at ${RELATIVE_PATH} ..."
-info "Tip: set LARAVEL_INSTALLER_VERSION to test against a different Laravel version"
+info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} at ${RELATIVE_PATH}"
+info "Tip: set LARAVEL_INSTALLER_VERSION to test a different Laravel. Use --verbose for full tool output."
 # --no-security-blocking: laravel/laravel's pinned phpunit/phpunit range can become
 # fully covered by a fresh advisory, which would otherwise make `composer create-project`
 # fail to resolve. Advisories are still reported. This is a test-only scaffold.
-composer create-project --quiet --prefer-dist --no-security-blocking laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
+quiet_run "composer create-project" \
+    composer create-project ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --prefer-dist --no-security-blocking --no-ansi -n \
+        laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
 cd "$APP_INSTALLATION_PATH"
 
-info "Making different types of classes for Laravel to analyze them using Psalm"
+info "Generating example Laravel classes for analysis"
 # Invoke every generator inside a single bootstrapped Laravel process — spawning
 # ~30 separate `./artisan` invocations is ~16× slower (~10s vs ~0.6s locally).
-php -r '
+# BufferedOutput captures the per-command "INFO ... created successfully" chatter
+# so we only emit a single summary line on success, and the full buffer on failure.
+VERBOSE="$VERBOSE" php -r '
 require __DIR__."/vendor/autoload.php";
 $app = require __DIR__."/bootstrap/app.php";
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-$output = new Symfony\Component\Console\Output\ConsoleOutput();
+$output = getenv("VERBOSE") === "true"
+    ? new Symfony\Component\Console\Output\ConsoleOutput()
+    : new Symfony\Component\Console\Output\BufferedOutput();
 $cmds = [
     ["make:cast", "ExampleCast"],
     ["make:channel", "ExampleChannel"],
@@ -168,28 +205,34 @@ foreach ($cmds as [$cmd, $name]) {
     $exit = Illuminate\Support\Facades\Artisan::call($cmd, ["name" => $name], $output);
     if ($exit !== 0) {
         fwrite(STDERR, "artisan {$cmd} {$name} failed (exit {$exit})\n");
+        if ($output instanceof Symfony\Component\Console\Output\BufferedOutput) {
+            fwrite(STDERR, $output->fetch());
+        }
         exit($exit);
     }
 }
-' | awk 'NF'
+echo "Generated " . count($cmds) . " example classes\n";
+'
 
-info "Adding package from source"
-composer config repositories.0 '{"type": "path", "url": "../../"}'
-composer config minimum-stability 'dev'
-COMPOSER_MEMORY_LIMIT=-1 composer require --dev "psalm/plugin-laravel:*" --update-with-all-dependencies
+info "Installing psalm/plugin-laravel from local source"
+composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} repositories.0 '{"type": "path", "url": "../../"}'
+composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} minimum-stability 'dev'
+export COMPOSER_MEMORY_LIMIT=-1
+quiet_run "composer require psalm/plugin-laravel" \
+    composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n --dev \
+        "psalm/plugin-laravel:*" --update-with-all-dependencies
 
-info "Analyzing Laravel"
 PSALM_CONFIG="../../tests/Application/laravel-test-psalm.xml"
 PSALM_BASELINE="../../tests/Application/laravel-test-psalm-baseline.xml"
 
 if [ "$UPDATE_BASELINE" = true ]; then
     info "Updating Psalm baseline"
-    ./vendor/bin/psalm --config="$PSALM_CONFIG" --set-baseline="$PSALM_BASELINE"
+    ./vendor/bin/psalm --config="$PSALM_CONFIG" --set-baseline="$PSALM_BASELINE" --no-progress --no-suggestions
     info "Baseline file $PSALM_BASELINE is updated, please check the changes and commit them."
 else
     info "Running Psalm analysis"
     # set -e ensures script exits on failure, so cleanup below only runs on success
-    ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --show-info=true --stats
+    ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --no-progress --no-suggestions --output-format=compact
 fi
 
 echo
