@@ -54,6 +54,13 @@ function test_chain_multiple_custom_methods(): void
     /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder> */
 }
 
+/** Custom builder method chained into a base Builder method preserves the custom builder. */
+function test_custom_method_chain_to_base_builder_method(): void
+{
+    $_result = WorkOrder::query()->whereCompleted()->where('priority', 1);
+    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder>&static */
+}
+
 /**
  * Base Builder methods still work on the custom builder.
  *
