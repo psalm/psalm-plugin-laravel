@@ -90,6 +90,17 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
+     * Build the Psalm type for the builder used by a model.
+     *
+     * @internal Used by magic forwarding handlers that intercept Model's @mixin path
+     * @psalm-external-mutation-free
+     */
+    public static function resolvedBuilderTypeFor(string $modelClass, Codebase $codebase): Type\Atomic\TNamedObject
+    {
+        return self::builderType(self::getBuilderClassForModel($modelClass), $modelClass, $codebase);
+    }
+
+    /**
      * Build the Psalm type for Builder<Model> (or CustomBuilder<Model>).
      *
      * If the custom builder has template parameters, returns TGenericObject (e.g. PostBuilder<Post>).

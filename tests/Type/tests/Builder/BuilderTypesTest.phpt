@@ -4,6 +4,12 @@
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use App\Models\Customer;
+use App\Models\Vehicle;
+
+/**
+ * @mixin Builder<Customer>
+ */
+final class NonEloquentBuilderMixin {}
 
 final class EloquentBuilderCustomerRepository
 {
@@ -53,7 +59,9 @@ final class EloquentBuilderCustomerRepository
 
     /** @return Builder<Customer> */
     public function getWhereBuilderViaInstance(array $attributes): Builder {
-        return (new Customer())->where($attributes);
+        $query = (new Customer())->where($attributes);
+        /** @psalm-check-type-exact $query = Builder<Customer> */
+        return $query;
     }
 
     public function chunkReturnsTemplatedCollection(): void
@@ -86,7 +94,15 @@ final class EloquentBuilderCustomerRepository
     /** @return Builder<Customer> */
     public function getWhereBuilderViaStatic(array $attributes): Builder
     {
-      return Customer::where($attributes);
+      $query = Customer::where($attributes);
+      /** @psalm-check-type-exact $query = Builder<Customer> */
+      return $query;
+    }
+
+    public function setModelChangesBuilderTemplate(): void
+    {
+        $_result = Customer::query()->setModel(new Vehicle());
+        /** @psalm-check-type-exact $_result = Builder<Vehicle>&static */
     }
 
 //    /** @return Collection<int, Customer> */
@@ -150,6 +166,12 @@ function test_where_long_form_closure(): Builder
 function test_firstWhere_arrow_closure(): ?Customer
 {
     return Customer::query()->firstWhere(fn ($q) => $q->where('email', 'x'));
+}
+
+function test_non_eloquent_mixin_does_not_use_model_builder_forwarding(): void
+{
+    $_result = (new NonEloquentBuilderMixin())->where(['id' => 1]);
+    /** @psalm-check-type-exact $_result = NonEloquentBuilderMixin */
 }
 ?>
 --EXPECTF--
