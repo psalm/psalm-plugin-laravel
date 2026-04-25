@@ -606,8 +606,13 @@ class Builder implements BuilderContract
     /**
      * Call the given local model scopes.
      *
+     * Laravel's docblock is `static|mixed` because user-defined scopes could
+     * theoretically return non-builder values, but the `|mixed` poisons every
+     * fluent chain after `->scopes(...)`. Drop it: scopes that return non-builders
+     * crash at runtime, so reporting them statically is acceptable.
+     *
      * @param  array|non-empty-string  $scopes
-     * @return static|mixed
+     * @return $this
      */
     public function scopes($scopes) {}
 
