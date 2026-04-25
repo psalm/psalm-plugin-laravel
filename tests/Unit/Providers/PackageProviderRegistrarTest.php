@@ -213,7 +213,7 @@ final class PackageProviderRegistrarTest extends TestCase
 
         // Create a temporary provider class that throws during register()
         $tmpFile = \sys_get_temp_dir() . '/ThrowingProvider_' . \uniqid() . '.php';
-        $className = 'ThrowingProvider_' . \uniqid('', true);
+        $className = 'ThrowingProvider_' . \uniqid();
         \file_put_contents($tmpFile, "<?php\nclass {$className} extends \\Illuminate\\Support\\ServiceProvider { public function register(): void { throw new \\RuntimeException('deliberate failure'); } }");
         require $tmpFile;
 
@@ -241,7 +241,7 @@ final class PackageProviderRegistrarTest extends TestCase
      */
     private static function tempDirWithComposerJson(array $composerJsonData): string
     {
-        $dir = \sys_get_temp_dir() . '/psalm_ppr_test_' . \uniqid('', true);
+        $dir = \sys_get_temp_dir() . '/psalm_ppr_test_' . \uniqid();
         \mkdir($dir, 0777, true);
         \file_put_contents($dir . '/composer.json', \json_encode($composerJsonData));
 
