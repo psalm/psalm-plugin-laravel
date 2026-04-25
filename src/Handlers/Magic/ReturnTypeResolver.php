@@ -81,7 +81,7 @@ final class ReturnTypeResolver
             return null;
         }
 
-        if (self::targetMethodReturnsSelf($codebase, $methodNameLowercase)) {
+        if (self::anyTargetClassMethodReturnsSelf($codebase, $methodNameLowercase)) {
             return new Union([
                 new TGenericObject($sourceClass, $sourceTemplateParams),
             ]);
@@ -105,7 +105,7 @@ final class ReturnTypeResolver
      *
      * @psalm-external-mutation-free
      */
-    private static function targetMethodReturnsSelf(
+    private static function anyTargetClassMethodReturnsSelf(
         Codebase $codebase,
         string $methodNameLowercase,
     ): bool {
@@ -115,7 +115,7 @@ final class ReturnTypeResolver
         }
 
         $rule = self::$rule;
-        \assert($rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule, 'initForRule() must be called before targetMethodReturnsSelf()');
+        \assert($rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule, 'initForRule() must be called before anyTargetClassMethodReturnsSelf()');
 
         $result = false;
 

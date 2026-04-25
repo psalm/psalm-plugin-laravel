@@ -95,7 +95,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * @internal Used by magic forwarding handlers that intercept Model's @mixin path
      * @psalm-external-mutation-free
      */
-    public static function builderTypeForModel(string $modelClass, Codebase $codebase): Type\Atomic\TNamedObject
+    public static function resolvedBuilderTypeFor(string $modelClass, Codebase $codebase): Type\Atomic\TNamedObject
     {
         return self::builderType(self::getBuilderClassForModel($modelClass), $modelClass, $codebase);
     }
