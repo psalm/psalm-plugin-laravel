@@ -6,10 +6,8 @@
 class EloquentWhereArrayPost extends \Illuminate\Database\Eloquent\Model {}
 
 /**
- * Eloquent where(), orWhere(), whereNot(), orWhereNot() use PDO parameterized
- * bindings for values — tainted values passed via the array form
- * (where(['col' => $tainted])) do not constitute SQL injection and must not
- * be flagged as TaintedSql.
+ * Eloquent where(), orWhere(), whereNot(), orWhereNot() parameterize array-form
+ * values, so tainted VALUES inside the condition map must not trigger TaintedSql.
  *
  * @psalm-suppress MixedAssignment
  */

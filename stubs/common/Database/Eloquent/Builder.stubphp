@@ -87,6 +87,7 @@ class Builder implements BuilderContract
      * @param  string  $boolean
      * @return $this
      *
+     * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
      * @psalm-flow ($operator, $value) -> return
      */
@@ -107,6 +108,7 @@ class Builder implements BuilderContract
      * @param  mixed  $value
      * @return $this
      *
+     * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
      * @psalm-flow ($operator, $value) -> return
      */
@@ -681,6 +683,7 @@ class Builder implements BuilderContract
      * @param  string  $boolean
      * @return $this
      *
+     * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
      * @psalm-flow ($operator, $value) -> return
      */
@@ -694,6 +697,7 @@ class Builder implements BuilderContract
      * @param  mixed  $value
      * @return $this
      *
+     * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
      * @psalm-flow ($operator, $value) -> return
      */
