@@ -212,6 +212,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
 
+        require_once __DIR__ . '/Handlers/Http/RequestRouteHandler.php';
+        $registration->registerHooksFromClass(Handlers\Http\RequestRouteHandler::class);
+
         // Model property handlers are registered dynamically by ModelRegistrationHandler
         // after Psalm populates its codebase (AfterCodebasePopulated event).
         require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';

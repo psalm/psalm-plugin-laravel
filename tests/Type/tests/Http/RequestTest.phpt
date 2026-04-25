@@ -1,6 +1,8 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use Illuminate\Database\Eloquent\Model;
+
 function it_returns_all_headers(\Illuminate\Http\Request $request): array {
     return $request->header();
 };
@@ -17,5 +19,25 @@ function it_returns_route_param(\Illuminate\Http\Request $request): void {
     $param = $request->route('station');
     /** @psalm-check-type-exact $param = \Illuminate\Database\Eloquent\Model|string|null */
 };
+
+class RadioStation extends Model {}
+
+/**
+ * @psalm-route-model station \RadioStation
+ */
+class RadioStationUpdateRequest extends \Illuminate\Foundation\Http\FormRequest
+{
+    public function authorize(): bool
+    {
+        $station = $this->route('station');
+        /** @psalm-check-type-exact $station = RadioStation|null */
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [];
+    }
+}
 ?>
 --EXPECTF--
