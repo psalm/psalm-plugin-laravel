@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777063736525,
+  "lastUpdate": 1777111030941,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2932,6 +2932,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.36,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "46d7741a5e2b8d80a0560f94b51f9b626d0816a4",
+          "message": "Merge pull request #839 from psalm/838-wildcard-array-rules-escape\n\nApply inline-validate taint escape to indexed wildcard accessors (#838)",
+          "timestamp": "2026-04-25T10:54:28+01:00",
+          "tree_id": "b94e412575ac5fb8397e2f080503729265f2b377",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/46d7741a5e2b8d80a0560f94b51f9b626d0816a4"
+        },
+        "date": 1777111030090,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.87,
+            "range": "± 0.27",
             "unit": "s"
           },
           {
