@@ -1,0 +1,14 @@
+[
+    {
+        "date": "2026-03-18 18:36",
+        "branch": "master",
+        "commit": "59a74c5",
+        "psalm": "Psalm dev-master@10fe9d0c8b3f70c862d2a77ce85255f6b4a135f5",
+        "runs": 10,
+        "time_overhead_s": 2.89,
+        "time_overhead_pct": 5.1,
+        "mem_overhead_mb": 456,
+        "mem_overhead_pct": 6.3,
+        "verdict": "PASS"
+    }
+]
