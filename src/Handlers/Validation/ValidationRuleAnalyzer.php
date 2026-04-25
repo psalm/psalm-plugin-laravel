@@ -208,11 +208,24 @@ final class ValidationRuleAnalyzer
             return $rule;
         }
 
-        if (\preg_match('/^(.+)\.\d+$/', $key, $matches) === 1) {
-            return $rules[$matches[1]] ?? null;
+        // Hot path: this runs for every keyed accessor read where rules exist.
+        // Hand-rolled scan beats `preg_match('/^(.+)\.\d+$/')`: the vast majority
+        // of keys (any without a numeric trailing segment) bail out on the cheap
+        // last-char check before any allocation. Equivalent to the regex:
+        // require at least one char before the last '.', and a 1+ digit suffix.
+        $lastDot = \strrpos($key, '.');
+
+        if ($lastDot === false || $lastDot === 0) {
+            return null;
         }
 
-        return null;
+        $suffix = \substr($key, $lastDot + 1);
+
+        if ($suffix === '' || !\ctype_digit($suffix)) {
+            return null;
+        }
+
+        return $rules[\substr($key, 0, $lastDot)] ?? null;
     }
 
     /**

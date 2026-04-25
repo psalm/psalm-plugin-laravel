@@ -17,7 +17,8 @@ use Illuminate\Validation\Rule;
  *
  * This test locks in the current behaviour so any future deeper-walk
  * implementation is a deliberate, reviewed change that flips the
- * expectation (adds a `TaintedHeader` line) rather than a silent regression.
+ * expectation (removes the `TaintedHeader` line) rather than a silent
+ * regression.
  */
 /** @psalm-suppress MixedArgument */
 function storeNestedWildcard(Request $request): RedirectResponse {
