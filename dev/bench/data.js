@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777155476742,
+  "lastUpdate": 1777157617495,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3002,6 +3002,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.39,
             "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "52def6d63d5f885943a5a70360845d8c42cb5be0",
+          "message": "fix(stubs): drop |mixed from Builder::scopes() return #794\n\nLaravel's docblock is `static|mixed`, but `|mixed` collapses the entire\nfluent chain after `->scopes(...)` to mixed, breaking 250+ inferences\non real apps (ixdf-web: +263 issues regression). Scopes returning\nnon-builder values crash at runtime, so dropping the mixed branch is\nsafe and restores chain narrowing through custom builders.",
+          "timestamp": "2026-04-26T00:50:15+02:00",
+          "tree_id": "1f753ce33301b501d438adfb87bacafd3b093c4a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/52def6d63d5f885943a5a70360845d8c42cb5be0"
+        },
+        "date": 1777157616723,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.82,
+            "range": "± 0.08",
             "unit": "s"
           },
           {
