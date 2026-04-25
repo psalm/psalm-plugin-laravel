@@ -57,14 +57,26 @@ function test_chain_multiple_custom_methods(): void
 /**
  * Base Builder methods still work on the custom builder.
  *
- * Returns Builder<WorkOrder> rather than WorkOrderBuilder<WorkOrder> because the Builder stub's
- * where() uses @return self<TModel> and self resolves to Builder (the declaring class).
- * Custom builder methods that explicitly return self<TModel> preserve the WorkOrderBuilder type.
+ * Fluent Builder methods preserve the concrete custom builder type.
  */
-function test_base_builder_methods_still_work(): void
+function test_base_builder_methods_preserve_custom_builder(): void
 {
     $_result = WorkOrder::query()->where('title', 'Hello');
-    /** @psalm-check-type-exact $_result = Builder<WorkOrder> */
+    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder>&static */
+}
+
+/** Base Builder methods preserve custom builder type via static model forwarding. */
+function test_base_builder_static_methods_preserve_custom_builder(): void
+{
+    $_result = WorkOrder::where('title', 'Hello');
+    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder> */
+}
+
+/** Base Builder methods preserve custom builder type via instance model forwarding. */
+function test_base_builder_instance_methods_preserve_custom_builder(): void
+{
+    $_result = (new WorkOrder())->where('title', 'Hello');
+    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder> */
 }
 
 /** Custom builder methods accessible via static call on the model. */
@@ -366,6 +378,20 @@ function test_non_template_builder_custom_method(): void
 function test_non_template_builder_static_call(): void
 {
     $_result = Invoice::wherePaid();
+    /** @psalm-check-type-exact $_result = InvoiceBuilder */
+}
+
+/** Non-template builder: base Builder method via static call preserves plain InvoiceBuilder. */
+function test_non_template_builder_base_static_call(): void
+{
+    $_result = Invoice::where('status', 'paid');
+    /** @psalm-check-type-exact $_result = InvoiceBuilder */
+}
+
+/** Non-template builder: base Builder method via instance call preserves plain InvoiceBuilder. */
+function test_non_template_builder_base_instance_call(): void
+{
+    $_result = (new Invoice())->where('status', 'paid');
     /** @psalm-check-type-exact $_result = InvoiceBuilder */
 }
 
