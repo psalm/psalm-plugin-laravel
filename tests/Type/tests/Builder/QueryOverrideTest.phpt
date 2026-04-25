@@ -1,9 +1,9 @@
 --FILE--
 <?php declare(strict_types=1);
 
-use App\Builders\ScopedSongBuilder;
-use App\Models\Admin;
-use App\Models\ScopedSong;
+use App\Builders\InvoiceBuilder;
+use App\Models\Customer;
+use App\Models\Invoice;
 
 /**
  * Regression test for https://github.com/psalm/psalm-plugin-laravel/issues/795
@@ -13,9 +13,9 @@ use App\Models\ScopedSong;
  * that uses them. Before the fix, Psalm's static call analyzer validated
  * argument lists against that pseudo rather than the overriding signature on
  * the model, emitting TooManyArguments and InvalidNamedArgument for every
- * call like `Song::query(type: $t, user: $u)`.
+ * call like `Invoice::query(status: $s, customer: $c)`.
  *
- * ScopedSong mirrors the Koel shape exactly: custom builder via
+ * Invoice mirrors the Koel shape exactly: custom builder via
  * #[UseEloquentBuilder], trait with @method static Builder query(), and an
  * overriding static query() with extra parameters.
  *
@@ -27,22 +27,22 @@ use App\Models\ScopedSong;
 /** Overriding query() accepts named args without shadowing from the trait's pseudo. */
 function test_query_override_named_args(): void
 {
-    $_result = ScopedSong::query(type: 'song', user: new Admin());
-    /** @psalm-check-type-exact $_result = ScopedSongBuilder */
+    $_result = Invoice::query(status: 'paid', customer: new Customer());
+    /** @psalm-check-type-exact $_result = InvoiceBuilder */
 }
 
 /** Same signature accepts positional args too. */
 function test_query_override_positional_args(): void
 {
-    $_result = ScopedSong::query('song', new Admin());
-    /** @psalm-check-type-exact $_result = ScopedSongBuilder */
+    $_result = Invoice::query('paid', new Customer());
+    /** @psalm-check-type-exact $_result = InvoiceBuilder */
 }
 
 /** Zero-arg call still works (all params optional). */
 function test_query_override_no_args(): void
 {
-    $_result = ScopedSong::query();
-    /** @psalm-check-type-exact $_result = ScopedSongBuilder */
+    $_result = Invoice::query();
+    /** @psalm-check-type-exact $_result = InvoiceBuilder */
 }
 
 /**
@@ -53,7 +53,7 @@ function test_query_override_no_args(): void
  */
 function test_unshadowed_pseudo_preserved(): void
 {
-    $_result = ScopedSong::traitOnlyHelper();
+    $_result = Invoice::traitOnlyHelper();
     /** @psalm-check-type-exact $_result = \Illuminate\Database\Eloquent\Builder */
 }
 ?>
