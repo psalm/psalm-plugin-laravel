@@ -166,6 +166,69 @@ final class ValidationRuleAnalyzer
     }
 
     /**
+     * Look up a resolved rule for an accessor key, with a fallback for
+     * indexed access to wildcard-array-shaped fields.
+     *
+     * `resolveRules()` stores the element rule of a `'field.*'` pattern under
+     * the parent key `'field'` (so a whole-array read like
+     * `$request->input('field')` resolves directly). An indexed read
+     * (`$request->input('field.0')`) arrives with the full dotted key; when
+     * the exact-key lookup misses, strip a single trailing `.\d+` segment and
+     * retry under the parent key. That covers the leaf-wildcard case
+     * highlighted in issue #838 — bulk-input endpoints (mass invite, tag
+     * arrays, address-book import) where `'field.*'` is the idiomatic rule.
+     *
+     * The fallback is deliberately scoped to one trailing numeric segment.
+     * Nested wildcards (`'addresses.*.email'` accessed as
+     * `'addresses.0.email'`) and wildcards with non-numeric segments
+     * (`'preferences.*.email'` accessed as `'preferences.us-west.email'`)
+     * are out of scope — see issue #838's "Out of scope" section. The
+     * nested case is locked in by
+     * `SafeInlineValidateNestedWildcardKnownLimitation.phpt` so any future
+     * deeper-walk implementation is a deliberate, reviewed change.
+     *
+     * Narrow-case soundness note: on a scalar rule like
+     * `'phone' => 'digits:10'`, a dotted read `$request->input('phone.0')`
+     * would also strip to `'phone'` and apply the scalar rule's escape.
+     * Laravel's `input()` with a dotted key on a scalar field returns
+     * `null` at runtime, so no actual validated data flows through the
+     * sink in that construction — there is no practical exploitation
+     * vector for the false-negative direction, and the precision cost of
+     * tracking wildcard origin in the rule map isn't worth it today.
+     *
+     * @param array<string, ResolvedRule> $rules
+     *
+     * @psalm-pure
+     */
+    public static function lookupRuleByKey(array $rules, string $key): ?ResolvedRule
+    {
+        $rule = $rules[$key] ?? null;
+
+        if ($rule !== null) {
+            return $rule;
+        }
+
+        // Hot path: this runs for every keyed accessor read where rules exist.
+        // Hand-rolled scan beats `preg_match('/^(.+)\.\d+$/')`: the vast majority
+        // of keys (any without a numeric trailing segment) bail out on the cheap
+        // last-char check before any allocation. Equivalent to the regex:
+        // require at least one char before the last '.', and a 1+ digit suffix.
+        $lastDot = \strrpos($key, '.');
+
+        if ($lastDot === false || $lastDot === 0) {
+            return null;
+        }
+
+        $suffix = \substr($key, $lastDot + 1);
+
+        if ($suffix === '' || !\ctype_digit($suffix)) {
+            return null;
+        }
+
+        return $rules[\substr($key, 0, $lastDot)] ?? null;
+    }
+
+    /**
      * Resolves a list of rule segments (already split from pipe-delimited or array format)
      * into a ResolvedRule with inferred type, taint escape bitmask, and modifier flags.
      *
