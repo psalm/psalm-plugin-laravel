@@ -300,6 +300,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Validation\InlineValidateRulesCollector::class);
         require_once __DIR__ . '/Handlers/Validation/ValidationTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidationTaintHandler::class);
+        require_once __DIR__ . '/Handlers/Database/WhereArrayValueTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Database\WhereArrayValueTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Helpers/CacheHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\CacheHandler::class);
