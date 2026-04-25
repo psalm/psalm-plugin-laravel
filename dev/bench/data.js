@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777111030941,
+  "lastUpdate": 1777155476742,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -2967,6 +2967,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.87,
             "range": "± 0.27",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bb31f7d727bb9fe793fc423c84af09407b330cf0",
+          "message": "Merge pull request #845 from psalm/codex/794-custom-builder-static\n\nPreserve custom Eloquent builder fluent returns",
+          "timestamp": "2026-04-25T23:15:25+01:00",
+          "tree_id": "86341a32c434f16121a4c6937a547cdf5edc6a94",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bb31f7d727bb9fe793fc423c84af09407b330cf0"
+        },
+        "date": 1777155476369,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.39,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
