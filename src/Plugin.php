@@ -11,6 +11,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
+use Psalm\LaravelPlugin\Providers\PackageProviderRegistrar;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -31,6 +32,16 @@ final class Plugin implements PluginEntryPointInterface
 
         try {
             ApplicationProvider::bootApp();
+
+            // Register the analysed project's own service providers (and those of
+            // its dependencies listed in composer.lock) into the Testbench app.
+            // This allows ContainerResolver to resolve string-alias bindings such
+            // as `app('datatables.request')` that packages register via their own
+            // service providers.  Registration is idempotent in Laravel, so this
+            // is safe even when analysing a full application whose providers are
+            // already loaded from bootstrap/app.php.
+            $projectRoot = \getcwd() ?: '.';
+            PackageProviderRegistrar::register(ApplicationProvider::getApp(), $projectRoot, $output);
 
             if ($pluginConfig->shouldUseMigrations()) {
                 $this->buildSchema($pluginConfig);
