@@ -31,6 +31,13 @@ final class ReturnTypeResolver
      */
     private static array $selfReturnCache = [];
 
+    /**
+     * Cache: "target class::method name" -> returns self?
+     *
+     * @var array<string, bool>
+     */
+    private static array $targetSelfReturnCache = [];
+
     private static ?ForwardingRule $rule = null;
 
     /** @var array<lowercase-string, true> Pre-lowered selfReturnIndicators as a lookup set, set via initForRule() */
@@ -47,6 +54,7 @@ final class ReturnTypeResolver
     public static function initForRule(ForwardingRule $rule): void
     {
         self::$selfReturnCache = [];
+        self::$targetSelfReturnCache = [];
         self::$rule = $rule;
         self::$indicatorsLower = \array_fill_keys(
             \array_map(static fn(string $s): string => \strtolower($s), $rule->selfReturnIndicators),
@@ -73,7 +81,7 @@ final class ReturnTypeResolver
             return null;
         }
 
-        if (self::targetMethodReturnsSelf($codebase, $methodNameLowercase)) {
+        if (self::anyTargetClassMethodReturnsSelf($codebase, $methodNameLowercase)) {
             return new Union([
                 new TGenericObject($sourceClass, $sourceTemplateParams),
             ]);
@@ -97,7 +105,7 @@ final class ReturnTypeResolver
      *
      * @psalm-external-mutation-free
      */
-    private static function targetMethodReturnsSelf(
+    private static function anyTargetClassMethodReturnsSelf(
         Codebase $codebase,
         string $methodNameLowercase,
     ): bool {
@@ -107,41 +115,73 @@ final class ReturnTypeResolver
         }
 
         $rule = self::$rule;
-        \assert($rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule, 'initForRule() must be called before targetMethodReturnsSelf()');
+        \assert($rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule, 'initForRule() must be called before anyTargetClassMethodReturnsSelf()');
 
         $result = false;
 
         foreach ($rule->searchClasses as $searchClass) {
             $returnType = self::getDeclaredReturnType($codebase, $searchClass, $methodNameLowercase);
 
-            if (!$returnType instanceof Union) {
-                continue;
-            }
-
-            foreach ($returnType->getAtomicTypes() as $atomicType) {
-                if (!$atomicType instanceof TNamedObject) {
-                    continue;
-                }
-
-                // Check 1: @return $this / @return static
-                // Psalm stores these as TNamedObject(value="static", is_static=false),
-                // NOT as is_static=true. Match the literal "static" value.
-                if ($atomicType->value === 'static' || $atomicType->is_static) {
-                    $result = true;
-                    break 2;
-                }
-
-                // Check 2: class name matches selfReturnIndicators (e.g., Builder)
-                if (isset(self::$indicatorsLower[\strtolower($atomicType->value)])) {
-                    $result = true;
-                    break 2;
-                }
+            if ($returnType instanceof Union && self::returnTypeIndicatesSelf($returnType)) {
+                $result = true;
+                break;
             }
         }
 
         self::$selfReturnCache[$methodNameLowercase] = $result;
 
         return $result;
+    }
+
+    /**
+     * Check one target class instead of all search classes in the active forwarding rule.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function targetClassMethodReturnsSelf(
+        Codebase $codebase,
+        string $targetClass,
+        string $methodNameLowercase,
+    ): bool {
+        $key = \strtolower($targetClass) . '::' . $methodNameLowercase;
+
+        if (\array_key_exists($key, self::$targetSelfReturnCache)) {
+            return self::$targetSelfReturnCache[$key];
+        }
+
+        $returnType = self::getDeclaredReturnType($codebase, $targetClass, $methodNameLowercase);
+
+        if (!$returnType instanceof Union) {
+            return self::$targetSelfReturnCache[$key] = false;
+        }
+
+        return self::$targetSelfReturnCache[$key] = self::returnTypeIndicatesSelf($returnType);
+    }
+
+    /**
+     * @psalm-external-mutation-free
+     */
+    private static function returnTypeIndicatesSelf(Union $returnType): bool
+    {
+        foreach ($returnType->getAtomicTypes() as $atomicType) {
+            if (!$atomicType instanceof TNamedObject) {
+                continue;
+            }
+
+            // Check 1: @return $this / @return static
+            // Psalm stores these as TNamedObject(value="static", is_static=false),
+            // NOT as is_static=true. Match the literal "static" value.
+            if ($atomicType->value === 'static' || $atomicType->is_static) {
+                return true;
+            }
+
+            // Check 2: class name matches selfReturnIndicators (e.g., Builder)
+            if (isset(self::$indicatorsLower[\strtolower($atomicType->value)])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
