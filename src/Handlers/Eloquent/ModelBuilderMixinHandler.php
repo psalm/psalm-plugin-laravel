@@ -33,7 +33,7 @@ final class ModelBuilderMixinHandler implements MethodReturnTypeProviderInterfac
     /**
      * Cache: class name → whether it is an Eloquent model.
      *
-     * @var array<string, bool>
+     * @var array<lowercase-string, bool>
      */
     private static array $modelClassCache = [];
 
