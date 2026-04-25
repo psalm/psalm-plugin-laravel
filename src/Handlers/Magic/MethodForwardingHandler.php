@@ -467,14 +467,9 @@ final class MethodForwardingHandler implements
             $calledClass = $event->getCalledFqClasslikeName();
 
             if (\is_string($calledClass) && self::isModelClass($codebase, $calledClass)) {
-                /** @var class-string<\Illuminate\Database\Eloquent\Model> */
                 return $calledClass;
             }
 
-            return null;
-        }
-
-        if (!$stmt instanceof MethodCall) {
             return null;
         }
 
@@ -494,7 +489,6 @@ final class MethodForwardingHandler implements
             }
 
             if (self::isModelClass($codebase, $atomicType->value)) {
-                /** @var class-string<\Illuminate\Database\Eloquent\Model> */
                 return $atomicType->value;
             }
         }
