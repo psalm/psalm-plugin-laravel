@@ -32,13 +32,13 @@ class Builder implements BuilderContract
     /**
      * @param  string  $identifier
      * @param  \Illuminate\Database\Eloquent\Scope|\Closure  $scope
-     * @return self<TModel>
+     * @return $this
      */
     public function withGlobalScope($identifier, $scope) {}
 
     /**
      * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
-     * @return self<TModel>
+     * @return $this
      */
     public function withoutGlobalScope($scope) {}
 
@@ -55,7 +55,7 @@ class Builder implements BuilderContract
 
     /**
      * @param  array|null  $scopes
-     * @return self<TModel>
+     * @return $this
      */
     public function withoutGlobalScopes(array $scopes = null) {}
 
@@ -68,13 +68,13 @@ class Builder implements BuilderContract
 
     /**
      * @param  mixed  $id
-     * @return self<TModel>
+     * @return $this
      */
     public function whereKey($id) {}
 
     /**
      * @param  mixed  $id
-     * @return self<TModel>
+     * @return $this
      */
     public function whereKeyNot($id) {}
 
@@ -85,7 +85,7 @@ class Builder implements BuilderContract
      * @param  mixed   $operator
      * @param  mixed   $value
      * @param  string  $boolean
-     * @return self<TModel>
+     * @return $this
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
@@ -98,7 +98,7 @@ class Builder implements BuilderContract
      * @param  string  $operator
      * @param  \DateTimeInterface|string|null  $value
      * @param  string  $boolean
-     * @return self<TModel>
+     * @return $this
      */
     public function whereDate($column, $operator, $value = null, $boolean = 'and') {}
 
@@ -106,7 +106,7 @@ class Builder implements BuilderContract
      * @param  \Closure|array|string  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return self<TModel>
+     * @return $this
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
@@ -119,7 +119,7 @@ class Builder implements BuilderContract
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return self<TModel>
+     * @return $this
      */
     public function whereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -128,7 +128,7 @@ class Builder implements BuilderContract
      * @param  \Closure|string|array<mixed>|\Illuminate\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return self<TModel>
+     * @return $this
      */
     public function whereRelation($relation, $column, $operator = null, $value = null) {}
 
@@ -144,7 +144,7 @@ class Builder implements BuilderContract
      * @param  \Closure|string|array<int, string>|\Illuminate\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return self<TModel>
+     * @return $this
      */
     public function orWhereRelation($relation, $column, $operator = null, $value = null) {}
 
@@ -153,7 +153,7 @@ class Builder implements BuilderContract
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return self<TModel>
+     * @return $this
      */
     public function orWhereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -166,7 +166,7 @@ class Builder implements BuilderContract
      * @param  int  $count
      * @param  string  $boolean
      * @param  \Closure|null  $callback
-     * @return self<TModel>
+     * @return $this
      */
     public function hasMorph($relation, $types, $operator = '>=', $count = 1, $boolean = 'and', \Closure $callback = null) {}
 
@@ -177,7 +177,7 @@ class Builder implements BuilderContract
      * @param  string|array<string>  $types
      * @param  string  $operator
      * @param  int  $count
-     * @return self<TModel>
+     * @return $this
      */
     public function orHasMorph($relation, $types, $operator = '>=', $count = 1) {}
 
@@ -188,7 +188,7 @@ class Builder implements BuilderContract
      * @param  string|array<string>  $types
      * @param  string  $boolean
      * @param  \Closure|null  $callback
-     * @return self<TModel>
+     * @return $this
      */
     public function doesntHaveMorph($relation, $types, $boolean = 'and', \Closure $callback = null) {}
 
@@ -197,7 +197,7 @@ class Builder implements BuilderContract
      * @template TChildModel of Model
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
-     * @return self<TModel>
+     * @return $this
      */
     public function orDoesntHaveMorph($relation, $types) {}
 
@@ -209,7 +209,7 @@ class Builder implements BuilderContract
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return self<TModel>
+     * @return $this
      */
     public function whereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -221,7 +221,7 @@ class Builder implements BuilderContract
      * @param  \Closure|null  $callback
      * @param  string  $operator
      * @param  int  $count
-     * @return self<TModel>
+     * @return $this
      */
     public function orWhereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -231,7 +231,7 @@ class Builder implements BuilderContract
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
      * @param  \Closure|null  $callback
-     * @return self<TModel>
+     * @return $this
      */
     public function whereDoesntHaveMorph($relation, $types, \Closure $callback = null) {}
 
@@ -241,39 +241,39 @@ class Builder implements BuilderContract
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
      * @param  \Closure|null  $callback
-     * @return self<TModel>
+     * @return $this
      */
     public function orWhereDoesntHaveMorph($relation, $types, \Closure $callback = null) {}
 
     /**
      * @param  \Illuminate\Database\Eloquent\Builder<TModel>  $from
-     * @return self<TModel>
+     * @return $this
      */
     public function mergeConstraintsFrom(\Illuminate\Database\Eloquent\Builder $from) {}
 
     /**
      * @param  string  $relation
      * @param  \Closure|null  $callback
-     * @return self<TModel>
+     * @return $this
      */
     public function orWhereDoesntHave($relation, \Closure $callback = null) {}
 
     /**
      * @param  string  $relation
      * @param  \Closure|null  $callback
-     * @return self<TModel>
+     * @return $this
      */
     public function whereDoesntHave($relation, \Closure $callback = null) {}
 
     /**
      * @param  string  $column
-     * @return self<TModel>
+     * @return $this
      */
     public function latest($column = null) {}
 
     /**
      * @param  string  $column
-     * @return self<TModel>
+     * @return $this
      */
     public function oldest($column = null) {}
 
@@ -432,7 +432,7 @@ class Builder implements BuilderContract
      * @param  int  $count
      * @param  string  $boolean
      * @param  \Closure|null  $callback
-     * @return self<TModel>
+     * @return $this
      *
      * @throws \RuntimeException
      */
@@ -442,7 +442,7 @@ class Builder implements BuilderContract
      * @param  string  $relation
      * @param  string  $operator
      * @param  int  $count
-     * @return self<TModel>
+     * @return $this
      */
     public function orHas($relation, $operator = '>=', $count = 1) {}
 
@@ -450,13 +450,13 @@ class Builder implements BuilderContract
      * @param  string  $relation
      * @param  string  $boolean
      * @param  \Closure|null  $callback
-     * @return self<TModel>
+     * @return $this
      */
     public function doesntHave($relation, $boolean = 'and', \Closure $callback = null) {}
 
     /**
      * @param  string  $relation
-     * @return self<TModel>
+     * @return $this
      */
     public function orDoesntHave($relation) {}
 
@@ -607,19 +607,19 @@ class Builder implements BuilderContract
      * Call the given local model scopes.
      *
      * @param  array|non-empty-string  $scopes
-     * @return self<TModel>
+     * @return static|mixed
      */
     public function scopes($scopes) {}
 
     /**
-     * @return self<TModel>
+     * @return static
      */
     public function applyScopes() {}
 
     /**
      * @param  mixed  $relations
      * @param  \Closure|string|null  $callback
-     * @return self<TModel>
+     * @return $this
      *
      * @psalm-variadic
      */
@@ -627,7 +627,7 @@ class Builder implements BuilderContract
 
     /**
      * @param  mixed  $relations
-     * @return self<TModel>
+     * @return $this
      *
      * @psalm-variadic
      */
@@ -646,19 +646,20 @@ class Builder implements BuilderContract
 
     /**
      * @param  \Illuminate\Database\Query\Builder  $query
-     * @return self<TModel>
+     * @return $this
      */
     public function setQuery($query) {}
 
     /**
      * @param array $eagerLoad
-     * @return self<TModel>
+     * @return $this
      */
     public function setEagerLoads(array $eagerLoad) {}
 
     /**
-     * @param TModel $model
-     * @return self<TModel>
+     * @template TNewModel of \Illuminate\Database\Eloquent\Model
+     * @param TNewModel $model
+     * @return static<TNewModel>
      */
     public function setModel(Model $model) {}
 
@@ -675,7 +676,7 @@ class Builder implements BuilderContract
      * @param  mixed  $operator
      * @param  mixed  $value
      * @param  string  $boolean
-     * @return self<TModel>
+     * @return $this
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql
@@ -689,7 +690,7 @@ class Builder implements BuilderContract
      * @param  (\Closure(self<TModel>): mixed)|array|string|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
-     * @return self<TModel>
+     * @return $this
      *
      * @psalm-taint-sink sql $column
      * @psalm-taint-escape sql

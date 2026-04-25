@@ -53,7 +53,9 @@ final class EloquentBuilderCustomerRepository
 
     /** @return Builder<Customer> */
     public function getWhereBuilderViaInstance(array $attributes): Builder {
-        return (new Customer())->where($attributes);
+        $query = (new Customer())->where($attributes);
+        /** @psalm-check-type-exact $query = Builder<Customer> */
+        return $query;
     }
 
     public function chunkReturnsTemplatedCollection(): void
@@ -86,7 +88,9 @@ final class EloquentBuilderCustomerRepository
     /** @return Builder<Customer> */
     public function getWhereBuilderViaStatic(array $attributes): Builder
     {
-      return Customer::where($attributes);
+      $query = Customer::where($attributes);
+      /** @psalm-check-type-exact $query = Builder<Customer> */
+      return $query;
     }
 
 //    /** @return Collection<int, Customer> */
