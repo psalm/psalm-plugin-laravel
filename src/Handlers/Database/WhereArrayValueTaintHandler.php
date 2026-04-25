@@ -189,9 +189,7 @@ final class WhereArrayValueTaintHandler implements
 
             $className = $atomic->value;
 
-            if ($className === QueryBuilder::class
-                || $className === EloquentBuilder::class
-                || $className === Relation::class
+            if (in_array($className, [QueryBuilder::class, EloquentBuilder::class, Relation::class], true)
             ) {
                 return true;
             }
