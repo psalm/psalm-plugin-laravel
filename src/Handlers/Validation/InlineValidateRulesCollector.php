@@ -93,18 +93,21 @@ use Psalm\StatementsSource;
  * live function-likes and sidesteps any `spl_object_id` reuse concern that
  * would otherwise appear when analyzers are garbage-collected mid-run.
  *
- * The variable-binding cache is updated in `beforeExpressionAnalysis`, not
- * `afterExpressionAnalysis`. The reason is ordering: `AssignmentAnalyzer`
- * fires the LHS `removeTaints` event for `$v` *during* the assignment's
- * own analysis (see `AssignmentAnalyzer::analyzeAssignValueDataFlow`),
- * which is before any post-expression hook fires. Updating from
- * `afterExpressionAnalysis` would leave a stale cache entry visible to
- * the in-flight LHS event for a reassignment like
- * `$v = $request->input('k'); $v = $_POST['raw'];` — the second LHS event
- * would silently apply the cached header/cookie escape to the raw input
- * source, masking a real `TaintedHeader`. Doing the population (and
- * eviction-by-default) in `beforeExpressionAnalysis` ensures the cache is
- * up-to-date before any LHS event for the new binding fires.
+ * The variable-binding cache is updated in `beforeExpressionAnalysis` (for
+ * `$v = $req->input('k')`-style assignments) and `beforeStatementAnalysis`
+ * (for `foreach ($req->array('k') as $v)`-style direct foreach iteration,
+ * issue #840), not `afterExpressionAnalysis`. The reason is ordering:
+ * `AssignmentAnalyzer` fires the LHS `removeTaints` event for `$v` *during*
+ * the assignment's own analysis (see
+ * `AssignmentAnalyzer::analyzeAssignValueDataFlow`), which is before any
+ * post-expression hook fires. Updating from `afterExpressionAnalysis` would
+ * leave a stale cache entry visible to the in-flight LHS event for a
+ * reassignment like `$v = $request->input('k'); $v = $_POST['raw'];` — the
+ * second LHS event would silently apply the cached header/cookie escape to
+ * the raw input source, masking a real `TaintedHeader`. Doing the
+ * population (and eviction-by-default) in the relevant `before*Analysis`
+ * hook ensures the cache is up-to-date before any LHS event for the new
+ * binding fires.
  *
  * ## Soundness caveats
  *
@@ -155,15 +158,20 @@ use Psalm\StatementsSource;
  *     the recognised accessor methods don't populate the cache, so the
  *     binding keeps the original taint and a `header` sink on `$v` still
  *     fires. Reassignment via `Expr\Assign` (`$v = $_POST['raw']`),
- *     `Expr\AssignRef` (`$v = &$other`), list / array destructuring
- *     (`[$a, $v] = ...`, `list($a, $v) = ...`), and `foreach (... as $v)`
- *     all correctly *evict* a stale cache entry for the rebound name
- *     (see `beforeExpressionAnalysis` for the Assign / AssignRef /
- *     destructuring forms and `beforeStatementAnalysis` for foreach),
- *     so a subsequent reassignment to raw user input via these paths
- *     does NOT silently inherit the previous escape. Eviction does not
- *     repopulate from these paths — the new value comes from a
- *     container or reference target, not a tracked accessor call.
+ *     `Expr\AssignRef` (`$v = &$other`), and list / array destructuring
+ *     (`[$a, $v] = ...`, `list($a, $v) = ...`) all correctly *evict* a
+ *     stale cache entry for the rebound name (see
+ *     `beforeExpressionAnalysis`), so a subsequent reassignment to raw
+ *     user input via these paths does NOT silently inherit the previous
+ *     escape. Eviction does not repopulate from these paths — the new
+ *     value comes from a container or reference target, not a tracked
+ *     accessor call. `foreach (... as $v)` is the exception (issue #840):
+ *     it evicts AND, when the iterable is a recognised keyed-accessor
+ *     call on a tracked Request (`foreach ($req->array('k') as $v)`),
+ *     repopulates the cache for `$v` with the rule's escape (see
+ *     `beforeStatementAnalysis`). This compensates for Psalm's
+ *     `arrayvalue-fetch` edge that bypasses the `removeTaints` mask
+ *     applied to the call expression.
  *   - A tracked binding wrapped in a nested assignment whose outer LHS
  *     is the same variable (`$v = foo($v = $request->input('k'))`) may
  *     temporarily expose the inner population to the outer LHS event;
@@ -237,10 +245,11 @@ final class InlineValidateRulesCollector implements
      * `removedTaints` bitmask of the rule covering the field that the
      * variable was bound to.
      *
-     * Populated and evicted in `beforeExpressionAnalysis` so the cache
-     * state is correct *before* `AssignmentAnalyzer` fires the LHS
-     * `removeTaints` event for the new binding — see "Cache lifecycle"
-     * below for why ordering matters.
+     * Populated and evicted in `beforeExpressionAnalysis` (Assign /
+     * AssignRef / destructuring) and `beforeStatementAnalysis` (foreach,
+     * issue #840) so the cache state is correct *before*
+     * `AssignmentAnalyzer` fires the LHS `removeTaints` event for the new
+     * binding — see "Cache lifecycle" below for why ordering matters.
      *
      * @var array<int, array<string, int>>
      */
@@ -364,6 +373,20 @@ final class InlineValidateRulesCollector implements
      * raw iterable element on the loop-variable edge — a real false
      * negative at downstream sinks.
      *
+     * Also populates the loop variable's escape cache when the iterable is
+     * a recognised keyed accessor (`foreach ($req->array('emails') as $e)`,
+     * issue #840). Psalm's `arrayvalue-fetch` for a direct method call
+     * builds a flow edge from the source declaration to the element,
+     * bypassing the `removeTaints` mask applied to the call expression.
+     * Caching the escape on the loop variable makes the bare-Variable
+     * lookup in {@see ValidationTaintHandler::removeTaints} fire at every
+     * `$e` read inside the body, which removes the kind on each outgoing
+     * edge. Variable-bound iterables (`$xs = $req->array('k'); foreach
+     * ($xs as $e)`) work without explicit population here: the rule's
+     * `removeTaints` was already applied to the accessor call when `$xs`
+     * was bound, and Psalm's own flow tracking carries that through the
+     * iteration to `$e`.
+     *
      * @inheritDoc
      */
     #[\Override]
@@ -375,9 +398,10 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        // Nothing to evict when no variable bindings have been cached.
-        // Same fast bail-out rationale as `beforeExpressionAnalysis`.
-        if (self::$inputVariablesByFunction === []) {
+        // Fast bail-out: nothing to evict OR populate when no rules and no
+        // existing variable bindings exist. Eviction needs a populated
+        // variable cache; population needs a populated rules cache.
+        if (self::$inputVariablesByFunction === [] && self::$rulesByFunction === []) {
             return null;
         }
 
@@ -391,6 +415,21 @@ final class InlineValidateRulesCollector implements
 
         if ($stmt->keyVar instanceof \PhpParser\Node\Expr) {
             self::evictForeachTarget($stmt->keyVar, $functionId);
+        }
+
+        // After eviction, repopulate the loop variable's escape cache when
+        // the iterable is a tracked keyed-accessor call. Only the value
+        // variable is relevant — the foreach key is the array index, never
+        // a rule-covered field. Destructuring (`as [$a, $b]`) is also out
+        // of scope: `$req->array('k')` returns array<scalar, mixed> so the
+        // per-element type is opaque, and there's no per-element rule to
+        // distribute across the destructured slots.
+        if ($stmt->valueVar instanceof Variable && \is_string($stmt->valueVar->name)) {
+            $escape = self::resolveEscapeFromAccessorRhs($stmt->expr, $functionId);
+
+            if ($escape !== null) {
+                self::$inputVariablesByFunction[$functionId][$stmt->valueVar->name] = $escape;
+            }
         }
 
         return null;
@@ -598,12 +637,15 @@ final class InlineValidateRulesCollector implements
 
     /**
      * Look up the cached escape mask for a local variable that was bound
-     * to a tracked `$req->{input|string|str|validated}('key')` read.
+     * to a tracked accessor read on a validated Request — either via
+     * `$v = $req->{accessor}('key')` (see
+     * {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS} for the full
+     * list) or via `foreach ($req->{accessor}('key') as $v)` (issue #840).
      *
      * Returns `null` when the variable was never bound to such a read in
      * this scope, or has since been reassigned to anything else (the
-     * eviction in `beforeExpressionAnalysis` clears the slot on every
-     * fresh assignment to the same name).
+     * eviction in `beforeExpressionAnalysis` / `beforeStatementAnalysis`
+     * clears the slot on every fresh assignment to the same name).
      *
      * @internal shared only with {@see ValidationTaintHandler}.
      *
@@ -667,15 +709,18 @@ final class InlineValidateRulesCollector implements
     }
 
     /**
-     * Inspect an Assign RHS and return the rule's `removedTaints` mask if
-     * the RHS is a `$req->{input|string|str|validated}('key')` call where
-     * `$req` already has rules cached for this scope and `'key'` is one
-     * of those rule-covered fields.
+     * Inspect an expression (an `Expr\Assign` RHS or a `Stmt\Foreach_`
+     * iterable) and return the rule's `removedTaints` mask if it is a
+     * recognised keyed-accessor call (see
+     * {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS}) where the
+     * caller variable already has rules cached for this scope and the
+     * literal key matches one of those rule-covered fields.
      *
      * Pattern requirements (mirrors {@see ValidationTaintHandler::matchKeyedAccessor},
      * with the difference that the type-based caller check is replaced by
      * a name-based lookup against the rule cache — type inference for the
-     * RHS hasn't run yet at the `BeforeExpressionAnalysis` callsite):
+     * expression hasn't run yet at the `BeforeExpressionAnalysis` /
+     * `BeforeStatementAnalysis` callsite):
      *
      *   - `MethodCall` with a recognised accessor method name
      *   - exactly one argument (a default arg can carry independent taint
@@ -722,9 +767,13 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        $rule = $callerRules[$keyArg->value] ?? null;
+        // Share the wildcard-suffix fallback with the direct-call path in
+        // ValidationTaintHandler so `$v = $request->input('email.0')` binds
+        // the same escape as `$request->input('email.0')` on a validated
+        // `'email.*'` rule (issue #838).
+        $rule = ValidationRuleAnalyzer::lookupRuleByKey($callerRules, $keyArg->value);
 
-        if ($rule === null) {
+        if (!$rule instanceof \Psalm\LaravelPlugin\Handlers\Validation\ResolvedRule) {
             return null;
         }
 

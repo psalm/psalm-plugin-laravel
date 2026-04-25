@@ -558,4 +558,96 @@ final class ValidationRuleAnalyzerTest extends TestCase
             $rule->removedTaints,
         );
     }
+
+    // --- lookupRuleByKey (#838 wildcard-suffix fallback) ---
+
+    #[Test]
+    public function lookup_by_key_returns_exact_match_when_present(): void
+    {
+        $emailRule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'email']);
+        $rules = ['email' => $emailRule];
+
+        $this->assertSame($emailRule, ValidationRuleAnalyzer::lookupRuleByKey($rules, 'email'));
+    }
+
+    #[Test]
+    public function lookup_by_key_returns_null_when_key_missing_and_no_numeric_suffix(): void
+    {
+        $rules = ['email' => ValidationRuleAnalyzer::resolveRuleSegments(['email'])];
+
+        $this->assertNull(ValidationRuleAnalyzer::lookupRuleByKey($rules, 'phone'));
+    }
+
+    #[Test]
+    public function lookup_by_key_strips_trailing_numeric_segment_and_retries(): void
+    {
+        // Simulates `'email.*' => [..., 'email']` after resolveRules expansion:
+        // the parent key 'email' holds the element rule, so `input('email.0')`
+        // strips `.0` and finds it.
+        $parentRule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'email']);
+        $rules = ['email' => $parentRule];
+
+        $this->assertSame($parentRule, ValidationRuleAnalyzer::lookupRuleByKey($rules, 'email.0'));
+    }
+
+    #[Test]
+    public function lookup_by_key_handles_multi_digit_indices(): void
+    {
+        // Laravel's dot-notation input indexing allows any non-negative integer.
+        $parentRule = ValidationRuleAnalyzer::resolveRuleSegments(['email']);
+        $rules = ['email' => $parentRule];
+
+        $this->assertSame($parentRule, ValidationRuleAnalyzer::lookupRuleByKey($rules, 'email.42'));
+    }
+
+    #[Test]
+    public function lookup_by_key_does_not_strip_non_numeric_suffix(): void
+    {
+        // `input('email.foo')` is a deliberately different access shape from
+        // `input('email.0')` — it typically addresses a nested object, not
+        // an array element. The fallback must only rewrite purely numeric
+        // trailing segments so nested-wildcard patterns stay out of scope.
+        $rules = ['email' => ValidationRuleAnalyzer::resolveRuleSegments(['email'])];
+
+        $this->assertNull(ValidationRuleAnalyzer::lookupRuleByKey($rules, 'email.foo'));
+    }
+
+    #[Test]
+    public function lookup_by_key_does_not_walk_past_one_segment(): void
+    {
+        // Nested wildcards (`'addresses.*.email'` accessed as `addresses.0.email`)
+        // are explicitly out of scope for #838. `addresses.0.email` does not
+        // end in `.\d+`, so the regex fails and no fallback applies. Even the
+        // parent `addresses` key would be wrong for this access — the rule
+        // describes the `.email` leaf, not the whole address object.
+        $rules = ['addresses' => ValidationRuleAnalyzer::resolveRuleSegments(['email'])];
+
+        $this->assertNull(ValidationRuleAnalyzer::lookupRuleByKey($rules, 'addresses.0.email'));
+    }
+
+    #[Test]
+    public function lookup_by_key_returns_null_when_numeric_suffix_strips_to_missing_parent(): void
+    {
+        // No 'phone' rule — stripping `.0` from 'phone.0' yields 'phone',
+        // which is still missing. Fall through to null.
+        $rules = ['email' => ValidationRuleAnalyzer::resolveRuleSegments(['email'])];
+
+        $this->assertNull(ValidationRuleAnalyzer::lookupRuleByKey($rules, 'phone.0'));
+    }
+
+    #[Test]
+    public function lookup_by_key_prefers_exact_match_over_fallback(): void
+    {
+        // Contrived but valid: both 'items' (whole) and 'items.0' (specific
+        // element) rules coexist. The exact key must win — the fallback is
+        // a miss-recovery step, not a competing lookup.
+        $exactRule = ValidationRuleAnalyzer::resolveRuleSegments(['string']);
+        $parentRule = ValidationRuleAnalyzer::resolveRuleSegments(['email']);
+        $rules = [
+            'items' => $parentRule,
+            'items.0' => $exactRule,
+        ];
+
+        $this->assertSame($exactRule, ValidationRuleAnalyzer::lookupRuleByKey($rules, 'items.0'));
+    }
 }
