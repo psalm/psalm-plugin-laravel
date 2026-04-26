@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777157617495,
+  "lastUpdate": 1777195818564,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3036,6 +3036,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Wall time",
             "value": 21.82,
+            "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d9594d5e1be26e1dca6ba2e235bffa12e4000c5f",
+          "message": "Merge pull request #846 from psalm/codex/794-custom-builder-static\n\nFix `scopes()` chaining on builder contracts",
+          "timestamp": "2026-04-26T10:27:57+01:00",
+          "tree_id": "d49639a5af51728dbc23407db26e79c23ae3dfdc",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d9594d5e1be26e1dca6ba2e235bffa12e4000c5f"
+        },
+        "date": 1777195818235,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.09,
             "range": "± 0.08",
             "unit": "s"
           },
