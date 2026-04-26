@@ -1,0 +1,104 @@
+<?php
+
+namespace Illuminate\Auth;
+
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Contracts\Auth\Factory as FactoryContract;
+use Illuminate\Contracts\Auth\Guard;
+use Illuminate\Contracts\Auth\StatefulGuard;
+use Illuminate\Contracts\Auth\UserProvider;
+use Symfony\Component\HttpFoundation\Response;
+
+/**
+ * @mixin Guard
+ * @mixin StatefulGuard
+ */
+class AuthManager implements FactoryContract
+{
+    public function check(): bool {}
+
+    public function guest(): bool {}
+
+    public function authenticate(): Authenticatable {}
+
+    public function user(): ?Authenticatable {}
+
+    /**
+     * @return int|string|null
+     */
+    public function id() {}
+
+    /**
+     * @param  array<array-key, mixed>  $credentials
+     */
+    public function validate(array $credentials = []): bool {}
+
+    public function hasUser(): bool {}
+
+    public function setUser(Authenticatable $user): Guard {}
+
+    public function forgetUser(): Guard {}
+
+    public function getProvider(): UserProvider {}
+
+    public function setProvider(UserProvider $provider): void {}
+
+    /**
+     * @param  array<array-key, mixed>  $credentials
+     */
+    public function attempt(array $credentials = [], bool $remember = false): bool {}
+
+    /**
+     * @param  array<array-key, mixed>  $credentials
+     */
+    public function once(array $credentials = []): bool {}
+
+    public function login(Authenticatable $user, bool $remember = false): void {}
+
+    /**
+     * @param  mixed  $id
+     *
+     * @return Authenticatable|false
+     */
+    public function loginUsingId($id, bool $remember = false) {}
+
+    /**
+     * @param  mixed  $id
+     *
+     * @return Authenticatable|false
+     */
+    public function onceUsingId($id) {}
+
+    public function viaRemember(): bool {}
+
+    public function logout(): void {}
+
+    /**
+     * @param  array<array-key, mixed>  $extraConditions
+     */
+    public function basic(string $field = 'email', array $extraConditions = []): ?Response {}
+
+    /**
+     * @param  array<array-key, mixed>  $extraConditions
+     */
+    public function onceBasic(string $field = 'email', array $extraConditions = []): ?Response {}
+
+    /**
+     * @param  array<array-key, mixed>  $credentials
+     * @param  array<array-key, mixed>|callable|null  $callbacks
+     */
+    public function attemptWhen(array $credentials = [], array|callable|null $callbacks = null, bool $remember = false): bool {}
+
+    public function logoutCurrentDevice(): void {}
+
+    public function logoutOtherDevices(string $password): ?Authenticatable {}
+
+    /**
+     * @param  mixed  $callback
+     */
+    public function attempting($callback): void {}
+
+    public function getLastAttempted(): ?Authenticatable {}
+
+    public function getUser(): ?Authenticatable {}
+}

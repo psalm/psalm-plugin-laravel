@@ -102,6 +102,20 @@ final class AuthHandlerTest extends TestCase
         $this->assertTrue($params[0]->is_optional);
     }
 
+    public function testGuardNameParameterTypeTracksLaravelVersion(): void
+    {
+        $method = new \ReflectionMethod(AuthHandler::class, 'getGuardNameParameterType');
+
+        $this->assertStringNotContainsString(
+            'UnitEnum',
+            $method->invoke(null, '12.99.0')->getId(),
+        );
+        $this->assertStringContainsString(
+            'UnitEnum',
+            $method->invoke(null, '13.0.0')->getId(),
+        );
+    }
+
     public function testGetMethodParamsForUnknownMethod(): void
     {
         $event = new MethodParamsProviderEvent(
@@ -115,8 +129,8 @@ final class AuthHandlerTest extends TestCase
     }
 
     /**
-     * For AuthManager / Factory the methods are real PHP (or routed via @mixin
-     * Guard/StatefulGuard), so Psalm can resolve their parameter types from source.
+     * For AuthManager / Factory the methods are declared in source or stubs, so Psalm can
+     * resolve their parameter types without facade-specific overrides.
      * Returning our facade-oriented overrides there would narrow `guard()`'s
      * \UnitEnum|string|null parameter down to string|null and flag valid enum calls
      * as InvalidArgument. See {@see AuthHandler::getMethodParams}.

@@ -74,11 +74,38 @@ function _diAuthManager(\Illuminate\Auth\AuthManager $authManager): void {
     $_amUser = $authManager->user();
     /** @psalm-check-type-exact $_amUser = \Illuminate\Foundation\Auth\User|null */
 
+    $_amAuthenticate = $authManager->authenticate();
+    /** @psalm-check-type-exact $_amAuthenticate = \Illuminate\Foundation\Auth\User */
+
+    $_amGetUser = $authManager->getUser();
+    /** @psalm-check-type-exact $_amGetUser = \Illuminate\Foundation\Auth\User|null */
+
+    $_amGetLastAttempted = $authManager->getLastAttempted();
+    /** @psalm-check-type-exact $_amGetLastAttempted = \Illuminate\Foundation\Auth\User|null */
+
+    $_amAttempt = $authManager->attempt(['email' => 'me@example.com', 'password' => 'secret']);
+    /** @psalm-check-type-exact $_amAttempt = bool */
+
+    $_amAttemptRemember = $authManager->attempt(['email' => 'me@example.com', 'password' => 'secret'], true);
+    /** @psalm-check-type-exact $_amAttemptRemember = bool */
+
+    $_amAttemptWhen = $authManager->attemptWhen(
+        ['email' => 'me@example.com', 'password' => 'secret'],
+        static fn (): bool => true,
+        true,
+    );
+    /** @psalm-check-type-exact $_amAttemptWhen = bool */
+
     $_amLoginUsingId = $authManager->loginUsingId(1);
     /** @psalm-check-type-exact $_amLoginUsingId = \Illuminate\Foundation\Auth\User|false */
 
+    $_amLoginUsingIdWithRemember = $authManager->loginUsingId(1, true);
+    /** @psalm-check-type-exact $_amLoginUsingIdWithRemember = \Illuminate\Foundation\Auth\User|false */
+
     $_amOnceUsingId = $authManager->onceUsingId(1);
     /** @psalm-check-type-exact $_amOnceUsingId = \Illuminate\Foundation\Auth\User|false */
+
+    $authManager->logout();
 
     // Chained calls — the acceptance example from issue #765
     $_amChainedUser = $authManager->guard('web')->user();

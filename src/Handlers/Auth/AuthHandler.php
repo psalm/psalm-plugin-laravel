@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
+use Illuminate\Foundation\Application;
 use Psalm\LaravelPlugin\Handlers\Auth\Concerns\ExtractsGuardNameFromCallLike;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -138,11 +139,12 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
      * @method annotations on facades causes an UnexpectedValueException crash. We must return
      * explicit params for every method we handle.
      *
-     * This override is scoped to the Auth facade only. For AuthManager and the Factory contract
-     * the methods are real (or come from @mixin Guard/StatefulGuard), so Psalm can derive
-     * parameter types from the source without our help. Returning our overrides there would
-     * narrow signatures (e.g. guard()'s \UnitEnum|string|null parameter down to string|null)
-     * and produce false positives on valid calls.
+     * This override is scoped to the Auth facade only. For AuthManager, forwarded guard methods
+     * are declared in our AuthManager stub so Psalm can derive parameter types without routing
+     * through __call. For the Factory contract, the methods it owns are real source methods.
+     * Returning our overrides there would narrow signatures (e.g. guard()'s
+     * \UnitEnum|string|null parameter down to string|null) and produce false positives on valid
+     * calls.
      *
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/454
      */
@@ -160,13 +162,13 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
             // SessionGuard::getLastAttempted() — all take no parameters
             'user', 'getuser', 'authenticate', 'getlastattempted' => [],
 
-            // AuthManager::guard(?string $name = null)
+            // AuthManager::guard(\UnitEnum|string|null $name = null) on Laravel 13+
             'guard' => [
                 new FunctionLikeParameter(
                     'name',
                     false,
-                    new Type\Union([new Type\Atomic\TString(), new Type\Atomic\TNull()]),
-                    new Type\Union([new Type\Atomic\TString(), new Type\Atomic\TNull()]),
+                    self::getGuardNameParameterType(),
+                    self::getGuardNameParameterType(),
                     is_optional: true,
                     default_type: Type::getNull(),
                 ),
@@ -190,5 +192,22 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
 
             default => null,
         };
+    }
+
+    /** @psalm-pure */
+    private static function getGuardNameParameterType(?string $laravelVersion = null): Type\Union
+    {
+        $laravelVersion ??= Application::VERSION;
+
+        $types = [
+            new Type\Atomic\TString(),
+            new Type\Atomic\TNull(),
+        ];
+
+        if (\version_compare($laravelVersion, '13.0.0', '>=')) {
+            $types[] = new Type\Atomic\TNamedObject(\UnitEnum::class);
+        }
+
+        return new Type\Union($types);
     }
 }
