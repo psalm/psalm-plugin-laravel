@@ -1,3 +1,5 @@
+--SKIPIF--
+<?php require getcwd() . '/vendor/autoload.php'; if (!\Composer\InstalledVersions::satisfies(new \Composer\Semver\VersionParser(), 'laravel/framework', '^12.0.0')) { echo 'skip requires Laravel 12+'; }
 --FILE--
 <?php declare(strict_types=1);
 

@@ -51,7 +51,8 @@ function test_static_distinct_variadic(): void
 function test_custom_builder_static_select_variadic(): void
 {
     $_result = WorkOrder::select('title', 'body');
-    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder>&static */
+    // L12: WorkOrderBuilder<WorkOrder>&static; L11: Eloquent\Builder<WorkOrder>&static (handler differs)
+    /** @psalm-check-type $_result = Illuminate\Database\Eloquent\Builder */
 }
 
 // --- Arity preservation: required params still enforced ---

@@ -57,18 +57,12 @@ final class GitHubActionsTarget implements CiTargetInterface
         return 'GitHub Actions';
     }
 
-    /**
-     * @psalm-impure
-     */
     #[\Override]
     public function detect(string $projectRoot): bool
     {
         return \is_dir($this->joinPath($projectRoot, '.github'));
     }
 
-    /**
-     * @psalm-impure
-     */
     #[\Override]
     public function plan(string $projectRoot): CiPlan
     {

@@ -391,3 +391,13 @@ function context($key = null, $default = null) {}
  * @return ($callback is null ? \Illuminate\Support\Defer\DeferredCallbackCollection : \Illuminate\Support\Defer\DeferredCallback)
  */
 function defer(?callable $callback = null, ?string $name = null, bool $always = false) {}
+
+/**
+ * Generate the URL to a named route.
+ *
+ * @param  string  $name
+ * @param  scalar|array|null  $parameters
+ * @param  bool  $absolute
+ * @return string
+ */
+function route($name, $parameters = [], $absolute = true) {}

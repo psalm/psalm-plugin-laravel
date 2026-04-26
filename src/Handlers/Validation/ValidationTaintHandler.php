@@ -13,7 +13,6 @@ use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
@@ -106,20 +105,20 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      * producing false negatives on sinks that consume the narrowed value.
      */
     #[\Override]
-    public static function addTaints(AddRemoveTaintsEvent $event): int
+    public static function addTaints(AddRemoveTaintsEvent $event): array
     {
         if (self::isValidationMethodCall($event)) {
-            return TaintKind::ALL_INPUT;
+            return ValidationRuleAnalyzer::allInputTaints();
         }
 
         // ValidatedInput::input('key') also has its return type narrowed
         // (see ValidatedTypeHandler::resolveValidatedInputMethod), so the
         // stub source is dropped there as well.
         if (self::isValidatedInputAccessor($event)) {
-            return TaintKind::ALL_INPUT;
+            return ValidationRuleAnalyzer::allInputTaints();
         }
 
-        return 0;
+        return [];
     }
 
     /**
@@ -148,7 +147,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      * kind either rule escapes.
      */
     #[\Override]
-    public static function removeTaints(AddRemoveTaintsEvent $event): int
+    public static function removeTaints(AddRemoveTaintsEvent $event): array
     {
         $expr = $event->getExpr();
 
@@ -164,10 +163,11 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         $accessor = self::matchKeyedAccessor($event);
 
         if ($accessor === null) {
-            return 0;
+            return [];
         }
 
-        $removed = 0;
+        /** @var list<string> $removed */
+        $removed = [];
 
         // FormRequest::rules() path — covers both direct FormRequest callers
         // and ValidatedInput<FormRequest> callers.
@@ -180,7 +180,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
                 $rule = ValidationRuleAnalyzer::lookupRuleByKey($rules, $accessor['key']);
 
                 if ($rule instanceof \Psalm\LaravelPlugin\Handlers\Validation\ResolvedRule) {
-                    $removed |= $rule->removedTaints;
+                    $removed = \array_values(\array_unique(\array_merge($removed, $rule->removedTaints)));
                 }
             }
         }
@@ -195,7 +195,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             $rule = ValidationRuleAnalyzer::lookupRuleByKey($inlineRules, $accessor['key']);
 
             if ($rule instanceof \Psalm\LaravelPlugin\Handlers\Validation\ResolvedRule) {
-                $removed |= $rule->removedTaints;
+                $removed = \array_values(\array_unique(\array_merge($removed, $rule->removedTaints)));
             }
         }
 
@@ -203,17 +203,19 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
     }
 
     /**
-     * Look up the cached escape mask for a local variable previously bound
+     * Look up the cached escape kinds for a local variable previously bound
      * to a tracked accessor read on a validated Request (`$v =
-     * $request->input('k')`). Returns 0 when no such binding is in scope.
+     * $request->input('k')`). Returns [] when no such binding is in scope.
      *
      * The binding is tracked per enclosing function-like; closures and
      * nested functions are separate scopes.
+     *
+     * @return list<string>
      */
     private static function lookupInlineValidateVariableEscape(
         AddRemoveTaintsEvent $event,
         string $variableName,
-    ): int {
+    ): array {
         // Fast bail-out for the common case where no function in the
         // current worker has populated the cache. `removeTaints` fires
         // for every bare Variable expression under taint analysis, and
@@ -221,16 +223,16 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         // cached inline-validate bindings — so this check is taken very
         // often and cheaply avoids the `getFunctionLikeId` walk.
         if (!InlineValidateRulesCollector::hasAnyVariableBindings()) {
-            return 0;
+            return [];
         }
 
         $functionId = InlineValidateRulesCollector::getFunctionLikeId($event->getStatementsSource());
 
         if ($functionId === null) {
-            return 0;
+            return [];
         }
 
-        return InlineValidateRulesCollector::getEscapeForVariable($functionId, $variableName) ?? 0;
+        return InlineValidateRulesCollector::getEscapeForVariable($functionId, $variableName) ?? [];
     }
 
     /**

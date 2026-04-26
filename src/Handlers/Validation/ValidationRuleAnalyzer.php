@@ -20,6 +20,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNumericString;
 use Psalm\Type\Atomic\TTrue;
 use Psalm\Type\TaintKind;
+use Psalm\Type\TaintKindGroup;
 use Psalm\Type\Union;
 
 /**
@@ -56,18 +57,18 @@ final class ValidationRuleAnalyzer
         // raw whitespace and control characters, so the value is safe for
         // header/cookie sinks. Other taints (HTML, SQL, …) are preserved.
         'illuminate\\validation\\rules\\email'
-            => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
+            => [TaintKind::INPUT_HEADER, TaintKind::INPUT_COOKIE],
         // Mirrors the 'numeric' string rule: the value contains no meta-chars.
-        'illuminate\\validation\\rules\\numeric' => TaintKind::ALL_INPUT,
+        'illuminate\\validation\\rules\\numeric' => TaintKindGroup::ALL_INPUT,
         // Mirrors the 'in:' string rule: whitelist-bounded values.
-        'illuminate\\validation\\rules\\in' => TaintKind::ALL_INPUT,
+        'illuminate\\validation\\rules\\in' => TaintKindGroup::ALL_INPUT,
         // Mirrors the 'date' / 'date_format' string rules: the object form
         // always emits at least one of those via Rules\Date::__toString(),
         // and every fluent method on Rules\Date (format, past, future,
         // beforeToday, between, …) returns $this and only adds
         // before/after/before_or_equal/after_or_equal constraints — all of
         // which are themselves ALL_INPUT-escaped in ruleToRemovedTaints().
-        'illuminate\\validation\\rules\\date' => TaintKind::ALL_INPUT,
+        'illuminate\\validation\\rules\\date' => TaintKindGroup::ALL_INPUT,
     ];
 
     /**
@@ -106,12 +107,27 @@ final class ValidationRuleAnalyzer
     private static array $cache = [];
 
     /**
-     * Per-class cache of the OR-ed `@psalm-taint-escape` bitmask read from a
-     * Rule class's own docblock. Keyed by lowercase FQN.
+     * Per-class cache of the deduplicated `@psalm-taint-escape` taint kinds
+     * read from a Rule class's own docblock. Keyed by lowercase FQN.
      *
-     * @var array<string, int>
+     * @var array<string, list<string>>
      */
     private static array $classTaintCache = [];
+
+    /**
+     * All input-related taint kinds — delegates to Psalm's own canonical list.
+     *
+     * Using TaintKindGroup::ALL_INPUT (Psalm 6 public API) avoids duplicating
+     * the list and automatically picks up any new INPUT_* kinds added in
+     * future Psalm 6.x releases.
+     *
+     * @return list<string>
+     * @psalm-pure
+     */
+    public static function allInputTaints(): array
+    {
+        return TaintKindGroup::ALL_INPUT;
+    }
 
     /**
      * Get resolved rules for a FormRequest subclass by reading its rules() method from AST.
@@ -237,7 +253,8 @@ final class ValidationRuleAnalyzer
     public static function resolveRuleSegments(array $segments): ResolvedRule
     {
         $type = null;
-        $removedTaints = 0;
+        /** @var list<string> $removedTaints */
+        $removedTaints = [];
         $nullable = false;
         $sometimes = false;
         $required = false;
@@ -250,12 +267,15 @@ final class ValidationRuleAnalyzer
             }
 
             // Synthetic segment for a custom Rule object. Contributes only to
-            // the taint escape bitmask — the rule's runtime behavior (type,
+            // the taint escape set — the rule's runtime behavior (type,
             // nullable, required) is opaque to the plugin.
             if (\str_starts_with($segment, self::CLASS_SEGMENT_PREFIX)) {
-                $removedTaints |= self::classRuleRemovedTaints(
-                    \substr($segment, \strlen(self::CLASS_SEGMENT_PREFIX)),
-                );
+                $removedTaints = \array_values(\array_unique(\array_merge(
+                    $removedTaints,
+                    self::classRuleRemovedTaints(
+                        \substr($segment, \strlen(self::CLASS_SEGMENT_PREFIX)),
+                    ),
+                )));
 
                 continue;
             }
@@ -291,7 +311,10 @@ final class ValidationRuleAnalyzer
                 $type = $ruleType;
             }
 
-            $removedTaints |= self::ruleToRemovedTaints($ruleName);
+            $removedTaints = \array_values(\array_unique(\array_merge(
+                $removedTaints,
+                self::ruleToRemovedTaints($ruleName),
+            )));
         }
 
         // Default: if no type rule matched, return mixed (don't narrow)
@@ -351,14 +374,15 @@ final class ValidationRuleAnalyzer
     }
 
     /**
-     * Map a validation rule name to a taint-escape bitmask.
+     * Map a validation rule name to a list of escaped taint kinds.
      *
      * Returns the set of taint kinds that this rule makes safe.
      * Adding a new rule = adding one line to this match.
      *
+     * @return list<string>
      * @psalm-pure
      */
-    private static function ruleToRemovedTaints(string $rule): int
+    private static function ruleToRemovedTaints(string $rule): array
     {
         return match ($rule) {
             // Strictly character-constrained — values cannot contain any meta-characters
@@ -375,12 +399,15 @@ final class ValidationRuleAnalyzer
             'after', 'after_or_equal',
             'date_equals',
             'timezone',
-            'in' => TaintKind::ALL_INPUT,
+            'in' => self::allInputTaints(),
 
             // IP literals: restricted to digits / dots / colons / hex letters.
             // Safe everywhere except SSRF — a syntactically valid IP can still
             // resolve to an internal host (169.254.169.254, 127.0.0.1, ::1, etc.).
-            'ip', 'ipv4', 'ipv6' => TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF,
+            'ip', 'ipv4', 'ipv6' => \array_values(\array_diff(
+                self::allInputTaints(),
+                [TaintKind::INPUT_SSRF],
+            )),
 
             // Emails: Laravel's email validators reject raw whitespace and control
             // characters, which is sufficient to prevent CRLF header injection in
@@ -392,17 +419,17 @@ final class ValidationRuleAnalyzer
             // inside quoted-strings; if that matters, switch the rule to
             // `email:strict` or `email:filter`. The plugin does not yet distinguish
             // these modes, so we take the pragmatic stance.
-            'email' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
+            'email' => [TaintKind::INPUT_HEADER, TaintKind::INPUT_COOKIE],
 
             // URLs: filter_var / RFC validation rejects CRLF and raw whitespace,
             // so it's safe for header/cookie sinks. A validated URL is still the
             // primary SSRF vector, and path / query components may carry HTML,
             // SQL, shell, or XPath payloads — those taints are preserved.
-            'url', 'active_url' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
+            'url', 'active_url' => [TaintKind::INPUT_HEADER, TaintKind::INPUT_COOKIE],
 
             // file, image, mimes, mimetypes → keep taint (file names/paths/contents are user-controlled)
             // string, json, regex, required, max, min, etc. → keep all taint
-            default => 0,
+            default => [],
         };
     }
 
@@ -627,7 +654,7 @@ final class ValidationRuleAnalyzer
                 $properties[$childField] = $childType;
             }
 
-            $shape = TKeyedArray::make($properties);
+            $shape = new TKeyedArray($properties);
             $listType = new Union([
                 Type::getListAtomic(new Union([$shape])),
             ]);
@@ -638,10 +665,11 @@ final class ValidationRuleAnalyzer
 
             // Aggregate child taint removal — if ALL children remove all taint,
             // the list container is also safe. Otherwise keep tainted.
-            $aggregatedTaint = TaintKind::ALL_INPUT;
+            // Intersection: only keep taint kinds removed by every child rule.
+            $aggregatedTaint = self::allInputTaints();
 
             foreach ($children as $childRule) {
-                $aggregatedTaint &= $childRule->removedTaints;
+                $aggregatedTaint = \array_values(\array_intersect($aggregatedTaint, $childRule->removedTaints));
             }
 
             $topLevel[$parent] = new ResolvedRule(
@@ -954,7 +982,7 @@ final class ValidationRuleAnalyzer
 
     /**
      * Read `@psalm-taint-escape <kind>` annotations from a Rule class's own
-     * docblock and return the OR-ed bitmask of TaintKind bits they cover.
+     * docblock and return the deduplicated list of taint kinds they cover.
      *
      * Psalm stores `removed_taints` on FunctionLikeStorage only — class-level
      * escapes are not part of ClassLikeStorage — so we parse the class's raw
@@ -962,19 +990,21 @@ final class ValidationRuleAnalyzer
      * honoured; the conditional form (`@psalm-taint-escape (...)`) is ignored
      * because it is defined per-parameter and has no meaning at class scope.
      *
-     * Unknown kinds map to 0 and are silently dropped. Unlike Psalm's own
+     * Unknown kinds are silently dropped. Unlike Psalm's own
      * `Codebase::getOrRegisterTaint()` (used in FunctionLikeDocblockScanner),
      * which registers unfamiliar names as custom taint kinds, this lookup
-     * honours only the built-in `TaintKind::TAINT_NAMES` set. A mistyped kind
+     * honours only the built-in INPUT_* kind set. A mistyped kind
      * (e.g. `heder` instead of `header`) contributes no escape and therefore
      * leaves taint intact, which produces extra reports (the false-positive
      * direction) — double-check spellings against the kind table in
      * `docs/contributing/taint-analysis.md`.
      *
      * The FQN is treated as an opaque string — if the class does not exist in
-     * the codebase, the storage lookup below fails and we return 0.
+     * the codebase, the storage lookup below fails and we return [].
+     *
+     * @return list<string>
      */
-    private static function classRuleRemovedTaints(string $classFqn): int
+    private static function classRuleRemovedTaints(string $classFqn): array
     {
         $cacheKey = \strtolower($classFqn);
 
@@ -996,48 +1026,50 @@ final class ValidationRuleAnalyzer
         try {
             $codebase = ProjectAnalyzer::getInstance()->getCodebase();
         } catch (\RuntimeException|\Error) {
-            return self::$classTaintCache[$cacheKey] = 0;
+            return self::$classTaintCache[$cacheKey] = [];
         }
 
         try {
             $storage = $codebase->classlike_storage_provider->get($cacheKey);
         } catch (\InvalidArgumentException) {
-            return self::$classTaintCache[$cacheKey] = 0;
+            return self::$classTaintCache[$cacheKey] = [];
         }
 
         $filePath = $storage->location?->file_path;
 
         if ($filePath === null) {
-            return self::$classTaintCache[$cacheKey] = 0;
+            return self::$classTaintCache[$cacheKey] = [];
         }
 
         try {
             $statements = $codebase->getStatementsForFile($filePath);
         } catch (\InvalidArgumentException|\UnexpectedValueException) {
-            return self::$classTaintCache[$cacheKey] = 0;
+            return self::$classTaintCache[$cacheKey] = [];
         }
 
         $classNode = self::findClassNode($statements, $storage->name);
 
         if (!$classNode instanceof \PhpParser\Node\Stmt\Class_) {
-            return self::$classTaintCache[$cacheKey] = 0;
+            return self::$classTaintCache[$cacheKey] = [];
         }
 
         $docComment = $classNode->getDocComment();
 
         if (!$docComment instanceof \PhpParser\Comment\Doc) {
-            return self::$classTaintCache[$cacheKey] = 0;
+            return self::$classTaintCache[$cacheKey] = [];
         }
 
         try {
             $parsed = DocComment::parsePreservingLength($docComment, true);
         } catch (DocblockParseException) {
-            return self::$classTaintCache[$cacheKey] = 0;
+            return self::$classTaintCache[$cacheKey] = [];
         }
 
         $escapeTags = $parsed->tags['psalm-taint-escape'] ?? [];
 
-        $bits = 0;
+        $allowed = self::knownTaintKinds();
+        /** @var list<string> $kinds */
+        $kinds = [];
 
         foreach ($escapeTags as $tagLine) {
             $kind = \trim($tagLine);
@@ -1050,10 +1082,39 @@ final class ValidationRuleAnalyzer
             // Psalm's parser keeps only the first whitespace-separated token.
             $kind = \explode(' ', $kind)[0];
 
-            $bits |= TaintKind::TAINT_NAMES[$kind] ?? 0;
+            // The `input` group alias expands to every INPUT_* taint kind,
+            // matching Psalm's own `Codebase::getOrRegisterTaint()` semantics.
+            if ($kind === TaintKindGroup::GROUP_INPUT) {
+                foreach (TaintKindGroup::ALL_INPUT as $inputKind) {
+                    if (!\in_array($inputKind, $kinds, true)) {
+                        $kinds[] = $inputKind;
+                    }
+                }
+
+                continue;
+            }
+
+            if (\in_array($kind, $allowed, true) && !\in_array($kind, $kinds, true)) {
+                $kinds[] = $kind;
+            }
         }
 
-        return self::$classTaintCache[$cacheKey] = $bits;
+        return self::$classTaintCache[$cacheKey] = $kinds;
+    }
+
+    /**
+     * Built-in taint kind set honoured by class-level `@psalm-taint-escape`
+     * annotations. Mirrors {@see TaintKind}'s INPUT_* / *_SECRET constants.
+     *
+     * @return list<string>
+     */
+    private static function knownTaintKinds(): array
+    {
+        return [
+            ...TaintKindGroup::ALL_INPUT,
+            TaintKind::USER_SECRET,
+            TaintKind::SYSTEM_SECRET,
+        ];
     }
 
     /**
