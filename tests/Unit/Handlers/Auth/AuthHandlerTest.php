@@ -108,11 +108,11 @@ final class AuthHandlerTest extends TestCase
 
         $this->assertStringNotContainsString(
             'UnitEnum',
-            $method->invoke(null, '12.99.0')->getId(),
+            (string) $method->invoke(null, '12.99.0')->getId(),
         );
         $this->assertStringContainsString(
             'UnitEnum',
-            $method->invoke(null, '13.0.0')->getId(),
+            (string) $method->invoke(null, '13.0.0')->getId(),
         );
     }
 
