@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777204095518,
+  "lastUpdate": 1777211170906,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3177,6 +3177,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.46,
             "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0608ff64d3c22a9e6c757177706401fcee3a2d8b",
+          "message": "Merge pull request #851 from psalm/848-firstOr-narrow-never\n\nBind `firstOr()` callback template across argument positions",
+          "timestamp": "2026-04-26T14:43:31+01:00",
+          "tree_id": "4ef73d1a83d771e1d8a18b9d24a71af66c4b36f3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0608ff64d3c22a9e6c757177706401fcee3a2d8b"
+        },
+        "date": 1777211169997,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.59,
+            "range": "± 0.17",
             "unit": "s"
           },
           {
