@@ -172,13 +172,17 @@ class BelongsToMany extends Relation
      * `$columns` parameter must therefore also carry `TValue` so Psalm binds
      * the template no matter where the closure lives.
      *
+     * Unlike `Builder::firstOr()`, the relation routes columns through
+     * `shouldSelect(array $columns)`, which hard-rejects bare strings at
+     * runtime — so this stub permits only `list<non-empty-string>`.
+     *
      * @template TValue
      *
      * @param  list<non-empty-string>|(\Closure(): TValue)  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @return (TRelatedModel&object{pivot: TPivotModel})|TValue
      */
-    public function firstOr($columns = ['*'], \Closure $callback = null) {}
+    public function firstOr($columns = ['*'], ?\Closure $callback = null) {}
 
     /**
      * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
