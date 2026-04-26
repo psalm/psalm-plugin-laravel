@@ -355,13 +355,24 @@ class Builder implements BuilderContract
     public function firstOrFail($columns = ['*']) {}
 
     /**
+     * Laravel accepts the callback in either argument position. When given as
+     * the first argument, Laravel swaps it into `$callback` internally; the
+     * `$columns` parameter must therefore also carry `TValue` so Psalm binds
+     * the template no matter where the closure lives.
+     *
+     * Builder calls Query Builder's `get($columns)` (via `first()`), which
+     * accepts a bare string and wraps it with `Arr::wrap()`. The relation
+     * subclasses route through `shouldSelect(array $columns)` instead, which
+     * hard-rejects strings — so the relation stubs do not include the string
+     * branch.
+     *
      * @template TValue
      *
-     * @param  \Closure|array  $columns
+     * @param  list<non-empty-string>|non-empty-string|(\Closure(): TValue)  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @return TModel|TValue
      */
-    public function firstOr($columns = ['*'], \Closure $callback = null) {}
+    public function firstOr($columns = ['*'], ?\Closure $callback = null) {}
 
     /**
      * @param  array<string, mixed>  $attributes

@@ -46,6 +46,20 @@ abstract class HasOneOrManyThrough extends Relation
     public function findOrFail($id, $columns = ['*']) {}
 
     /**
+     * Override the @mixin Builder<TRelatedModel> route so the relation enforces
+     * its own runtime constraint: like BelongsToMany, the through-relations
+     * route columns through `shouldSelect(array $columns)`, which rejects bare
+     * strings — so this stub permits only `list<non-empty-string>`.
+     *
+     * @template TValue
+     *
+     * @param  list<non-empty-string>|(\Closure(): TValue)  $columns
+     * @param  (\Closure(): TValue)|null  $callback
+     * @return TRelatedModel|TValue
+     */
+    public function firstOr($columns = ['*'], ?\Closure $callback = null) {}
+
+    /**
      * @param  int|null  $perPage
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
