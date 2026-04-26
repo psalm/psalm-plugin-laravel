@@ -1,6 +1,3 @@
-# Claude Code agents
-.agents/
-
 # Composer
 composer.lock
 /vendor/
@@ -21,3 +18,7 @@ phpunit.xml
 # AI
 .claude
 CLAUDE.local.md
+
+## Codex agents
+.agents/
+AGENTS.md
