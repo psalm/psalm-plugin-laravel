@@ -1,0 +1,17 @@
+<?php
+
+namespace Illuminate\Support;
+
+class Str
+{
+    /**
+     * Get a new stringable object from the given string.
+     *
+     * @param  string  $string
+     * @return \Illuminate\Support\Stringable
+     *
+     * @psalm-taint-specialize
+     * @psalm-flow ($string) -> return
+     */
+    public static function of($string) {}
+}

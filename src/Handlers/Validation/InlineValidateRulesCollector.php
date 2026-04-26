@@ -237,13 +237,13 @@ final class InlineValidateRulesCollector implements
     private static array $rulesByFunction = [];
 
     /**
-     * Per-variable taint-escape masks for variables bound to a
+     * Per-variable taint-escape kinds for variables bound to a
      * rule-covered accessor read on a tracked Request.
      *
      * Outer key: `spl_object_id()` of the enclosing FunctionLikeAnalyzer.
      * Inner key: source-level variable name (without `$`). Value: the
-     * `removedTaints` bitmask of the rule covering the field that the
-     * variable was bound to.
+     * `removedTaints` taint-kind list of the rule covering the field that
+     * the variable was bound to.
      *
      * Populated and evicted in `beforeExpressionAnalysis` (Assign /
      * AssignRef / destructuring) and `beforeStatementAnalysis` (foreach,
@@ -251,7 +251,7 @@ final class InlineValidateRulesCollector implements
      * `AssignmentAnalyzer` fires the LHS `removeTaints` event for the new
      * binding — see "Cache lifecycle" below for why ordering matters.
      *
-     * @var array<int, array<string, int>>
+     * @var array<int, array<string, list<string>>>
      */
     private static array $inputVariablesByFunction = [];
 
@@ -565,7 +565,10 @@ final class InlineValidateRulesCollector implements
             // class docblock for the merge rationale.
             $existing[$field] = new ResolvedRule(
                 $existing[$field]->type,
-                $existing[$field]->removedTaints | $resolvedRule->removedTaints,
+                \array_values(\array_unique(\array_merge(
+                    $existing[$field]->removedTaints,
+                    $resolvedRule->removedTaints,
+                ))),
                 $existing[$field]->nullable,
                 $existing[$field]->sometimes,
                 $existing[$field]->required,
@@ -647,11 +650,13 @@ final class InlineValidateRulesCollector implements
      * eviction in `beforeExpressionAnalysis` / `beforeStatementAnalysis`
      * clears the slot on every fresh assignment to the same name).
      *
+     * @return list<string>|null
+     *
      * @internal shared only with {@see ValidationTaintHandler}.
      *
      * @psalm-external-mutation-free
      */
-    public static function getEscapeForVariable(int $functionId, string $variableName): ?int
+    public static function getEscapeForVariable(int $functionId, string $variableName): ?array
     {
         return self::$inputVariablesByFunction[$functionId][$variableName] ?? null;
     }
@@ -710,7 +715,7 @@ final class InlineValidateRulesCollector implements
 
     /**
      * Inspect an expression (an `Expr\Assign` RHS or a `Stmt\Foreach_`
-     * iterable) and return the rule's `removedTaints` mask if it is a
+     * iterable) and return the rule's `removedTaints` list if it is a
      * recognised keyed-accessor call (see
      * {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS}) where the
      * caller variable already has rules cached for this scope and the
@@ -733,8 +738,10 @@ final class InlineValidateRulesCollector implements
      *   - caller is a plain `Variable` whose name has rules collected by a
      *     prior `validate()` in this same scope
      *   - the literal key matches one of those rules
+     *
+     * @return list<string>|null
      */
-    private static function resolveEscapeFromAccessorRhs(Expr $rhs, int $functionId): ?int
+    private static function resolveEscapeFromAccessorRhs(Expr $rhs, int $functionId): ?array
     {
         if (!$rhs instanceof MethodCall || !$rhs->name instanceof Identifier) {
             return null;

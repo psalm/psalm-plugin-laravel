@@ -61,8 +61,7 @@ You can read more about how the plugin's taint analysis works and what vulnerabi
 Since [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta, allow dev (or beta) packages first:
 
 ```bash
-composer config minimum-stability dev && composer config prefer-stable true
-composer require --dev psalm/plugin-laravel:^4.8
+composer require --dev "psalm/plugin-laravel:^3.8"
 ```
 
 ### Step 2: Generate a Laravel-tailored `psalm.xml`

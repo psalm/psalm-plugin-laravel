@@ -154,7 +154,6 @@ final class ModelBuilderMixinHandler implements MethodReturnTypeProviderInterfac
 
     /**
      * @psalm-assert-if-true class-string<Model> $className
-     * @psalm-external-mutation-free
      */
     private static function isModelClass(Codebase $codebase, string $className): bool
     {

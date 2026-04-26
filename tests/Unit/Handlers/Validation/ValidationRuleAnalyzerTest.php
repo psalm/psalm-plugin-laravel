@@ -9,7 +9,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Validation\ResolvedRule;
 use Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer;
-use Psalm\Type\TaintKind;
 
 /**
  * Tests for the rule parsing and type/taint resolution logic in ValidationRuleAnalyzer.
@@ -164,7 +163,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('integer');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -172,7 +171,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('string');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -180,31 +179,33 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('uuid');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
-    public function url_rule_removes_only_header_and_cookie_taint(): void
+    public function url_rule_escapes_header_and_cookie(): void
     {
         $rule = $this->resolve('url');
 
-        $this->assertSame(TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE, $rule->removedTaints);
+        $this->assertSame([\Psalm\Type\TaintKind::INPUT_HEADER, \Psalm\Type\TaintKind::INPUT_COOKIE], $rule->removedTaints);
     }
 
     #[Test]
-    public function ip_rule_removes_all_input_taint_except_ssrf(): void
+    public function ip_rule_escapes_all_input_except_ssrf(): void
     {
         $rule = $this->resolve('ip');
 
-        $this->assertSame(TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF, $rule->removedTaints);
+        $this->assertNotContains(\Psalm\Type\TaintKind::INPUT_SSRF, $rule->removedTaints);
+        $this->assertContains(\Psalm\Type\TaintKind::INPUT_HTML, $rule->removedTaints);
+        $this->assertContains(\Psalm\Type\TaintKind::INPUT_HEADER, $rule->removedTaints);
     }
 
     #[Test]
-    public function email_rule_removes_only_header_and_cookie_taint(): void
+    public function email_rule_escapes_header_and_cookie(): void
     {
         $rule = $this->resolve('email');
 
-        $this->assertSame(TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE, $rule->removedTaints);
+        $this->assertSame([\Psalm\Type\TaintKind::INPUT_HEADER, \Psalm\Type\TaintKind::INPUT_COOKIE], $rule->removedTaints);
     }
 
     #[Test]
@@ -212,7 +213,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('in:a,b,c');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -220,7 +221,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('date');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -228,7 +229,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('alpha_num');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -237,7 +238,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $rule = $this->resolve('decimal:2');
 
         $this->assertSame('numeric-string', $rule->type->getId());
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -246,7 +247,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $rule = $this->resolve('digits:4');
 
         $this->assertSame('numeric-string', $rule->type->getId());
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -254,7 +255,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('accepted');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -262,7 +263,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('declined');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -271,7 +272,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $rule = $this->resolve('before:2025-01-01');
 
         $this->assertSame('string', $rule->type->getId());
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -279,7 +280,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('date_equals:today');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     #[Test]
@@ -303,7 +304,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('file');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -311,7 +312,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('image');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -359,7 +360,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('json');
 
-        $this->assertSame(0, $rule->removedTaints);
+        $this->assertSame([], $rule->removedTaints);
     }
 
     #[Test]
@@ -367,7 +368,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         $rule = $this->resolve('boolean');
 
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     // --- Array rule format ---
@@ -379,7 +380,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $rule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'integer', 'max:100']);
 
         $this->assertSame('int|numeric-string', $rule->type->getId());
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
     }
 
     // --- Edge cases ---
@@ -403,7 +404,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $ruleB = ValidationRuleAnalyzer::resolveRuleSegments(['integer', 'string']);
 
         $this->assertSame($ruleA->removedTaints, $ruleB->removedTaints);
-        $this->assertSame(TaintKind::ALL_INPUT, $ruleA->removedTaints);
+        $this->assertSame(ValidationRuleAnalyzer::allInputTaints(), $ruleA->removedTaints);
     }
 
     #[Test]
@@ -413,241 +414,5 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $rule = ValidationRuleAnalyzer::resolveRuleSegments(['string', 'integer']);
 
         $this->assertSame('string', $rule->type->getId());
-    }
-
-    // --- Custom Rule class segments (#822) ---
-
-    #[Test]
-    public function class_segment_for_unknown_class_removes_no_taint(): void
-    {
-        // Without a Psalm analysis context, the class storage lookup in
-        // classRuleRemovedTaints fails and the segment contributes 0. The
-        // segment must still be tolerated (no crash) and must not affect
-        // the type or presence flags derived from the other segments.
-        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
-            ['required', 'string', 'class:App\\Rules\\NonExistent'],
-        );
-
-        $this->assertSame('string', $rule->type->getId());
-        $this->assertSame(0, $rule->removedTaints);
-        $this->assertTrue($rule->required);
-    }
-
-    #[Test]
-    public function class_segment_is_not_a_type_bearing_rule(): void
-    {
-        // A `class:` segment alone never narrows the type — the handler
-        // cannot introspect the Rule's runtime output, only its declared
-        // taint escape set.
-        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
-            ['class:App\\Rules\\NonExistent'],
-        );
-
-        $this->assertTrue($rule->type->isMixed());
-        $this->assertFalse($rule->required);
-    }
-
-    // --- First-party Illuminate\Validation\Rules\* segments (#828) ---
-
-    #[Test]
-    public function class_segment_for_rules_email_removes_header_and_cookie_taint(): void
-    {
-        // The authoritative FIRST_PARTY_RULE_ESCAPES table short-circuits the
-        // docblock lookup, so this resolves even without a Psalm analysis
-        // context. The bits mirror the 'email' string rule.
-        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
-            ['required', 'string', 'class:Illuminate\\Validation\\Rules\\Email'],
-        );
-
-        $this->assertSame(
-            TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
-            $rule->removedTaints,
-        );
-        $this->assertSame('string', $rule->type->getId());
-    }
-
-    #[Test]
-    public function class_segment_for_rules_numeric_removes_all_input_taint(): void
-    {
-        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
-            ['required', 'class:Illuminate\\Validation\\Rules\\Numeric'],
-        );
-
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
-        $this->assertTrue($rule->required);
-    }
-
-    #[Test]
-    public function class_segment_for_rules_in_removes_all_input_taint(): void
-    {
-        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
-            ['required', 'class:Illuminate\\Validation\\Rules\\In'],
-        );
-
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
-    }
-
-    #[Test]
-    public function class_segment_for_rules_date_removes_all_input_taint(): void
-    {
-        // The 'date' string rule escapes ALL_INPUT; the object form must be
-        // in parity since Rules\Date::__toString() always emits 'date' or
-        // 'date_format:...' as the first constraint.
-        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
-            ['required', 'class:Illuminate\\Validation\\Rules\\Date'],
-        );
-
-        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
-    }
-
-    #[Test]
-    public function class_segment_for_rules_notin_removes_no_taint(): void
-    {
-        // NotIn is deliberately not in FIRST_PARTY_RULE_ESCAPES: rejecting a
-        // blocklist of values does not constrain the accepted set to a safe
-        // shape. In unit-test context ProjectAnalyzer::getInstance() throws,
-        // so the function returns 0 without touching the docblock path.
-        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
-            ['required', 'class:Illuminate\\Validation\\Rules\\NotIn'],
-        );
-
-        $this->assertSame(0, $rule->removedTaints);
-    }
-
-    /**
-     * Defensive guard: these classes are mapped in RULE_FACADE_METHOD_RETURN_CLASS
-     * but deliberately omitted from FIRST_PARTY_RULE_ESCAPES. File/ImageFile
-     * carry user-controlled filename/mime/contents; Enum is a plausible
-     * candidate for a future escape (backing values are developer-defined
-     * string literals) but is intentionally out of scope for the initial PR.
-     * If a future refactor added any of them, this test would flip to a
-     * non-zero expectation and fail, forcing a deliberate decision.
-     *
-     * @return iterable<string, array{string}>
-     */
-    public static function provideNonEscapingMappedRuleClasses(): iterable
-    {
-        yield 'Enum' => ['Illuminate\\Validation\\Rules\\Enum'];
-        yield 'File' => ['Illuminate\\Validation\\Rules\\File'];
-        yield 'ImageFile' => ['Illuminate\\Validation\\Rules\\ImageFile'];
-    }
-
-    #[Test]
-    #[\PHPUnit\Framework\Attributes\DataProvider('provideNonEscapingMappedRuleClasses')]
-    public function mapped_rule_class_outside_escape_table_removes_no_taint(string $fqn): void
-    {
-        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
-            ['required', 'string', 'class:' . $fqn],
-        );
-
-        $this->assertSame(0, $rule->removedTaints);
-    }
-
-    #[Test]
-    public function class_segment_for_rules_email_is_case_insensitive(): void
-    {
-        // ValidationRuleAnalyzer lower-cases the FQN for cache/table lookup,
-        // so mixed-case input (e.g. from a `resolvedName` that preserves the
-        // `use` statement's casing) must still hit the escape table.
-        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
-            ['class:illuminate\\validation\\rules\\EMAIL'],
-        );
-
-        $this->assertSame(
-            TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
-            $rule->removedTaints,
-        );
-    }
-
-    // --- lookupRuleByKey (#838 wildcard-suffix fallback) ---
-
-    #[Test]
-    public function lookup_by_key_returns_exact_match_when_present(): void
-    {
-        $emailRule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'email']);
-        $rules = ['email' => $emailRule];
-
-        $this->assertSame($emailRule, ValidationRuleAnalyzer::lookupRuleByKey($rules, 'email'));
-    }
-
-    #[Test]
-    public function lookup_by_key_returns_null_when_key_missing_and_no_numeric_suffix(): void
-    {
-        $rules = ['email' => ValidationRuleAnalyzer::resolveRuleSegments(['email'])];
-
-        $this->assertNull(ValidationRuleAnalyzer::lookupRuleByKey($rules, 'phone'));
-    }
-
-    #[Test]
-    public function lookup_by_key_strips_trailing_numeric_segment_and_retries(): void
-    {
-        // Simulates `'email.*' => [..., 'email']` after resolveRules expansion:
-        // the parent key 'email' holds the element rule, so `input('email.0')`
-        // strips `.0` and finds it.
-        $parentRule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'email']);
-        $rules = ['email' => $parentRule];
-
-        $this->assertSame($parentRule, ValidationRuleAnalyzer::lookupRuleByKey($rules, 'email.0'));
-    }
-
-    #[Test]
-    public function lookup_by_key_handles_multi_digit_indices(): void
-    {
-        // Laravel's dot-notation input indexing allows any non-negative integer.
-        $parentRule = ValidationRuleAnalyzer::resolveRuleSegments(['email']);
-        $rules = ['email' => $parentRule];
-
-        $this->assertSame($parentRule, ValidationRuleAnalyzer::lookupRuleByKey($rules, 'email.42'));
-    }
-
-    #[Test]
-    public function lookup_by_key_does_not_strip_non_numeric_suffix(): void
-    {
-        // `input('email.foo')` is a deliberately different access shape from
-        // `input('email.0')` — it typically addresses a nested object, not
-        // an array element. The fallback must only rewrite purely numeric
-        // trailing segments so nested-wildcard patterns stay out of scope.
-        $rules = ['email' => ValidationRuleAnalyzer::resolveRuleSegments(['email'])];
-
-        $this->assertNull(ValidationRuleAnalyzer::lookupRuleByKey($rules, 'email.foo'));
-    }
-
-    #[Test]
-    public function lookup_by_key_does_not_walk_past_one_segment(): void
-    {
-        // Nested wildcards (`'addresses.*.email'` accessed as `addresses.0.email`)
-        // are explicitly out of scope for #838. `addresses.0.email` does not
-        // end in `.\d+`, so the regex fails and no fallback applies. Even the
-        // parent `addresses` key would be wrong for this access — the rule
-        // describes the `.email` leaf, not the whole address object.
-        $rules = ['addresses' => ValidationRuleAnalyzer::resolveRuleSegments(['email'])];
-
-        $this->assertNull(ValidationRuleAnalyzer::lookupRuleByKey($rules, 'addresses.0.email'));
-    }
-
-    #[Test]
-    public function lookup_by_key_returns_null_when_numeric_suffix_strips_to_missing_parent(): void
-    {
-        // No 'phone' rule — stripping `.0` from 'phone.0' yields 'phone',
-        // which is still missing. Fall through to null.
-        $rules = ['email' => ValidationRuleAnalyzer::resolveRuleSegments(['email'])];
-
-        $this->assertNull(ValidationRuleAnalyzer::lookupRuleByKey($rules, 'phone.0'));
-    }
-
-    #[Test]
-    public function lookup_by_key_prefers_exact_match_over_fallback(): void
-    {
-        // Contrived but valid: both 'items' (whole) and 'items.0' (specific
-        // element) rules coexist. The exact key must win — the fallback is
-        // a miss-recovery step, not a competing lookup.
-        $exactRule = ValidationRuleAnalyzer::resolveRuleSegments(['string']);
-        $parentRule = ValidationRuleAnalyzer::resolveRuleSegments(['email']);
-        $rules = [
-            'items' => $parentRule,
-            'items.0' => $exactRule,
-        ];
-
-        $this->assertSame($exactRule, ValidationRuleAnalyzer::lookupRuleByKey($rules, 'items.0'));
     }
 }

@@ -96,8 +96,6 @@ final class CiTargetRegistry
      * which inspects the filesystem through {@see CiTargetInterface::detect()}.
      *
      * @throws UnknownCiTargetException if $name is neither `ci` nor a registered id
-     *
-     * @psalm-impure
      */
     public function resolve(string $name, string $projectRoot): CiTargetInterface
     {
@@ -115,8 +113,6 @@ final class CiTargetRegistry
      * (GitHub in the default registry). A deterministic fallback is better than
      * an error because most users running `add ci` on a project with no CI
      * config yet still want GitHub Actions written.
-     *
-     * @psalm-impure
      */
     private function autoDetect(string $projectRoot): CiTargetInterface
     {

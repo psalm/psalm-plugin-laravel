@@ -22,6 +22,5 @@
         </pluginClass>
     </plugins>
     <issueHandlers>
-        <MissingPureAnnotation errorLevel="info" />
     </issueHandlers>
 </psalm>

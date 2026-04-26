@@ -15,8 +15,6 @@ namespace Psalm\LaravelPlugin\Cli\Integrations\Ci;
  *
  * Adding a new CI provider is a two-step change: implement this interface,
  * then register the instance in CiTargetRegistry::default().
- *
- * @psalm-mutable Interface does not require implementations to be immutable.
  */
 interface CiTargetInterface
 {
@@ -42,10 +40,8 @@ interface CiTargetInterface
      *
      * Used by the `ci` alias to pick the right adapter automatically.
      * Implementations should confine reads to files under $projectRoot and
-     * must not execute anything. Marked impure because filesystem reads
-     * (`is_dir` and friends) are impure by Psalm's definition.
-     *
-     * @psalm-impure
+     * must not execute anything. Implementations may read the filesystem
+     * (`is_dir` and friends), so the method is implicitly impure.
      */
     public function detect(string $projectRoot): bool;
 
@@ -55,10 +51,8 @@ interface CiTargetInterface
      * Throws \RuntimeException if the bundled template cannot be read, which
      * indicates a broken plugin install (a file shipped with the package has
      * gone missing); surface this loudly so the user can reinstall instead of
-     * debugging silent CI failures. Marked impure because it reads the
-     * bundled template via `file_get_contents`.
-     *
-     * @psalm-impure
+     * debugging silent CI failures. Reads the bundled template via
+     * `file_get_contents`, so the method is implicitly impure.
      */
     public function plan(string $projectRoot): CiPlan;
 }
