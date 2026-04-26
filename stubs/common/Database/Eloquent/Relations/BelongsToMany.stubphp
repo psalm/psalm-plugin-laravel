@@ -167,9 +167,14 @@ class BelongsToMany extends Relation
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 
     /**
+     * Laravel accepts the callback in either argument position. When given as
+     * the first argument, Laravel swaps it into `$callback` internally; the
+     * `$columns` parameter must therefore also carry `TValue` so Psalm binds
+     * the template no matter where the closure lives.
+     *
      * @template TValue
      *
-     * @param  \Closure|array  $columns
+     * @param  list<string>|(\Closure(): TValue)  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @return (TRelatedModel&object{pivot: TPivotModel})|TValue
      */
