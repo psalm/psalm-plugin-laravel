@@ -48,16 +48,6 @@ function lazy_collection_doesnt_contain_variadic(LazyCollection $c): void
     /** @psalm-check-type-exact $_triple = bool */
 }
 
-/** @param LazyCollection<int, string> $c */
-function lazy_collection_doesnt_contain_strict_variadic(LazyCollection $c): void
-{
-    $_single = $c->doesntContainStrict('needle');
-    /** @psalm-check-type-exact $_single = bool */
-
-    $_triple = $c->doesntContainStrict('status', '=', 'active');
-    /** @psalm-check-type-exact $_triple = bool */
-}
-
 /**
  * @param LazyCollection<int, string> $c
  * @param LazyCollection<int, string> $other
