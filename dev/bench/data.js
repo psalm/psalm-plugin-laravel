@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777195818564,
+  "lastUpdate": 1777198069619,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3077,6 +3077,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6c3d6ebb6dc721e8e8562b108bee64dbdc700937",
+          "message": "Merge pull request #847 from psalm/codex/fix-softdelete-custom-builder-methods\n\nRegister custom builder pseudo-method macros",
+          "timestamp": "2026-04-26T11:05:27+01:00",
+          "tree_id": "d2163f009d5758e285b7fbd6a85f198672303b09",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6c3d6ebb6dc721e8e8562b108bee64dbdc700937"
+        },
+        "date": 1777198069295,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.06,
+            "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
