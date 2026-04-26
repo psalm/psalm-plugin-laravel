@@ -3,6 +3,8 @@
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
+use Illuminate\Database\Eloquent\Model;
 use App\Models\Customer;
 use App\Models\Vehicle;
 
@@ -172,6 +174,13 @@ function test_non_eloquent_mixin_does_not_use_model_builder_forwarding(): void
 {
     $_result = (new NonEloquentBuilderMixin())->where(['id' => 1]);
     /** @psalm-check-type-exact $_result = NonEloquentBuilderMixin */
+}
+
+function test_scopes_on_builder_contract_preserves_concrete_builder_surface(BuilderContract $query): BuilderContract
+{
+    $_result = $query->scopes(['active'])->whereNull('deleted_at');
+    /** @psalm-check-type-exact $_result = Builder<Model>&static */
+    return $_result;
 }
 ?>
 --EXPECTF--

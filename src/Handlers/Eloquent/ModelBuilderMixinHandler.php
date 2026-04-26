@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
@@ -13,6 +14,7 @@ use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Magic\ReturnTypeResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -74,6 +76,14 @@ final class ModelBuilderMixinHandler implements MethodReturnTypeProviderInterfac
             ? $source->getNodeTypeProvider()->getType($stmt->var)
             : null;
 
+        if (self::callerIsEloquentBuilderContract($callerType)) {
+            return new Union([
+                new TGenericObject(Builder::class, [
+                    new Union([new TNamedObject(Model::class)]),
+                ]),
+            ]);
+        }
+
         $modelClass = self::extractModelClassFromMixinCaller($event, $codebase, $callerType);
 
         if ($modelClass === null) {
@@ -81,6 +91,31 @@ final class ModelBuilderMixinHandler implements MethodReturnTypeProviderInterfac
         }
 
         return new Union([ModelMethodHandler::resolvedBuilderTypeFor($modelClass, $codebase)]);
+    }
+
+    /**
+     * Laravel's Builder contract is an empty @mixin host. When fluent methods are
+     * resolved through that mixin, returning static would bind the chain back to the
+     * empty interface and hide concrete Builder methods such as whereNull().
+     *
+     * @psalm-mutation-free
+     */
+    private static function callerIsEloquentBuilderContract(?Union $callerType): bool
+    {
+        if (!$callerType instanceof Union) {
+            return false;
+        }
+
+        foreach ($callerType->getAtomicTypes() as $atomicType) {
+            if (
+                $atomicType instanceof TNamedObject
+                && \strtolower($atomicType->value) === \strtolower(BuilderContract::class)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
