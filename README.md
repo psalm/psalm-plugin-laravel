@@ -26,49 +26,33 @@ Unlike pattern-matching tools, Psalm follows dataflow across function boundaries
 ```php
 // psalm-laravel catches this:
 Route::get('/search', function (Request $request) {
-    $query = $request->input('q');
-    DB::statement("SELECT * FROM users WHERE name = '$query'");
-    // TaintedSql: user input flows directly to the SQL query
+    $sortByColumn = $request->input('sort'); // Tainted source: user input from HTTP request
+    User::where('name', $request->input('name'))
+        ->orderBy($sortByColumn) // 🚨 Tainted sink: unvalidated user input used in query builder
+        ->get();
+
+// Psalm output:
+// ERROR TaintedSql: Detected tainted SQL
 });
 ```
 
-Taint analysis also works across helper functions, service classes, and any number of call layers:
+Taint analysis also works across helper functions, service classes, and any number of call layers.
 
 ```php
-// Cross-function taint flow — pattern-matching tools miss this:
-function getUserQuery(Request $request): string {
-    return "SELECT * FROM users WHERE name = '" . $request->input('name') . "'";
-}
+// UserController.php
+$user->siteSettinsg['articles_sort'] = $request->input('sort'); // Tainted source: user input from HTTP request
+$user->save();
 
-Route::get('/users', function (Request $request) {
-    DB::statement(getUserQuery($request));
-    // Psalm catches this: taint flows Request -> getUserQuery() -> DB::statement()
-});
+// ArticlesConstoller.php
+Articles::query()
+    ->orderBy($user->siteSettinsg['articles_sort']) // 🚨 Tainted sink: unvalidated user input used in query builder
+    ->get();
+
+// Psalm output:
+// ERROR TaintedSql: Detected tainted SQL
 ```
 
-### What it detects
-
-| Vulnerability   | OWASP    | Examples                                                      |
-|-----------------|----------|---------------------------------------------------------------|
-| SQL Injection   | A03:2021 | `DB::statement()`, `DB::unprepared()`, raw query methods      |
-| Shell Injection | A03:2021 | `Process::run()`, `Process::command()`                        |
-| XSS             | A03:2021 | `Response::make()` with unescaped content                     |
-| SSRF            | A10:2021 | `Http::get()`, `Http::post()` with user-controlled URLs       |
-| File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |
-| Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
-| Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
-
-Security scanning runs automatically alongside type analysis, no extra configuration needed.
-
-### How it compares
-
-| Tool              | Laravel-aware types | Taint analysis     | Free               |
-|-------------------|---------------------|--------------------|--------------------|
-| **psalm-laravel** | Yes                 | Yes (dataflow)     | Yes                |
-| Larastan          | Yes                 | No (PHPStan can't) | Yes                |
-| SonarQube         | Generic PHP         | Yes (generic)      | Paid editions only |
-| Semgrep           | Pro tier only       | Pattern-based      | Limited free tier  |
-| Snyk Code         | Generic             | Yes (generic)      | Freemium           |
+You can read more about how the plugin's taint analysis works and what vulnerabilities it detects in [docs/security.md](docs/security.md).
 
 ## Quickstart
 
@@ -129,16 +113,15 @@ See [docs/issues/index.md](docs/issues/index.md) for the full catalog.
 
 Maintained versions:
 
-| Laravel Psalm Plugin | PHP   | Laravel   | Psalm | Status |
-|----------------------|-------|-----------|-------|--------|
-| 4.x                  | ^8.2  | 12, 13    | 7     | Stable |
-| 3.x                  | ^8.2  | 11, 12    | 6     | Stable |
-| 2.12+                | ^8.0  | 9, 10, 11 | 5, 6  | Legacy |
+| Laravel Psalm Plugin                         | PHP  | Laravel   | Psalm | Status |
+|----------------------------------------------|------|-----------|-------|--------|
+| 4.x                                          | ^8.2 | 12, 13    | 7     | Stable |
+| 3.x ([v4 upgrade guide](docs/upgrade-v4.md)) | ^8.2 | 11, 12    | 6     | Stable |
+| 2.12+                                        | ^8.0 | 9, 10, 11 | 5, 6  | Legacy |
 
 _(Older versions of Laravel, PHP, and Psalm were supported by version 1.x of the plugin, but they are no longer maintained)_
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
-Upgrading from v3? See the [v3 → v4 upgrade guide](docs/upgrade-v4.md).
 
 ## How it works
 
