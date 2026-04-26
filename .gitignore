@@ -1,3 +1,6 @@
+# Claude Code agents
+.agents/
+
 # Composer
 composer.lock
 /vendor/
