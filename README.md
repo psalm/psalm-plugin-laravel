@@ -62,7 +62,7 @@ Since [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta,
 
 ```bash
 composer config minimum-stability dev && composer config prefer-stable true
-composer require --dev psalm/plugin-laravel
+composer require --dev psalm/plugin-laravel:^4.8
 ```
 
 ### Step 2: Generate a Laravel-tailored `psalm.xml`
@@ -113,11 +113,11 @@ See [docs/issues/index.md](docs/issues/index.md) for the full catalog.
 
 Maintained versions:
 
-| Laravel Psalm Plugin                         | PHP  | Laravel   | Psalm | Status |
-|----------------------------------------------|------|-----------|-------|--------|
-| 4.x                                          | ^8.2 | 12, 13    | 7     | Stable |
-| 3.x ([v4 upgrade guide](docs/upgrade-v4.md)) | ^8.2 | 11, 12    | 6     | Stable |
-| 2.12+                                        | ^8.0 | 9, 10, 11 | 5, 6  | Legacy |
+| Laravel Psalm Plugin                      | PHP  | Laravel   | Psalm | Status |
+|-------------------------------------------|------|-----------|-------|--------|
+| 4.x                                       | ^8.2 | 12, 13    | 7     | Stable |
+| 3.x ([upgrade v4 to](docs/upgrade-v4.md)) | ^8.2 | 11, 12    | 6     | Stable |
+| 2.12+                                     | ^8.0 | 9, 10, 11 | 5, 6  | Legacy |
 
 _(Older versions of Laravel, PHP, and Psalm were supported by version 1.x of the plugin, but they are no longer maintained)_
 
