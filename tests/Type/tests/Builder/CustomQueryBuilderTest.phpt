@@ -1,12 +1,14 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Builders\BuilderMacroModelBuilder;
 use App\Builders\VehicleBuilder;
 use App\Builders\InvoiceBuilder;
 use App\Builders\MechanicBuilder;
 use App\Builders\WorkOrderBuilder;
 use App\Collections\InvoiceCollection;
 use App\Collections\WorkOrderCollection;
+use App\Models\BuilderMacroModel;
 use App\Models\Vehicle;
 use App\Models\Invoice;
 use App\Models\Mechanic;
@@ -402,6 +404,40 @@ function test_non_template_builder_base_instance_call(): void
     /** @psalm-check-type-exact $_result = InvoiceBuilder */
 }
 
+/** Non-template builder: model-level @method returning the custom builder is also a builder macro. */
+function test_model_level_custom_builder_macro_static_call(): void
+{
+    $_result = BuilderMacroModel::activeOnly();
+    /** @psalm-check-type-exact $_result = BuilderMacroModelBuilder */
+}
+
+/** Model-level @method returning a custom builder preserves static-side SoftDeletes wiring. */
+function test_model_level_custom_builder_soft_deletes_static_call(): void
+{
+    $_result = BuilderMacroModel::onlyTrashed();
+    /** @psalm-check-type-exact $_result = BuilderMacroModelBuilder */
+}
+
+/** Model-level @method returning a custom builder is also a builder macro. */
+function test_model_level_custom_builder_macro_instance_call(BuilderMacroModelBuilder $query): void
+{
+    $_result = $query->activeOnly();
+    /** @psalm-check-type-exact $_result = BuilderMacroModelBuilder */
+}
+
+/** Non-template builder: base Builder method chain must keep model-level trait macros. */
+function test_model_level_custom_builder_macro_after_base_builder_method(BuilderMacroModelBuilder $query): void
+{
+    $_result = $query->where('deleted_at', '<', '2024-01-01')->onlyTrashed();
+    /** @psalm-check-type-exact $_result = BuilderMacroModelBuilder */
+}
+
+/** Negative: unrelated model-level @method returns are not registered as builder macros. */
+function test_unrelated_model_level_method_is_not_registered_on_custom_builder(BuilderMacroModelBuilder $query): void
+{
+    $_result = $query->unrelatedMacro();
+}
+
 /**
  * Non-template builder: terminal get() returns base Collection, not InvoiceCollection.
  *
@@ -433,3 +469,4 @@ function test_non_template_collection_all(): void
 InvalidStaticInvocation on line %d: Method App\Models\WorkOrder::completed is not static, but is called statically
 UndefinedMagicMethod on line %d: Magic method App\Builders\WorkOrderBuilder::completelyfakemethod does not exist
 UndefinedMagicMethod on line %d: Magic method App\Models\WorkOrder::completelyfakemethod does not exist
+UndefinedMagicMethod on line %d: Magic method App\Builders\BuilderMacroModelBuilder::unrelatedmacro does not exist

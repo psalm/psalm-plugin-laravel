@@ -361,7 +361,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         string $modelClass,
         string $builderClass,
     ): void {
-        $traitMethods = self::extractBuilderReturningMethods($storage);
+        $traitMethods = self::extractBuilderReturningMethods($storage, $builderClass);
         if ($traitMethods === []) {
             return;
         }
@@ -396,18 +396,20 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     }
 
     /**
-     * Extract @method static declarations that return Builder<static> from
-     * a model's pseudo_static_methods. These typically originate from traits
-     * like SoftDeletes (which register builder macros via global scopes), but
-     * may also include model-level @method annotations; this is acceptable as
-     * we only act on methods whose return type is a generic Builder.
+     * Extract @method static declarations that return Builder<static> or the model's
+     * custom builder class from a model's pseudo_static_methods. These typically
+     * originate from traits like SoftDeletes (which register builder macros via
+     * global scopes), but may also include model-level @method annotations; this
+     * is acceptable as we only act on methods whose return type is a builder.
      *
+     * @param class-string<Builder>|null $customBuilderClass
      * @return array<lowercase-string, list<FunctionLikeParameter>>
      * @psalm-mutation-free
      */
-    private static function extractBuilderReturningMethods(ClassLikeStorage $storage): array
+    private static function extractBuilderReturningMethods(ClassLikeStorage $storage, ?string $customBuilderClass = null): array
     {
         $builderClassLower = \strtolower(Builder::class);
+        $customBuilderClassLower = $customBuilderClass !== null ? \strtolower($customBuilderClass) : null;
         $result = [];
 
         foreach ($storage->pseudo_static_methods as $methodName => $methodStorage) {
@@ -417,10 +419,16 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             foreach ($returnType->getAtomicTypes() as $type) {
-                if (
-                    $type instanceof TGenericObject
-                    && \strtolower($type->value) === $builderClassLower
-                ) {
+                // Laravel traits such as SoftDeletes declare Builder<static>, while apps often
+                // override those macros in model PHPDoc with a concrete custom builder return.
+                // Keep the generic and named-object checks separate so we do not treat arbitrary
+                // generic classes as builder macros, but still catch non-templated custom builders.
+                if ($type instanceof TGenericObject && \strtolower($type->value) === $builderClassLower) {
+                    $result[$methodName] = $methodStorage->params;
+                    break;
+                }
+
+                if ($customBuilderClassLower !== null && $type instanceof TNamedObject && \strtolower($type->value) === $customBuilderClassLower) {
                     $result[$methodName] = $methodStorage->params;
                     break;
                 }
