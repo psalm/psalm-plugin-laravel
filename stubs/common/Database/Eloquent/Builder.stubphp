@@ -357,11 +357,11 @@ class Builder implements BuilderContract
     /**
      * @template TValue
      *
-     * @param  \Closure|array  $columns
+     * @param  (\Closure(): TValue)|list<non-empty-string>|non-empty-string  $columns
      * @param  (\Closure(): TValue)|null  $callback
-     * @return TModel|TValue
+     * @return (TValue is never ? TModel : TModel|TValue)
      */
-    public function firstOr($columns = ['*'], \Closure $callback = null) {}
+    public function firstOr($columns = ['*'], ?\Closure $callback = null) {}
 
     /**
      * @param  array<string, mixed>  $attributes

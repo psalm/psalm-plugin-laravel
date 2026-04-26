@@ -46,6 +46,15 @@ abstract class HasOneOrManyThrough extends Relation
     public function findOrFail($id, $columns = ['*']) {}
 
     /**
+     * @template TValue
+     *
+     * @param  (\Closure(): TValue)|list<non-empty-string>  $columns
+     * @param  (\Closure(): TValue)|null  $callback
+     * @return (TValue is never ? TRelatedModel : TRelatedModel|TValue)
+     */
+    public function firstOr($columns = ['*'], ?\Closure $callback = null) {}
+
+    /**
      * @param  int|null  $perPage
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName

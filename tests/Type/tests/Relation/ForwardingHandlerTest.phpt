@@ -105,6 +105,28 @@ function test_firstOrFail_returns_model(): void {
     /** @psalm-check-type-exact $_ = Invoice */
 }
 
+function test_hasManyThrough_firstOr_with_never_callback_returns_model(): WorkOrder {
+    /** @var HasManyThrough<WorkOrder, Vehicle, Customer> $r */
+    $r = (new Customer())->workOrders();
+    $_ = $r->firstOr(static function (): never {
+        throw new \RuntimeException('Missing work order');
+    });
+    /** @psalm-check-type-exact $_ = WorkOrder */
+
+    return $_;
+}
+
+function test_hasManyThrough_firstOr_with_columns_and_never_callback_returns_model(): WorkOrder {
+    /** @var HasManyThrough<WorkOrder, Vehicle, Customer> $r */
+    $r = (new Customer())->workOrders();
+    $_ = $r->firstOr(['*'], static function (): never {
+        throw new \RuntimeException('Missing work order');
+    });
+    /** @psalm-check-type-exact $_ = WorkOrder */
+
+    return $_;
+}
+
 // Non-fluent mixin method: count() returns int, not HasOne<Invoice, WorkOrder>
 function test_count_returns_int_not_relation(): void {
     /** @var HasOne<Invoice, WorkOrder> $r */

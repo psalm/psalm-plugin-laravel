@@ -41,6 +41,26 @@ final class EloquentBuilderCustomerRepository
         return $builder->findOrFail(1);
     }
 
+    /** @param Builder<Customer> $builder */
+    public function firstOrWithNeverCallbackFromBuilderInstance(Builder $builder): Customer {
+        $_result = $builder->firstOr(static function (): never {
+            throw new \RuntimeException('Missing customer');
+        });
+        /** @psalm-check-type-exact $_result = Customer */
+
+        return $_result;
+    }
+
+    /** @param Builder<Customer> $builder */
+    public function firstOrWithNeverCallbackAndColumnsFromBuilderInstance(Builder $builder): Customer {
+        $_result = $builder->firstOr(['*'], static function (): never {
+            throw new \RuntimeException('Missing customer');
+        });
+        /** @psalm-check-type-exact $_result = Customer */
+
+        return $_result;
+    }
+
     /**
     * @param Builder<Customer> $builder
     * @return Collection<int, Customer>

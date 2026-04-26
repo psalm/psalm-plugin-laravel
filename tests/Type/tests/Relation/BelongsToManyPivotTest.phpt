@@ -54,6 +54,35 @@ function test_firstOrFail_infers_pivot_intersection(BelongsToMany $relation): vo
 }
 
 /**
+ * firstOr() with a never-returning fallback must narrow to the related model
+ * and keep the pivot intersection.
+ *
+ * @param BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'pivot'> $relation
+ */
+function test_firstOr_with_never_callback_infers_pivot_intersection(BelongsToMany $relation): MechanicSpecialization
+{
+    $_ = $relation->firstOr(static function (): never {
+        throw new \RuntimeException('Missing specialization');
+    });
+    /** @psalm-check-type-exact $_ = MechanicSpecialization&object{pivot: SpecializationPivot} */
+
+    return $_;
+}
+
+/**
+ * @param BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'pivot'> $relation
+ */
+function test_firstOr_with_columns_and_never_callback_infers_pivot_intersection(BelongsToMany $relation): MechanicSpecialization
+{
+    $_ = $relation->firstOr(['*'], static function (): never {
+        throw new \RuntimeException('Missing specialization');
+    });
+    /** @psalm-check-type-exact $_ = MechanicSpecialization&object{pivot: SpecializationPivot} */
+
+    return $_;
+}
+
+/**
  * create() return type must include the pivot intersection.
  *
  * @param BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'pivot'> $relation

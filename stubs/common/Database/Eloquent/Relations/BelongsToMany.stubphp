@@ -169,11 +169,11 @@ class BelongsToMany extends Relation
     /**
      * @template TValue
      *
-     * @param  \Closure|array  $columns
+     * @param  (\Closure(): TValue)|list<non-empty-string>  $columns
      * @param  (\Closure(): TValue)|null  $callback
-     * @return (TRelatedModel&object{pivot: TPivotModel})|TValue
+     * @return (TValue is never ? TRelatedModel&object{pivot: TPivotModel} : (TRelatedModel&object{pivot: TPivotModel})|TValue)
      */
-    public function firstOr($columns = ['*'], \Closure $callback = null) {}
+    public function firstOr($columns = ['*'], ?\Closure $callback = null) {}
 
     /**
      * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
