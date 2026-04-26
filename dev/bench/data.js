@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777198069619,
+  "lastUpdate": 1777201121951,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3107,6 +3107,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.06,
             "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "web.lapateen@gmail.com",
+            "name": "alies-dev",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "1c94bcccd06da9af0e811b1401edca2828e02a85",
+          "message": "chore: cleanup wt dir",
+          "timestamp": "2026-04-26T12:51:52+02:00",
+          "tree_id": "c89949e9762b6e784f8ac2ef02f895dd947b13bb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1c94bcccd06da9af0e811b1401edca2828e02a85"
+        },
+        "date": 1777201121457,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.7,
+            "range": "± 0.05",
             "unit": "s"
           },
           {
