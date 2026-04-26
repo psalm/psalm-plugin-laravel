@@ -126,12 +126,6 @@ function lazy_collection_doesnt_contain_too_few(LazyCollection $c): void
 }
 
 /** @param LazyCollection<array-key, mixed> $c */
-function lazy_collection_doesnt_contain_strict_too_few(LazyCollection $c): void
-{
-    $c->doesntContainStrict();
-}
-
-/** @param LazyCollection<array-key, mixed> $c */
 function lazy_collection_zip_too_few(LazyCollection $c): void
 {
     $c->zip();
@@ -191,8 +185,6 @@ TooFewArguments on line %d: Too few arguments for Illuminate\Support\LazyCollect
 TooFewArguments on line %d: Too few arguments for method Illuminate\Support\LazyCollection::hasany saw 0
 TooFewArguments on line %d: Too few arguments for Illuminate\Support\LazyCollection::doesntContain - expecting key to be passed
 TooFewArguments on line %d: Too few arguments for method Illuminate\Support\LazyCollection::doesntcontain saw 0
-TooFewArguments on line %d: Too few arguments for Illuminate\Support\LazyCollection::doesntContainStrict - expecting key to be passed
-TooFewArguments on line %d: Too few arguments for method Illuminate\Support\LazyCollection::doesntcontainstrict saw 0
 TooFewArguments on line %d: Too few arguments for Illuminate\Support\LazyCollection::zip - expecting items to be passed
 TooFewArguments on line %d: Too few arguments for method Illuminate\Support\LazyCollection::zip saw 0
 TooFewArguments on line %d: Too few arguments for Illuminate\Support\MessageBag::has - expecting key to be passed
