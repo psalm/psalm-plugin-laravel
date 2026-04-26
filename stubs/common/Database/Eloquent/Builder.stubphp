@@ -362,7 +362,7 @@ class Builder implements BuilderContract
      *
      * @template TValue
      *
-     * @param  list<string>|(\Closure(): TValue)  $columns
+     * @param  list<non-empty-string>|(\Closure(): TValue)  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @return TModel|TValue
      */

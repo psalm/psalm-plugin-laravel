@@ -174,7 +174,7 @@ class BelongsToMany extends Relation
      *
      * @template TValue
      *
-     * @param  list<string>|(\Closure(): TValue)  $columns
+     * @param  list<non-empty-string>|(\Closure(): TValue)  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @return (TRelatedModel&object{pivot: TPivotModel})|TValue
      */
