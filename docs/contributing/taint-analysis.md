@@ -224,6 +224,8 @@ Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argumen
 
 The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, and `orHaving()`.
 
+The plugin also has a dedicated taint handler for the array form (`where(['col' => $tainted])`): it removes SQL taint from the array **values** only, while leaving the `$column` sink in place so tainted string column names — including tainted array keys — still report.
+
 ### Pattern for find-family methods
 
 ```php
