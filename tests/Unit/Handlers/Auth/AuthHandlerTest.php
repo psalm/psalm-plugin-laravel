@@ -115,17 +115,18 @@ final class AuthHandlerTest extends TestCase
     }
 
     /**
-     * For AuthManager / Factory the methods are real PHP (or routed via @mixin
-     * Guard/StatefulGuard), so Psalm can resolve their parameter types from source.
-     * Returning our facade-oriented overrides there would narrow `guard()`'s
-     * \UnitEnum|string|null parameter down to string|null and flag valid enum calls
-     * as InvalidArgument. See {@see AuthHandler::getMethodParams}.
+     * Issue #854: when AuthManager / Factory are registered as a return type provider, Psalm
+     * routes calls to methods reached only via __call (authenticate, getUser, getLastAttempted,
+     * logoutOtherDevices — none of which appear on the @mixin Guard / StatefulGuard interfaces)
+     * through MissingMethodCallHandler. Returning null from getMethodParams there triggers the
+     * "Cannot get method params for ..." UnexpectedValueException. We must return non-null params
+     * for every method we narrow on these receivers, exactly as we do for the facade.
      *
      * @return \Iterator<string, array{class-string, string}>
      */
     public static function nonFacadeReceiversProvider(): \Iterator
     {
-        $methods = ['user', 'getuser', 'authenticate', 'getlastattempted', 'guard', 'logoutotherdevices', 'loginusingid', 'onceusingid'];
+        $methods = ['user', 'getuser', 'authenticate', 'getlastattempted', 'logoutotherdevices', 'loginusingid', 'onceusingid'];
 
         foreach ($methods as $method) {
             yield "AuthManager::{$method}" => [\Illuminate\Auth\AuthManager::class, $method];
@@ -137,13 +138,42 @@ final class AuthHandlerTest extends TestCase
      * @param class-string $fqClassLikeName
      */
     #[DataProvider('nonFacadeReceiversProvider')]
-    public function testGetMethodParamsReturnsNullForNonFacadeReceivers(string $fqClassLikeName, string $method): void
+    public function testGetMethodParamsReturnsNonNullForNonFacadeReceivers(string $fqClassLikeName, string $method): void
     {
         $event = new MethodParamsProviderEvent($fqClassLikeName, $method);
 
+        $this->assertNotNull(
+            AuthHandler::getMethodParams($event),
+            "getMethodParams() must not return null for {$fqClassLikeName}::{$method} — Psalm 7 crashes when the method is reached via __call (issue #854)",
+        );
+    }
+
+    /**
+     * `guard()` is the one method we still defer to Laravel's source for non-facade receivers.
+     * AuthManager and Factory both declare it as a real method, so Psalm can derive params from
+     * the source — and skipping our override insulates us against future Laravel signature
+     * changes (e.g. adding \UnitEnum to the parameter type) that would otherwise turn our
+     * `string|null` override into false positives.
+     *
+     * @return \Iterator<string, array{class-string}>
+     */
+    public static function nonFacadeReceiversForGuardProvider(): \Iterator
+    {
+        yield 'AuthManager::guard' => [\Illuminate\Auth\AuthManager::class];
+        yield 'Factory::guard' => [\Illuminate\Contracts\Auth\Factory::class];
+    }
+
+    /**
+     * @param class-string $fqClassLikeName
+     */
+    #[DataProvider('nonFacadeReceiversForGuardProvider')]
+    public function testGetMethodParamsReturnsNullForGuardOnNonFacadeReceivers(string $fqClassLikeName): void
+    {
+        $event = new MethodParamsProviderEvent($fqClassLikeName, 'guard');
+
         $this->assertNull(
             AuthHandler::getMethodParams($event),
-            "getMethodParams() must return null for {$fqClassLikeName}::{$method} so Psalm uses the native signature",
+            "getMethodParams() must return null for {$fqClassLikeName}::guard so Psalm uses the native signature",
         );
     }
 }

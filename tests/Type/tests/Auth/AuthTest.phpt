@@ -80,6 +80,21 @@ function _diAuthManager(\Illuminate\Auth\AuthManager $authManager): void {
     $_amOnceUsingId = $authManager->onceUsingId(1);
     /** @psalm-check-type-exact $_amOnceUsingId = \Illuminate\Foundation\Auth\User|false */
 
+    // Issue #854: methods reached via AuthManager::__call that are NOT on the @mixin
+    // Guard|StatefulGuard interfaces. Without explicit getMethodParams entries Psalm
+    // crashed with "Cannot get method params for Illuminate\Auth\AuthManager::<method>".
+    $_amAuthenticate = $authManager->authenticate();
+    /** @psalm-check-type-exact $_amAuthenticate = \Illuminate\Foundation\Auth\User */
+
+    $_amGetUser = $authManager->getUser();
+    /** @psalm-check-type-exact $_amGetUser = \Illuminate\Foundation\Auth\User|null */
+
+    $_amGetLastAttempted = $authManager->getLastAttempted();
+    /** @psalm-check-type-exact $_amGetLastAttempted = \Illuminate\Foundation\Auth\User|null */
+
+    $_amLogoutOtherDevices = $authManager->logoutOtherDevices('secret');
+    /** @psalm-check-type-exact $_amLogoutOtherDevices = \Illuminate\Foundation\Auth\User|null */
+
     // Chained calls — the acceptance example from issue #765
     $_amChainedUser = $authManager->guard('web')->user();
     /** @psalm-check-type-exact $_amChainedUser = \Illuminate\Foundation\Auth\User|null */

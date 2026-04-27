@@ -39,8 +39,9 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
 
     /**
      * Register for the Auth facade, the concrete AuthManager (common DI target), and the
-     * Factory contract (DI by interface). The handler body below is class-agnostic — it
-     * matches on method name only, so all three surfaces receive the same narrowing.
+     * Factory contract (DI by interface). {@see getMethodReturnType} is class-agnostic and
+     * narrows uniformly across all three surfaces; {@see getMethodParams} has one carve-out
+     * for `guard()` on non-facade receivers (see that method's docblock).
      *
      * @return list<string>
      * @psalm-pure
@@ -135,25 +136,40 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
      * Provide explicit parameter definitions for all methods handled by {@see getMethodReturnType}.
      *
      * In Psalm 7, returning null from a MethodParamsProvider for methods that only exist as
-     * @method annotations on facades causes an UnexpectedValueException crash. We must return
-     * explicit params for every method we handle.
+     * @method annotations on facades causes an UnexpectedValueException crash. The same crash
+     * happens when a method is reached via __call on a class registered as a return type provider
+     * but is not a real method on the class or its @mixin targets. Issue #854 reproduced this with
+     * AuthManager::authenticate / getUser / getLastAttempted / logoutOtherDevices: AuthManager
+     * declares only __call (forwarding to the active guard), and these methods do not appear on
+     * the Guard / StatefulGuard interfaces it @mixins. The MissingMethodCallHandler then asks
+     * Methods::getMethodParams for params Psalm cannot find, throwing UnexpectedValueException.
      *
-     * This override is scoped to the Auth facade only. For AuthManager and the Factory contract
-     * the methods are real (or come from @mixin Guard/StatefulGuard), so Psalm can derive
-     * parameter types from the source without our help. Returning our overrides there would
-     * narrow signatures (e.g. guard()'s \UnitEnum|string|null parameter down to string|null)
-     * and produce false positives on valid calls.
+     * Only `guard()` is scoped to the facade. AuthManager / Factory declare guard() with
+     * `string|null` today, so our override would match — but the early-return guards against
+     * future Laravel signature changes (e.g. accepting \UnitEnum|string|null) that would turn
+     * our override into false positives on valid calls. Letting Psalm derive guard()'s params
+     * from the source for non-facade receivers keeps that signature in sync automatically.
      *
-     * @see https://github.com/psalm/psalm-plugin-laravel/issues/454
+     * INVARIANT: every method handled by {@see getMethodReturnType} above must have a non-null
+     * arm in the match below (the `guard()` early-return is the documented exception, safe because
+     * `guard()` is a real method on AuthManager / Factory). Adding a method to getMethodReturnType
+     * without mirroring it here re-triggers the crash. The unit test `nonFacadeReceiversProvider`
+     * pins the current set, but it is not auto-derived — keep both in sync by hand.
+     *
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/454 — original crash on facades
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/854 — same crash on AuthManager
      */
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
-        if ($event->getFqClasslikeName() !== \Illuminate\Support\Facades\Auth::class) {
+        $method_name_lowercase = $event->getMethodNameLowercase();
+
+        // Defer guard()'s params to Laravel source for non-facade receivers — see method docblock.
+        if ($method_name_lowercase === 'guard'
+            && $event->getFqClasslikeName() !== \Illuminate\Support\Facades\Auth::class
+        ) {
             return null;
         }
-
-        $method_name_lowercase = $event->getMethodNameLowercase();
 
         return match ($method_name_lowercase) {
             // Guard::user(), GuardHelpers::authenticate(), SessionGuard::getUser(),
