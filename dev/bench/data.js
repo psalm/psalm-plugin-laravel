@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777211170906,
+  "lastUpdate": 1777275816668,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3212,6 +3212,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.59,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e42b3650d0907578a79e36f95332ff6e163dd760",
+          "message": "Merge pull request #856 from psalm/worktree-854-authmanager-magic-method-crash\n\nFix Psalm crash on AuthManager __call-forwarded methods (#854)",
+          "timestamp": "2026-04-27T08:41:24+01:00",
+          "tree_id": "68461a5e39ca9ead00a834a9b2e4f40c1b9c4db8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e42b3650d0907578a79e36f95332ff6e163dd760"
+        },
+        "date": 1777275815803,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.42,
+            "range": "± 0.37",
             "unit": "s"
           },
           {
