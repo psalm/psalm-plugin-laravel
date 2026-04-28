@@ -71,7 +71,7 @@ final class RouteScannerTest extends TestCase
     public function bind_without_return_type_is_skipped(): void
     {
         $router = $this->makeRouter();
-        $router->bind('opaque', static fn(string $value) => $value);
+        $router->bind('opaque', static fn(string $value): string => $value);
 
         $registry = (new RouteScanner())->scan($router);
 
@@ -157,7 +157,7 @@ final class RouteScannerTest extends TestCase
         // A route must use the parameter for the registry to surface it,
         // because the scanner scopes safe constraints to names that actually
         // appear in registered routes (see RouteScanner::collectSafeConstraints).
-        $router->get('/foo/{id}', static fn() => null);
+        $router->get('/foo/{id}', static fn(): null => null);
 
         $registry = (new RouteScanner())->scan($router);
 
@@ -169,7 +169,7 @@ final class RouteScannerTest extends TestCase
     {
         $router = $this->makeRouter();
         $router->pattern('id', '.+');
-        $router->get('/foo/{id}', static fn() => null);
+        $router->get('/foo/{id}', static fn(): null => null);
 
         $registry = (new RouteScanner())->scan($router);
 
@@ -180,7 +180,7 @@ final class RouteScannerTest extends TestCase
     public function per_route_safe_where_marks_constraint_safe(): void
     {
         $router = $this->makeRouter();
-        $router->get('/foo/{key}', static fn() => null)
+        $router->get('/foo/{key}', static fn(): null => null)
             ->where('key', '[A-Za-z0-9]+');
 
         $registry = (new RouteScanner())->scan($router);
@@ -198,8 +198,8 @@ final class RouteScannerTest extends TestCase
         // Two routes share the name 'id'. One has a safe where, the other has
         // none. The scanner must conservatively reject — at the call site we
         // can't know which route resolves the request.
-        $router->get('/safe/{id}', static fn() => null)->where('id', '\d+');
-        $router->get('/unsafe/{id}', static fn() => null);
+        $router->get('/safe/{id}', static fn(): null => null)->where('id', '\d+');
+        $router->get('/unsafe/{id}', static fn(): null => null);
 
         $registry = (new RouteScanner())->scan($router);
 
@@ -216,8 +216,8 @@ final class RouteScannerTest extends TestCase
         // Both regexes are individually safe — different shapes still produce
         // the same property (no metachar) so the conservative aggregation
         // stays safe.
-        $router->get('/digits/{id}', static fn() => null)->where('id', '\d+');
-        $router->get('/alpha/{id}', static fn() => null)->where('id', '[a-zA-Z0-9]+');
+        $router->get('/digits/{id}', static fn(): null => null)->where('id', '\d+');
+        $router->get('/alpha/{id}', static fn(): null => null)->where('id', '[a-zA-Z0-9]+');
 
         $registry = (new RouteScanner())->scan($router);
 
@@ -228,8 +228,8 @@ final class RouteScannerTest extends TestCase
     public function one_unsafe_route_disables_safety_for_name(): void
     {
         $router = $this->makeRouter();
-        $router->get('/safe/{key}', static fn() => null)->where('key', '\d+');
-        $router->get('/unsafe/{key}', static fn() => null)->where('key', '.+');
+        $router->get('/safe/{key}', static fn(): null => null)->where('key', '\d+');
+        $router->get('/unsafe/{key}', static fn(): null => null)->where('key', '.+');
 
         $registry = (new RouteScanner())->scan($router);
 

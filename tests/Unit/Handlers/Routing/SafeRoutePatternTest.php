@@ -55,7 +55,7 @@ final class SafeRoutePatternTest extends TestCase
     {
         yield 'wildcard' => ['.+'];
         yield 'non-slash' => ['[^/]+'];
-        yield 'with quote' => ['[a-zA-Z0-9\']+'];
+        yield 'with quote' => ["[a-zA-Z0-9']+"];
         yield 'with newline class' => ['[\s\S]+'];
         yield 'with shell metachar' => ['[A-Za-z0-9;]+'];
         yield 'with html bracket' => ['[A-Za-z0-9<>]+'];

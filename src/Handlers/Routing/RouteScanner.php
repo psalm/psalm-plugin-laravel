@@ -98,7 +98,6 @@ final class RouteScanner
             return null;
         }
 
-        /** @var mixed $value */
         $value = $property->getValue($router);
 
         return \is_array($value) ? $value : null;

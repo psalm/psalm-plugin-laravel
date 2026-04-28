@@ -28,7 +28,7 @@ final class RouteParameterRegistryBuilder
     {
         try {
             $app = ApplicationProvider::getApp();
-        } catch (\Throwable $bootFailure) {
+        } catch (\Throwable $throwable) {
             // ApplicationProvider warns once on the FIRST failed bootApp(),
             // but `getApp()` does not cache that null result (`self::$app`
             // stays unset on failure), so a second call here re-runs
@@ -39,7 +39,7 @@ final class RouteParameterRegistryBuilder
             // accordingly.
             $output->warning(
                 "Laravel plugin: route binding scan skipped — application not bootable: "
-                . $bootFailure->getMessage(),
+                . $throwable->getMessage(),
             );
 
             return;
@@ -54,10 +54,10 @@ final class RouteParameterRegistryBuilder
         try {
             /** @var Router $router */
             $router = $app->make('router');
-        } catch (\Throwable $resolutionFailure) {
+        } catch (\Throwable $throwable) {
             $output->warning(
                 "Laravel plugin: could not resolve router service for route binding analysis: "
-                . $resolutionFailure->getMessage(),
+                . $throwable->getMessage(),
             );
 
             return;
@@ -65,13 +65,13 @@ final class RouteParameterRegistryBuilder
 
         try {
             $registry = (new RouteScanner())->scan($router);
-        } catch (\Throwable $scanFailure) {
+        } catch (\Throwable $throwable) {
             // RouteScanner is defensive but reflection on a non-standard
             // Router subclass could still surprise us — keep the warning
             // visible so plugin maintainers can fix the regression.
             $output->warning(
                 "Laravel plugin: route binding scan failed, falling back to empty registry: "
-                . $scanFailure->getMessage(),
+                . $throwable->getMessage(),
             );
 
             return;
