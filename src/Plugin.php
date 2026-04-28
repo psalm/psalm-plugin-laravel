@@ -47,6 +47,14 @@ final class Plugin implements PluginEntryPointInterface
             // of whether findMissingTranslations is enabled
             $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations);
 
+            // Scan the booted Laravel router for route-model bindings and
+            // safe parameter constraints. RouteServiceProvider has already
+            // run (it's part of the console-kernel bootstrap inside
+            // ApplicationProvider::doGetApp), so the route collection is
+            // populated. Failures fall back to an empty registry — the stub
+            // remains conservative.
+            Handlers\Routing\RouteParameterRegistryBuilder::boot($output);
+
             if ($pluginConfig->findMissingViews) {
                 $this->initMissingViewHandler($output);
             }
@@ -292,6 +300,16 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
+
+        // Routing handlers consult RouteParameterRegistry (populated by
+        // RouteParameterRegistryBuilder::boot above). Type provider must
+        // be registered before the taint handler so reviewers reading
+        // top-to-bottom see the override decision before the source
+        // compensation that depends on it.
+        require_once __DIR__ . '/Handlers/Routing/RequestRouteReturnTypeProvider.php';
+        $registration->registerHooksFromClass(Handlers\Routing\RequestRouteReturnTypeProvider::class);
+        require_once __DIR__ . '/Handlers/Routing/RequestRouteTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Routing\RequestRouteTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
