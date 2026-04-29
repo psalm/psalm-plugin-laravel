@@ -8,7 +8,7 @@ has_children: true
 
 The plugin ships advanced Laravel-aware static analysis checks that extend Psalm's built-in diagnostics:
 
-- [NoEnvOutsideConfig](NoEnvOutsideConfig.md) — `env()` called outside `config/` directory
+- [NoEnvOutsideConfig](NoEnvOutsideConfig.md) — `env()` called outside the application's config directory
 - [InvalidConsoleArgumentName](InvalidConsoleArgumentName.md) — `argument()` references undefined console command argument
 - [InvalidConsoleOptionName](InvalidConsoleOptionName.md) — `option()` references undefined console command option
 - [MissingView](MissingView.md) — `view()` references a non-existent Blade template (opt-in)

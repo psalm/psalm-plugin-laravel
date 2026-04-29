@@ -44,6 +44,71 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
         $this->assertTrue($config->resolveDynamicWhereClauses);
+        $this->assertSame([], $config->configDirectories);
+    }
+
+    #[Test]
+    public function config_directories_single_entry(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><configDirectory name="app/Config" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertSame(['app/Config'], $config->configDirectories);
+    }
+
+    #[Test]
+    public function config_directories_multiple_entries_preserve_order(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<configDirectory name="app/Config" />'
+            . '<configDirectory name="packages/*/config" />'
+            . '<configDirectory name="vendor/foo/bar/config" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertSame(
+            ['app/Config', 'packages/*/config', 'vendor/foo/bar/config'],
+            $config->configDirectories,
+        );
+    }
+
+    #[Test]
+    public function config_directories_throw_on_empty_name_attribute(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<configDirectory name="app/Config" />'
+            . '<configDirectory name="" />'
+            . '</pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/<configDirectory> requires a non-empty `name` attribute/');
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function config_directories_throw_on_missing_name_attribute(): void
+    {
+        // Catches typos like <configDirectory path="..." /> where the user used the wrong
+        // attribute name — without this guard the element is silently dropped and the
+        // typo-warning behaviour kicks in only when *every* entry is malformed.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<configDirectory name="app/Config" />'
+            . '<configDirectory path="packages/forms/config" />'
+            . '</pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/<configDirectory> requires a non-empty `name` attribute/');
+
+        PluginConfig::fromXml($xml);
     }
 
     #[Test]
@@ -282,6 +347,8 @@ final class PluginConfigTest extends TestCase
             . '<failOnInternalError value="true" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<configDirectory name="app/Config" />'
+            . '<configDirectory name="packages/*/config" />'
             . '</pluginClass>',
         );
 
@@ -293,5 +360,6 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->findMissingViews);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);
+        $this->assertSame(['app/Config', 'packages/*/config'], $config->configDirectories);
     }
 }

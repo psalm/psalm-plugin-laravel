@@ -184,6 +184,55 @@ final class IssueUrlGeneratorTest extends TestCase
     }
 
     /**
+     * An empty configDirectories list is the implicit-default case (no XML opt-in).
+     * Triage needs to see "default" rather than "[]" so the bug-report reader knows
+     * the plugin used config_path() at runtime, not literally an empty list.
+     */
+    #[Test]
+    public function body_renders_empty_config_directories_as_default(): void
+    {
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
+
+        $this->assertStringContainsString('- configDirectories: [] (default: config_path())', $body);
+    }
+
+    /**
+     * Non-empty configDirectories render comma-separated, with each entry passed through
+     * sanitizeCachePath(). Relative entries have no prefix to collapse and pass through
+     * unchanged; absolute entries under $HOME, cwd, or tmp must collapse to anonymised
+     * forms so the bug-report body does not leak filesystem layout.
+     *
+     * Uses sys_get_temp_dir() rather than cwd because cwd reliably appears elsewhere in
+     * the rendered body (RuntimeException trace frames pointing into tests/), so a
+     * "body does not contain $cwd" assertion would always fail. The temp-dir branch of
+     * sanitizeCachePath is equivalent — both exercise the str_starts_with prefix collapse.
+     */
+    #[Test]
+    public function body_anonymises_absolute_config_directory_paths(): void
+    {
+        $tmp = \sys_get_temp_dir();
+        $absoluteUnderTmp = $tmp . \DIRECTORY_SEPARATOR . 'fake' . \DIRECTORY_SEPARATOR . 'Config';
+
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<configDirectory name="' . \htmlspecialchars($absoluteUnderTmp, \ENT_XML1) . '" />'
+            . '<configDirectory name="packages/*/config" />'
+            . '</pluginClass>',
+        );
+        $config = PluginConfig::fromXml($xml);
+
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $config));
+
+        // Absolute entry collapses to "<tmp>/fake/Config" via sanitizeCachePath's tmp branch.
+        // Relative "packages/*/config" has no prefix to collapse and passes through.
+        $this->assertStringContainsString(
+            '- configDirectories: [<tmp>' . \DIRECTORY_SEPARATOR . 'fake' . \DIRECTORY_SEPARATOR . 'Config, packages/*/config]',
+            $body,
+        );
+        $this->assertStringNotContainsString($absoluteUnderTmp, $body);
+    }
+
+    /**
      * Vendor fallback: an absolute prefix containing a vendor/ segment collapses
      * to a relative vendor/... path — useful for the uncommon case where the
      * cache sits inside a checkout rather than under cwd / tmp / HOME.
