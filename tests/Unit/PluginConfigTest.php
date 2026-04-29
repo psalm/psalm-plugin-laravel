@@ -77,19 +77,38 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function config_directories_skip_empty_name_attributes(): void
+    public function config_directories_throw_on_empty_name_attribute(): void
     {
         $xml = new \SimpleXMLElement(
             '<pluginClass>'
             . '<configDirectory name="app/Config" />'
             . '<configDirectory name="" />'
-            . '<configDirectory />'
             . '</pluginClass>',
         );
 
-        $config = PluginConfig::fromXml($xml);
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/<configDirectory> requires a non-empty `name` attribute/');
 
-        $this->assertSame(['app/Config'], $config->configDirectories);
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function config_directories_throw_on_missing_name_attribute(): void
+    {
+        // Catches typos like <configDirectory path="..." /> where the user used the wrong
+        // attribute name — without this guard the element is silently dropped and the
+        // typo-warning behaviour kicks in only when *every* entry is malformed.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<configDirectory name="app/Config" />'
+            . '<configDirectory path="packages/forms/config" />'
+            . '</pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/<configDirectory> requires a non-empty `name` attribute/');
+
+        PluginConfig::fromXml($xml);
     }
 
     #[Test]

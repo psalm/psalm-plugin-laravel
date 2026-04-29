@@ -64,19 +64,16 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
         foreach ($directories as $directory) {
             // Try literal path first so paths with glob metacharacters (e.g. brackets in
             // `/home/user/dev[work]/config`) resolve correctly. Only fall back to glob()
-            // when the literal path isn't a directory.
+            // when the literal path isn't a directory. GLOB_ONLYDIR drops non-directory
+            // matches up-front; GLOB_NOSORT skips alphabetical sorting we don't need.
             if (\is_dir($directory)) {
                 $matches = [$directory];
             } else {
-                $globMatches = \glob($directory);
+                $globMatches = \glob($directory, \GLOB_ONLYDIR | \GLOB_NOSORT);
                 $matches = $globMatches === false ? [] : $globMatches;
             }
 
             foreach ($matches as $match) {
-                if (!\is_dir($match)) {
-                    continue;
-                }
-
                 $real = \realpath($match);
 
                 if ($real === false) {

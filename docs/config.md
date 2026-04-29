@@ -103,7 +103,7 @@ See [MissingView](issues/MissingView.md) for details.
 
 Controls which directories are treated as config directories by [`NoEnvOutsideConfig`](issues/NoEnvOutsideConfig.md). `env()` calls inside any of these directories are exempt from the check.
 
-Each entry can be an absolute path or a path relative to where Psalm is invoked (typically the project root; PHP's `glob()` is used for resolution, so `<configDirectory>` is sensitive to your working directory). Glob patterns are supported and expanded once at plugin boot.
+Each entry can be an absolute path or a relative path resolved by PHP's `glob()` against the current working directory. Psalm sets the working directory to the directory containing `psalm.xml` by default (controlled by Psalm's `resolveFromConfigFile` option), so relative entries normally resolve from the project root. Absolute paths are recommended when running Psalm from a subdirectory or when several config files are in play. Glob patterns are supported and expanded once at plugin boot.
 
 **Defining any `<configDirectory>` replaces the default**, so include `config` (or whatever your project's standard config dir is) explicitly if you still want it covered. Test files (paths containing `/tests/`) are always exempt regardless of this setting.
 

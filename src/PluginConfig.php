@@ -72,7 +72,10 @@ final readonly class PluginConfig
 
     /**
      * Read repeating elements like `<configDirectory name="..." />` as a list of `name` values.
-     * Empty `name` attributes are skipped so a stray `<configDirectory />` does not produce "".
+     *
+     * Throws on any element that lacks a non-empty `name` attribute so user typos like
+     * `<configDirectory path="..." />` (wrong attribute) or a stray `<configDirectory />`
+     * surface immediately instead of silently falling back to the default config_path().
      *
      * The `iterable<\SimpleXMLElement>` annotation on `$children` is necessary because
      * Psalm's SimpleXMLElement stub types dynamic-property iteration as `mixed`.
@@ -93,9 +96,13 @@ final readonly class PluginConfig
         foreach ($children as $node) {
             $value = (string) ($node['name'] ?? '');
 
-            if ($value !== '') {
-                $values[] = $value;
+            if ($value === '') {
+                throw new \InvalidArgumentException(
+                    "<{$element}> requires a non-empty `name` attribute, e.g. <{$element} name=\"app/Config\" />.",
+                );
             }
+
+            $values[] = $value;
         }
 
         return $values;
