@@ -64,6 +64,33 @@ Disable if dynamic where resolution conflicts with your codebase.
 <resolveDynamicWhereClauses value="false" />
 ```
 
+## `configDirectory`
+
+**default**: the booted Laravel app's `config_path()`
+
+Controls which directories are treated as config directories by [`NoEnvOutsideConfig`](issues/NoEnvOutsideConfig.md). `env()` calls inside any of these directories are exempt from the check.
+
+Each entry can be an absolute path or a relative path resolved by PHP's `glob()` against the current working directory. Psalm sets the working directory to the directory containing `psalm.xml` by default (controlled by Psalm's `resolveFromConfigFile` option), so relative entries normally resolve from the project root. Absolute paths are recommended when running Psalm from a subdirectory or when several config files are in play. Glob patterns are supported and expanded once at plugin boot.
+
+**Defining any `<configDirectory>` replaces the default**, so include `config` (or whatever your project's standard config dir is) explicitly if you still want it covered. Test files (paths containing `/tests/`) are always exempt regardless of this setting.
+
+If no entry resolves to an existing directory at boot, the plugin emits a warning so the typo case (`<configDirectory name="cofnig" />`) is surfaced rather than silently flagging every `env()` call.
+
+### Examples
+
+A non-standard layout (e.g. BookStack's `app/Config/`):
+
+```xml
+<configDirectory name="app/Config" />
+```
+
+Standard `config/` plus monorepo package configs:
+
+```xml
+<configDirectory name="config" />
+<configDirectory name="packages/*/config" />
+```
+
 ## `findMissingTranslations`
 
 **default**: `false`
@@ -95,33 +122,6 @@ See [MissingView](issues/MissingView.md) for details.
 
 ```xml
 <findMissingViews value="true" />
-```
-
-## `configDirectory`
-
-**default**: the booted Laravel app's `config_path()`
-
-Controls which directories are treated as config directories by [`NoEnvOutsideConfig`](issues/NoEnvOutsideConfig.md). `env()` calls inside any of these directories are exempt from the check.
-
-Each entry can be an absolute path or a relative path resolved by PHP's `glob()` against the current working directory. Psalm sets the working directory to the directory containing `psalm.xml` by default (controlled by Psalm's `resolveFromConfigFile` option), so relative entries normally resolve from the project root. Absolute paths are recommended when running Psalm from a subdirectory or when several config files are in play. Glob patterns are supported and expanded once at plugin boot.
-
-**Defining any `<configDirectory>` replaces the default**, so include `config` (or whatever your project's standard config dir is) explicitly if you still want it covered. Test files (paths containing `/tests/`) are always exempt regardless of this setting.
-
-If no entry resolves to an existing directory at boot, the plugin emits a warning so the typo case (`<configDirectory name="cofnig" />`) is surfaced rather than silently flagging every `env()` call.
-
-### Examples
-
-A non-standard layout (e.g. BookStack's `app/Config/`):
-
-```xml
-<configDirectory name="app/Config" />
-```
-
-Standard `config/` plus monorepo package configs:
-
-```xml
-<configDirectory name="config" />
-<configDirectory name="packages/*/config" />
 ```
 
 ## Cache directory
