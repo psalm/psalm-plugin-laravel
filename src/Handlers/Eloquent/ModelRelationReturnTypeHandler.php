@@ -35,10 +35,15 @@ use Psalm\Type\Union;
  * {@see RelationMethodParser} parses the AST body to detect a relation factory call
  * (`$this->hasOne(X::class)`, `$this->belongsTo(X::class)`, ...) and returns the
  * properly templated concrete relation type (e.g. `HasOne<Invoice, WorkOrder>`,
- * `BelongsToMany<Tag, Post>`, not `Relation<...>`). Polymorphic morphTo
- * is intentionally skipped (the related class is determined at runtime). hasOneThrough
- * and hasManyThrough require all three class-strings (related, intermediate, declaring)
- * to resolve statically; if either factory arg is dynamic the handler defers.
+ * `BelongsToMany<Tag, Post>`, not `Relation<...>`). `MorphTo` can be narrowed when the
+ * related model is statically declared via a docblock generic
+ * (`@phpstan-return MorphTo<User|Post, $this>` — read by
+ * {@see RelationMethodParser::extractDocblockRelatedModelType}); without that the
+ * handler defers because the related class is determined at runtime. `HasOneThrough`
+ * and `HasManyThrough` require both factory class-string args (related and intermediate)
+ * to resolve statically. The declaring-model generic comes from the receiver
+ * (`$bindingClass`), not a factory arg, so it is always available; if either factory
+ * arg is dynamic the handler defers.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
  * @internal
