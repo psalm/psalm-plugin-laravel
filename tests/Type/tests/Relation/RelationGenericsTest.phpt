@@ -30,13 +30,13 @@ function test_hasManyThrough_returns_typed_relation(): HasManyThrough
 }
 
 /**
- * When the generic type is explicitly annotated, getRelated()/getParent() resolve correctly.
- * Psalm cannot yet infer full generic params through trait methods, so @var is used to
- * verify template parameter propagation through the relation API.
+ * Generic params now propagate through user-defined relation methods directly via the
+ * ModelRelationReturnTypeHandler — no @var coercion required. getRelated()/getParent()
+ * resolve through the existing relation stubs once the called-on type carries the
+ * right template params.
  */
 function test_hasOne_getRelated_returns_invoice(): Invoice
 {
-    /** @var HasOne<Invoice, WorkOrder> $relation */
     $relation = (new WorkOrder())->invoice();
     /** @psalm-check-type-exact $relation = HasOne<Invoice, WorkOrder> */
     return $relation->getRelated();
@@ -44,7 +44,6 @@ function test_hasOne_getRelated_returns_invoice(): Invoice
 
 function test_hasOne_getParent_returns_workOrder(): WorkOrder
 {
-    /** @var HasOne<Invoice, WorkOrder> $relation */
     $relation = (new WorkOrder())->invoice();
     return $relation->getParent();
 }
@@ -54,7 +53,6 @@ function test_hasOne_getParent_returns_workOrder(): WorkOrder
 
 function test_latest_preserves_relation_type(): HasOne
 {
-    /** @var HasOne<Invoice, WorkOrder> $relation */
     $relation = (new WorkOrder())->invoice();
     /** @psalm-check-type-exact $latest = HasOne<Invoice, WorkOrder>&static */
     $latest = $relation->latest();
@@ -64,7 +62,6 @@ function test_latest_preserves_relation_type(): HasOne
 /** @return \App\Collections\InvoiceCollection */
 function test_get_returns_collection(): \App\Collections\InvoiceCollection
 {
-    /** @var HasOne<Invoice, WorkOrder> $relation */
     $relation = (new WorkOrder())->invoice();
     /** @psalm-check-type-exact $collection = \App\Collections\InvoiceCollection */
     $collection = $relation->get();
@@ -73,7 +70,6 @@ function test_get_returns_collection(): \App\Collections\InvoiceCollection
 
 function test_sole_returns_model(): Invoice
 {
-    /** @var HasOne<Invoice, WorkOrder> $relation */
     $relation = (new WorkOrder())->invoice();
     /** @psalm-check-type-exact $model = Invoice */
     $model = $relation->sole();
@@ -86,7 +82,6 @@ function test_sole_returns_model(): Invoice
  */
 function test_select_variadic_on_relation(): HasOne
 {
-    /** @var HasOne<Invoice, WorkOrder> $relation */
     $relation = (new WorkOrder())->invoice();
     return $relation->select('id', 'name', 'created_at');
 }

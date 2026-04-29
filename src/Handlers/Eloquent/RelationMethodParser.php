@@ -43,13 +43,18 @@ use Psalm\Type\Union;
 final class RelationMethodParser
 {
     /**
-     * Parsed result: the relationship factory method and optionally the related model FQCN.
+     * Parsed result: the relationship factory method, related model FQCN, and (for "through"
+     * relations only) the intermediate model FQCN.
      *
      * relatedModel is null when:
      * - The relation is polymorphic (morphTo) — the related type is not statically determinable
      * - The first argument could not be statically resolved (e.g. a variable or method call)
      *
-     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string}>
+     * intermediateModel is non-null only for hasOneThrough / hasManyThrough — for every other
+     * relation factory it stays null. Resolves the same way as relatedModel: missing or non-
+     * literal class-string arguments produce null.
+     *
+     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}>
      */
     private static array $cache = [];
 
@@ -82,12 +87,14 @@ final class RelationMethodParser
     ];
 
     /**
-     * Parse a relationship method body and extract the relation class and related model.
+     * Parse a relationship method body and extract the relation class, related model, and (for
+     * through relations only) the intermediate model.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}
      *         null if the method cannot be parsed as a relationship method.
      *         relatedModel is null when polymorphic (morphTo) or when the first argument
-     *         could not be statically resolved.
+     *         could not be statically resolved. intermediateModel is non-null only for
+     *         hasOneThrough / hasManyThrough.
      */
     public static function parse(Codebase $codebase, string $className, string $methodName): ?array
     {
@@ -104,7 +111,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}
      */
     private static function doParse(Codebase $codebase, string $className, string $methodName): ?array
     {
@@ -126,7 +133,7 @@ final class RelationMethodParser
      * like $this->belongsTo(Vault::class).
      *
      * @param array<array-key, PhpParser\Node\Stmt> $stmts
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}
      */
     private static function parseMethodBody(array $stmts): ?array
     {
@@ -145,7 +152,7 @@ final class RelationMethodParser
      * Recursively search an expression for a relationship factory method call.
      * Handles both direct calls and method chains.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}
      */
     private static function findRelationCallInExpr(PhpParser\Node\Expr $expr): ?array
     {
@@ -161,7 +168,13 @@ final class RelationMethodParser
             if ($relationClass !== null) {
                 return [
                     'relationClass' => $relationClass,
-                    'relatedModel' => self::extractClassStringArg($expr, $lowerName),
+                    'relatedModel' => self::extractClassStringArg($expr, $lowerName, 0),
+                    // Through relations carry the intermediate model as the second class-string
+                    // argument: hasOneThrough(Related, Intermediate) / hasManyThrough(Related, Intermediate).
+                    // Every other factory leaves this null.
+                    'intermediateModel' => \in_array($lowerName, ['hasonethrough', 'hasmanythrough'], true)
+                        ? self::extractClassStringArg($expr, $lowerName, 1)
+                        : null,
                 ];
             }
         }
@@ -172,13 +185,16 @@ final class RelationMethodParser
     }
 
     /**
-     * Extract the class-string first argument from a relationship factory call.
+     * Extract the class-string argument at $argIndex from a relationship factory call.
      *
      * morphTo() is special: it may have no arguments (Laravel infers the type from the method name),
      * or it may have string arguments rather than a class-string. Returns null for morphTo()
      * since the related model type is polymorphic and not statically determinable.
+     *
+     * $argIndex=0 captures the related model. $argIndex=1 is used by the through relations
+     * (hasOneThrough / hasManyThrough) to capture the intermediate model.
      */
-    private static function extractClassStringArg(PhpParser\Node\Expr\MethodCall $call, string $lowerMethodName): ?string
+    private static function extractClassStringArg(PhpParser\Node\Expr\MethodCall $call, string $lowerMethodName, int $argIndex): ?string
     {
         // morphTo() doesn't take a class-string<Model> as first arg — the related type is polymorphic
         if ($lowerMethodName === 'morphto') {
@@ -186,11 +202,11 @@ final class RelationMethodParser
         }
 
         $args = $call->args;
-        if ($args === [] || !$args[0] instanceof PhpParser\Node\Arg) {
+        if (!isset($args[$argIndex]) || !$args[$argIndex] instanceof PhpParser\Node\Arg) {
             return null;
         }
 
-        $firstArg = $args[0]->value;
+        $firstArg = $args[$argIndex]->value;
 
         // Expect ClassName::class
         if (
@@ -260,11 +276,20 @@ final class RelationMethodParser
     private static function findClassMethodWithStatements(Codebase $codebase, string $className, string $methodName): ?array
     {
         $methodId = $className . '::' . $methodName;
+        $methodIdentifier = MethodIdentifier::wrap($methodId);
+
+        // Pre-check via the non-throwing API. The new ModelRelationReturnTypeHandler
+        // (see https://github.com/psalm/psalm-plugin-laravel/issues/760) calls this
+        // path for every method dispatch on every Model subclass — including Builder
+        // forwards (find/where/save/etc.) that aren't declared on the subclass at all.
+        // Falling through to getStorage() and catching the resulting UnexpectedValueException
+        // for each cold miss adds a real cost per (class, method) pair on first analysis.
+        if (!$codebase->methods->hasStorage($methodIdentifier)) {
+            return null;
+        }
 
         try {
-            $methodStorage = $codebase->methods->getStorage(
-                MethodIdentifier::wrap($methodId),
-            );
+            $methodStorage = $codebase->methods->getStorage($methodIdentifier);
         } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
             $codebase->progress->debug("Laravel plugin: could not get method storage for {$methodId}: {$e->getMessage()}\n");
             return null;
