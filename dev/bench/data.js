@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777493391991,
+  "lastUpdate": 1777499502299,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3287,6 +3287,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1dcf9c6fc894cb33849c3b832645f9e35c9de9fb",
+          "message": "Merge pull request #859 from psalm/worktree-858-config-directories\n\nAllow custom config directories for `NoEnvOutsideConfig`",
+          "timestamp": "2026-04-29T23:49:09+02:00",
+          "tree_id": "1acfd665b9afc6d42860bd10ec2447568ecef20f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1dcf9c6fc894cb33849c3b832645f9e35c9de9fb"
+        },
+        "date": 1777499501921,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.73,
+            "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
