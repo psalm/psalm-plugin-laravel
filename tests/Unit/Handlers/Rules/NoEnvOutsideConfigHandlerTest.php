@@ -104,8 +104,8 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     }
 
     /**
-     * Acceptance criterion from issue #858: glob patterns expand at init() time.
-     * `packages/* /config` matches every package's config directory in a monorepo.
+     * Acceptance criterion from issue #858: glob patterns expand at init() time and
+     * match every package's config directory in a monorepo.
      */
     #[Test]
     public function skips_glob_pattern_matched_directories(): void
@@ -120,6 +120,50 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
 
         $this->assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($eventForms));
         $this->assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($eventTables));
+    }
+
+    /**
+     * Regression for the glob-metacharacter bug: a literal path like `dev[work]/config`
+     * must resolve via the is_dir() fast path, not through glob() — glob would
+     * interpret `[work]` as a character class and return no matches.
+     */
+    #[Test]
+    public function skips_literal_path_with_glob_metacharacters(): void
+    {
+        $configDir = $this->makeDir('dev[work]/config');
+        NoEnvOutsideConfigHandler::init([$configDir]);
+
+        $event = $this->makeEvent($configDir . \DIRECTORY_SEPARATOR . 'app.php');
+
+        $this->assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($event));
+    }
+
+    /**
+     * Glob patterns may be relative to the cwd (Larastan convention). Verifies the
+     * fallback to glob() runs when the literal path isn't a directory.
+     */
+    #[Test]
+    public function skips_relative_glob_pattern(): void
+    {
+        // makeDir() returns realpath() so it survives the symlinked tmp dir on macOS
+        // (/var/folders/... → /private/var/folders/...).
+        $formsConfig = $this->makeDir('packages/forms/config');
+        $tempRootReal = \realpath($this->tempRoot);
+        \assert(\is_string($tempRootReal));
+
+        $cwd = \getcwd();
+        \assert(\is_string($cwd));
+
+        try {
+            \chdir($tempRootReal);
+            NoEnvOutsideConfigHandler::init(['packages/*/config']);
+        } finally {
+            \chdir($cwd);
+        }
+
+        $event = $this->makeEvent($formsConfig . \DIRECTORY_SEPARATOR . 'forms.php');
+
+        $this->assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($event));
     }
 
     /**
@@ -226,7 +270,8 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     /**
      * A glob that matches nothing (or any other silent drop) is normal and must not warn
      * as long as at least one entry resolves successfully — projects often configure
-     * patterns like `packages/* /config` for monorepos that may be empty initially.
+     * monorepo glob patterns for `packages/<wildcard>/config` directories that may be
+     * empty initially.
      */
     #[Test]
     public function init_does_not_warn_when_at_least_one_entry_resolves(): void

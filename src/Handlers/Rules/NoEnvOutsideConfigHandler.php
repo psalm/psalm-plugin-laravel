@@ -20,8 +20,9 @@ use Psalm\Type\Union;
  *
  * The set of "config directories" is configured via `<configDirectory name="..." />`
  * elements in psalm.xml; when none are provided, the booted Laravel app's
- * `config_path()` is used. Glob patterns are supported (e.g. `packages/* /config`)
- * and resolved at plugin boot — runtime checks are a pure str_starts_with loop.
+ * `config_path()` is used. Glob patterns are supported (e.g. `app/<wildcard>/config`,
+ * where the wildcard is `*`) and resolved at plugin boot. Runtime checks are a pure
+ * str_starts_with loop.
  *
  * @see https://laravel.com/docs/configuration#configuration-caching
  */
@@ -40,17 +41,19 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
      *
      * Each entry may be:
      *   - an absolute or cwd-relative path (matches Larastan's convention),
-     *   - a glob pattern (e.g. `packages/* /config`).
+     *   - a glob pattern with `*` as the wildcard (e.g. `app/<wildcard>/config`).
      *
-     * Resolution: glob() expansion → is_dir() guard → realpath() → trailing separator.
-     * Psalm reports normalised absolute paths for scanned files; realpath()-ing config
-     * dirs keeps both sides comparable across symlinks.
+     * Resolution: literal is_dir() check first (so paths containing glob metacharacters
+     * like `[` and `]` work), falling back to glob() expansion for actual patterns,
+     * then realpath() and trailing separator. Psalm reports normalised absolute paths
+     * for scanned files; realpath()-ing config dirs keeps both sides comparable across
+     * symlinks.
      *
      * Individual entries that fail to resolve are dropped silently — common when a glob
-     * matches nothing (e.g. `packages/* /config` in a project without packages yet).
-     * Passing an empty list explicitly resets state (test convenience). Otherwise, when
-     * a non-empty input resolves to no directories, a warning is emitted via $progress
-     * if provided — that's the typo case where every env() call would otherwise be flagged.
+     * matches nothing in a monorepo without packages yet. Passing an empty list
+     * explicitly resets state (test convenience). Otherwise, when a non-empty input
+     * resolves to no directories, a warning is emitted via $progress if provided —
+     * that's the typo case where every env() call would otherwise be flagged.
      *
      * @param list<string> $directories
      */
@@ -59,10 +62,14 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
         $resolved = [];
 
         foreach ($directories as $directory) {
-            $matches = \glob($directory);
-
-            if ($matches === false) {
-                continue;
+            // Try literal path first so paths with glob metacharacters (e.g. brackets in
+            // `/home/user/dev[work]/config`) resolve correctly. Only fall back to glob()
+            // when the literal path isn't a directory.
+            if (\is_dir($directory)) {
+                $matches = [$directory];
+            } else {
+                $globMatches = \glob($directory);
+                $matches = $globMatches === false ? [] : $globMatches;
             }
 
             foreach ($matches as $match) {
@@ -106,7 +113,9 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
     {
         $filePath = $event->getStatementsSource()->getFilePath();
 
-        if (self::isInsideConfigDirectory($filePath) || self::isTestFile($filePath)) {
+        // isTestFile is a single str_contains; isInsideConfigDirectory loops over every
+        // configured directory. Cheaper check first to short-circuit test files.
+        if (self::isTestFile($filePath) || self::isInsideConfigDirectory($filePath)) {
             return null;
         }
 
