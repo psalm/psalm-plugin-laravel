@@ -6,7 +6,7 @@ nav_order: 1
 
 # NoEnvOutsideConfig
 
-Emitted when `env()` is called outside the `config/` directory.
+Emitted when `env()` is called outside the application's config directory (by default the booted app's [`config_path()`](../config.md#configdirectory); configurable via `<configDirectory>` for non-standard layouts).
 
 ## Why this is a problem
 
@@ -54,3 +54,16 @@ class PaymentService
 
 1. Move the `env()` call into a config file (e.g. `config/services.php`)
 2. Reference the value via `config()` in your application code
+
+## Custom config directories
+
+By default the plugin treats only the Laravel app's `config_path()` as a config directory. If your project keeps configuration elsewhere (for example BookStack's `app/Config/`) or you want to allow `env()` inside vendor packages, add `<configDirectory>` elements to your `psalm.xml`:
+
+```xml
+<pluginClass class="Psalm\LaravelPlugin\Plugin">
+    <configDirectory name="app/Config" />
+    <configDirectory name="packages/*/config" />
+</pluginClass>
+```
+
+See [Configuration](../config.md#configdirectory) for the full reference.

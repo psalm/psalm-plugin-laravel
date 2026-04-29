@@ -51,6 +51,8 @@ final class Plugin implements PluginEntryPointInterface
                 $this->initMissingViewHandler($output);
             }
 
+            $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
+
             $this->registerHandlers($registration, $pluginConfig);
             $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
@@ -341,7 +343,7 @@ final class Plugin implements PluginEntryPointInterface
         // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler
         // always returns null (it only emits an issue), so the chain continues to EnvHandler for
         // type narrowing. Reversing the order would silently suppress the NoEnvOutsideConfig issue.
-        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
+        // (require_once for the handler ran in initNoEnvOutsideConfigHandler() before this method.)
         $registration->registerHooksFromClass(Handlers\Rules\NoEnvOutsideConfigHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/EnvHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\EnvHandler::class);
@@ -352,6 +354,28 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
         }
+    }
+
+    /**
+     * Resolve config directory paths and pass them to NoEnvOutsideConfigHandler.
+     *
+     * When the user has not configured any `<configDirectory>` elements, fall back to
+     * the booted Laravel app's `config_path()`. Relative paths and glob patterns are
+     * left as-is — the handler resolves them via glob() + realpath() at this boot step.
+     *
+     * The handler emits a warning via $output if the resolution produces zero directories
+     * for a non-empty input — that's the typo case where every env() call would be flagged.
+     */
+    private function initNoEnvOutsideConfigHandler(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
+    {
+        $directories = $pluginConfig->configDirectories;
+
+        if ($directories === []) {
+            $directories = [ApplicationProvider::getApp()->configPath()];
+        }
+
+        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
+        Handlers\Rules\NoEnvOutsideConfigHandler::init($directories, $output);
     }
 
     /**

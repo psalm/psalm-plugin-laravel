@@ -25,6 +25,7 @@ Full config example:
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <failOnInternalError value="true" />
+        <configDirectory name="app/Config" />
     </pluginClass>
 </plugins>
 ```
@@ -94,6 +95,33 @@ See [MissingView](issues/MissingView.md) for details.
 
 ```xml
 <findMissingViews value="true" />
+```
+
+## `configDirectory`
+
+**default**: the booted Laravel app's `config_path()`
+
+Controls which directories are treated as config directories by [`NoEnvOutsideConfig`](issues/NoEnvOutsideConfig.md). `env()` calls inside any of these directories are exempt from the check.
+
+Each entry can be an absolute path or a path relative to where Psalm is invoked (typically the project root; PHP's `glob()` is used for resolution, so `<configDirectory>` is sensitive to your working directory). Glob patterns are supported and expanded once at plugin boot.
+
+**Defining any `<configDirectory>` replaces the default**, so include `config` (or whatever your project's standard config dir is) explicitly if you still want it covered. Test files (paths containing `/tests/`) are always exempt regardless of this setting.
+
+If no entry resolves to an existing directory at boot, the plugin emits a warning so the typo case (`<configDirectory name="cofnig" />`) is surfaced rather than silently flagging every `env()` call.
+
+### Examples
+
+A non-standard layout (e.g. BookStack's `app/Config/`):
+
+```xml
+<configDirectory name="app/Config" />
+```
+
+Standard `config/` plus monorepo package configs:
+
+```xml
+<configDirectory name="config" />
+<configDirectory name="packages/*/config" />
 ```
 
 ## Cache directory

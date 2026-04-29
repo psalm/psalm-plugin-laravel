@@ -89,7 +89,29 @@ final class IssueUrlGenerator
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
+            '- configDirectories: ' . self::formatConfigDirectories($pluginConfig->configDirectories),
         ];
+    }
+
+    /**
+     * Render configDirectories for the bug-report body.
+     *
+     * Empty rendering is `[] (default: config_path())` to make triage unambiguous —
+     * an empty list in PluginConfig means "user did not opt in via XML, plugin used
+     * the booted app's config_path() at runtime".
+     *
+     * Each non-empty entry is anonymised the same way as $cachePath so a misconfigured
+     * config directory does not leak the user's home directory or absolute paths.
+     *
+     * @param list<string> $values
+     */
+    private static function formatConfigDirectories(array $values): string
+    {
+        if ($values === []) {
+            return '[] (default: config_path())';
+        }
+
+        return '[' . \implode(', ', \array_map(self::sanitizeCachePath(...), $values)) . ']';
     }
 
     /** @psalm-pure */
