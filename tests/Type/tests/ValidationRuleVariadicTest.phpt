@@ -15,7 +15,7 @@ use Illuminate\Validation\Rules\NotIn;
  * Covers array, single string, variadic string, Arrayable, and UnitEnum forms.
  */
 
-enum SortDirection: string
+enum SortOrder: string
 {
     case Asc = 'asc';
     case Desc = 'desc';
@@ -35,7 +35,7 @@ function test_rule_in_with_array(Arrayable $arrayable): void
     $_arrayable = Rule::in($arrayable);
     /** @psalm-check-type-exact $_arrayable = In */
 
-    $_enum = Rule::in(SortDirection::Asc);
+    $_enum = Rule::in(SortOrder::Asc);
     /** @psalm-check-type-exact $_enum = In */
 }
 
