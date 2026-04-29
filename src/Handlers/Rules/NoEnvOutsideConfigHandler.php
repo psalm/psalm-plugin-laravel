@@ -54,14 +54,15 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
     }
 
     /**
-     * Match any path with a `config` directory segment.
+     * Match any path with a `config` directory segment (case-insensitive).
      * Covers apps, published packages, vendor dirs, and monorepo sub-packages.
+     * Case-insensitive to handle non-standard layouts like BookStack's app/Config/.
      *
      * @psalm-pure
      */
     private static function isInsideConfigDirectory(string $filePath): bool
     {
-        return \str_contains($filePath, \DIRECTORY_SEPARATOR . 'config' . \DIRECTORY_SEPARATOR);
+        return \str_contains(\strtolower($filePath), \DIRECTORY_SEPARATOR . 'config' . \DIRECTORY_SEPARATOR);
     }
 
     /** @psalm-pure */

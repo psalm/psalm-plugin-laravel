@@ -41,6 +41,7 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
         yield 'package config' => ["{$s}home{$s}dev{$s}spatie{$s}laravel-backup{$s}config{$s}backup.php"];
         yield 'monorepo sub-package config' => ["{$s}monorepo{$s}packages{$s}forms{$s}config{$s}forms.php"];
         yield 'vendor package config' => ["{$s}project{$s}vendor{$s}spatie{$s}laravel-backup{$s}config{$s}backup.php"];
+        yield 'uppercase Config directory (BookStack-style)' => ["{$s}project{$s}app{$s}Config{$s}app.php"];
         yield 'test file' => ["{$s}project{$s}tests{$s}Unit{$s}MyTest.php"];
         yield 'feature test' => ["{$s}project{$s}tests{$s}Feature{$s}MyTest.php"];
     }
