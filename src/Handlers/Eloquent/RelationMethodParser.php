@@ -229,7 +229,7 @@ final class RelationMethodParser
         if (
             !isset($args[$positionalIndex])
             || !$args[$positionalIndex] instanceof PhpParser\Node\Arg
-            || $args[$positionalIndex]->name !== null
+            || $args[$positionalIndex]->name instanceof \PhpParser\Node\Identifier
         ) {
             return null;
         }
