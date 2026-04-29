@@ -46,7 +46,11 @@ use Psalm\Type\Union;
 final class ModelRelationReturnTypeHandler
 {
     /**
-     * Memoized return-type Unions keyed by "class::method".
+     * Memoized return-type Unions keyed by "declaringClass|bindingClass::method".
+     *
+     * The (declaring, binding) pair distinguishes inherited dispatches: `BaseUser::posts`
+     * called on `User` and on `AdminUser` produce different Unions because TDeclaringModel
+     * binds to the receiver, not to the class where the method body lives.
      *
      * The closure is dispatched for every method call on every Model subclass during
      * analysis. RelationMethodParser caches the parsed metadata, but without this
