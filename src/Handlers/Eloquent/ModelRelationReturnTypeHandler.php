@@ -129,14 +129,14 @@ final class ModelRelationReturnTypeHandler
             } else {
                 $relatedModelType = self::resolveRelatedModelType($parsed, $codebase, $declaringClass, $methodName);
 
-                $result = $relatedModelType === null
-                    ? null
-                    : self::buildRelationType(
+                $result = $relatedModelType instanceof \Psalm\Type\Union
+                    ? self::buildRelationType(
                         $parsed['relationClass'],
                         $relatedModelType,
                         $parsed['intermediateModel'],
                         $bindingClass,
-                    );
+                    )
+                    : null;
             }
         } catch (\Throwable $throwable) {
             // Plugin closures are invoked by Psalm without a safety net. Surface the
