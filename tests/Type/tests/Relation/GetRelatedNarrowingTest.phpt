@@ -8,7 +8,6 @@ use App\Models\Invoice;
 use App\Models\Mechanic;
 use App\Models\MechanicSpecialization;
 use App\Models\Part;
-use App\Models\SpecializationPivot;
 use App\Models\Vehicle;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Model;

@@ -34,7 +34,8 @@ use Psalm\Type\Union;
  * closure per concrete Model class. For every method call dispatched on the model,
  * {@see RelationMethodParser} parses the AST body to detect a relation factory call
  * (`$this->hasOne(X::class)`, `$this->belongsTo(X::class)`, ...) and returns the
- * properly templated `Relation<TRelatedModel, TDeclaringModel>`. Polymorphic morphTo
+ * properly templated concrete relation type (e.g. `HasOne<Invoice, WorkOrder>`,
+ * `BelongsToMany<Tag, Post>`, not `Relation<...>`). Polymorphic morphTo
  * is intentionally skipped (the related class is determined at runtime). hasOneThrough
  * and hasManyThrough require all three class-strings (related, intermediate, declaring)
  * to resolve statically; if either factory arg is dynamic the handler defers.
