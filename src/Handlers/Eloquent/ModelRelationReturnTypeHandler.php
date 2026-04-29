@@ -184,9 +184,13 @@ final class ModelRelationReturnTypeHandler
      * Construct the relation type with the right template-param shape. Returns null when
      * a through relation is missing its intermediate class-string.
      *
-     * Two template-param shapes are emitted:
-     * - Standard: `Relation<TRelatedModel, TDeclaringModel>`
-     * - Through:  `Relation<TRelatedModel, TIntermediateModel, TDeclaringModel>`
+     * The returned Union wraps a `TGenericObject` for the concrete relation class named by
+     * `$relationClass`. The shape varies per Relation subclass:
+     * - Standard relations: `<TRelatedModel, TDeclaringModel>` — e.g. `HasOne<Post, User>`,
+     *   `BelongsTo<User, Post>`, `BelongsToMany<Tag, Post>` (TPivotModel/TAccessor default).
+     * - Through relations: `<TRelatedModel, TIntermediateModel, TDeclaringModel>` — e.g.
+     *   `HasManyThrough<Post, Membership, Country>`. Note the Relation parent's 3rd template
+     *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
      *
      * @param class-string $relationClass
      *
@@ -196,7 +200,7 @@ final class ModelRelationReturnTypeHandler
         string $relationClass,
         Union $relatedModel,
         ?string $intermediateModel,
-        string $declaringClass,
+        string $bindingClass,
     ): ?Union {
         $isThrough = $relationClass === HasOneThrough::class || $relationClass === HasManyThrough::class;
 
@@ -212,7 +216,10 @@ final class ModelRelationReturnTypeHandler
             $typeParams[] = new Union([new TNamedObject($intermediateModel)]);
         }
 
-        $typeParams[] = new Union([new TNamedObject($declaringClass)]);
+        // $bindingClass is the late-static-bound receiver class — what TDeclaringModel
+        // should resolve to at the call site (User for `(new User())->posts()`), even if
+        // the method body lives on a parent class.
+        $typeParams[] = new Union([new TNamedObject($bindingClass)]);
 
         return new Union([new TGenericObject($relationClass, $typeParams)]);
     }
