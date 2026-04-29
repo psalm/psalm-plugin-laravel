@@ -91,7 +91,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 
 - `InvalidConsoleArgumentName` -- `argument()` references an undefined name in the command's `$signature`
 - `InvalidConsoleOptionName` -- `option()` references an undefined name in the command's `$signature`
-- `NoEnvOutsideConfig` -- `env()` called outside the `config/` directory (`env()` returns `null` when the config is cached)
+- `NoEnvOutsideConfig` -- `env()` called outside the application's [`config_path()`](config.md#configdirectory) (`env()` returns `null` when the config is cached). Configurable via `<configDirectory>` for non-standard layouts.
 
 ```xml
 <issueHandlers>

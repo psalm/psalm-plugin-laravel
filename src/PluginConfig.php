@@ -16,9 +16,14 @@ use Psalm\Config;
  */
 final readonly class PluginConfig
 {
-    /** @psalm-mutation-free */
+    /**
+     * @param list<string> $configDirectories
+     *
+     * @psalm-mutation-free
+     */
     private function __construct(
         public ColumnFallback $modelPropertiesColumnFallback,
+        public array $configDirectories,
         public bool $resolveDynamicWhereClauses,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
@@ -46,9 +51,11 @@ final readonly class PluginConfig
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
+        $configDirectories = self::xmlNameList($config, 'configDirectory');
 
         return new self(
             modelPropertiesColumnFallback: $columnFallback,
+            configDirectories: $configDirectories,
             resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
@@ -61,6 +68,44 @@ final readonly class PluginConfig
     public function shouldUseMigrations(): bool
     {
         return $this->modelPropertiesColumnFallback === ColumnFallback::Migrations;
+    }
+
+    /**
+     * Read repeating elements like `<configDirectory name="..." />` as a list of `name` values.
+     *
+     * Throws on any element that lacks a non-empty `name` attribute so user typos like
+     * `<configDirectory path="..." />` (wrong attribute) or a stray `<configDirectory />`
+     * surface immediately instead of silently falling back to the default config_path().
+     *
+     * The `iterable<\SimpleXMLElement>` annotation on `$children` is necessary because
+     * Psalm's SimpleXMLElement stub types dynamic-property iteration as `mixed`.
+     *
+     * @return list<string>
+     */
+    private static function xmlNameList(?\SimpleXMLElement $config, string $element): array
+    {
+        if (!$config instanceof \SimpleXMLElement) {
+            return [];
+        }
+
+        /** @psalm-var iterable<\SimpleXMLElement> $children */
+        $children = $config->{$element};
+
+        $values = [];
+
+        foreach ($children as $node) {
+            $value = (string) ($node['name'] ?? '');
+
+            if ($value === '') {
+                throw new \InvalidArgumentException(
+                    "<{$element}> requires a non-empty `name` attribute, e.g. <{$element} name=\"app/Config\" />.",
+                );
+            }
+
+            $values[] = $value;
+        }
+
+        return $values;
     }
 
     /**
