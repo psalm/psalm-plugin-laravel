@@ -6,7 +6,9 @@ use App\Models\Customer;
 use App\Models\DamageReport;
 use App\Models\Invoice;
 use App\Models\Mechanic;
+use App\Models\MechanicSpecialization;
 use App\Models\Part;
+use App\Models\SpecializationPivot;
 use App\Models\Vehicle;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Model;
@@ -116,13 +118,19 @@ function test_belongsTo_no_psalm_return_resolves(): Mechanic
     return (new WorkOrder())->mechanic()->getRelated();
 }
 
-// morphTo: the handler defers (related model is polymorphic / not statically known).
-// The stub's `MorphTo<Model, $this>` default applies and getRelated returns Model.
-// What matters here is that no MixedMethodCall fires on the chain — the handler
-// must not accidentally emit a wrong relation generic for morphTo.
-function test_morphTo_getRelated_does_not_break(): string
+// morphTo with a docblock-declared candidate set narrows getRelated() to that union.
+// DamageReport::reportable() is annotated `@phpstan-return MorphTo<Vehicle|WorkOrder, $this>`;
+// the handler reads that via RelationMethodParser::extractDocblockRelatedModelType.
+function test_morphTo_with_docblock_narrows_to_union(): Vehicle|WorkOrder
 {
-    return (new DamageReport())->reportable()->getRelated()->getKeyName();
+    return (new DamageReport())->reportable()->getRelated();
+}
+
+// morphTo without a docblock — the handler defers, the stub's `MorphTo<Model, $this>`
+// default applies. What matters here is that no MixedMethodCall fires on the chain.
+function test_morphTo_no_docblock_does_not_break(\Illuminate\Database\Eloquent\Relations\MorphTo $r): string
+{
+    return $r->getRelated()->getKeyName();
 }
 
 // Plain Relation parameter — handler is not registered on Relation, so the stub's
@@ -133,6 +141,18 @@ function test_plain_relation_parameter_returns_model(Relation $relation): string
     $record = $relation->getRelated();
     /** @psalm-check-type-exact $record = Model */
     return $record->getKeyName();
+}
+
+// belongsToMany with `->using(CustomPivot::class)`: the handler still narrows
+// TRelatedModel and TDeclaringModel — getRelated() resolves correctly. TPivotModel
+// rebinding via `using()` is a known Psalm 7 limitation (the stub's
+// `@psalm-this-out` does not propagate, and the user's `@psalm-return` annotation
+// also collapses when `$this` cannot be substituted), so the pivot defaults to
+// Pivot. The primary fix from #760 — getRelated() not returning Model — is
+// preserved.
+function test_using_chain_still_narrows_getRelated(): MechanicSpecialization
+{
+    return (new Mechanic())->specializationsWithPivot()->getRelated();
 }
 
 ?>

@@ -6,6 +6,8 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type\Atomic\TGenericObject;
@@ -113,14 +115,29 @@ final class ModelRelationReturnTypeHandler
         try {
             $parsed = RelationMethodParser::parse($codebase, $declaringClass, $methodName);
 
-            $result = $parsed === null
-                ? null
-                : self::buildRelationType(
-                    $parsed['relationClass'],
-                    $parsed['relatedModel'],
-                    $parsed['intermediateModel'],
-                    $bindingClass,
-                );
+            // Known limitation: when the body wraps the factory in
+            // `->using(CustomPivot::class)` or `->as('accessor')`, those calls rebind
+            // TPivotModel / TAccessor on BelongsToMany / MorphToMany. The handler emits
+            // only the 2-template `Relation<TRelatedModel, TDeclaringModel>` shape and
+            // silently defaults TPivotModel = Pivot, TAccessor = 'pivot'. Deferring to
+            // the user's `@psalm-return BelongsToMany<X, $this, CustomPivot, 'pivot'>`
+            // does not help either — Psalm 7 collapses the entire annotation (including
+            // TPivotModel) when it cannot substitute `$this`. The primary issue from
+            // #760, TDeclaringModel collapsing to Model, stays fixed.
+            if ($parsed === null) {
+                $result = null;
+            } else {
+                $relatedModelType = self::resolveRelatedModelType($parsed, $codebase, $declaringClass, $methodName);
+
+                $result = $relatedModelType === null
+                    ? null
+                    : self::buildRelationType(
+                        $parsed['relationClass'],
+                        $relatedModelType,
+                        $parsed['intermediateModel'],
+                        $bindingClass,
+                    );
+            }
         } catch (\Throwable $throwable) {
             // Plugin closures are invoked by Psalm without a safety net. Surface the
             // failure as a debug message rather than crashing the whole analysis run.
@@ -139,8 +156,32 @@ final class ModelRelationReturnTypeHandler
     }
 
     /**
+     * Resolve the related-model Union for the parsed relation. Most factories return a
+     * single Model FQCN via `relatedModel`; polymorphic `morphTo` returns null there
+     * but may declare its target via `@psalm-return MorphTo<User|Post, $this>`, which
+     * {@see RelationMethodParser::extractDocblockRelatedModelType} reads from the
+     * docblock. Returns null when neither path produces a usable type.
+     *
+     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string} $parsed
+     */
+    private static function resolveRelatedModelType(array $parsed, Codebase $codebase, string $declaringClass, string $methodName): ?Union
+    {
+        if ($parsed['relatedModel'] !== null) {
+            return new Union([new TNamedObject($parsed['relatedModel'])]);
+        }
+
+        // morphTo: the factory's first arg is not a class-string, so the parser yields
+        // null. Fall back to the docblock generic for users who annotated their morphTo
+        // with the candidate model union.
+        if ($parsed['relationClass'] === MorphTo::class) {
+            return RelationMethodParser::extractDocblockRelatedModelType($codebase, $declaringClass, $methodName);
+        }
+
+        return null;
+    }
+
+    /**
      * Construct the relation type with the right template-param shape. Returns null when
-     * the related model is not statically known (morphTo / dynamic class-string), or when
      * a through relation is missing its intermediate class-string.
      *
      * Two template-param shapes are emitted:
@@ -153,15 +194,10 @@ final class ModelRelationReturnTypeHandler
      */
     private static function buildRelationType(
         string $relationClass,
-        ?string $relatedModel,
+        Union $relatedModel,
         ?string $intermediateModel,
         string $declaringClass,
     ): ?Union {
-        if ($relatedModel === null) {
-            // morphTo (polymorphic) or unresolved class-string arg — leave to default.
-            return null;
-        }
-
         $isThrough = $relationClass === HasOneThrough::class || $relationClass === HasManyThrough::class;
 
         if ($isThrough && $intermediateModel === null) {
@@ -170,7 +206,7 @@ final class ModelRelationReturnTypeHandler
             return null;
         }
 
-        $typeParams = [new Union([new TNamedObject($relatedModel)])];
+        $typeParams = [$relatedModel];
 
         if ($intermediateModel !== null) {
             $typeParams[] = new Union([new TNamedObject($intermediateModel)]);
