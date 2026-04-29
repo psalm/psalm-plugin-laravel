@@ -23,12 +23,12 @@ final readonly class PluginConfig
      */
     private function __construct(
         public ColumnFallback $modelPropertiesColumnFallback,
+        public array $configDirectories,
         public bool $resolveDynamicWhereClauses,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         public string $cachePath,
         public bool $failOnInternalError,
-        public array $configDirectories,
     ) {}
 
     public static function fromXml(?\SimpleXMLElement $config): self
@@ -55,12 +55,12 @@ final readonly class PluginConfig
 
         return new self(
             modelPropertiesColumnFallback: $columnFallback,
+            configDirectories: $configDirectories,
             resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             cachePath: self::resolveCachePath(),
             failOnInternalError: $failOnInternalError,
-            configDirectories: $configDirectories,
         );
     }
 
