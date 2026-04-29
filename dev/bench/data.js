@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777275816668,
+  "lastUpdate": 1777493391991,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3252,6 +3252,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "73d15c6c51080dbfe18e0b1615186d0e7d540bef",
+          "message": "fix(rules): detect config/ directories case-insensitively #858\n\nFixes false positives for apps that store config files under a\ncapitalized directory (e.g. BookStack's app/Config/).",
+          "timestamp": "2026-04-29T22:07:11+02:00",
+          "tree_id": "f52670f9086c3604cddb0e46c5a6e3645bf08492",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/73d15c6c51080dbfe18e0b1615186d0e7d540bef"
+        },
+        "date": 1777493391633,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.38,
+            "range": "± 0.41",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
