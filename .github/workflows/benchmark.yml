@@ -110,7 +110,7 @@ jobs:
       # Key is safe to pin to MONICA_REF + PHP_VERSION because the ref points at a tag
       # with an immutable composer.lock.
       - name: Cache Monica vendor
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /tmp/monica-source/vendor
           key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
@@ -220,7 +220,7 @@ jobs:
             "https://github.com/$MONICA_REPO" /tmp/monica
 
       - name: Cache Monica vendor
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /tmp/monica/vendor
           key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
