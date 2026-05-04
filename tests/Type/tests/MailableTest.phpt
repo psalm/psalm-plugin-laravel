@@ -52,5 +52,43 @@ class ExampleMail extends Mailable
         return [];
     }
 }
+
+/**
+ * Legacy build()-style mailable.
+ *
+ * Locks in coverage for the `Illuminate\Mail\Mailable => ['build']` entry. `build()` is
+ * dispatched via `Container::getInstance()->call([$this, 'build'])` from a foreign scope,
+ * so the visibility filter applies and only public overrides are suppressed.
+ */
+class LegacyExampleMail extends Mailable
+{
+    public function __construct() {}
+
+    /** @return $this */
+    public function build()
+    {
+        return $this->view('emails.legacy');
+    }
+}
+
+/**
+ * Negative-path fixture for `suppressFrameworkHookMethod()`.
+ *
+ * The visibility filter is meant to keep non-public framework hooks reported as real bugs.
+ * A `protected function build()` cannot be reached by `Container::call([$this, 'build'])`
+ * from BoundMethod's foreign scope, so under #869's findUnusedCode lock-in this method
+ * should raise `PossiblyUnusedMethod` (proving the filter still fires). Until then it
+ * is a smoke fixture documenting the intent.
+ */
+class ProtectedBuildMail extends Mailable
+{
+    public function __construct() {}
+
+    /** @return $this */
+    protected function build()
+    {
+        return $this->view('emails.bad');
+    }
+}
 ?>
 --EXPECTF--
