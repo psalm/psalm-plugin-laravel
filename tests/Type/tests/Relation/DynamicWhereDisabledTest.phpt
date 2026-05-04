@@ -5,7 +5,6 @@
 
 use App\Models\Invoice;
 use App\Models\WorkOrder;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * When resolveDynamicWhereClauses is disabled (<resolveDynamicWhereClauses value="false" />),
@@ -16,7 +15,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  */
 
 function test_dynamic_where_not_resolved_when_disabled(): void {
-    /** @var HasOne<Invoice, WorkOrder> $r */
     $r = (new WorkOrder())->invoice();
     // whereInvoiceNumber IS a valid @property on Invoice, but the feature is off —
     // must fall through to mixed instead of preserving the relation generic type.

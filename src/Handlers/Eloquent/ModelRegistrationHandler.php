@@ -198,6 +198,15 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             $className,
             CustomCollectionHandler::getModelMethodReturnType(...),
         );
+        // Relationship method return types: precise generics for hasOne/belongsTo/etc.
+        // Registered AFTER the forwarding/collection providers because those handlers
+        // already returned null for relation method names. The first non-null result
+        // wins, so safe ordering — no return-type swap relative to the prior chain.
+        // See https://github.com/psalm/psalm-plugin-laravel/issues/760
+        $methods->return_type_provider->registerClosure(
+            $className,
+            ModelRelationReturnTypeHandler::getReturnType(...),
+        );
 
         // Registration order matters — the first non-null result wins.
 
