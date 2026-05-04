@@ -128,7 +128,14 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             // as `PossiblyUnusedMethod`. Verified against IxDF's real codebase. The visibility
             // filter in `suppressFrameworkHookMethod()` keeps non-public constructors flagged
             // (a `protected __construct` would fail at `new` from outside the class anyway).
-            'Illuminate\Mail\Mailable' => ['__construct', 'build', 'envelope', 'content', 'attachments'],
+            //
+            // `build` is dispatched via `Container::getInstance()->call([$this, 'build'])` from
+            // `Mailable::prepareMailableForDelivery()` — the call_user_func_array inside Container
+            // is in BoundMethod's lexical scope, which is unrelated to the user's Mailable, so
+            // public is required. envelope() / content() / attachments() live in
+            // suppressMailableLifecycleMethods() because they are invoked via $this->method() from
+            // Mailable's own parent code and protected/private overrides work at runtime.
+            'Illuminate\Mail\Mailable' => ['__construct', 'build'],
             // toXxx() channel-render methods are handled by suppressNotificationChannelMethods()
             // because the set of channels is open-ended (core, first-party packages like
             // laravel/slack-notification-channel, community packages from
@@ -271,6 +278,10 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             self::suppressNotificationChannelMethods($classStorage);
             self::suppressNotificationQueueHooks($classStorage);
         }
+
+        if (\in_array('Illuminate\Mail\Mailable', $parents, true)) {
+            self::suppressMailableLifecycleMethods($classStorage);
+        }
     }
 
     /**
@@ -318,6 +329,30 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         foreach ($classStorage->methods as $methodName => $methodStorage) {
             if (\preg_match('/^to.+/', $methodName)) {
                 self::suppressFrameworkHookMethod('PossiblyUnusedMethod', $methodStorage);
+            }
+        }
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod for Mailable lifecycle hooks invoked internally on `$this`.
+     *
+     * `envelope()` / `content()` / `attachments()` are called from `Mailable`'s own parent code
+     * via `$this->envelope()` / `$this->content()` / `$this->attachments()` (see
+     * `prepareMailableForDelivery()`, `ensureEnvelopeIsHydrated()`, etc.). Since the dispatch
+     * lives inside the Mailable class hierarchy, protected/private overrides work at runtime —
+     * unlike `build` which is dispatched via `Container::getInstance()->call([$this, 'build'])`
+     * from a foreign scope and so requires public visibility.
+     *
+     * Route through unfiltered `suppress()` (not `suppressFrameworkHookMethod()`) so a
+     * `protected envelope()` is not mis-flagged as `PossiblyUnusedMethod`.
+     */
+    private static function suppressMailableLifecycleMethods(ClassLikeStorage $classStorage): void
+    {
+        // Names are already lowercase, matching the keying convention of $classStorage->methods.
+        foreach (['envelope', 'content', 'attachments'] as $methodName) {
+            $methodStorage = $classStorage->methods[$methodName] ?? null;
+            if ($methodStorage instanceof MethodStorage) {
+                self::suppress('PossiblyUnusedMethod', $methodStorage);
             }
         }
     }
