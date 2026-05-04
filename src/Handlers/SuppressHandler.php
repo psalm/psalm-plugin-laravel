@@ -108,6 +108,9 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     /** @var array<string, array<string, list<string>>> */
     private const METHOD_LEVEL_BY_PARENT_CLASS = [
         'PossiblyUnusedMethod' => [
+            'Illuminate\Console\Command' => ['handle'],
+            'Illuminate\Database\Migrations\Migration' => ['up', 'down'],
+            'Illuminate\Database\Seeder' => ['run'],
             'Illuminate\Foundation\Http\FormRequest' => [
                 'after',
                 'authorize',
@@ -117,7 +120,27 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 'withValidator',
             ],
             'Illuminate\Mail\Mailable' => ['__construct', 'build', 'envelope', 'content', 'attachments'],
-            'Illuminate\Notifications\Notification' => ['__construct', 'via', 'toMail', 'toArray'],
+            // toMicrosoftTeams / toSlack / toVonage are dispatched by external channel packages
+            // (laravel/slack-notification-channel, laravel/vonage-notification-channel,
+            // laravel-notification-channels/microsoft-teams), not by laravel/framework itself.
+            'Illuminate\Notifications\Notification' => [
+                '__construct',
+                'broadcastAs',
+                'broadcastOn',
+                'broadcastWith',
+                'shouldSend',
+                'toArray',
+                'toBroadcast',
+                'toDatabase',
+                'toMail',
+                'toMicrosoftTeams',
+                'toSlack',
+                'toVonage',
+                'via',
+                'viaConnections',
+                'viaQueues',
+            ],
+            'Illuminate\Support\ServiceProvider' => ['boot'],
         ],
     ];
 

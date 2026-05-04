@@ -5,6 +5,8 @@ namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\BroadcastMessage;
+use Illuminate\Notifications\Messages\DatabaseMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -32,6 +34,33 @@ class ExampleNotification extends Notification
     }
 
     /**
+     * Determine if the notification should be sent.
+     * @param mixed $notifiable
+     */
+    public function shouldSend($notifiable, string $channel): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the connections the notification should be sent on per channel.
+     * @return array<string, string>
+     */
+    public function viaConnections(): array
+    {
+        return ['mail' => 'sync'];
+    }
+
+    /**
+     * Get the queues the notification should be queued on per channel.
+     * @return array<string, string>
+     */
+    public function viaQueues(): array
+    {
+        return ['mail' => 'default'];
+    }
+
+    /**
      * Get the mail representation of the notification.
      * @param mixed $notifiable
      * @return \Illuminate\Notifications\Messages\MailMessage
@@ -54,6 +83,51 @@ class ExampleNotification extends Notification
         return [
             //
         ];
+    }
+
+    /**
+     * Get the database representation of the notification.
+     * @param mixed $notifiable
+     */
+    public function toDatabase($notifiable): DatabaseMessage
+    {
+        return new DatabaseMessage([]);
+    }
+
+    /**
+     * Get the broadcastable representation of the notification.
+     * @param mixed $notifiable
+     */
+    public function toBroadcast($notifiable): BroadcastMessage
+    {
+        return new BroadcastMessage([]);
+    }
+
+    /**
+     * Get the channels the notification should broadcast on.
+     * @return array<int, \Illuminate\Broadcasting\Channel>
+     */
+    #[\Override]
+    public function broadcastOn(): array
+    {
+        return [];
+    }
+
+    /**
+     * Get the data to broadcast.
+     * @return array<string, mixed>
+     */
+    public function broadcastWith(): array
+    {
+        return [];
+    }
+
+    /**
+     * Get the broadcast event name.
+     */
+    public function broadcastAs(): string
+    {
+        return 'example.notification';
     }
 }
 --EXPECTF--
