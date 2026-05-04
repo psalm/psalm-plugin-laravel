@@ -44,7 +44,9 @@ final class RelationMethodParser
 {
     /**
      * Parsed result: the relationship factory method, related model FQCN, and (for "through"
-     * relations only) the intermediate model FQCN.
+     * relations only) the intermediate model FQCN. For BelongsToMany / MorphToMany only,
+     * the chain is also scanned for `->using(Pivot::class)` and `->as('accessor')` mutations
+     * which rebind TPivotModel / TAccessor on the relation.
      *
      * relatedModel is null when:
      * - The relation is polymorphic (morphTo) — the related type is not statically determinable
@@ -54,7 +56,11 @@ final class RelationMethodParser
      * relation factory it stays null. Resolves the same way as relatedModel: missing or non-
      * literal class-string arguments produce null.
      *
-     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}>
+     * pivotModel / accessor are non-null only when an explicit `->using(...)` / `->as(...)` was
+     * detected on a BelongsToMany or MorphToMany chain with a statically resolvable argument.
+     * Other relations leave them null.
+     *
+     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}>
      */
     private static array $cache = [];
 
@@ -87,14 +93,17 @@ final class RelationMethodParser
     ];
 
     /**
-     * Parse a relationship method body and extract the relation class, related model, and (for
-     * through relations only) the intermediate model.
+     * Parse a relationship method body and extract the relation class, related model, (for
+     * through relations only) the intermediate model, and (for BelongsToMany / MorphToMany
+     * only) any `->using()` / `->as()` mutations detected on the chain.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      *         null if the method cannot be parsed as a relationship method.
      *         relatedModel is null when polymorphic (morphTo) or when the first argument
      *         could not be statically resolved. intermediateModel is non-null only for
-     *         hasOneThrough / hasManyThrough.
+     *         hasOneThrough / hasManyThrough. pivotModel / accessor are non-null only when
+     *         an explicit `->using(Pivot::class)` / `->as('alias')` chain mutation was
+     *         detected with a statically resolvable argument.
      */
     public static function parse(Codebase $codebase, string $className, string $methodName): ?array
     {
@@ -111,7 +120,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
     private static function doParse(Codebase $codebase, string $className, string $methodName): ?array
     {
@@ -133,7 +142,7 @@ final class RelationMethodParser
      * like $this->belongsTo(Vault::class).
      *
      * @param array<array-key, PhpParser\Node\Stmt> $stmts
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
     private static function parseMethodBody(array $stmts): ?array
     {
@@ -142,7 +151,10 @@ final class RelationMethodParser
                 continue;
             }
 
-            return self::findRelationCallInExpr($stmt->expr);
+            $pivotModel = null;
+            $accessor = null;
+
+            return self::findRelationCallInExpr($stmt->expr, $pivotModel, $accessor);
         }
 
         return null;
@@ -150,12 +162,21 @@ final class RelationMethodParser
 
     /**
      * Recursively search an expression for a relationship factory method call.
-     * Handles both direct calls and method chains.
+     * Handles both direct calls and method chains. While unwrapping the chain on the way
+     * to the inner factory call, also collect any `->using(Pivot::class)` and
+     * `->as('accessor')` mutations — these rebind TPivotModel / TAccessor on
+     * BelongsToMany and MorphToMany. Other chain calls (`->withDefault()`, `->wherePivot()`,
+     * etc.) are transparent: the recursion descends past them without recording anything.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string}
+     * @param ?string $pivotModel out-parameter: FQCN captured from `->using(...)` if found
+     * @param ?string $accessor   out-parameter: literal string captured from `->as(...)` if found
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
-    private static function findRelationCallInExpr(PhpParser\Node\Expr $expr): ?array
-    {
+    private static function findRelationCallInExpr(
+        PhpParser\Node\Expr $expr,
+        ?string &$pivotModel,
+        ?string &$accessor,
+    ): ?array {
         if (!$expr instanceof PhpParser\Node\Expr\MethodCall) {
             return null;
         }
@@ -175,13 +196,63 @@ final class RelationMethodParser
                     'intermediateModel' => \in_array($lowerName, ['hasonethrough', 'hasmanythrough'], true)
                         ? self::extractClassStringArg($expr, $lowerName, 1, 'through')
                         : null,
+                    'pivotModel' => $pivotModel,
+                    'accessor' => $accessor,
                 ];
+            }
+
+            // Pivot / accessor mutators: capture the first statically resolvable argument.
+            // Outside-in recursion visits the outermost call first, so the outermost
+            // `using()` / `as()` wins via `??=` — inner ones cannot overwrite once set.
+            if ($lowerName === 'using') {
+                $pivotModel ??= self::firstClassStringArg($expr);
+            } elseif ($lowerName === 'as') {
+                $accessor ??= self::firstStringLiteralArg($expr);
             }
         }
 
         // Not a relationship call — try the inner expression (unwrap chain).
         // e.g. for $this->belongsTo(X::class)->withDefault(), $expr->var is $this->belongsTo(X::class)
-        return self::findRelationCallInExpr($expr->var);
+        return self::findRelationCallInExpr($expr->var, $pivotModel, $accessor);
+    }
+
+    /**
+     * Resolve the first argument of `->using(Pivot::class)` to its FQCN, or null when the
+     * argument is dynamic (a variable, a method call, etc.). The first physical arg is
+     * read regardless of whether it carries a name token — `using()` is a single-parameter
+     * method, so named (`->using(class: P::class)`) and positional (`->using(P::class)`)
+     * forms are both honored.
+     */
+    private static function firstClassStringArg(PhpParser\Node\Expr\MethodCall $call): ?string
+    {
+        $first = $call->args[0] ?? null;
+        if (!$first instanceof PhpParser\Node\Arg) {
+            return null;
+        }
+
+        return self::resolveClassConstFetch($first->value);
+    }
+
+    /**
+     * Resolve the first argument of `->as('accessor')` to its literal string value, or null
+     * when the argument is dynamic. Only literal scalars produce a usable TAccessor binding —
+     * variables and concatenation cannot be statically pinned.
+     *
+     * @psalm-mutation-free
+     */
+    private static function firstStringLiteralArg(PhpParser\Node\Expr\MethodCall $call): ?string
+    {
+        $first = $call->args[0] ?? null;
+        if (!$first instanceof PhpParser\Node\Arg) {
+            return null;
+        }
+
+        $value = $first->value;
+        if ($value instanceof PhpParser\Node\Scalar\String_) {
+            return $value->value;
+        }
+
+        return null;
     }
 
     /**

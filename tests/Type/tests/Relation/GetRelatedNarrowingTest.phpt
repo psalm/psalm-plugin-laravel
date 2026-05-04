@@ -8,9 +8,13 @@ use App\Models\Invoice;
 use App\Models\Mechanic;
 use App\Models\MechanicSpecialization;
 use App\Models\Part;
+use App\Models\SpecializationPivot;
 use App\Models\Vehicle;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
@@ -142,16 +146,83 @@ function test_plain_relation_parameter_returns_model(Relation $relation): string
     return $record->getKeyName();
 }
 
-// belongsToMany with `->using(CustomPivot::class)`: the handler still narrows
-// TRelatedModel and TDeclaringModel — getRelated() resolves correctly. TPivotModel
-// rebinding via `using()` is a known Psalm 7 limitation (the stub's
-// `@psalm-this-out` does not propagate, and the user's `@psalm-return` annotation
-// also collapses when `$this` cannot be substituted), so the pivot defaults to
-// Pivot. The primary fix from #760 — getRelated() not returning Model — is
-// preserved.
-function test_using_chain_still_narrows_getRelated(): MechanicSpecialization
+// belongsToMany with `->using(CustomPivot::class)`: the handler walks the chain to
+// capture the pivot model and emits a 4-template `BelongsToMany<R, D, P, 'pivot'>`,
+// so getRelated() narrows and downstream pivot intersections resolve to the
+// user-declared pivot model rather than the default `Pivot`.
+function test_using_chain_narrows_getRelated(): MechanicSpecialization
 {
     return (new Mechanic())->specializationsWithPivot()->getRelated();
+}
+
+// Limitation: a 2-template `BelongsToMany<R, D>` is silently normalised against a
+// 4-template assertion via stub-declared template defaults, so neither the typed-return
+// form below nor `psalm-check-type-exact` will catch a regression that drops back to
+// the 2-template form. These tests pin intent and document the expected emission.
+
+// belongsToMany with `->using()`: TPivotModel binds to the user-declared pivot model,
+// so slot 3 carries `SpecializationPivot` rather than the default `Pivot`.
+/**
+ * @psalm-return BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'pivot'>
+ */
+function test_using_chain_narrows_pivot_class(): BelongsToMany
+{
+    return (new Mechanic())->specializationsWithPivot();
+}
+
+// belongsToMany with `->using()` and `->as('details')`: both mutators are captured,
+// so slot 3 = SpecializationPivot, slot 4 = 'details'.
+/**
+ * @psalm-return BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'details'>
+ */
+function test_as_chain_binds_accessor_template(): BelongsToMany
+{
+    return (new Mechanic())->specializationsWithCustomAccessor();
+}
+
+// `->as()` without `->using()`: the parser captures only the accessor, the handler
+// emits the explicit `Pivot` default for slot 3 — exercising the all-or-nothing rule
+// (if either slot is captured, emit both with declared defaults filling the gaps).
+/**
+ * @psalm-return BelongsToMany<MechanicSpecialization, Mechanic, Pivot, 'details'>
+ */
+function test_as_only_chain_emits_pivot_default(): BelongsToMany
+{
+    return (new Mechanic())->specializationsAccessorOnly();
+}
+
+// Reverse-order chain `->as('details')->using(...)`: outside-in recursion records
+// both mutators regardless of source-order — ensures the chain capture isn't
+// brittle to reordering.
+/**
+ * @psalm-return BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'details'>
+ */
+function test_as_then_using_chain_captures_both(): BelongsToMany
+{
+    return (new Mechanic())->specializationsAsThenUsing();
+}
+
+// MorphToMany also opts into the 4-template emit path. Without this test, a regression
+// that drops `MorphToMany::class` from the allow-list would ship undetected — the
+// BelongsToMany tests above wouldn't catch it.
+/**
+ * @psalm-return MorphToMany<WorkOrder, Mechanic, SpecializationPivot, 'pivot'>
+ */
+function test_morphToMany_using_chain_narrows_pivot_class(): MorphToMany
+{
+    return (new Mechanic())->workOrderTagsWithPivot();
+}
+
+// MorphToMany with `->as()` only: the all-or-nothing rule emits TPivotModel as the
+// stub-declared default, which for MorphToMany is `MorphPivot` (not `Pivot` — that's
+// BelongsToMany's default). A handler that hard-coded `Pivot` here would silently
+// produce a wrong type for accessor-only morph chains.
+/**
+ * @psalm-return MorphToMany<WorkOrder, Mechanic, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'meta'>
+ */
+function test_morphToMany_as_only_emits_morphPivot_default(): MorphToMany
+{
+    return (new Mechanic())->workOrderTagsAccessorOnly();
 }
 
 ?>

@@ -146,6 +146,12 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         'PossiblyUnusedMethod' => [
             'Illuminate\Foundation\Events\Dispatchable' => ['broadcastOn'],
             'Illuminate\Foundation\Bus\Dispatchable' => ['handle'],
+            // The combined Queueable trait Laravel 11+ uses for `make:job` scaffolds
+            // (composes Bus\Queueable, InteractsWithQueue, etc). The `handle()` entry
+            // point is invoked by the queue worker via Container::call(), not from
+            // user code — without this suppression, default queued jobs always trip
+            // PossiblyUnusedMethod.
+            'Illuminate\Foundation\Queue\Queueable' => ['handle'],
         ],
     ];
 
