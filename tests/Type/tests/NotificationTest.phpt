@@ -129,5 +129,15 @@ class ExampleNotification extends Notification
     {
         return 'example.notification';
     }
+
+    /**
+     * Custom channel render method — community/user-defined channels can add any toXxx() name.
+     * @param mixed $notifiable
+     * @return array<string, mixed>
+     */
+    public function toCustomChannel($notifiable): array
+    {
+        return [];
+    }
 }
 --EXPECTF--

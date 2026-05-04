@@ -119,23 +119,16 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 'validationRules',
                 'withValidator',
             ],
-            'Illuminate\Mail\Mailable' => ['__construct', 'build', 'envelope', 'content', 'attachments'],
-            // toMicrosoftTeams / toSlack / toVonage are dispatched by external channel packages
-            // (laravel/slack-notification-channel, laravel/vonage-notification-channel,
-            // laravel-notification-channels/microsoft-teams), not by laravel/framework itself.
+            'Illuminate\Mail\Mailable' => ['build', 'envelope', 'content', 'attachments'],
+            // toXxx() channel-render methods are handled by suppressNotificationChannelMethods()
+            // because the set of channels is open-ended (core, first-party packages like
+            // laravel/slack-notification-channel, community packages from
+            // laravel-notification-channels.com, plus user-defined custom channels).
             'Illuminate\Notifications\Notification' => [
-                '__construct',
                 'broadcastAs',
                 'broadcastOn',
                 'broadcastWith',
                 'shouldSend',
-                'toArray',
-                'toBroadcast',
-                'toDatabase',
-                'toMail',
-                'toMicrosoftTeams',
-                'toSlack',
-                'toVonage',
                 'via',
                 'viaConnections',
                 'viaQueues',
@@ -252,6 +245,10 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         if (\in_array('Illuminate\Database\Eloquent\Model', $parents, true)) {
             self::suppressEloquentAccessorMethods($classStorage);
         }
+
+        if (\in_array('Illuminate\Notifications\Notification', $parents, true)) {
+            self::suppressNotificationChannelMethods($classStorage);
+        }
     }
 
     /**
@@ -267,6 +264,30 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     {
         foreach ($classStorage->methods as $methodName => $methodStorage) {
             if (\preg_match('/^get.+attribute$/', $methodName) || \preg_match('/^set.+attribute$/', $methodName)) {
+                self::suppress('PossiblyUnusedMethod', $methodStorage);
+            }
+        }
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod for Notification toXxx() channel-render methods.
+     *
+     * Each notification channel calls $notification->to{ChannelName}(...) via method_exists()
+     * (e.g. DatabaseChannel calls toDatabase, BroadcastChannel calls toBroadcast, MailChannel
+     * calls toMail). The set of channels is open-ended — core ships only a few, but first-party
+     * packages (laravel/slack-notification-channel, laravel/vonage-notification-channel),
+     * community packages (see laravel-notification-channels.com), and user-defined custom
+     * channels each add their own. Listing every channel name explicitly is not maintainable, so
+     * suppress the whole prefix instead. The trade-off is mild: a method named "toCalendar"
+     * that the user genuinely never calls would be silently suppressed, but that's preferable
+     * to false-positive PossiblyUnusedMethod reports on real channel render hooks.
+     *
+     * Note: method names are stored lowercase in ClassLikeStorage.
+     */
+    private static function suppressNotificationChannelMethods(ClassLikeStorage $classStorage): void
+    {
+        foreach ($classStorage->methods as $methodName => $methodStorage) {
+            if (\preg_match('/^to.+/', $methodName)) {
                 self::suppress('PossiblyUnusedMethod', $methodStorage);
             }
         }
