@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers;
 
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
@@ -170,7 +171,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 /** @psalm-suppress RedundantFunctionCall method names in constants may contain uppercase */
                 $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
                 if ($method_storage instanceof MethodStorage) {
-                    self::suppress($issue, $method_storage);
+                    self::suppressFrameworkHookMethod($issue, $method_storage);
                 }
             }
         }
@@ -236,7 +237,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 foreach ($method_names as $method_name) {
                     $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
                     if ($method_storage instanceof MethodStorage) {
-                        self::suppress($issue, $method_storage);
+                        self::suppressFrameworkHookMethod($issue, $method_storage);
                     }
                 }
             }
@@ -264,7 +265,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     {
         foreach ($classStorage->methods as $methodName => $methodStorage) {
             if (\preg_match('/^get.+attribute$/', $methodName) || \preg_match('/^set.+attribute$/', $methodName)) {
-                self::suppress('PossiblyUnusedMethod', $methodStorage);
+                self::suppressFrameworkHookMethod('PossiblyUnusedMethod', $methodStorage);
             }
         }
     }
@@ -288,7 +289,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     {
         foreach ($classStorage->methods as $methodName => $methodStorage) {
             if (\preg_match('/^to.+/', $methodName)) {
-                self::suppress('PossiblyUnusedMethod', $methodStorage);
+                self::suppressFrameworkHookMethod('PossiblyUnusedMethod', $methodStorage);
             }
         }
     }
@@ -333,7 +334,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 foreach ($method_names as $method_name) {
                     $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
                     if ($method_storage instanceof MethodStorage) {
-                        self::suppress($issue, $method_storage);
+                        self::suppressFrameworkHookMethod($issue, $method_storage);
                     }
                 }
             }
@@ -345,5 +346,23 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         if (!\in_array($issue, $storage->suppressed_issues, true)) {
             $storage->suppressed_issues[] = $issue;
         }
+    }
+
+    /**
+     * Suppress an issue on a method only if the method is public.
+     *
+     * Laravel dispatches framework hooks via `method_exists()` + `Container::call()`,
+     * `$instance->method()`, or reflection — all of which require the target method to be
+     * public. A non-public override of a framework hook (e.g. `protected function handle()`
+     * on a Console\Command, `private function up()` on a Migration) is a runtime bug, not
+     * a candidate for suppression. Skip non-public methods so Psalm can still surface them.
+     */
+    private static function suppressFrameworkHookMethod(string $issue, MethodStorage $methodStorage): void
+    {
+        if ($methodStorage->visibility !== ClassLikeAnalyzer::VISIBILITY_PUBLIC) {
+            return;
+        }
+
+        self::suppress($issue, $methodStorage);
     }
 }
