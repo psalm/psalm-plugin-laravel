@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -45,11 +50,38 @@ use Psalm\Type\Union;
  * (`$bindingClass`), not a factory arg, so it is always available; if either factory
  * arg is dynamic the handler defers.
  *
+ * For `BelongsToMany` and `MorphToMany` the parser also walks the chain to capture
+ * `->using(CustomPivot::class)` (TPivotModel) and `->as('accessor')` (TAccessor); when
+ * present they are emitted as the 3rd and 4th template params so downstream pivot
+ * intersections (e.g. `first()` returning `TRelatedModel&object{pivot: TPivotModel}`)
+ * resolve to the user-declared pivot model rather than the default `Pivot`. When neither
+ * mutator appears the handler emits the 2-param shape and Psalm fills in the template
+ * defaults.
+ *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
  * @internal
  */
 final class ModelRelationReturnTypeHandler
 {
+    /**
+     * Relation classes whose stub declares the 4-template
+     * `<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` shape, mapped to
+     * the stub-declared TPivotModel default. The handler emits this default when
+     * the parser captures `->as(...)` but no `->using(...)` (the all-or-nothing
+     * rule still requires emitting slot 3). Other relations ignore the captured
+     * pivot/accessor — emitting slots 3+4 on a 2-template relation produces a
+     * malformed type. Defaults must match Laravel source: `BelongsToMany` =>
+     * `Pivot`, `MorphToMany` => `MorphPivot` (see Laravel's MorphToMany
+     * constructor and the BelongsToMany stub at
+     * stubs/common/Database/Eloquent/Relations/).
+     *
+     * @var array<class-string, class-string<Pivot>>
+     */
+    private const PIVOT_AWARE_RELATIONS = [
+        BelongsToMany::class => Pivot::class,
+        MorphToMany::class => MorphPivot::class,
+    ];
+
     /**
      * Memoized return-type Unions keyed by "declaringClass|bindingClass::method".
      *
@@ -125,15 +157,6 @@ final class ModelRelationReturnTypeHandler
         try {
             $parsed = RelationMethodParser::parse($codebase, $declaringClass, $methodName);
 
-            // Known limitation: when the body wraps the factory in
-            // `->using(CustomPivot::class)` or `->as('accessor')`, those calls rebind
-            // TPivotModel / TAccessor on BelongsToMany / MorphToMany. The handler emits
-            // only the 2-template `Relation<TRelatedModel, TDeclaringModel>` shape and
-            // silently defaults TPivotModel = Pivot, TAccessor = 'pivot'. Deferring to
-            // the user's `@psalm-return BelongsToMany<X, $this, CustomPivot, 'pivot'>`
-            // does not help either — Psalm 7 collapses the entire annotation (including
-            // TPivotModel) when it cannot substitute `$this`. The primary issue from
-            // #760, TDeclaringModel collapsing to Model, stays fixed.
             if ($parsed === null) {
                 $result = null;
             } else {
@@ -144,6 +167,8 @@ final class ModelRelationReturnTypeHandler
                         $parsed['relationClass'],
                         $relatedModelType,
                         $parsed['intermediateModel'],
+                        $parsed['pivotModel'],
+                        $parsed['accessor'],
                         $bindingClass,
                     )
                     : null;
@@ -172,7 +197,7 @@ final class ModelRelationReturnTypeHandler
      * {@see RelationMethodParser::extractDocblockRelatedModelType} reads from the
      * docblock. Returns null when neither path produces a usable type.
      *
-     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string} $parsed
+     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string} $parsed
      */
     private static function resolveRelatedModelType(array $parsed, Codebase $codebase, string $declaringClass, string $methodName): ?Union
     {
@@ -197,7 +222,13 @@ final class ModelRelationReturnTypeHandler
      * The returned Union wraps a `TGenericObject` for the concrete relation class named by
      * `$relationClass`. The shape varies per Relation subclass:
      * - Standard relations: `<TRelatedModel, TDeclaringModel>` — e.g. `HasOne<Post, User>`,
-     *   `BelongsTo<User, Post>`, `BelongsToMany<Tag, Post>` (TPivotModel/TAccessor default).
+     *   `BelongsTo<User, Post>`.
+     * - BelongsToMany / MorphToMany: `<TRelatedModel, TDeclaringModel>` by default, expanding
+     *   to `<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` when the parser captured
+     *   `->using(CustomPivot::class)` / `->as('alias')` chain mutations. The 4-template form
+     *   is needed so downstream pivot intersections (e.g. `first()` returning
+     *   `TRelatedModel&object{pivot: TPivotModel}`) resolve to the user-declared pivot model
+     *   rather than the default `Pivot`.
      * - Through relations: `<TRelatedModel, TIntermediateModel, TDeclaringModel>` — e.g.
      *   `HasManyThrough<Post, Membership, Country>`. Note the Relation parent's 3rd template
      *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
@@ -210,6 +241,8 @@ final class ModelRelationReturnTypeHandler
         string $relationClass,
         Union $relatedModel,
         ?string $intermediateModel,
+        ?string $pivotModel,
+        ?string $accessor,
         string $bindingClass,
     ): ?Union {
         $isThrough = $relationClass === HasOneThrough::class || $relationClass === HasManyThrough::class;
@@ -230,6 +263,18 @@ final class ModelRelationReturnTypeHandler
         // should resolve to at the call site (User for `(new User())->posts()`), even if
         // the method body lives on a parent class.
         $typeParams[] = new Union([new TNamedObject($bindingClass)]);
+
+        // Emit TPivotModel / TAccessor (slots 3 and 4) only when the parser captured a
+        // chain mutation. Both slots are filled together (with declared defaults filling
+        // any gap); a partial 3-template `BelongsToMany<R, D, P>` would leave TAccessor
+        // unbound on a relation whose template list expects 4 entries when any are given.
+        // The pivot default is per-relation (BelongsToMany => Pivot, MorphToMany => MorphPivot)
+        // to match the stub's @template default expression.
+        $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
+        if ($pivotDefault !== null && ($pivotModel !== null || $accessor !== null)) {
+            $typeParams[] = new Union([new TNamedObject($pivotModel ?? $pivotDefault)]);
+            $typeParams[] = new Union([TLiteralString::make($accessor ?? 'pivot')]);
+        }
 
         return new Union([new TGenericObject($relationClass, $typeParams)]);
     }
