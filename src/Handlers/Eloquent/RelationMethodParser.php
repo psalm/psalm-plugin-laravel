@@ -218,10 +218,10 @@ final class RelationMethodParser
 
     /**
      * Resolve the first argument of `->using(Pivot::class)` to its FQCN, or null when the
-     * argument is dynamic (a variable, a method call, etc.).
-     *
-     * Named-argument form `->using(class: SomePivot::class)` is uncommon for a single-argument
-     * mutator, so only the positional first arg is honored here.
+     * argument is dynamic (a variable, a method call, etc.). The first physical arg is
+     * read regardless of whether it carries a name token — `using()` is a single-parameter
+     * method, so named (`->using(class: P::class)`) and positional (`->using(P::class)`)
+     * forms are both honored.
      */
     private static function firstClassStringArg(PhpParser\Node\Expr\MethodCall $call): ?string
     {

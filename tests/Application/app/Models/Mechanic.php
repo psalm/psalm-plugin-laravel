@@ -106,6 +106,19 @@ final class Mechanic extends Model
     }
 
     /**
+     * Tagging WorkOrders with `->as()` and no `->using()` — exercises the per-relation
+     * pivot default selection: MorphToMany's TPivotModel default is `MorphPivot`, not
+     * `Pivot`. A handler that hard-coded `Pivot` for the all-or-nothing fallback would
+     * silently emit the wrong template here.
+     *
+     * @psalm-return MorphToMany<WorkOrder, $this, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'meta'>
+     */
+    public function workOrderTagsAccessorOnly(): MorphToMany
+    {
+        return $this->morphedByMany(WorkOrder::class, 'taggable')->as('meta');
+    }
+
+    /**
      * Admin bookmarks for this mechanic (inverse of Admin::mechanics()).
      *
      * @psalm-return MorphToMany<Admin>

@@ -213,5 +213,17 @@ function test_morphToMany_using_chain_narrows_pivot_class(): MorphToMany
     return (new Mechanic())->workOrderTagsWithPivot();
 }
 
+// MorphToMany with `->as()` only: the all-or-nothing rule emits TPivotModel as the
+// stub-declared default, which for MorphToMany is `MorphPivot` (not `Pivot` — that's
+// BelongsToMany's default). A handler that hard-coded `Pivot` here would silently
+// produce a wrong type for accessor-only morph chains.
+/**
+ * @psalm-return MorphToMany<WorkOrder, Mechanic, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'meta'>
+ */
+function test_morphToMany_as_only_emits_morphPivot_default(): MorphToMany
+{
+    return (new Mechanic())->workOrderTagsAccessorOnly();
+}
+
 ?>
 --EXPECTF--

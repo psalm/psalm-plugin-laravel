@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
@@ -64,13 +65,22 @@ final class ModelRelationReturnTypeHandler
 {
     /**
      * Relation classes whose stub declares the 4-template
-     * `<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` shape. Other
-     * relation classes ignore the captured pivot/accessor — emitting slots 3+4
-     * on a 2-template relation produces a malformed type.
+     * `<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` shape, mapped to
+     * the stub-declared TPivotModel default. The handler emits this default when
+     * the parser captures `->as(...)` but no `->using(...)` (the all-or-nothing
+     * rule still requires emitting slot 3). Other relations ignore the captured
+     * pivot/accessor — emitting slots 3+4 on a 2-template relation produces a
+     * malformed type. Defaults must match Laravel source: `BelongsToMany` =>
+     * `Pivot`, `MorphToMany` => `MorphPivot` (see Laravel's MorphToMany
+     * constructor and the BelongsToMany stub at
+     * stubs/common/Database/Eloquent/Relations/).
      *
-     * @var list<class-string>
+     * @var array<class-string, class-string<Pivot>>
      */
-    private const PIVOT_AWARE_RELATIONS = [BelongsToMany::class, MorphToMany::class];
+    private const PIVOT_AWARE_RELATIONS = [
+        BelongsToMany::class => Pivot::class,
+        MorphToMany::class => MorphPivot::class,
+    ];
 
     /**
      * Memoized return-type Unions keyed by "declaringClass|bindingClass::method".
@@ -258,11 +268,11 @@ final class ModelRelationReturnTypeHandler
         // chain mutation. Both slots are filled together (with declared defaults filling
         // any gap); a partial 3-template `BelongsToMany<R, D, P>` would leave TAccessor
         // unbound on a relation whose template list expects 4 entries when any are given.
-        if (
-            \in_array($relationClass, self::PIVOT_AWARE_RELATIONS, true)
-            && ($pivotModel !== null || $accessor !== null)
-        ) {
-            $typeParams[] = new Union([new TNamedObject($pivotModel ?? Pivot::class)]);
+        // The pivot default is per-relation (BelongsToMany => Pivot, MorphToMany => MorphPivot)
+        // to match the stub's @template default expression.
+        $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
+        if ($pivotDefault !== null && ($pivotModel !== null || $accessor !== null)) {
+            $typeParams[] = new Union([new TNamedObject($pivotModel ?? $pivotDefault)]);
             $typeParams[] = new Union([TLiteralString::make($accessor ?? 'pivot')]);
         }
 
