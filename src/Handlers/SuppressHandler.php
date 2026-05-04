@@ -120,7 +120,12 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 'validationRules',
                 'withValidator',
             ],
-            'Illuminate\Mail\Mailable' => ['build', 'envelope', 'content', 'attachments'],
+            // __construct is included because Laravel apps typically instantiate Mailables
+            // through factories or container resolution (e.g. Mail::send(new MyMail(...))
+            // from a route handler that itself isn't `new`'d from user code), so Psalm
+            // doesn't see a direct `new MyMail()` call site. The visibility filter in
+            // suppressFrameworkHookMethod() keeps non-public constructors flagged.
+            'Illuminate\Mail\Mailable' => ['__construct', 'build', 'envelope', 'content', 'attachments'],
             // toXxx() channel-render methods are handled by suppressNotificationChannelMethods()
             // because the set of channels is open-ended (core, first-party packages like
             // laravel/slack-notification-channel, community packages from
@@ -131,6 +136,11 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             // reads them when the notification implements ShouldQueue. Listing them here would
             // hide real dead code on synchronous notifications.
             'Illuminate\Notifications\Notification' => [
+                // __construct included for the same reason as Mailable above: notifications
+                // are typically created inside controller/service code that Psalm cannot trace
+                // back to the call site (containers, factories, queue payloads). The visibility
+                // filter keeps non-public constructors flagged.
+                '__construct',
                 'broadcastAs',
                 'broadcastOn',
                 'broadcastWith',
