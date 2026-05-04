@@ -259,13 +259,20 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
      * Eloquent's __get()/__set() magic when accessing $model->xxx — Psalm cannot
      * see these call sites, so it incorrectly reports them as possibly unused.
      *
+     * Visibility note: unlike framework hooks dispatched from outside the class,
+     * Eloquent invokes accessors via `$this->{'get'.$key.'Attribute'}(...)` inside
+     * `Model::mutateAttribute()` (`HasAttributes::mutateAttribute()`). The call
+     * lives on `$this`, so protected/private accessors work at runtime and must
+     * also be suppressed. Do not route through suppressFrameworkHookMethod() —
+     * that would re-introduce false positives on protected accessors.
+     *
      * Note: method names are stored lowercase in ClassLikeStorage.
      */
     private static function suppressEloquentAccessorMethods(ClassLikeStorage $classStorage): void
     {
         foreach ($classStorage->methods as $methodName => $methodStorage) {
             if (\preg_match('/^get.+attribute$/', $methodName) || \preg_match('/^set.+attribute$/', $methodName)) {
-                self::suppressFrameworkHookMethod('PossiblyUnusedMethod', $methodStorage);
+                self::suppress('PossiblyUnusedMethod', $methodStorage);
             }
         }
     }
