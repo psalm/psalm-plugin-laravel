@@ -10,7 +10,7 @@ use Illuminate\Notifications\Messages\DatabaseMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class ExampleNotification extends Notification
+class ExampleNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 

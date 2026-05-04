@@ -125,14 +125,17 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             // because the set of channels is open-ended (core, first-party packages like
             // laravel/slack-notification-channel, community packages from
             // laravel-notification-channels.com, plus user-defined custom channels).
+            //
+            // Queue-only hooks (viaConnections / viaQueues) live in
+            // suppressNotificationQueueHooks() — NotificationSender::queueNotification() only
+            // reads them when the notification implements ShouldQueue. Listing them here would
+            // hide real dead code on synchronous notifications.
             'Illuminate\Notifications\Notification' => [
                 'broadcastAs',
                 'broadcastOn',
                 'broadcastWith',
                 'shouldSend',
                 'via',
-                'viaConnections',
-                'viaQueues',
             ],
             'Illuminate\Support\ServiceProvider' => ['boot'],
         ],
@@ -249,6 +252,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
         if (\in_array('Illuminate\Notifications\Notification', $parents, true)) {
             self::suppressNotificationChannelMethods($classStorage);
+            self::suppressNotificationQueueHooks($classStorage);
         }
     }
 
@@ -296,6 +300,29 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     {
         foreach ($classStorage->methods as $methodName => $methodStorage) {
             if (\preg_match('/^to.+/', $methodName)) {
+                self::suppressFrameworkHookMethod('PossiblyUnusedMethod', $methodStorage);
+            }
+        }
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod for queue-only Notification hooks.
+     *
+     * `viaConnections()` and `viaQueues()` are only consulted from
+     * `NotificationSender::queueNotification()`, which is reached exclusively when
+     * `$notification instanceof ShouldQueue`. On synchronous notifications these methods
+     * are never called — let Psalm surface them as `PossiblyUnusedMethod` so the developer
+     * notices the dead code (likely indicates a forgotten `implements ShouldQueue`).
+     */
+    private static function suppressNotificationQueueHooks(ClassLikeStorage $classStorage): void
+    {
+        if (!isset($classStorage->class_implements[\strtolower('Illuminate\Contracts\Queue\ShouldQueue')])) {
+            return;
+        }
+
+        foreach (['viaConnections', 'viaQueues'] as $methodName) {
+            $methodStorage = $classStorage->methods[\strtolower($methodName)] ?? null;
+            if ($methodStorage instanceof MethodStorage) {
                 self::suppressFrameworkHookMethod('PossiblyUnusedMethod', $methodStorage);
             }
         }
