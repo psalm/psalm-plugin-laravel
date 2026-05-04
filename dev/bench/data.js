@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777891647153,
+  "lastUpdate": 1777897032533,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3457,6 +3457,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.17,
             "range": "± 0.64",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5fa621b91bbb43bd17ab790e38791933535e00a9",
+          "message": "Merge pull request #866 from psalm/worktree-864-suppress-laravel-hook-methods\n\nExpand `PossiblyUnusedMethod` suppression to common Laravel hook methods: Command, Migration, Seeder, Mailable, Notification, ServiceProvider",
+          "timestamp": "2026-05-04T14:14:14+02:00",
+          "tree_id": "53a5408c7d6c3b153cc1c94f8ffd86516e0d5c61",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5fa621b91bbb43bd17ab790e38791933535e00a9"
+        },
+        "date": 1777897031617,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.57,
+            "range": "± 0.18",
             "unit": "s"
           },
           {
