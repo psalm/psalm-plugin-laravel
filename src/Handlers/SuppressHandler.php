@@ -108,6 +108,14 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     /** @var array<string, array<string, list<string>>> */
     private const METHOD_LEVEL_BY_PARENT_CLASS = [
         'PossiblyUnusedMethod' => [
+            'Illuminate\Foundation\Http\FormRequest' => [
+                'after',
+                'authorize',
+                'rules',
+                'validator',
+                'validationRules',
+                'withValidator',
+            ],
             'Illuminate\Mail\Mailable' => ['__construct', 'build', 'envelope', 'content', 'attachments'],
             'Illuminate\Notifications\Notification' => ['__construct', 'via', 'toMail', 'toArray'],
         ],
