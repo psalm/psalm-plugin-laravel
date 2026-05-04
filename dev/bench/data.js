@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777883605642,
+  "lastUpdate": 1777884603900,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3387,6 +3387,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.02,
             "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7d03c2405c6bc73392a677f3e24b8894a4c253ec",
+          "message": "Merge pull request #860 from psalm/worktree-760-relation-getrelated-narrowing\n\nProvide template type info for Relation methods",
+          "timestamp": "2026-05-04T10:47:13+02:00",
+          "tree_id": "dcf80d868e25aae92d0a78ca20ac1003edd7a5a7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7d03c2405c6bc73392a677f3e24b8894a4c253ec"
+        },
+        "date": 1777884603008,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.55,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
