@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777652211155,
+  "lastUpdate": 1777883605642,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3357,6 +3357,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bfad8c9a1e13d4cf8bd764df48a6262ee9b1447e",
+          "message": "Merge pull request #863 from andrew-demb/suppress-form-request\n\nSuppress `PossiblyUnusedMethod` reports for FormRequest hooks",
+          "timestamp": "2026-05-04T10:30:52+02:00",
+          "tree_id": "59cff2b6e909693779685a004a7cd87cba50f37b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bfad8c9a1e13d4cf8bd764df48a6262ee9b1447e"
+        },
+        "date": 1777883605291,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.02,
+            "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
