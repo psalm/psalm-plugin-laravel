@@ -304,7 +304,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     {
         foreach ($classStorage->methods as $methodName => $methodStorage) {
             if (\preg_match('/^get.+attribute$/', $methodName) || \preg_match('/^set.+attribute$/', $methodName)) {
-                self::suppress('PossiblyUnusedMethod', $methodStorage);
+                self::suppressInternalDispatchMethod('PossiblyUnusedMethod', $methodStorage);
             }
         }
     }
@@ -352,7 +352,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         foreach (['envelope', 'content', 'attachments'] as $methodName) {
             $methodStorage = $classStorage->methods[$methodName] ?? null;
             if ($methodStorage instanceof MethodStorage) {
-                self::suppress('PossiblyUnusedMethod', $methodStorage);
+                self::suppressInternalDispatchMethod('PossiblyUnusedMethod', $methodStorage);
             }
         }
     }
@@ -446,6 +446,25 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     private static function suppressFrameworkHookMethod(string $issue, MethodStorage $methodStorage): void
     {
         if ($methodStorage->visibility !== ClassLikeAnalyzer::VISIBILITY_PUBLIC) {
+            return;
+        }
+
+        self::suppress($issue, $methodStorage);
+    }
+
+    /**
+     * Suppress an issue on a method only if the method is public or protected.
+     *
+     * For hooks dispatched on `$this` from a parent class's own code (Eloquent accessors via
+     * `Model::mutateAttribute()`, Mailable lifecycle via `Mailable::ensureXIsHydrated()`),
+     * PHP scopes `private` overrides to the declaring subclass — so the parent's
+     * `$this->method()` call cannot resolve a private override and triggers a fatal error.
+     * `protected` works because the parent class is in the visibility chain. Skip `private`
+     * here so a `private getNameAttribute()` / `private envelope()` stays reported.
+     */
+    private static function suppressInternalDispatchMethod(string $issue, MethodStorage $methodStorage): void
+    {
+        if ($methodStorage->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
             return;
         }
 
