@@ -140,4 +140,43 @@ class ExampleNotification extends Notification implements ShouldQueue
         return [];
     }
 }
+
+/**
+ * Synchronous (non-ShouldQueue) notification.
+ *
+ * Locks in the negative case for `suppressNotificationQueueHooks()`: viaConnections()
+ * and viaQueues() are queue-only hooks (NotificationSender::queueNotification()), so
+ * declaring them on a non-ShouldQueue notification is dead code that should still
+ * raise PossiblyUnusedMethod once #869 enables findUnusedCode locking for these tests.
+ */
+class SyncExampleNotification extends Notification
+{
+    /**
+     * @param mixed $notifiable
+     * @return array
+     */
+    public function via($notifiable)
+    {
+        return ['mail'];
+    }
+
+    /**
+     * Dead code on a synchronous notification — left here so a future regression of the
+     * ShouldQueue gate would surface a real `PossiblyUnusedMethod`.
+     * @return array<string, string>
+     */
+    public function viaConnections(): array
+    {
+        return [];
+    }
+
+    /**
+     * Same as viaConnections — queue-only hook, dead on a synchronous notification.
+     * @return array<string, string>
+     */
+    public function viaQueues(): array
+    {
+        return [];
+    }
+}
 --EXPECTF--
