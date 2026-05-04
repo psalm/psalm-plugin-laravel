@@ -234,8 +234,6 @@ final class ModelRelationReturnTypeHandler
      *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
      *
      * @param class-string $relationClass
-     *
-     * @psalm-pure
      */
     private static function buildRelationType(
         string $relationClass,

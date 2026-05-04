@@ -370,9 +370,6 @@ final class RecordingProgress extends \Psalm\Progress\Progress
     public function debug(string $message): void {}
 
     #[\Override]
-    public function startPhase(\Psalm\Progress\Phase $phase, int $threads = 1): void {}
-
-    #[\Override]
     public function expand(int $number_of_tasks): void {}
 
     #[\Override]
