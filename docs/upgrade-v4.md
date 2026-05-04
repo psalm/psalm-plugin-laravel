@@ -10,7 +10,7 @@ nav_order: 5
 | Dependency | v3           | v4         |
 |------------|--------------|------------|
 | PHP        | ^8.2         | **^8.2**   |
-| Laravel    | 11, 12       | **12, 13** |
+| Laravel    | 11, 12, 13   | **12, 13** |
 | Psalm      | 6, 7 (beta)  | **7 only** |
 
 Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
