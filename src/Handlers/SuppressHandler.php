@@ -120,11 +120,14 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 'validationRules',
                 'withValidator',
             ],
-            // __construct is included because Laravel apps typically instantiate Mailables
-            // through factories or container resolution (e.g. Mail::send(new MyMail(...))
-            // from a route handler that itself isn't `new`'d from user code), so Psalm
-            // doesn't see a direct `new MyMail()` call site. The visibility filter in
-            // suppressFrameworkHookMethod() keeps non-public constructors flagged.
+            // __construct included because Mailable subclasses typically have their `new` call
+            // sites only inside controller actions / service methods. Those enclosing methods
+            // are themselves only invoked by Laravel through reflection (router, container),
+            // so Psalm marks them unreachable from any visible entry point — and `new MyMail()`
+            // sitting inside them inherits that unreachability, leaving `__construct` reported
+            // as `PossiblyUnusedMethod`. Verified against IxDF's real codebase. The visibility
+            // filter in `suppressFrameworkHookMethod()` keeps non-public constructors flagged
+            // (a `protected __construct` would fail at `new` from outside the class anyway).
             'Illuminate\Mail\Mailable' => ['__construct', 'build', 'envelope', 'content', 'attachments'],
             // toXxx() channel-render methods are handled by suppressNotificationChannelMethods()
             // because the set of channels is open-ended (core, first-party packages like
@@ -136,10 +139,8 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             // reads them when the notification implements ShouldQueue. Listing them here would
             // hide real dead code on synchronous notifications.
             'Illuminate\Notifications\Notification' => [
-                // __construct included for the same reason as Mailable above: notifications
-                // are typically created inside controller/service code that Psalm cannot trace
-                // back to the call site (containers, factories, queue payloads). The visibility
-                // filter keeps non-public constructors flagged.
+                // __construct included for the same reason as Mailable: see the comment above.
+                // The visibility filter keeps non-public constructors flagged.
                 '__construct',
                 'broadcastAs',
                 'broadcastOn',
