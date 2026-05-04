@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777884603900,
+  "lastUpdate": 1777891647153,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3427,6 +3427,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9fa66cbfbeaa13378609d3b87bcc207e3c38b0f2",
+          "message": "Merge pull request #868 from psalm/worktree-pr-860-followup-using-as\n\nCapture `using`/`as` chain mutations on `belongsToMany` / `morphToMany`",
+          "timestamp": "2026-05-04T12:44:39+02:00",
+          "tree_id": "fc31615f3db6ad9663210fd0e9ac30089748367f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9fa66cbfbeaa13378609d3b87bcc207e3c38b0f2"
+        },
+        "date": 1777891646477,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.17,
+            "range": "± 0.64",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
