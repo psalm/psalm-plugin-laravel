@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\Handlers\Validation;
+namespace Psalm\LaravelPlugin\Util;
 
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
@@ -13,18 +13,23 @@ use Psalm\Type\Union;
 
 /**
  * Walks a method call's caller type (`$caller->method(...)`) looking for a
- * TNamedObject that matches or extends `$baseClass`. Returns the first matching
- * class-string, or null when nothing in the caller's type union qualifies.
+ * TNamedObject that matches or extends `$baseClass`. Returns the first
+ * matching class-string, or null when nothing in the caller's type union
+ * qualifies.
  *
- * Shared between {@see InlineValidateRulesCollector} (which wants a bool "is
- * the caller a Request?") and {@see ValidationTaintHandler} (which wants the
- * concrete class-string for further lookups). The walk handles exact-class
- * match, extends match, unpopulated classlikes, and invalid class-string
- * exceptions uniformly so both callers get the same semantics.
+ * Used by handlers that need to confirm a method call lands on a particular
+ * Laravel base class (Request, FormRequest, …) before applying narrowing or
+ * taint logic. The walk handles exact-class match, extends match, unpopulated
+ * classlikes, and invalid class-string exceptions uniformly so all callers
+ * get the same semantics.
+ *
+ * Promoted from `Handlers\Validation\ValidationCallerResolver` once a second
+ * (Routing) handler started consuming it — the routing namespace must not
+ * depend on validation internals, so the helper now lives in `Util/`.
  *
  * @internal
  */
-final class ValidationCallerResolver
+final class MethodCallerResolver
 {
     /**
      * @param class-string $baseClass

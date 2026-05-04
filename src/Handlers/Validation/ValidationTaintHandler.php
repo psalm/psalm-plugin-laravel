@@ -501,7 +501,7 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             return null;
         }
 
-        return ValidationCallerResolver::resolveCallerClass(
+        return \Psalm\LaravelPlugin\Util\MethodCallerResolver::resolveCallerClass(
             $expr,
             $event->getStatementsSource(),
             $event->getCodebase(),
