@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -143,10 +145,27 @@ final class ModelRelationReturnTypeHandler
         $bindingClass = $event->getCalledFqClasslikeName() ?? $declaringClass;
         $methodName = $event->getMethodNameLowercase();
 
-        // Cache keyed by the (declaring, binding) tuple — the Union returned for
-        // BaseUser::posts dispatched on User differs from BaseUser::posts dispatched
-        // on AdminUser, since each binds a different TDeclaringModel.
-        $cacheKey = $declaringClass . '|' . $bindingClass . '::' . $methodName;
+        // Detect `$this->relation()` (vs `(new Model())->relation()` or `$var->relation()`)
+        // so the emitted TDeclaringModel can be `static<bindingClass>` instead of plain
+        // `bindingClass`. Required when the receiver is `$this` because user docblocks
+        // routinely declare `@return Rel<X, $this>` (= `Rel<X, bindingClass&static>` under
+        // psalm/psalm#11768), and a method body like
+        // `return $this->users()->where(...)` re-enters this handler with a `$this`
+        // receiver — emitting plain `bindingClass` would mismatch the declared
+        // `bindingClass&static`. External dispatch like `(new Model())->m()` keeps the
+        // plain concrete-class emission so existing tests asserting `Rel<X, ConcreteClass>`
+        // (no `&static`) still pass. Covariance on TDeclaringModel in the relation stubs
+        // additionally lets the `&static` form satisfy concrete-class declarations like
+        // `@return Rel<X, Campaign>` (ixdf-web pattern).
+        $stmt = $event->getStmt();
+        $isThisDispatch = $stmt instanceof MethodCall
+            && $stmt->var instanceof Variable
+            && $stmt->var->name === 'this';
+
+        // Cache keyed by the (declaring, binding, isThisDispatch) tuple — the same
+        // (declaring, binding) pair can produce two different Unions depending on
+        // whether the receiver was `$this` (static-aware) or a concrete instance.
+        $cacheKey = $declaringClass . '|' . $bindingClass . '|' . ($isThisDispatch ? '1' : '0') . '::' . $methodName;
 
         if (\array_key_exists($cacheKey, self::$unionCache)) {
             return self::$unionCache[$cacheKey];
@@ -170,6 +189,7 @@ final class ModelRelationReturnTypeHandler
                         $parsed['pivotModel'],
                         $parsed['accessor'],
                         $bindingClass,
+                        $isThisDispatch,
                     )
                     : null;
             }
@@ -244,6 +264,7 @@ final class ModelRelationReturnTypeHandler
         ?string $pivotModel,
         ?string $accessor,
         string $bindingClass,
+        bool $isThisDispatch,
     ): ?Union {
         $isThrough = $relationClass === HasOneThrough::class || $relationClass === HasManyThrough::class;
 
@@ -261,8 +282,11 @@ final class ModelRelationReturnTypeHandler
 
         // $bindingClass is the late-static-bound receiver class — what TDeclaringModel
         // should resolve to at the call site (User for `(new User())->posts()`), even if
-        // the method body lives on a parent class.
-        $typeParams[] = new Union([new TNamedObject($bindingClass)]);
+        // the method body lives on a parent class. When dispatched on `$this`, mark the
+        // type as static (`bindingClass&static`) so it matches `$this` in user docblocks
+        // declaring `@return Rel<X, $this>`. External dispatch keeps the plain concrete
+        // class so `(new User())->posts()` still resolves to `Rel<X, User>` (no `&static`).
+        $typeParams[] = new Union([new TNamedObject($bindingClass, is_static: $isThisDispatch)]);
 
         // Emit TPivotModel / TAccessor (slots 3 and 4) only when the parser captured a
         // chain mutation. Both slots are filled together (with declared defaults filling
