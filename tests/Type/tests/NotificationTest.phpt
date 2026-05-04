@@ -5,10 +5,12 @@ namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\BroadcastMessage;
+use Illuminate\Notifications\Messages\DatabaseMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class ExampleNotification extends Notification
+class ExampleNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
@@ -29,6 +31,33 @@ class ExampleNotification extends Notification
     public function via($notifiable)
     {
         return ['mail'];
+    }
+
+    /**
+     * Determine if the notification should be sent.
+     * @param mixed $notifiable
+     */
+    public function shouldSend($notifiable, string $channel): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the connections the notification should be sent on per channel.
+     * @return array<string, string>
+     */
+    public function viaConnections(): array
+    {
+        return ['mail' => 'sync'];
+    }
+
+    /**
+     * Get the queues the notification should be queued on per channel.
+     * @return array<string, string>
+     */
+    public function viaQueues(): array
+    {
+        return ['mail' => 'default'];
     }
 
     /**
@@ -54,6 +83,100 @@ class ExampleNotification extends Notification
         return [
             //
         ];
+    }
+
+    /**
+     * Get the database representation of the notification.
+     * @param mixed $notifiable
+     */
+    public function toDatabase($notifiable): DatabaseMessage
+    {
+        return new DatabaseMessage([]);
+    }
+
+    /**
+     * Get the broadcastable representation of the notification.
+     * @param mixed $notifiable
+     */
+    public function toBroadcast($notifiable): BroadcastMessage
+    {
+        return new BroadcastMessage([]);
+    }
+
+    /**
+     * Get the channels the notification should broadcast on.
+     * @return array<int, \Illuminate\Broadcasting\Channel>
+     */
+    #[\Override]
+    public function broadcastOn(): array
+    {
+        return [];
+    }
+
+    /**
+     * Get the data to broadcast.
+     * @return array<string, mixed>
+     */
+    public function broadcastWith(): array
+    {
+        return [];
+    }
+
+    /**
+     * Get the broadcast event name.
+     */
+    public function broadcastAs(): string
+    {
+        return 'example.notification';
+    }
+
+    /**
+     * Custom channel render method — community/user-defined channels can add any toXxx() name.
+     * @param mixed $notifiable
+     * @return array<string, mixed>
+     */
+    public function toCustomChannel($notifiable): array
+    {
+        return [];
+    }
+}
+
+/**
+ * Synchronous (non-ShouldQueue) notification.
+ *
+ * Locks in the negative case for `suppressNotificationQueueHooks()`: viaConnections()
+ * and viaQueues() are queue-only hooks (NotificationSender::queueNotification()), so
+ * declaring them on a non-ShouldQueue notification is dead code that should still
+ * raise PossiblyUnusedMethod once #869 enables findUnusedCode locking for these tests.
+ */
+class SyncExampleNotification extends Notification
+{
+    /**
+     * @param mixed $notifiable
+     * @return array
+     */
+    public function via($notifiable)
+    {
+        return ['mail'];
+    }
+
+    /**
+     * Dead code on a synchronous notification — left here so a future regression of the
+     * ShouldQueue gate would surface a real `PossiblyUnusedMethod`.
+     * @return array<string, string>
+     */
+    public function viaConnections(): array
+    {
+        return [];
+    }
+
+    /**
+     * Same as viaConnections — queue-only hook, dead on a synchronous notification.
+     * @return array<string, string>
+     */
+    public function viaQueues(): array
+    {
+        return [];
     }
 }
 --EXPECTF--

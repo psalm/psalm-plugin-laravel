@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers;
 
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
@@ -108,6 +109,9 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     /** @var array<string, array<string, list<string>>> */
     private const METHOD_LEVEL_BY_PARENT_CLASS = [
         'PossiblyUnusedMethod' => [
+            'Illuminate\Console\Command' => ['handle'],
+            'Illuminate\Database\Migrations\Migration' => ['up', 'down'],
+            'Illuminate\Database\Seeder' => ['run'],
             'Illuminate\Foundation\Http\FormRequest' => [
                 'after',
                 'authorize',
@@ -116,8 +120,44 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 'validationRules',
                 'withValidator',
             ],
-            'Illuminate\Mail\Mailable' => ['__construct', 'build', 'envelope', 'content', 'attachments'],
-            'Illuminate\Notifications\Notification' => ['__construct', 'via', 'toMail', 'toArray'],
+            // __construct included because Mailable subclasses typically have their `new` call
+            // sites only inside controller actions / service methods. Those enclosing methods
+            // are themselves only invoked by Laravel through reflection (router, container),
+            // so Psalm marks them unreachable from any visible entry point — and `new MyMail()`
+            // sitting inside them inherits that unreachability, leaving `__construct` reported
+            // as `PossiblyUnusedMethod`. Verified against IxDF's real codebase. The visibility
+            // filter in `suppressFrameworkHookMethod()` keeps non-public constructors flagged
+            // (a `protected __construct` would fail at `new` from outside the class anyway).
+            //
+            // `build` is dispatched via `Container::getInstance()->call([$this, 'build'])` from
+            // `Mailable::prepareMailableForDelivery()` — the call_user_func_array inside Container
+            // is in BoundMethod's lexical scope, which is unrelated to the user's Mailable, so
+            // public is required. envelope() / content() / attachments() live in
+            // suppressMailableLifecycleMethods() because they are invoked via $this->method() from
+            // Mailable's own parent code: public and protected overrides work, but PHP scopes
+            // private methods to the declaring subclass so a `private envelope()` cannot be
+            // resolved by the parent's $this->envelope() and is left flagged by design.
+            'Illuminate\Mail\Mailable' => ['__construct', 'build'],
+            // toXxx() channel-render methods are handled by suppressNotificationChannelMethods()
+            // because the set of channels is open-ended (core, first-party packages like
+            // laravel/slack-notification-channel, community packages from
+            // laravel-notification-channels.com, plus user-defined custom channels).
+            //
+            // Queue-only hooks (viaConnections / viaQueues) live in
+            // suppressNotificationQueueHooks() — NotificationSender::queueNotification() only
+            // reads them when the notification implements ShouldQueue. Listing them here would
+            // hide real dead code on synchronous notifications.
+            'Illuminate\Notifications\Notification' => [
+                // __construct included for the same reason as Mailable: see the comment above.
+                // The visibility filter keeps non-public constructors flagged.
+                '__construct',
+                'broadcastAs',
+                'broadcastOn',
+                'broadcastWith',
+                'shouldSend',
+                'via',
+            ],
+            'Illuminate\Support\ServiceProvider' => ['boot'],
         ],
     ];
 
@@ -160,7 +200,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 /** @psalm-suppress RedundantFunctionCall method names in constants may contain uppercase */
                 $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
                 if ($method_storage instanceof MethodStorage) {
-                    self::suppress($issue, $method_storage);
+                    self::suppressFrameworkHookMethod($issue, $method_storage);
                 }
             }
         }
@@ -226,7 +266,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 foreach ($method_names as $method_name) {
                     $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
                     if ($method_storage instanceof MethodStorage) {
-                        self::suppress($issue, $method_storage);
+                        self::suppressFrameworkHookMethod($issue, $method_storage);
                     }
                 }
             }
@@ -234,6 +274,15 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
         if (\in_array('Illuminate\Database\Eloquent\Model', $parents, true)) {
             self::suppressEloquentAccessorMethods($classStorage);
+        }
+
+        if (\in_array('Illuminate\Notifications\Notification', $parents, true)) {
+            self::suppressNotificationChannelMethods($classStorage);
+            self::suppressNotificationQueueHooks($classStorage);
+        }
+
+        if (\in_array('Illuminate\Mail\Mailable', $parents, true)) {
+            self::suppressMailableLifecycleMethods($classStorage);
         }
     }
 
@@ -244,13 +293,95 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
      * Eloquent's __get()/__set() magic when accessing $model->xxx — Psalm cannot
      * see these call sites, so it incorrectly reports them as possibly unused.
      *
+     * Visibility: Eloquent dispatches accessors via `$this->{'get'.$key.'Attribute'}(...)`
+     * inside `Model::mutateAttribute()` (in `HasAttributes::mutateAttribute()`). The call
+     * lives on `$this` from the Model parent's scope, so public and protected overrides
+     * work at runtime. PHP scopes `private` methods to the declaring subclass — the parent
+     * cannot resolve a private override and would fatal at runtime — so route through
+     * `suppressInternalDispatchMethod()`, which keeps `private` accessors flagged as the
+     * real bug they are.
+     *
      * Note: method names are stored lowercase in ClassLikeStorage.
      */
     private static function suppressEloquentAccessorMethods(ClassLikeStorage $classStorage): void
     {
         foreach ($classStorage->methods as $methodName => $methodStorage) {
             if (\preg_match('/^get.+attribute$/', $methodName) || \preg_match('/^set.+attribute$/', $methodName)) {
-                self::suppress('PossiblyUnusedMethod', $methodStorage);
+                self::suppressInternalDispatchMethod('PossiblyUnusedMethod', $methodStorage);
+            }
+        }
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod for Notification toXxx() channel-render methods.
+     *
+     * Each notification channel calls $notification->to{ChannelName}(...) via method_exists()
+     * (e.g. DatabaseChannel calls toDatabase, BroadcastChannel calls toBroadcast, MailChannel
+     * calls toMail). The set of channels is open-ended — core ships only a few, but first-party
+     * packages (laravel/slack-notification-channel, laravel/vonage-notification-channel),
+     * community packages (see laravel-notification-channels.com), and user-defined custom
+     * channels each add their own. Listing every channel name explicitly is not maintainable, so
+     * suppress the whole prefix instead. The trade-off is mild: a method named "toCalendar"
+     * that the user genuinely never calls would be silently suppressed, but that's preferable
+     * to false-positive PossiblyUnusedMethod reports on real channel render hooks.
+     *
+     * Note: method names are stored lowercase in ClassLikeStorage.
+     */
+    private static function suppressNotificationChannelMethods(ClassLikeStorage $classStorage): void
+    {
+        foreach ($classStorage->methods as $methodName => $methodStorage) {
+            if (\preg_match('/^to.+/', $methodName)) {
+                self::suppressFrameworkHookMethod('PossiblyUnusedMethod', $methodStorage);
+            }
+        }
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod for Mailable lifecycle hooks invoked internally on `$this`.
+     *
+     * `envelope()` / `content()` / `attachments()` are called from `Mailable`'s own parent code
+     * via `$this->envelope()` / `$this->content()` / `$this->attachments()` (see
+     * `prepareMailableForDelivery()`, `ensureEnvelopeIsHydrated()`, etc.). The dispatch lives in
+     * the Mailable class hierarchy, so public and protected overrides work at runtime. PHP
+     * scopes `private` methods to the declaring subclass — the parent cannot resolve a private
+     * override and would fatal at runtime — so route through `suppressInternalDispatchMethod()`,
+     * which keeps `private` overrides flagged as the real bug they are.
+     *
+     * Contrast with `build`, which is dispatched via
+     * `Container::getInstance()->call([$this, 'build'])` from BoundMethod's foreign scope and
+     * so requires public visibility — that one stays in METHOD_LEVEL_BY_PARENT_CLASS, gated by
+     * `suppressFrameworkHookMethod()`.
+     */
+    private static function suppressMailableLifecycleMethods(ClassLikeStorage $classStorage): void
+    {
+        // Names are already lowercase, matching the keying convention of $classStorage->methods.
+        foreach (['envelope', 'content', 'attachments'] as $methodName) {
+            $methodStorage = $classStorage->methods[$methodName] ?? null;
+            if ($methodStorage instanceof MethodStorage) {
+                self::suppressInternalDispatchMethod('PossiblyUnusedMethod', $methodStorage);
+            }
+        }
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod for queue-only Notification hooks.
+     *
+     * `viaConnections()` and `viaQueues()` are only consulted from
+     * `NotificationSender::queueNotification()`, which is reached exclusively when
+     * `$notification instanceof ShouldQueue`. On synchronous notifications these methods
+     * are never called — let Psalm surface them as `PossiblyUnusedMethod` so the developer
+     * notices the dead code (likely indicates a forgotten `implements ShouldQueue`).
+     */
+    private static function suppressNotificationQueueHooks(ClassLikeStorage $classStorage): void
+    {
+        if (!isset($classStorage->class_implements[\strtolower('Illuminate\Contracts\Queue\ShouldQueue')])) {
+            return;
+        }
+
+        foreach (['viaConnections', 'viaQueues'] as $methodName) {
+            $methodStorage = $classStorage->methods[\strtolower($methodName)] ?? null;
+            if ($methodStorage instanceof MethodStorage) {
+                self::suppressFrameworkHookMethod('PossiblyUnusedMethod', $methodStorage);
             }
         }
     }
@@ -295,7 +426,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 foreach ($method_names as $method_name) {
                     $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
                     if ($method_storage instanceof MethodStorage) {
-                        self::suppress($issue, $method_storage);
+                        self::suppressFrameworkHookMethod($issue, $method_storage);
                     }
                 }
             }
@@ -307,5 +438,42 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         if (!\in_array($issue, $storage->suppressed_issues, true)) {
             $storage->suppressed_issues[] = $issue;
         }
+    }
+
+    /**
+     * Suppress an issue on a method only if the method is public.
+     *
+     * Laravel dispatches framework hooks via `method_exists()` + `Container::call()`,
+     * `$instance->method()`, or reflection — all of which require the target method to be
+     * public. A non-public override of a framework hook (e.g. `protected function handle()`
+     * on a Console\Command, `private function up()` on a Migration) is a runtime bug, not
+     * a candidate for suppression. Skip non-public methods so Psalm can still surface them.
+     */
+    private static function suppressFrameworkHookMethod(string $issue, MethodStorage $methodStorage): void
+    {
+        if ($methodStorage->visibility !== ClassLikeAnalyzer::VISIBILITY_PUBLIC) {
+            return;
+        }
+
+        self::suppress($issue, $methodStorage);
+    }
+
+    /**
+     * Suppress an issue on a method only if the method is public or protected.
+     *
+     * For hooks dispatched on `$this` from a parent class's own code (Eloquent accessors via
+     * `Model::mutateAttribute()`, Mailable lifecycle via `Mailable::ensureXIsHydrated()`),
+     * PHP scopes `private` overrides to the declaring subclass — so the parent's
+     * `$this->method()` call cannot resolve a private override and triggers a fatal error.
+     * `protected` works because the parent class is in the visibility chain. Skip `private`
+     * here so a `private getNameAttribute()` / `private envelope()` stays reported.
+     */
+    private static function suppressInternalDispatchMethod(string $issue, MethodStorage $methodStorage): void
+    {
+        if ($methodStorage->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
+            return;
+        }
+
+        self::suppress($issue, $methodStorage);
     }
 }
