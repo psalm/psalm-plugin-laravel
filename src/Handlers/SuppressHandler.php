@@ -134,7 +134,9 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             // is in BoundMethod's lexical scope, which is unrelated to the user's Mailable, so
             // public is required. envelope() / content() / attachments() live in
             // suppressMailableLifecycleMethods() because they are invoked via $this->method() from
-            // Mailable's own parent code and protected/private overrides work at runtime.
+            // Mailable's own parent code: public and protected overrides work, but PHP scopes
+            // private methods to the declaring subclass so a `private envelope()` cannot be
+            // resolved by the parent's $this->envelope() and is left flagged by design.
             'Illuminate\Mail\Mailable' => ['__construct', 'build'],
             // toXxx() channel-render methods are handled by suppressNotificationChannelMethods()
             // because the set of channels is open-ended (core, first-party packages like
@@ -291,12 +293,13 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
      * Eloquent's __get()/__set() magic when accessing $model->xxx — Psalm cannot
      * see these call sites, so it incorrectly reports them as possibly unused.
      *
-     * Visibility note: unlike framework hooks dispatched from outside the class,
-     * Eloquent invokes accessors via `$this->{'get'.$key.'Attribute'}(...)` inside
-     * `Model::mutateAttribute()` (`HasAttributes::mutateAttribute()`). The call
-     * lives on `$this`, so protected/private accessors work at runtime and must
-     * also be suppressed. Do not route through suppressFrameworkHookMethod() —
-     * that would re-introduce false positives on protected accessors.
+     * Visibility: Eloquent dispatches accessors via `$this->{'get'.$key.'Attribute'}(...)`
+     * inside `Model::mutateAttribute()` (in `HasAttributes::mutateAttribute()`). The call
+     * lives on `$this` from the Model parent's scope, so public and protected overrides
+     * work at runtime. PHP scopes `private` methods to the declaring subclass — the parent
+     * cannot resolve a private override and would fatal at runtime — so route through
+     * `suppressInternalDispatchMethod()`, which keeps `private` accessors flagged as the
+     * real bug they are.
      *
      * Note: method names are stored lowercase in ClassLikeStorage.
      */
@@ -338,13 +341,16 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
      *
      * `envelope()` / `content()` / `attachments()` are called from `Mailable`'s own parent code
      * via `$this->envelope()` / `$this->content()` / `$this->attachments()` (see
-     * `prepareMailableForDelivery()`, `ensureEnvelopeIsHydrated()`, etc.). Since the dispatch
-     * lives inside the Mailable class hierarchy, protected/private overrides work at runtime —
-     * unlike `build` which is dispatched via `Container::getInstance()->call([$this, 'build'])`
-     * from a foreign scope and so requires public visibility.
+     * `prepareMailableForDelivery()`, `ensureEnvelopeIsHydrated()`, etc.). The dispatch lives in
+     * the Mailable class hierarchy, so public and protected overrides work at runtime. PHP
+     * scopes `private` methods to the declaring subclass — the parent cannot resolve a private
+     * override and would fatal at runtime — so route through `suppressInternalDispatchMethod()`,
+     * which keeps `private` overrides flagged as the real bug they are.
      *
-     * Route through unfiltered `suppress()` (not `suppressFrameworkHookMethod()`) so a
-     * `protected envelope()` is not mis-flagged as `PossiblyUnusedMethod`.
+     * Contrast with `build`, which is dispatched via
+     * `Container::getInstance()->call([$this, 'build'])` from BoundMethod's foreign scope and
+     * so requires public visibility — that one stays in METHOD_LEVEL_BY_PARENT_CLASS, gated by
+     * `suppressFrameworkHookMethod()`.
      */
     private static function suppressMailableLifecycleMethods(ClassLikeStorage $classStorage): void
     {

@@ -56,9 +56,12 @@ class ExampleMail extends Mailable
 /**
  * Legacy build()-style mailable.
  *
- * Locks in coverage for the `Illuminate\Mail\Mailable => ['build']` entry. `build()` is
+ * Smoke fixture for the `Illuminate\Mail\Mailable => ['build']` entry. `build()` is
  * dispatched via `Container::getInstance()->call([$this, 'build'])` from a foreign scope,
- * so the visibility filter applies and only public overrides are suppressed.
+ * so the visibility filter applies and only public overrides are suppressed. The default
+ * type-test config has `findUnusedCode` off, so this fixture only exercises the plugin
+ * code path today; it becomes a real regression guard once #869's findUnusedCode lock-in
+ * lands.
  */
 class LegacyExampleMail extends Mailable
 {
