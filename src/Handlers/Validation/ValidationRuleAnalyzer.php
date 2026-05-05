@@ -909,10 +909,8 @@ final class ValidationRuleAnalyzer
      *   - Spread / unpacked args (`Rule::in(...$values)` or `Rule::in([...$x])`).
      *   - Associative array literals (`Rule::in(['a' => 'b'])`).
      *   - Empty argument lists (`Rule::in()`, `Rule::in([])`).
-     *   - Values containing `,` — emitting `in:a,b` for a single value
-     *     `'a,b'` would split into `'a'|'b'` (unsound). The fluent form is
-     *     the canonical workaround for comma-bearing whitelist values, so
-     *     this case must round-trip to `mixed` rather than mis-narrow.
+     *   - Values whose `'in:a,b,c'` round-trip is lossy (commas, whitespace
+     *     edges, empty strings) — see {@see isLossLessInValue()}.
      */
     private static function tryExtractInLikeRuleSegment(Node\Expr $expr): ?string
     {
@@ -966,10 +964,9 @@ final class ValidationRuleAnalyzer
      * Extract a list of string literals from a static call's argument list,
      * accepting either variadic strings or a single array-literal of strings.
      *
-     * Returns null when any argument is not a plain string literal, when args
-     * are spread (`...$x`), when the array literal has associative keys, when
-     * the list is empty, or when any value contains a `,` (which would be
-     * misinterpreted as a separator by the receiver — see caller).
+     * Returns null when the argument list is unsupported (non-string-literal,
+     * spread, associative key, empty list) or when any value would lose
+     * fidelity through the `'in:a,b,c'` segment encoding.
      *
      * @param list<Node\Arg|Node\VariadicPlaceholder> $args
      * @return non-empty-list<string>|null
@@ -1000,7 +997,7 @@ final class ValidationRuleAnalyzer
             if (!$arg instanceof Node\Arg
                 || $arg->unpack
                 || !$arg->value instanceof Node\Scalar\String_
-                || \str_contains($arg->value->value, ',')
+                || !self::isLossLessInValue($arg->value->value)
             ) {
                 return null;
             }
@@ -1015,7 +1012,8 @@ final class ValidationRuleAnalyzer
 
     /**
      * Walk an array literal's items and collect string-literal values, bailing
-     * on any non-string item, spread, associative key, or comma-bearing value.
+     * on any non-string item, spread, associative key, empty list, or value
+     * that would lose fidelity through the `'in:a,b,c'` segment encoding.
      *
      * @return non-empty-list<string>|null
      *
@@ -1030,7 +1028,7 @@ final class ValidationRuleAnalyzer
                 || $item->unpack
                 || $item->key !== null
                 || !$item->value instanceof Node\Scalar\String_
-                || \str_contains($item->value->value, ',')
+                || !self::isLossLessInValue($item->value->value)
             ) {
                 return null;
             }
@@ -1039,6 +1037,35 @@ final class ValidationRuleAnalyzer
         }
 
         return $values === [] ? null : $values;
+    }
+
+    /**
+     * Filter out values whose meaning would change once funnelled through the
+     * `'in:a,b,c'` string-rule encoding. Lossy cases:
+     *
+     *   - empty string — `'in:'` is parsed as a parameter-less rule, so
+     *     `inRuleToLiteralUnion()` returns the unconstrained `string` type
+     *     rather than the singleton `''`.
+     *   - leading / trailing whitespace — `inRuleToLiteralUnion()` calls
+     *     `\trim()` on each comma-separated segment, so `Rule::in([' a'])`
+     *     would silently narrow to `'a'`. Laravel preserves whitespace at
+     *     runtime (its `__toString()` quotes each value and the parser uses
+     *     `str_getcsv()`), so trimming would produce a type that excludes
+     *     a value the runtime accepts.
+     *   - comma — splits one whitelist entry into multiple narrowed values
+     *     (`'a,b'` → `'a'|'b'`). The fluent form is the canonical workaround
+     *     for comma-bearing whitelists, so it must round-trip to `mixed`.
+     *
+     * Bailed values fall through to the existing `class:` segment, which
+     * preserves taint behaviour while leaving the type as `mixed`.
+     *
+     * @psalm-pure
+     */
+    private static function isLossLessInValue(string $value): bool
+    {
+        return $value !== ''
+            && !\str_contains($value, ',')
+            && $value === \trim($value);
     }
 
     /**

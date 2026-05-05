@@ -158,6 +158,63 @@ function testFluentInWithCommaInValueFallsBackToMixed(FluentInWithCommaInValueRe
     /** @psalm-check-type-exact $_pair = mixed */
 }
 
+class FluentInWithLeadingWhitespaceRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            // inRuleToLiteralUnion() trims each comma-separated segment, so
+            // emitting 'in: a' would silently narrow to 'a'. Laravel preserves
+            // whitespace at runtime (its __toString quotes each value and
+            // parseParameters uses str_getcsv), so trimming would exclude a
+            // value the runtime accepts. Bail to mixed.
+            'token' => ['required', Rule::in([' a', 'b'])],
+        ];
+    }
+}
+
+function testFluentInWithLeadingWhitespaceFallsBackToMixed(FluentInWithLeadingWhitespaceRequest $request): void
+{
+    $_token = $request->validated('token');
+    /** @psalm-check-type-exact $_token = mixed */
+}
+
+class FluentInWithTrailingWhitespaceRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            // Variadic-form sibling of the leading-whitespace case.
+            'token' => ['required', Rule::in('a ', 'b')],
+        ];
+    }
+}
+
+function testFluentInWithTrailingWhitespaceFallsBackToMixed(FluentInWithTrailingWhitespaceRequest $request): void
+{
+    $_token = $request->validated('token');
+    /** @psalm-check-type-exact $_token = mixed */
+}
+
+class FluentInWithEmptyStringRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            // 'in:' is parsed as a parameter-less rule, so inRuleToLiteralUnion
+            // would return the unconstrained `string` type rather than the
+            // singleton ''. Bail to mixed.
+            'opt' => ['required', Rule::in(['', 'something'])],
+        ];
+    }
+}
+
+function testFluentInWithEmptyStringFallsBackToMixed(FluentInWithEmptyStringRequest $request): void
+{
+    $_opt = $request->validated('opt');
+    /** @psalm-check-type-exact $_opt = mixed */
+}
+
 class FluentNotInVariadicRequest extends FormRequest
 {
     public function rules(): array
