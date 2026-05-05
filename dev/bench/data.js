@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777897032533,
+  "lastUpdate": 1778002920639,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3497,6 +3497,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a3b643447318f93c99922ed5b4adf3e80c368f9a",
+          "message": "Merge pull request #877 from psalm/worktree-873-rule-in-fluent-narrowing\n\nNarrow `Rule::in(...)` fluent builder to literal-string union",
+          "timestamp": "2026-05-05T19:37:41+02:00",
+          "tree_id": "46687fec4d660f7d662b56a7a7b6b6f43bb494d3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a3b643447318f93c99922ed5b4adf3e80c368f9a"
+        },
+        "date": 1778002919740,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.56,
+            "range": "± 0.3",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
