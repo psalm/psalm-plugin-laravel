@@ -119,7 +119,9 @@ abstract class Factory
     public function createManyQuietly(int|iterable|null $records = null) {}
 
     /**
-     * Create a collection of models and persist them to the database.
+     * Persist either a single model or a collection of models, depending on
+     * whether `count()`/`times()` was called earlier in the chain. See the
+     * conditional return for the plurality split.
      *
      * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
      * @param  Model|null  $parent
@@ -128,7 +130,7 @@ abstract class Factory
     public function create($attributes = [], ?Model $parent = null) {}
 
     /**
-     * Create a collection of models and persist them to the database without dispatching any model events.
+     * Same as `create()`, but without dispatching any model events.
      *
      * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
      * @param  Model|null  $parent
@@ -137,7 +139,8 @@ abstract class Factory
     public function createQuietly($attributes = [], ?Model $parent = null) {}
 
     /**
-     * Create a callback that persists a model in the database when invoked.
+     * Wrap `create()` in a closure for deferred persistence. The closure
+     * returns the same single-or-collection shape as `create()`.
      *
      * @param  array<string, mixed>  $attributes
      * @param  Model|null  $parent
@@ -154,7 +157,8 @@ abstract class Factory
     public function makeOne($attributes = []) {}
 
     /**
-     * Create a collection of models.
+     * Build either a single model or a collection of models without
+     * persisting, depending on whether `count()`/`times()` was called.
      *
      * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
      * @param  Model|null  $parent

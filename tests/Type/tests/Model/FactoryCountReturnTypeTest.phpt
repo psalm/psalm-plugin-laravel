@@ -79,10 +79,16 @@ $_makeMany = (new CustomerFactory())->makeMany();
 $_countThenState = (new CustomerFactory())->count(3)->state(['email' => 'a@b'])->create();
 /** @psalm-check-type-exact $_countThenState = \Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
 
-// ----- variable count: union is the contract --------------------------------
+// ----- non-null int variable: definitely a Collection -----------------------
 $n = random_int(2, 5);
-$_variable = (new CustomerFactory())->count($n)->create();
-/** @psalm-check-type-exact $_variable = \App\Models\Customer|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
+$_variableInt = (new CustomerFactory())->count($n)->create();
+/** @psalm-check-type-exact $_variableInt = \Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
+
+// ----- nullable int variable: union is the contract -------------------------
+/** @var int|null */
+$maybeNull = null;
+$_variableNullable = (new CustomerFactory())->count($maybeNull)->create();
+/** @psalm-check-type-exact $_variableNullable = \App\Models\Customer|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
 
 ?>
 --EXPECTF--

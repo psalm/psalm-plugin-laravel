@@ -11,6 +11,7 @@ use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TLiteralInt;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
@@ -174,14 +175,16 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
 
     /**
      * Map the count argument to the TCount template type:
-     *  - missing or `null` → `null` (single-mode branch of the conditional)
-     *  - any other literal int (incl. 0 and 1) → literal `2` (collection
-     *    branch — Laravel's `Factory::make()` returns a collection for any
-     *    non-null count, including 0 and 1)
-     *  - non-literal int → `null|2` (forces conditional to a union)
+     *  - missing or `null` literal → `null` (single-mode branch)
+     *  - any non-null int (literal `0`/`1`/`N`, plain `int`, `int<a, b>`,
+     *    `positive-int`, etc.) → literal `2` (collection branch — Laravel's
+     *    `Factory::make()` returns a collection for every non-null count)
+     *  - mixed `int|null` or any non-int/non-null atomic → `null|2` (forces
+     *    the conditional to a union of both branches)
      *
      * Literal `2` is just a representative value: the conditional only
-     * distinguishes `null` from "anything else".
+     * distinguishes `null|0|1` from "anything else", and `2` falls into the
+     * "anything else" side regardless of the exact runtime count.
      *
      * @param list<\PhpParser\Node\Arg> $callArgs
      */
@@ -197,27 +200,30 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
             return self::unknownCountUnion();
         }
 
-        $hasSingle = false;
-        $hasPlural = false;
+        $hasNull = false;
+        $hasNonNullInt = false;
 
         foreach ($argType->getAtomicTypes() as $atomic) {
             if ($atomic instanceof TNull) {
-                $hasSingle = true;
+                $hasNull = true;
                 continue;
             }
 
-            if ($atomic instanceof TLiteralInt) {
-                $hasPlural = true;
+            // TLiteralInt extends TInt, so this branch also covers literal
+            // ints (`0`, `1`, `N`), TIntRange, and any future TInt subclass.
+            if ($atomic instanceof TInt) {
+                $hasNonNullInt = true;
                 continue;
             }
 
-            // Non-literal (e.g., plain `int`) — keep both branches alive.
+            // Unexpected atomic (e.g., string from a misuse via __callStatic).
+            // Fall back to the union shape so neither branch is silently dropped.
             return self::unknownCountUnion();
         }
 
         return match (true) {
-            $hasSingle && !$hasPlural => self::singleCountUnion(),
-            $hasPlural && !$hasSingle => self::pluralCountUnion(),
+            $hasNull && !$hasNonNullInt => self::singleCountUnion(),
+            $hasNonNullInt && !$hasNull => self::pluralCountUnion(),
             default => self::unknownCountUnion(),
         };
     }

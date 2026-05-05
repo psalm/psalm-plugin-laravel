@@ -29,17 +29,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             'Illuminate\Support\ServiceProvider',
             'Illuminate\View\Component',
         ],
-        // The Factory stub adds a second @template TCount with default null,
-        // used to encode plurality across count()/times()/create() chains
-        // (see FactoryCountTypeProvider). User-defined factory subclasses
-        // declared as `class UserFactory extends Factory<User>` only specify
-        // one template arg, but Psalm's MissingTemplateParam check ignores
-        // template defaults during inheritance — suppress the noise. Pairs
-        // with the HasFactory entry in CLASS_LEVEL_BY_USED_TRAITS below; both
-        // suppress the same issue for the same template-default reason.
-        'MissingTemplateParam' => [
-            'Illuminate\Database\Eloquent\Factories\Factory',
-        ],
     ];
 
     /** @var array<string, list<string>> */
@@ -294,6 +283,36 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
         if (\in_array('Illuminate\Mail\Mailable', $parents, true)) {
             self::suppressMailableLifecycleMethods($classStorage);
+        }
+
+        if (\in_array('Illuminate\Database\Eloquent\Factories\Factory', $parents, true)) {
+            self::suppressFactoryMissingTCount($classStorage);
+        }
+    }
+
+    /**
+     * Suppress MissingTemplateParam on Factory subclasses that bind `TModel`
+     * but skip the optional `TCount`.
+     *
+     * The Factory stub (see stubs/common/Database/Eloquent/Factories/Factory.stubphp)
+     * adds a second `@template TCount` with default `null`, used by
+     * FactoryCountTypeProvider to encode plurality across count()/times()
+     * chains. User-defined factories declared as
+     * `class UserFactory extends Factory<User>` only specify one template arg,
+     * but Psalm's MissingTemplateParam check ignores template defaults during
+     * inheritance — that warning is plugin-induced noise, not a user bug.
+     *
+     * The check is intentionally narrow: only suppress when the user has bound
+     * `TModel`. A Factory subclass without ANY `@extends` annotation is
+     * actually missing TModel (a real typing issue), and Psalm should still
+     * surface it.
+     */
+    private static function suppressFactoryMissingTCount(ClassLikeStorage $classStorage): void
+    {
+        $factoryParams = $classStorage->template_extended_params['Illuminate\Database\Eloquent\Factories\Factory'] ?? null;
+
+        if (\is_array($factoryParams) && isset($factoryParams['TModel'])) {
+            self::suppress('MissingTemplateParam', $classStorage);
         }
     }
 
