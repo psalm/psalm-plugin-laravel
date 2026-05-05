@@ -910,7 +910,7 @@ final class ValidationRuleAnalyzer
      *   - Associative array literals (`Rule::in(['a' => 'b'])`).
      *   - Empty argument lists (`Rule::in()`, `Rule::in([])`).
      *   - Values whose `'in:a,b,c'` round-trip is lossy (commas, whitespace
-     *     edges, empty strings) — see {@see isLossLessInValue()}.
+     *     edges, empty strings) — see {@see isLosslessInValue()}.
      */
     private static function tryExtractInLikeRuleSegment(Node\Expr $expr): ?string
     {
@@ -997,7 +997,7 @@ final class ValidationRuleAnalyzer
             if (!$arg instanceof Node\Arg
                 || $arg->unpack
                 || !$arg->value instanceof Node\Scalar\String_
-                || !self::isLossLessInValue($arg->value->value)
+                || !self::isLosslessInValue($arg->value->value)
             ) {
                 return null;
             }
@@ -1028,7 +1028,7 @@ final class ValidationRuleAnalyzer
                 || $item->unpack
                 || $item->key !== null
                 || !$item->value instanceof Node\Scalar\String_
-                || !self::isLossLessInValue($item->value->value)
+                || !self::isLosslessInValue($item->value->value)
             ) {
                 return null;
             }
@@ -1061,7 +1061,7 @@ final class ValidationRuleAnalyzer
      *
      * @psalm-pure
      */
-    private static function isLossLessInValue(string $value): bool
+    private static function isLosslessInValue(string $value): bool
     {
         return $value !== ''
             && !\str_contains($value, ',')
