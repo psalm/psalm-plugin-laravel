@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778002920639,
+  "lastUpdate": 1778017046312,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3532,6 +3532,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a68f5b89c816fdc2593d8365c3251ce7c946e5d2",
+          "message": "Merge pull request #881 from psalm/init-config-info\n\nUse level 4 by default and level info instead of suppress",
+          "timestamp": "2026-05-05T23:34:21+02:00",
+          "tree_id": "eb6d53c7a86eb0615b70fc819224bc1db0280839",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a68f5b89c816fdc2593d8365c3251ce7c946e5d2"
+        },
+        "date": 1778017045336,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.79,
+            "range": "± 0.63",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
