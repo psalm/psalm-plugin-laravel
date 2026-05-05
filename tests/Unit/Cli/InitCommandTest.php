@@ -50,15 +50,15 @@ final class InitCommandTest extends TestCase
 
         $contents = \file_get_contents($target);
         $this->assertIsString($contents);
-        $this->assertStringContainsString('errorLevel="3"', $contents);
+        $this->assertStringContainsString('errorLevel="4"', $contents);
         $this->assertStringContainsString('findUnusedCode="false"', $contents);
         $this->assertStringContainsString('ensureOverrideAttribute="false"', $contents);
         $this->assertStringContainsString('<pluginClass class="Psalm\\LaravelPlugin\\Plugin"/>', $contents);
         $this->assertStringContainsString('<directory name="vendor"/>', $contents);
         $this->assertStringContainsString('<directory name="storage"/>', $contents);
         $this->assertStringContainsString('<directory name="bootstrap/cache"/>', $contents);
-        $this->assertStringContainsString('<ClassMustBeFinal errorLevel="suppress"/>', $contents);
-        $this->assertStringContainsString('<MissingOverrideAttribute errorLevel="suppress"/>', $contents);
+        $this->assertStringContainsString('<ClassMustBeFinal errorLevel="info"/>', $contents);
+        $this->assertStringContainsString('<MissingOverrideAttribute errorLevel="info"/>', $contents);
         $this->assertStringContainsString('<UnnecessaryVarAnnotation errorLevel="suppress"/>', $contents);
     }
 
