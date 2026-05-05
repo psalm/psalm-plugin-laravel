@@ -29,6 +29,17 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             'Illuminate\Support\ServiceProvider',
             'Illuminate\View\Component',
         ],
+        // The Factory stub adds a second @template TCount with default null,
+        // used to encode plurality across count()/times()/create() chains
+        // (see FactoryCountTypeProvider). User-defined factory subclasses
+        // declared as `class UserFactory extends Factory<User>` only specify
+        // one template arg, but Psalm's MissingTemplateParam check ignores
+        // template defaults during inheritance — suppress the noise. Pairs
+        // with the HasFactory entry in CLASS_LEVEL_BY_USED_TRAITS below; both
+        // suppress the same issue for the same template-default reason.
+        'MissingTemplateParam' => [
+            'Illuminate\Database\Eloquent\Factories\Factory',
+        ],
     ];
 
     /** @var array<string, list<string>> */
