@@ -17,7 +17,7 @@ use Illuminate\Validation\Rule;
  * not constrain accepted values), so HTML/quotes taints continue to flow
  * to the echo sink unchanged.
  */
-final class FluentNotInVariadicRequest extends FormRequest
+final class FluentVariadicNotInRequest extends FormRequest
 {
     public function rules(): array
     {
@@ -25,7 +25,7 @@ final class FluentNotInVariadicRequest extends FormRequest
     }
 }
 
-function render(FluentNotInVariadicRequest $request): void {
+function render(FluentVariadicNotInRequest $request): void {
     echo $request->string('role');
 }
 ?>
