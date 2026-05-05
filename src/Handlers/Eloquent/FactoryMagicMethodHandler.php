@@ -261,8 +261,8 @@ final class FactoryMagicMethodHandler
         $selfClass = $modelClass;
         try {
             $returnType = $codebase->getMethodReturnType($methodId, $selfClass);
-        } catch (\InvalidArgumentException $e) {
-            $codebase->progress->debug("Laravel plugin: could not get return type for {$methodId}: {$e->getMessage()}\n");
+        } catch (\InvalidArgumentException $invalidArgumentException) {
+            $codebase->progress->debug("Laravel plugin: could not get return type for {$methodId}: {$invalidArgumentException->getMessage()}\n");
             return self::$relationshipMethodCache[$methodId] = false;
         }
 
