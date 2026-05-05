@@ -849,6 +849,20 @@ final class ValidationRuleAnalyzer
                         continue;
                     }
 
+                    // Rule::in(...) / Rule::notIn(...) with statically-extractable
+                    // string literals — emit the equivalent 'in:a,b,c' / 'not_in:a,b,c'
+                    // segment so resolveRuleSegments narrows the type via the existing
+                    // string-rule path. Falls through to the class: segment when the
+                    // arguments aren't statically resolvable (variables, enums,
+                    // Arrayable, spread, comma-bearing values, …).
+                    $inLikeSegment = self::tryExtractInLikeRuleSegment($ruleItem->value);
+
+                    if ($inLikeSegment !== null) {
+                        $segments[] = $inLikeSegment;
+
+                        continue;
+                    }
+
                     // Custom Rule object — capture the class FQN so resolveRuleSegments
                     // can OR the class's own @psalm-taint-escape bits into removedTaints.
                     $ruleClassFqn = self::resolveRuleObjectClassName($ruleItem->value);
@@ -869,6 +883,162 @@ final class ValidationRuleAnalyzer
         }
 
         return $rules !== [] ? $rules : null;
+    }
+
+    /**
+     * If the expression is a `Rule::in(...)` or `Rule::notIn(...)` static call
+     * (optionally wrapped in fluent method calls) whose arguments are all
+     * string literals, return the equivalent `in:a,b,c` / `not_in:a,b,c`
+     * rule segment. Returns null for any unsupported argument shape.
+     *
+     * Reusing the string-rule segment funnels the fluent form through the
+     * same {@see inRuleToLiteralUnion()} narrowing and {@see ruleToRemovedTaints()}
+     * escape path that `'in:a,b,c'` already takes. Identical taint contribution
+     * for `in` (`TaintKind::ALL_INPUT` from both the class table and the rule
+     * table) and `not_in` (0 from both) means swapping segment forms cannot
+     * regress taint analysis.
+     *
+     * Forms supported:
+     *   - `Rule::in('a', 'b')`         variadic
+     *   - `Rule::in('a')`              single
+     *   - `Rule::in(['a', 'b'])`       array literal
+     *
+     * Bails (returns null) for:
+     *   - Any non-string-literal argument (variables, enum cases, method calls,
+     *     `Arrayable` arguments, …).
+     *   - Spread / unpacked args (`Rule::in(...$values)` or `Rule::in([...$x])`).
+     *   - Associative array literals (`Rule::in(['a' => 'b'])`).
+     *   - Empty argument lists (`Rule::in()`, `Rule::in([])`).
+     *   - Values containing `,` — emitting `in:a,b` for a single value
+     *     `'a,b'` would split into `'a'|'b'` (unsound). The fluent form is
+     *     the canonical workaround for comma-bearing whitelist values, so
+     *     this case must round-trip to `mixed` rather than mis-narrow.
+     */
+    private static function tryExtractInLikeRuleSegment(Node\Expr $expr): ?string
+    {
+        // Unwrap outer fluent calls — same convention as resolveRuleObjectClassName.
+        // In and NotIn have no fluent setters in Laravel today (only __construct
+        // and __toString), so this loop is defensive future-proofing: a future
+        // Laravel version, a user-authored subclass, or a `__call`-magic chain
+        // would carry the In/NotIn root through the outer method calls.
+        while ($expr instanceof Node\Expr\MethodCall
+            || $expr instanceof Node\Expr\NullsafeMethodCall
+        ) {
+            $expr = $expr->var;
+        }
+
+        if (!$expr instanceof Node\Expr\StaticCall
+            || !$expr->class instanceof Node\Name
+            || !$expr->name instanceof Node\Identifier
+        ) {
+            return null;
+        }
+
+        /** @var string|null $resolved */
+        $resolved = $expr->class->getAttribute('resolvedName');
+
+        if (!\is_string($resolved)
+            || \strtolower($resolved) !== self::RULE_FACADE_LOWER_FQN
+        ) {
+            return null;
+        }
+
+        $ruleName = match (\strtolower($expr->name->name)) {
+            'in' => 'in',
+            'notin' => 'not_in',
+            default => null,
+        };
+
+        if ($ruleName === null) {
+            return null;
+        }
+
+        $values = self::extractStringLiteralArgs(\array_values($expr->args));
+
+        if ($values === null) {
+            return null;
+        }
+
+        return $ruleName . ':' . \implode(',', $values);
+    }
+
+    /**
+     * Extract a list of string literals from a static call's argument list,
+     * accepting either variadic strings or a single array-literal of strings.
+     *
+     * Returns null when any argument is not a plain string literal, when args
+     * are spread (`...$x`), when the array literal has associative keys, when
+     * the list is empty, or when any value contains a `,` (which would be
+     * misinterpreted as a separator by the receiver — see caller).
+     *
+     * @param list<Node\Arg|Node\VariadicPlaceholder> $args
+     * @return non-empty-list<string>|null
+     *
+     * @psalm-mutation-free
+     */
+    private static function extractStringLiteralArgs(array $args): ?array
+    {
+        if ($args === []) {
+            return null;
+        }
+
+        // Single array argument: Rule::in(['a', 'b']).
+        $first = $args[0];
+
+        if (\count($args) === 1
+            && $first instanceof Node\Arg
+            && !$first->unpack
+            && $first->value instanceof Node\Expr\Array_
+        ) {
+            return self::extractStringLiteralArrayItems($first->value);
+        }
+
+        // Variadic / single string args: Rule::in('a', 'b').
+        $values = [];
+
+        foreach ($args as $arg) {
+            if (!$arg instanceof Node\Arg
+                || $arg->unpack
+                || !$arg->value instanceof Node\Scalar\String_
+                || \str_contains($arg->value->value, ',')
+            ) {
+                return null;
+            }
+
+            $values[] = $arg->value->value;
+        }
+
+        // The early `$args === []` guard plus a foreach with no early-return
+        // guarantees at least one push, so $values is non-empty here.
+        return $values;
+    }
+
+    /**
+     * Walk an array literal's items and collect string-literal values, bailing
+     * on any non-string item, spread, associative key, or comma-bearing value.
+     *
+     * @return non-empty-list<string>|null
+     *
+     * @psalm-mutation-free
+     */
+    private static function extractStringLiteralArrayItems(Node\Expr\Array_ $array): ?array
+    {
+        $values = [];
+
+        foreach ($array->items as $item) {
+            if ($item === null
+                || $item->unpack
+                || $item->key !== null
+                || !$item->value instanceof Node\Scalar\String_
+                || \str_contains($item->value->value, ',')
+            ) {
+                return null;
+            }
+
+            $values[] = $item->value->value;
+        }
+
+        return $values === [] ? null : $values;
     }
 
     /**
