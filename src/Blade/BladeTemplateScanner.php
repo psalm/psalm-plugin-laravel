@@ -4,18 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-use function array_keys;
-use function array_merge;
 use function max;
-use function preg_match_all;
-use function preg_replace;
-use function preg_replace_callback;
-use function str_replace;
-use function substr;
 use function substr_count;
-
-use const PREG_OFFSET_CAPTURE;
-use const PREG_SET_ORDER;
 
 /**
  * Regex-based scanner that extracts variable references from a Blade template
@@ -79,7 +69,7 @@ final class BladeTemplateScanner
             BladeEchoKind::PHP_BLOCK,
         );
 
-        $withoutPhp = preg_replace_callback(
+        $withoutPhp = \preg_replace_callback(
             '/@php\b.*?@endphp\b/s',
             /** @param array{0: string} $m */
             static fn(array $m): string => self::blank($m[0]),
@@ -103,7 +93,7 @@ final class BladeTemplateScanner
 
         // Blank raw / legacy regions so the plain {{ ... }} pass cannot
         // re-match their contents.
-        $remaining = preg_replace_callback(
+        $remaining = \preg_replace_callback(
             '/\{!!.*?!!\}|\{\{\{.*?\}\}\}/s',
             /** @param array{0: string} $m */
             static fn(array $m): string => self::blank($m[0]),
@@ -116,7 +106,7 @@ final class BladeTemplateScanner
             BladeEchoKind::ESCAPED,
         );
 
-        return array_merge($rawUsages, $legacyUsages, $escapedUsages, $phpUsages);
+        return \array_merge($rawUsages, $legacyUsages, $escapedUsages, $phpUsages);
     }
 
     /**
@@ -149,7 +139,7 @@ final class BladeTemplateScanner
             $unsafe[$usage->name] = true;
         }
 
-        return array_keys($unsafe);
+        return \array_keys($unsafe);
     }
 
     /**
@@ -182,11 +172,9 @@ final class BladeTemplateScanner
         $locals = [];
 
         // @foreach / @forelse — `as $val` or `as $key => $val`.
-        if (preg_match_all('/@for(?:each|else)\s*\(.*?\bas\s+\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*=>\s*\$([a-zA-Z_][a-zA-Z0-9_]*))?/s', $source, $matches) !== false) {
+        if (\preg_match_all('/@for(?:each|else)\s*\(.*?\bas\s+\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*=>\s*\$([a-zA-Z_][a-zA-Z0-9_]*))?/s', $source, $matches) !== false) {
             foreach ($matches[1] as $name) {
-                if ($name !== '') {
-                    $locals[$name] = true;
-                }
+                $locals[$name] = true;
             }
 
             foreach ($matches[2] as $name) {
@@ -201,11 +189,9 @@ final class BladeTemplateScanner
         // paren balancing requires a non-regex parser, so we accept the
         // single-line, no-nested-call shape and let the handler apply an
         // explicit safe-list for more complex cases.
-        if (preg_match_all('/@(?:if|elseif|while)\s*\(\s*\$([a-zA-Z_][a-zA-Z0-9_]*)\s*=[^=]/', $source, $matches) !== false) {
+        if (\preg_match_all('/@(?:if|elseif|while)\s*\(\s*\$([a-zA-Z_]\w*)\s*=[^=]/', $source, $matches) !== false) {
             foreach ($matches[1] as $name) {
-                if ($name !== '') {
-                    $locals[$name] = true;
-                }
+                $locals[$name] = true;
             }
         }
 
@@ -219,7 +205,7 @@ final class BladeTemplateScanner
      */
     private static function collect(string $source, string $pattern, BladeEchoKind $kind): array
     {
-        if (preg_match_all($pattern, $source, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE) === false) {
+        if (\preg_match_all($pattern, $source, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) === false) {
             return [];
         }
 
@@ -230,7 +216,7 @@ final class BladeTemplateScanner
             $offset = $match[0][1];
             // `max(1, ...)` pins the return type to `int<1, max>` for the
             // BladeVariableUsage constructor without a runtime assert.
-            $line = max(1, 1 + substr_count(substr($source, 0, $offset), "\n"));
+            $line = \max(1, 1 + \substr_count(\substr($source, 0, $offset), "\n"));
 
             foreach (self::extractVariables($match['expr'][0]) as $name) {
                 $usages[] = new BladeVariableUsage($name, $line, $kind);
@@ -254,7 +240,7 @@ final class BladeTemplateScanner
      */
     private static function blank(string $match): string
     {
-        return preg_replace('/[^\n]/', ' ', $match) ?? $match;
+        return \preg_replace('/[^\n]/', ' ', $match) ?? $match;
     }
 
     /** @psalm-pure */
@@ -262,7 +248,7 @@ final class BladeTemplateScanner
     {
         // Blade comments never reach the compiler; variables inside them are
         // never rendered, so we drop them.
-        $source = preg_replace_callback(
+        $source = \preg_replace_callback(
             '/\{\{--.*?--\}\}/s',
             /** @param array{0: string} $m */
             static fn(array $m): string => self::blank($m[0]),
@@ -272,7 +258,7 @@ final class BladeTemplateScanner
         // @verbatim blocks preserve their inner text literally — Blade does
         // not evaluate `{{ }}` inside them. Match either @endverbatim or EOF
         // so an unclosed @verbatim still strips to end-of-file.
-        return preg_replace_callback(
+        return \preg_replace_callback(
             '/@verbatim\b.*?(?:@endverbatim\b|\z)/s',
             /** @param array{0: string} $m */
             static fn(array $m): string => self::blank($m[0]),
@@ -290,7 +276,7 @@ final class BladeTemplateScanner
      */
     private static function protectEscapedBraces(string $source): string
     {
-        return str_replace(['@{{', '@{!!'], ['   ', '    '], $source);
+        return \str_replace(['@{{', '@{!!'], ['   ', '    '], $source);
     }
 
     /**
@@ -310,7 +296,7 @@ final class BladeTemplateScanner
      */
     private static function extractVariables(string $expr): array
     {
-        if (preg_match_all('/\$([a-zA-Z_][a-zA-Z0-9_]*)/', $expr, $matches) === false) {
+        if (\preg_match_all('/\$([a-zA-Z_]\w*)/', $expr, $matches) === false) {
             return [];
         }
 
@@ -319,7 +305,7 @@ final class BladeTemplateScanner
         $seen = [];
 
         foreach ($matches[1] as $name) {
-            if ($name === '' || isset($seen[$name])) {
+            if (isset($seen[$name])) {
                 continue;
             }
 

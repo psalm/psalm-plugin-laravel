@@ -4,20 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use SplFileInfo;
-
-use function array_keys;
-use function file_get_contents;
-use function is_dir;
-use function rtrim;
 use function str_ends_with;
-use function str_replace;
-use function strlen;
-use function substr;
-
-use const DIRECTORY_SEPARATOR;
 
 /**
  * Per-template record of which data keys reach a raw echo context.
@@ -58,9 +45,9 @@ final readonly class BladeSafetyMap
         $map = [];
 
         foreach ($viewPaths as $root) {
-            $root = rtrim($root, DIRECTORY_SEPARATOR);
+            $root = \rtrim($root, \DIRECTORY_SEPARATOR);
 
-            if (!is_dir($root)) {
+            if (!\is_dir($root)) {
                 continue;
             }
 
@@ -70,7 +57,7 @@ final readonly class BladeSafetyMap
                 // `/var` -> `/private/var`) and would break prefix-stripping.
                 $path = $file->getPathname();
 
-                $source = file_get_contents($path);
+                $source = \file_get_contents($path);
 
                 if ($source === false) {
                     continue;
@@ -118,19 +105,19 @@ final readonly class BladeSafetyMap
      */
     public function knownViews(): array
     {
-        return array_keys($this->unsafeKeysByView);
+        return \array_keys($this->unsafeKeysByView);
     }
 
     /**
-     * @return iterable<SplFileInfo>
+     * @return iterable<\SplFileInfo>
      */
     private static function iterateBladeFiles(string $root): iterable
     {
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS),
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($root, \RecursiveDirectoryIterator::SKIP_DOTS),
         );
 
-        /** @var SplFileInfo $file */
+        /** @var \SplFileInfo $file */
         foreach ($iterator as $file) {
             if (!$file->isFile()) {
                 continue;
@@ -139,7 +126,7 @@ final readonly class BladeSafetyMap
             // Match Laravel's FileViewFinder default extension. str_ends_with
             // (not str_contains) so editor temp files like `foo.blade.php.bak`
             // or `foo.blade.php~` don't leak into the scan.
-            if (!str_ends_with($file->getFilename(), '.blade.php')) {
+            if (!\str_ends_with($file->getFilename(), '.blade.php')) {
                 continue;
             }
 
@@ -158,14 +145,14 @@ final readonly class BladeSafetyMap
      */
     private static function viewNameFor(string $root, string $path): string
     {
-        $relative = substr($path, strlen($root) + 1);
+        $relative = \substr($path, \strlen($root) + 1);
 
         // Blade templates are always `.blade.php`; strip the suffix to get
         // the dotted view name. Non-blade files are filtered out earlier.
-        if (str_ends_with($relative, '.blade.php')) {
-            $relative = substr($relative, 0, -strlen('.blade.php'));
+        if (\str_ends_with($relative, '.blade.php')) {
+            $relative = \substr($relative, 0, -\strlen('.blade.php'));
         }
 
-        return str_replace(DIRECTORY_SEPARATOR, '.', $relative);
+        return \str_replace(\DIRECTORY_SEPARATOR, '.', $relative);
     }
 }

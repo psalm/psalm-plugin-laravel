@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Tests\Unit\Blade;
 
+use function count;
+
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeEchoKind;
 use Psalm\LaravelPlugin\Blade\BladeTemplateScanner;
-
-use function array_map;
-use function count;
-use function sort;
 
 final class BladeTemplateScannerTest extends TestCase
 {
@@ -18,27 +16,27 @@ final class BladeTemplateScannerTest extends TestCase
     {
         $usages = BladeTemplateScanner::scan('<h1>{{ $title }}</h1>');
 
-        self::assertCount(1, $usages);
-        self::assertSame('title', $usages[0]->name);
-        self::assertSame(BladeEchoKind::ESCAPED, $usages[0]->kind);
+        $this->assertCount(1, $usages);
+        $this->assertSame('title', $usages[0]->name);
+        $this->assertSame(BladeEchoKind::ESCAPED, $usages[0]->kind);
     }
 
     public function test_raw_echo_is_classified_as_raw(): void
     {
         $usages = BladeTemplateScanner::scan('<div>{!! $html !!}</div>');
 
-        self::assertCount(1, $usages);
-        self::assertSame('html', $usages[0]->name);
-        self::assertSame(BladeEchoKind::RAW, $usages[0]->kind);
+        $this->assertCount(1, $usages);
+        $this->assertSame('html', $usages[0]->name);
+        $this->assertSame(BladeEchoKind::RAW, $usages[0]->kind);
     }
 
     public function test_legacy_triple_brace_is_classified_as_escaped(): void
     {
         $usages = BladeTemplateScanner::scan('<p>{{{ $legacy }}}</p>');
 
-        self::assertCount(1, $usages);
-        self::assertSame('legacy', $usages[0]->name);
-        self::assertSame(BladeEchoKind::ESCAPED, $usages[0]->kind);
+        $this->assertCount(1, $usages);
+        $this->assertSame('legacy', $usages[0]->name);
+        $this->assertSame(BladeEchoKind::ESCAPED, $usages[0]->kind);
     }
 
     public function test_php_block_classifies_variables_as_php_block(): void
@@ -51,9 +49,9 @@ final class BladeTemplateScannerTest extends TestCase
 
         $usages = BladeTemplateScanner::scan($source);
 
-        self::assertCount(1, $usages);
-        self::assertSame('dangerous', $usages[0]->name);
-        self::assertSame(BladeEchoKind::PHP_BLOCK, $usages[0]->kind);
+        $this->assertCount(1, $usages);
+        $this->assertSame('dangerous', $usages[0]->name);
+        $this->assertSame(BladeEchoKind::PHP_BLOCK, $usages[0]->kind);
     }
 
     public function test_raw_echo_literal_inside_php_string_is_not_mis_matched(): void
@@ -67,7 +65,7 @@ final class BladeTemplateScannerTest extends TestCase
 
         $unsafe = BladeTemplateScanner::unsafeVariables($source);
 
-        self::assertSame(['note'], $unsafe);
+        $this->assertSame(['note'], $unsafe);
     }
 
     public function test_blade_comments_are_ignored(): void
@@ -76,8 +74,8 @@ final class BladeTemplateScannerTest extends TestCase
 
         $usages = BladeTemplateScanner::scan($source);
 
-        self::assertCount(1, $usages);
-        self::assertSame('visible', $usages[0]->name);
+        $this->assertCount(1, $usages);
+        $this->assertSame('visible', $usages[0]->name);
     }
 
     public function test_verbatim_blocks_are_ignored(): void
@@ -91,8 +89,8 @@ final class BladeTemplateScannerTest extends TestCase
 
         $usages = BladeTemplateScanner::scan($source);
 
-        self::assertCount(1, $usages);
-        self::assertSame('real', $usages[0]->name);
+        $this->assertCount(1, $usages);
+        $this->assertSame('real', $usages[0]->name);
     }
 
     public function test_unclosed_verbatim_block_strips_to_end_of_file(): void
@@ -102,7 +100,7 @@ final class BladeTemplateScannerTest extends TestCase
         // directive as literal text, not by leaking variables from it.
         $source = "@verbatim\n{!! \$leaked !!}\nno closing tag";
 
-        self::assertSame([], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame([], BladeTemplateScanner::unsafeVariables($source));
     }
 
     public function test_escaped_braces_are_ignored(): void
@@ -111,16 +109,16 @@ final class BladeTemplateScannerTest extends TestCase
         // common pattern for Vue/Alpine templates. No PHP variable is emitted.
         $usages = BladeTemplateScanner::scan('@{{ $vuetemplate }} {{ $real }}');
 
-        self::assertCount(1, $usages);
-        self::assertSame('real', $usages[0]->name);
+        $this->assertCount(1, $usages);
+        $this->assertSame('real', $usages[0]->name);
     }
 
     public function test_escaped_raw_brace_is_ignored(): void
     {
         $usages = BladeTemplateScanner::scan('@{!! $literal !!} {{ $real }}');
 
-        self::assertCount(1, $usages);
-        self::assertSame('real', $usages[0]->name);
+        $this->assertCount(1, $usages);
+        $this->assertSame('real', $usages[0]->name);
     }
 
     public function test_foreach_alias_is_not_treated_as_view_data_key(): void
@@ -134,7 +132,7 @@ final class BladeTemplateScannerTest extends TestCase
             @endforeach
             BLADE;
 
-        self::assertSame([], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame([], BladeTemplateScanner::unsafeVariables($source));
     }
 
     public function test_foreach_key_value_aliases_are_excluded(): void
@@ -145,7 +143,7 @@ final class BladeTemplateScannerTest extends TestCase
             @endforeach
             BLADE;
 
-        self::assertSame([], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame([], BladeTemplateScanner::unsafeVariables($source));
     }
 
     public function test_forelse_alias_is_excluded(): void
@@ -158,7 +156,7 @@ final class BladeTemplateScannerTest extends TestCase
             @endforelse
             BLADE;
 
-        self::assertSame([], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame([], BladeTemplateScanner::unsafeVariables($source));
     }
 
     public function test_inline_assignment_in_if_condition_is_excluded(): void
@@ -169,7 +167,7 @@ final class BladeTemplateScannerTest extends TestCase
             @endif
             BLADE;
 
-        self::assertSame([], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame([], BladeTemplateScanner::unsafeVariables($source));
     }
 
     public function test_property_access_reports_top_level_variable_only(): void
@@ -178,16 +176,16 @@ final class BladeTemplateScannerTest extends TestCase
         // The scanner deliberately operates at top-level granularity.
         $usages = BladeTemplateScanner::scan('{!! $user->bio !!}');
 
-        self::assertCount(1, $usages);
-        self::assertSame('user', $usages[0]->name);
+        $this->assertCount(1, $usages);
+        $this->assertSame('user', $usages[0]->name);
     }
 
     public function test_array_access_reports_top_level_variable_only(): void
     {
         $usages = BladeTemplateScanner::scan('{!! $data["html"] !!}');
 
-        self::assertCount(1, $usages);
-        self::assertSame('data', $usages[0]->name);
+        $this->assertCount(1, $usages);
+        $this->assertSame('data', $usages[0]->name);
     }
 
     public function test_line_numbers_are_reported_correctly(): void
@@ -202,9 +200,9 @@ final class BladeTemplateScannerTest extends TestCase
             $byName[$usage->name] = $usage;
         }
 
-        self::assertCount(2, $byName);
-        self::assertSame(2, $byName['bad']->line);
-        self::assertSame(3, $byName['good']->line);
+        $this->assertCount(2, $byName);
+        $this->assertSame(2, $byName['bad']->line);
+        $this->assertSame(3, $byName['good']->line);
     }
 
     public function test_line_numbers_survive_multi_line_blanked_region(): void
@@ -229,7 +227,7 @@ final class BladeTemplateScannerTest extends TestCase
             $byName[$usage->name] = $usage;
         }
 
-        self::assertSame(5, $byName['later']->line);
+        $this->assertSame(5, $byName['later']->line);
     }
 
     public function test_line_numbers_survive_multi_line_raw_echo(): void
@@ -242,7 +240,7 @@ final class BladeTemplateScannerTest extends TestCase
             $byName[$usage->name] = $usage;
         }
 
-        self::assertSame(5, $byName['after']->line);
+        $this->assertSame(5, $byName['after']->line);
     }
 
     public function test_multi_line_echo_is_handled(): void
@@ -251,7 +249,7 @@ final class BladeTemplateScannerTest extends TestCase
 
         $unsafe = BladeTemplateScanner::unsafeVariables($source);
 
-        self::assertSame(['wrapped'], $unsafe);
+        $this->assertSame(['wrapped'], $unsafe);
     }
 
     public function test_multiple_echoes_on_one_line(): void
@@ -264,8 +262,8 @@ final class BladeTemplateScannerTest extends TestCase
             $byName[$usage->name] = $usage;
         }
 
-        self::assertSame(BladeEchoKind::ESCAPED, $byName['a']->kind);
-        self::assertSame(BladeEchoKind::RAW, $byName['b']->kind);
+        $this->assertSame(BladeEchoKind::ESCAPED, $byName['a']->kind);
+        $this->assertSame(BladeEchoKind::RAW, $byName['b']->kind);
     }
 
     public function test_unsafe_variables_aggregates_across_kinds(): void
@@ -278,9 +276,9 @@ final class BladeTemplateScannerTest extends TestCase
 
         $unsafe = BladeTemplateScanner::unsafeVariables($source);
 
-        sort($unsafe);
+        \sort($unsafe);
 
-        self::assertSame(['phpBlock', 'raw'], $unsafe);
+        $this->assertSame(['phpBlock', 'raw'], $unsafe);
     }
 
     public function test_same_variable_in_safe_and_raw_contexts_is_reported_unsafe(): void
@@ -289,13 +287,13 @@ final class BladeTemplateScannerTest extends TestCase
         // — if ANY echo is unsafe, the key must be treated as an html sink.
         $source = '{{ $title }} ... {!! $title !!}';
 
-        self::assertSame(['title'], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame(['title'], BladeTemplateScanner::unsafeVariables($source));
     }
 
     public function test_no_variables_returns_empty(): void
     {
-        self::assertSame([], BladeTemplateScanner::scan('<p>Hello, world!</p>'));
-        self::assertSame([], BladeTemplateScanner::unsafeVariables('<p>Hello, world!</p>'));
+        $this->assertSame([], BladeTemplateScanner::scan('<p>Hello, world!</p>'));
+        $this->assertSame([], BladeTemplateScanner::unsafeVariables('<p>Hello, world!</p>'));
     }
 
     public function test_all_safe_template_has_no_unsafe_variables(): void
@@ -308,18 +306,18 @@ final class BladeTemplateScannerTest extends TestCase
             @endforeach
             BLADE;
 
-        self::assertSame([], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame([], BladeTemplateScanner::unsafeVariables($source));
     }
 
     public function test_multiple_variables_in_single_echo(): void
     {
         $usages = BladeTemplateScanner::scan('{!! $a . $b . $c !!}');
 
-        $names = array_map(static fn($u) => $u->name, $usages);
+        $names = \array_map(static fn(\Psalm\LaravelPlugin\Blade\BladeVariableUsage $u): string => $u->name, $usages);
 
-        sort($names);
+        \sort($names);
 
-        self::assertSame(['a', 'b', 'c'], $names);
+        $this->assertSame(['a', 'b', 'c'], $names);
     }
 
     public function test_section_with_content_argument_does_not_flag_variable(): void
@@ -329,7 +327,7 @@ final class BladeTemplateScannerTest extends TestCase
         // current scanner ignores @section entirely — this test pins that.
         $source = "@section('title', \$dynamic)\n@stop";
 
-        self::assertSame([], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame([], BladeTemplateScanner::unsafeVariables($source));
     }
 
     public function test_known_limitation_string_interpolation_inside_raw_echo_surfaces_names(): void
@@ -341,10 +339,7 @@ final class BladeTemplateScannerTest extends TestCase
         // already an unescaped echo, so any key appearing inside should be
         // sinked regardless). Pinning the current behaviour so intentional
         // future changes are visible.
-        self::assertSame(
-            ['attacker'],
-            BladeTemplateScanner::unsafeVariables('{!! "hello {$attacker}" !!}'),
-        );
+        $this->assertSame(['attacker'], BladeTemplateScanner::unsafeVariables('{!! "hello {$attacker}" !!}'));
     }
 
     public function test_known_limitation_at_php_inline_directive_is_not_recognised(): void
@@ -356,7 +351,7 @@ final class BladeTemplateScannerTest extends TestCase
         // improvement lands with an intentional test change.
         $source = "@php(\$foo = 'x')\n{!! \$foo !!}";
 
-        self::assertSame(['foo'], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame(['foo'], BladeTemplateScanner::unsafeVariables($source));
     }
 
     public function test_known_limitation_assignment_with_preceding_call_in_condition(): void
@@ -366,6 +361,6 @@ final class BladeTemplateScannerTest extends TestCase
         // the known-limitation behaviour: `$x` is NOT excluded.
         $source = "@if (count(\$rows) > 0 && \$rendered = compute())\n{!! \$rendered !!}\n@endif";
 
-        self::assertSame(['rendered'], BladeTemplateScanner::unsafeVariables($source));
+        $this->assertSame(['rendered'], BladeTemplateScanner::unsafeVariables($source));
     }
 }
