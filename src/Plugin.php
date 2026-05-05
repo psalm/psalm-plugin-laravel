@@ -221,12 +221,20 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/FactoryMagicMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/FactoryRegistrationHandler.php';
         if ($pluginConfig->shouldUseMigrations()) {
             require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
             Handlers\Eloquent\ModelRegistrationHandler::enableMigrations();
         }
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
+        // Discovers Factory subclasses and registers per-class hooks so that
+        // for{Relation}() / has{Relation}() magic calls type-check (issue #696).
+        // Runs after ModelRegistrationHandler in registration order; order doesn't
+        // affect correctness — both subscribe to AfterCodebasePopulated and only
+        // query the codebase at analysis time, by which point both have registered.
+        $registration->registerHooksFromClass(Handlers\Eloquent\FactoryRegistrationHandler::class);
 
         // Magic method forwarding: Relation -> Builder (decorated forwarding).
         // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and
