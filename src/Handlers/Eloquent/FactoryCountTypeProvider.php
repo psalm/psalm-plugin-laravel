@@ -64,7 +64,9 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
      * the analysed codebase, so re-allocating these per call adds up.
      */
     private static ?Union $singleCountUnion = null;
+
     private static ?Union $pluralCountUnion = null;
+
     private static ?Union $unknownCountUnion = null;
 
     /**
