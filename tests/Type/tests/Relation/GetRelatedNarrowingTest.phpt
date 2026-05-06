@@ -155,10 +155,12 @@ function test_using_chain_narrows_getRelated(): MechanicSpecialization
     return (new Mechanic())->specializationsWithPivot()->getRelated();
 }
 
-// Limitation: a 2-template `BelongsToMany<R, D>` is silently normalised against a
-// 4-template assertion via stub-declared template defaults, so neither the typed-return
-// form below nor `psalm-check-type-exact` will catch a regression that drops back to
-// the 2-template form. These tests pin intent and document the expected emission.
+// Limitation: the typed-return form below silently normalises a 2-template
+// `BelongsToMany<R, D>` against a 4-template assertion via stub-declared template
+// defaults, so the @psalm-return assertions in this section pin intent rather than
+// catch regressions. Regression coverage for the 4-template emission lives in
+// Issue883FullTemplateEmissionTest.phpt, where chain-consumer scenarios surface
+// MissingTemplateParam under a 2-of-4 emission.
 
 // belongsToMany with `->using()`: TPivotModel binds to the user-declared pivot model,
 // so slot 3 carries `SpecializationPivot` rather than the default `Pivot`.
@@ -181,8 +183,9 @@ function test_as_chain_binds_accessor_template(): BelongsToMany
 }
 
 // `->as()` without `->using()`: the parser captures only the accessor, the handler
-// emits the explicit `Pivot` default for slot 3 — exercising the all-or-nothing rule
-// (if either slot is captured, emit both with declared defaults filling the gaps).
+// emits the per-relation `Pivot` default for slot 3. (After #883 the handler emits
+// all 4 slots unconditionally for pivot-aware relations; this test pins the
+// captured-vs-default split.)
 /**
  * @psalm-return BelongsToMany<MechanicSpecialization, Mechanic, Pivot, 'details'>
  */
@@ -213,9 +216,9 @@ function test_morphToMany_using_chain_narrows_pivot_class(): MorphToMany
     return (new Mechanic())->workOrderTagsWithPivot();
 }
 
-// MorphToMany with `->as()` only: the all-or-nothing rule emits TPivotModel as the
-// stub-declared default, which for MorphToMany is `MorphPivot` (not `Pivot` — that's
-// BelongsToMany's default). A handler that hard-coded `Pivot` here would silently
+// MorphToMany with `->as()` only: slot 3 is filled with the per-relation default,
+// which for MorphToMany is `MorphPivot` (not `Pivot` — that's BelongsToMany's default).
+// A handler that hard-coded `Pivot` for the missing-mutator fallback would silently
 // produce a wrong type for accessor-only morph chains.
 /**
  * @psalm-return MorphToMany<WorkOrder, Mechanic, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'meta'>
