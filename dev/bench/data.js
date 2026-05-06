@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778017046312,
+  "lastUpdate": 1778068023274,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3562,6 +3562,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.79,
             "range": "± 0.63",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a2a730e4b1db73ea588506606298245544b82e63",
+          "message": "Merge pull request #885 from psalm/worktree-883-belongs-to-many-4-templates\n\nFix `MissingTemplateParam` on `BelongsToMany`/`MorphToMany` relation consumers",
+          "timestamp": "2026-05-06T13:44:26+02:00",
+          "tree_id": "d158f4db7c842566b37316e67953e3e5ad2ebbf7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a2a730e4b1db73ea588506606298245544b82e63"
+        },
+        "date": 1778068022897,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.64,
+            "range": "± 0.46",
             "unit": "s"
           },
           {
