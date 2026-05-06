@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778068023274,
+  "lastUpdate": 1778099362236,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3597,6 +3597,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.64,
             "range": "± 0.46",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bcb0ea9e1dadf107118e7b14d5a3e4f8d189b634",
+          "message": "Merge pull request #887 from psalm/worktree-879-self-static-parent-class-relations\n\nResolve `self::class`/`static::class`/`parent::class` in relation factories",
+          "timestamp": "2026-05-06T22:26:38+02:00",
+          "tree_id": "97539a442c69932f7293de5923cd057129c4d3b2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bcb0ea9e1dadf107118e7b14d5a3e4f8d189b634"
+        },
+        "date": 1778099361594,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.96,
+            "range": "± 0.04",
             "unit": "s"
           },
           {
