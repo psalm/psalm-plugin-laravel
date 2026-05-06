@@ -69,9 +69,10 @@ final class Mechanic extends Model
     }
 
     /**
-     * Specializations with `->as()` but no `->using()` — exercises the all-or-nothing
-     * emission rule: when only one mutator is captured, the handler still emits both
-     * pivot and accessor slots (filling the missing one with its declared default).
+     * Specializations with `->as()` but no `->using()` — verifies that when only
+     * the accessor is captured, slot 3 is still filled with the per-relation
+     * `Pivot` default. (The handler emits all 4 slots unconditionally for
+     * pivot-aware relations; this test pins the captured-vs-default split.)
      *
      * @psalm-return BelongsToMany<MechanicSpecialization, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'details'>
      */
@@ -108,8 +109,8 @@ final class Mechanic extends Model
     /**
      * Tagging WorkOrders with `->as()` and no `->using()` — exercises the per-relation
      * pivot default selection: MorphToMany's TPivotModel default is `MorphPivot`, not
-     * `Pivot`. A handler that hard-coded `Pivot` for the all-or-nothing fallback would
-     * silently emit the wrong template here.
+     * `Pivot`. A handler that hard-coded `Pivot` for the missing-mutator fallback
+     * would silently emit the wrong template here.
      *
      * @psalm-return MorphToMany<WorkOrder, $this, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'meta'>
      */
