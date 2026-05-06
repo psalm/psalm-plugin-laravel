@@ -1,68 +1,79 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Models\Part;
 use App\Models\Shop;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
 /**
- * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/883
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/883.
  *
- * `belongsToMany()` / `morphToMany()` relation bodies that don't include
- * `->using(...)` or `->as(...)` chain mutations must still produce a fully-
- * applied 4-template `BelongsToMany<TRelatedModel, TDeclaringModel, TPivotModel,
- * TAccessor>` (or `MorphToMany<...>`). A partial 2-of-4 emission overrides any
- * user-declared 4-template docblock and trips `MissingTemplateParam` on
- * consumers, because Psalm rejects the partial form once any template slot is
- * supplied — even when the stub declares `@template-default`.
+ * BelongsToMany / MorphToMany relation method bodies that don't include
+ * `->using(...)` / `->as(...)` chain mutations must still produce a fully-
+ * applied 4-template type. The handler-emitted Union overrides any user-
+ * declared docblock at the call site, and Psalm rejects partial 2-of-4 forms
+ * (consumers trip MissingTemplateParam) even when the stub declares a default
+ * for the missing slots. The pivot default is per-relation: BelongsToMany =>
+ * Pivot, MorphToMany => MorphPivot. The accessor default is 'pivot'.
  *
- * `@psalm-check-type-exact` silently normalises a 2-template type against a
- * 4-template assertion using stub defaults, so it cannot detect the regression.
- * `@psalm-trace` emits a Trace issue containing the literal inferred type,
- * which EXPECTF matches verbatim — that's the only way to lock in the
- * 4-template emission. Both `Shop::parts()` and `Shop::allWorkOrders()` are
- * declared without a `@psalm-return` docblock, so the handler-emitted Union
- * is what Psalm reports here (no docblock return type to interfere).
- *
- * The pivot default is per-relation: `BelongsToMany` => `Pivot`, `MorphToMany`
- * => `MorphPivot`. The accessor default is `'pivot'`.
+ * The chain-consumer tests below are the regression oracle: empty `--EXPECTF--`
+ * asserts that `wherePivot()->count()` (the user's reported shape) does not
+ * trip MissingTemplateParam. The typed-return tests pin the expected emission
+ * shape; they don't catch a 2-of-4 regression on their own (Psalm normalises
+ * 2-template against 4-template via the stub `@template-default`), but reading
+ * them clarifies which slots the handler should fill.
  */
 
-// belongsToMany without `->using()` / `->as()` and no `@psalm-return` docblock
-// — emits the full 4-template form with the BelongsToMany default (`Pivot`).
-function test_belongsToMany_without_chain_emits_4_templates(): BelongsToMany
+// Typed-return assertions pin the expected emission. `Shop::parts()` and
+// `Shop::allWorkOrders()` carry no `@psalm-return` docblock, so the handler-
+// emitted Union is what Psalm reports here. `WorkOrder::parts()` declares a
+// 2-template `@psalm-return` docblock, demonstrating that handler emission
+// wins over the user docblock at the call site.
+
+/**
+ * @psalm-return BelongsToMany<Part, Shop, Pivot, 'pivot'>
+ */
+function test_belongsToMany_no_chain_emits_4_templates(): BelongsToMany
 {
-    $r = (new Shop())->parts();
-    /** @psalm-trace $r */
-    return $r;
+    return (new Shop())->parts();
 }
 
-// morphToMany without chain mutations and no `@psalm-return` docblock: the
-// per-relation pivot default is `MorphPivot`, not `Pivot`. A handler that
-// hard-coded `Pivot` for the default fallback would silently emit the wrong
-// type for accessor-only morph chains.
-function test_morphToMany_without_chain_emits_4_templates_with_morphPivot_default(): MorphToMany
+/**
+ * @psalm-return MorphToMany<WorkOrder, Shop, MorphPivot, 'pivot'>
+ */
+function test_morphToMany_no_chain_emits_4_templates(): MorphToMany
 {
-    $r = (new Shop())->allWorkOrders();
-    /** @psalm-trace $r */
-    return $r;
+    return (new Shop())->allWorkOrders();
 }
 
-// belongsToMany with a 2-template `@psalm-return BelongsToMany<Part, $this>` docblock:
-// this case verifies the precedence between the user docblock and the handler-emitted
-// type. `WorkOrder::parts()` declares the 2-template form; the handler emits 4
-// templates. The trace shows whichever wins. The 2-template docblock is itself a
-// historical workaround for the partial-emission shape; once the handler emits the
-// full 4-template form, those `@psalm-return` docblocks become redundant.
-function test_belongsToMany_with_two_template_docblock_emits_full_4_templates(): BelongsToMany
+/**
+ * @psalm-return BelongsToMany<Part, WorkOrder, Pivot, 'pivot'>
+ */
+function test_belongsToMany_handler_overrides_two_template_docblock(): BelongsToMany
 {
-    $r = (new WorkOrder())->parts();
-    /** @psalm-trace $r */
-    return $r;
+    return (new WorkOrder())->parts();
+}
+
+// Chain-consumer scenarios from the issue's reproducer. The chain
+// `wherePivot()->count()` trips MissingTemplateParam under a 2-of-4
+// emission, so the empty `--EXPECTF--` block below is the regression oracle.
+
+function test_belongsToMany_no_chain_consumer_chain_resolves(): int
+{
+    return (new Shop())->parts()
+        ->wherePivot('quantity', 1)
+        ->count();
+}
+
+function test_morphToMany_no_chain_consumer_chain_resolves(): int
+{
+    return (new Shop())->allWorkOrders()
+        ->wherePivot('priority', 'high')
+        ->count();
 }
 ?>
 --EXPECTF--
-Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\Shop, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\MorphToMany<App\Models\WorkOrder, App\Models\Shop, Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
-Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>

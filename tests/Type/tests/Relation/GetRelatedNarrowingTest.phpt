@@ -158,9 +158,9 @@ function test_using_chain_narrows_getRelated(): MechanicSpecialization
 // Limitation: the typed-return form below silently normalises a 2-template
 // `BelongsToMany<R, D>` against a 4-template assertion via stub-declared template
 // defaults, so the @psalm-return assertions in this section pin intent rather than
-// catch regressions. The trace-based regression coverage for the 4-template
-// emission lives in Issue883FullTemplateEmissionTest.phpt — a regression that
-// drops back to the 2-template form fails there.
+// catch regressions. Regression coverage for the 4-template emission lives in
+// Issue883FullTemplateEmissionTest.phpt, where chain-consumer scenarios surface
+// MissingTemplateParam under a 2-of-4 emission.
 
 // belongsToMany with `->using()`: TPivotModel binds to the user-declared pivot model,
 // so slot 3 carries `SpecializationPivot` rather than the default `Pivot`.
