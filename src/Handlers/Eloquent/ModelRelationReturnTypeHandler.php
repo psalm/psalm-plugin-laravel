@@ -58,7 +58,7 @@ use Psalm\Type\Union;
  * captured the handler still emits all 4 slots, filling slot 3 with the per-relation
  * pivot default (`Pivot` / `MorphPivot`) and slot 4 with `'pivot'` — emitting only 2
  * triggers `MissingTemplateParam` on consumers because Psalm rejects a partial form
- * even when the stub declares `@template-default` (see #883).
+ * even when the stub declares a default via `@template T of … = Default` (see #883).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
  * @internal

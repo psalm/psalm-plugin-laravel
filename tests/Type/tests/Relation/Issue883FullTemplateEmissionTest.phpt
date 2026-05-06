@@ -24,8 +24,9 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * asserts that `wherePivot()->count()` (the user's reported shape) does not
  * trip MissingTemplateParam. The typed-return tests pin the expected emission
  * shape; they don't catch a 2-of-4 regression on their own (Psalm normalises
- * 2-template against 4-template via the stub `@template-default`), but reading
- * them clarifies which slots the handler should fill.
+ * 2-template against 4-template via the stub default declared by
+ * `@template T of … = Default`), but reading them clarifies which slots the
+ * handler should fill.
  */
 
 // Typed-return assertions pin the expected emission. `Shop::parts()` and
