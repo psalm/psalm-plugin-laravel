@@ -11,9 +11,9 @@ class Route
      * stub restated the same `$middleware is null` check (with `string[]` on the null branch
      * instead of `array`), and that overlap interacts badly with Psalm's stub/source merge on
      * some Psalm versions: chained calls (`->middleware([...])->withoutScopedBindings()`)
-     * collapse to the null branch (issue #888). Until the upstream Psalm bug is fixed, the
-     * proper layer for this is `vimeo/psalm` itself; this stub keeps only the setter branch
-     * (`$this`) as a workaround.
+     * collapse to the null branch (issue #888, upstream `vimeo/psalm#11837`). The proper
+     * layer for this is `vimeo/psalm` itself; this stub keeps only the setter branch
+     * (`$this`) as a workaround until the upstream bug is fixed.
      *
      * Trade-off: the no-arg getter form `$route->middleware()` resolves to `$this` instead
      * of `array`. That form is rarely called from user code. `@psalm-variadic` survives
