@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778099362236,
+  "lastUpdate": 1778139012483,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3632,6 +3632,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.96,
             "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d813b8844ffe5ff8d05e1ae47f7d630217f7538f",
+          "message": "Merge pull request #889 from psalm/worktree-888-route-middleware-conditional-return\n\nFix `Route::middleware()` chain inference on Psalm dev-master",
+          "timestamp": "2026-05-07T09:27:34+02:00",
+          "tree_id": "105828fe7c411fa9349206bbb5d218aec65920db",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d813b8844ffe5ff8d05e1ae47f7d630217f7538f"
+        },
+        "date": 1778139011463,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.93,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
