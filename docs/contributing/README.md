@@ -114,6 +114,8 @@ When a **class stub and a trait stub** both declare the same method, Psalm creat
 
 Stub files are loaded in alphabetical order (sorted by full path) to ensure deterministic results across OSes.
 
+When a **stub re-declares a method that already has a conditional `@return` in Laravel's source** (such as `($x is null ? array : $this)`), restating the same condition (even with different branch types) can collide during the merge and collapse to one branch on some Psalm versions. If the stub only needs to add an annotation (e.g. `@psalm-variadic`), drop the conditional from the stub or diverge intentionally to one branch. See `stubs/common/Routing/Route.stubphp` and the issue #888 regression test for a worked example.
+
 ## How to add a handler
 
 Handlers implement Psalm event interfaces to override type inference.
