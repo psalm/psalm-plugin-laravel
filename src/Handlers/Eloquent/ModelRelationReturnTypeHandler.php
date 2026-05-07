@@ -51,12 +51,14 @@ use Psalm\Type\Union;
  * arg is dynamic the handler defers.
  *
  * For `BelongsToMany` and `MorphToMany` the parser also walks the chain to capture
- * `->using(CustomPivot::class)` (TPivotModel) and `->as('accessor')` (TAccessor); when
- * present they are emitted as the 3rd and 4th template params so downstream pivot
- * intersections (e.g. `first()` returning `TRelatedModel&object{pivot: TPivotModel}`)
- * resolve to the user-declared pivot model rather than the default `Pivot`. When neither
- * mutator appears the handler emits the 2-param shape and Psalm fills in the template
- * defaults.
+ * `->using(CustomPivot::class)` (TPivotModel) and `->as('accessor')` (TAccessor) and emits
+ * them as the 3rd and 4th template params so downstream pivot intersections (e.g.
+ * `first()` returning `TRelatedModel&object{pivot: TPivotModel}`) resolve to the
+ * user-declared pivot model rather than the default `Pivot`. When neither mutator is
+ * captured the handler still emits all 4 slots, filling slot 3 with the per-relation
+ * pivot default (`Pivot` / `MorphPivot`) and slot 4 with `'pivot'` — emitting only 2
+ * triggers `MissingTemplateParam` on consumers because Psalm rejects a partial form
+ * even when the stub declares a default via `@template T of … = Default` (see #883).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
  * @internal
@@ -66,13 +68,14 @@ final class ModelRelationReturnTypeHandler
     /**
      * Relation classes whose stub declares the 4-template
      * `<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` shape, mapped to
-     * the stub-declared TPivotModel default. The handler emits this default when
-     * the parser captures `->as(...)` but no `->using(...)` (the all-or-nothing
-     * rule still requires emitting slot 3). Other relations ignore the captured
-     * pivot/accessor — emitting slots 3+4 on a 2-template relation produces a
-     * malformed type. Defaults must match Laravel source: `BelongsToMany` =>
-     * `Pivot`, `MorphToMany` => `MorphPivot` (see Laravel's MorphToMany
-     * constructor and the BelongsToMany stub at
+     * the stub-declared TPivotModel default. The handler always emits slots 3+4
+     * for these relations: when the parser captures `->using(...)` / `->as(...)`
+     * the captured values fill the slots, otherwise the per-relation defaults
+     * (`Pivot` / `MorphPivot`) and `'pivot'` are emitted (see #883). Other
+     * relations ignore the captured pivot/accessor — emitting slots 3+4 on a
+     * 2-template relation produces a malformed type. Defaults must match Laravel
+     * source: `BelongsToMany` => `Pivot`, `MorphToMany` => `MorphPivot` (see
+     * Laravel's MorphToMany constructor and the BelongsToMany stub at
      * stubs/common/Database/Eloquent/Relations/).
      *
      * @var array<class-string, class-string<Pivot>>
@@ -223,12 +226,13 @@ final class ModelRelationReturnTypeHandler
      * `$relationClass`. The shape varies per Relation subclass:
      * - Standard relations: `<TRelatedModel, TDeclaringModel>` — e.g. `HasOne<Post, User>`,
      *   `BelongsTo<User, Post>`.
-     * - BelongsToMany / MorphToMany: `<TRelatedModel, TDeclaringModel>` by default, expanding
-     *   to `<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` when the parser captured
-     *   `->using(CustomPivot::class)` / `->as('alias')` chain mutations. The 4-template form
-     *   is needed so downstream pivot intersections (e.g. `first()` returning
-     *   `TRelatedModel&object{pivot: TPivotModel}`) resolve to the user-declared pivot model
-     *   rather than the default `Pivot`.
+     * - BelongsToMany / MorphToMany: always emit the full 4-template form
+     *   `<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>`. When the parser captured
+     *   `->using(CustomPivot::class)` / `->as('alias')` chain mutations they fill slots 3 and 4;
+     *   otherwise the per-relation pivot default (`Pivot` / `MorphPivot`) and `'pivot'` fill
+     *   them. Emitting all 4 slots is required so downstream pivot intersections (e.g.
+     *   `first()` returning `TRelatedModel&object{pivot: TPivotModel}`) resolve, and so
+     *   consumers don't trip `MissingTemplateParam` on a partial 2-of-4 emission (#883).
      * - Through relations: `<TRelatedModel, TIntermediateModel, TDeclaringModel>` — e.g.
      *   `HasManyThrough<Post, Membership, Country>`. Note the Relation parent's 3rd template
      *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
@@ -262,14 +266,15 @@ final class ModelRelationReturnTypeHandler
         // the method body lives on a parent class.
         $typeParams[] = new Union([new TNamedObject($bindingClass)]);
 
-        // Emit TPivotModel / TAccessor (slots 3 and 4) only when the parser captured a
-        // chain mutation. Both slots are filled together (with declared defaults filling
-        // any gap); a partial 3-template `BelongsToMany<R, D, P>` would leave TAccessor
-        // unbound on a relation whose template list expects 4 entries when any are given.
-        // The pivot default is per-relation (BelongsToMany => Pivot, MorphToMany => MorphPivot)
-        // to match the stub's @template default expression.
+        // Always emit TPivotModel / TAccessor (slots 3 and 4) for pivot-aware relations,
+        // filling declared defaults when the parser didn't capture a chain mutation.
+        // A partial 2-of-4 emission triggers MissingTemplateParam on consumers (see #883)
+        // because once any template is supplied the partial form is rejected even when
+        // the stub declares a `@template T of … = Default` expression. The pivot default
+        // is per-relation (BelongsToMany => Pivot, MorphToMany => MorphPivot) to match
+        // the corresponding stub default.
         $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
-        if ($pivotDefault !== null && ($pivotModel !== null || $accessor !== null)) {
+        if ($pivotDefault !== null) {
             $typeParams[] = new Union([new TNamedObject($pivotModel ?? $pivotDefault)]);
             $typeParams[] = new Union([TLiteralString::make($accessor ?? 'pivot')]);
         }

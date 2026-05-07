@@ -23,7 +23,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 final class InitCommand extends Command
 {
-    private const DEFAULT_ERROR_LEVEL = '3';
+    private const DEFAULT_ERROR_LEVEL = '4';
 
     private const PSALM_XML_TEMPLATE = <<<'XML'
         <?xml version="1.0"?>
@@ -41,6 +41,7 @@ final class InitCommand extends Command
                     <directory name="vendor"/>
                     <directory name="storage"/>
                     <directory name="bootstrap/cache"/>
+                    <directory name="tests"/><!-- install psalm/plugin-phpunit and psalm/plugin-mockery for the full tests support -->
                 </ignoreFiles>
             </projectFiles>
 
@@ -49,15 +50,16 @@ final class InitCommand extends Command
             </plugins>
 
             <issueHandlers>
-                <ClassMustBeFinal errorLevel="suppress"/>
-                <MissingAbstractPureAnnotation errorLevel="suppress"/>
-                <MissingClosureReturnType errorLevel="suppress"/>
-                <MissingImmutableAnnotation errorLevel="suppress"/>
-                <MissingInterfaceImmutableAnnotation errorLevel="suppress"/>
-                <MissingOverrideAttribute errorLevel="suppress"/>
-                <MissingPureAnnotation errorLevel="suppress"/>
-                <RedundantCast errorLevel="suppress"/>
-                <RedundantCondition errorLevel="suppress"/>
+                <ClassMustBeFinal errorLevel="info"/>
+                <ImplicitToStringCast errorLevel="info"/>
+                <MissingAbstractPureAnnotation errorLevel="info"/>
+                <MissingClosureReturnType errorLevel="info"/>
+                <MissingImmutableAnnotation errorLevel="info"/>
+                <MissingInterfaceImmutableAnnotation errorLevel="info"/>
+                <MissingOverrideAttribute errorLevel="info"/>
+                <MissingPureAnnotation errorLevel="info"/>
+                <RedundantCast errorLevel="info"/>
+                <RedundantCondition errorLevel="info"/>
                 <UnnecessaryVarAnnotation errorLevel="suppress"/>
             </issueHandlers>
         </psalm>
