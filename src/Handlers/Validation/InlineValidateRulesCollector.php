@@ -791,7 +791,7 @@ final class InlineValidateRulesCollector implements
         StatementsSource $source,
         Codebase $codebase,
     ): bool {
-        return ValidationCallerResolver::resolveCallerClass(
+        return \Psalm\LaravelPlugin\Util\MethodCallerResolver::resolveCallerClass(
             $expr,
             $source,
             $codebase,

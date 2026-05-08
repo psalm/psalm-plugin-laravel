@@ -27,11 +27,29 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     /**
      * Get the route handling the request.
      *
+     * Route-model binding (implicit type-hinted controller params, Route::bind,
+     * Route::model) replaces the URL segment string with the resolved object
+     * at runtime: a Model instance for Eloquent bindings, a BackedEnum for
+     * implicit enum binding (Illuminate\Routing\ImplicitRouteBinding::resolveBackedEnumsForRoute).
+     * The plugin's RequestRouteReturnTypeProvider narrows the return to the
+     * concrete bound class when it can resolve the binding from the registered
+     * routes (issues #801, #803). The Model and BackedEnum members of the
+     * union are the fallback for cases the registry can't resolve and prevent
+     * InvalidPropertyFetch on `$request->route('x')->id`-style chains.
+     * Plain-object bindings via `Route::bind('name', fn () => new Dto())` to a
+     * non-Model, non-BackedEnum class — including non-Model UrlRoutable
+     * implementors like JsonResource resolved via implicit binding — are out
+     * of scope for the fallback union; they still type-check against TDefault.
+     *
+     * Constraint-driven taint suppression (issue #849) is handled by
+     * RequestRouteTaintHandler — the @psalm-taint-source below stays on the
+     * stub and is conditionally dropped/partially re-added at the call site.
+     *
      * @template TDefault of object
      *
      * @param string|null $param
      * @param TDefault $default
-     * @psalm-return ($param is null ? \Illuminate\Routing\Route : TDefault|string|null)
+     * @psalm-return ($param is null ? \Illuminate\Routing\Route : TDefault|string|\Illuminate\Database\Eloquent\Model|\BackedEnum|null)
      *
      * @psalm-taint-source input
      */
