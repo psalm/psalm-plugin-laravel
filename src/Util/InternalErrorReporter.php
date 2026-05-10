@@ -24,6 +24,14 @@ final class InternalErrorReporter
     {
         $output->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
 
+        // Best-effort classification: tells the user whether the failure
+        // looks like an app-level config issue, a plugin bug, a Laravel
+        // framework problem, or a Testbench fallback issue.
+        $hint = InternalErrorClassifier::hint($throwable);
+        if ($hint !== null) {
+            $output->warning("Laravel plugin: {$hint}");
+        }
+
         // URL generation is best-effort — a secondary failure here (e.g. a
         // throwable with a broken __toString(), a corrupt composer installed.php)
         // must never shadow the original init error that the user actually cares
