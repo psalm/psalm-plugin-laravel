@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
+use Psalm\LaravelPlugin\Util\Arg;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
@@ -45,20 +46,14 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
     #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
     {
-        $call_args = $event->getCallArgs();
+        $second_arg_type = Arg::typeAt($event->getCallArgs(), $event->getStatementsSource(), 1);
 
-        // No default argument — env var may not be set → null
-        if (\count($call_args) < 2) {
-            return new Type\Union([new TString(), new TNull()]);
-        }
-
-        $second_arg_type = $event->getStatementsSource()
-            ->getNodeTypeProvider()
-            ->getType($call_args[1]->value);
-
-        // Unknown type, default includes null, or default is mixed (implicitly includes null):
-        // fall back to string|null
-        if (!$second_arg_type instanceof \Psalm\Type\Union
+        // Fall back to string|null when:
+        //   - no default argument supplied (env var may not be set → null)
+        //   - default has unknown type
+        //   - default explicitly includes null
+        //   - default is mixed (implicitly includes null)
+        if ($second_arg_type === null
             || $second_arg_type->isNullable()
             || $second_arg_type->hasMixed()
         ) {
