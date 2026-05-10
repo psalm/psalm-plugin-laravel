@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778429093300,
+  "lastUpdate": 1778430049913,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3737,6 +3737,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.04,
             "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "047b13b03930e18be4bcf29e6740ae3f6dd2ea46",
+          "message": "Merge pull request #892 from psalm/worktree-arg-helper-extract\n\nExtract `Arg` helper to dedupe per-call-arg type/node access in handlers",
+          "timestamp": "2026-05-10T18:17:39+02:00",
+          "tree_id": "c53739f94393190d3d4a119b770f1bb8b9c14c1c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/047b13b03930e18be4bcf29e6740ae3f6dd2ea46"
+        },
+        "date": 1778430049016,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.09,
+            "range": "± 0.29",
             "unit": "s"
           },
           {
