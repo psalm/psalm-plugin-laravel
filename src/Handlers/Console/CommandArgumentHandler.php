@@ -8,6 +8,7 @@ use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\InvalidConsoleArgumentName;
 use Psalm\LaravelPlugin\Issues\InvalidConsoleOptionName;
+use Psalm\LaravelPlugin\Util\Arg;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -49,18 +50,13 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // argument(null) / option(null) or no args — returns the full array, fall through
-        $callArgs = $event->getCallArgs();
-
-        if ($callArgs === []) {
-            return null;
-        }
-
-        // Extract the literal string key from the first argument
-        $firstArgType = $event->getSource()->getNodeTypeProvider()->getType($callArgs[0]->value);
+        // Extract the literal string key from the first argument.
+        // argument(null) / option(null) or no args fall through here too — typeAt
+        // returns null for missing args, and a literal-null arg is not a string literal.
+        $firstArgType = Arg::typeAt($event->getCallArgs(), $event->getSource(), 0);
 
         if (!$firstArgType instanceof \Psalm\Type\Union || !$firstArgType->isSingleStringLiteral()) {
-            return null; // dynamic key — cannot narrow
+            return null; // dynamic key, no arg, or null literal — cannot narrow
         }
 
         $key = $firstArgType->getSingleStringLiteral()->value;
