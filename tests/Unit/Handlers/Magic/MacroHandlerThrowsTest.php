@@ -90,7 +90,7 @@ final class MacroHandlerThrowsTest extends TestCase
         $reflection = new \ReflectionMethod(MacroHandler::class, 'buildMethodStorage');
 
         $result = $reflection->invoke(null, $def, false);
-        \assert($result instanceof MethodStorage);
+        $this->assertInstanceOf(MethodStorage::class, $result);
 
         return $result;
     }
