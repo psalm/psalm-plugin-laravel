@@ -42,12 +42,12 @@ use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
  * so scoped captures are re-created per request. They are the Octane-safe
  * alternative to singleton() and are out of scope for this rule.
  *
- * Handler is auto-registered when the project depends on laravel/octane, and
- * also registered when findOctaneIncompatibleBinding is set in psalm.xml. When
- * registered, the hook fires for every resolved MethodCall and StaticCall; we
- * reject StaticCall immediately (facade-form bindings like `App::singleton(...)`
- * are out of scope) and match remaining calls in O(1) via an isset() lookup on
- * the declaring method id.
+ * Handler registration is tri-state: auto-detected when laravel/octane is
+ * installed; `<findOctaneIncompatibleBinding value="true|false" />` in psalm.xml
+ * forces it on or off. When registered, the hook fires for every resolved
+ * MethodCall and StaticCall; we reject StaticCall immediately (facade-form
+ * bindings like `App::singleton(...)` are out of scope) and match remaining
+ * calls in O(1) via an isset() lookup on the declaring method id.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php

@@ -156,7 +156,14 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- resolveDynamicWhereClauses: true', $body);
         $this->assertStringContainsString('- findMissingTranslations: false', $body);
         $this->assertStringContainsString('- findMissingViews: false', $body);
-        $this->assertStringContainsString('- findOctaneIncompatibleBinding: false', $body);
+        // Tri-state default (null) renders as "auto (...)" with the resolved
+        // class_exists() outcome so triagers know whether the handler actually ran.
+        // The plugin's own composer.json does not depend on laravel/octane, so the
+        // resolution is "false" in the test environment.
+        $this->assertStringContainsString(
+            '- findOctaneIncompatibleBinding: auto (laravel/octane installed: false)',
+            $body,
+        );
         $this->assertStringContainsString('- cachePath:', $body);
         $this->assertStringContainsString('- failOnInternalError: false', $body);
     }

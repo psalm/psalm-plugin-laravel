@@ -87,7 +87,7 @@ final class IssueUrlGenerator
             '- resolveDynamicWhereClauses: ' . self::formatBool($pluginConfig->resolveDynamicWhereClauses),
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
-            '- findOctaneIncompatibleBinding: ' . self::formatBool($pluginConfig->findOctaneIncompatibleBinding),
+            '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
             '- configDirectories: ' . self::formatConfigDirectories($pluginConfig->configDirectories),
@@ -119,6 +119,25 @@ final class IssueUrlGenerator
     private static function formatBool(bool $value): string
     {
         return $value ? 'true' : 'false';
+    }
+
+    /**
+     * Render the tri-state findOctaneIncompatibleBinding flag for the bug-report body.
+     *
+     * Plain `auto` is ambiguous for triagers because it does not say whether the
+     * handler actually ran on this project. We resolve `null` (the auto-detect
+     * sentinel) the same way Plugin::registerHandlers() does, and surface the
+     * resolution alongside the user's intent.
+     */
+    private static function formatOctaneFlag(?bool $configured): string
+    {
+        if ($configured !== null) {
+            return self::formatBool($configured);
+        }
+
+        $octaneInstalled = \class_exists('Laravel\\Octane\\Octane');
+
+        return 'auto (laravel/octane installed: ' . self::formatBool($octaneInstalled) . ')';
     }
 
     /**

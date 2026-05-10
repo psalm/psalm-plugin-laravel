@@ -338,14 +338,17 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
-        // Auto-enable when the project depends on laravel/octane (the rule is only
-        // relevant under long-lived workers); allow manual opt-in via
-        // `<findOctaneIncompatibleBinding value="true" />` for projects that don't
-        // install the package directly but still want the check (e.g. shared
-        // libraries that aim to stay Octane-safe).
-        // class_exists() triggers the project autoloader, which is already active
-        // here because ApplicationProvider booted the Laravel app earlier.
-        if ($pluginConfig->findOctaneIncompatibleBinding || \class_exists('Laravel\\Octane\\Octane')) {
+        // Tri-state gate for the OctaneIncompatibleBinding rule:
+        //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
+        //   findOctaneIncompatibleBinding === true  → force enabled
+        //   findOctaneIncompatibleBinding === false → force disabled (opt-out, even if laravel/octane is installed)
+        // Auto-detect uses class_exists(), which triggers the project autoloader. The
+        // autoloader is already active here because ApplicationProvider booted the
+        // Laravel app earlier in __invoke().
+        $shouldRegisterOctaneRule = $pluginConfig->findOctaneIncompatibleBinding
+            ?? \class_exists('Laravel\\Octane\\Octane');
+
+        if ($shouldRegisterOctaneRule) {
             require_once __DIR__ . '/Handlers/Rules/OctaneIncompatibleBindingHandler.php';
             $registration->registerHooksFromClass(Handlers\Rules\OctaneIncompatibleBindingHandler::class);
         }

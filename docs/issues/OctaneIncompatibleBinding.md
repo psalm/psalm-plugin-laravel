@@ -8,7 +8,7 @@ nav_order: 7
 
 Emitted when a `singleton()` or `singletonIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, or `Auth`.
 
-**Auto-enabled when `laravel/octane` is installed.** Projects that don't depend on the package directly can still opt in via `<findOctaneIncompatibleBinding value="true" />` in `psalm.xml`. See [Configuration](../config.md#findoctaneincompatiblebinding).
+**Auto-enabled when `laravel/octane` is installed.** Projects that don't depend on the package directly can opt in via `<findOctaneIncompatibleBinding value="true" />` in `psalm.xml`. To opt out even when `laravel/octane` is installed, set `<findOctaneIncompatibleBinding value="false" />`. See [Configuration](../config.md#findoctaneincompatiblebinding).
 
 `bind()`, `bindIf()`, `scoped()`, and `scopedIf()` are NOT flagged:
 

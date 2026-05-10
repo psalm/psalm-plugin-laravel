@@ -27,7 +27,14 @@ final readonly class PluginConfig
         public bool $resolveDynamicWhereClauses,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
-        public bool $findOctaneIncompatibleBinding,
+        /**
+         * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
+         *
+         *  - null  → auto-detect (rule registers when laravel/octane is installed)
+         *  - true  → force enabled (useful for shared libraries that aim to stay Octane-safe)
+         *  - false → force disabled (override even when laravel/octane is installed)
+         */
+        public ?bool $findOctaneIncompatibleBinding,
         public string $cachePath,
         public bool $failOnInternalError,
     ) {}
@@ -51,7 +58,7 @@ final readonly class PluginConfig
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
-        $findOctaneIncompatibleBinding = self::xmlBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
+        $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
 
@@ -138,6 +145,40 @@ final readonly class PluginConfig
         }
 
         $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
+
+        if (!\in_array($value, ['true', 'false'], true)) {
+            throw new \InvalidArgumentException(
+                "Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.",
+            );
+        }
+
+        return $value === 'true';
+    }
+
+    /**
+     * Tri-state variant of {@see self::xmlBoolAttr()} for flags that auto-detect
+     * when unset. Returns null when the element is absent so callers can fall back
+     * to runtime detection (e.g. `class_exists()`); returns true/false when the
+     * user explicitly opts in or out via XML.
+     *
+     * @psalm-pure
+     */
+    private static function xmlOptionalBoolAttr(?\SimpleXMLElement $element, string $name): ?bool
+    {
+        if (!$element instanceof \SimpleXMLElement) {
+            return null;
+        }
+
+        // SimpleXMLElement returns an empty proxy when accessing a non-existent
+        // child via dynamic property syntax, so the instanceof check above does
+        // not distinguish "absent" from "present". Use the value attribute as
+        // the absence signal: a present element without a value attribute is
+        // treated as auto-detect, same as a missing element.
+        if (!isset($element['value'])) {
+            return null;
+        }
+
+        $value = (string) $element['value'];
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException(
