@@ -68,7 +68,7 @@ use Psalm\Type\Union;
  *     these read from a specific transport rather than the validated merge,
  *     so a rule on 'team_email' does not necessarily describe $req->query('team_email').
  *   - integer/float/boolean/date/enum:
- *     cast methods are not taint sources (see InteractsWithData.stubphp).
+ *     cast methods are not taint sources (see InteractsWithData.phpstub).
  *
  * Upstream workaround for Psalm dropping the stub source on override:
  *   https://github.com/vimeo/psalm/issues/11765

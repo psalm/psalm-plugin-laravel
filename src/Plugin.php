@@ -130,7 +130,7 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * Recursively find all .stubphp files in a directory.
+     * Recursively find all .phpstub files in a directory.
      *
      * Results are sorted to ensure deterministic stub registration order.
      * RecursiveDirectoryIterator returns files in filesystem order, which
@@ -160,7 +160,7 @@ final class Plugin implements PluginEntryPointInterface
         try {
             /** @var \SplFileInfo $file */
             foreach ($iterator as $file) {
-                if ($file->getExtension() !== 'stubphp') {
+                if ($file->getExtension() !== 'phpstub') {
                     continue;
                 }
 
@@ -737,7 +737,7 @@ final class Plugin implements PluginEntryPointInterface
 
     public static function getAliasStubLocation(PluginConfig $pluginConfig): string
     {
-        return self::getCacheLocation($pluginConfig) . \DIRECTORY_SEPARATOR . 'aliases.stubphp';
+        return self::getCacheLocation($pluginConfig) . \DIRECTORY_SEPARATOR . 'aliases.phpstub';
     }
 
     public static function getCacheLocation(PluginConfig $pluginConfig): string

@@ -135,10 +135,10 @@ trait InteractsWithInput
     // Note: str(), string(), integer(), float(), boolean(), clamp(), date(),
     // enum(), enums(), array(), collect(), only(), except() live on
     // Illuminate\Support\Traits\InteractsWithData in Laravel 11+
-    // (stubbed at stubs/common/Support/Traits/InteractsWithData.stubphp).
+    // (stubbed at stubs/common/Support/Traits/InteractsWithData.phpstub).
     //
     // Note: old() lives on Illuminate\Http\Concerns\InteractsWithFlashData
-    // (stubbed at stubs/common/Http/Concerns/InteractsWithFlashData.stubphp).
+    // (stubbed at stubs/common/Http/Concerns/InteractsWithFlashData.phpstub).
 
     /**
      * Dump the request input as a debug helper.
