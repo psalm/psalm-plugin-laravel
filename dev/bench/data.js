@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778428249972,
+  "lastUpdate": 1778429093300,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3707,6 +3707,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b1fd3138cc8e59e7e96cde81af9f0c633d39ec5",
+          "message": "Merge pull request #891 from psalm/worktree-phpstub-extension-rename\n\nRename stub extension `.stubphp` to `.phpstub`",
+          "timestamp": "2026-05-10T18:01:38+02:00",
+          "tree_id": "7b7d6af98e5aa1eeb66bfcbe2eefa16d7151c751",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9b1fd3138cc8e59e7e96cde81af9f0c633d39ec5"
+        },
+        "date": 1778429092715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.04,
+            "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
