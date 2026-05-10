@@ -849,6 +849,20 @@ final class ValidationRuleAnalyzer
                         continue;
                     }
 
+                    // Rule::in(...) / Rule::notIn(...) with statically-extractable
+                    // string literals — emit the equivalent 'in:a,b,c' / 'not_in:a,b,c'
+                    // segment so resolveRuleSegments narrows the type via the existing
+                    // string-rule path. Falls through to the class: segment when the
+                    // arguments aren't statically resolvable (variables, enums,
+                    // Arrayable, spread, comma-bearing values, …).
+                    $inLikeSegment = self::tryExtractInLikeRuleSegment($ruleItem->value);
+
+                    if ($inLikeSegment !== null) {
+                        $segments[] = $inLikeSegment;
+
+                        continue;
+                    }
+
                     // Custom Rule object — capture the class FQN so resolveRuleSegments
                     // can OR the class's own @psalm-taint-escape bits into removedTaints.
                     $ruleClassFqn = self::resolveRuleObjectClassName($ruleItem->value);
@@ -869,6 +883,189 @@ final class ValidationRuleAnalyzer
         }
 
         return $rules !== [] ? $rules : null;
+    }
+
+    /**
+     * If the expression is a `Rule::in(...)` or `Rule::notIn(...)` static call
+     * (optionally wrapped in fluent method calls) whose arguments are all
+     * string literals, return the equivalent `in:a,b,c` / `not_in:a,b,c`
+     * rule segment. Returns null for any unsupported argument shape.
+     *
+     * Reusing the string-rule segment funnels the fluent form through the
+     * same {@see inRuleToLiteralUnion()} narrowing and {@see ruleToRemovedTaints()}
+     * escape path that `'in:a,b,c'` already takes. Identical taint contribution
+     * for `in` (`TaintKind::ALL_INPUT` from both the class table and the rule
+     * table) and `not_in` (0 from both) means swapping segment forms cannot
+     * regress taint analysis.
+     *
+     * Forms supported:
+     *   - `Rule::in('a', 'b')`         variadic
+     *   - `Rule::in('a')`              single
+     *   - `Rule::in(['a', 'b'])`       array literal
+     *
+     * Bails (returns null) for:
+     *   - Any non-string-literal argument (variables, enum cases, method calls,
+     *     `Arrayable` arguments, …).
+     *   - Spread / unpacked args (`Rule::in(...$values)` or `Rule::in([...$x])`).
+     *   - Associative array literals (`Rule::in(['a' => 'b'])`).
+     *   - Empty argument lists (`Rule::in()`, `Rule::in([])`).
+     *   - Values whose `'in:a,b,c'` round-trip is lossy (commas, whitespace
+     *     edges, empty strings) — see {@see isLosslessInValue()}.
+     */
+    private static function tryExtractInLikeRuleSegment(Node\Expr $expr): ?string
+    {
+        // Unwrap outer fluent calls — same convention as resolveRuleObjectClassName.
+        // In and NotIn have no fluent setters in Laravel today (only __construct
+        // and __toString), so this loop is defensive future-proofing: a future
+        // Laravel version, a user-authored subclass, or a `__call`-magic chain
+        // would carry the In/NotIn root through the outer method calls.
+        while ($expr instanceof Node\Expr\MethodCall
+            || $expr instanceof Node\Expr\NullsafeMethodCall
+        ) {
+            $expr = $expr->var;
+        }
+
+        if (!$expr instanceof Node\Expr\StaticCall
+            || !$expr->class instanceof Node\Name
+            || !$expr->name instanceof Node\Identifier
+        ) {
+            return null;
+        }
+
+        /** @var string|null $resolved */
+        $resolved = $expr->class->getAttribute('resolvedName');
+
+        if (!\is_string($resolved)
+            || \strtolower($resolved) !== self::RULE_FACADE_LOWER_FQN
+        ) {
+            return null;
+        }
+
+        $ruleName = match (\strtolower($expr->name->name)) {
+            'in' => 'in',
+            'notin' => 'not_in',
+            default => null,
+        };
+
+        if ($ruleName === null) {
+            return null;
+        }
+
+        $values = self::extractStringLiteralArgs(\array_values($expr->args));
+
+        if ($values === null) {
+            return null;
+        }
+
+        return $ruleName . ':' . \implode(',', $values);
+    }
+
+    /**
+     * Extract a list of string literals from a static call's argument list,
+     * accepting either variadic strings or a single array-literal of strings.
+     *
+     * Returns null when the argument list is unsupported (non-string-literal,
+     * spread, associative key, empty list) or when any value would lose
+     * fidelity through the `'in:a,b,c'` segment encoding.
+     *
+     * @param list<Node\Arg|Node\VariadicPlaceholder> $args
+     * @return non-empty-list<string>|null
+     *
+     * @psalm-mutation-free
+     */
+    private static function extractStringLiteralArgs(array $args): ?array
+    {
+        if ($args === []) {
+            return null;
+        }
+
+        // Single array argument: Rule::in(['a', 'b']).
+        $first = $args[0];
+
+        if (\count($args) === 1
+            && $first instanceof Node\Arg
+            && !$first->unpack
+            && $first->value instanceof Node\Expr\Array_
+        ) {
+            return self::extractStringLiteralArrayItems($first->value);
+        }
+
+        // Variadic / single string args: Rule::in('a', 'b').
+        $values = [];
+
+        foreach ($args as $arg) {
+            if (!$arg instanceof Node\Arg
+                || $arg->unpack
+                || !$arg->value instanceof Node\Scalar\String_
+                || !self::isLosslessInValue($arg->value->value)
+            ) {
+                return null;
+            }
+
+            $values[] = $arg->value->value;
+        }
+
+        // The early `$args === []` guard plus a foreach with no early-return
+        // guarantees at least one push, so $values is non-empty here.
+        return $values;
+    }
+
+    /**
+     * Walk an array literal's items and collect string-literal values, bailing
+     * on any non-string item, spread, associative key, empty list, or value
+     * that would lose fidelity through the `'in:a,b,c'` segment encoding.
+     *
+     * @return non-empty-list<string>|null
+     *
+     * @psalm-mutation-free
+     */
+    private static function extractStringLiteralArrayItems(Node\Expr\Array_ $array): ?array
+    {
+        $values = [];
+
+        foreach ($array->items as $item) {
+            if ($item === null
+                || $item->unpack
+                || $item->key !== null
+                || !$item->value instanceof Node\Scalar\String_
+                || !self::isLosslessInValue($item->value->value)
+            ) {
+                return null;
+            }
+
+            $values[] = $item->value->value;
+        }
+
+        return $values === [] ? null : $values;
+    }
+
+    /**
+     * Filter out values whose meaning would change once funnelled through the
+     * `'in:a,b,c'` string-rule encoding. Lossy cases:
+     *
+     *   - empty string — `'in:'` is parsed as a parameter-less rule, so
+     *     `inRuleToLiteralUnion()` returns the unconstrained `string` type
+     *     rather than the singleton `''`.
+     *   - leading / trailing whitespace — `inRuleToLiteralUnion()` calls
+     *     `\trim()` on each comma-separated segment, so `Rule::in([' a'])`
+     *     would silently narrow to `'a'`. Laravel preserves whitespace at
+     *     runtime (its `__toString()` quotes each value and the parser uses
+     *     `str_getcsv()`), so trimming would produce a type that excludes
+     *     a value the runtime accepts.
+     *   - comma — splits one whitelist entry into multiple narrowed values
+     *     (`'a,b'` → `'a'|'b'`). The fluent form is the canonical workaround
+     *     for comma-bearing whitelists, so it must round-trip to `mixed`.
+     *
+     * Bailed values fall through to the existing `class:` segment, which
+     * preserves taint behaviour while leaving the type as `mixed`.
+     *
+     * @psalm-pure
+     */
+    private static function isLosslessInValue(string $value): bool
+    {
+        return $value !== ''
+            && !\str_contains($value, ',')
+            && $value === \trim($value);
     }
 
     /**
