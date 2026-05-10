@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778430049913,
+  "lastUpdate": 1778440251524,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3777,6 +3777,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "94e65e7f24f9651bb0fd8adacf5bd0e190265466",
+          "message": "Merge pull request #898 from psalm/worktree-703-octane-incompatible-binding\n\nDetect Octane-incompatible singleton bindings",
+          "timestamp": "2026-05-10T21:08:00+02:00",
+          "tree_id": "77e156e91bfcf8b7ba27b45e4c2e0fc7057b31dd",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/94e65e7f24f9651bb0fd8adacf5bd0e190265466"
+        },
+        "date": 1778440251156,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.08,
+            "range": "± 0.4",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
