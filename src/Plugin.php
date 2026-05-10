@@ -6,13 +6,13 @@ namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser;
+use Psalm\LaravelPlugin\Providers\AliasStubProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
-use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
+use Psalm\LaravelPlugin\Util\InternalErrorReporter;
+use Psalm\LaravelPlugin\Util\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 
@@ -36,8 +36,6 @@ final class Plugin implements PluginEntryPointInterface
                 $this->buildSchema($pluginConfig);
             }
 
-            $this->generateAliasStubs($pluginConfig);
-
             // Build facade → service class map before registering handlers.
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
@@ -56,146 +54,24 @@ final class Plugin implements PluginEntryPointInterface
             $this->registerHandlers($registration, $pluginConfig);
             $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
-            $this->handleInternalError($throwable, $output, $pluginConfig);
+            InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
-    }
-
-    /** @return list<string> */
-    private function getCommonStubs(\Psalm\Progress\Progress $output): array
-    {
-        return $this->findStubFiles(\dirname(__DIR__) . '/stubs/common', $output);
-    }
-
-    /**
-     * Collect stubs from all version directories that are <= the installed Laravel version.
-     *
-     * Supports both major-only directories (e.g. "12/", "13/") and patch-level directories
-     * (e.g. "12.20.0/", "12.42.0/"). Directories are sorted in ascending version order so
-     * that later versions override earlier ones for same-named stubs.
-     *
-     * @see https://www.php.net/version_compare — treats "12" as "12.0.0"
-     *
-     * @return list<string>
-     */
-    private function getStubsForLaravelVersion(string $version, \Psalm\Progress\Progress $output): array
-    {
-        $stubsRoot = \dirname(__DIR__) . '/stubs';
-
-        // Collect version directories (names starting with a digit, e.g. "12", "12.20.0", "13")
-        $candidates = [];
-
-        foreach (new \DirectoryIterator($stubsRoot) as $entry) {
-            if (! $entry->isDir() || $entry->isDot()) {
-                continue;
-            }
-
-            $dirName = $entry->getFilename();
-
-            // Skip non-version directories (e.g. "common")
-            if (\ctype_digit($dirName[0])) {
-                $candidates[] = $dirName;
-            }
-        }
-
-        $stubGroups = [];
-
-        foreach (self::filterVersionDirectories($candidates, $version) as $dir) {
-            $stubGroups[] = $this->findStubFiles($stubsRoot . '/' . $dir, $output);
-        }
-
-        return $stubGroups === [] ? [] : \array_merge(...$stubGroups);
-    }
-
-    /**
-     * Filter and sort version directory names, keeping only those <= the target version.
-     *
-     * @param list<string> $candidates directory names (e.g. ["13", "12", "12.20.0"])
-     *
-     * @return list<string> sorted ascending by version (e.g. ["12", "12.20.0"])
-     *
-     * @psalm-pure
-     *
-     * @internal used by tests
-     */
-    public static function filterVersionDirectories(array $candidates, string $targetVersion): array
-    {
-        $matched = \array_filter(
-            $candidates,
-            static fn(string $dir): bool => \version_compare($dir, $targetVersion, '<='),
-        );
-
-        \usort($matched, static fn(string $a, string $b): int => \version_compare($a, $b));
-
-        return $matched;
-    }
-
-    /**
-     * Recursively find all .phpstub files in a directory.
-     *
-     * Results are sorted to ensure deterministic stub registration order.
-     * RecursiveDirectoryIterator returns files in filesystem order, which
-     * varies across OSes (alphabetical on APFS/HFS+, inode order on ext4).
-     *
-     * Stub loading order matters: when multiple stubs declare the same method
-     * on the same class, Psalm reuses the MethodStorage and re-applies docblock
-     * parsing. Type annotations (`@return`, `@param`) use `=` so the last-loaded
-     * stub wins; taint annotations (`@psalm-taint-*`) use `|=` and accumulate.
-     * Without sorting, moving or renaming stub files can silently change types.
-     * See docs/contributing/README.md "Stub merging" for details.
-     *
-     * @return list<string>
-     */
-    private function findStubFiles(string $directory, \Psalm\Progress\Progress $output): array
-    {
-        if (!\is_dir($directory)) {
-            return [];
-        }
-
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-        );
-
-        $stubs = [];
-
-        try {
-            /** @var \SplFileInfo $file */
-            foreach ($iterator as $file) {
-                if ($file->getExtension() !== 'phpstub') {
-                    continue;
-                }
-
-                $realPath = $file->getRealPath();
-
-                if (!\is_string($realPath)) {
-                    continue;
-                }
-
-                $stubs[] = $realPath;
-            }
-        } catch (\UnexpectedValueException $unexpectedValueException) {
-            // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories.
-            // Return whatever stubs were collected before the error — partial results from
-            // readable subdirectories are better than none.
-            $output->warning("Laravel plugin: error scanning stub directory '{$directory}': {$unexpectedValueException->getMessage()}");
-        }
-
-        \sort($stubs);
-
-        return $stubs;
     }
 
     private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
     {
+        $stubsRoot = \dirname(__DIR__) . '/stubs';
+
         $stubs = \array_merge(
-            $this->getCommonStubs($output),
-            $this->getStubsForLaravelVersion(Application::VERSION, $output),
+            StubFileFinder::commonStubs($stubsRoot, $output),
+            StubFileFinder::stubsForLaravelVersion($stubsRoot, Application::VERSION, $output),
         );
 
         foreach ($stubs as $stubFilePath) {
             $registration->addStubFile($stubFilePath);
         }
 
-        $registration->addStubFile(self::getAliasStubLocation($pluginConfig));
+        AliasStubProvider::register($registration, self::getAliasStubLocation($pluginConfig));
 
         CarbonStubProvider::register($registration, $output);
     }
@@ -480,259 +356,20 @@ final class Plugin implements PluginEntryPointInterface
     {
         $app = ApplicationProvider::getApp();
 
+        // Defensive guard: getApp() is typed as Illuminate\Foundation\Application, but
+        // alternative bootstraps (e.g. trimmed-down Testbench builds) may return an
+        // implementation that lacks databasePath(). Skip the migration build rather
+        // than fatal-erroring inside MigrationSchemaBuilder.
         if (!\method_exists($app, 'databasePath')) {
             return;
         }
 
-        $projectAnalyzer = ProjectAnalyzer::getInstance();
-        $codebase = $projectAnalyzer->getCodebase();
-        $progress = $codebase->progress;
-
-        // Discover all files first — needed for cache fingerprinting
-        $sqlDumpFiles = $this->discoverSqlDumpFiles($app, $progress);
-        $migrationFiles = $this->discoverMigrationFiles($app, $progress);
-
+        $codebase = ProjectAnalyzer::getInstance()->getCodebase();
         $cache = new Handlers\Eloquent\Schema\MigrationCache(self::getCacheLocation($pluginConfig));
 
-        $tables = $cache->remember(
-            $migrationFiles,
-            $sqlDumpFiles,
-            function () use ($sqlDumpFiles, $migrationFiles, $codebase, $progress): array {
-                $schemaAggregator = new Handlers\Eloquent\Schema\SchemaAggregator();
+        $aggregator = (new Handlers\Eloquent\Schema\MigrationSchemaBuilder($app, $codebase, $cache))->build();
 
-                // Parse SQL schema dumps first — they represent the base state from
-                // squashed migrations (php artisan schema:dump)
-                $this->parseSqlDumps($sqlDumpFiles, $schemaAggregator, $progress);
-
-                // Then parse PHP migrations — they modify the base state
-                foreach ($migrationFiles as $file) {
-                    try {
-                        $schemaAggregator->addStatements($codebase->getStatementsForFile($file));
-                    } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-                        $progress->warning(
-                            "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}",
-                        );
-                    }
-                }
-
-                return $schemaAggregator->tables;
-            },
-        );
-
-        if ($cache->wasCacheHit()) {
-            $progress->debug("Laravel plugin: loaded migration schema from cache\n");
-        } elseif ($cache->wasCacheWritten()) {
-            $progress->debug("Laravel plugin: parsed migration schema (cached for next run)\n");
-        } else {
-            $writeFailure = $cache->getWriteFailureReason();
-            $detail = $writeFailure !== null ? ": {$writeFailure}" : ' — check directory permissions';
-            $progress->warning("Laravel plugin: parsed migration schema (cache write failed{$detail})");
-        }
-
-        $readFailure = $cache->getReadFailureReason();
-        if ($readFailure !== null) {
-            $progress->warning("Laravel plugin: {$readFailure}");
-        }
-
-        $schemaAggregator = new Handlers\Eloquent\Schema\SchemaAggregator();
-        $schemaAggregator->tables = $tables;
-        SchemaStateProvider::setSchema($schemaAggregator);
-    }
-
-    /**
-     * Discover SQL schema dump files from the database/schema/ directory.
-     *
-     * @return list<string>
-     */
-    private function discoverSqlDumpFiles(Application $app, \Psalm\Progress\Progress $progress): array
-    {
-        $schemaDir = $app->databasePath('schema');
-
-        if (!\is_dir($schemaDir)) {
-            return [];
-        }
-
-        return $this->findSqlDumpFiles($schemaDir, $progress);
-    }
-
-    /**
-     * Discover PHP migration files from all registered migration directories.
-     * @return list<string>
-     */
-    private function discoverMigrationFiles(Application $app, \Psalm\Progress\Progress $progress): array
-    {
-        $files = [];
-
-        foreach ($this->getMigrationDirectories($app) as $directory) {
-            \array_push($files, ...$this->findPhpFilesRecursive($directory, $progress));
-        }
-
-        // Sort by basename to match Laravel's migrator ordering (timestamp prefixes
-        // ensure chronological order). Without sorting, RecursiveIteratorIterator
-        // returns files in filesystem order (not alphabetical on ext4/Linux), causing
-        // Schema::table() to run before the corresponding Schema::create().
-        \usort($files, static fn(string $a, string $b): int => \basename($a) <=> \basename($b));
-
-        return $files;
-    }
-
-    /**
-     * Parse SQL schema dump files into the aggregator.
-     *
-     * Laravel's `php artisan schema:dump` creates these files using mysqldump/pg_dump.
-     * They represent squashed migrations and should be parsed before PHP migrations.
-     *
-     * @param list<string> $sqlDumpFiles
-     */
-    private function parseSqlDumps(
-        array $sqlDumpFiles,
-        SchemaAggregator $schemaAggregator,
-        \Psalm\Progress\Progress $progress,
-    ): void {
-        if ($sqlDumpFiles === []) {
-            return;
-        }
-
-        $sqlParser = new SqlSchemaParser();
-
-        foreach ($sqlDumpFiles as $file) {
-            try {
-                $sql = \file_get_contents($file);
-
-                if ($sql === false) {
-                    $progress->warning("Laravel plugin: could not read SQL schema dump '{$file}'");
-                    continue;
-                }
-
-                $sqlParser->addToAggregator($sql, $schemaAggregator);
-            } catch (\RuntimeException $exception) {
-                // SqlSchemaParser is pure string processing and shouldn't throw.
-                // This catch is a safety net for unexpected runtime issues (e.g. memory).
-                $progress->warning("Laravel plugin: skipping SQL schema dump '{$file}': {$exception->getMessage()}");
-            }
-        }
-    }
-
-    /**
-     * Find SQL schema dump files in a directory (non-recursive — schema dumps are flat).
-     *
-     * The .dump extension is supported for backward compatibility with schema dumps
-     * created by older Laravel versions. Both extensions contain plain-text SQL.
-     *
-     * @return list<string>
-     */
-    private function findSqlDumpFiles(string $directory, \Psalm\Progress\Progress $progress): array
-    {
-        try {
-            $iterator = new \DirectoryIterator($directory);
-        } catch (\UnexpectedValueException $unexpectedValueException) {
-            $progress->warning("Laravel plugin: could not read schema directory '{$directory}': {$unexpectedValueException->getMessage()}");
-            return [];
-        }
-
-        $files = [];
-
-        foreach ($iterator as $fileInfo) {
-            if (!$fileInfo->isFile() || !\in_array($fileInfo->getExtension(), ['sql', 'dump'], true)) {
-                continue;
-            }
-
-            $realPath = $fileInfo->getRealPath();
-
-            if (\is_string($realPath)) {
-                $files[] = $realPath;
-            }
-        }
-
-        // Sort for deterministic loading order — later files can overwrite tables from earlier ones
-        \sort($files);
-
-        return $files;
-    }
-
-    /**
-     * Resolve migration directories the same way Laravel does:
-     * extra paths registered via loadMigrationsFrom() + the default database/migrations directory.
-     *
-     * @return non-empty-list<string>
-     */
-    private function getMigrationDirectories(Application $app): array
-    {
-        /** @var \Illuminate\Database\Migrations\Migrator $migrator */
-        $migrator = $app->make('migrator');
-
-        return \array_values(\array_merge($migrator->paths(), [$app->databasePath('migrations')]));
-    }
-
-    /**
-     * Recursively find all .php files in a directory.
-     * @return list<string>
-     */
-    private function findPhpFilesRecursive(string $directory, \Psalm\Progress\Progress $progress): array
-    {
-        if (!\is_dir($directory)) {
-            return [];
-        }
-
-        try {
-            $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-            );
-        } catch (\UnexpectedValueException $unexpectedValueException) {
-            $progress->warning("Laravel plugin: could not read migration directory '{$directory}': {$unexpectedValueException->getMessage()}");
-            return [];
-        }
-
-        $files = [];
-
-        try {
-            /** @var \SplFileInfo $file */
-            foreach ($iterator as $file) {
-                if ($file->getExtension() !== 'php') {
-                    continue;
-                }
-
-                $realPath = $file->getRealPath();
-                if (\is_string($realPath)) {
-                    $files[] = $realPath;
-                }
-            }
-        } catch (\UnexpectedValueException $unexpectedValueException) {
-            // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories
-            $progress->warning("Laravel plugin: error scanning migration directory '{$directory}': {$unexpectedValueException->getMessage()}");
-        }
-
-        return $files;
-    }
-
-    private function generateAliasStubs(PluginConfig $pluginConfig): void
-    {
-        // Read aliases from the booted app's AliasLoader — this reflects the actual
-        // aliases registered for this project (config app.aliases + package discovery),
-        // not just Laravel's hardcoded defaults.
-        /** @var array<string, class-string> $aliases */
-        $aliases = \Illuminate\Foundation\AliasLoader::getInstance()->getAliases();
-        $stub = "<?php\n\n";
-
-        foreach ($aliases as $alias => $fqcn) {
-            // Skip namespaced aliases — `class Some\Name extends ...` is invalid PHP
-            // without a namespace block
-            if (\str_contains($alias, '\\')) {
-                continue;
-            }
-
-            $stub .= "class {$alias} extends \\{$fqcn} {}\n";
-        }
-
-        $location = self::getAliasStubLocation($pluginConfig);
-        $result = \file_put_contents($location, $stub);
-
-        if ($result === false) {
-            throw new \RuntimeException(
-                "Failed to write alias stub file to '{$location}'. "
-                . 'Check that the directory exists and is writable.',
-            );
-        }
+        SchemaStateProvider::setSchema($aggregator);
     }
 
     public static function getAliasStubLocation(PluginConfig $pluginConfig): string
@@ -749,31 +386,6 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         return $dir;
-    }
-
-    /** @throws \Throwable */
-    private function handleInternalError(\Throwable $throwable, \Psalm\Progress\Progress $output, PluginConfig $pluginConfig): void
-    {
-        $output->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
-
-        // URL generation is best-effort — a secondary failure here (e.g. a
-        // throwable with a broken __toString(), a corrupt composer installed.php)
-        // must never shadow the original init error that the user actually cares
-        // about, so we fall back to a plain issue-tracker link. The secondary
-        // error is still surfaced as a separate warning so plugin maintainers can
-        // spot regressions in the URL generator during self-analysis.
-        try {
-            $url = IssueUrlGenerator::generate($throwable, $pluginConfig);
-        } catch (\Throwable $urlGenerationFailure) {
-            $output->warning("Laravel plugin failed to build a detailed report URL: {$urlGenerationFailure->getMessage()}");
-            $url = 'https://github.com/psalm/psalm-plugin-laravel/issues';
-        }
-
-        $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $url);
-
-        if ($pluginConfig->failOnInternalError) {
-            throw $throwable;
-        }
     }
 
     /** @psalm-mutation-free */
