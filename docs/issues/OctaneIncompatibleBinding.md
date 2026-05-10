@@ -6,14 +6,11 @@ nav_order: 7
 
 # OctaneIncompatibleBinding
 
-Emitted when a `singleton()` or `singletonIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, or `Auth`.
+Emitted when a `singleton()` or `singletonIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, `Auth`, or `Config`.
 
 **Auto-enabled when `laravel/octane` is installed.** Projects that don't depend on the package directly can opt in via `<findOctaneIncompatibleBinding value="true" />` in `psalm.xml`. To opt out even when `laravel/octane` is installed, set `<findOctaneIncompatibleBinding value="false" />`. See [Configuration](../config.md#findoctaneincompatiblebinding).
 
-`bind()`, `bindIf()`, `scoped()`, and `scopedIf()` are NOT flagged:
-
-- `bind()` / `bindIf()` re-execute the closure on every resolution.
-- `scoped()` / `scopedIf()` are flushed between requests under Octane (via `Container::forgetScopedInstances()`), so captured state does not leak across requests. These are the Octane-safe alternative to `singleton()`.
+`bind()`, `bindIf()`, `scoped()`, and `scopedIf()` are NOT flagged. `bind()` re-executes the closure on every resolution; `scoped()` instances are flushed between requests under Octane (via `Container::forgetScopedInstances()`), so neither leaks captured state.
 
 ## Why this is a problem
 
@@ -25,36 +22,21 @@ This is a [documented Octane caveat](https://laravel.com/docs/octane#dependency-
 
 > You should avoid injecting the application container or HTTP request into the constructor of any object you register as a singleton.
 
+`Config` is a special case. The repository binding itself is a singleton, but Octane resets its state between requests, so values read inside a singleton closure freeze at first-resolution time even though the repository instance is reused.
+
 ## Examples
 
 ```php
 // Bad. The Request is captured once and reused for every future request.
-class AppServiceProvider extends ServiceProvider
-{
-    public function register(): void
-    {
-        $this->app->singleton(MyService::class, function ($app) {
-            return new MyService($app->make(Request::class)); // OctaneIncompatibleBinding
-        });
-    }
-}
-```
-
-```php
-// Also bad. Same issue, facade variant.
-$this->app->singleton(MyService::class, function () {
-    return new MyService(App::make(Request::class)); // OctaneIncompatibleBinding
+$this->app->singleton(MyService::class, function ($app) {
+    return new MyService($app->make(Request::class)); // OctaneIncompatibleBinding
 });
-```
 
-```php
 // Good. Use bind() so the closure re-runs on every resolution.
 $this->app->bind(MyService::class, function ($app) {
     return new MyService($app->make(Request::class));
 });
-```
 
-```php
 // Also good. Keep the singleton, but resolve the request-scoped service at the
 // point of use instead of constructor injection.
 class MyService
@@ -69,26 +51,22 @@ class MyService
 }
 ```
 
-## Detected services
+```php
+// Bad. Config values read inside a singleton closure are frozen at first resolution.
+$this->app->singleton(MyService::class, function ($app) {
+    $config = $app->make('config'); // OctaneIncompatibleBinding
+    return new MyService($config->get('myservice.endpoint'));
+});
 
-The following abstracts are treated as request-scoped:
-
-- `Illuminate\Http\Request` and its Symfony parent `Symfony\Component\HttpFoundation\Request`, alias `'request'`
-- `Illuminate\Session\Store`, `Illuminate\Session\SessionManager`, `Illuminate\Contracts\Session\Session`, aliases `'session'`, `'session.store'`
-- `Illuminate\Auth\AuthManager`, `Illuminate\Contracts\Auth\Factory`, `Illuminate\Contracts\Auth\Guard`, `Illuminate\Contracts\Auth\Authenticatable`, aliases `'auth'`, `'auth.driver'`
-- `Illuminate\Cookie\CookieJar` (and contracts `Illuminate\Contracts\Cookie\Factory`, `Illuminate\Contracts\Cookie\QueueingFactory`), alias `'cookie'`
-- `Illuminate\Config\Repository`, `Illuminate\Contracts\Config\Repository`, alias `'config'` (Octane clones config per request)
-- `Illuminate\Routing\UrlGenerator`, `Illuminate\Contracts\Routing\UrlGenerator`, alias `'url'`
-- `Illuminate\Routing\Redirector`, alias `'redirect'`
-
-## Known gaps
-
-- `Container::getInstance()->make(...)` inside a closure is not detected.
-- The rule does not trace transitive dependencies. Singleton A that depends on singleton B which captures `Request` is flagged only at B.
-- Named arguments are not normalized: if the closure is not the second source-order argument of `singleton()`, the call is missed (e.g. `singleton(concrete: fn() => ..., abstract: X::class)` puts the closure at source position 0).
+// Good. Read config via the facade at call site so the lookup happens on each resolution.
+$this->app->singleton(MyService::class, function () {
+    return new MyService(Config::string('myservice.endpoint'));
+});
+```
 
 ## How to fix
 
 - Change `singleton()` to `scoped()`. Octane flushes scoped instances between requests, so the closure runs once per request instead of once per worker.
 - Or change `singleton()` to `bind()`. The closure will re-run on every resolution (simpler but no intra-request caching).
 - Or keep the singleton and move the request-scoped resolution out of the constructor: inject the container and resolve lazily inside the method that actually uses it.
+- For `config` specifically, replace `$app->make('config')` with the `Config` facade inside the closure.
