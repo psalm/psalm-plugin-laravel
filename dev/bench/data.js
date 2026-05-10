@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778139012483,
+  "lastUpdate": 1778428249972,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3672,6 +3672,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5ab50798f25f85701f4caf2cf4727d353c90ce7f",
+          "message": "Merge pull request #890 from psalm/worktree-799-eloquent-static-return\n\nFix `Model::query()` flattening `static` for plain models",
+          "timestamp": "2026-05-10T17:48:42+02:00",
+          "tree_id": "6de89f9af4d0f501cf8a1183444ca09944ee43c9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5ab50798f25f85701f4caf2cf4727d353c90ce7f"
+        },
+        "date": 1778428249065,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.91,
+            "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
