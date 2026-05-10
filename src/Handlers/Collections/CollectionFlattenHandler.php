@@ -8,6 +8,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Support\LazyCollection;
 use PhpParser\Node\Scalar\Int_;
+use Psalm\LaravelPlugin\Util\Arg;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -87,12 +88,8 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
      */
     private static function extractLiteralDepth(MethodReturnTypeProviderEvent $event): ?int
     {
-        $args = $event->getCallArgs();
-        if ($args === []) {
-            return null; // no argument = INF depth, can't narrow
-        }
-
-        $depthArg = $args[0]->value;
+        // Missing arg means INF depth — can't narrow.
+        $depthArg = Arg::nodeAt($event->getCallArgs(), 0);
 
         if ($depthArg instanceof Int_) {
             return $depthArg->value;

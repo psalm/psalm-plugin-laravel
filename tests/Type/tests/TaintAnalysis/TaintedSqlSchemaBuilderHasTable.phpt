@@ -5,7 +5,7 @@
 
 /**
  * Direct Builder::hasTable() call path. Exercises the `@psalm-taint-sink sql $table`
- * annotation on the Builder stub (stubs/common/Database/Schema/Builder.stubphp). Mirrors
+ * annotation on the Builder stub (stubs/common/Database/Schema/Builder.phpstub). Mirrors
  * sibling TaintedSqlSchemaDrop / Rename / Table tests in this directory.
  *
  * Facade variant lives in TaintedSqlSchemaHasTable.phpt.

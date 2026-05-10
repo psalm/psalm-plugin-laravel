@@ -2,7 +2,7 @@
 composer.lock
 /vendor/
 
-cache/*.stubphp
+cache/*.phpstub
 
 # CS
 .php-cs-fixer.cache

@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <psalm
+    autoloader="./macro-fixtures.php"
     disableSuppressAll="true"
     ensureArrayStringOffsetsExist="true"
     errorLevel="1"
@@ -20,6 +21,15 @@
             <resolveDynamicWhereClauses value="true" />
         </pluginClass>
     </plugins>
+    <stubs>
+        <!-- Fixture class declaration consumed by tests/Type/tests/Macros/*.phpt.
+             The runtime macro registrations live in ./macro-fixtures.php (loaded as
+             the `autoloader` attribute), and that file `require_once`s this `.phpstub`
+             file so reflection sees the class. The stub entry here is what makes
+             Psalm's scan phase aware of the class without parsing the autoloader's
+             top-level macro registration calls. -->
+        <file name="./macro-fixtures-class.phpstub" />
+    </stubs>
     <issueHandlers>
         <!-- NoEnvOutsideConfig is a linting rule, not a type issue. psalm-tester runs
              Psalm on temp files in sys_get_temp_dir(), which don't match the /tests/

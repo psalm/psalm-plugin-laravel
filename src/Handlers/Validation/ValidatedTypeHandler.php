@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
+use Psalm\LaravelPlugin\Util\Arg;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -110,7 +111,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
         }
 
         // safe(['key1', 'key2']) → extract literal string keys from the array argument
-        $argType = $event->getSource()->getNodeTypeProvider()->getType($callArgs[0]->value);
+        $argType = Arg::typeAt($callArgs, $event->getSource(), 0);
 
         if (!$argType instanceof Union) {
             return null;

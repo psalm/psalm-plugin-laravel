@@ -5,14 +5,14 @@ on:
   push:
     paths:
       - '**.php'
-      - '**.stubphp'
+      - '**.phpstub'
       - 'composer.json'
       - 'tests/Application/laravel*'
       - '.github/workflows/test-laravel-app.yml'
   pull_request:
     paths:
       - '**.php'
-      - '**.stubphp'
+      - '**.phpstub'
       - 'composer.json'
       - 'tests/Application/laravel*'
       - '.github/workflows/test-laravel-app.yml'

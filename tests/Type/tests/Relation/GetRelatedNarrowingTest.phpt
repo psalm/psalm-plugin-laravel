@@ -104,7 +104,7 @@ function test_getParent_narrows_to_declaring_model(): WorkOrder
 // Through-relation getParent() pins which template slot wins.
 // HasManyThrough<TRelatedModel, TIntermediateModel, TDeclaringModel> binds the
 // parent Relation's second template (TDeclaringModel-of-Relation) to TIntermediateModel,
-// not to the far parent — see stubs/common/Database/Eloquent/Relations/HasOneOrManyThrough.stubphp.
+// not to the far parent — see stubs/common/Database/Eloquent/Relations/HasOneOrManyThrough.phpstub.
 // At runtime $parent is the immediate "throughParent" (Vehicle), matching Laravel's
 // HasOneOrManyThrough constructor. This test locks the contract so a stub edit can't
 // silently flip it.

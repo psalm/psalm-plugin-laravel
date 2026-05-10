@@ -24,6 +24,7 @@ Full config example:
         <resolveDynamicWhereClauses value="false" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
+        <findOctaneIncompatibleBinding value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
     </pluginClass>
@@ -122,6 +123,25 @@ See [MissingView](issues/MissingView.md) for details.
 
 ```xml
 <findMissingViews value="true" />
+```
+
+## `findOctaneIncompatibleBinding`
+
+**default**: omit the element. The plugin then auto-detects: the rule registers if the project depends on `laravel/octane`, and stays off otherwise.
+
+The plugin flags `singleton()` and `singletonIf()` binding closures that resolve request-scoped Laravel services (Request, Session, Auth, Cookie, Config, UrlGenerator, Redirector). Under Laravel Octane the application instance is reused across requests, so these captures leak state from the first resolving request into every subsequent one. `scoped()` / `scopedIf()` bindings are not flagged: Octane flushes them between requests.
+
+To override the auto-detect:
+
+- `value="true"`: force the rule on. Useful for projects that don't install `laravel/octane` directly but still want the check (e.g. shared libraries that aim to stay Octane-safe).
+- `value="false"`: force the rule off, even when `laravel/octane` is installed.
+
+See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details.
+
+### Example
+
+```xml
+<findOctaneIncompatibleBinding value="true" />
 ```
 
 ## Cache directory
