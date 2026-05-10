@@ -69,6 +69,11 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
     public static function with($relations) {}
 
     /**
+     * The `<static>` template argument MUST stay literal. Replacing it with `<self>` or any
+     * concrete class collapses the `&static` intersection that `: static`-returning callers
+     * depend on, and `ModelMethodHandler::getMethodReturnType` deliberately defers to this
+     * annotation for plain models (see #799).
+     *
      * @return \Illuminate\Database\Eloquent\Builder<static>
      */
     public static function query() {}
