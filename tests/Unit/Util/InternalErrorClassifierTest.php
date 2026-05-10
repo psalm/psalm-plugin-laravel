@@ -23,8 +23,8 @@ final class InternalErrorClassifierTest extends TestCase
     {
         $hint = InternalErrorClassifier::hintForFile($file);
 
-        self::assertNotNull($hint, "expected a hint for {$file}");
-        self::assertStringContainsString($expectedCategory, $hint);
+        $this->assertNotNull($hint, "expected a hint for {$file}");
+        $this->assertStringContainsString($expectedCategory, $hint);
     }
 
     /** @return iterable<string, array{string, string}> */
@@ -79,8 +79,8 @@ final class InternalErrorClassifierTest extends TestCase
     #[Test]
     public function it_skips_internal_error_machinery_frames(): void
     {
-        self::assertNull(InternalErrorClassifier::hintForFile('/x/src/Util/InternalErrorReporter.php'));
-        self::assertNull(InternalErrorClassifier::hintForFile('/x/src/Util/InternalErrorClassifier.php'));
+        $this->assertNull(InternalErrorClassifier::hintForFile('/x/src/Util/InternalErrorReporter.php'));
+        $this->assertNull(InternalErrorClassifier::hintForFile('/x/src/Util/InternalErrorClassifier.php'));
     }
 
     #[Test]
@@ -89,7 +89,7 @@ final class InternalErrorClassifierTest extends TestCase
         // hint() filters empty paths before calling hintForFile, but the public
         // surface should still treat an empty path as unclassifiable rather than
         // as user code with empty parentheses
-        self::assertNull(InternalErrorClassifier::hintForFile(''));
+        $this->assertNull(InternalErrorClassifier::hintForFile(''));
     }
 
     #[Test]
@@ -100,6 +100,6 @@ final class InternalErrorClassifierTest extends TestCase
         // and the hint() loop reaches a classifiable frame.
         $hint = InternalErrorClassifier::hint(new \RuntimeException('boom'));
 
-        self::assertNotNull($hint);
+        $this->assertNotNull($hint);
     }
 }
