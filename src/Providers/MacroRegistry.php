@@ -122,13 +122,15 @@ final class MacroRegistry
 
             try {
                 // Macroable::$macros is documented as `array<string, callable>` and
-                // populated only via the `macro()` API, which type-hints `callable`.
-                // We expand `callable` to its structural union so downstream
-                // helpers can accept it without triggering PHP's strict
-                // call-time `is_callable()` check (see `buildDefinition()`).
-                // The `is_array` guard below still defends against the rare class
-                // that declares a static `$macros` of an unrelated shape.
-                /** @psalm-var array<string, \Closure|non-empty-string|array{0: object|class-string, 1: non-empty-string}|object>|null $rawMacros */
+                // populated via the `macro()` API, which type-hints `callable`. We
+                // expand `callable` to its structural union so downstream helpers
+                // can accept it without triggering PHP's strict call-time
+                // `is_callable()` check (see `buildDefinition()`). Keys are typed as
+                // `array-key` rather than `string` because the Macroable-shape
+                // heuristic above can let through classes whose `$macros` static
+                // happens to use integer keys; the `is_string($name)` guard below
+                // is the runtime defense against that.
+                /** @psalm-var array<array-key, \Closure|non-empty-string|array{0: object|class-string, 1: non-empty-string}|object>|null $rawMacros */
                 $rawMacros = $macroProp->getValue();
             } catch (\Throwable $exception) {
                 // `getValue()` on a typed static property that is uninitialised throws
@@ -147,11 +149,7 @@ final class MacroRegistry
 
             $classMacros = [];
             foreach ($rawMacros as $name => $callable) {
-                // The narrowed `array<string, callable>` annotation makes the key
-                // type known. Empty-string keys are still defended against — PHP
-                // allows them in arrays, even if Macroable's `macro()` API does not
-                // permit them in practice.
-                if ($name === '') {
+                if (!\is_string($name) || $name === '') {
                     continue;
                 }
 
@@ -331,8 +329,6 @@ final class MacroRegistry
      * element doesn't resolve to a class/object, or methods that fail the visibility check.
      *
      * @param class-string $declaringClass for diagnostic messages only
-     */
-    /**
      * @param \Closure|non-empty-string|array{0: object|class-string, 1: non-empty-string}|object $callable
      *        See {@see self::buildDefinition()} for why this is a structural union
      *        rather than the PHP `callable` pseudo-type.
@@ -373,10 +369,12 @@ final class MacroRegistry
             }
 
             if (\is_array($callable)) {
-                // The `callable` parameter type narrows to the standard callable-array
-                // shape (`array{0: object|class-string, 1: string}`); both keys are
-                // present and `[1]` is a string, so the prior `isset` + `is_string`
-                // guards are redundant under the narrowed type.
+                // The structural-union annotation says `[0]` and `[1]` are present and
+                // typed, but `getValue()` on an unrelated `static $macros` could feed
+                // through a malformed array shape (missing offset, non-string `[1]`).
+                // The broadened `\Throwable` catch on this method's `try` swallows any
+                // resulting `TypeError` / undefined-offset error so a single bad entry
+                // cannot abort discovery for the rest.
                 $target = $callable[0];
                 $methodName = $callable[1];
                 if (\is_string($target) && \class_exists($target) && \method_exists($target, $methodName)) {
@@ -398,9 +396,14 @@ final class MacroRegistry
             if (\is_object($callable) && \method_exists($callable, '__invoke')) {
                 return self::ifPublic(new \ReflectionMethod($callable, '__invoke'));
             }
-        } catch (\ReflectionException $reflectionException) {
+        } catch (\Throwable $exception) {
+            // `ReflectionException` for missing classes/methods is the common case,
+            // but we also catch `TypeError` and undefined-offset errors raised by
+            // malformed `static $macros` shapes (see the array branch above), and
+            // any other engine error. Mirrors the broad catch in `init()`: a single
+            // bad callable should not abort the whole discovery pass.
             $progress->warning(
-                "Laravel plugin: MacroRegistry could not reflect callable for {$declaringClass}::{$name}: {$reflectionException->getMessage()}",
+                "Laravel plugin: MacroRegistry could not reflect callable for {$declaringClass}::{$name}: {$exception->getMessage()}",
             );
         }
 
