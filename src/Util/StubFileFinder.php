@@ -10,9 +10,9 @@ use Psalm\Progress\Progress;
  * Discovers `.phpstub` files for the plugin's stub registration.
  *
  * Splits responsibility from {@see \Psalm\LaravelPlugin\Plugin}: filesystem
- * traversal and version-directory selection are pure helpers with no Psalm
- * coupling, so they live next to the other utilities and can be exercised
- * by unit tests without booting the plugin.
+ * traversal and version-directory selection live in this utility so they can
+ * be exercised by unit tests without booting the plugin, while warning
+ * reporting still uses Psalm's {@see Progress} output interface.
  *
  * @internal
  */
