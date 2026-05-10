@@ -10,7 +10,7 @@ use Illuminate\Contracts\Database\Eloquent\SupportsPartialRelations;
  * must be repeated verbatim or callers typed on the contract break.
  *
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
- * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
  * @template-extends MorphOneOrMany<TRelatedModel, TDeclaringModel, ?TRelatedModel>
  * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
  */

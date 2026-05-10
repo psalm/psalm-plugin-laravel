@@ -14,7 +14,7 @@ use Illuminate\Support\Traits\Macroable;
  * must be repeated verbatim or callers typed on the contract break.
  *
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
- * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
  * @template TResult
  * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
  */
