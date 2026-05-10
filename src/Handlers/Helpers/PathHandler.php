@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Closure;
-use PhpParser\Node\Arg;
 use PhpParser\Node\Scalar\String_;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Util\Arg;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
@@ -98,12 +98,9 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         // so that we can inform psalm of where the files live.
         $argument = '';
 
-        $first_argument = $call_args[0] ?? null;
-        if ($first_argument instanceof Arg) {
-            $argumentType = $first_argument->value;
-            if ($argumentType instanceof String_) {
-                $argument = $argumentType->value;
-            }
+        $first_argument = Arg::nodeAt($call_args, 0);
+        if ($first_argument instanceof String_) {
+            $argument = $first_argument->value;
         }
 
         $result = $closure([$argument]);
