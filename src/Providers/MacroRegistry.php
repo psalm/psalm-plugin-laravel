@@ -396,14 +396,14 @@ final class MacroRegistry
             if (\is_object($callable) && \method_exists($callable, '__invoke')) {
                 return self::ifPublic(new \ReflectionMethod($callable, '__invoke'));
             }
-        } catch (\Throwable $exception) {
+        } catch (\Throwable $throwable) {
             // `ReflectionException` for missing classes/methods is the common case,
             // but we also catch `TypeError` and undefined-offset errors raised by
             // malformed `static $macros` shapes (see the array branch above), and
             // any other engine error. Mirrors the broad catch in `init()`: a single
             // bad callable should not abort the whole discovery pass.
             $progress->warning(
-                "Laravel plugin: MacroRegistry could not reflect callable for {$declaringClass}::{$name}: {$exception->getMessage()}",
+                "Laravel plugin: MacroRegistry could not reflect callable for {$declaringClass}::{$name}: {$throwable->getMessage()}",
             );
         }
 
