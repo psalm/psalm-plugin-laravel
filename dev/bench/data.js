@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778446904267,
+  "lastUpdate": 1778452986285,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3882,6 +3882,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "db1930264eea8dd55ef8e15a92dc68deb33ccb5b",
+          "message": "Merge pull request #902 from psalm/worktree-type-coverage-investigation\n\nTighten types to reach 100% Psalm type coverage",
+          "timestamp": "2026-05-11T00:40:36+02:00",
+          "tree_id": "859ed3eccfe87961ccf41995e374f8ac08234ffe",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/db1930264eea8dd55ef8e15a92dc68deb33ccb5b"
+        },
+        "date": 1778452985752,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.62,
+            "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
