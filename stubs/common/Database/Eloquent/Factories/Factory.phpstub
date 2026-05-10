@@ -1,0 +1,176 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Factories;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\ForwardsCalls;
+use Illuminate\Support\Traits\Macroable;
+
+/**
+ * Factory stub adds a second `TCount` template parameter to track plurality
+ * across the chain. The receiver's `TCount` decides whether `create()`,
+ * `make()`, and `createQuietly()` resolve to a single model or a collection.
+ *
+ * Plurality split mirrors Laravel runtime in `Factory::make()`:
+ * `count === null` → single `TModel`; any other value → `Collection<int, TModel>`,
+ * including `count(0)` (empty collection) and `count(1)` (one-item collection).
+ *
+ * The conditional set `null|0|1` is intentional: Psalm requires the broader
+ * shape so an unbound `TCount` on a user subclass like `class UserFactory
+ * extends Factory<User>` (one template arg only) evaluates to the single
+ * branch when no `count()`/`times()` was called. The `FactoryCountTypeProvider`
+ * handler reroutes literal `0` and `1` to a plural sentinel so the runtime
+ * semantics still hold for explicit `count(0)` / `count(1)` calls.
+ *
+ * `TCount` defaults to `null` so user-defined factories declared as
+ * `class UserFactory extends Factory<User>` keep working — the missing arg
+ * resolves to the default.
+ *
+ * Methods that return `static` (state, for, has, etc.) propagate `TCount`
+ * automatically because Psalm preserves template parameters across `static`
+ * returns. This keeps follow-up #696 (`for*()` / `has*()` magic methods) free
+ * to add their own provider without touching plurality logic — those methods
+ * just need to return `static`.
+ *
+ * @template TModel of Model
+ * @template TCount of int|null = null
+ *
+ * @method $this trashed()
+ */
+abstract class Factory
+{
+    use Conditionable, ForwardsCalls, Macroable {
+        __call as macroCall;
+    }
+
+    /**
+     * @param  TCount  $count
+     */
+    public function __construct(
+        $count = null,
+        ?\Illuminate\Support\Collection $states = null,
+        ?\Illuminate\Support\Collection $has = null,
+        ?\Illuminate\Support\Collection $for = null,
+        ?\Illuminate\Support\Collection $afterMaking = null,
+        ?\Illuminate\Support\Collection $afterCreating = null,
+        $connection = null,
+        ?\Illuminate\Support\Collection $recycle = null,
+        ?bool $expandRelationships = null,
+        array $excludeRelationships = [],
+    ) {}
+
+    /**
+     * @return array<string, mixed>
+     */
+    abstract public function definition();
+
+    /**
+     * Specify how many models should be generated.
+     *
+     * Return type is overridden by FactoryCountTypeProvider — the handler
+     * returns the BASE Factory class with the literal TCount as the second
+     * template arg, which is required for the conditional return on
+     * create()/make() to resolve correctly through user-defined subclasses.
+     *
+     * @return Factory<TModel, int|null>
+     */
+    public function count(?int $count) {}
+
+    /**
+     * Get a new factory instance for the given number of models.
+     *
+     * Return type is overridden by FactoryCountTypeProvider — see count().
+     *
+     * @return Factory<TModel, int>
+     */
+    public static function times(int $count) {}
+
+    /**
+     * Create a single model and persist it to the database.
+     *
+     * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
+     * @return TModel
+     */
+    public function createOne($attributes = []) {}
+
+    /**
+     * Create a single model and persist it to the database without dispatching any model events.
+     *
+     * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
+     * @return TModel
+     */
+    public function createOneQuietly($attributes = []) {}
+
+    /**
+     * Create a collection of models and persist them to the database.
+     *
+     * @param  int|null|iterable<int, array<string, mixed>>  $records
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
+     */
+    public function createMany(int|iterable|null $records = null) {}
+
+    /**
+     * Create a collection of models and persist them to the database without dispatching any model events.
+     *
+     * @param  int|null|iterable<int, array<string, mixed>>  $records
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
+     */
+    public function createManyQuietly(int|iterable|null $records = null) {}
+
+    /**
+     * Persist either a single model or a collection of models, depending on
+     * whether `count()`/`times()` was called earlier in the chain. See the
+     * conditional return for the plurality split.
+     *
+     * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
+     * @param  Model|null  $parent
+     * @return (TCount is null|0|1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
+     */
+    public function create($attributes = [], ?Model $parent = null) {}
+
+    /**
+     * Same as `create()`, but without dispatching any model events.
+     *
+     * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
+     * @param  Model|null  $parent
+     * @return (TCount is null|0|1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
+     */
+    public function createQuietly($attributes = [], ?Model $parent = null) {}
+
+    /**
+     * Wrap `create()` in a closure for deferred persistence. The closure
+     * returns the same single-or-collection shape as `create()`.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  Model|null  $parent
+     * @return \Closure(): (TCount is null|0|1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
+     */
+    public function lazy(array $attributes = [], ?Model $parent = null) {}
+
+    /**
+     * Make a single instance of the model.
+     *
+     * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
+     * @return TModel
+     */
+    public function makeOne($attributes = []) {}
+
+    /**
+     * Build either a single model or a collection of models without
+     * persisting, depending on whether `count()`/`times()` was called.
+     *
+     * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
+     * @param  Model|null  $parent
+     * @return (TCount is null|0|1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
+     */
+    public function make($attributes = [], ?Model $parent = null) {}
+
+    /**
+     * Create a collection of models.
+     *
+     * @param  iterable<int, array<string, mixed>>|int|null  $records
+     * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
+     */
+    public function makeMany(iterable|int|null $records = null) {}
+}
