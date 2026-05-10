@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778445657057,
+  "lastUpdate": 1778446904267,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3847,6 +3847,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2fb8cb32fe468ab7e6539ec25584f9e03520cc7",
+          "message": "Merge pull request #878 from psalm/worktree-693-factory-count-collection\n\nInfer Collection from `Factory` count/times chains",
+          "timestamp": "2026-05-10T22:59:07+02:00",
+          "tree_id": "8bbef6ae956bc66234db39571d0369af7429d9d9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f2fb8cb32fe468ab7e6539ec25584f9e03520cc7"
+        },
+        "date": 1778446903752,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31,
+            "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
