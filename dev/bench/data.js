@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778452986285,
+  "lastUpdate": 1778453948261,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3912,6 +3912,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.62,
             "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "186d17f38afab6a0cbcd06f687ba2b2dd5866960",
+          "message": "Merge pull request #904 from psalm/fix-collection-random-stub-callable-signature",
+          "timestamp": "2026-05-11T00:56:31+02:00",
+          "tree_id": "fde172e6f42c6578dca67e378ab99cd5894acb7e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/186d17f38afab6a0cbcd06f687ba2b2dd5866960"
+        },
+        "date": 1778453947928,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.61,
+            "range": "± 0.21",
             "unit": "s"
           },
           {
