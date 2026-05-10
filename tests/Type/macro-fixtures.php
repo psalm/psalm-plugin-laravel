@@ -35,3 +35,21 @@ MacroFixtureBag::macro('countCharsTest', static fn(string $needle): int => 0);
 // so its pseudo-methods land on Builder itself and any Builder<TModel> call
 // site dispatches to them normally.
 Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
+
+// Locks in coverage for issue #899 idea #5 (facade-class macro propagation).
+// `Router` and `Factory` are the backing classes of the `Route` and `Http`
+// facades respectively — both are real-world cases observed in app benchmarks
+// (spatie-dashboard's `Route::ohDearWebhooks(...)`, monica's
+// `Http::macro('getDnsRecord', ...)`). The macros land on the Macroable owner's
+// `$macros` storage at registration time; the plugin then propagates them onto
+// every facade class that resolves to the owner via `FacadeMapProvider`. The
+// closures are never executed at type-check time, so the bodies are degenerate
+// — only the param and return types matter.
+\Illuminate\Routing\Router::macro(
+    'testRouterFacadeMacro',
+    static fn(string $name): string => $name,
+);
+\Illuminate\Http\Client\Factory::macro(
+    'testHttpFacadeMacro',
+    static fn(string $url): int => 200,
+);
