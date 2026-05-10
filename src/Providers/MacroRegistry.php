@@ -1,0 +1,520 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Providers;
+
+use Psalm\Progress\Progress;
+use Psalm\Storage\FunctionLikeParameter;
+use Psalm\Type;
+use Psalm\Type\Union;
+
+/**
+ * Registry of macros discovered via runtime reflection of the booted Laravel app's
+ * `Macroable::$macros` static properties.
+ *
+ * Foundation for issue #758 (Strategy B). Populated from
+ * {@see \Psalm\LaravelPlugin\Handlers\Magic\MacroHandler::afterCodebasePopulated()}
+ * (NOT from `Plugin::__invoke`) because Psalm's `autoloader` config attribute fires
+ * during analyser setup — after plugin entry points but before `AfterCodebasePopulated`.
+ * Discovering at boot time would miss any macro registered in code reachable only
+ * through the autoloader (e.g. test fixtures, or — for the Testbench fallback path
+ * where the analysed package lacks a `bootstrap/app.php` — autoload-time service
+ * provider initialisation).
+ *
+ * The lifecycle therefore differs from {@see FacadeMapProvider}, which IS populated
+ * at plugin init: facades are registered by Laravel's bootstrap, which has run by
+ * then. Macros include user-app and test-time registrations that haven't.
+ *
+ * Coverage:
+ * - **App analysis** (`bootstrap/app.php` exists): catches macros registered by user
+ *   `App\Providers\*::boot()`, third-party packages auto-discovered via Laravel
+ *   package discovery, and any framework-internal macros (`Request::validate`,
+ *   `Request::hasValidSignature`, etc. registered by `FoundationServiceProvider`).
+ * - **Package analysis** (Testbench fallback): does not run the analysed package's
+ *   own provider — see issue #766. Strategy C (AST scan) will close that gap.
+ *
+ * Detection heuristic: a class is treated as Macroable-shaped if it has a static
+ * `$macros` property AND exposes one of `__call`, `__callStatic`, or `macro()`.
+ * This catches the `Macroable` trait users (Stringable, Str, Builder/Query, Request,
+ * etc.) and `\Illuminate\Database\Eloquent\Builder`, which declares its own
+ * `$macros` storage and dispatch methods without using the trait. Spurious matches
+ * are filtered downstream by the per-callable shape check in
+ * {@see self::reflectCallable()} and the real-method shadow check in
+ * {@see self::init()}.
+ *
+ * @internal
+ */
+final class MacroRegistry
+{
+    /**
+     * @var array<lowercase-string, array<lowercase-string, MacroDefinition>>
+     *      classFqcn (lower) => methodName (lower) => def
+     */
+    private static array $macros = [];
+
+    /** @var list<class-string> Macroable-shaped classes that have at least one resolved macro */
+    private static array $knownMacroableClasses = [];
+
+    /**
+     * Discover macros from every loaded class with a static `$macros` array property.
+     *
+     * Reads the property via `ReflectionProperty::getValue()` directly. Since PHP 8.1,
+     * `ReflectionProperty` has been accessible by default — no `setAccessible(true)`
+     * call needed for the protected `Macroable::$macros` storage. Closures that fail
+     * to resolve (e.g. closure was bound to a since-unloaded class) are silently
+     * skipped to keep one bad macro from disabling the rest.
+     *
+     * Filter order is performance-sensitive: `get_declared_classes()` returns the
+     * full PHP runtime class table (10k+ entries on a real Laravel app). We start
+     * with the cheapest possible reject (`hasProperty('macros')`) and only progress
+     * to the more expensive checks for the small surviving set.
+     *
+     * Idempotent: reruns reset state. Tests rely on this for isolation.
+     */
+    public static function init(Progress $progress): void
+    {
+        self::$macros = [];
+        self::$knownMacroableClasses = [];
+
+        foreach (\get_declared_classes() as $className) {
+            try {
+                $reflection = new \ReflectionClass($className);
+            } catch (\ReflectionException) {
+                continue;
+            }
+
+            // Cheapest reject first — O(1) hash probe against PHP's resolved class
+            // info, which already includes inherited properties (so this also fires
+            // for any subclass of a Macroable-trait user).
+            if (!$reflection->hasProperty('macros')) {
+                continue;
+            }
+
+            $macroProp = $reflection->getProperty('macros');
+            if (!$macroProp->isStatic()) {
+                continue;
+            }
+
+            // Subclass entries inherit the parent's storage. Only register against the
+            // class that DECLARES the property — otherwise we'd record the same macro
+            // dozens of times (once per descendant). The handler propagates pseudo-
+            // methods to descendants explicitly so this isn't a coverage loss.
+            // Performance bonus: this filter runs BEFORE getValue(), avoiding the
+            // costly read on every analysed subclass of a Macroable parent.
+            $declaringClass = $macroProp->getDeclaringClass()->getName();
+            if ($declaringClass !== $className) {
+                continue;
+            }
+
+            // Tighten the heuristic: a class with a static `$macros` array is treated
+            // as Macroable-shaped only if it also exposes a runtime dispatch surface
+            // (`__call` / `__callStatic` / a static `macro()` method). This avoids
+            // false positives for unrelated classes that happen to declare a `$macros`
+            // static property for their own purposes.
+            if (
+                !$reflection->hasMethod('__call')
+                && !$reflection->hasMethod('__callStatic')
+                && !$reflection->hasMethod('macro')
+            ) {
+                continue;
+            }
+
+            try {
+                $rawMacros = $macroProp->getValue();
+            } catch (\Throwable $exception) {
+                // `getValue()` on a typed static property that is uninitialised throws
+                // `\Error`, not `ReflectionException`. Catch broadly so a single bad
+                // class — including one whose static initialiser throws — cannot
+                // abort discovery for the rest.
+                $progress->warning(
+                    "Laravel plugin: MacroRegistry could not read \$macros on {$className}: {$exception->getMessage()}",
+                );
+                continue;
+            }
+
+            if (!\is_array($rawMacros) || $rawMacros === []) {
+                continue;
+            }
+
+            $classMacros = [];
+            /** @var mixed $callable */
+            foreach ($rawMacros as $name => $callable) {
+                if (!\is_string($name) || $name === '') {
+                    continue;
+                }
+
+                // Skip macros whose name shadows a real method on the class.
+                // PHP's method resolution checks declared methods before falling through
+                // to __call, so the macro is unreachable at runtime — the real method
+                // wins. The handler that injects pseudo-methods also guards against this
+                // (a real `methods[$name]` entry blocks the pseudo-method write), but
+                // filtering here keeps the registry honest about what's actually callable.
+                if ($reflection->hasMethod($name)) {
+                    continue;
+                }
+
+                $def = self::buildDefinition($className, $name, $callable, $progress);
+                if (!$def instanceof \Psalm\LaravelPlugin\Providers\MacroDefinition) {
+                    continue;
+                }
+
+                $classMacros[\strtolower($name)] = $def;
+            }
+
+            if ($classMacros === []) {
+                continue;
+            }
+
+            self::$macros[\strtolower($className)] = $classMacros;
+            self::$knownMacroableClasses[] = $className;
+        }
+    }
+
+    /**
+     * All macros registered on the given Macroable class.
+     *
+     * @return array<lowercase-string, MacroDefinition>
+     * @psalm-external-mutation-free
+     */
+    public static function for(string $fqcn): array
+    {
+        return self::$macros[\strtolower($fqcn)] ?? [];
+    }
+
+    /**
+     * Single macro by class + method name, or `null` if not registered.
+     *
+     * @psalm-api Used by unit tests and any handler that needs to look up a single macro
+     *            without enumerating the whole class. The handler currently uses {@see self::for()}.
+     * @psalm-external-mutation-free
+     */
+    public static function get(string $fqcn, string $methodName): ?MacroDefinition
+    {
+        return self::$macros[\strtolower($fqcn)][\strtolower($methodName)] ?? null;
+    }
+
+    /**
+     * @return list<class-string> Macroable-shaped classes that have at least one macro
+     * @psalm-external-mutation-free
+     */
+    public static function getKnownMacroableClasses(): array
+    {
+        return self::$knownMacroableClasses;
+    }
+
+    /**
+     * Test seam: replace the registry contents in tests without going through {@see init()}.
+     *
+     * @param array<lowercase-string, array<lowercase-string, MacroDefinition>> $macros
+     * @param list<class-string> $knownMacroableClasses
+     * @psalm-api Tests only.
+     * @psalm-external-mutation-free
+     */
+    public static function overrideForTesting(array $macros, array $knownMacroableClasses): void
+    {
+        self::$macros = $macros;
+        self::$knownMacroableClasses = $knownMacroableClasses;
+    }
+
+    /**
+     * Reset registry to empty state. Tests use this to isolate runs.
+     *
+     * @psalm-api Tests only.
+     * @psalm-external-mutation-free
+     */
+    public static function reset(): void
+    {
+        self::$macros = [];
+        self::$knownMacroableClasses = [];
+    }
+
+    /**
+     * Build a {@see MacroDefinition} from a registered callable.
+     *
+     * Handles every callable shape Laravel's `Macroable::__call` dispatches:
+     *
+     * - `Closure` (the common case)
+     * - String `'ClassName::method'` — reflected as a static method
+     * - String `'function_name'` — reflected as a function
+     * - Array `[ClassName::class, 'method']` or `[$obj, 'method']` — reflected as a method
+     * - Invokable object (any object with `__invoke`) — reflected as `__invoke`
+     *
+     * Each shape is reduced to a `\ReflectionFunctionAbstract` and the same param /
+     * return-type extraction runs.
+     *
+     * @param class-string $declaringClass
+     */
+    private static function buildDefinition(
+        string $declaringClass,
+        string $name,
+        mixed $callable,
+        Progress $progress,
+    ): ?MacroDefinition {
+        $reflection = self::reflectCallable($callable, $declaringClass, $name, $progress);
+        if (!$reflection instanceof \ReflectionFunctionAbstract) {
+            return null;
+        }
+
+        // Native `self`/`static`/`parent` references in a `\ReflectionMethod`'s signature
+        // resolve relative to the method's class, not the Macroable host. We expand them
+        // before parsing.
+        //
+        // - `self` and `parent` always resolve to the method's *declaring* class / its parent.
+        // - `static` is late-static-binding. For an object callable `[$obj, 'method']` it
+        //   refers to the runtime class of `$obj`, which can be a subclass of the declaring
+        //   class. The conservative-but-correct approximation is `get_class($obj)`. For
+        //   `[Class::class, 'method']` and `'Class::method'` string callables there's no
+        //   instance to bind to, so `static` collapses to the declaring class.
+        $selfHostClass = null;
+        $staticHostClass = null;
+        if ($reflection instanceof \ReflectionMethod) {
+            $selfHostClass = $reflection->getDeclaringClass()->getName();
+            $staticHostClass = $selfHostClass;
+            if (\is_array($callable) && isset($callable[0]) && \is_object($callable[0])) {
+                $staticHostClass = \get_class($callable[0]);
+            } elseif (\is_object($callable) && !$callable instanceof \Closure) {
+                $staticHostClass = \get_class($callable);
+            }
+        }
+
+        $params = [];
+        foreach ($reflection->getParameters() as $reflParam) {
+            $params[] = self::buildParameter($reflParam, $selfHostClass, $staticHostClass);
+        }
+
+        // `$nativeReturnType === null` is "callable declared no native return type", which is
+        // distinct from "declared `mixed`". The former leaves `signature_return_type`
+        // null per Psalm convention; the latter would set it to a real Union.
+        $nativeReturnType = self::reflectionTypeToUnion($reflection->getReturnType(), $selfHostClass, $staticHostClass);
+
+        return new MacroDefinition(
+            declaringClass: $declaringClass,
+            methodName: \strtolower($name),
+            casedName: $name,
+            params: $params,
+            returnType: $nativeReturnType ?? Type::getMixed(),
+            signatureReturnType: $nativeReturnType,
+        );
+    }
+
+    /**
+     * Resolve a registered macro callable to a `\ReflectionFunctionAbstract` we
+     * can extract param + return types from. Handled shapes:
+     *
+     * - `Closure` → `ReflectionFunction`
+     * - String `'Class::method'` → `ReflectionMethod` (must be public)
+     * - String `'function_name'` (`function_exists` returns true) → `ReflectionFunction`
+     * - Array `[Class, 'method']` / `[$obj, 'method']` → `ReflectionMethod` (must be public)
+     * - Object with `__invoke` → `ReflectionMethod` for `__invoke` (must be public)
+     *
+     * Returns `null` for opaque objects without `__invoke`, callable arrays whose first
+     * element doesn't resolve to a class/object, or methods that fail the visibility check.
+     *
+     * @param class-string $declaringClass for diagnostic messages only
+     */
+    private static function reflectCallable(
+        mixed $callable,
+        string $declaringClass,
+        string $name,
+        Progress $progress,
+    ): ?\ReflectionFunctionAbstract {
+        try {
+            if ($callable instanceof \Closure) {
+                return new \ReflectionFunction($callable);
+            }
+
+            if (\is_string($callable) && \str_contains($callable, '::')) {
+                $parts = \explode('::', $callable, 2);
+                if (\count($parts) !== 2) {
+                    return null;
+                }
+
+                [$cls, $method] = $parts;
+                if (\class_exists($cls) && \method_exists($cls, $method)) {
+                    // String `'Class::method'` callables dispatch through PHP's
+                    // class-string handler, which only resolves to *static* methods.
+                    // A non-static target would error at runtime.
+                    return self::ifPublicStatic(new \ReflectionMethod($cls, $method));
+                }
+
+                return null;
+            }
+
+            if (\is_string($callable) && \function_exists($callable)) {
+                // Plain function-name callable, e.g. `Stringable::macro('upper', 'strtoupper')`.
+                // Macroable dispatches these through PHP's variable-function mechanism; the
+                // function's reflected signature is what callers see.
+                return new \ReflectionFunction($callable);
+            }
+
+            if (\is_array($callable) && isset($callable[0], $callable[1]) && \is_string($callable[1])) {
+                /** @var mixed $target */
+                $target = $callable[0];
+                $methodName = $callable[1];
+                if (\is_string($target) && \class_exists($target) && \method_exists($target, $methodName)) {
+                    // Class-string array callable `[ClassName::class, 'method']` —
+                    // same constraint as the `'Class::method'` string form: the target
+                    // must be a static method, otherwise PHP will error at runtime.
+                    return self::ifPublicStatic(new \ReflectionMethod($target, $methodName));
+                }
+
+                if (\is_object($target) && \method_exists($target, $methodName)) {
+                    // Object array callable `[$obj, 'method']` works for both static
+                    // and instance methods, so only the visibility check applies.
+                    return self::ifPublic(new \ReflectionMethod($target, $methodName));
+                }
+
+                return null;
+            }
+
+            if (\is_object($callable) && \method_exists($callable, '__invoke')) {
+                return self::ifPublic(new \ReflectionMethod($callable, '__invoke'));
+            }
+        } catch (\ReflectionException $reflectionException) {
+            $progress->warning(
+                "Laravel plugin: MacroRegistry could not reflect callable for {$declaringClass}::{$name}: {$reflectionException->getMessage()}",
+            );
+        }
+
+        return null;
+    }
+
+    /**
+     * Reject non-public methods. Macroable's `__call` invokes the registered callable
+     * from outside the target class's scope, so a protected/private method would throw
+     * `Error: Call to (protected|private) method` at runtime — synthesising a pseudo-
+     * method for it would be a false positive.
+     */
+    private static function ifPublic(\ReflectionMethod $method): ?\ReflectionMethod
+    {
+        return $method->isPublic() ? $method : null;
+    }
+
+    /**
+     * Reject methods that aren't both public AND static. For class-string callable
+     * forms (`'Class::method'` and `[Class::class, 'method']`), PHP only dispatches
+     * to static methods — calling a non-static target this way errors at runtime,
+     * so the macro is unreachable.
+     */
+    private static function ifPublicStatic(\ReflectionMethod $method): ?\ReflectionMethod
+    {
+        return ($method->isPublic() && $method->isStatic()) ? $method : null;
+    }
+
+    /**
+     * @param class-string|null $selfHostClass The method's declaring class (binds `self`,
+     *                                          `parent`). Null for free functions and Closures.
+     * @param class-string|null $staticHostClass The class `static` should expand to: for
+     *                                            object callables, `get_class($obj)`; otherwise
+     *                                            same as `$selfHostClass`. Null for free
+     *                                            functions and Closures.
+     */
+    private static function buildParameter(\ReflectionParameter $reflParam, ?string $selfHostClass, ?string $staticHostClass): FunctionLikeParameter
+    {
+        $reflType = $reflParam->getType();
+        $type = self::reflectionTypeToUnion($reflType, $selfHostClass, $staticHostClass);
+
+        return new FunctionLikeParameter(
+            name: $reflParam->getName(),
+            by_ref: $reflParam->isPassedByReference(),
+            type: $type,
+            signature_type: $type,
+            is_optional: $reflParam->isOptional() || $reflParam->isDefaultValueAvailable(),
+            // `allowsNull()` covers both `?string` syntax and `string|null` unions, and
+            // is more reliable than asking the parsed Union — Psalm's parseString of
+            // `?string` does not always set the nullable flag the way we'd expect.
+            is_nullable: $reflType?->allowsNull() ?? false,
+            is_variadic: $reflParam->isVariadic(),
+        );
+    }
+
+    /**
+     * Convert PHP's reflected type to a Psalm Union, or `null` when the callable declared none.
+     *
+     * Uses the type's string form (`int|null`, `\App\Foo`, `?array`) as the parse input —
+     * Psalm's parser accepts the same surface as PHP. When `$methodHostClass` is set, the
+     * resolved string also has `self`/`static`/`parent` references expanded to concrete
+     * FQCNs against that host (otherwise `Foo::method(): self` would surface as the literal
+     * `self`, which Psalm reads relative to the *call site*, not the method).
+     *
+     * Two failure modes are anticipated:
+     *
+     * - `TypeParseTreeException` — genuinely un-parseable input (rare; reflection emits
+     *   well-formed PHP type strings). Swallow and degrade to `null` so a single bad type
+     *   does not poison the registry.
+     * - `\Error` from `ProjectAnalyzer::getInstance()` — `parseString` reaches for the
+     *   project analyzer when expanding union/nullable types. In a unit-test context the
+     *   analyzer is not initialised, which is fine — we skip and let test-only constructions
+     *   carry on. In a real Psalm run the analyzer always exists, so this branch never
+     *   fires in production.
+     *
+     * Engine-level errors outside those two paths (TypeError, AssertionError, etc.) are
+     * left to propagate so genuine Psalm bugs aren't silently masked.
+     *
+     * @param class-string|null $selfHostClass
+     * @param class-string|null $staticHostClass
+     */
+    private static function reflectionTypeToUnion(?\ReflectionType $type, ?string $selfHostClass = null, ?string $staticHostClass = null): ?Union
+    {
+        if (!$type instanceof \ReflectionType) {
+            return null;
+        }
+
+        $typeString = (string) $type;
+        if ($typeString === '') {
+            return null;
+        }
+
+        if ($selfHostClass !== null) {
+            $typeString = self::expandSelfStaticParent($typeString, $selfHostClass, $staticHostClass ?? $selfHostClass);
+        }
+
+        try {
+            return Type::parseString($typeString);
+        } catch (\Psalm\Exception\TypeParseTreeException) {
+            return null;
+        } catch (\Error $error) {
+            // Only the specific "ProjectAnalyzer not initialised" path is benign.
+            // Anything else is a real bug — re-throw.
+            if (!\str_contains($error->getMessage(), 'ProjectAnalyzer')) {
+                throw $error;
+            }
+
+            return null;
+        }
+    }
+
+    /**
+     * Replace `self`/`static`/`parent` tokens in a reflected type string with concrete
+     * FQCNs. `self` and `parent` resolve against the method's *declaring* class
+     * (`$selfHostClass`); `static` resolves against `$staticHostClass`, which is
+     * `get_class($obj)` for object callables and `$selfHostClass` otherwise. Operates
+     * on word boundaries to avoid clobbering `self` substrings inside other identifiers
+     * (e.g. `Selfish`, `MyParentObserver`).
+     *
+     * @param class-string $selfHostClass
+     * @param class-string $staticHostClass
+     * @psalm-pure
+     */
+    private static function expandSelfStaticParent(string $typeString, string $selfHostClass, string $staticHostClass): string
+    {
+        $parent = null;
+        try {
+            $parent = (new \ReflectionClass($selfHostClass))->getParentClass();
+        } catch (\ReflectionException) {
+            // Leave $parent null — `parent` references stay literal and parser may reject
+            // them, returning null Union, which is the same conservative outcome.
+        }
+
+        $replacements = [
+            '/\bself\b/' => '\\' . $selfHostClass,
+            '/\bstatic\b/' => '\\' . $staticHostClass,
+        ];
+        if ($parent instanceof \ReflectionClass) {
+            $replacements['/\bparent\b/'] = '\\' . $parent->getName();
+        }
+
+        return \preg_replace(\array_keys($replacements), \array_values($replacements), $typeString) ?? $typeString;
+    }
+}
