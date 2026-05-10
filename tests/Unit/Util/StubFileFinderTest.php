@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Tests\Psalm\LaravelPlugin\Unit;
+namespace Tests\Psalm\LaravelPlugin\Unit\Util;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Plugin;
+use Psalm\LaravelPlugin\Util\StubFileFinder;
 
-#[CoversClass(Plugin::class)]
-final class PluginVersionStubsTest extends TestCase
+#[CoversClass(StubFileFinder::class)]
+final class StubFileFinderTest extends TestCase
 {
     /**
      * @param list<string> $candidates
@@ -24,7 +24,7 @@ final class PluginVersionStubsTest extends TestCase
         string $targetVersion,
         array $expected,
     ): void {
-        $this->assertSame($expected, Plugin::filterVersionDirectories($candidates, $targetVersion));
+        $this->assertSame($expected, StubFileFinder::filterVersionDirectories($candidates, $targetVersion));
     }
 
     /** @return iterable<string, array{list<string>, string, list<string>}> */

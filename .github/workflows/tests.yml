@@ -5,14 +5,14 @@ on:
   push:
     paths:
       - '**.php'
-      - '**.stubphp'
+      - '**.phpstub'
       - '**.phpt'
       - '**.yml'
       - 'composer.json'
   pull_request:
     paths:
       - '**.php'
-      - '**.stubphp'
+      - '**.phpstub'
       - '**.phpt'
       - 'composer.json'
       - '.github/workflows/tests.yml'

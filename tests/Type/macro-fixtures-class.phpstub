@@ -1,0 +1,34 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Stub-only declaration of the macro test fixture classes. Loaded via psalm.xml
+ * `<stubs>` so Psalm knows these classes exist. Macros are registered at runtime
+ * by `tests/Type/macro-fixtures.php` (the `autoloader` attribute), and the plugin
+ * reads them during `AfterCodebasePopulated`.
+ *
+ * Kept separate from the autoloader file so Psalm doesn't try to parse the
+ * top-level `MacroFixtureBag::macro(...)` calls as analysis input.
+ *
+ * Two classes:
+ * - `MacroFixtureBag`: directly uses `Macroable`. Anchor for macro tests.
+ * - `MacroFixtureChild`: extends `MacroFixtureBag` without redeclaring `Macroable`.
+ *   Anchor for subclass-dispatch tests — macros registered on `MacroFixtureBag`
+ *   must be visible on `MacroFixtureChild` too (Psalm's `MissingMethodCallHandler`
+ *   does not walk `parent_classes` natively, so `MacroHandler` propagates the
+ *   pseudo-methods explicitly).
+ */
+
+namespace Tests\Psalm\LaravelPlugin\Type\Fixtures;
+
+use Illuminate\Support\Traits\Macroable;
+
+class MacroFixtureBag
+{
+    use Macroable;
+}
+
+final class MacroFixtureChild extends MacroFixtureBag
+{
+}

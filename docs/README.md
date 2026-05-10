@@ -34,3 +34,4 @@ Each one links to detailed documentation with examples and fix guidance.
 - [MissingTranslation](issues/MissingTranslation.md)
 - [MissingView](issues/MissingView.md)
 - [ModelMakeDiscouraged](issues/ModelMakeDiscouraged.md)
+- [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md)

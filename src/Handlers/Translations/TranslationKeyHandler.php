@@ -10,6 +10,7 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\MissingTranslation;
+use Psalm\LaravelPlugin\Util\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
@@ -103,7 +104,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         // Dynamic keys (variables, sprintf, concatenation) or missing literal keys:
         // return string to avoid PossiblyInvalidCast noise from string|array union
-        $firstArgType = $event->getStatementsSource()->getNodeTypeProvider()->getType($callArgs[0]->value);
+        $firstArgType = ArgUtil::typeAt($callArgs, $event->getStatementsSource(), 0);
 
         if ($firstArgType instanceof \Psalm\Type\Union) {
             if ($firstArgType->isString()) {

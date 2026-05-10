@@ -35,7 +35,7 @@ flowchart TD
         Helpers — CacheHandler, PathHandler, TransHandler
         Translations — TranslationKeyHandler
         Views — MissingViewHandler
-        Rules — NoEnvOutsideConfigHandler, ModelMakeHandler
+        Rules — NoEnvOutsideConfigHandler, ModelMakeHandler, OctaneIncompatibleBindingHandler
         Validation — ValidatedTypeHandler, ValidationTaintHandler
         SuppressHandler
     "]
@@ -43,7 +43,7 @@ flowchart TD
     F --- stubs["
         stubs/common/ (types + taint annotations)
         stubs/12/, stubs/13/ (version-specific)
-        aliases.stubphp (generated)
+        aliases.phpstub (generated)
     "]
 
     G["Psalm scans all project files"] -.->|afterCodebasePopulated| H["ModelRegistrationHandler"]
@@ -110,7 +110,7 @@ When **multiple stub files declare the same method on the same class**, Psalm re
 
 This means splitting type and taint annotations for the same method across two stub files is fragile -- the type that "wins" depends on file loading order. Always put both in the same file.
 
-When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects -- one per class/trait. There is no cross-merging: if `Connection.stubphp` overrides a method defined in `ManagesTransactions.stubphp`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
+When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects -- one per class/trait. There is no cross-merging: if `Connection.phpstub` overrides a method defined in `ManagesTransactions.phpstub`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
 
 Stub files are loaded in alphabetical order (sorted by full path) to ensure deterministic results across OSes.
 
@@ -208,6 +208,13 @@ flowchart LR
         expression AST, codebase
         ----
         ModelMakeHandler"]
+
+        A7["AfterMethodCallAnalysis
+        on each resolved method call
+        ----
+        expression, declaring method id
+        ----
+        OctaneIncompatibleBindingHandler"]
     end
 
     scanning --> populated --> analysis

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
+use Psalm\LaravelPlugin\Util\Arg;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
@@ -34,7 +35,7 @@ final class CacheHandler implements FunctionReturnTypeProviderInterface
             ]);
         }
 
-        $first_arg_type = $event->getStatementsSource()->getNodeTypeProvider()->getType($call_args[0]->value);
+        $first_arg_type = Arg::typeAt($call_args, $event->getStatementsSource(), 0);
 
         /** @see \Illuminate\Contracts\Cache\Store::put() */
         if ($first_arg_type && $first_arg_type->isArray()) {

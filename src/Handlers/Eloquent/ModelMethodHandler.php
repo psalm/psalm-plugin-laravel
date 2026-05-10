@@ -37,8 +37,13 @@ use Psalm\Type\Union;
  * provider lookup requires exact class name matching — a handler registered for Model::class
  * is not consulted for concrete subclasses like App\Models\User.
  *
- * The getClassLikeNames() registration for Model::class still handles Model::query()
- * and the __callStatic proxy for methods resolvable through the single-hop mixin chain.
+ * The getClassLikeNames() registration for Model::class handles `Model::query()` only when
+ * a custom Eloquent builder is registered for the called model. For plain models (base
+ * `Builder`), `query()` is intentionally deferred to the stub at
+ * `stubs/common/Database/Eloquent/Model.stubphp` whose `@return Builder<static>` is the only
+ * way to preserve the `&static` intersection through Psalm's template binding (see #799).
+ * `__callStatic` is similarly proxied for methods resolvable through the single-hop mixin
+ * chain.
  *
  * Builder-instance handlers (trait methods and scopes on custom builders) are in
  * {@see CustomBuilderMethodHandler}.
@@ -386,6 +391,16 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // Model::query()
         if ($event->getMethodNameLowercase() === 'query') {
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
+
+            // For models without a custom builder, defer to the stub's
+            // `@return Builder<static>` annotation. Returning `Builder<ConcreteModel>`
+            // here flattens `static`, which then breaks return-type inference inside
+            // methods declared `: static` (e.g. `static::query()->firstOrCreate(...)`)
+            // because the `&static` intersection is lost across the template binding.
+            // See https://github.com/psalm/psalm-plugin-laravel/issues/799.
+            if ($builderClass === Builder::class) {
+                return null;
+            }
 
             return new Union([self::builderType($builderClass, $called_fq_classlike_name, $codebase)]);
         }

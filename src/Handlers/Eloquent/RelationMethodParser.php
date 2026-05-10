@@ -134,17 +134,47 @@ final class RelationMethodParser
             return null;
         }
 
-        return self::parseMethodBody($classMethod->stmts);
+        // Resolve the parent FQCN once so `parent::class` in factory args can be substituted
+        // without re-querying class storage per occurrence. `findClassMethodWithStatements`
+        // searches the file by `$className`, so a successful lookup means the method body
+        // lives in `$className` itself — `self::class` and (conservatively) `static::class`
+        // both resolve to `$className`. See {@see resolveClassConstFetch} for the trade-off.
+        $parentClass = self::resolveParentClass($codebase, $className);
+
+        return self::parseMethodBody($classMethod->stmts, $className, $parentClass);
+    }
+
+    /**
+     * Look up the immediate parent FQCN of `$className`, or null when the class has no
+     * parent (or storage isn't available). Used to substitute `parent::class` in relation
+     * factory arguments. The InvalidArgumentException catch mirrors the surrounding
+     * fail-soft style — a missing parent yields null and the handler defers, rather than
+     * crashing the analysis run.
+     */
+    private static function resolveParentClass(Codebase $codebase, string $className): ?string
+    {
+        try {
+            $storage = $codebase->classlike_storage_provider->get($className);
+        } catch (\InvalidArgumentException $invalidArgumentException) {
+            $codebase->progress->debug("Laravel plugin: could not resolve parent class for {$className}: {$invalidArgumentException->getMessage()}\n");
+            return null;
+        }
+
+        return $storage->parent_class;
     }
 
     /**
      * Walk the method body to find a return statement containing a relationship factory call
      * like $this->belongsTo(Vault::class).
      *
+     * `$declaringClass` and `$parentClass` thread down to {@see resolveClassConstFetch} so
+     * `self::class` / `static::class` / `parent::class` arguments resolve to real FQCNs
+     * instead of leaking the keyword as the related-model template parameter.
+     *
      * @param array<array-key, PhpParser\Node\Stmt> $stmts
      * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
-    private static function parseMethodBody(array $stmts): ?array
+    private static function parseMethodBody(array $stmts, string $declaringClass, ?string $parentClass): ?array
     {
         foreach ($stmts as $stmt) {
             if (!$stmt instanceof PhpParser\Node\Stmt\Return_ || !$stmt->expr instanceof PhpParser\Node\Expr) {
@@ -154,7 +184,7 @@ final class RelationMethodParser
             $pivotModel = null;
             $accessor = null;
 
-            return self::findRelationCallInExpr($stmt->expr, $pivotModel, $accessor);
+            return self::findRelationCallInExpr($stmt->expr, $declaringClass, $parentClass, $pivotModel, $accessor);
         }
 
         return null;
@@ -174,6 +204,8 @@ final class RelationMethodParser
      */
     private static function findRelationCallInExpr(
         PhpParser\Node\Expr $expr,
+        string $declaringClass,
+        ?string $parentClass,
         ?string &$pivotModel,
         ?string &$accessor,
     ): ?array {
@@ -189,12 +221,12 @@ final class RelationMethodParser
             if ($relationClass !== null) {
                 return [
                     'relationClass' => $relationClass,
-                    'relatedModel' => self::extractClassStringArg($expr, $lowerName, 0, 'related'),
+                    'relatedModel' => self::extractClassStringArg($expr, $lowerName, 0, 'related', $declaringClass, $parentClass),
                     // Through relations carry the intermediate model as the second class-string
                     // argument: hasOneThrough(Related, Intermediate) / hasManyThrough(Related, Intermediate).
                     // Every other factory leaves this null.
                     'intermediateModel' => \in_array($lowerName, ['hasonethrough', 'hasmanythrough'], true)
-                        ? self::extractClassStringArg($expr, $lowerName, 1, 'through')
+                        ? self::extractClassStringArg($expr, $lowerName, 1, 'through', $declaringClass, $parentClass)
                         : null,
                     'pivotModel' => $pivotModel,
                     'accessor' => $accessor,
@@ -205,7 +237,7 @@ final class RelationMethodParser
             // Outside-in recursion visits the outermost call first, so the outermost
             // `using()` / `as()` wins via `??=` — inner ones cannot overwrite once set.
             if ($lowerName === 'using') {
-                $pivotModel ??= self::firstClassStringArg($expr);
+                $pivotModel ??= self::firstClassStringArg($expr, $declaringClass, $parentClass);
             } elseif ($lowerName === 'as') {
                 $accessor ??= self::firstStringLiteralArg($expr);
             }
@@ -213,7 +245,7 @@ final class RelationMethodParser
 
         // Not a relationship call — try the inner expression (unwrap chain).
         // e.g. for $this->belongsTo(X::class)->withDefault(), $expr->var is $this->belongsTo(X::class)
-        return self::findRelationCallInExpr($expr->var, $pivotModel, $accessor);
+        return self::findRelationCallInExpr($expr->var, $declaringClass, $parentClass, $pivotModel, $accessor);
     }
 
     /**
@@ -223,14 +255,14 @@ final class RelationMethodParser
      * method, so named (`->using(class: P::class)`) and positional (`->using(P::class)`)
      * forms are both honored.
      */
-    private static function firstClassStringArg(PhpParser\Node\Expr\MethodCall $call): ?string
+    private static function firstClassStringArg(PhpParser\Node\Expr\MethodCall $call, string $declaringClass, ?string $parentClass): ?string
     {
         $first = $call->args[0] ?? null;
         if (!$first instanceof PhpParser\Node\Arg) {
             return null;
         }
 
-        return self::resolveClassConstFetch($first->value);
+        return self::resolveClassConstFetch($first->value, $declaringClass, $parentClass);
     }
 
     /**
@@ -276,6 +308,8 @@ final class RelationMethodParser
         string $lowerMethodName,
         int $positionalIndex,
         string $paramName,
+        string $declaringClass,
+        ?string $parentClass,
     ): ?string {
         // morphTo() doesn't take a class-string<Model> as first arg — the related type is polymorphic
         if ($lowerMethodName === 'morphto') {
@@ -291,7 +325,7 @@ final class RelationMethodParser
                 && $arg->name instanceof PhpParser\Node\Identifier
                 && $arg->name->name === $paramName
             ) {
-                return self::resolveClassConstFetch($arg->value);
+                return self::resolveClassConstFetch($arg->value, $declaringClass, $parentClass);
             }
         }
 
@@ -305,14 +339,35 @@ final class RelationMethodParser
             return null;
         }
 
-        return self::resolveClassConstFetch($args[$positionalIndex]->value);
+        return self::resolveClassConstFetch($args[$positionalIndex]->value, $declaringClass, $parentClass);
     }
 
     /**
      * Resolve a `ClassName::class` expression to the resolved FQCN, or null when the
      * expression is anything else (a variable, a method call, a string literal, etc.).
+     *
+     * Handles the `self` / `static` / `parent` keywords specifically. PhpParser's
+     * `NameResolver` deliberately leaves them unresolved (`resolvedName` attribute is
+     * null) because they are context-sensitive — without substituting them here,
+     * `toString()` would return the literal keyword and the parser would emit, e.g.,
+     * `HasMany<self, User>` instead of `HasMany<User, User>` (#879).
+     *
+     * Substitution rules:
+     * - `self::class` → `$declaringClass` (always correct: PHP resolves `self` to the
+     *   class where the method body is declared).
+     * - `static::class` → `$declaringClass` (conservative). Late static binding would
+     *   resolve this to the receiver's runtime class, but the parser is keyed by the
+     *   declaring class only, so we cannot vary the result per binding without
+     *   defeating the cache. Yields a strictly better answer than leaking `'static'`.
+     * - `parent::class` → `$parentClass` (or null when the declaring class has no
+     *   parent — same path as a dynamic arg, which makes the upstream handler defer).
+     *   When the declaring class extends `Illuminate\Database\Eloquent\Model` directly,
+     *   `parent::class` legitimately resolves to that abstract base — that matches PHP's
+     *   runtime semantics; the resulting `Relation<Model, Self>` is well-formed but
+     *   semantically thin. Filtering Model out here would break faithfulness to the
+     *   user's source.
      */
-    private static function resolveClassConstFetch(PhpParser\Node\Expr $expr): ?string
+    private static function resolveClassConstFetch(PhpParser\Node\Expr $expr, string $declaringClass, ?string $parentClass): ?string
     {
         if (
             !$expr instanceof PhpParser\Node\Expr\ClassConstFetch
@@ -321,6 +376,14 @@ final class RelationMethodParser
             || $expr->name->name !== 'class'
         ) {
             return null;
+        }
+
+        if ($expr->class->isSpecialClassName()) {
+            return match ($expr->class->toLowerString()) {
+                'self', 'static' => $declaringClass,
+                'parent' => $parentClass,
+                default => null,
+            };
         }
 
         // Prefer the FQCN resolved by Psalm's name-resolution pass
