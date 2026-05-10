@@ -87,6 +87,7 @@ final class IssueUrlGenerator
             '- resolveDynamicWhereClauses: ' . self::formatBool($pluginConfig->resolveDynamicWhereClauses),
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
+            '- findOctaneIncompatibleBinding: ' . self::formatBool($pluginConfig->findOctaneIncompatibleBinding),
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
             '- configDirectories: ' . self::formatConfigDirectories($pluginConfig->configDirectories),

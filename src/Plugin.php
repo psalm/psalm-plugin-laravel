@@ -338,6 +338,18 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+        // Auto-enable when the project depends on laravel/octane (the rule is only
+        // relevant under long-lived workers); allow manual opt-in via
+        // `<findOctaneIncompatibleBinding value="true" />` for projects that don't
+        // install the package directly but still want the check (e.g. shared
+        // libraries that aim to stay Octane-safe).
+        // class_exists() triggers the project autoloader, which is already active
+        // here because ApplicationProvider booted the Laravel app earlier.
+        if ($pluginConfig->findOctaneIncompatibleBinding || \class_exists('Laravel\\Octane\\Octane')) {
+            require_once __DIR__ . '/Handlers/Rules/OctaneIncompatibleBindingHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\OctaneIncompatibleBindingHandler::class);
+        }
+
         // NoEnvOutsideConfigHandler must be registered BEFORE EnvHandler.
         // Both handle 'env()' via FunctionReturnTypeProviderInterface; Psalm dispatches handlers
         // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler

@@ -156,6 +156,7 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- resolveDynamicWhereClauses: true', $body);
         $this->assertStringContainsString('- findMissingTranslations: false', $body);
         $this->assertStringContainsString('- findMissingViews: false', $body);
+        $this->assertStringContainsString('- findOctaneIncompatibleBinding: false', $body);
         $this->assertStringContainsString('- cachePath:', $body);
         $this->assertStringContainsString('- failOnInternalError: false', $body);
     }
@@ -169,6 +170,7 @@ final class IssueUrlGeneratorTest extends TestCase
             . '<resolveDynamicWhereClauses value="false" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findOctaneIncompatibleBinding value="true" />'
             . '<failOnInternalError value="true" />'
             . '</pluginClass>',
         );
@@ -180,6 +182,7 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- resolveDynamicWhereClauses: false', $body);
         $this->assertStringContainsString('- findMissingTranslations: true', $body);
         $this->assertStringContainsString('- findMissingViews: true', $body);
+        $this->assertStringContainsString('- findOctaneIncompatibleBinding: true', $body);
         $this->assertStringContainsString('- failOnInternalError: true', $body);
     }
 

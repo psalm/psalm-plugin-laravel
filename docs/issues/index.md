@@ -14,5 +14,6 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [MissingView](MissingView.md) — `view()` references a non-existent Blade template (opt-in)
 - [MissingTranslation](MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
 - [ModelMakeDiscouraged](ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
+- [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed)
 
 Each issue page explains what it detects, why it matters, and how to fix it.
