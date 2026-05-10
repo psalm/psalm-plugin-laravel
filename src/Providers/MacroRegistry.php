@@ -121,7 +121,6 @@ final class MacroRegistry
             }
 
             try {
-                /** @var mixed $rawMacros */
                 $rawMacros = $macroProp->getValue();
             } catch (\Throwable $exception) {
                 // `getValue()` on a typed static property that is uninitialised throws
@@ -156,7 +155,7 @@ final class MacroRegistry
                 }
 
                 $def = self::buildDefinition($className, $name, $callable, $progress);
-                if ($def === null) {
+                if (!$def instanceof \Psalm\LaravelPlugin\Providers\MacroDefinition) {
                     continue;
                 }
 
@@ -253,7 +252,7 @@ final class MacroRegistry
         Progress $progress,
     ): ?MacroDefinition {
         $reflection = self::reflectCallable($callable, $declaringClass, $name, $progress);
-        if ($reflection === null) {
+        if (!$reflection instanceof \ReflectionFunctionAbstract) {
             return null;
         }
 
@@ -330,6 +329,7 @@ final class MacroRegistry
                 if (\count($parts) !== 2) {
                     return null;
                 }
+
                 [$cls, $method] = $parts;
                 if (\class_exists($cls) && \method_exists($cls, $method)) {
                     // String `'Class::method'` callables dispatch through PHP's
@@ -337,6 +337,7 @@ final class MacroRegistry
                     // A non-static target would error at runtime.
                     return self::ifPublicStatic(new \ReflectionMethod($cls, $method));
                 }
+
                 return null;
             }
 
@@ -357,20 +358,22 @@ final class MacroRegistry
                     // must be a static method, otherwise PHP will error at runtime.
                     return self::ifPublicStatic(new \ReflectionMethod($target, $methodName));
                 }
+
                 if (\is_object($target) && \method_exists($target, $methodName)) {
                     // Object array callable `[$obj, 'method']` works for both static
                     // and instance methods, so only the visibility check applies.
                     return self::ifPublic(new \ReflectionMethod($target, $methodName));
                 }
+
                 return null;
             }
 
             if (\is_object($callable) && \method_exists($callable, '__invoke')) {
                 return self::ifPublic(new \ReflectionMethod($callable, '__invoke'));
             }
-        } catch (\ReflectionException $exception) {
+        } catch (\ReflectionException $reflectionException) {
             $progress->warning(
-                "Laravel plugin: MacroRegistry could not reflect callable for {$declaringClass}::{$name}: {$exception->getMessage()}",
+                "Laravel plugin: MacroRegistry could not reflect callable for {$declaringClass}::{$name}: {$reflectionException->getMessage()}",
             );
         }
 
@@ -454,7 +457,7 @@ final class MacroRegistry
      */
     private static function reflectionTypeToUnion(?\ReflectionType $type, ?string $selfHostClass = null, ?string $staticHostClass = null): ?Union
     {
-        if ($type === null) {
+        if (!$type instanceof \ReflectionType) {
             return null;
         }
 
@@ -477,6 +480,7 @@ final class MacroRegistry
             if (!\str_contains($error->getMessage(), 'ProjectAnalyzer')) {
                 throw $error;
             }
+
             return null;
         }
     }

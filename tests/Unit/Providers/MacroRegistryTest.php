@@ -43,12 +43,12 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'shout');
-        self::assertNotNull($def);
-        self::assertSame(Stringable::class, $def->declaringClass);
-        self::assertSame('shout', $def->methodName);
-        self::assertSame('shout', $def->casedName);
-        self::assertSame([], $def->params);
-        self::assertSame('string', $def->returnType->getId());
+        $this->assertNotNull($def);
+        $this->assertSame(Stringable::class, $def->declaringClass);
+        $this->assertSame('shout', $def->methodName);
+        $this->assertSame('shout', $def->casedName);
+        $this->assertSame([], $def->params);
+        $this->assertSame('string', $def->returnType->getId());
     }
 
     #[Test]
@@ -61,9 +61,9 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'countcharstest');
-        self::assertNotNull($def);
-        self::assertSame('countcharstest', $def->methodName);
-        self::assertSame('countCharsTest', $def->casedName);
+        $this->assertNotNull($def);
+        $this->assertSame('countcharstest', $def->methodName);
+        $this->assertSame('countCharsTest', $def->casedName);
     }
 
     #[Test]
@@ -77,7 +77,7 @@ final class MacroRegistryTest extends TestCase
 
         MacroRegistry::init(new VoidProgress());
 
-        self::assertNull(MacroRegistry::get(Stringable::class, 'value'));
+        $this->assertNull(MacroRegistry::get(Stringable::class, 'value'));
     }
 
     #[Test]
@@ -88,8 +88,8 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         // Method name is lower-cased on storage AND on lookup.
-        self::assertNotNull(MacroRegistry::get(Stringable::class, 'camelcased'));
-        self::assertNotNull(MacroRegistry::get(Stringable::class, 'CAMELCASED'));
+        $this->assertNotNull(MacroRegistry::get(Stringable::class, 'camelcased'));
+        $this->assertNotNull(MacroRegistry::get(Stringable::class, 'CAMELCASED'));
     }
 
     #[Test]
@@ -100,8 +100,8 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         // Psalm passes class FQCNs through verbatim; underlying storage is lower-cased.
-        self::assertNotNull(MacroRegistry::get(Stringable::class, 'foo'));
-        self::assertNotNull(MacroRegistry::get(\strtoupper(Stringable::class), 'foo'));
+        $this->assertNotNull(MacroRegistry::get(Stringable::class, 'foo'));
+        $this->assertNotNull(MacroRegistry::get(\strtoupper(Stringable::class), 'foo'));
     }
 
     #[Test]
@@ -112,16 +112,16 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'joined');
-        self::assertNotNull($def);
-        self::assertCount(2, $def->params);
+        $this->assertNotNull($def);
+        $this->assertCount(2, $def->params);
 
-        self::assertSame('separator', $def->params[0]->name);
-        self::assertSame('string', $def->params[0]->type?->getId());
-        self::assertFalse($def->params[0]->is_optional);
+        $this->assertSame('separator', $def->params[0]->name);
+        $this->assertSame('string', $def->params[0]->type?->getId());
+        $this->assertFalse($def->params[0]->is_optional);
 
-        self::assertSame('count', $def->params[1]->name);
-        self::assertSame('int', $def->params[1]->type?->getId());
-        self::assertTrue($def->params[1]->is_optional);
+        $this->assertSame('count', $def->params[1]->name);
+        $this->assertSame('int', $def->params[1]->type?->getId());
+        $this->assertTrue($def->params[1]->is_optional);
     }
 
     #[Test]
@@ -132,9 +132,9 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'byref');
-        self::assertNotNull($def);
-        self::assertCount(1, $def->params);
-        self::assertTrue($def->params[0]->by_ref);
+        $this->assertNotNull($def);
+        $this->assertCount(1, $def->params);
+        $this->assertTrue($def->params[0]->by_ref);
     }
 
     #[Test]
@@ -147,10 +147,10 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'viaarraycallable');
-        self::assertNotNull($def);
-        self::assertCount(1, $def->params);
-        self::assertSame('input', $def->params[0]->name);
-        self::assertSame('string', $def->signatureReturnType?->getId());
+        $this->assertNotNull($def);
+        $this->assertCount(1, $def->params);
+        $this->assertSame('input', $def->params[0]->name);
+        $this->assertSame('string', $def->signatureReturnType?->getId());
     }
 
     #[Test]
@@ -162,9 +162,9 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'viastringcallable');
-        self::assertNotNull($def);
-        self::assertCount(1, $def->params);
-        self::assertSame('string', $def->signatureReturnType?->getId());
+        $this->assertNotNull($def);
+        $this->assertCount(1, $def->params);
+        $this->assertSame('string', $def->signatureReturnType?->getId());
     }
 
     #[Test]
@@ -176,10 +176,10 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'viainvokable');
-        self::assertNotNull($def);
-        self::assertCount(1, $def->params);
-        self::assertSame('count', $def->params[0]->name);
-        self::assertSame('int', $def->signatureReturnType?->getId());
+        $this->assertNotNull($def);
+        $this->assertCount(1, $def->params);
+        $this->assertSame('count', $def->params[0]->name);
+        $this->assertSame('int', $def->signatureReturnType?->getId());
     }
 
     #[Test]
@@ -192,9 +192,9 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'viafunctionname');
-        self::assertNotNull($def);
-        self::assertCount(1, $def->params);
-        self::assertSame('string', $def->params[0]->name);
+        $this->assertNotNull($def);
+        $this->assertCount(1, $def->params);
+        $this->assertSame('string', $def->params[0]->name);
     }
 
     #[Test]
@@ -207,7 +207,7 @@ final class MacroRegistryTest extends TestCase
 
         MacroRegistry::init(new VoidProgress());
 
-        self::assertNull(MacroRegistry::get(Stringable::class, 'viaprotected'));
+        $this->assertNull(MacroRegistry::get(Stringable::class, 'viaprotected'));
     }
 
     #[Test]
@@ -221,8 +221,8 @@ final class MacroRegistryTest extends TestCase
 
         MacroRegistry::init(new VoidProgress());
 
-        self::assertNull(MacroRegistry::get(Stringable::class, 'viainstancearr'));
-        self::assertNull(MacroRegistry::get(Stringable::class, 'viainstancestr'));
+        $this->assertNull(MacroRegistry::get(Stringable::class, 'viainstancearr'));
+        $this->assertNull(MacroRegistry::get(Stringable::class, 'viainstancestr'));
     }
 
     #[Test]
@@ -235,7 +235,7 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'viainstanceobj');
-        self::assertNotNull($def);
+        $this->assertNotNull($def);
     }
 
     #[Test]
@@ -248,11 +248,11 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'viaselfreturn');
-        self::assertNotNull($def);
-        self::assertNotNull($def->signatureReturnType);
+        $this->assertNotNull($def);
+        $this->assertNotNull($def->signatureReturnType);
         // Should resolve to MacroSelfReturnFixture, NOT the literal `self` (which Psalm
         // would otherwise interpret relative to the call site = Stringable).
-        self::assertSame(\strtolower(MacroSelfReturnFixture::class), \strtolower($def->signatureReturnType->getId()));
+        $this->assertSame(\strtolower(MacroSelfReturnFixture::class), \strtolower($def->signatureReturnType->getId()));
     }
 
     #[Test]
@@ -263,15 +263,15 @@ final class MacroRegistryTest extends TestCase
         // return types varies between patch versions (8.4.20 returns null, 8.4.21
         // surfaces an inferred type), so this asserts only the universal invariant:
         // discovery must produce SOME definition, and `returnType` must be a valid Union.
-        Stringable::macro('reflectionDiscovery', static function () {
+        Stringable::macro('reflectionDiscovery', static function (): int {
             return 1;
         });
 
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'reflectiondiscovery');
-        self::assertNotNull($def);
-        self::assertNotNull($def->returnType);
+        $this->assertNotNull($def);
+        $this->assertNotNull($def->returnType);
         // Either the closure declared no return type → mixed, or PHP inferred one → that.
         // Both are correct outcomes of buildDefinition; we only require a Union to be present.
     }
@@ -284,9 +284,9 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'varargs');
-        self::assertNotNull($def);
-        self::assertCount(1, $def->params);
-        self::assertTrue($def->params[0]->is_variadic);
+        $this->assertNotNull($def);
+        $this->assertCount(1, $def->params);
+        $this->assertTrue($def->params[0]->is_variadic);
     }
 
     #[Test]
@@ -297,11 +297,11 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $def = MacroRegistry::get(Stringable::class, 'maybenull');
-        self::assertNotNull($def);
+        $this->assertNotNull($def);
         // is_nullable comes straight from ReflectionParameter::allowsNull() — independent
         // of Psalm's parseString, which needs ProjectAnalyzer::$instance (only set during
         // a real Psalm run, not in the unit-test bootstrap).
-        self::assertTrue($def->params[0]->is_nullable);
+        $this->assertTrue($def->params[0]->is_nullable);
     }
 
     #[Test]
@@ -310,12 +310,12 @@ final class MacroRegistryTest extends TestCase
         Stringable::macro('present', static fn(): string => '');
 
         MacroRegistry::init(new VoidProgress());
-        self::assertNotNull(MacroRegistry::get(Stringable::class, 'present'));
+        $this->assertNotNull(MacroRegistry::get(Stringable::class, 'present'));
 
         MacroRegistry::reset();
-        self::assertNull(MacroRegistry::get(Stringable::class, 'present'));
-        self::assertSame([], MacroRegistry::for(Stringable::class));
-        self::assertSame([], MacroRegistry::getKnownMacroableClasses());
+        $this->assertNull(MacroRegistry::get(Stringable::class, 'present'));
+        $this->assertSame([], MacroRegistry::for(Stringable::class));
+        $this->assertSame([], MacroRegistry::getKnownMacroableClasses());
     }
 
     #[Test]
@@ -325,7 +325,7 @@ final class MacroRegistryTest extends TestCase
 
         MacroRegistry::init(new VoidProgress());
 
-        self::assertContains(Stringable::class, MacroRegistry::getKnownMacroableClasses());
+        $this->assertContains(Stringable::class, MacroRegistry::getKnownMacroableClasses());
     }
 
     #[Test]
@@ -339,9 +339,9 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
         $second = MacroRegistry::for(Stringable::class);
 
-        self::assertSame(\array_keys($first), \array_keys($second));
+        $this->assertSame(\array_keys($first), \array_keys($second));
         // Definitions are equal by value; not necessarily the same instances.
-        self::assertEquals($first['x'], $second['x']);
+        $this->assertEquals($first['x'], $second['x']);
     }
 
     #[Test]
@@ -353,8 +353,8 @@ final class MacroRegistryTest extends TestCase
 
         MacroRegistry::init(new VoidProgress());
 
-        self::assertNotNull(MacroRegistry::get(Stringable::class, 'mixinone'));
-        self::assertNotNull(MacroRegistry::get(Stringable::class, 'mixintwo'));
+        $this->assertNotNull(MacroRegistry::get(Stringable::class, 'mixinone'));
+        $this->assertNotNull(MacroRegistry::get(Stringable::class, 'mixintwo'));
     }
 
     #[Test]
@@ -374,8 +374,8 @@ final class MacroRegistryTest extends TestCase
             knownMacroableClasses: [Stringable::class],
         );
 
-        self::assertSame($def, MacroRegistry::get(Stringable::class, 'fake'));
-        self::assertSame([Stringable::class], MacroRegistry::getKnownMacroableClasses());
+        $this->assertSame($def, MacroRegistry::get(Stringable::class, 'fake'));
+        $this->assertSame([Stringable::class], MacroRegistry::getKnownMacroableClasses());
     }
 
     #[Test]
@@ -388,10 +388,10 @@ final class MacroRegistryTest extends TestCase
         MacroRegistry::init(new VoidProgress());
 
         $typed = MacroRegistry::get(Stringable::class, 'typedreturn');
-        self::assertNotNull($typed);
-        self::assertNotNull($typed->signatureReturnType);
-        self::assertSame('int', $typed->signatureReturnType->getId());
-        self::assertSame('int', $typed->returnType->getId());
+        $this->assertNotNull($typed);
+        $this->assertNotNull($typed->signatureReturnType);
+        $this->assertSame('int', $typed->signatureReturnType->getId());
+        $this->assertSame('int', $typed->returnType->getId());
     }
 
     #[Test]
@@ -418,9 +418,9 @@ final class MacroRegistryTest extends TestCase
         );
 
         $retrieved = MacroRegistry::get(Stringable::class, 'noNative');
-        self::assertNotNull($retrieved);
-        self::assertNull($retrieved->signatureReturnType);
-        self::assertSame('mixed', $retrieved->returnType->getId());
+        $this->assertNotNull($retrieved);
+        $this->assertNull($retrieved->signatureReturnType);
+        $this->assertSame('mixed', $retrieved->returnType->getId());
     }
 
 }
