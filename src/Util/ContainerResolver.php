@@ -32,8 +32,8 @@ final class ContainerResolver
 
         // dynamic analysis to resolve the actual type from the container
         try {
+            /** @psalm-var mixed $concrete */
             $concrete = ApplicationProvider::getApp()->make($abstract);
-            assert(\is_object($concrete) || \is_string($concrete));
         } catch (\Throwable) {
             return null;
         }
@@ -41,9 +41,15 @@ final class ContainerResolver
         if (\is_string($concrete)) {
             // some path-helpers actually return a string when being resolved
             $concreteClass = $concrete;
-        } else {
+        } elseif (\is_object($concrete)) {
             // normally we have an object resolved
             $concreteClass = $concrete::class;
+        } else {
+            // Some Laravel bindings (e.g. Authenticatable on a fresh Testbench app
+            // with no authenticated user) resolve to null. The previous assert-based
+            // check was a no-op in production, letting `$concrete::class` crash on
+            // null. Return null so the caller falls back to mixed inference.
+            return null;
         }
 
         self::$cache[$abstract] = $concreteClass;

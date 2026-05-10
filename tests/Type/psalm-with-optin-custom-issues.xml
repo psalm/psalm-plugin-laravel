@@ -19,6 +19,7 @@
             <failOnInternalError value="true" />
             <findMissingViews value="true" />
             <findMissingTranslations value="true" />
+            <findOctaneIncompatibleBinding value="true" />
         </pluginClass>
     </plugins>
     <issueHandlers>
