@@ -121,6 +121,14 @@ final class MacroRegistry
             }
 
             try {
+                // Macroable::$macros is documented as `array<string, callable>` and
+                // populated only via the `macro()` API, which type-hints `callable`.
+                // We expand `callable` to its structural union so downstream
+                // helpers can accept it without triggering PHP's strict
+                // call-time `is_callable()` check (see `buildDefinition()`).
+                // The `is_array` guard below still defends against the rare class
+                // that declares a static `$macros` of an unrelated shape.
+                /** @psalm-var array<string, \Closure|non-empty-string|array{0: object|class-string, 1: non-empty-string}|object>|null $rawMacros */
                 $rawMacros = $macroProp->getValue();
             } catch (\Throwable $exception) {
                 // `getValue()` on a typed static property that is uninitialised throws
@@ -138,9 +146,12 @@ final class MacroRegistry
             }
 
             $classMacros = [];
-            /** @var mixed $callable */
             foreach ($rawMacros as $name => $callable) {
-                if (!\is_string($name) || $name === '') {
+                // The narrowed `array<string, callable>` annotation makes the key
+                // type known. Empty-string keys are still defended against — PHP
+                // allows them in arrays, even if Macroable's `macro()` API does not
+                // permit them in practice.
+                if ($name === '') {
                     continue;
                 }
 
@@ -243,12 +254,20 @@ final class MacroRegistry
      * Each shape is reduced to a `\ReflectionFunctionAbstract` and the same param /
      * return-type extraction runs.
      *
+     * The `$callable` union mirrors every dispatchable shape but uses a structural
+     * union instead of PHP's `callable` pseudo-type. Callable validation at the
+     * parameter boundary would reject array shapes whose target isn't actually
+     * callable (`[Class::class, 'protectedMethod']`, non-static via class-string),
+     * preventing the body's visibility/static checks from running and surfacing
+     * the rejection. Mirrors `reflectCallable()`.
+     *
      * @param class-string $declaringClass
+     * @param \Closure|non-empty-string|array{0: object|class-string, 1: non-empty-string}|object $callable
      */
     private static function buildDefinition(
         string $declaringClass,
         string $name,
-        mixed $callable,
+        string|array|object $callable,
         Progress $progress,
     ): ?MacroDefinition {
         $reflection = self::reflectCallable($callable, $declaringClass, $name, $progress);
@@ -313,8 +332,13 @@ final class MacroRegistry
      *
      * @param class-string $declaringClass for diagnostic messages only
      */
+    /**
+     * @param \Closure|non-empty-string|array{0: object|class-string, 1: non-empty-string}|object $callable
+     *        See {@see self::buildDefinition()} for why this is a structural union
+     *        rather than the PHP `callable` pseudo-type.
+     */
     private static function reflectCallable(
-        mixed $callable,
+        string|array|object $callable,
         string $declaringClass,
         string $name,
         Progress $progress,
@@ -348,8 +372,11 @@ final class MacroRegistry
                 return new \ReflectionFunction($callable);
             }
 
-            if (\is_array($callable) && isset($callable[0], $callable[1]) && \is_string($callable[1])) {
-                /** @var mixed $target */
+            if (\is_array($callable)) {
+                // The `callable` parameter type narrows to the standard callable-array
+                // shape (`array{0: object|class-string, 1: string}`); both keys are
+                // present and `[1]` is a string, so the prior `isset` + `is_string`
+                // guards are redundant under the narrowed type.
                 $target = $callable[0];
                 $methodName = $callable[1];
                 if (\is_string($target) && \class_exists($target) && \method_exists($target, $methodName)) {
