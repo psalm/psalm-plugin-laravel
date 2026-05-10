@@ -362,7 +362,10 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 
     private static function isAppFacade(Name $class): bool
     {
-        /** @psalm-var mixed $resolved */
+        // Psalm's SimpleNameResolver stores `resolvedName` as a string (it calls
+        // `Name::toString()` before setting), so this attribute is always
+        // `string|null` in practice when running under Psalm analysis.
+        /** @psalm-var ?string $resolved */
         $resolved = $class->getAttribute('resolvedName');
 
         if (\is_string($resolved)) {
@@ -407,7 +410,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             && $node->name instanceof Identifier
             && \strtolower($node->name->name) === 'class'
         ) {
-            /** @psalm-var mixed $resolved */
+            // See isAppFacade(): under Psalm, `resolvedName` is always `?string`.
+            /** @psalm-var ?string $resolved */
             $resolved = $node->class->getAttribute('resolvedName');
 
             if (\is_string($resolved) && isset(self::REQUEST_SCOPED_CLASSES[$resolved])) {
@@ -445,7 +449,12 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         yield $node;
 
         foreach ($node->getSubNodeNames() as $name) {
-            /** @psalm-var mixed $sub */
+            // PhpParser subnodes are typed as `Node | array<Node> | scalar | null`
+            // (and rarely `array<scalar>` for things like Property::$names). The
+            // walker only acts on Node and array-of-Node branches; the runtime
+            // `instanceof Node` checks below filter out any stray non-Node entries
+            // in array subnodes, so the simplified annotation is safe.
+            /** @psalm-var Node|array<array-key, Node>|scalar|null $sub */
             $sub = $node->$name;
 
             if (self::isScopeBoundary($sub)) {
@@ -459,7 +468,6 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             }
 
             if (\is_array($sub)) {
-                /** @psalm-var mixed $item */
                 foreach ($sub as $item) {
                     if (self::isScopeBoundary($item)) {
                         continue;
