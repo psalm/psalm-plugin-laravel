@@ -331,7 +331,7 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml(null);
         $location = Plugin::getAliasStubLocation($config);
 
-        $this->assertSame('/tmp/psalm-test-cache' . \DIRECTORY_SEPARATOR . 'aliases.stubphp', $location);
+        $this->assertSame('/tmp/psalm-test-cache' . \DIRECTORY_SEPARATOR . 'aliases.phpstub', $location);
     }
 
     #[Test]

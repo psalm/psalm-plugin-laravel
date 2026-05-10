@@ -6,7 +6,7 @@ use Illuminate\Contracts\Console\Kernel as KernelContract;
 
 // Taint annotations for the concrete Kernel class.
 // Psalm does not inherit taint annotations from the Contracts\Console\Kernel interface,
-// so this class must be annotated separately (see also Contracts/Console/Kernel.stubphp for the contract).
+// so this class must be annotated separately (see also Contracts/Console/Kernel.phpstub for the contract).
 class Kernel implements KernelContract
 {
     /**
