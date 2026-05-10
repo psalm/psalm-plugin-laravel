@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778440251524,
+  "lastUpdate": 1778445657057,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3812,6 +3812,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f1dd225fb96c0fb81be5c4fa1382e361a77d0f99",
+          "message": "Merge pull request #896 from psalm/plugin-cleanup-extractions\n\nExtract collaborators from Plugin.php",
+          "timestamp": "2026-05-10T22:38:07+02:00",
+          "tree_id": "414aa400000793728482903f2e2b6ae48c59810f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f1dd225fb96c0fb81be5c4fa1382e361a77d0f99"
+        },
+        "date": 1778445656734,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.06,
+            "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1096,
             "unit": "MB"
           }
         ]
