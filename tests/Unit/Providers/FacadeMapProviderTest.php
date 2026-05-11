@@ -129,12 +129,8 @@ final class FacadeMapProviderTest extends TestCase
 
         $facades = FacadeMapProvider::getFacadeClasses($concrete);
 
-        self::assertContains(
-            $expectedFacade,
-            $facades,
-            "Expected `{$expectedFacade}` to appear in getFacadeClasses({$concrete}); got: "
-            . \json_encode($facades),
-        );
+        $this->assertContains($expectedFacade, $facades, "Expected `{$expectedFacade}` to appear in getFacadeClasses({$concrete}); got: "
+        . \json_encode($facades));
     }
 
 }

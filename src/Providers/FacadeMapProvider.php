@@ -213,6 +213,7 @@ final class FacadeMapProvider
                         } else {
                             $progress->debug($message);
                         }
+
                         continue;
                     }
                 } catch (\Throwable $e) {
