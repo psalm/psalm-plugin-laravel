@@ -68,12 +68,13 @@ use Psalm\Storage\MethodStorage;
  * - `Http` → `\Illuminate\Http\Client\Factory` (Macroable)
  * - `DB`   → `\Illuminate\Database\DatabaseManager` (Macroable)
  *
- * Out of scope: facades whose accessor returns a *manager* that does NOT itself
- * use `Macroable` and instead forwards `__call` to per-store concretes which do
- * (Auth → `AuthManager` (non-Macroable) → `SessionGuard`/`RequestGuard`;
- * Cache → `CacheManager` → `Repository`; Session → `SessionManager` → `Store`).
- * Macros on those tree leaves only reach the facade via a separate multi-target
- * map — tracked by issue #899 idea #4.
+ * It also covers the *manager-forwarding* facades whose `getFacadeRoot()`
+ * returns a non-Macroable manager that delegates `__call` to a per-store
+ * concrete which uses `Macroable` — `Auth` → `SessionGuard`/`RequestGuard`/
+ * `TokenGuard`, `Cache` → `Repository`, `Session` → `Store`, `Storage` →
+ * `FilesystemAdapter`, `Mail` → `Mailer`. The seeding for those edges lives
+ * in {@see FacadeMapProvider::MULTI_TARGET_FACADES} so this propagation pass
+ * picks them up unchanged. See issue #899 idea #4.
  *
  * `@mixin` propagation was tried in an earlier iteration (write Builder macros
  * onto every Model declared as `@mixin Builder<static>`) but removed for two
