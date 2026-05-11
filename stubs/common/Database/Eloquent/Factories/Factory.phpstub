@@ -173,4 +173,44 @@ abstract class Factory
      * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      */
     public function makeMany(iterable|int|null $records = null) {}
+
+    /**
+     * Define a child relationship for the model.
+     *
+     * Redeclared here so the argument's template params don't collapse to the
+     * `TModel` / `TCount` bounds (`Factory<Model, int|null>`). Laravel's source
+     * declares `@param Factory $factory` with no template args, and once the
+     * Factory stub adds a second template, Psalm's invariant template check
+     * rejects callers passing `Factory<Subclass, 2>` from a `count()` chain
+     * (see #693).
+     *
+     * @template TRelatedModel of Model
+     * @template TRelatedCount of int|null
+     * @param  Factory<TRelatedModel, TRelatedCount>  $factory
+     * @return static
+     */
+    public function has(self $factory, ?string $relationship = null) {}
+
+    /**
+     * Define an attached relationship for the model. See `has()` for the
+     * rationale behind the explicit template params on the `Factory` arg.
+     *
+     * @template TRelatedModel of Model
+     * @template TRelatedCount of int|null
+     * @param  Factory<TRelatedModel, TRelatedCount>|\Illuminate\Support\Collection<array-key, TRelatedModel>|TRelatedModel|array<array-key, TRelatedModel|array<string, mixed>>  $factory
+     * @param  (callable(): array<string, mixed>)|array<string, mixed>  $pivot
+     * @return static
+     */
+    public function hasAttached($factory, $pivot = [], ?string $relationship = null) {}
+
+    /**
+     * Define a parent relationship for the model. See `has()` for the
+     * rationale behind the explicit template params on the `Factory` arg.
+     *
+     * @template TRelatedModel of Model
+     * @template TRelatedCount of int|null
+     * @param  Factory<TRelatedModel, TRelatedCount>|TRelatedModel  $factory
+     * @return static
+     */
+    public function for($factory, ?string $relationship = null) {}
 }
