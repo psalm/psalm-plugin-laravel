@@ -28,4 +28,4 @@ final class CustomerFactory extends Factory
 $_ = (new CustomerFactory())->hasAttached([1, 2, 3])->create();
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of App\Sandbox\HasAttachedReject\CustomerFactory::hasAttached expects %s, but list{1, 2, 3} provided
+InvalidArgument on line %d: Argument 1 of App\Sandbox\HasAttachedReject\CustomerFactory::hasAttached expects %s, but %s provided
