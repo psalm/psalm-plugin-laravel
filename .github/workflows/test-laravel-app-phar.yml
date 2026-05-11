@@ -1,0 +1,193 @@
+name: Test Laravel app (psalm.phar)
+
+# Validates the plugin works when Psalm is run as a standalone phar (not
+# vendor/bin/psalm). This is the "phar class-loading" gate referenced in
+# docs/contributing/decisions.md → "Handler files are loaded with explicit
+# require_once". A passing run here is the empirical evidence that unblocks
+# collapsing src/Plugin.php::registerHandlers() into a foreach loop.
+# See https://github.com/psalm/psalm-plugin-laravel/issues/895.
+#
+# Triggers are deliberately narrow: manual + on a new release (post-tag smoke
+# test) + a weekly schedule (catches drift between releases). We do NOT run
+# this on every PR/push because the matrix is heavy and the failure modes are
+# slow-moving (Psalm's plugin loader and our require_once block both change
+# rarely).
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+  schedule:
+    # Weekly on Friday at 06:00 UTC, matching test-laravel-app.yml.
+    - cron: "0 6 * * 5"
+
+# Cancel superseded runs on the same ref (mostly relevant for manual dispatch).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Test Laravel ${{ matrix.laravel-installer-version }} under psalm.phar (PHP ${{ matrix.php-version }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version:
+          - '8.2'
+          - '8.3'
+          - '8.4'
+          - '8.5'
+        laravel-installer-version:
+          - '12.12.2'
+          - 'dev-master'
+        exclude:
+          - php-version: '8.2'
+            laravel-installer-version: 'dev-master'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Create Laravel app and install plugin (no Psalm run)
+        run: |
+          LARAVEL_INSTALLER_VERSION=${{ matrix.laravel-installer-version }} \
+            ./tests/Application/laravel-test.sh --verbose --setup-only
+
+      - name: Download psalm.phar matching the resolved Psalm version
+        working-directory: tests-app/laravel-example
+        run: |
+          # Read the exact Psalm version composer resolved in the test project.
+          # jq is preinstalled on GitHub-hosted ubuntu runners. Parsing JSON is
+          # more robust than text-parsing `composer show`.
+          PSALM_VERSION=$(composer show -f json vimeo/psalm | jq -r '.versions[0]')
+          if [ -z "$PSALM_VERSION" ] || [ "$PSALM_VERSION" = "null" ]; then
+            echo "::error::Could not resolve installed vimeo/psalm version"
+            composer show vimeo/psalm
+            exit 1
+          fi
+          echo "Resolved Psalm version: $PSALM_VERSION"
+          # Restrict to a proper semver tag. This rejects both `dev-master`
+          # (no phar published) and Composer's path-repo aliases like
+          # `9999999-dev`, where building a GitHub release URL would 404 with
+          # a less actionable message.
+          if [[ ! "$PSALM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Resolved Psalm version '$PSALM_VERSION' is not a tagged semver release; no phar artifact is published for dev refs."
+            echo "::error::Pin vimeo/psalm to a tagged release in composer.json before running this workflow."
+            exit 1
+          fi
+          PHAR_URL="https://github.com/vimeo/psalm/releases/download/${PSALM_VERSION}/psalm.phar"
+          curl -fL --retry 3 -o psalm.phar "$PHAR_URL"
+          # Integrity check: a TCP reset can leave curl with exit 0 but a
+          # truncated phar. `--version` alone would still pass on a truncated
+          # phar that happens to print a parse error before crashing, so we
+          # gate on the version line actually starting with `Psalm`.
+          if ! php psalm.phar --version | tee /dev/stderr | grep -q '^Psalm'; then
+            echo "::error::psalm.phar appears truncated or corrupt (--version did not print a 'Psalm ...' line)"
+            ls -la psalm.phar
+            exit 1
+          fi
+
+      - name: Run plugin under psalm.phar (baseline check)
+        working-directory: tests-app/laravel-example
+        run: |
+          # Mirrors what laravel-test.sh does on the vendor/bin path, but via
+          # psalm.phar. failOnInternalError=true in the config means a plugin
+          # init failure makes psalm exit non-zero, and pipefail propagates
+          # that out of the `tee`. The positive-assertion step (next) is what
+          # actually proves handlers registered — this step only catches
+          # regressions in the absorbed-by-baseline issue set.
+          php psalm.phar \
+            --config=../../tests/Application/laravel-test-psalm.xml \
+            --use-baseline=../../tests/Application/laravel-test-psalm-baseline.xml \
+            --no-cache --no-progress --no-suggestions --output-format=compact
+
+      - name: Positive assertion (NoEnvOutsideConfig fires under psalm.phar)
+        working-directory: tests-app/laravel-example
+        run: |
+          # Drop a tiny fixture into the Laravel app that calls env() outside a
+          # config directory. The NoEnvOutsideConfigHandler should flag it.
+          # If the handler silently didn't register (e.g. a refactor that broke
+          # the require_once defense), the diagnostic won't appear and this
+          # step fails. That is the load-bearing assertion of the whole job.
+          mkdir -p app/PharCheck
+          cat > app/PharCheck/PharCheckEnvFixture.php <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace App\PharCheck;
+
+          final class PharCheckEnvFixture
+          {
+              public function call(): void
+              {
+                  env('PSALM_PLUGIN_LARAVEL_PHAR_CHECK');
+              }
+          }
+          PHP
+          # Minimal config: only the fixture file is in scope, no baseline, no
+          # noise filters. Both Psalm's exit code AND the diagnostic must
+          # appear; see the three-way gate below.
+          cat > psalm-phar-fixture.xml <<'XML'
+          <?xml version="1.0"?>
+          <psalm errorLevel="1"
+              findUnusedBaselineEntry="false"
+              findUnusedCode="false"
+              resolveFromConfigFile="false"
+              xmlns="https://getpsalm.org/schema/config">
+              <projectFiles>
+                  <file name="app/PharCheck/PharCheckEnvFixture.php"/>
+              </projectFiles>
+              <plugins>
+                  <pluginClass class="Psalm\LaravelPlugin\Plugin">
+                      <failOnInternalError value="true"/>
+                  </pluginClass>
+              </plugins>
+          </psalm>
+          XML
+          # The diagnostic causes a non-zero psalm exit, which is expected.
+          # We capture the psalm exit code separately via PIPESTATUS so we can
+          # distinguish three outcomes:
+          #   exit == 0  -> psalm ran clean (BAD: diagnostic should have fired)
+          #   exit != 0  + diagnostic in output -> PASS
+          #   exit != 0  + no diagnostic       -> psalm crashed before handlers ran
+          set +e
+          php psalm.phar --config=psalm-phar-fixture.xml --no-cache --no-progress --no-suggestions --output-format=compact 2>&1 | tee positive.log
+          PSALM_EXIT=${PIPESTATUS[0]}
+          set -e
+          # Init-failure marker. We match either of the two stable strings the
+          # plugin's InternalErrorReporter emits, so a reword of one of them
+          # does not silently disable this gate.
+          if grep -qE 'Laravel plugin (error on initialisation|has been disabled)' positive.log; then
+            echo "::error::Plugin emitted init warning under psalm.phar (positive run)"
+            exit 1
+          fi
+          if [ "$PSALM_EXIT" -eq 0 ]; then
+            echo "::error::psalm.phar exited 0 on the bad-env fixture; NoEnvOutsideConfig should have caused a non-zero exit. Output may be empty or the handler is misregistered."
+            echo "--- positive.log ---"
+            cat positive.log
+            exit 1
+          fi
+          if ! grep -q 'NoEnvOutsideConfig' positive.log; then
+            echo "::error::psalm.phar exited $PSALM_EXIT but NoEnvOutsideConfig diagnostic was NOT in the output. Plugin handlers may have failed to register, or psalm crashed before the rule fired."
+            echo "--- positive.log ---"
+            cat positive.log
+            exit 1
+          fi
+          echo "Positive assertion passed: NoEnvOutsideConfig fired under psalm.phar (psalm exit $PSALM_EXIT)"
+
+      - name: Diagnostics on failure
+        if: ${{ failure() }}
+        run: |
+          echo "Psalm analysis failed under psalm.phar."
+          echo "If the baseline step regressed, consider: ./tests/Application/laravel-test.sh --update"
+          echo "If the positive-assertion step failed, the plugin's class-loading flow is broken under psalm.phar."
+          echo "See https://github.com/psalm/psalm-plugin-laravel/issues/895."

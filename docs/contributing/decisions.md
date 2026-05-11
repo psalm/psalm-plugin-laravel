@@ -88,7 +88,7 @@ In practice, the plugin also boots a real Laravel app via Testbench, which requi
 
 **Sister plugins follow the same pattern:** `psalm-plugin-symfony` keeps `require_once` for every handler. `psalm-plugin-phpunit` and `Lctrs/psalm-psr-container-plugin` use `class_exists($fqcn, true)` instead, but each has only one handler — the failure mode is harder to miss.
 
-**How to remove this constraint:** add a CI job that installs `psalm.phar` and runs the plugin against a sample Laravel project ([#895](https://github.com/psalm/psalm-plugin-laravel/issues/895)). Once that job exists and passes consistently, this decision can be revisited and the `require_once` block collapsed.
+**How to remove this constraint:** [#895](https://github.com/psalm/psalm-plugin-laravel/issues/895) tracks the cleanup. A CI job (`.github/workflows/test-laravel-app-phar.yml`) now exercises the plugin under `psalm.phar` and asserts that a known plugin diagnostic (`NoEnvOutsideConfig`) fires. That gives positive evidence handlers actually register, not just absence of errors. The job runs on `workflow_dispatch`, on new releases, and weekly on Fridays. It does not run on every PR or push, because the failure modes here are slow-moving and the matrix is heavy. Once that job has accumulated consistent green runs, this decision can be revisited and the `require_once` block collapsed.
 
 **Until then:** every new handler added to `Plugin::registerHandlers()` MUST keep its paired `require_once` line.
 

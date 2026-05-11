@@ -26,7 +26,13 @@ NC='\033[0m' # No Color
 UPDATE_BASELINE=false
 VERBOSE=false
 REMOVE=false
+SETUP_ONLY=false
 PSALM_PASSED=false
+
+# Path (or filename, resolved relative to the Laravel app dir) of the Psalm binary
+# to invoke. Defaults to the composer-installed binstub. The phar CI job
+# (test-laravel-app-phar.yml) overrides this to ./psalm.phar.
+PSALM_BINARY="${PSALM_BINARY:-./vendor/bin/psalm}"
 
 # Function to display script usage
 show_help() {
@@ -39,10 +45,16 @@ Options:
     -h, --help                          Show this help message
     -u, --update                        Update Psalm baseline
     -v, --verbose                       Enable verbose output
-    -r, --remove   Remove Laravel project directory after execution
+    -r, --remove                        Remove Laravel project directory after execution
+    --setup-only                        Create the Laravel app + install the plugin, then exit
+                                        before running Psalm. Lets the caller swap the binary
+                                        (e.g. psalm.phar) before invoking analysis.
 
 Environment variables:
-    LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 12.12.2)
+    LARAVEL_INSTALLER_VERSION    Laravel version to install (default: dev-master)
+    PSALM_BINARY                 Psalm binary path, relative to the Laravel app dir
+                                 (default: ./vendor/bin/psalm). The phar CI job sets
+                                 this to ./psalm.phar.
     COMPOSER_MEMORY_LIMIT        Memory limit for Composer (default: -1)
 EOF
 }
@@ -118,6 +130,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -v|--verbose)
             VERBOSE=true
+            shift
+            ;;
+        --setup-only)
+            SETUP_ONLY=true
             shift
             ;;
         *)
@@ -225,14 +241,24 @@ quiet_run "composer require psalm/plugin-laravel" \
 PSALM_CONFIG="../../tests/Application/laravel-test-psalm.xml"
 PSALM_BASELINE="../../tests/Application/laravel-test-psalm-baseline.xml"
 
+if [ "$SETUP_ONLY" = true ]; then
+    info "Setup complete (--setup-only). Skipping Psalm run; Laravel app preserved at $APP_INSTALLATION_PATH"
+    # Skip the EXIT-trap cleanup: callers (e.g. the phar CI job) need the app dir
+    # intact to download psalm.phar into it and run analysis as a follow-up step.
+    trap - EXIT
+    exit 0
+fi
+
+# Invoke via `php` so PSALM_BINARY works for both ./vendor/bin/psalm (executable
+# binstub) and ./psalm.phar (downloaded artifact without +x bit).
 if [ "$UPDATE_BASELINE" = true ]; then
-    info "Updating Psalm baseline"
-    ./vendor/bin/psalm --config="$PSALM_CONFIG" --set-baseline="$PSALM_BASELINE" --no-progress --no-suggestions
+    info "Updating Psalm baseline (using $PSALM_BINARY)"
+    php "$PSALM_BINARY" --config="$PSALM_CONFIG" --set-baseline="$PSALM_BASELINE" --no-progress --no-suggestions
     info "Baseline file $PSALM_BASELINE is updated, please check the changes and commit them."
 else
-    info "Running Psalm analysis"
+    info "Running Psalm analysis (using $PSALM_BINARY)"
     # set -e ensures script exits on failure, so cleanup below only runs on success
-    ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --no-progress --no-suggestions --output-format=compact
+    php "$PSALM_BINARY" --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --no-progress --no-suggestions --output-format=compact
 fi
 
 echo
