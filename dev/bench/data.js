@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778483232904,
+  "lastUpdate": 1778535603746,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4017,6 +4017,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.39,
             "range": "± 0.43",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "11a360c10139663821fb12e3da49be74cdbc9da0",
+          "message": "Merge pull request #916 from psalm/worktree-912-suppress-inherited-testcase-properties\n\nSkip `PropertyNotSetInConstructor` on Laravel testing lifecycle properties",
+          "timestamp": "2026-05-11T23:36:55+02:00",
+          "tree_id": "47322c589582b43d69a59ac4777c18606ba9286e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/11a360c10139663821fb12e3da49be74cdbc9da0"
+        },
+        "date": 1778535603281,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.21,
+            "range": "± 0.69",
             "unit": "s"
           },
           {
