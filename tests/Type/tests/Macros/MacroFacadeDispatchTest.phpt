@@ -2,7 +2,9 @@
 <?php declare(strict_types=1);
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Vite;
 
 /**
  * Coverage for issue #899 idea #5: macros registered on a Macroable owner
@@ -27,6 +29,26 @@ function test_http_macro_resolves_via_facade_fqcn(): int
 {
     $_ = Http::testHttpFacadeMacro('https://example.com');
     /** @psalm-check-type-exact $_ = int */
+    return $_;
+}
+
+// Locks in https://laravel.com/docs/master/responses#response-macros
+// (Response::macro registers on `Illuminate\Routing\ResponseFactory`, which
+// the Response facade resolves to via `ResponseFactoryContract`).
+function test_response_macro_resolves_via_facade_fqcn(): string
+{
+    $_ = Response::testResponseFacadeMacro('hi');
+    /** @psalm-check-type-exact $_ = string */
+    return $_;
+}
+
+// Locks in https://laravel.com/docs/master/vite#blade-aliases
+// (Vite::macro registers on `Illuminate\Foundation\Vite`, which the Vite
+// facade resolves to directly).
+function test_vite_macro_resolves_via_facade_fqcn(): string
+{
+    $_ = Vite::testViteFacadeMacro('logo.svg');
+    /** @psalm-check-type-exact $_ = string */
     return $_;
 }
 
