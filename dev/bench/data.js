@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778453948261,
+  "lastUpdate": 1778481000135,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -3952,6 +3952,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1096,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa0e795f6a6d1277310d207a10ee410c7716ec53",
+          "message": "Merge pull request #905 from psalm/worktree-899-macro-facade-propagation\n\nMacro: propagate macros to facade classes (support `Route::macro`, `Http::macro`, `Collection::macro`, etc)",
+          "timestamp": "2026-05-11T08:27:17+02:00",
+          "tree_id": "82fd3b23354b169d0245887cb82b21b6705f57ee",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fa0e795f6a6d1277310d207a10ee410c7716ec53"
+        },
+        "date": 1778480999266,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.74,
+            "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1097,
             "unit": "MB"
           }
         ]
