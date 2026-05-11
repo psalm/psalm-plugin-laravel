@@ -35,3 +35,34 @@ MacroFixtureBag::macro('countCharsTest', static fn(string $needle): int => 0);
 // so its pseudo-methods land on Builder itself and any Builder<TModel> call
 // site dispatches to them normally.
 Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
+
+// Locks in coverage for issue #899 idea #5 (facade-class macro propagation).
+// Each registration targets a Macroable backing class of a Laravel facade —
+// the call-site shape Laravel docs encourage:
+//
+//   Route::macro('foo', fn() => ...) ->    Router            (spatie-dashboard)
+//   Http::macro('foo', fn() => ...)  ->    Http\Client\Factory (monica)
+//   Response::macro('foo', fn() => ...) -> Routing\ResponseFactory (docs example)
+//   Vite::macro('foo', fn() => ...)  ->    Foundation\Vite   (docs example)
+//
+// The macros land on the Macroable owner's `$macros` storage at registration
+// time; the plugin then propagates them onto every facade class that resolves
+// to the owner via `FacadeMapProvider`. The closures are never executed at
+// type-check time, so the bodies are degenerate (only the param and return
+// types matter for analysis).
+\Illuminate\Routing\Router::macro(
+    'testRouterFacadeMacro',
+    static fn(string $name): string => $name,
+);
+\Illuminate\Http\Client\Factory::macro(
+    'testHttpFacadeMacro',
+    static fn(string $url): int => 200,
+);
+\Illuminate\Routing\ResponseFactory::macro(
+    'testResponseFacadeMacro',
+    static fn(string $value): string => $value,
+);
+\Illuminate\Foundation\Vite::macro(
+    'testViteFacadeMacro',
+    static fn(string $asset): string => "resources/images/{$asset}",
+);

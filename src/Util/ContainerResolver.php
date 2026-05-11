@@ -30,9 +30,13 @@ final class ContainerResolver
             return self::$cache[$abstract];
         }
 
-        // dynamic analysis to resolve the actual type from the container
+        // dynamic analysis to resolve the actual type from the container.
+        // Narrowed annotation: every abstract this resolver receives is a service or
+        // path-helper; both Container::make() return shapes are object|string. null
+        // covers the unbound-Authenticatable case below. Closure-bound abstracts that
+        // return arbitrary scalars/arrays are out of scope for this plugin.
         try {
-            /** @psalm-var mixed $concrete */
+            /** @psalm-var object|string|null $concrete */
             $concrete = ApplicationProvider::getApp()->make($abstract);
         } catch (\Throwable) {
             return null;
