@@ -372,8 +372,18 @@ final class ValidationRuleAnalyzer
     private static function ruleToRemovedTaints(string $rule): int
     {
         return match ($rule) {
-            // Strictly character-constrained — values cannot contain any meta-characters
-            // that matter to known input sinks, so we escape every INPUT_* kind.
+            // Safe across every INPUT_* kind. Two distinct rationales feed
+            // into this same arm:
+            //   1. Character-constrained rules (integer, numeric, boolean,
+            //      uuid, alpha*, hex_color, date*, timezone, …) — values
+            //      cannot contain any meta-characters that matter to known
+            //      input sinks.
+            //   2. Whitelist / provenance rules ('in', 'enum') — the
+            //      validated value is one of a fixed set of developer-
+            //      authored whitelist values (source-code constants), so it
+            //      is trusted by provenance regardless of content. The
+            //      per-rule inline comments below spell the rationale out
+            //      where it's non-obvious.
             'integer', 'numeric', 'boolean',
             'decimal', 'digits', 'digits_between',
             'accepted', 'accepted_if',

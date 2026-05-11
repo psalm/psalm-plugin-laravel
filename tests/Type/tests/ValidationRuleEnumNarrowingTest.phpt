@@ -219,7 +219,7 @@ function testNewInArrayLiteral(NewInArrayLiteralRequest $request): void
     /** @psalm-check-type-exact $_workday = 'full'|'half' */
 }
 
-class NewNotInVariadicRequest extends FormRequest
+class NewNotInArrayLiteralRequest extends FormRequest
 {
     public function rules(): array
     {
@@ -234,7 +234,7 @@ class NewNotInVariadicRequest extends FormRequest
     }
 }
 
-function testNewNotInVariadic(NewNotInVariadicRequest $request): void
+function testNewNotInArrayLiteral(NewNotInArrayLiteralRequest $request): void
 {
     $_role = $request->validated('role');
     /** @psalm-check-type-exact $_role = string */
