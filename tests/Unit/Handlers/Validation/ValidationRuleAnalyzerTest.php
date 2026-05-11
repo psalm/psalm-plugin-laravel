@@ -534,8 +534,10 @@ final class ValidationRuleAnalyzerTest extends TestCase
      * but deliberately omitted from FIRST_PARTY_RULE_ESCAPES. File/ImageFile
      * carry user-controlled filename/mime/contents — no value-shape guarantee
      * that would justify a blanket escape. Enum used to live here; #908 added
-     * an explicit escape entry (enum cases are character-constrained), so it
-     * moves to the positive-assertion test above.
+     * an explicit escape entry (the validated value is always one of the
+     * developer-declared case backing values — a source-code constant, same
+     * provenance / whitelist trust model as Rule::in([...])), so it moves to
+     * the positive-assertion test above.
      * If a future refactor added either of these, this test would flip to a
      * non-zero expectation and fail, forcing a deliberate decision.
      *
