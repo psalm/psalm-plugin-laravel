@@ -184,12 +184,19 @@ abstract class Factory
      * rejects callers passing `Factory<Subclass, 2>` from a `count()` chain
      * (see #693).
      *
+     * The native type is `Factory` rather than `self` so Psalm reads the
+     * argument's templates strictly from the docblock (`Factory<TRelatedModel,
+     * TRelatedCount>`) instead of risking a bind to the receiver's `TModel` /
+     * `TCount` via `self`. Laravel's source declares `has(self $factory)` but
+     * the stub only needs to match Laravel's behavior on instance-ness, not on
+     * the exact native type — Psalm consumes the docblock either way.
+     *
      * @template TRelatedModel of Model
      * @template TRelatedCount of int|null
      * @param  Factory<TRelatedModel, TRelatedCount>  $factory
      * @return static
      */
-    public function has(self $factory, ?string $relationship = null) {}
+    public function has(Factory $factory, ?string $relationship = null) {}
 
     /**
      * Define an attached relationship for the model. See `has()` for the
