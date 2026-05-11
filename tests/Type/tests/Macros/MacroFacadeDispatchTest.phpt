@@ -42,10 +42,15 @@ function test_router_macro_resolves_via_global_alias(): string
     return $_;
 }
 
+// The EXPECTF line below renders the method name in lowercase
+// (`testrouterfacademacro`) intentionally. Psalm keys pseudo-methods by
+// lowercased name and that lowercased key is what `InvalidArgument` echoes
+// back in the static-call path. Do NOT "fix" it to camelCase — it will
+// cease to match the actual Psalm output and the test will fail.
 function test_router_macro_rejects_wrong_argument_type(): string
 {
     return Route::testRouterFacadeMacro(42);
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of Illuminate\Support\Facades\Route::testRouterFacadeMacro expects string, but 42 provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Support\Facades\Route::testrouterfacademacro expects string, but 42 provided
