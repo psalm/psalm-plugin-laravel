@@ -48,4 +48,4 @@ function test_router_macro_rejects_wrong_argument_type(): string
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of Illuminate\Support\Facades\Route::testrouterfacademacro expects string, but 42 provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Support\Facades\Route::testRouterFacadeMacro expects string, but 42 provided
