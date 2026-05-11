@@ -294,7 +294,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
      * Suppress MissingTemplateParam on Factory subclasses that bind `TModel`
      * but skip the optional `TCount`.
      *
-     * The Factory stub (see stubs/common/Database/Eloquent/Factories/Factory.stubphp)
+     * The Factory stub (see stubs/common/Database/Eloquent/Factories/Factory.phpstub)
      * adds a second `@template TCount` with default `null`, used by
      * FactoryCountTypeProvider to encode plurality across count()/times()
      * chains. User-defined factories declared as

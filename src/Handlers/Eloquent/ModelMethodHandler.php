@@ -40,7 +40,7 @@ use Psalm\Type\Union;
  * The getClassLikeNames() registration for Model::class handles `Model::query()` only when
  * a custom Eloquent builder is registered for the called model. For plain models (base
  * `Builder`), `query()` is intentionally deferred to the stub at
- * `stubs/common/Database/Eloquent/Model.stubphp` whose `@return Builder<static>` is the only
+ * `stubs/common/Database/Eloquent/Model.phpstub` whose `@return Builder<static>` is the only
  * way to preserve the `&static` intersection through Psalm's template binding (see #799).
  * `__callStatic` is similarly proxied for methods resolvable through the single-hop mixin
  * chain.
