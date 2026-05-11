@@ -387,12 +387,16 @@ final class ValidationRuleAnalyzer
             'date_equals',
             'timezone',
             'in',
-            // Enum rule (synthetic `enum:FQN` segment): only developer-declared
-            // case backing values reach validated() output (source-code
-            // constants), none of which contain input-sink meta-characters.
-            // Pure UnitEnums are out of reach via scalar input — Enum::passes()
-            // short-circuits without `tryFrom`, so no value flows to a sink.
-            // Mirrors the 'in' escape.
+            // Enum rule (synthetic `enum:FQN` segment): the validated value is
+            // necessarily one of the developer-declared case backing values —
+            // i.e. a source-code constant. Same trust model as Rule::in([...]):
+            // we treat developer-authored whitelist values as trusted, even
+            // when an individual case happens to spell something risky like
+            // `case Evil = "'; DROP TABLE--"`. The escape is about provenance
+            // (source code, not user input), not a character-level guarantee.
+            // Pure UnitEnums never reach a sink via scalar input — passes()
+            // short-circuits without `tryFrom` — so the escape is vacuous for
+            // that branch and sound on both. Mirrors the 'in' escape.
             'enum' => TaintKind::ALL_INPUT,
 
             // IP literals: restricted to digits / dots / colons / hex letters.
