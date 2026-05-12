@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers;
 
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
+use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
@@ -101,8 +102,44 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             ],
             'Illuminate\View\Component' => ['componentName'],
         ],
-        'PropertyNotSetInConstructor' => [
-            'Illuminate\Foundation\Testing\TestCase' => ['callbackException', 'app'],
+    ];
+
+    /**
+     * Properties that Laravel populates during a framework-driven lifecycle hook (e.g. testing
+     * setUp(), createApplication()) rather than from any constructor. Listing them by the class
+     * the user typically extends; the entry is resolved to the actual declaring class storage
+     * (trait or parent) at codebase-populated time.
+     *
+     * Marking a property as "initialized" on its declaring class storage is what Psalm itself
+     * does for properties with a default value or promoted constructor params (see
+     * ClassLikeNodeScanner / FunctionLikeNodeScanner). The PropertyNotSetInConstructor check
+     * keys off `$declaring_class_storage->initialized_properties[$property_name]`, so writing
+     * there cleanly skips the un-init check for every subclass without touching their
+     * `$storage->suppressed_issues` — the user's own un-initialized properties still get
+     * flagged. A property-level entry in PROPERTY_LEVEL_BY_PARENT_CLASS does NOT achieve this
+     * because ClassAnalyzer's PropertyNotSetInConstructor report does not consult
+     * `$property_storage->suppressed_issues`.
+     *
+     * @var array<string, list<string>>
+     */
+    private const FRAMEWORK_INITIALIZED_PROPERTIES_BY_FQCN = [
+        // `app` and `callbackException` are declared in the
+        // `Illuminate\Foundation\Testing\Concerns\InteractsWithTestCaseLifecycle` trait used by
+        // TestCase. `traitsUsedByTest` is declared on TestCase itself and assigned inside
+        // `createApplication()`. See psalm/psalm-plugin-laravel#912.
+        'Illuminate\Foundation\Testing\TestCase' => [
+            'app',
+            'callbackException',
+            'traitsUsedByTest',
+        ],
+        // `faker` is declared on the `WithFaker` trait and assigned by `setUpFaker()`, called from
+        // the trait's `setUpFakerHelpers()` lifecycle hook. Any TestCase subclass that does
+        // `use WithFaker;` trips the same false positive as the entries above. Resolving by trait
+        // FQCN works because the trait's own ClassLikeStorage has `declaring_property_ids['faker']`
+        // pointing back to itself (set during scanning), so the mutation lands on the trait
+        // storage and propagates to every user class that composes it.
+        'Illuminate\Foundation\Testing\WithFaker' => [
+            'faker',
         ],
     ];
 
@@ -213,7 +250,9 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
-        foreach ($event->getCodebase()->classlike_storage_provider::getAll() as $classStorage) {
+        $provider = $event->getCodebase()->classlike_storage_provider;
+
+        foreach ($provider::getAll() as $classStorage) {
             if (!$classStorage->user_defined) {
                 continue;
             }
@@ -226,6 +265,47 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             self::suppressByUsedTraits($classStorage);
             self::suppressByInterface($classStorage);
         }
+
+        self::markFrameworkInitializedProperties($provider);
+    }
+
+    /**
+     * Mark framework-initialized properties as initialized on the class that declares them.
+     *
+     * `declaring_property_ids` is populated by Psalm's Populator after inheritance resolution,
+     * so a property inherited via a trait points at the trait's storage and a property declared
+     * on the parent class points at the parent. Writing `initialized_properties[$name] = true`
+     * there is the same signal Psalm emits for properties with a default value, which the
+     * PropertyNotSetInConstructor check honours without further configuration. The user's own
+     * declared (and genuinely un-initialised) properties are unaffected.
+     */
+    private static function markFrameworkInitializedProperties(ClassLikeStorageProvider $provider): void
+    {
+        foreach (self::FRAMEWORK_INITIALIZED_PROPERTIES_BY_FQCN as $className => $propertyNames) {
+            if (!$provider->has($className)) {
+                continue;
+            }
+
+            $classStorage = $provider->get($className);
+
+            foreach ($propertyNames as $propertyName) {
+                $declaringClass = $classStorage->declaring_property_ids[$propertyName] ?? null;
+                if ($declaringClass === null) {
+                    continue;
+                }
+
+                if (!$provider->has($declaringClass)) {
+                    continue;
+                }
+
+                self::markPropertyInitialized($provider->get($declaringClass), $propertyName);
+            }
+        }
+    }
+
+    private static function markPropertyInitialized(ClassLikeStorage $storage, string $propertyName): void
+    {
+        $storage->initialized_properties[$propertyName] = true;
     }
 
     private static function suppressByParentClass(ClassLikeStorage $classStorage): void
