@@ -27,11 +27,21 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     /**
      * Get the route handling the request.
      *
+     * Intentionally more precise than Laravel's own PHPDoc. Laravel declares
+     * `@return ($param is null ? \Illuminate\Routing\Route : object|string|null)`,
+     * but the body returns the unresolved resolver result directly:
+     * `if (is_null($route) || is_null($param)) { return $route; }`. The route
+     * resolver is `null` before routing matches (early middleware, console
+     * context, exception handler), so the `$param is null` branch can return
+     * `null` too. Laravel's own `Request::fingerprint()` guards on this with
+     * `if (! $route = $this->route())`. Upstream Laravel PHPDoc fix tracked
+     * separately; this stub fixes the plugin-level false positive (#918).
+     *
      * @template TDefault of object
      *
      * @param string|null $param
      * @param TDefault $default
-     * @psalm-return ($param is null ? \Illuminate\Routing\Route : TDefault|string|null)
+     * @psalm-return ($param is null ? \Illuminate\Routing\Route|null : TDefault|string|null)
      *
      * @psalm-taint-source input
      */
