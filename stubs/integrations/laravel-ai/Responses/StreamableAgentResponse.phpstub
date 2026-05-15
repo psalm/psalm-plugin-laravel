@@ -1,0 +1,17 @@
+<?php
+
+namespace Laravel\Ai\Responses;
+
+/**
+ * Streaming sibling of AgentResponse. NOT a TextResponse subclass in the
+ * real package, but exposes the same `$text` property after the stream
+ * completes. Listed explicitly in LlmOutputTaintHandler so property
+ * reads carry taint without relying on inheritance.
+ */
+class StreamableAgentResponse
+{
+    public string $text;
+
+    /** @psalm-taint-source input */
+    public function __toString(): string {}
+}

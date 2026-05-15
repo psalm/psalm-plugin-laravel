@@ -1,0 +1,88 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Illuminate\Broadcasting\Channel;
+use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\QueuedAgentResponse;
+use Laravel\Ai\Responses\StreamableAgentResponse;
+
+/**
+ * Trait used by every user-defined agent class.
+ *
+ * Every method below routes the $prompt string into the LLM provider, so each
+ * is a sink for the `llm_prompt` taint kind. Taint propagating from
+ * `Request::input()`, `Http::*->body()`, `Storage::get()`, or any other source
+ * the plugin marks as `@psalm-taint-source input` ends here.
+ *
+ * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
+ */
+trait Promptable
+{
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function prompt(
+        string $prompt,
+        array $attachments = [],
+        Lab|array|string|null $provider = null,
+        ?string $model = null,
+        ?int $timeout = null,
+    ): AgentResponse {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function stream(
+        string $prompt,
+        array $attachments = [],
+        Lab|array|string|null $provider = null,
+        ?string $model = null,
+        ?int $timeout = null,
+    ): StreamableAgentResponse {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function queue(
+        string $prompt,
+        array $attachments = [],
+        Lab|array|string|null $provider = null,
+        ?string $model = null,
+    ): QueuedAgentResponse {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function broadcast(
+        string $prompt,
+        Channel|array $channels,
+        array $attachments = [],
+        bool $now = false,
+        Lab|array|string|null $provider = null,
+        ?string $model = null,
+    ): StreamableAgentResponse {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function broadcastNow(
+        string $prompt,
+        Channel|array $channels,
+        array $attachments = [],
+        Lab|array|string|null $provider = null,
+        ?string $model = null,
+    ): StreamableAgentResponse {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function broadcastOnQueue(
+        string $prompt,
+        Channel|array $channels,
+        array $attachments = [],
+        Lab|array|string|null $provider = null,
+        ?string $model = null,
+    ): QueuedAgentResponse {}
+}

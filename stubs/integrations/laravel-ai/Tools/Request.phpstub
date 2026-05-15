@@ -1,0 +1,124 @@
+<?php
+
+namespace Laravel\Ai\Tools;
+
+use ArrayAccess;
+use Illuminate\Contracts\Support\Arrayable;
+
+/**
+ * Arguments the LLM chose to pass to a tool. From the application's
+ * perspective, these are attacker-controllable: the LLM is downstream of any
+ * untrusted input that reached its context, and adversarial prompts steer it
+ * into calling tools with arbitrary arguments (see CVE-2025-54795, Claude
+ * Code argument injection; GHSA-534m-3w6r-8pqr, Cursor).
+ *
+ * Every accessor is tainted with the `input` kind — the same one used for
+ * Request::input() — so existing sinks (sql, shell, file, header, html, ssrf)
+ * catch tool-call hijack chains automatically.
+ *
+ * Parameter signatures intentionally match Laravel's InteractsWithData trait
+ * (untyped, with original defaults) so docblock-only @param annotations
+ * stay accurate against the real class.
+ *
+ * @template-implements ArrayAccess<string, mixed>
+ */
+class Request implements Arrayable, ArrayAccess
+{
+    /**
+     * @param  mixed  $keys
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function all($keys = null): array {}
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function toArray(): array {}
+
+    public function offsetExists(mixed $offset): bool {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function offsetGet(mixed $offset): mixed {}
+
+    public function offsetSet(mixed $offset, mixed $value): void {}
+
+    public function offsetUnset(mixed $offset): void {}
+
+    /**
+     * @param  string  $key
+     * @param  mixed   $default
+     *
+     * @psalm-taint-source input
+     */
+    public function str($key, $default = null): \Illuminate\Support\Stringable {}
+
+    /**
+     * @param  string  $key
+     * @param  mixed   $default
+     *
+     * @psalm-taint-source input
+     */
+    public function string($key, $default = null): \Illuminate\Support\Stringable {}
+
+    /**
+     * @param  string  $key
+     * @param  int     $default
+     *
+     * @psalm-taint-source input
+     */
+    public function integer($key, $default = 0): int {}
+
+    /**
+     * @param  string  $key
+     * @param  float   $default
+     *
+     * @psalm-taint-source input
+     */
+    public function float($key, $default = 0.0): float {}
+
+    /**
+     * @param  string|null  $key
+     * @param  bool         $default
+     *
+     * @psalm-taint-source input
+     */
+    public function boolean($key = null, $default = false): bool {}
+
+    /**
+     * @param  array|string|null  $key
+     * @return array<array-key, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function array($key = null): array {}
+
+    /**
+     * @param  array<array-key, string>|string  $keys
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function only($keys): array {}
+
+    /**
+     * @param  array<array-key, string>|string  $keys
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function except($keys): array {}
+
+    /**
+     * @param  array|string|null  $key
+     * @return \Illuminate\Support\Collection<array-key, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function collect($key = null): \Illuminate\Support\Collection {}
+}

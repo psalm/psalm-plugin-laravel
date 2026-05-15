@@ -1,0 +1,18 @@
+<?php
+
+namespace Laravel\Ai\Tools;
+
+use Closure;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+
+class SimilaritySearch implements Tool
+{
+    /**
+     * Description visible to the LLM — same tool-poisoning concern as
+     * Contracts\Tool::description() and CanActAsTool::description().
+     *
+     * @psalm-taint-sink llm_prompt $description
+     */
+    public function withDescription(string $description): self {}
+}

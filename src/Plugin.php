@@ -65,6 +65,7 @@ final class Plugin implements PluginEntryPointInterface
         $stubs = \array_merge(
             StubFileFinder::commonStubs($stubsRoot, $output),
             StubFileFinder::stubsForLaravelVersion($stubsRoot, Application::VERSION, $output),
+            self::optionalIntegrationStubs($stubsRoot, $output),
         );
 
         foreach ($stubs as $stubFilePath) {
@@ -74,6 +75,24 @@ final class Plugin implements PluginEntryPointInterface
         AliasStubProvider::register($registration, self::getAliasStubLocation($pluginConfig));
 
         CarbonStubProvider::register($registration, $output);
+    }
+
+    /**
+     * Stubs for optional first/third-party AI packages. Each entry guards on
+     * Composer's runtime metadata so absent packages contribute zero stubs and
+     * we avoid triggering the project autoloader for a class lookup.
+     *
+     * @return list<string>
+     */
+    private static function optionalIntegrationStubs(string $stubsRoot, \Psalm\Progress\Progress $output): array
+    {
+        $stubs = [];
+
+        if (\Composer\InstalledVersions::isInstalled('laravel/ai')) {
+            \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
+        }
+
+        return $stubs;
     }
 
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
@@ -221,6 +240,15 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+
+        // laravel/ai integration: LLM output as taint source. Stubs cover the prompt
+        // sinks declaratively; this handler covers the property-level `$response->text`
+        // source because Psalm doesn't honor `@psalm-taint-source` on properties.
+        // Guarded the same way as the matching stubs in optionalIntegrationStubs().
+        if (\Composer\InstalledVersions::isInstalled('laravel/ai')) {
+            require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
+            $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
+        }
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled

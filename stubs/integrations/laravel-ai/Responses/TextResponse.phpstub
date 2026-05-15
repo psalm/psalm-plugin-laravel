@@ -1,0 +1,27 @@
+<?php
+
+namespace Laravel\Ai\Responses;
+
+/**
+ * LLM-generated text is untrusted. The model is downstream of every
+ * untrusted source that reached its prompt (web fetch, RAG corpus,
+ * tool output, attacker email — see EchoLeak CVE-2025-32711, Slack AI
+ * Aug 2024, ChatGPT SpAIware). Treat the response as user input on the
+ * way back out: passing it to sinks like SQL, shell, or HTML yields the
+ * standard Tainted* findings.
+ *
+ * Property reads (`$response->text`) are tainted programmatically by
+ * Handlers\Ai\LlmOutputTaintHandler — `@psalm-taint-source` on a
+ * property is not honored by Psalm.
+ *
+ * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
+ *
+ * @psalm-api
+ */
+class TextResponse
+{
+    public string $text;
+
+    /** @psalm-taint-source input */
+    public function __toString(): string {}
+}

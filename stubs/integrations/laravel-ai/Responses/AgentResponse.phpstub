@@ -1,0 +1,14 @@
+<?php
+
+namespace Laravel\Ai\Responses;
+
+/**
+ * The terminal response returned by `Agent::prompt()`. Inherits the
+ * `$text` property from TextResponse; LlmOutputTaintHandler taints
+ * the same property here automatically (it walks the class hierarchy).
+ */
+class AgentResponse extends TextResponse
+{
+    /** @psalm-taint-source input */
+    public function __toString(): string {}
+}

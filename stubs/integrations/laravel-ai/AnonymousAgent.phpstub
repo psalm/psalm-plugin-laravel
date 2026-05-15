@@ -1,0 +1,21 @@
+<?php
+
+namespace Laravel\Ai;
+
+/**
+ * Concrete agent used when callers want to build one inline rather than
+ * extending Promptable. The constructor's $instructions argument is a sink
+ * for the same reason as the agent() helper.
+ */
+class AnonymousAgent
+{
+    /**
+     * @psalm-taint-sink llm_prompt $instructions
+     * @psalm-taint-sink llm_prompt $messages
+     */
+    public function __construct(
+        \Stringable|string $instructions,
+        iterable $messages = [],
+        iterable $tools = [],
+    ) {}
+}

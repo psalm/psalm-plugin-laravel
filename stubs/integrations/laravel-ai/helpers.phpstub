@@ -1,0 +1,17 @@
+<?php
+
+namespace Laravel\Ai;
+
+/**
+ * Anonymous-agent factory. Both $instructions (system prompt) and the
+ * content of each message in $messages flow into the LLM context.
+ *
+ * @psalm-taint-sink llm_prompt $instructions
+ * @psalm-taint-sink llm_prompt $messages
+ */
+function agent(
+    \Stringable|string $instructions = '',
+    iterable $messages = [],
+    iterable $tools = [],
+    ?\Closure $schema = null,
+): \Laravel\Ai\Contracts\Agent {}

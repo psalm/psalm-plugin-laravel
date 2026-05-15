@@ -1,0 +1,22 @@
+<?php
+
+namespace Laravel\Ai\Messages;
+
+use Laravel\Ai\Messages\MessageRole;
+
+class Message
+{
+    public MessageRole $role;
+
+    public ?string $content;
+
+    /**
+     * @psalm-taint-sink llm_prompt $content
+     */
+    public function __construct(MessageRole|string $role, ?string $content = '') {}
+
+    /**
+     * @psalm-taint-sink llm_prompt return
+     */
+    public static function tryFrom(mixed $message): self {}
+}
