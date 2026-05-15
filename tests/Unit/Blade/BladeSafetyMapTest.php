@@ -6,14 +6,23 @@ namespace Psalm\LaravelPlugin\Tests\Unit\Blade;
 
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeSafetyMap;
+use Psalm\LaravelPlugin\Blade\BladeUncertaintyReason;
+use Psalm\LaravelPlugin\Blade\BladeViewSafetyKind;
 
 final class BladeSafetyMapTest extends TestCase
 {
     /** @var list<string> */
     private array $rootsToCleanUp = [];
 
-    private string $root;
+    /**
+     * Initialised in {@see setUp()}, which PHPUnit invokes before each test
+     * method. Declared `string` rather than `?string` because every test
+     * method dereferences it; a null sentinel would only delay the obvious
+     * failure (and trip Psalm's PossiblyNullArgument on every read).
+     */
+    private string $root = '';
 
+    #[\Override]
     protected function setUp(): void
     {
         $this->root = $this->makeTempRoot();
@@ -22,6 +31,7 @@ final class BladeSafetyMapTest extends TestCase
         \mkdir($this->root . \DIRECTORY_SEPARATOR . 'posts', 0777, true);
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
         foreach ($this->rootsToCleanUp as $root) {
@@ -38,7 +48,7 @@ final class BladeSafetyMapTest extends TestCase
         $map = BladeSafetyMap::build([$this->root]);
 
         $this->assertSame(['banner'], $map->unsafeKeysFor('emails.welcome'));
-        $this->assertTrue($map->hasUnsafeKeys('emails.welcome'));
+        $this->assertSame(BladeViewSafetyKind::UnsafeKeys, $map->safetyFor('emails.welcome')?->kind());
     }
 
     public function test_nested_subdirectory_produces_multi_segment_view_name(): void
@@ -51,15 +61,40 @@ final class BladeSafetyMapTest extends TestCase
         $this->assertSame(['html'], $map->unsafeKeysFor('partials.forms.input'));
     }
 
-    public function test_safe_templates_are_not_recorded(): void
+    public function test_safe_templates_are_recorded_as_safe(): void
     {
+        // Earlier versions only stored unsafe templates, leaving SAFE views
+        // indistinguishable from "never scanned". The handler layer needs the
+        // distinction to decide between "no sink" and "apply UNKNOWN fallback".
         $this->writeBlade($this->root, 'posts/show.blade.php', '<h1>{{ $post->title }}</h1>');
 
         $map = BladeSafetyMap::build([$this->root]);
 
-        $this->assertFalse($map->hasUnsafeKeys('posts.show'));
+        $this->assertTrue($map->isKnownSafe('posts.show'));
+        $this->assertFalse($map->isUnknown('posts.show'));
         $this->assertSame([], $map->unsafeKeysFor('posts.show'));
-        $this->assertSame([], $map->knownViews());
+        $this->assertSame(['posts.show'], $map->knownViews());
+        $this->assertSame(BladeViewSafetyKind::Safe, $map->safetyFor('posts.show')?->kind());
+    }
+
+    public function test_layout_template_is_recorded_as_unknown(): void
+    {
+        \mkdir($this->root . \DIRECTORY_SEPARATOR . 'layouts', 0777, true);
+        $this->writeBlade(
+            $this->root,
+            'layouts/app.blade.php',
+            "<html><body>@yield('content')</body></html>",
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertTrue($map->isUnknown('layouts.app'));
+
+        $safety = $map->safetyFor('layouts.app');
+
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+        $this->assertSame(BladeViewSafetyKind::Unknown, $safety->kind());
+        $this->assertContains(BladeUncertaintyReason::LayoutSectionFlow, $safety->uncertainties());
     }
 
     public function test_multiple_unsafe_keys_are_collected(): void
@@ -78,7 +113,7 @@ final class BladeSafetyMapTest extends TestCase
         $this->assertSame(['rawFooter', 'summaryHtml'], $unsafe);
     }
 
-    public function test_first_matching_path_wins(): void
+    public function test_first_matching_path_wins_for_unsafe_view(): void
     {
         // Laravel's FileViewFinder iterates paths in order and returns the
         // first match. BladeSafetyMap mirrors that: the first occurrence of a
@@ -92,6 +127,24 @@ final class BladeSafetyMapTest extends TestCase
         $map = BladeSafetyMap::build([$this->root, $altRoot]);
 
         $this->assertSame(['primary'], $map->unsafeKeysFor('emails.welcome'));
+    }
+
+    public function test_first_matching_path_wins_when_first_is_safe(): void
+    {
+        // Regression for the earlier PoC: when the first root had a SAFE view
+        // and a later root had an UNSAFE view, the map skipped the SAFE one
+        // and stored the UNSAFE shadow — which Laravel would never render.
+        // The map must record the first match regardless of safety kind.
+        $altRoot = $this->makeTempRoot();
+        \mkdir($altRoot . \DIRECTORY_SEPARATOR . 'emails', 0777, true);
+
+        $this->writeBlade($this->root, 'emails/welcome.blade.php', '<h1>{{ $title }}</h1>');
+        $this->writeBlade($altRoot, 'emails/welcome.blade.php', '{!! $injected !!}');
+
+        $map = BladeSafetyMap::build([$this->root, $altRoot]);
+
+        $this->assertTrue($map->isKnownSafe('emails.welcome'));
+        $this->assertSame([], $map->unsafeKeysFor('emails.welcome'));
     }
 
     public function test_view_in_second_path_is_picked_up_when_absent_from_first(): void
@@ -129,6 +182,45 @@ final class BladeSafetyMapTest extends TestCase
         $map = BladeSafetyMap::build(['/nonexistent/path/to/views']);
 
         $this->assertSame([], $map->knownViews());
+    }
+
+    public function test_unknown_view_name_returns_null_from_safety_for(): void
+    {
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $map->safetyFor('never.scanned'));
+        $this->assertFalse($map->isKnownSafe('never.scanned'));
+        $this->assertFalse($map->isUnknown('never.scanned'));
+        $this->assertSame([], $map->unsafeKeysFor('never.scanned'));
+    }
+
+    public function test_unreadable_blade_file_is_recorded_as_unknown(): void
+    {
+        // Verifies the FILE_UNREADABLE branch in BladeSafetyMap::build().
+        // chmod 0000 is ineffective on Windows and as root, so we skip in
+        // those environments rather than fake the test.
+        if (\PHP_OS_FAMILY === 'Windows' || (\function_exists('posix_geteuid') && \posix_geteuid() === 0)) {
+            $this->markTestSkipped('chmod 0000 not effective on Windows or as root');
+        }
+
+        $path = $this->root . \DIRECTORY_SEPARATOR . 'emails' . \DIRECTORY_SEPARATOR . 'locked.blade.php';
+        \file_put_contents($path, '{!! $banner !!}');
+        \chmod($path, 0000);
+
+        try {
+            $map = BladeSafetyMap::build([$this->root]);
+
+            $this->assertTrue($map->isUnknown('emails.locked'));
+            $safety = $map->safetyFor('emails.locked');
+            $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+            $this->assertContains(
+                BladeUncertaintyReason::FileUnreadable,
+                $safety->uncertainties(),
+            );
+        } finally {
+            // Restore so the recursive teardown can unlink the file.
+            \chmod($path, 0644);
+        }
     }
 
     private function writeBlade(string $root, string $relativePath, string $contents): void

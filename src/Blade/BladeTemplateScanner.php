@@ -4,315 +4,827 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-use function max;
-use function substr_count;
+use PhpParser\Error as PhpParserError;
+use PhpParser\Node;
+use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitorAbstract;
+use PhpParser\Parser;
+use PhpParser\ParserFactory;
 
 /**
- * Regex-based scanner that extracts variable references from a Blade template
- * and classifies each by echo context (escaped vs. raw vs. @php block).
+ * Compiles a Blade template via {@see PsalmBladeCompiler} and walks the resulting
+ * PHP AST to classify the template as SAFE, UNSAFE_KEYS, or UNKNOWN.
  *
- * This is deliberately NOT a full Blade compiler. The scanner trades precision
- * for simplicity: it recognises the three echo syntaxes defined in
- * {@see BladeEchoKind} and extracts top-level variable names from each echo's
- * PHP expression. It does not:
+ * The scanner avoids regex-based Blade parsing entirely. Laravel's
+ * {@see \Illuminate\View\Compilers\BladeCompiler} already maps every Blade
+ * directive ({@code @foreach}, {@code @if}, {@code @php}, {@code @extends},
+ * {@code @include}, etc.) to a small, deterministic set of PHP statements:
  *
- *  - follow `@include` / `@extends` / `@yield` / `@section` data flows
- *  - resolve Blade components (`<x-foo :bar="$data" />`)
- *  - evaluate PHP expressions (e.g. `{!! $user->bio !!}` records `user`, not `bio`)
- *  - handle dynamic keys
+ *  - `{{ $x }}`               -> `echo e($x)`
+ *  - `{!! $x !!}`             -> `echo $x`
+ *  - `{{{ $x }}}`             -> `echo e($x)` (legacy triple-brace)
+ *  - `@foreach (...)`         -> `foreach (...): ... endforeach;`
+ *  - `@php ... @endphp`       -> `<?php ... ?>`
+ *  - `@extends(...)`          -> `$__env->make(...)->render()`
+ *  - `@yield(...)`            -> `echo $__env->yieldContent(...)`
+ *  - `@stack(...)`            -> `echo $__env->yieldPushContent(...)`
+ *  - `@include(...)`          -> `echo $__env->make(...)->render()`
+ *  - `@inject(...)`           -> `$name = app(...)`
  *
- * These are acceptable limitations for the initial taint-refinement use case:
- * we only need to know which *top-level* template variables reach a raw echo,
- * because the `view()` data array keys are always top-level variables after
- * `extract()`.
+ * Walking the resulting AST gives perfect handling of constructs that broke the
+ * regex backend: string literals containing `@yield(...)` inside `@php` blocks
+ * (compiled away), word-boundary issues between `@push` / `@pushOnce` (separate
+ * AST nodes), `@verbatim` regions ({{ }} stays literal in HTML output, never
+ * reaches an `echo` node), comments (compiled away), and inline assignments
+ * `@if ($x = expr)` ({@see Node\Expr\Assign} inside {@see Node\Stmt\If_::$cond}
+ * is plainly visible to the visitor).
  *
- * Scope-introduced variables (Blade directive aliases such as `@foreach(... as
- * $item)`) are tracked separately so they can be excluded from the
- * "unsafe view-data keys" result. `$item` in `@foreach ($items as $item) {!!
- * $item !!} @endforeach` is NOT a view data key, so it must not surface.
+ * Compiler / parser instances are injected so tests can substitute fakes and so
+ * a long-lived {@see BladeSafetyMap::build()} pass can reuse one parser across
+ * many templates. Both constructor arguments default to fresh instances built
+ * with no Laravel container access, so the scanner has no boot-time dependency
+ * on the plugin's Testbench-backed application.
  *
- * Edge-case handling:
- *  - `{{-- ... --}}` blade comments are stripped before scanning so tokens
- *    inside them are ignored.
- *  - `@verbatim ... @endverbatim` blocks are stripped (their contents are
- *    treated as literal text by Blade).
- *  - `@php ... @endphp` blocks are processed separately so their contents do
- *    not leak into the echo passes (strings like `"{!! x !!}"` inside @php
- *    would otherwise be matched as raw echoes).
- *  - `@{{ ... }}` / `@{!! ... !!}` (escaped braces) are treated as literal text.
- *  - `{{{ ... }}}` (legacy triple-brace escape) is treated as ESCAPED.
+ * Purity: the scanner is *not* marked `@psalm-pure` or `@psalm-mutation-free`.
+ * {@see PsalmBladeCompiler::compileBladeSource()} mutates the underlying
+ * BladeCompiler instance (footers, raw blocks, sawComponentTag flag), and the
+ * visitor maintains intermediate state. Each call to {@see analyze()} resets
+ * compiler state and constructs a fresh visitor, so externally the scanner
+ * behaves like a deterministic function from `$source` to `BladeTemplateAnalysis`.
+ *
+ * Known precision limitation: {@see BladeAstAnalysisVisitor} maintains a flat
+ * `scopeLocals` set. NodeTraverser visits inner closures, arrow functions,
+ * function declarations, and dead branches, so an assignment inside any of
+ * those still registers the LHS name as a scope-local for the whole template.
+ * The practical impact is a false-negative when a closure body shadows the
+ * name of a view-data key that is also raw-echoed at the top level. Adding
+ * push/pop scope frames is scoped to a follow-up PR.
  *
  * @psalm-api
  */
 final class BladeTemplateScanner
 {
+    /** Function names whose echo result is auto-escaped HTML. */
+    private const SAFE_HTML_WRAPPER_FUNCTIONS = ['e', 'htmlspecialchars', 'htmlentities'];
+
     /**
-     * Scan a blade template source and return every variable reference found
-     * inside an echo or @php block, paired with its echo kind and line number.
-     *
-     * @return list<BladeVariableUsage>
-     *
-     * @psalm-pure
+     * Static-method names treated as safe when called on a class named `Js`
+     * (Laravel's {@see \Illuminate\Support\Js} helper). Imported as either
+     * `use Illuminate\Support\Js;` (bare `Js::from`) or with the full
+     * namespace, so the scanner matches both shapes by short-name.
      */
-    public static function scan(string $source): array
+    private const SAFE_JS_HELPER_METHOD = 'from';
+
+    /**
+     * Auto-generated locals produced by the BladeCompiler in compiled output.
+     * These are never view-data keys, so a raw echo of e.g. `$loop->index`
+     * must not surface `loop` as an unsafe key.
+     */
+    private const FRAMEWORK_LOCALS = [
+        '__env' => true,
+        '__data' => true,
+        '__path' => true,
+        '__currentLoopData' => true,
+        'loop' => true,
+        '__empty_1' => true,
+    ];
+
+    /**
+     * `$__env` method names that signal layout / section / fragment /
+     * translation / stack flow. Mapped to
+     * {@see BladeUncertaintyReason::LayoutSectionFlow}.
+     *
+     *  - `@yield`, `@parent` -> yieldContent
+     *  - `@section`, `@show`, `@overwrite`, `@stop`, `@endsection`
+     *    -> startSection / stopSection / yieldSection / appendSection
+     *  - `@hasStack` -> isStackEmpty
+     *  - `@fragment`, `@endfragment` -> startFragment / stopFragment / renderFragment
+     *  - `@lang { ... } @endlang` -> startTranslation / renderTranslation
+     */
+    private const ENV_LAYOUT_METHODS = [
+        'yieldContent', 'yieldSection', 'startSection', 'stopSection',
+        'appendSection', 'isStackEmpty',
+        'startFragment', 'stopFragment', 'renderFragment',
+        'startTranslation', 'renderTranslation',
+    ];
+
+    /**
+     * `$__env` method names emitted by `@component` / `@slot` directives.
+     * Mapped to {@see BladeUncertaintyReason::ComponentTag} so downstream
+     * handlers can apply component-specific fallback policy (e.g. trace
+     * attribute / slot data flow) distinct from section-flow policy.
+     */
+    private const ENV_COMPONENT_METHODS = [
+        'startComponent', 'renderComponent', 'slot',
+    ];
+
+    /**
+     * `$__env` method names that signal an include / partial render.
+     * `@include`, `@includeIf`, `@includeFirst`, `@each` all map to one of
+     * these. `first` is the method called by `@extendsFirst` and
+     * `@includeFirst` (compiled to `$__env->first([...])->render()`).
+     */
+    private const ENV_INCLUDE_METHODS = [
+        'make', 'first', 'renderEach', 'renderWhen', 'renderUnless', 'renderFirst',
+    ];
+
+    /**
+     * `$__env` method names for the stack / push / prepend family. These
+     * compile to `$__env->yieldPushContent` / `$__env->startPush` etc., and
+     * any presence implies a cross-template stack flow. Mapped to the same
+     * {@see BladeUncertaintyReason::LayoutSectionFlow} reason because the
+     * fallback policy for both is identical.
+     */
+    private const ENV_STACK_METHODS = [
+        'yieldPushContent', 'yieldPushContentFirst',
+        'startPush', 'stopPush', 'startPrepend', 'stopPrepend',
+        'startPushOnce', 'stopPushOnce',
+        'startPrependOnce', 'stopPrependOnce',
+    ];
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function __construct(
+        private readonly PsalmBladeCompiler $compiler = new PsalmBladeCompiler(),
+        private readonly Parser $parser = new \PhpParser\Parser\Php8(new \PhpParser\Lexer()),
+    ) {}
+
+    /**
+     * Default-construction helper for callers that want the standard parser
+     * (newest supported PHP version) without importing {@see ParserFactory}.
+     *
+     * The named-default in the constructor is intentionally a {@see Parser\Php8}
+     * direct construction (cheap) rather than `ParserFactory::createForNewestSupportedVersion()`,
+     * which allocates a Lexer and walks a version-detection path. Tests that
+     * need the newest-PHP parser can call this helper.
+     *
+     * @psalm-api
+     */
+    public static function withDefaults(): self
     {
-        $cleaned = self::stripCommentsAndVerbatim($source);
-        $cleaned = self::protectEscapedBraces($cleaned);
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
 
-        // Run the @php pass against the cleaned source, then blank those
-        // regions before the echo passes. Without blanking, `{!! ... !!}`
-        // inside a PHP string literal would match the raw-echo regex and
-        // inject phantom "variables" from inside the literal.
-        $phpUsages = self::collect(
-            $cleaned,
-            '/@php\b(?P<expr>.*?)@endphp\b/s',
-            BladeEchoKind::PHP_BLOCK,
-        );
-
-        $withoutPhp = \preg_replace_callback(
-            '/@php\b.*?@endphp\b/s',
-            /** @param array{0: string} $m */
-            static fn(array $m): string => self::blank($m[0]),
-            $cleaned,
-        ) ?? $cleaned;
-
-        // {!! ... !!} — raw echo. Extracted first so the shorter {{ ... }} pass
-        // below runs on a template with raw-echo regions blanked out, avoiding
-        // double-matches with {{{ ... }}} and mis-matches with stray `{{`.
-        $rawUsages = self::collect(
-            $withoutPhp,
-            '/\{!!\s*(?P<expr>.*?)\s*!!\}/s',
-            BladeEchoKind::RAW,
-        );
-
-        $legacyUsages = self::collect(
-            $withoutPhp,
-            '/\{\{\{\s*(?P<expr>.*?)\s*\}\}\}/s',
-            BladeEchoKind::ESCAPED,
-        );
-
-        // Blank raw / legacy regions so the plain {{ ... }} pass cannot
-        // re-match their contents.
-        $remaining = \preg_replace_callback(
-            '/\{!!.*?!!\}|\{\{\{.*?\}\}\}/s',
-            /** @param array{0: string} $m */
-            static fn(array $m): string => self::blank($m[0]),
-            $withoutPhp,
-        ) ?? $withoutPhp;
-
-        $escapedUsages = self::collect(
-            $remaining,
-            '/\{\{\s*(?P<expr>.*?)\s*\}\}/s',
-            BladeEchoKind::ESCAPED,
-        );
-
-        return \array_merge($rawUsages, $legacyUsages, $escapedUsages, $phpUsages);
+        return new self(new PsalmBladeCompiler(), $parser);
     }
 
     /**
-     * Extract the set of variable names that appear in at least one unescaped
-     * echo context ({!! !!} or @php) AND are not introduced by a scope-local
-     * directive (@foreach, @forelse). These are the keys a caller must treat
-     * as html sinks when passing view data.
+     * Analyze a Blade template source and return the tri-state safety result.
+     *
+     * Pipeline:
+     *   1. {@see PsalmBladeCompiler::compileBladeSource()} produces compiled PHP.
+     *      Any compile-time exception (malformed Blade, unbalanced directives)
+     *      maps to UNKNOWN(UNPARSABLE_PHP_BLOCK).
+     *   2. {@see Parser::parse()} produces an AST. Parser errors (extremely
+     *      unlikely on BladeCompiler output, but possible if an `@php` block
+     *      contains malformed PHP) map to the same UNKNOWN reason.
+     *   3. {@see BladeAstAnalysisVisitor} walks the AST, collecting:
+     *      - top-level variables raw-echoed (unsafe keys, after filtering
+     *        scope-locals and framework locals);
+     *      - `$__env` method calls indicating layout/section/stack/include flow;
+     *      - the {@see PsalmBladeCompiler::sawComponentTag()} flag for `<x-...>`
+     *        and `@component` / `@slot` directives.
+     *   4. Uncertainties dominate: any uncertainty produces UNKNOWN; otherwise
+     *      a non-empty unsafe-key list produces UNSAFE_KEYS; otherwise SAFE.
+     */
+    public function analyze(string $source): BladeTemplateAnalysis
+    {
+        if ($this->hasUnclosedPhpBlock($source)) {
+            /*
+             * BladeCompiler does NOT throw on an unclosed `@php` block: the
+             * raw-block storage regex requires a matching `@endphp` and
+             * silently leaves an unclosed `@php` as literal text in the
+             * compiled output, where it becomes inline HTML in the AST.
+             * That would let any taint inside the unclosed region slip
+             * through as SAFE. Detect the imbalance ourselves and emit
+             * UNKNOWN(UNPARSABLE_PHP_BLOCK).
+             */
+            return BladeTemplateAnalysis::unknown([BladeUncertaintyReason::UnparsablePhpBlock]);
+        }
+
+        try {
+            $compiled = $this->compiler->compileBladeSource($source);
+        } catch (\Throwable) {
+            return BladeTemplateAnalysis::unknown([BladeUncertaintyReason::UnparsablePhpBlock]);
+        }
+
+        try {
+            /*
+             * BladeCompiler emits PHP open/close tags interleaved with
+             * literal HTML. The parser accepts that as a normal mixed-mode
+             * PHP file; no manual prefix needed.
+             */
+            $ast = $this->parser->parse($compiled);
+        } catch (PhpParserError) {
+            return BladeTemplateAnalysis::unknown([BladeUncertaintyReason::UnparsablePhpBlock]);
+        }
+
+        if ($ast === null) {
+            return BladeTemplateAnalysis::unknown([BladeUncertaintyReason::UnparsablePhpBlock]);
+        }
+
+        $visitor = new BladeAstAnalysisVisitor();
+        $traverser = new NodeTraverser();
+        $traverser->addVisitor($visitor);
+        $traverser->traverse($ast);
+
+        $uncertainties = $visitor->uncertainties;
+
+        if ($this->compiler->sawComponentTag()
+            && !\in_array(BladeUncertaintyReason::ComponentTag, $uncertainties, true)) {
+            $uncertainties[] = BladeUncertaintyReason::ComponentTag;
+        }
+
+        $unsafeKeys = $visitor->computeUnsafeKeys(self::FRAMEWORK_LOCALS);
+
+        if ($uncertainties !== []) {
+            return BladeTemplateAnalysis::unknown($uncertainties, $unsafeKeys);
+        }
+
+        return BladeTemplateAnalysis::unsafeKeys($unsafeKeys);
+    }
+
+    /**
+     * True when the source contains a multi-line `@php` directive that has
+     * no matching `@endphp`. The check matches BladeCompiler's own
+     * `storePhpBlocks` regex (which only stores blocks that are properly
+     * closed), so a leftover unclosed `@php` would otherwise be passed
+     * through as literal text.
+     *
+     * The inline `@php(...)` directive is excluded from the count because it
+     * is a single-expression form with no `@endphp` partner.
+     *
+     * @psalm-pure
+     */
+    private function hasUnclosedPhpBlock(string $source): bool
+    {
+        $openCount = \preg_match_all('/(?<!@)@php\b(?!\s*\()/', $source);
+        $closeCount = \preg_match_all('/(?<!@)@endphp\b/', $source);
+
+        return $openCount !== false && $closeCount !== false && $openCount > $closeCount;
+    }
+
+    /**
+     * Lower-level helper: return every variable reference observed inside an
+     * `echo` / `print` / `@php` block, with line numbers.
+     *
+     * Line numbers reflect the *compiled* PHP, not the original Blade source.
+     * BladeCompiler does not preserve a complete source map, so per-occurrence
+     * line tracking is approximate. Callers using {@see scan()} for
+     * diagnostics should treat the line number as a hint, not a contract.
+     *
+     * @return list<BladeVariableUsage>
+     */
+    public function scan(string $source): array
+    {
+        try {
+            $compiled = $this->compiler->compileBladeSource($source);
+        } catch (\Throwable) {
+            return [];
+        }
+
+        try {
+            $ast = $this->parser->parse($compiled);
+        } catch (PhpParserError) {
+            return [];
+        }
+
+        if ($ast === null) {
+            return [];
+        }
+
+        $visitor = new BladeAstAnalysisVisitor();
+        $traverser = new NodeTraverser();
+        $traverser->addVisitor($visitor);
+        $traverser->traverse($ast);
+
+        return $visitor->usages;
+    }
+
+    /**
+     * Used by {@see BladeAstAnalysisVisitor} to decide whether a call wraps
+     * its argument in HTML-escape semantics. Kept on the scanner so the list
+     * of safe wrappers is defined exactly once.
      *
      * @return list<string>
      *
-     * @psalm-pure
-     */
-    public static function unsafeVariables(string $source): array
-    {
-        $scopeLocals = self::scopeLocalVariables($source);
-
-        $unsafe = [];
-
-        foreach (self::scan($source) as $usage) {
-            if (!$usage->kind->isUnescaped()) {
-                continue;
-            }
-
-            if (isset($scopeLocals[$usage->name])) {
-                // e.g. `$item` in `@foreach ($items as $item)` — not a view
-                // data key, so we must not surface it as unsafe.
-                continue;
-            }
-
-            $unsafe[$usage->name] = true;
-        }
-
-        return \array_keys($unsafe);
-    }
-
-    /**
-     * Variables introduced by Blade control-flow directives that bind names in
-     * local scope. These names cannot be view data keys (they are bound after
-     * `extract()` runs), so they must be excluded from the unsafe-keys result.
-     *
-     * Covers:
-     *  - `@foreach ($items as $x)` and `@foreach ($items as $k => $v)`
-     *  - `@forelse (...)` (same alias syntax)
-     *  - Simple inline assignments `@if ($x = expr)` / `@elseif (...)` / `@while (...)`,
-     *    bounded to a single line.
-     *
-     * Known limitations:
-     *  - Conditions that mix a function call with an assignment on the same line
-     *    (for example `@if (count($rows) > 0 && $x = expr)`) fall through. The
-     *    name is not recorded as scope-local, so if `$x` is later raw-echoed it
-     *    will surface as an unsafe view-data key. This is a false positive at
-     *    the sink layer; an explicit safe-list on the handler side can cover it.
-     *  - The inline `@php($foo = expr)` directive (shorthand for `@php ... @endphp`)
-     *    is not recognised. Same failure mode.
-     *  - Nested `@foreach` inside a string literal (unlikely) is not stripped.
-     *
-     * @return array<string, true> name -> true, for O(1) membership
+     * @internal
      *
      * @psalm-pure
      */
-    private static function scopeLocalVariables(string $source): array
+    public static function safeHtmlWrapperFunctions(): array
     {
-        $locals = [];
-
-        // @foreach / @forelse — `as $val` or `as $key => $val`.
-        if (\preg_match_all('/@for(?:each|else)\s*\(.*?\bas\s+\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*=>\s*\$([a-zA-Z_][a-zA-Z0-9_]*))?/s', $source, $matches) !== false) {
-            foreach ($matches[1] as $name) {
-                $locals[$name] = true;
-            }
-
-            foreach ($matches[2] as $name) {
-                if ($name !== '') {
-                    $locals[$name] = true;
-                }
-            }
-        }
-
-        // Inline assignments in @if / @elseif / @while conditions. The
-        // character class `[^()\n]*?` is intentionally line-scoped: proper
-        // paren balancing requires a non-regex parser, so we accept the
-        // single-line, no-nested-call shape and let the handler apply an
-        // explicit safe-list for more complex cases.
-        if (\preg_match_all('/@(?:if|elseif|while)\s*\(\s*\$([a-zA-Z_]\w*)\s*=[^=]/', $source, $matches) !== false) {
-            foreach ($matches[1] as $name) {
-                $locals[$name] = true;
-            }
-        }
-
-        return $locals;
+        return self::SAFE_HTML_WRAPPER_FUNCTIONS;
     }
 
     /**
-     * @return list<BladeVariableUsage>
+     * @internal
      *
      * @psalm-pure
      */
-    private static function collect(string $source, string $pattern, BladeEchoKind $kind): array
+    public static function safeJsHelperMethod(): string
     {
-        if (\preg_match_all($pattern, $source, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) === false) {
-            return [];
+        return self::SAFE_JS_HELPER_METHOD;
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @internal
+     *
+     * @psalm-pure
+     */
+    public static function envLayoutMethods(): array
+    {
+        return self::ENV_LAYOUT_METHODS;
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @internal
+     *
+     * @psalm-pure
+     */
+    public static function envIncludeMethods(): array
+    {
+        return self::ENV_INCLUDE_METHODS;
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @internal
+     *
+     * @psalm-pure
+     */
+    public static function envStackMethods(): array
+    {
+        return self::ENV_STACK_METHODS;
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @internal
+     *
+     * @psalm-pure
+     */
+    public static function envComponentMethods(): array
+    {
+        return self::ENV_COMPONENT_METHODS;
+    }
+}
+
+/**
+ * Visits the compiled-Blade AST and accumulates the data needed to build a
+ * {@see BladeTemplateAnalysis}.
+ *
+ * The visitor owns state across one walk only; the parent scanner constructs a
+ * fresh visitor per `analyze()` / `scan()` call. State fields are public so
+ * the scanner can read them directly after traversal; no setter ceremony.
+ *
+ * @internal
+ */
+final class BladeAstAnalysisVisitor extends NodeVisitorAbstract
+{
+    /** @var list<BladeUncertaintyReason> */
+    public array $uncertainties = [];
+
+    /** @var list<BladeVariableUsage> */
+    public array $usages = [];
+
+    /** @var array<string, true> Variables introduced by assignments / foreach value-vars / etc. */
+    private array $scopeLocals = [];
+
+    /** @var array<string, true> Top-level variable names raw-echoed in the template. */
+    private array $rawTopVars = [];
+
+    /** @var array<string, true> reason-name => true, dedup uncertainty set */
+    private array $seenUncertainty = [];
+
+    #[\Override]
+    public function enterNode(Node $node): ?int
+    {
+        // Track scope-locals from assignment LHS. Covers `@inject` (Assign),
+        // inline `@if ($x = expr)` (Assign inside cond), `$__currentLoopData`
+        // setup, and the user's own `@php $foo = expr; @endphp`.
+        if ($node instanceof Node\Expr\Assign) {
+            $this->captureScopeLocalFromAssign($node);
         }
 
-        $usages = [];
+        if ($node instanceof Node\Stmt\Foreach_) {
+            $this->captureForeachLocals($node);
+        }
 
-        /** @var list<array{0: array{0: string, 1: int}, expr: array{0: string, 1: int}}> $matches */
-        foreach ($matches as $match) {
-            $offset = $match[0][1];
-            // `max(1, ...)` pins the return type to `int<1, max>` for the
-            // BladeVariableUsage constructor without a runtime assert.
-            $line = \max(1, 1 + \substr_count(\substr($source, 0, $offset), "\n"));
-
-            foreach (self::extractVariables($match['expr'][0]) as $name) {
-                $usages[] = new BladeVariableUsage($name, $line, $kind);
+        if ($node instanceof Node\Stmt\Echo_) {
+            foreach ($node->exprs as $expr) {
+                $this->classifyEcho($expr, $node->getStartLine());
             }
         }
 
-        return $usages;
+        if ($node instanceof Node\Expr\Print_) {
+            $this->classifyEcho($node->expr, $node->getStartLine());
+        }
+
+        if ($node instanceof Node\Expr\MethodCall) {
+            $this->classifyEnvMethodCall($node);
+        }
+
+        return null;
     }
 
     /**
-     * Replace a substring with whitespace while preserving `\n`. Keeping
-     * newlines intact is critical: later passes compute line numbers from
-     * `substr_count($prefix, "\n")` over the same buffer, so a blanked
-     * multi-line `@php` / `@verbatim` / raw-echo region must not collapse
-     * its interior newlines.
+     * Materialise the unsafe-keys list, filtering scope-locals and framework
+     * locals. Called once by the scanner after traversal.
      *
-     * Byte length is preserved because every non-newline character maps to a
-     * single space.
-     *
-     * @psalm-pure
-     */
-    private static function blank(string $match): string
-    {
-        return \preg_replace('/[^\n]/', ' ', $match) ?? $match;
-    }
-
-    /** @psalm-pure */
-    private static function stripCommentsAndVerbatim(string $source): string
-    {
-        // Blade comments never reach the compiler; variables inside them are
-        // never rendered, so we drop them.
-        $source = \preg_replace_callback(
-            '/\{\{--.*?--\}\}/s',
-            /** @param array{0: string} $m */
-            static fn(array $m): string => self::blank($m[0]),
-            $source,
-        ) ?? $source;
-
-        // @verbatim blocks preserve their inner text literally — Blade does
-        // not evaluate `{{ }}` inside them. Match either @endverbatim or EOF
-        // so an unclosed @verbatim still strips to end-of-file.
-        return \preg_replace_callback(
-            '/@verbatim\b.*?(?:@endverbatim\b|\z)/s',
-            /** @param array{0: string} $m */
-            static fn(array $m): string => self::blank($m[0]),
-            $source,
-        ) ?? $source;
-    }
-
-    /**
-     * Replace `@{{` / `@{!!` (escaped opening braces) with a same-length
-     * whitespace sequence so our echo regexes don't match them. Blade renders
-     * these literally — they're commonly used for Vue/Alpine templates that
-     * share the `{{ }}` syntax.
-     *
-     * @psalm-pure
-     */
-    private static function protectEscapedBraces(string $source): string
-    {
-        return \str_replace(['@{{', '@{!!'], ['   ', '    '], $source);
-    }
-
-    /**
-     * Extract top-level variable names from a PHP-like expression snippet.
-     *
-     * We purposefully only capture the identifier after the leading `$` and
-     * before any property/method/index access. For `$user->bio`, we record
-     * `user`; for `$data['html']`, we record `data`. This matches the
-     * granularity of view data keys, which are top-level after `extract()`.
-     *
-     * Ignores: variable variables (`$$foo`), string interpolation inside
-     * regex-like literals, and `static::`-prefixed identifiers (not `$`).
+     * @param array<string, true> $frameworkLocals
      *
      * @return list<non-empty-string>
      *
-     * @psalm-pure
+     * @psalm-mutation-free
      */
-    private static function extractVariables(string $expr): array
+    public function computeUnsafeKeys(array $frameworkLocals): array
     {
-        if (\preg_match_all('/\$([a-zA-Z_]\w*)/', $expr, $matches) === false) {
-            return [];
-        }
+        /** @var list<non-empty-string> $keys */
+        $keys = [];
 
-        /** @var list<non-empty-string> $names */
-        $names = [];
-        $seen = [];
-
-        foreach ($matches[1] as $name) {
-            if (isset($seen[$name])) {
+        foreach (\array_keys($this->rawTopVars) as $name) {
+            if ($name === '') {
                 continue;
             }
 
-            $seen[$name] = true;
-            $names[] = $name;
+            if (isset($this->scopeLocals[$name])) {
+                continue;
+            }
+
+            if (isset($frameworkLocals[$name])) {
+                continue;
+            }
+
+            $keys[] = $name;
         }
 
-        return $names;
+        return $keys;
+    }
+
+    private function classifyEcho(Node\Expr $expr, int $line): void
+    {
+        $kind = $this->isSafeHtmlWrappedCall($expr) ? BladeEchoKind::Escaped : BladeEchoKind::Raw;
+        $names = $this->extractTopLevelVariables($expr);
+
+        foreach ($names as $name) {
+            if ($name === '') {
+                continue;
+            }
+
+            $this->usages[] = new BladeVariableUsage(
+                $name,
+                \max(1, $line),
+                $kind,
+            );
+
+            if ($kind === BladeEchoKind::Raw) {
+                $this->rawTopVars[$name] = true;
+            }
+        }
+
+        /*
+         * Conservative fallback: if a RAW echo's expression yielded no
+         * top-level variables and is not a plain literal, the walker is
+         * looking at an expression shape it does not model. Examples that
+         * hit this branch:
+         *   {!! request()->input('html') !!}     // global helper
+         *   {!! Auth::user()->bio !!}            // static-call chain
+         *   {!! $$dynamicName !!}                // variable-variable
+         *   {!! (fn () => $x)() !!}              // closure result
+         * Silently classifying these as SAFE would be a security regression
+         * (the closed-set extractor would otherwise let canonical XSS
+         * sources bypass the analysis), so we mark the template UNKNOWN
+         * with a precise reason.
+         */
+        if ($kind === BladeEchoKind::Raw && $names === [] && !$this->isPureLiteralExpression($expr)) {
+            $this->addUncertainty(BladeUncertaintyReason::UnknownLocalDependency);
+        }
+    }
+
+    /**
+     * True for expressions whose value is statically known to be a literal:
+     * scalar literals, `null` / `true` / `false`, and class constants. Used
+     * by {@see classifyEcho()} to distinguish "raw echo of a constant"
+     * (genuinely safe) from "raw echo we don't understand" (must be UNKNOWN).
+     *
+     * @psalm-pure
+     */
+    private function isPureLiteralExpression(Node\Expr $expr): bool
+    {
+        if ($expr instanceof Node\Scalar\String_) {
+            return true;
+        }
+
+        if ($expr instanceof Node\Scalar\Int_ || $expr instanceof Node\Scalar\Float_) {
+            return true;
+        }
+
+        return $expr instanceof Node\Expr\ConstFetch || $expr instanceof Node\Expr\ClassConstFetch;
+    }
+
+    /*
+     * Not annotated `@psalm-pure` or `@psalm-mutation-free`: the helper
+     * reads {@see Node\Name::toLowerString()} and {@see Node\Name::getLast()},
+     * which php-parser does not mark pure. Callers can still be marked
+     * external-mutation-free because Psalm treats this method as impure
+     * only inside fully-pure contexts.
+     */
+    private function isSafeHtmlWrappedCall(Node\Expr $expr): bool
+    {
+        if ($expr instanceof Node\Expr\FuncCall && $expr->name instanceof Node\Name) {
+            $name = $expr->name->toLowerString();
+
+            if (!\in_array($name, BladeTemplateScanner::safeHtmlWrapperFunctions(), true)) {
+                return false;
+            }
+
+            /*
+             * Only the single-argument form is safe. `e($x, false)` disables
+             * double-encoding (allowing pre-escaped `&` to slip through);
+             * `htmlspecialchars($x, ENT_NOQUOTES)` does not escape quotes,
+             * leaving HTML-attribute contexts vulnerable. Conservatively
+             * fall through to RAW when extra arguments are present so the
+             * inner variable surfaces as unsafe.
+             */
+            return \count($expr->args) === 1;
+        }
+
+        if ($this->isJsFromStaticCall($expr)) {
+            return true;
+        }
+
+        /*
+         * Chained method calls on a Js::from result (e.g.
+         * `Js::from($data)->toHtml()`) remain HTML-safe because every
+         * method on the Js helper escapes its output. Surfacing the
+         * receiver chain again here would re-leak `$data`.
+         */
+        return $expr instanceof Node\Expr\MethodCall
+            && $this->isJsFromStaticCall($expr->var);
+    }
+
+    private function isJsFromStaticCall(Node\Expr $expr): bool
+    {
+        if (!($expr instanceof Node\Expr\StaticCall)) {
+            return false;
+        }
+
+        if (!($expr->class instanceof Node\Name)) {
+            return false;
+        }
+
+        if (!($expr->name instanceof Node\Identifier)) {
+            return false;
+        }
+
+        $shortName = $expr->class->getLast();
+        $method = $expr->name->toString();
+
+        // `Js::from` or `\Illuminate\Support\Js::from`. Short-name match is
+        // intentional: an aliased `use Illuminate\Support\Js as J;` would
+        // not satisfy a strict FQCN check.
+        return $shortName === 'Js' && $method === BladeTemplateScanner::safeJsHelperMethod();
+    }
+
+    /**
+     * Recursively extract top-level variable names from an expression tree.
+     *
+     * "Top-level" means the variable that appears as the root of a chain of
+     * property/array/method accesses. `$user->bio` yields `user`;
+     * `$data['html']` yields `data`; `$x . $y` yields both `x` and `y`;
+     * `"hello {$attacker}"` yields `attacker`.
+     *
+     * @return list<string>
+     *
+     * @psalm-mutation-free
+     */
+    private function extractTopLevelVariables(Node\Expr $expr): array
+    {
+        if ($expr instanceof Node\Expr\Variable && \is_string($expr->name)) {
+            return [$expr->name];
+        }
+
+        if ($expr instanceof Node\Expr\PropertyFetch
+            || $expr instanceof Node\Expr\NullsafePropertyFetch
+            || $expr instanceof Node\Expr\ArrayDimFetch
+        ) {
+            return $this->extractTopLevelVariables($expr->var);
+        }
+
+        if ($expr instanceof Node\Expr\StaticPropertyFetch) {
+            // `Class::$prop` — the class name is a Node\Name, not a variable.
+            // No top-level data flows through this construct, so return empty.
+            return [];
+        }
+
+        if ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\NullsafeMethodCall) {
+            /*
+             * For `$svc->render($body)`, the receiver `$svc` is one top-level
+             * input and each argument expression contributes additional
+             * top-level inputs. When the receiver is a scope-local (e.g. an
+             * injected service), the call's result is opaque, so any
+             * view-data argument should still surface as unsafe.
+             */
+            $names = $this->extractTopLevelVariables($expr->var);
+
+            foreach ($expr->args as $arg) {
+                if ($arg instanceof Node\Arg) {
+                    $names = [...$names, ...$this->extractTopLevelVariables($arg->value)];
+                }
+            }
+
+            return $names;
+        }
+
+        if ($expr instanceof Node\Expr\BinaryOp) {
+            return [
+                ...$this->extractTopLevelVariables($expr->left),
+                ...$this->extractTopLevelVariables($expr->right),
+            ];
+        }
+
+        if ($expr instanceof Node\Expr\Ternary) {
+            $names = $this->extractTopLevelVariables($expr->cond);
+            if ($expr->if instanceof Node\Expr) {
+                $names = [...$names, ...$this->extractTopLevelVariables($expr->if)];
+            }
+
+            $names = [...$names, ...$this->extractTopLevelVariables($expr->else)];
+
+            return $names;
+        }
+
+        if ($expr instanceof Node\Scalar\InterpolatedString) {
+            $names = [];
+            foreach ($expr->parts as $part) {
+                if ($part instanceof Node\Expr) {
+                    $names = [...$names, ...$this->extractTopLevelVariables($part)];
+                }
+            }
+
+            return $names;
+        }
+
+        if ($expr instanceof Node\Expr\Cast
+            || $expr instanceof Node\Expr\BooleanNot
+            || $expr instanceof Node\Expr\BitwiseNot
+            || $expr instanceof Node\Expr\UnaryMinus
+            || $expr instanceof Node\Expr\UnaryPlus
+        ) {
+            /*
+             * Single-operand operators ((string)$x, !$x, ~$x, -$x). Type
+             * casts do not sanitize HTML, so `(string) $tainted` flowing
+             * into a raw echo must surface `tainted` as unsafe.
+             */
+            return $this->extractTopLevelVariables($expr->expr);
+        }
+
+        if ($expr instanceof Node\Expr\Array_) {
+            $names = [];
+            foreach ($expr->items as $item) {
+                if (!($item instanceof Node\ArrayItem)) {
+                    // Skipped slots in destructuring shapes such as `[, $b]`
+                    // surface as `null` in the items list.
+                    continue;
+                }
+
+                $names = [...$names, ...$this->extractTopLevelVariables($item->value)];
+                if ($item->key instanceof Node\Expr) {
+                    $names = [...$names, ...$this->extractTopLevelVariables($item->key)];
+                }
+            }
+
+            return $names;
+        }
+
+        if ($expr instanceof Node\Expr\Match_) {
+            $names = $this->extractTopLevelVariables($expr->cond);
+            foreach ($expr->arms as $arm) {
+                $names = [...$names, ...$this->extractTopLevelVariables($arm->body)];
+
+                if ($arm->conds !== null) {
+                    foreach ($arm->conds as $cond) {
+                        $names = [...$names, ...$this->extractTopLevelVariables($cond)];
+                    }
+                }
+            }
+
+            return $names;
+        }
+
+        if ($expr instanceof Node\Expr\FuncCall || $expr instanceof Node\Expr\StaticCall || $expr instanceof Node\Expr\New_) {
+            // Unknown call inside an echo — conservatively treat its arguments
+            // as raw-echoed inputs. This is the "treat unknown calls as
+            // unsafe" rule from the design doc; callers can later add
+            // taint-escape annotations to specific helpers (out of scope for
+            // this PR).
+            $names = [];
+            foreach ($expr->args as $arg) {
+                if ($arg instanceof Node\Arg) {
+                    $names = [...$names, ...$this->extractTopLevelVariables($arg->value)];
+                }
+            }
+
+            return $names;
+        }
+
+        return [];
+    }
+
+    /** @psalm-external-mutation-free */
+    private function captureScopeLocalFromAssign(Node\Expr\Assign $assign): void
+    {
+        $this->captureLhsTargets($assign->var);
+    }
+
+    /** @psalm-external-mutation-free */
+    private function captureForeachLocals(Node\Stmt\Foreach_ $foreach): void
+    {
+        $this->captureLhsTargets($foreach->valueVar);
+
+        if ($foreach->keyVar instanceof Node\Expr) {
+            $this->captureLhsTargets($foreach->keyVar);
+        }
+    }
+
+    /**
+     * Walks an LHS expression (assignment target or foreach value/key var)
+     * and records every {@see Node\Expr\Variable} it finds as a scope-local.
+     *
+     * Handles nested destructuring: `[$a, [$b, $c]] = $data` records `a`, `b`,
+     * `c`; `@foreach ($pairs as [$k, $v])` records `k`, `v`. Without this
+     * walk, downstream raw echoes of the destructured names would surface as
+     * false-positive view-data keys.
+     *
+     * @psalm-external-mutation-free
+     */
+    private function captureLhsTargets(Node\Expr $target): void
+    {
+        if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
+            $this->scopeLocals[$target->name] = true;
+            return;
+        }
+
+        if ($target instanceof Node\Expr\List_ || $target instanceof Node\Expr\Array_) {
+            foreach ($target->items as $item) {
+                if (!($item instanceof Node\ArrayItem)) {
+                    continue;
+                }
+
+                $this->captureLhsTargets($item->value);
+            }
+        }
+    }
+
+    /** @psalm-external-mutation-free */
+    private function classifyEnvMethodCall(Node\Expr\MethodCall $call): void
+    {
+        if (!($call->var instanceof Node\Expr\Variable)) {
+            return;
+        }
+
+        if ($call->var->name !== '__env') {
+            return;
+        }
+
+        if (!($call->name instanceof Node\Identifier)) {
+            return;
+        }
+
+        $method = $call->name->toString();
+
+        if (\in_array($method, BladeTemplateScanner::envComponentMethods(), true)) {
+            $this->addUncertainty(BladeUncertaintyReason::ComponentTag);
+            return;
+        }
+
+        if (\in_array($method, BladeTemplateScanner::envLayoutMethods(), true)
+            || \in_array($method, BladeTemplateScanner::envStackMethods(), true)
+        ) {
+            $this->addUncertainty(BladeUncertaintyReason::LayoutSectionFlow);
+            return;
+        }
+
+        if (\in_array($method, BladeTemplateScanner::envIncludeMethods(), true)) {
+            $this->addUncertainty(BladeUncertaintyReason::IncludeDirective);
+        }
+    }
+
+    /** @psalm-external-mutation-free */
+    private function addUncertainty(BladeUncertaintyReason $reason): void
+    {
+        if (isset($this->seenUncertainty[$reason->name])) {
+            return;
+        }
+
+        $this->seenUncertainty[$reason->name] = true;
+        $this->uncertainties[] = $reason;
     }
 }
