@@ -501,6 +501,21 @@ final class ValidationRuleAnalyzerTest extends TestCase
     }
 
     #[Test]
+    public function class_segment_for_rules_enum_removes_all_input_taint(): void
+    {
+        // Issue #908 follow-on: the `Rules\Enum` class segment is the fallback
+        // path used when the analyzer can't statically resolve the enum-class
+        // argument (e.g. `new Enum($variable)`). The synthetic `enum:FQN`
+        // segment already escapes via ruleToRemovedTaints, so the class:
+        // fallback must match for parity — see FIRST_PARTY_RULE_ESCAPES entry.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'class:Illuminate\\Validation\\Rules\\Enum'],
+        );
+
+        $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
+    }
+
+    #[Test]
     public function class_segment_for_rules_notin_removes_no_taint(): void
     {
         // NotIn is deliberately not in FIRST_PARTY_RULE_ESCAPES: rejecting a
@@ -517,17 +532,19 @@ final class ValidationRuleAnalyzerTest extends TestCase
     /**
      * Defensive guard: these classes are mapped in RULE_FACADE_METHOD_RETURN_CLASS
      * but deliberately omitted from FIRST_PARTY_RULE_ESCAPES. File/ImageFile
-     * carry user-controlled filename/mime/contents; Enum is a plausible
-     * candidate for a future escape (backing values are developer-defined
-     * string literals) but is intentionally out of scope for the initial PR.
-     * If a future refactor added any of them, this test would flip to a
+     * carry user-controlled filename/mime/contents — no value-shape guarantee
+     * that would justify a blanket escape. Enum used to live here; #908 added
+     * an explicit escape entry (the validated value is always one of the
+     * developer-declared case backing values — a source-code constant, same
+     * provenance / whitelist trust model as Rule::in([...])), so it moves to
+     * the positive-assertion test above.
+     * If a future refactor added either of these, this test would flip to a
      * non-zero expectation and fail, forcing a deliberate decision.
      *
      * @return iterable<string, array{string}>
      */
     public static function provideNonEscapingMappedRuleClasses(): iterable
     {
-        yield 'Enum' => ['Illuminate\\Validation\\Rules\\Enum'];
         yield 'File' => ['Illuminate\\Validation\\Rules\\File'];
         yield 'ImageFile' => ['Illuminate\\Validation\\Rules\\ImageFile'];
     }
