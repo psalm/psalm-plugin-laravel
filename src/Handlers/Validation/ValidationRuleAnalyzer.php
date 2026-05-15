@@ -78,7 +78,7 @@ final class ValidationRuleAnalyzer
         // therefore sound for both branches. Covers the fallback class: path
         // when the enum class argument isn't statically resolvable (e.g.
         // `new Enum($variable)`).
-        'illuminate\\validation\\rules\\enum' => TaintKind::ALL_INPUT,
+        'illuminate\\validation\\rules\\enum' => TaintKindGroup::ALL_INPUT,
     ];
 
     /**
