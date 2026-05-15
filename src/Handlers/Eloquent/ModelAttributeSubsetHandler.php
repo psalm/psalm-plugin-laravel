@@ -90,6 +90,7 @@ final class ModelAttributeSubsetHandler
             if (!$argType instanceof Union || !$argType->isSingleStringLiteral()) {
                 return null;
             }
+
             $keys[] = $argType->getSingleStringLiteral()->value;
         }
 
@@ -141,6 +142,7 @@ final class ModelAttributeSubsetHandler
             if ($propType->possibly_undefined || !$propType->isSingleStringLiteral()) {
                 return null;
             }
+
             $keys[] = $propType->getSingleStringLiteral()->value;
         }
 
