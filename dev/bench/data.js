@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778845813110,
+  "lastUpdate": 1778849773346,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4092,6 +4092,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8b58da58160e7f919b024bc7a1628b79175fbbb",
+          "message": "Narrow `Rules\\Enum` and `Rules\\In` object forms in `validated()` (#911)\n\n* feat(validation): narrow Enum/In rule object forms #908\n\n`FormRequest::validated()` previously left fields validated by\n`new Enum(BackedEnum::class)`, `Rule::enum(...)`, `new In([...])`, or\n`new NotIn([...])` as `mixed`, forcing callers to assert types\nthemselves or accept the InvalidArgument error described in #908.\n\nRecognise these constructs during rule extraction and emit synthetic\n`enum:FQN` / `in:a,b,c` segments so the existing narrowing pipeline\nproduces the right literal union. Pure UnitEnums stay at `mixed` —\nLaravel's `Enum::passes()` rejects all scalar UnitEnum input, so any\nnarrower type would be unsound for the only paths that reach\nvalidated(). Variable / non-resolvable args fall through to the class:\nsegment, which now also escapes ALL_INPUT taint for `Rules\\Enum` parity\nwith the synthetic segment.\n\n* docs(validation): clarify enum taint-escape rationale #908\n\nCopilot review feedback: the 'no input-sink meta-characters' framing\nimplies a character-level guarantee that enum backing values don't\nactually carry — a developer could declare `case Evil = \"<script>\"`.\nThe actual safety argument matches Rule::in([...]): developer-authored\nwhitelist values are trusted because they live in source code, not\nbecause of their content.\n\n* docs/test(validation): refine taint comment + rename NotIn test #908\n\nRound-2 Copilot review:\n- Reword the ALL_INPUT group header in `ruleToRemovedTaints()` so it\n  covers both rationales — character-constrained rules and whitelist /\n  provenance rules ('in', 'enum') — instead of asserting a stricter\n  character-level guarantee that doesn't hold for the latter.\n- Rename `NewNotInVariadicRequest` → `NewNotInArrayLiteralRequest` to\n  match the actual constructor argument shape (an array literal, not\n  variadic strings).\n\n* docs(validation): correct enum escape rationale in unit-test comment #908\n\nRound-3 Copilot review: the docblock for provideNonEscapingMappedRuleClasses\nstill attributed Enum's escape to \"enum cases are character-constrained\",\ncontradicting the corrected source-comment rationale (developer-declared\ncase backing values, source-code constants, same trust model as\nRule::in([...])).",
+          "timestamp": "2026-05-15T14:53:35+02:00",
+          "tree_id": "446ff71e1cb10afddc66185439a05c70ac58a38e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d8b58da58160e7f919b024bc7a1628b79175fbbb"
+        },
+        "date": 1778849772653,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.13,
+            "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1099,
             "unit": "MB"
           }
         ]
