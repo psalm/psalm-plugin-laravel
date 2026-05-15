@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778862776059,
+  "lastUpdate": 1778863064246,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4157,6 +4157,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.08,
             "range": "± 0.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "97f02fae7e6855d24486358969faab563d4b2557",
+          "message": "Narrow MySQL `SET` columns to literal union in `ModelPropertyHandler` (#932)\n\n* feat(eloquent): narrow MySQL SET columns to literal union #924\n\nGroup SET with ENUM in `ModelPropertyHandler::mapColumnType` so SET\ncolumn properties resolve to `'a'|'b'|'c'` instead of `mixed`. MySQL\nreturns SET as a comma-separated string at runtime; the literal-union\nis an over-narrowing approximation but strictly better than `mixed`\nfor the common `in_array($column, [...])` check. Matches Larastan.\n\nAdds `SchemaColumn::TYPE_SET` for parity with the other `TYPE_*`\nconstants and replaces literal `'set'` / `'enum'` strings in\n`SchemaAggregator` and `SqlSchemaParser`.\n\nWraps the `TLiteralString::make()` loop with the same try/catch\nfallback used in `ValidationRuleAnalyzer::inRuleToLiteralUnion` so\nthe helper degrades to plain string when Psalm Config is not yet\ninitialized (unit-test context) or when an option exceeds\n`max_string_length`.\n\nCloses #924\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* docs: clarify in_array example refers to model attr #924\n\nAddresses copilot review: the example `in_array($column, [...])` was\nambiguous because `$column` in this scope is the SchemaColumn object,\nnot the model attribute value. Renamed to `$model->status` so the\nrationale reads as intended.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-15T18:35:17+02:00",
+          "tree_id": "c6b709055e60dd24a8a5857c682a92acce6c54d0",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/97f02fae7e6855d24486358969faab563d4b2557"
+        },
+        "date": 1778863063831,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.58,
+            "range": "± 0.06",
             "unit": "s"
           },
           {
