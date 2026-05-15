@@ -236,9 +236,10 @@ final class BladeTemplateScanner
         }
 
         $unsafeKeys = $visitor->computeUnsafeKeys(self::FRAMEWORK_LOCALS);
+        $includeEdges = $visitor->computeIncludeEdges(self::FRAMEWORK_LOCALS);
 
         if ($uncertainties !== []) {
-            return BladeTemplateAnalysis::unknown($uncertainties, $unsafeKeys);
+            return BladeTemplateAnalysis::unknown($uncertainties, $unsafeKeys, $includeEdges);
         }
 
         return BladeTemplateAnalysis::unsafeKeys($unsafeKeys);
@@ -402,6 +403,18 @@ final class BladeAstAnalysisVisitor extends NodeVisitorAbstract
 
     /** @var array<string, true> reason-name => true, dedup uncertainty set */
     private array $seenUncertainty = [];
+
+    /**
+     * Raw `@include` edges collected during traversal. Each entry records the
+     * literal child view name and, for the 3-argument compileInclude form, the
+     * unfiltered top-level variables present in each explicit-data-array entry.
+     * Filtering (scope-locals / framework-locals) is deferred to
+     * {@see computeIncludeEdges()} because scope-local discovery completes
+     * only after the whole AST has been walked.
+     *
+     * @var list<array{view: non-empty-string, explicit: array<non-empty-string, list<string>>|null}>
+     */
+    private array $rawIncludeEdges = [];
 
     #[\Override]
     public function enterNode(Node $node): ?int
@@ -813,8 +826,215 @@ final class BladeAstAnalysisVisitor extends NodeVisitorAbstract
         }
 
         if (\in_array($method, BladeTemplateScanner::envIncludeMethods(), true)) {
+            // Only `$__env->make(...)` (compiled from `@include` /
+            // `@includeIf` / `@includeIsolated`) is statically resolvable
+            // here. `first` / `renderEach` / `renderWhen` / `renderUnless`
+            // come from include-family directives the scanner does not yet
+            // model precisely (different call-arg shapes; resolution is
+            // tracked in PR-5+), so they fall through to the conservative
+            // IncludeDirective uncertainty unchanged.
+            if ($method === 'make' && $this->tryRecordIncludeEdge($call)) {
+                $this->addUncertainty(BladeUncertaintyReason::IncludeResolved);
+                return;
+            }
+
             $this->addUncertainty(BladeUncertaintyReason::IncludeDirective);
         }
+    }
+
+    /**
+     * Inspect a compiled `$__env->make(...)` call. When the view-name argument
+     * is a literal string AND (in the 3-arg form) the explicit-data argument
+     * is a literal `Array_`, record a {@see BladeIncludeEdge} and return true.
+     * Otherwise return false so the caller falls through to the unresolvable
+     * `IncludeDirective` path.
+     *
+     * `compileInclude()` emits at most three arguments:
+     *  - 2 args: `make($view, $mergeData = array_diff_key(get_defined_vars(),
+     *    ['__data' => 1, '__path' => 1]))`. There is no explicit data array;
+     *    every parent-scope variable flows through `mergeData`.
+     *  - 3 args: `make($view, $explicitData, $mergeData = array_diff_key(...))`.
+     *    The user wrote `@include('child', [...])` and the second argument is
+     *    the literal data array (Laravel does not transform it).
+     *
+     * Any other call shape (zero args, four+ args, `$__env->make(...)` outside
+     * the include compilation path) is treated as unresolvable.
+     *
+     * @psalm-external-mutation-free
+     */
+    private function tryRecordIncludeEdge(Node\Expr\MethodCall $call): bool
+    {
+        $args = $call->args;
+
+        if (\count($args) < 2 || \count($args) > 3) {
+            return false;
+        }
+
+        $viewArg = $args[0];
+
+        if (!$viewArg instanceof Node\Arg || $viewArg->unpack) {
+            return false;
+        }
+
+        if (!$viewArg->value instanceof Node\Scalar\String_) {
+            return false;
+        }
+
+        $view = $viewArg->value->value;
+
+        if ($view === '') {
+            return false;
+        }
+
+        if (\count($args) === 2) {
+            // 2-arg form: arg1 is the implicit mergeData (array_diff_key call).
+            // No explicit user-provided data array; encode as `null` so the
+            // propagation pass falls back entirely to the verbatim-key rule.
+            $this->rawIncludeEdges[] = ['view' => $view, 'explicit' => null];
+
+            return true;
+        }
+
+        $dataArg = $args[1];
+
+        if (!$dataArg instanceof Node\Arg || $dataArg->unpack) {
+            return false;
+        }
+
+        if (!$dataArg->value instanceof Node\Expr\Array_) {
+            return false;
+        }
+
+        $mapping = $this->parseLiteralKeyMap($dataArg->value);
+
+        if ($mapping === null) {
+            return false;
+        }
+
+        $this->rawIncludeEdges[] = ['view' => $view, 'explicit' => $mapping];
+
+        return true;
+    }
+
+    /**
+     * Build a key-to-bound-vars map from a literal data-array node. Returns
+     * null if any item carries an unenumerable key shape (argument spread,
+     * dynamic key); the caller falls through to the unresolvable path.
+     *
+     * Integer keys, list-style entries, and invalid-identifier string keys are
+     * silently skipped because `extract()` would not bind them to a usable
+     * variable name in the child template — including them would create
+     * keys that no child raw echo can match.
+     *
+     * @return array<non-empty-string, list<string>>|null
+     *
+     * @psalm-mutation-free
+     */
+    private function parseLiteralKeyMap(Node\Expr\Array_ $array): ?array
+    {
+        $map = [];
+
+        foreach ($array->items as $item) {
+            if (!$item instanceof Node\ArrayItem) {
+                continue;
+            }
+
+            if ($item->unpack) {
+                // Inline spread `[...$rest]` carries opaque keys.
+                return null;
+            }
+
+            $keyNode = $item->key;
+
+            if (!$keyNode instanceof \PhpParser\Node\Expr) {
+                // List-style entry `['foo']`; extract() drops it.
+                continue;
+            }
+
+            if ($keyNode instanceof Node\Scalar\Int_ || $keyNode instanceof Node\Scalar\LNumber) {
+                // Integer literal key `[0 => $x]`; extract() drops it.
+                // Two class names because php-parser renamed LNumber → Int_
+                // in 5.x; matching both keeps the scanner forward-compatible.
+                continue;
+            }
+
+            if (!$keyNode instanceof Node\Scalar\String_) {
+                // Dynamic key shape: defeats enumeration.
+                return null;
+            }
+
+            $keyName = $keyNode->value;
+
+            if ($keyName === '' || \preg_match('/^[A-Za-z_]\w*$/', $keyName) !== 1) {
+                // Non-identifier string key (`['1foo' => ...]`, empty string,
+                // dotted etc.); extract() drops it for the same reason
+                // BladeAwareViewTaintHandler::literalArrayKey() does.
+                continue;
+            }
+
+            $map[$keyName] = $this->extractTopLevelVariables($item->value);
+        }
+
+        return $map;
+    }
+
+    /**
+     * Project the raw edge list collected during traversal onto a list of
+     * {@see BladeIncludeEdge} value objects, filtering each explicit-key
+     * binding's variable list against scope-locals and framework-locals.
+     *
+     * Filtering happens here, not at edge-recording time, because the visitor
+     * traverses top-down: an assignment inside an `@php ... @endphp` block
+     * that follows an `@include` directive only registers as a scope-local
+     * after the include itself has been visited.
+     *
+     * @param array<string, true> $frameworkLocals
+     *
+     * @return list<BladeIncludeEdge>
+     *
+     * @psalm-mutation-free
+     */
+    public function computeIncludeEdges(array $frameworkLocals): array
+    {
+        $edges = [];
+
+        foreach ($this->rawIncludeEdges as $raw) {
+            $rawExplicit = $raw['explicit'];
+
+            if ($rawExplicit === null) {
+                $edges[] = new BladeIncludeEdge($raw['view'], null);
+                continue;
+            }
+
+            /** @var array<non-empty-string, list<non-empty-string>> $cleaned */
+            $cleaned = [];
+
+            foreach ($rawExplicit as $keyName => $names) {
+                $filtered = [];
+
+                foreach ($names as $name) {
+                    if ($name === '') {
+                        continue;
+                    }
+
+                    if (isset($this->scopeLocals[$name])) {
+                        continue;
+                    }
+
+                    if (isset($frameworkLocals[$name])) {
+                        continue;
+                    }
+
+                    $filtered[] = $name;
+                }
+
+                $cleaned[$keyName] = $filtered;
+            }
+
+            $edges[] = new BladeIncludeEdge($raw['view'], $cleaned);
+        }
+
+        return $edges;
     }
 
     /** @psalm-external-mutation-free */

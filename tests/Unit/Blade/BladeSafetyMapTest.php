@@ -194,6 +194,251 @@ final class BladeSafetyMapTest extends TestCase
         $this->assertSame([], $map->unsafeKeysFor('never.scanned'));
     }
 
+    public function test_include_literal_target_propagates_child_unsafe_keys_through_explicit_data_array(): void
+    {
+        // Parent calls `@include('partials.row', ['html' => $bio])`. Child's
+        // unsafe key 'html' is mapped through the parent's explicit array to
+        // the parent variable $bio. The parent's unsafe-keys gain 'bio' AND
+        // every other child unsafe key not bound by the explicit array
+        // (mergeData verbatim pass-through).
+        \mkdir($this->root . \DIRECTORY_SEPARATOR . 'partials', 0777, true);
+
+        $this->writeBlade($this->root, 'partials/row.blade.php', '{!! $html !!} {!! $secret !!}');
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            "@include('partials.row', ['html' => \$bio])",
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $parentSafety = $map->safetyFor('posts.show');
+
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $parentSafety);
+        $this->assertSame(BladeViewSafetyKind::UnsafeKeys, $parentSafety->kind());
+
+        $unsafe = $parentSafety->unsafeKeys();
+        \sort($unsafe);
+
+        // - 'html' was bound to $bio → parent gains 'bio'.
+        // - 'secret' was NOT bound → parent gains 'secret' verbatim (mergeData).
+        $this->assertSame(['bio', 'secret'], $unsafe);
+    }
+
+    public function test_include_with_no_explicit_data_propagates_child_keys_verbatim(): void
+    {
+        // 2-arg `@include('partials.row')` — no explicit data array, so every
+        // child unsafe key reaches the parent as the parent's same-named
+        // variable via mergeData.
+        \mkdir($this->root . \DIRECTORY_SEPARATOR . 'partials', 0777, true);
+
+        $this->writeBlade($this->root, 'partials/row.blade.php', '{!! $html !!}');
+        $this->writeBlade($this->root, 'posts/show.blade.php', "@include('partials.row')");
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertSame(['html'], $map->unsafeKeysFor('posts.show'));
+        $this->assertSame(BladeViewSafetyKind::UnsafeKeys, $map->safetyFor('posts.show')?->kind());
+    }
+
+    public function test_include_into_safe_child_leaves_parent_safe(): void
+    {
+        // A literal `@include` of a SAFE template propagates zero unsafe keys.
+        // The parent is flipped from UNKNOWN(IncludeResolved) to SAFE.
+        \mkdir($this->root . \DIRECTORY_SEPARATOR . 'partials', 0777, true);
+
+        $this->writeBlade($this->root, 'partials/row.blade.php', '<p>{{ $html }}</p>');
+        $this->writeBlade($this->root, 'posts/show.blade.php', "@include('partials.row')");
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertTrue($map->isKnownSafe('posts.show'));
+        $this->assertSame([], $map->unsafeKeysFor('posts.show'));
+    }
+
+    public function test_include_with_non_literal_target_keeps_parent_unknown(): void
+    {
+        // Dynamic include target: scanner cannot resolve the child, so the
+        // propagation pass cannot run. Parent stays UNKNOWN(IncludeDirective).
+        $this->writeBlade($this->root, 'posts/show.blade.php', "@include(\$partial, ['x' => \$y])");
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $safety = $map->safetyFor('posts.show');
+
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+        $this->assertSame(BladeViewSafetyKind::Unknown, $safety->kind());
+        $this->assertContains(BladeUncertaintyReason::IncludeDirective, $safety->uncertainties());
+    }
+
+    public function test_include_with_non_literal_data_array_keeps_parent_unknown(): void
+    {
+        // Literal target, dynamic data array (`$data`): the explicit key
+        // binding is unenumerable, so the scanner emits IncludeDirective
+        // rather than IncludeResolved. Parent stays UNKNOWN.
+        \mkdir($this->root . \DIRECTORY_SEPARATOR . 'partials', 0777, true);
+
+        $this->writeBlade($this->root, 'partials/row.blade.php', '{!! $html !!}');
+        $this->writeBlade($this->root, 'posts/show.blade.php', "@include('partials.row', \$data)");
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $safety = $map->safetyFor('posts.show');
+
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+        $this->assertSame(BladeViewSafetyKind::Unknown, $safety->kind());
+        $this->assertContains(BladeUncertaintyReason::IncludeDirective, $safety->uncertainties());
+    }
+
+    public function test_include_into_unknown_child_keeps_parent_unknown(): void
+    {
+        // Child is UNKNOWN (its own LayoutSectionFlow uncertainty). Parent's
+        // contribution from the include is opaque → parent stays UNKNOWN
+        // even though the include itself was statically resolvable.
+        \mkdir($this->root . \DIRECTORY_SEPARATOR . 'partials', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'partials/row.blade.php',
+            "@yield('chunk')",
+        );
+        $this->writeBlade($this->root, 'posts/show.blade.php', "@include('partials.row')");
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $safety = $map->safetyFor('posts.show');
+
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+        $this->assertSame(BladeViewSafetyKind::Unknown, $safety->kind());
+        $this->assertContains(BladeUncertaintyReason::IncludeDirective, $safety->uncertainties());
+    }
+
+    public function test_include_into_unknown_child_does_not_propagate_local_unsafe_keys(): void
+    {
+        // Even when a child is UNKNOWN, the propagation pass treats the
+        // include's contribution as opaque rather than reusing the child's
+        // local unsafe-keys list. The parent's localUnsafeKeys are
+        // preserved on the resulting safety record (for diagnostics) but
+        // they do not include the child's keys.
+        \mkdir($this->root . \DIRECTORY_SEPARATOR . 'partials', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'partials/row.blade.php',
+            "{!! \$inner !!} @yield('chunk')",
+        );
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            "{!! \$parentRaw !!} @include('partials.row')",
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $safety = $map->safetyFor('posts.show');
+
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+        $this->assertSame(BladeViewSafetyKind::Unknown, $safety->kind());
+        // The parent's local raw echo of $parentRaw is preserved.
+        $this->assertContains('parentRaw', $safety->unsafeKeys());
+        // But the child's 'inner' key does NOT leak through opaque UNKNOWN.
+        $this->assertNotContains('inner', $safety->unsafeKeys());
+    }
+
+    public function test_include_cycle_marks_every_member_unknown_include_cycle(): void
+    {
+        // a → b → a. Both participate; both become UNKNOWN(IncludeCycle).
+        $this->writeBlade($this->root, 'posts/a.blade.php', "@include('posts.b')");
+        $this->writeBlade($this->root, 'posts/b.blade.php', "@include('posts.a')");
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        foreach (['posts.a', 'posts.b'] as $name) {
+            $safety = $map->safetyFor($name);
+
+            $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+            $this->assertSame(BladeViewSafetyKind::Unknown, $safety->kind());
+            $this->assertContains(BladeUncertaintyReason::IncludeCycle, $safety->uncertainties());
+        }
+    }
+
+    public function test_include_self_loop_is_marked_include_cycle(): void
+    {
+        $this->writeBlade($this->root, 'posts/self.blade.php', "@include('posts.self')");
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $safety = $map->safetyFor('posts.self');
+
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+        $this->assertSame(BladeViewSafetyKind::Unknown, $safety->kind());
+        $this->assertContains(BladeUncertaintyReason::IncludeCycle, $safety->uncertainties());
+    }
+
+    public function test_include_with_other_uncertainty_strips_include_resolved_marker(): void
+    {
+        // Parent has BOTH a literal `@include` (would normally produce
+        // IncludeResolved) AND another uncertainty (@yield → LayoutSectionFlow).
+        // The propagation pass is non-eligible (uncertainty list contains a
+        // non-IncludeResolved entry), so propagation is skipped. The
+        // post-build safety record must NOT expose IncludeResolved — that
+        // marker is documented as intermediate-only via
+        // {@see BladeUncertaintyReason::IncludeResolved}'s class docblock.
+        \mkdir($this->root . \DIRECTORY_SEPARATOR . 'partials', 0777, true);
+
+        $this->writeBlade($this->root, 'partials/row.blade.php', '{!! $html !!}');
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            "@yield('chunk')\n@include('partials.row')",
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $safety = $map->safetyFor('posts.show');
+
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+        $this->assertSame(BladeViewSafetyKind::Unknown, $safety->kind());
+        $this->assertContains(BladeUncertaintyReason::LayoutSectionFlow, $safety->uncertainties());
+        $this->assertNotContains(
+            BladeUncertaintyReason::IncludeResolved,
+            $safety->uncertainties(),
+            'IncludeResolved is an intermediate marker and must not leak into the public map.',
+        );
+    }
+
+    public function test_include_chain_propagates_through_multiple_hops(): void
+    {
+        // a includes b, b includes c. c has unsafe key 'html'. The
+        // propagation pass folds c → b → a so a gains 'html'.
+        \mkdir($this->root . \DIRECTORY_SEPARATOR . 'partials', 0777, true);
+
+        $this->writeBlade($this->root, 'partials/c.blade.php', '{!! $html !!}');
+        $this->writeBlade($this->root, 'partials/b.blade.php', "@include('partials.c')");
+        $this->writeBlade($this->root, 'posts/a.blade.php', "@include('partials.b')");
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertSame(['html'], $map->unsafeKeysFor('posts.a'));
+        $this->assertSame(['html'], $map->unsafeKeysFor('partials.b'));
+        $this->assertSame(['html'], $map->unsafeKeysFor('partials.c'));
+    }
+
+    public function test_include_with_missing_child_view_keeps_parent_unknown(): void
+    {
+        // Child view does not exist on disk (typo). Propagation cannot
+        // proceed; parent stays UNKNOWN(IncludeDirective).
+        $this->writeBlade($this->root, 'posts/show.blade.php', "@include('missing.partial')");
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $safety = $map->safetyFor('posts.show');
+
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Blade\BladeViewSafety::class, $safety);
+        $this->assertSame(BladeViewSafetyKind::Unknown, $safety->kind());
+        $this->assertContains(BladeUncertaintyReason::IncludeDirective, $safety->uncertainties());
+    }
+
     public function test_unreadable_blade_file_is_recorded_as_unknown(): void
     {
         // Verifies the FILE_UNREADABLE branch in BladeSafetyMap::build().

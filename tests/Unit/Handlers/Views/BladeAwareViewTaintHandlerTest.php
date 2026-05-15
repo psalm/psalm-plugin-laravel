@@ -274,8 +274,11 @@ final class BladeAwareViewTaintHandlerTest extends TestCase
         $graph = new TaintFlowGraph();
         $codebase = $this->createCodebase($graph);
 
+        // `share` is a real Factory method but is intentionally NOT in the
+        // dispatch table (see buildMethodSpecs' deferred-list comment). The
+        // hot-path suffix gate should reject it cleanly.
         $event = $this->makeMethodEvent(
-            \Illuminate\View\Factory::class . '::renderEach',
+            \Illuminate\View\Factory::class . '::share',
             [
                 new Arg(new String_('post')),
                 new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
@@ -719,6 +722,1045 @@ final class BladeAwareViewTaintHandlerTest extends TestCase
         $this->assertSinkLabelExists($this->graphSinks($graph), "(post, 'bio')");
     }
 
+    #[Test]
+    public function factory_first_unions_unsafe_keys_across_literal_templates(): void
+    {
+        // first(['a', 'b'], $data): scanner sees 'a' has 'bio', 'b' has 'title'.
+        // The handler sinks both keys when present in the data array.
+        $this->initWithMap([
+            'a' => new BladeViewSafety('a', '/views/a.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+            'b' => new BladeViewSafety('b', '/views/b.blade.php', BladeTemplateAnalysis::unsafeKeys(['title'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::first', [
+            new Arg($this->viewNameList(['a', 'b'])),
+            new Arg($this->arrayLiteral([
+                'bio' => $this->taintedVariable('bio'),
+                'title' => $this->taintedVariable('title'),
+                'safe' => $this->taintedVariable('safe'),
+            ])),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $sinks = $this->graphSinks($graph);
+
+        $this->assertCount(2, $sinks, 'Union of bio + title; safe is not sunk.');
+        $this->assertSinkLabelExists($sinks, "'bio'");
+        $this->assertSinkLabelExists($sinks, "'title'");
+    }
+
+    #[Test]
+    public function factory_first_with_unknown_template_falls_back_to_whole_data_sink(): void
+    {
+        // first(['a', 'b']) where 'a' is UNKNOWN — the unsafe-key union loses
+        // soundness, so the call falls back to the whole-data sink.
+        $this->initWithMap([
+            'a' => new BladeViewSafety(
+                'a',
+                '/views/a.blade.php',
+                BladeTemplateAnalysis::unknown([BladeUncertaintyReason::LayoutSectionFlow]),
+            ),
+            'b' => new BladeViewSafety('b', '/views/b.blade.php', BladeTemplateAnalysis::unsafeKeys(['title'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::first', [
+            new Arg($this->viewNameList(['a', 'b'])),
+            new Arg($this->arrayLiteral([
+                'bio' => $this->taintedVariable('bio'),
+                'title' => $this->taintedVariable('title'),
+            ])),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $sinks = $this->graphSinks($graph);
+
+        // Whole-data fallback sinks BOTH keys regardless of which template
+        // tripped the fallback.
+        $this->assertCount(2, $sinks);
+    }
+
+    #[Test]
+    public function factory_first_with_non_literal_array_item_falls_back_to_whole_data(): void
+    {
+        $this->initWithMap([
+            'a' => new BladeViewSafety('a', '/views/a.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        // One literal, one variable item. Whole-data sink fires because the
+        // second template's name is opaque at analysis time.
+        $viewsArray = new Array_([
+            new ArrayItem(new String_('a')),
+            new ArrayItem($this->taintedVariable('dynamicTemplate')),
+        ]);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::first', [
+            new Arg($viewsArray),
+            new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $sinks = $this->graphSinks($graph);
+
+        // Whole-data fallback fires. The label carries the first literal
+        // candidate name encountered before the non-literal item (here 'a').
+        // When no literal candidate is resolved first, the dispatcher would
+        // emit '<first-dynamic>' instead.
+        $this->assertSinkLabelExists($sinks, "(a, 'bio')");
+    }
+
+    #[Test]
+    public function factory_first_with_non_array_views_arg_falls_back_to_dynamic(): void
+    {
+        $this->initWithMap([]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::first', [
+            new Arg($this->taintedVariable('views')),
+            new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(<dynamic>, 'bio')");
+    }
+
+    #[Test]
+    public function factory_first_all_safe_templates_install_no_sink(): void
+    {
+        $this->initWithMap([
+            'a' => new BladeViewSafety('a', '/views/a.blade.php', BladeTemplateAnalysis::safe()),
+            'b' => new BladeViewSafety('b', '/views/b.blade.php', BladeTemplateAnalysis::safe()),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::first', [
+            new Arg($this->viewNameList(['a', 'b'])),
+            new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function factory_render_each_with_literal_iterator_matching_unsafe_key(): void
+    {
+        // renderEach('row', $items, 'user'): the child template binds each
+        // $items element under $user. If 'user' is an unsafe key, sink $items.
+        $this->initWithMap([
+            'row' => new BladeViewSafety('row', '/views/row.blade.php', BladeTemplateAnalysis::unsafeKeys(['user'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::rendereach', [
+            new Arg(new String_('row')),
+            new Arg($this->taintedVariable('items')),
+            new Arg(new String_('user')),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(row, 'user')");
+    }
+
+    #[Test]
+    public function factory_render_each_with_non_matching_iterator_installs_no_sink(): void
+    {
+        $this->initWithMap([
+            'row' => new BladeViewSafety('row', '/views/row.blade.php', BladeTemplateAnalysis::unsafeKeys(['other'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        // 'user' iterator does not match the unsafe key 'other'.
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::rendereach', [
+            new Arg(new String_('row')),
+            new Arg($this->taintedVariable('items')),
+            new Arg(new String_('user')),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function factory_render_each_with_non_literal_iterator_falls_back_to_whole_data(): void
+    {
+        $this->initWithMap([
+            'row' => new BladeViewSafety('row', '/views/row.blade.php', BladeTemplateAnalysis::unsafeKeys(['user'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::rendereach', [
+            new Arg(new String_('row')),
+            new Arg($this->taintedVariable('items')),
+            new Arg($this->taintedVariable('iteratorName')),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(row, '<argument>')");
+    }
+
+    #[Test]
+    public function factory_render_each_with_unknown_template_falls_back_to_whole_data(): void
+    {
+        $this->initWithMap([
+            'row' => new BladeViewSafety(
+                'row',
+                '/views/row.blade.php',
+                BladeTemplateAnalysis::unknown([BladeUncertaintyReason::LayoutSectionFlow]),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::rendereach', [
+            new Arg(new String_('row')),
+            new Arg($this->taintedVariable('items')),
+            new Arg(new String_('user')),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(row, '<argument>')");
+    }
+
+    #[Test]
+    public function response_factory_view_installs_per_key_sink(): void
+    {
+        // Same shape as Factory::make() but on a different class. The contract
+        // and concrete class are both registered; both must dispatch.
+        $this->initWithMap([
+            'profile' => new BladeViewSafety(
+                'profile',
+                '/views/profile.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\Routing\ResponseFactory::class . '::view',
+            [
+                new Arg(new String_('profile')),
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(profile, 'bio')");
+    }
+
+    #[Test]
+    public function response_factory_contract_view_installs_per_key_sink(): void
+    {
+        $this->initWithMap([
+            'profile' => new BladeViewSafety(
+                'profile',
+                '/views/profile.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\Contracts\Routing\ResponseFactory::class . '::view',
+            [
+                new Arg(new String_('profile')),
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(profile, 'bio')");
+    }
+
+    #[Test]
+    public function view_with_chained_off_view_helper_installs_single_key_sink(): void
+    {
+        // view('post')->with('bio', $bio) — receiver resolves to 'post' via
+        // FuncCall walk. Single-key sink fires when 'bio' is unsafe.
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $bioVar = $this->taintedVariable('bio');
+
+        // Build the chained receiver expression.
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('post'))]);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $viewCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg($bioVar),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(post, 'bio')");
+    }
+
+    #[Test]
+    public function view_with_chained_off_factory_make_installs_single_key_sink(): void
+    {
+        // \Illuminate\Support\Facades\View::make('post')->with('bio', $bio) —
+        // static call receiver.
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $bioVar = $this->taintedVariable('bio');
+
+        $makeCall = new StaticCall(
+            new Name(\Illuminate\Support\Facades\View::class),
+            'make',
+            [new Arg(new String_('post'))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $makeCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg($bioVar),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(post, 'bio')");
+    }
+
+    #[Test]
+    public function view_with_unresolvable_receiver_installs_no_sink(): void
+    {
+        // $v->with('bio', $bio) — receiver is a bare variable; we can't trace
+        // the view name back through it. No sink, per the documented policy.
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $this->taintedVariable('viewInstance'),
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function view_with_non_matching_key_installs_no_sink(): void
+    {
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('post'))]);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $viewCall,
+            [
+                new Arg(new String_('title')),
+                new Arg($this->taintedVariable('title')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function view_with_unknown_template_falls_back_to_value_sink(): void
+    {
+        $this->initWithMap([
+            'broken' => new BladeViewSafety(
+                'broken',
+                '/views/broken.blade.php',
+                BladeTemplateAnalysis::unknown([BladeUncertaintyReason::LayoutSectionFlow]),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('broken'))]);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $viewCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        // UNKNOWN template + literal key → sink installed on $value with the
+        // literal key name (NOT the whole-arg fallback label).
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(broken, 'bio')");
+    }
+
+    #[Test]
+    public function view_with_chained_through_prior_with_call(): void
+    {
+        // view('post')->with('first', 1)->with('bio', $bio) — the receiver of
+        // the outer with() is a MethodCall whose method-name is 'with'. The
+        // resolver recurses into its receiver to recover 'post'.
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('post'))]);
+        $innerWith = new \PhpParser\Node\Expr\MethodCall(
+            $viewCall,
+            'with',
+            [new Arg(new String_('first')), new Arg(new String_('1'))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $innerWith,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(post, 'bio')");
+    }
+
+    #[Test]
+    public function mailable_view_installs_per_key_sink(): void
+    {
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::view',
+            [
+                new Arg(new String_('emails.welcome')),
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(emails.welcome, 'bio')");
+    }
+
+    #[Test]
+    public function mailable_markdown_installs_per_key_sink(): void
+    {
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::markdown',
+            [
+                new Arg(new String_('emails.welcome')),
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(emails.welcome, 'bio')");
+    }
+
+    #[Test]
+    public function mailable_text_installs_per_key_sink(): void
+    {
+        $this->initWithMap([
+            'emails.welcome-text' => new BladeViewSafety(
+                'emails.welcome-text',
+                '/views/emails/welcome-text.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::text',
+            [
+                new Arg(new String_('emails.welcome-text')),
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(emails.welcome-text, 'bio')");
+    }
+
+    #[Test]
+    public function mail_message_view_installs_per_key_sink(): void
+    {
+        $this->initWithMap([
+            'notification' => new BladeViewSafety(
+                'notification',
+                '/views/notification.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['user']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\Notifications\Messages\MailMessage::class . '::view',
+            [
+                new Arg(new String_('notification')),
+                new Arg($this->arrayLiteral(['user' => $this->taintedVariable('user')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(notification, 'user')");
+    }
+
+    #[Test]
+    public function content_constructor_installs_sinks_for_each_view_slot(): void
+    {
+        // Content(?view, ?html, ?text, ?markdown, with = []). When view AND
+        // text resolve to literal templates and both have an unsafe key
+        // matching $with, one sink per view-slot fires.
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+            'emails.welcome-text' => new BladeViewSafety(
+                'emails.welcome-text',
+                '/views/emails/welcome-text.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\Mail\Mailables\Content::class . '::__construct',
+            [
+                new Arg(new String_('emails.welcome')),
+                new Arg(new String_('')),
+                new Arg(new String_('emails.welcome-text')),
+                new Arg(new String_('')),
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $sinks = $this->graphSinks($graph);
+
+        // Both view slots (index 0 and 2) contribute a sink — markdown (index
+        // 3) is the empty literal '' (treated as a literal string), but since
+        // there's no 'emails.welcome-markdown' or matching name in the map,
+        // it produces no sink. Test asserts only the two confirmed.
+        $this->assertSinkLabelExists($sinks, "(emails.welcome, 'bio')");
+        $this->assertSinkLabelExists($sinks, "(emails.welcome-text, 'bio')");
+    }
+
+    #[Test]
+    public function factory_first_mixed_safe_and_unsafe_takes_union(): void
+    {
+        // 'a' is SAFE (contributes nothing), 'b' has unsafe key 'bio'. The
+        // dispatcher must NOT short-circuit on SAFE and must take the
+        // union, so 'bio' surfaces as the sole sink.
+        $this->initWithMap([
+            'a' => new BladeViewSafety('a', '/views/a.blade.php', BladeTemplateAnalysis::safe()),
+            'b' => new BladeViewSafety('b', '/views/b.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::first', [
+            new Arg($this->viewNameList(['a', 'b'])),
+            new Arg($this->arrayLiteral([
+                'bio' => $this->taintedVariable('bio'),
+                'safe' => $this->taintedVariable('safe'),
+            ])),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $sinks = $this->graphSinks($graph);
+
+        $this->assertCount(1, $sinks);
+        $this->assertSinkLabelExists($sinks, "'bio'");
+    }
+
+    #[Test]
+    public function factory_first_with_mixed_unknown_in_map_and_missing_falls_back_to_whole_data(): void
+    {
+        // One candidate is in-map UNKNOWN (trips the UNKNOWN-fallback);
+        // another is not-in-map (which on its own would silently skip).
+        // The UNKNOWN should dominate regardless of iteration order; the
+        // result is the whole-data fallback. Regression for the policy
+        // boundary documented at dispatchFirstLike's "not in map →
+        // continue" branch.
+        $this->initWithMap([
+            'inMapUnknown' => new BladeViewSafety(
+                'inMapUnknown',
+                '/views/inMapUnknown.blade.php',
+                BladeTemplateAnalysis::unknown([BladeUncertaintyReason::LayoutSectionFlow]),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::first', [
+            new Arg($this->viewNameList(['inMapUnknown', 'notInMap'])),
+            new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        // Whole-data fallback fires; the label carries the UNKNOWN
+        // candidate's name (the first to trip the fallback).
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(inMapUnknown,");
+    }
+
+    #[Test]
+    public function factory_first_empty_array_installs_no_sink(): void
+    {
+        // `first([], $data)` — zero candidates. Laravel throws at runtime
+        // (InvalidArgumentException). At analysis time we install nothing:
+        // there is no template to sink against. Documents the boundary.
+        $this->initWithMap([]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(\Illuminate\View\Factory::class . '::first', [
+            new Arg($this->viewNameList([])),
+            new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+        ], $codebase);
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function view_first_chained_with_multiple_literal_candidates_skips_sink(): void
+    {
+        // Receiver-walk soundness: `View::first(['a', 'b'])->with('bio', $bio)`.
+        // The receiver array carries multiple literal candidates; the
+        // dispatcher cannot tell which Laravel will pick at runtime, so it
+        // refuses resolution rather than picking one and risking a missed
+        // XSS in the unpicked template.
+        $this->initWithMap([
+            'a' => new BladeViewSafety('a', '/views/a.blade.php', BladeTemplateAnalysis::safe()),
+            'b' => new BladeViewSafety('b', '/views/b.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $firstCall = new StaticCall(
+            new Name(\Illuminate\Support\Facades\View::class),
+            'first',
+            [new Arg($this->viewNameList(['a', 'b']))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $firstCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function view_with_array_form_installs_per_key_sinks(): void
+    {
+        // Laravel's `View::with($key, $value = null)` accepts $key as a
+        // string OR array. The array form merges every entry into the view
+        // data via `array_merge($this->data, $key)`. Without this dispatch
+        // the array form would silently bypass taint analysis.
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('post'))]);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $viewCall,
+            [
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(post, 'bio')");
+    }
+
+    #[Test]
+    public function view_with_array_form_on_unknown_template_installs_whole_data_sink(): void
+    {
+        $this->initWithMap([
+            'broken' => new BladeViewSafety(
+                'broken',
+                '/views/broken.blade.php',
+                BladeTemplateAnalysis::unknown([BladeUncertaintyReason::LayoutSectionFlow]),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('broken'))]);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $viewCall,
+            [
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertNotEmpty($this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function view_with_array_key_and_non_null_value_still_routes_to_array_dispatch(): void
+    {
+        // Laravel ignores `$value` when `$key` is an array, regardless of
+        // `$value`'s shape: `with(['bio' => $tainted], $unused)` merges only
+        // the array. The dispatcher must NOT sink on $unused.
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('post'))]);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $viewCall,
+            [
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+                new Arg($this->taintedVariable('unusedSecondArg')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $sinks = $this->graphSinks($graph);
+
+        // Exactly one sink: the array's 'bio' entry. Not the unused $value.
+        $this->assertCount(1, $sinks);
+        $this->assertSinkLabelExists($sinks, "(post, 'bio')");
+    }
+
+    #[Test]
+    public function view_with_string_key_and_explicit_null_value_installs_no_sink(): void
+    {
+        // `with('key', null)` — string key, explicit null value. Laravel
+        // binds null to the literal key; no value flows. The array-form
+        // gate must NOT misroute this through `installSinksForArg`, which
+        // would otherwise install a `<argument>` whole-arg sink on the key
+        // expression and produce a false positive when `$keyVar` is tainted.
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('post'))]);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $viewCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg(new \PhpParser\Node\Expr\ConstFetch(new Name('null'))),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        // Null value has no taintable parent_nodes, so even reaching
+        // installSinkForExpression would short-circuit. Asserting the empty
+        // sink list pins the no-FP boundary against future refactors that
+        // could route the call through a whole-data fallback.
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function view_with_variable_key_and_explicit_null_value_installs_no_sink(): void
+    {
+        // `with($scalarKeyVar, null)` — variable key, explicit null value.
+        // The dispatcher must NOT enter the array-form branch (the key is
+        // not an array literal) and therefore must NOT install a sink on
+        // the key variable. This is the Round 2 security finding fix.
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('post'))]);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $viewCall,
+            [
+                new Arg($this->taintedVariable('keyName')),
+                new Arg(new \PhpParser\Node\Expr\ConstFetch(new Name('null'))),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function view_with_array_form_with_explicit_null_value_routes_to_array_dispatch(): void
+    {
+        // `->with(['bio' => $tainted], null)` — explicit `null` $value with
+        // array $key. Same array-form semantics as the 1-arg shape.
+        $this->initWithMap([
+            'post' => new BladeViewSafety('post', '/views/post.blade.php', BladeTemplateAnalysis::unsafeKeys(['bio'])),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $viewCall = new FuncCall(new Name('view'), [new Arg(new String_('post'))]);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\View\View::class . '::with',
+            $viewCall,
+            [
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+                new Arg(new \PhpParser\Node\Expr\ConstFetch(new Name('null'))),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(post, 'bio')");
+    }
+
+    #[Test]
+    public function content_constructor_with_explicit_null_view_slots_installs_no_dynamic_sink(): void
+    {
+        // `new Content(view: null, text: 'emails.welcome-text', markdown: null,
+        // with: ['bio' => $tainted])` — opt out of two slots with literal
+        // `null`. Each null slot must NOT install a `<dynamic>` whole-data
+        // sink; only the text slot dispatches against its real safety record.
+        $this->initWithMap([
+            'emails.welcome-text' => new BladeViewSafety(
+                'emails.welcome-text',
+                '/views/emails/welcome-text.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $nullConst = new \PhpParser\Node\Expr\ConstFetch(new Name('null'));
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\Mail\Mailables\Content::class . '::__construct',
+            [
+                new Arg($nullConst), // view: null
+                new Arg(new String_('')), // html (pre-rendered, unregistered)
+                new Arg(new String_('emails.welcome-text')), // text: 'emails.welcome-text'
+                new Arg($nullConst), // markdown: null
+                new Arg($this->arrayLiteral(['bio' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $sinks = $this->graphSinks($graph);
+
+        // Exactly one sink: the text slot's per-key sink. No <dynamic>
+        // whole-data sinks from the null slots.
+        $this->assertCount(1, $sinks);
+        $this->assertSinkLabelExists($sinks, "(emails.welcome-text, 'bio')");
+    }
+
+    #[Test]
+    public function view_nest_with_dynamic_nested_view_falls_back_to_dynamic(): void
+    {
+        $this->initWithMap([]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\View\View::class . '::nest',
+            [
+                new Arg(new String_('section')),
+                new Arg($this->taintedVariable('dynamicNestedView')),
+                new Arg($this->arrayLiteral(['html' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(<dynamic>, 'html')");
+    }
+
+    #[Test]
+    public function view_nest_installs_sink_on_nested_view_data(): void
+    {
+        // $factory->nest('section', 'partials.row', ['html' => $bio]). The
+        // child template at index 1 is the safety lookup; data at index 2.
+        $this->initWithMap([
+            'partials.row' => new BladeViewSafety(
+                'partials.row',
+                '/views/partials/row.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['html']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeMethodEvent(
+            \Illuminate\View\View::class . '::nest',
+            [
+                new Arg(new String_('section')),
+                new Arg(new String_('partials.row')),
+                new Arg($this->arrayLiteral(['html' => $this->taintedVariable('bio')])),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(partials.row, 'html')");
+    }
+
     /**
      * Build the handler with a synthetic safety map. The map is opaque to the
      * scanner here: tests fabricate {@see BladeViewSafety} records directly,
@@ -729,6 +1771,39 @@ final class BladeAwareViewTaintHandlerTest extends TestCase
     private function initWithMap(array $safetyByView): void
     {
         BladeAwareViewTaintHandler::init(new BladeSafetyMap($safetyByView));
+    }
+
+    /**
+     * Build an {@see AfterMethodCallAnalysisEvent} backed by an instance
+     * MethodCall (rather than the StaticCall used by {@see makeMethodEvent}).
+     * The dispatcher's receiver-walk for `View::with` requires a real
+     * `\PhpParser\Node\Expr\MethodCall` so it can inspect `$expr->var`.
+     *
+     * @param list<Arg> $args
+     */
+    private function makeInstanceMethodEvent(
+        string $methodId,
+        \PhpParser\Node\Expr $receiver,
+        array $args,
+        Codebase $codebase,
+    ): AfterMethodCallAnalysisEvent {
+        $methodName = \explode('::', $methodId)[1];
+
+        $methodCall = new \PhpParser\Node\Expr\MethodCall($receiver, $methodName, $args);
+        $methodCall->setAttribute('startFilePos', 0);
+        $methodCall->setAttribute('endFilePos', 100);
+
+        $source = $this->makeSource($args);
+
+        return new AfterMethodCallAnalysisEvent(
+            $methodCall,
+            $methodId,
+            $methodId,
+            $methodId,
+            new Context(),
+            $source,
+            $codebase,
+        );
     }
 
     /**
@@ -891,6 +1966,24 @@ final class BladeAwareViewTaintHandlerTest extends TestCase
 
         foreach ($entries as $key => $value) {
             $items[] = new ArrayItem($value, new String_((string) $key));
+        }
+
+        return new Array_($items);
+    }
+
+    /**
+     * Build a list-style `[String_('a'), String_('b'), ...]` array literal
+     * for `Factory::first()`'s candidate-view array. Distinct from
+     * {@see arrayLiteral()} which expects associative `key => Expr` pairs.
+     *
+     * @param list<string> $names
+     */
+    private function viewNameList(array $names): Array_
+    {
+        $items = [];
+
+        foreach ($names as $name) {
+            $items[] = new ArrayItem(new String_($name));
         }
 
         return new Array_($items);

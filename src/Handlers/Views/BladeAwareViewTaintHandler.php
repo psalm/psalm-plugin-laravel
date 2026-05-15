@@ -16,6 +16,7 @@ use Psalm\CodeLocation;
 use Psalm\Internal\Codebase\TaintFlowGraph;
 use Psalm\Internal\DataFlow\DataFlowNode;
 use Psalm\LaravelPlugin\Blade\BladeSafetyMap;
+use Psalm\LaravelPlugin\Blade\BladeTemplateAnalysis;
 use Psalm\LaravelPlugin\Blade\BladeViewSafety;
 use Psalm\LaravelPlugin\Blade\BladeViewSafetyKind;
 use Psalm\Plugin\EventHandler\AfterFunctionCallAnalysisInterface;
@@ -58,20 +59,26 @@ use Psalm\Type\Union;
  * same `extract()` call as `$data`, so it is subjected to identical rules:
  * the keys observed by the scanner apply to either source.
  *
- * Out of scope (handled in PR-4 onwards, tracked under issue #581):
- *  - `@include('child', [...])` propagation into the parent template's safety
- *    record. The scanner flags any include as UNKNOWN, so the conservative
- *    fallback already covers it; PR-4 will narrow this.
+ * Out of scope (tracked under issue #581 for PR-5+):
  *  - Component data flow (`<x-foo :bar="$data" />`).
- *  - `Factory::first(array $views, ...)` and `Factory::renderEach()`. `first()`
- *    needs a union over multiple template safety records; `renderEach()` has a
- *    different argument shape (`$data` is a collection, `$iterator` names the
- *    per-item variable, the template echoes `$iterator` not data-array keys).
- *    Both fold into the same dispatch helper but require extra wiring beyond
- *    the scope of this PR.
- *  - `ResponseFactory::view()`. Same shape as `Factory::make()` but on a
- *    different service class; will follow once PR-3 stabilises the per-call
- *    sink construction.
+ *  - Variable-bound view-builder chains (`$v = view('home'); $v->with(...)`)
+ *    where the receiver-walk in {@see self::resolveReceiverViewName()} cannot
+ *    recover the literal view name through the intermediate variable binding.
+ *    PR-5 may attach view-name metadata to the {@see Union} returned by
+ *    `view()` / `Factory::make()` so the chain resolves through the variable.
+ *  - `Mailable::with($key, $value)` chained onto `Mailable::view(...)` /
+ *    `Mailable::markdown(...)` / `Mailable::text(...)`. `Mailable::view`,
+ *    `markdown`, `text` ARE registered as direct sink sites, but the
+ *    receiver-walk does not recognise their return-`$this` chain shape, and
+ *    `Mailable::with` is NOT registered as a sink site (registration without
+ *    receiver-walk support would be a no-op). Users who write
+ *    `(new InvoiceMail)->view('mail.invoice')->with('bio', $tainted)` will
+ *    have the `view()` call analysed (no data array there) but `with()`
+ *    silently miss. Same scope as variable-bound chains; same PR-5 fix.
+ *  - `View::share()` global view data — runtime-injected across every
+ *    subsequent `view()` call, with no per-call site for the dispatcher to
+ *    hook.
+ *  - Scanner result caching across analysis runs.
  *
  * Stability: the taint sink construction uses Psalm's internal classes
  * {@see TaintFlowGraph} and {@see DataFlowNode}, both `@internal` in
@@ -123,11 +130,44 @@ final class BladeAwareViewTaintHandler implements
      * Method-id → argument shape descriptor. Built once at init from
      * {@see \Illuminate\View\Factory::class} plus its facade classes (so calls
      * like `\View::make()` route through the same dispatch). Keyed by the
-     * lower-cased method id Psalm emits in {@see AfterMethodCallAnalysisEvent::getMethodId()}.
+     * lower-cased method id Psalm emits in
+     * {@see AfterMethodCallAnalysisEvent::getMethodId()}.
      *
-     * @var array<lowercase-string, MakeLikeMethodSpec>
+     * Value is a {@see ViewBindingSinkSpec} sealed-union: the dispatcher
+     * branches on the concrete spec type via `match (true)` to handle the
+     * different call shapes (make/renderWhen, first, renderEach, with).
+     *
+     * @var array<lowercase-string, ViewBindingSinkSpec>
      */
     private static array $methodSpecs = [];
+
+    /**
+     * Lower-cased method-name suffixes that gate the hot path. Every entry
+     * here must correspond to at least one method id installed by
+     * {@see buildMethodSpecs()}; adding a suffix without a matching id
+     * is a pure cost (lookup misses every time). Removing a suffix without
+     * removing its corresponding ids silently drops the dispatch.
+     *
+     * Most suffixes are uncommon outside Laravel (`renderwhen`, `rendereach`,
+     * `renderunless`, `markdown`, `nest`). A handful (`view`, `with`,
+     * `first`, `text`, `make`, `__construct`) appear in many non-Laravel
+     * call sites; the gate still rejects them cheaply via the isset check,
+     * deferring the more expensive full-id lookup until after the suffix
+     * matches.
+     */
+    private const METHOD_NAME_SUFFIXES = [
+        'make' => true,
+        'renderwhen' => true,
+        'renderunless' => true,
+        'first' => true,
+        'rendereach' => true,
+        'view' => true,
+        'with' => true,
+        'nest' => true,
+        'markdown' => true,
+        'text' => true,
+        '__construct' => true,
+    ];
 
     private static bool $enabled = false;
 
@@ -136,17 +176,25 @@ final class BladeAwareViewTaintHandler implements
      * that proxy to {@see \Illuminate\View\Factory}. Idempotent: callers may
      * invoke this multiple times during a single analysis run.
      *
-     * @param list<class-string> $factoryFacadeClasses additional class names whose
-     *                                                 `::make()` should be treated
-     *                                                 as a Blade view call site
+     * @param list<class-string> $factoryFacadeClasses          additional class names whose
+     *                                                          `::make()` (and friends) should be
+     *                                                          treated as a `\Illuminate\View\Factory`
+     *                                                          call site
+     * @param list<class-string> $responseFactoryFacadeClasses  additional class names whose
+     *                                                          `::view()` should be treated as a
+     *                                                          `\Illuminate\Routing\ResponseFactory`
+     *                                                          call site (e.g. `\Illuminate\Support\Facades\Response`)
      *
      * @psalm-external-mutation-free
      */
-    public static function init(BladeSafetyMap $map, array $factoryFacadeClasses = []): void
-    {
+    public static function init(
+        BladeSafetyMap $map,
+        array $factoryFacadeClasses = [],
+        array $responseFactoryFacadeClasses = [],
+    ): void {
         self::$map = $map;
         self::$enabled = true;
-        self::$methodSpecs = self::buildMethodSpecs($factoryFacadeClasses);
+        self::$methodSpecs = self::buildMethodSpecs($factoryFacadeClasses, $responseFactoryFacadeClasses);
     }
 
     /**
@@ -247,22 +295,683 @@ final class BladeAwareViewTaintHandler implements
         }
 
         $args = $event->getExpr()->getArgs();
+        $source = $event->getStatementsSource();
+        $codebase = $event->getCodebase();
+        $map = self::$map;
 
-        if (!isset($args[$spec->viewArgIndex])) {
+        // Dispatch by concrete spec type. `match (true)` makes the dispatch
+        // exhaustive — the spec union is sealed via {@see ViewBindingSinkSpec},
+        // so adding a new shape requires touching this site.
+        match (true) {
+            $spec instanceof MakeLikeMethodSpec => self::dispatchMakeLike(
+                $spec,
+                $args,
+                $map,
+                $source,
+                $codebase,
+                $taintGraph,
+            ),
+            $spec instanceof FirstLikeMethodSpec => self::dispatchFirstLike(
+                $spec,
+                $args,
+                $map,
+                $source,
+                $codebase,
+                $taintGraph,
+            ),
+            $spec instanceof RenderEachLikeMethodSpec => self::dispatchRenderEachLike(
+                $spec,
+                $args,
+                $map,
+                $source,
+                $codebase,
+                $taintGraph,
+            ),
+            $spec instanceof WithLikeMethodSpec => self::dispatchWithLike(
+                $spec,
+                $args,
+                $event->getExpr(),
+                $map,
+                $source,
+                $codebase,
+                $taintGraph,
+            ),
+        };
+    }
+
+    /**
+     * Run the per-key / per-view sink installer for a {@see MakeLikeMethodSpec}
+     * call. The spec can carry multiple view-name slots (Content::__construct
+     * has three: view, text, markdown); each slot dispatches independently
+     * against the same shared data argument.
+     *
+     * @param array<array-key, Arg> $args
+     */
+    private static function dispatchMakeLike(
+        MakeLikeMethodSpec $spec,
+        array $args,
+        BladeSafetyMap $map,
+        StatementsSource $source,
+        Codebase $codebase,
+        TaintFlowGraph $taintGraph,
+    ): void {
+        $dataArg = $args[$spec->dataArgIndex] ?? null;
+        $mergeDataArg = $spec->mergeDataArgIndex !== null
+            ? ($args[$spec->mergeDataArgIndex] ?? null)
+            : null;
+
+        foreach ($spec->viewArgIndices as $viewArgIndex) {
+            $viewArg = $args[$viewArgIndex] ?? null;
+
+            if (!$viewArg instanceof Arg) {
+                // Missing view slot — positional argument was omitted (e.g.
+                // `new Content('emails.welcome')` passing only $view).
+                continue;
+            }
+
+            if (self::isLiteralNull($viewArg)) {
+                // Explicit-null slot (e.g. `new Content(view: 'foo',
+                // text: null, markdown: null, with: $data)`). Without this
+                // check, the slot would fall through `dispatchSinks` →
+                // `literalString()` (which returns null for any non-String_
+                // value, including ConstFetch('null')) → the dynamic-name
+                // fallback, emitting a `<dynamic>` whole-data sink for every
+                // opted-out slot. The literal `null` documents intent: this
+                // slot does NOT render a template; install nothing.
+                continue;
+            }
+
+            self::dispatchSinks(
+                map: $map,
+                viewArg: $viewArg,
+                dataArg: $dataArg,
+                mergeDataArg: $mergeDataArg,
+                source: $source,
+                codebase: $codebase,
+                taintGraph: $taintGraph,
+            );
+        }
+    }
+
+    /**
+     * Dispatch sinks for `Factory::first(array $views, $data, $mergeData)`.
+     * Per task spec: if every listed view is a literal string AND every
+     * resolved template is SAFE or UNSAFE_KEYS, the unsafe-key sets are
+     * unioned; if ANY listed template is UNKNOWN or unknown to the map, the
+     * whole-data sink fires. Non-literal items in the views array, or a
+     * non-array views argument, collapse to the dynamic-name fallback.
+     *
+     * @param array<array-key, Arg> $args
+     */
+    private static function dispatchFirstLike(
+        FirstLikeMethodSpec $spec,
+        array $args,
+        BladeSafetyMap $map,
+        StatementsSource $source,
+        Codebase $codebase,
+        TaintFlowGraph $taintGraph,
+    ): void {
+        $viewsArg = $args[$spec->viewsArrayArgIndex] ?? null;
+        $dataArg = $args[$spec->dataArgIndex] ?? null;
+        $mergeDataArg = $spec->mergeDataArgIndex !== null
+            ? ($args[$spec->mergeDataArgIndex] ?? null)
+            : null;
+
+        if (!$viewsArg instanceof Arg) {
             return;
         }
 
-        self::dispatchSinks(
-            map: self::$map,
-            viewArg: $args[$spec->viewArgIndex],
-            dataArg: $args[$spec->dataArgIndex] ?? null,
-            mergeDataArg: $spec->mergeDataArgIndex !== null
-                ? ($args[$spec->mergeDataArgIndex] ?? null)
-                : null,
-            source: $event->getStatementsSource(),
-            codebase: $event->getCodebase(),
+        if (!$dataArg instanceof Arg && !$mergeDataArg instanceof Arg) {
+            // No data to sink; nothing to do regardless of view safety.
+            return;
+        }
+
+        $viewsArray = self::asArrayLiteral($viewsArg);
+
+        if (!$viewsArray instanceof Array_) {
+            // Non-array-literal views arg (`$views`, function call, etc.):
+            // we cannot enumerate candidate templates. Fall back to the
+            // dynamic-name policy.
+            self::installWholeDataSink('<dynamic>', $dataArg, $source, $codebase, $taintGraph);
+            self::installWholeDataSink('<dynamic>', $mergeDataArg, $source, $codebase, $taintGraph);
+
+            return;
+        }
+
+        // Iterate the literal views, accumulating the unsafe-key union or
+        // tripping the UNKNOWN flag the moment we see a non-literal item or
+        // an unresolvable template.
+        /** @var array<non-empty-string, true> $unionKeys */
+        $unionKeys = [];
+
+        $sawUnknown = false;
+
+        $resolvedViewLabel = '';
+
+        foreach ($viewsArray->items as $item) {
+            if (!$item instanceof ArrayItem) {
+                continue;
+            }
+
+            if ($item->unpack || $item->key instanceof \PhpParser\Node\Expr) {
+                // Inner spread or explicit keys: we cannot enumerate the
+                // list. Conservative fallback.
+                $sawUnknown = true;
+                break;
+            }
+
+            $value = $item->value;
+
+            if (!$value instanceof String_) {
+                // Non-literal candidate view name.
+                $sawUnknown = true;
+                break;
+            }
+
+            $candidateName = $value->value;
+
+            if ($candidateName === '') {
+                continue;
+            }
+
+            $safety = $map->safetyFor($candidateName);
+
+            if (!$safety instanceof BladeViewSafety) {
+                // Candidate not in the map: typo, package view, or
+                // out-of-scope path. Mirrors {@see dispatchSinks()}'s
+                // "view not in map → no sink" policy: do NOT promote to
+                // UNKNOWN. Skipping the unresolvable candidate is sound
+                // because Laravel's `first()` picks the first existing
+                // view at runtime; if the in-map candidates cover the
+                // existing case, their union is precise. If they don't
+                // (every candidate is missing), MissingViewHandler emits
+                // the typo diagnostic instead. Promoting to UNKNOWN here
+                // would re-introduce the package-view false-positive
+                // regression PR #684 fixed.
+                continue;
+            }
+
+            $kind = $safety->kind();
+
+            if ($kind === BladeViewSafetyKind::Unknown) {
+                $sawUnknown = true;
+                $resolvedViewLabel = $resolvedViewLabel === '' ? $candidateName : $resolvedViewLabel;
+                break;
+            }
+
+            // SAFE templates contribute zero keys (no-op). UNSAFE_KEYS
+            // contribute their keys to the union.
+            foreach ($safety->unsafeKeys() as $key) {
+                $unionKeys[$key] = true;
+            }
+
+            $resolvedViewLabel = $resolvedViewLabel === '' ? $candidateName : $resolvedViewLabel . '|' . $candidateName;
+        }
+
+        if ($sawUnknown) {
+            // Any UNKNOWN / non-literal contributor → whole-data fallback.
+            // The view label uses the first candidate that triggered the
+            // fallback so the sink identity remains stable across calls.
+            $label = $resolvedViewLabel === '' ? '<first-dynamic>' : $resolvedViewLabel;
+            self::installWholeDataSink($label, $dataArg, $source, $codebase, $taintGraph);
+            self::installWholeDataSink($label, $mergeDataArg, $source, $codebase, $taintGraph);
+
+            return;
+        }
+
+        if ($unionKeys === []) {
+            // Every literal candidate resolved SAFE. No sink needed; matches
+            // the SAFE policy from PR-3 dispatch.
+            return;
+        }
+
+        /** @var list<non-empty-string> $unionKeyList */
+        $unionKeyList = \array_keys($unionKeys);
+
+        $label = $resolvedViewLabel === '' ? '<first>' : $resolvedViewLabel;
+
+        // Synthesize a safety record using the union. We pass it to the same
+        // installer used for normal UNSAFE_KEYS dispatch so the sink identity
+        // and per-key dispatch logic match PR-3 exactly.
+        $unionSafety = new BladeViewSafety(
+            $label,
+            $label,
+            BladeTemplateAnalysis::unsafeKeys($unionKeyList),
+        );
+
+        self::installUnsafeKeySinks(
+            $label,
+            $unionSafety,
+            $dataArg,
+            $mergeDataArg,
+            $source,
+            $codebase,
+            $taintGraph,
+        );
+    }
+
+    /**
+     * Dispatch sinks for `Factory::renderEach($view, $data, $iterator,
+     * $empty)`. The shape differs from `make()`: `$data` is iterable, each
+     * element binds to a variable named by the literal `$iterator` in the
+     * child template.
+     *
+     * Sink rules:
+     *  - SAFE template → no sink.
+     *  - UNSAFE_KEYS template + literal `$iterator` matching unsafe keys →
+     *    install a sink on `$data` keyed by the iterator name.
+     *  - UNSAFE_KEYS template + literal `$iterator` NOT matching → no sink.
+     *  - Non-literal `$iterator` OR UNKNOWN template → whole-data sink on
+     *    `$data`.
+     *  - Dynamic `$view` → dynamic-name fallback (whole-data on `$data`).
+     *  - View not in map → no sink (MissingViewHandler covers the typo).
+     *
+     * @param array<array-key, Arg> $args
+     */
+    private static function dispatchRenderEachLike(
+        RenderEachLikeMethodSpec $spec,
+        array $args,
+        BladeSafetyMap $map,
+        StatementsSource $source,
+        Codebase $codebase,
+        TaintFlowGraph $taintGraph,
+    ): void {
+        $viewArg = $args[$spec->viewArgIndex] ?? null;
+        $dataArg = $args[$spec->dataArgIndex] ?? null;
+        $iteratorArg = $args[$spec->iteratorArgIndex] ?? null;
+
+        if (!$viewArg instanceof Arg || !$dataArg instanceof Arg) {
+            return;
+        }
+
+        $viewName = self::literalString($viewArg);
+
+        if ($viewName === null) {
+            self::installWholeDataSink('<dynamic>', $dataArg, $source, $codebase, $taintGraph);
+
+            return;
+        }
+
+        $safety = $map->safetyFor($viewName);
+
+        if (!$safety instanceof BladeViewSafety) {
+            return;
+        }
+
+        $kind = $safety->kind();
+
+        if ($kind === BladeViewSafetyKind::Safe) {
+            return;
+        }
+
+        $iteratorName = $iteratorArg instanceof Arg ? self::literalString($iteratorArg) : null;
+
+        if ($kind === BladeViewSafetyKind::Unknown || $iteratorName === null) {
+            // UNKNOWN template OR non-literal $iterator: the per-element
+            // flow's destination variable is opaque. Sink the whole data
+            // iterable.
+            self::installWholeDataSink($viewName, $dataArg, $source, $codebase, $taintGraph);
+
+            return;
+        }
+
+        $unsafeKeys = $safety->unsafeKeys();
+        $unsafeKeyLookup = \array_fill_keys($unsafeKeys, true);
+
+        if (!isset($unsafeKeyLookup[$iteratorName])) {
+            // $iterator names a variable the child template never raw-echoes.
+            // No flow possible.
+            return;
+        }
+
+        // Per-element flow into an unsafe key. The data argument is an
+        // iterable of element values; sinking the whole arg is the correct
+        // grain because Psalm's element-level taint flow reaches the sink
+        // through the iterable's parent nodes.
+        self::installSinkForExpression(
+            viewName: $viewName,
+            key: $iteratorName,
+            expr: $dataArg->value,
+            source: $source,
+            codebase: $codebase,
             taintGraph: $taintGraph,
         );
+    }
+
+    /**
+     * Dispatch sinks for `\Illuminate\View\View::with($key, $value)`. The
+     * receiver carries the view name; this method walks the receiver
+     * expression to recover it.
+     *
+     * @param array<array-key, Arg> $args
+     */
+    private static function dispatchWithLike(
+        WithLikeMethodSpec $spec,
+        array $args,
+        \PhpParser\Node\Expr\MethodCall|\PhpParser\Node\Expr\StaticCall $callExpr,
+        BladeSafetyMap $map,
+        StatementsSource $source,
+        Codebase $codebase,
+        TaintFlowGraph $taintGraph,
+    ): void {
+        $keyArg = $args[$spec->keyArgIndex] ?? null;
+        $valueArg = $args[$spec->valueArgIndex] ?? null;
+
+        if (!$keyArg instanceof Arg) {
+            // No key argument: not a real `with` call. Nothing to sink.
+            return;
+        }
+
+        // Receiver is only available on instance method calls. Static calls
+        // (Facade::with(...)) do not chain off a view-builder receiver and
+        // therefore cannot carry a resolvable view name; skip them.
+        // `NullsafeMethodCall` cannot reach this dispatcher: Psalm rewrites
+        // `?->method(...)` calls into a `VirtualMethodCall` inside a
+        // VirtualTernary before `AfterMethodCallAnalysisEvent` fires (see
+        // vendor/vimeo/psalm/.../NullsafeAnalyzer.php).
+        if (!$callExpr instanceof \PhpParser\Node\Expr\MethodCall) {
+            return;
+        }
+
+        $viewName = self::resolveReceiverViewName($callExpr->var);
+
+        if ($viewName === null) {
+            // Receiver does not name a literal view. Consistent with PR-3's
+            // "view not in map → no sink" policy — silently passing the
+            // whole-data fallback here would create false positives for
+            // common variable-bound view-builder patterns
+            // (`$v = view('home'); $v->with(...)`).
+            return;
+        }
+
+        $safety = $map->safetyFor($viewName);
+
+        if (!$safety instanceof BladeViewSafety) {
+            return;
+        }
+
+        $kind = $safety->kind();
+
+        if ($kind === BladeViewSafetyKind::Safe) {
+            return;
+        }
+
+        // Laravel's `View::with($key, $value = null)` accepts `$key` as
+        // string OR array. When `$key` is an array, Laravel merges every
+        // entry into the view data and IGNORES `$value` entirely
+        // (vendor/laravel/framework/src/Illuminate/View/View.php: `with`
+        // dispatches via `is_array($key) ? $this->data = array_merge(...) :
+        // $this->data[$key] = $value`). The dispatcher mirrors this:
+        //
+        //  - $valueArg missing (1-arg call `with([...])`): unambiguous array
+        //    form per Laravel's signature default.
+        //  - $keyArg->value is an inline `Array_`: always array form
+        //    regardless of $value, because Laravel ignores $value when $key
+        //    is an array. Covers `with([...], null)` AND `with([...], $x)`.
+        //  - else (`with('key', $value)`, `with($var, $value)`,
+        //    `with('key', null)`, `with($var, null)`): string-key form.
+        //    No silent over-sink on the key expression.
+        $keyIsLiteralArray = $keyArg->value instanceof Array_;
+        $treatAsArrayForm = $valueArg === null || $keyIsLiteralArray;
+
+        if ($treatAsArrayForm) {
+            if ($kind === BladeViewSafetyKind::Unknown) {
+                self::installWholeDataSink($viewName, $keyArg, $source, $codebase, $taintGraph);
+
+                return;
+            }
+
+            // UNSAFE_KEYS template + array-form $key: dispatch the inline
+            // array's entries through the same per-key path used for
+            // `Factory::make($view, $data)`. When $key is a variable
+            // (`with($arrayVar)`), `installSinksForArg` falls back to the
+            // whole-arg sink via `asArrayLiteral` returning null — same as
+            // the non-literal data argument path on `make()`.
+            self::installSinksForArg($viewName, $keyArg, $safety->unsafeKeys(), $source, $codebase, $taintGraph);
+
+            return;
+        }
+
+        // String-key form: `with($key, $value)` with non-array $key. The
+        // array-form branch above already returned for $valueArg === null
+        // (1-arg call) or for any inline-array $key (Laravel ignores $value
+        // when $key is an array). Anything reaching this line therefore has
+        // a non-null $valueArg with a non-array $key — assert to narrow
+        // Psalm's null tracking.
+        if (!$valueArg instanceof Arg) {
+            return;
+        }
+
+        $keyName = self::literalString($keyArg);
+
+        if ($kind === BladeViewSafetyKind::Unknown || $keyName === null) {
+            // Unknown template OR non-literal key: cannot prove the value
+            // does NOT flow to a raw echo. Sink the value expression itself.
+            self::installSinkForExpression(
+                viewName: $viewName,
+                key: $keyName ?? '<argument>',
+                expr: $valueArg->value,
+                source: $source,
+                codebase: $codebase,
+                taintGraph: $taintGraph,
+            );
+
+            return;
+        }
+
+        $unsafeKeys = $safety->unsafeKeys();
+        $unsafeKeyLookup = \array_fill_keys($unsafeKeys, true);
+
+        if (!isset($unsafeKeyLookup[$keyName])) {
+            // Literal key not in the unsafe set — no flow.
+            return;
+        }
+
+        self::installSinkForExpression(
+            viewName: $viewName,
+            key: $keyName,
+            expr: $valueArg->value,
+            source: $source,
+            codebase: $codebase,
+            taintGraph: $taintGraph,
+        );
+    }
+
+    /**
+     * True when an argument is an explicit literal `null` constant (e.g.
+     * `with('key', null)` or `new Content(view: null, ...)`). Distinguished
+     * from "argument absent altogether" so callers can treat both as "no
+     * value supplied" — both shapes hit the same fallback paths in the
+     * View::with array form and the Content __construct dispatch.
+     */
+    private static function isLiteralNull(Arg $arg): bool
+    {
+        $value = $arg->value;
+
+        if (!$value instanceof \PhpParser\Node\Expr\ConstFetch) {
+            return false;
+        }
+
+        return $value->name->toLowerString() === 'null';
+    }
+
+    /**
+     * Walk a `View::with()` receiver expression to recover the bound view
+     * name. Returns null when the receiver shape cannot be resolved (variable
+     * receiver, dynamic view name, chained call with no statically known
+     * source).
+     *
+     * Resolvable shapes:
+     *  - `view('home')->with(...)`
+     *    – `FuncCall(name='view', args=[String('home'), ...])`
+     *  - `View::make('home')->with(...)` or `app('view')->make('home')->with(...)`
+     *    – `MethodCall(name='make', args=[String('home'), ...])` /
+     *      `StaticCall(name='make', args=[String('home'), ...])`
+     *  - `view('home')->with('a', 1)->with(...)` — recurse into receiver's
+     *    receiver for any chain of `with()` calls.
+     *  - `View::first(['a', 'b'])->with(...)` — first literal in the array.
+     *
+     * PR-4 does not propagate view names through variable bindings; a future
+     * PR may attach metadata to {@see \Psalm\Type\Union} via NodeTypeProvider
+     * to cover the `$v = view('home'); $v->with(...)` pattern.
+     */
+    private static function resolveReceiverViewName(\PhpParser\Node\Expr $receiver): ?string
+    {
+        // Treat nullsafe and regular method calls uniformly. We re-dispatch
+        // by drilling into the same shape rather than constructing a fresh
+        // MethodCall node (which would trigger Psalm's purity guards on the
+        // node constructor).
+        if ($receiver instanceof \PhpParser\Node\Expr\NullsafeMethodCall) {
+            return self::resolveMethodCallReceiver($receiver->var, $receiver->name, $receiver->args);
+        }
+
+        if ($receiver instanceof \PhpParser\Node\Expr\FuncCall) {
+            return self::viewNameFromFuncCall($receiver);
+        }
+
+        if ($receiver instanceof \PhpParser\Node\Expr\MethodCall) {
+            return self::resolveMethodCallReceiver($receiver->var, $receiver->name, $receiver->args);
+        }
+
+        if ($receiver instanceof \PhpParser\Node\Expr\StaticCall) {
+            if (!$receiver->name instanceof \PhpParser\Node\Identifier) {
+                return null;
+            }
+
+            $methodName = $receiver->name->toLowerString();
+
+            if ($methodName === 'make') {
+                return self::viewNameFromArg($receiver->args[0] ?? null);
+            }
+
+            if ($methodName === 'first') {
+                return self::firstLiteralFromArrayArg($receiver->args[0] ?? null);
+            }
+
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Shared resolution for `MethodCall` / `NullsafeMethodCall` receivers.
+     * Both shapes carry the same `(receiver, method-name, args)` triple; the
+     * caller pre-extracts them so this helper can run on either node type
+     * without constructing intermediate AST nodes (which would breach Psalm
+     * purity guards on the php-parser constructors).
+     *
+     * @param array<array-key, \PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\Arg> $args
+     */
+    private static function resolveMethodCallReceiver(
+        \PhpParser\Node\Expr $methodReceiver,
+        \PhpParser\Node\Identifier|\PhpParser\Node\Expr $methodName,
+        array $args,
+    ): ?string {
+        if (!$methodName instanceof \PhpParser\Node\Identifier) {
+            return null;
+        }
+
+        $methodNameLc = $methodName->toLowerString();
+
+        // Chained `with()` / `withErrors()` (and similar) preserve the
+        // view-builder identity. Recurse into the receiver's receiver to
+        // recover the underlying view name.
+        if ($methodNameLc === 'with' || $methodNameLc === 'witherrors') {
+            return self::resolveReceiverViewName($methodReceiver);
+        }
+
+        if ($methodNameLc === 'make') {
+            return self::viewNameFromArg($args[0] ?? null);
+        }
+
+        if ($methodNameLc === 'first') {
+            return self::firstLiteralFromArrayArg($args[0] ?? null);
+        }
+
+        return null;
+    }
+
+    private static function viewNameFromFuncCall(\PhpParser\Node\Expr\FuncCall $call): ?string
+    {
+        if (!$call->name instanceof \PhpParser\Node\Name) {
+            return null;
+        }
+
+        if ($call->name->toLowerString() !== self::FUNCTION_VIEW) {
+            return null;
+        }
+
+        return self::viewNameFromArg($call->args[0] ?? null);
+    }
+
+    /** @psalm-mutation-free */
+    private static function viewNameFromArg(\PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\Arg|null $arg): ?string
+    {
+        if (!$arg instanceof Arg) {
+            return null;
+        }
+
+        return self::literalString($arg);
+    }
+
+    /**
+     * Return the sole literal-string element of an array literal argument, or
+     * null if the argument is not an array literal, contains no literal
+     * strings, or contains MORE THAN ONE literal string.
+     *
+     * Used for `View::first(['a', 'b'])->with(...)` chains. Laravel's runtime
+     * semantics for `first()` are "render the first existing view"; at
+     * analysis time we cannot know which candidate exists, so picking ANY one
+     * literal would be unsound for the receiver-walk's single-view lookup.
+     * Consider:
+     *
+     *     view::first(['safe_layout', 'unsafe_show'])->with('html_body', $tainted);
+     *
+     * If `safe_layout` ships and `unsafe_show` doesn't, no XSS. If
+     * `safe_layout` is later renamed and Laravel falls back to `unsafe_show`,
+     * `$tainted` reaches a raw echo. Picking `safe_layout` for the with-
+     * dispatcher's safety lookup would silently miss this regression.
+     *
+     * The conservative fix is to refuse resolution entirely for multi-
+     * candidate arrays. `dispatchFirstLike` already takes the union across
+     * all literals at the direct `Factory::first(...)` call site; the
+     * receiver-walk path (chained `with()` off a `first()` receiver) does
+     * not have an equivalent union mechanism wired here yet. Treating the
+     * receiver as unresolvable is consistent with PR-3's "view not in map
+     * → no sink" policy.
+     *
+     * @psalm-mutation-free
+     */
+    private static function firstLiteralFromArrayArg(\PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\Arg|null $arg): ?string
+    {
+        if (!$arg instanceof Arg || $arg->unpack || !$arg->value instanceof Array_) {
+            return null;
+        }
+
+        $resolved = null;
+
+        foreach ($arg->value->items as $item) {
+            if (!$item instanceof ArrayItem) {
+                continue;
+            }
+
+            if (!$item->value instanceof String_) {
+                // Non-literal candidate: the runtime view name is opaque, so
+                // any earlier match we picked would be unsound. Bail.
+                return null;
+            }
+
+            if ($resolved !== null) {
+                // Second literal observed: cannot tell which Laravel will
+                // pick. Conservatively refuse resolution.
+                return null;
+            }
+
+            $resolved = $item->value->value;
+        }
+
+        return $resolved;
     }
 
     /**
@@ -548,28 +1257,32 @@ final class BladeAwareViewTaintHandler implements
     }
 
     /**
-     * Suffix-based fast reject for the method-call hot path. Matches the
-     * method-name portion of a Psalm method id (`Class::method`) against the
-     * known view-creating method names. Allocation-free; designed to run on
-     * every method call analysed.
+     * Suffix-based fast reject for the method-call hot path. Extracts the
+     * method-name portion of a Psalm method id (`Class::method`) and probes
+     * it against {@see self::METHOD_NAME_SUFFIXES}. Designed to run on every
+     * method call analysed; one `strrpos` + one `substr` + one isset.
      *
      * Stays in sync with {@see buildMethodSpecs()}: every method name added
-     * there must appear here. The keys table holds the actual class-bound
-     * lookups; this gate just skips the lowercased-id cost for the >99% of
-     * calls that miss.
+     * there must appear in the suffix table. The keys table holds the actual
+     * class-bound lookups; this gate just rejects the >99% of calls that miss
+     * before the dispatcher allocates a lower-cased copy of the full id.
      *
-     * Suffixes are written in lowercase only. Psalm's
-     * {@see \Psalm\Internal\MethodIdentifier} declares `lowercase-string
-     * $method_name`, so the method-name part of every emitted method id is
-     * already lowercased — a camelCase suffix would never match in production.
+     * Psalm's {@see \Psalm\Internal\MethodIdentifier} declares the method-name
+     * suffix as `lowercase-string`, so the substring extracted here is
+     * already lower-case — a camelCase entry in the suffix table would never
+     * match in production.
      *
      * @psalm-pure
      */
     private static function isViewLikeMethodId(string $methodId): bool
     {
-        return \str_ends_with($methodId, '::make')
-            || \str_ends_with($methodId, '::renderwhen')
-            || \str_ends_with($methodId, '::renderunless');
+        $pos = \strrpos($methodId, '::');
+
+        if ($pos === false) {
+            return false;
+        }
+
+        return isset(self::METHOD_NAME_SUFFIXES[\substr($methodId, $pos + 2)]);
     }
 
     /**
@@ -694,25 +1407,27 @@ final class BladeAwareViewTaintHandler implements
     }
 
     /**
-     * Build the method-id table for `Factory::make()` and every facade class
-     * that proxies to {@see \Illuminate\View\Factory}. The boot path passes
-     * the facade list explicitly so the handler stays decoupled from
-     * `FacadeMapProvider` (which is plugin-internal and harder to fake in
-     * unit tests).
+     * Build the method-id table for every Laravel API the handler dispatches
+     * on. The boot path passes the facade list explicitly so the handler
+     * stays decoupled from `FacadeMapProvider` (which is plugin-internal and
+     * harder to fake in unit tests).
      *
      * @param list<class-string> $factoryFacadeClasses
+     * @param list<class-string> $responseFactoryFacadeClasses
      *
-     * @return array<lowercase-string, MakeLikeMethodSpec>
+     * @return array<lowercase-string, ViewBindingSinkSpec>
      *
      * @psalm-pure
      */
-    private static function buildMethodSpecs(array $factoryFacadeClasses): array
-    {
+    private static function buildMethodSpecs(
+        array $factoryFacadeClasses,
+        array $responseFactoryFacadeClasses = [],
+    ): array {
         // `make($view, $data = [], $mergeData = [])` is the canonical shape on
         // `\Illuminate\View\Factory`. Facade classes inherit it (or stub it via
         // the plugin's generated alias stubs); the argument layout is identical.
         $makeSpec = new MakeLikeMethodSpec(
-            viewArgIndex: 0,
+            viewArgIndices: [0],
             dataArgIndex: 1,
             mergeDataArgIndex: 2,
         );
@@ -723,57 +1438,159 @@ final class BladeAwareViewTaintHandler implements
         // condition arg shifts every index by one, but the (view, data,
         // mergeData) triple still applies to taint sink dispatch.
         $renderWhenSpec = new MakeLikeMethodSpec(
-            viewArgIndex: 1,
+            viewArgIndices: [1],
             dataArgIndex: 2,
             mergeDataArgIndex: 3,
+        );
+
+        // `first(array $views, $data = [], $mergeData = [])`. Multi-template
+        // union; see {@see FirstLikeMethodSpec}.
+        $firstSpec = new FirstLikeMethodSpec(
+            viewsArrayArgIndex: 0,
+            dataArgIndex: 1,
+            mergeDataArgIndex: 2,
+        );
+
+        // `renderEach($view, $data, $iterator, $empty = 'raw|')`.
+        $renderEachSpec = new RenderEachLikeMethodSpec(
+            viewArgIndex: 0,
+            dataArgIndex: 1,
+            iteratorArgIndex: 2,
+        );
+
+        // `ResponseFactory::view($view, $data, $status, $headers)`. Same
+        // (view, data) layout as `make()` but with no mergeData; the third
+        // arg is the response status and is not a view-data carrier.
+        $responseViewSpec = new MakeLikeMethodSpec(
+            viewArgIndices: [0],
+            dataArgIndex: 1,
+            mergeDataArgIndex: null,
+        );
+
+        // `View::with($key, $value)`. Receiver-resolved single key/value
+        // sink; see {@see WithLikeMethodSpec}.
+        $withSpec = new WithLikeMethodSpec(
+            keyArgIndex: 0,
+            valueArgIndex: 1,
+        );
+
+        // `View::nest($key, $view, $data = [])`. Equivalent to a child
+        // Factory::make() call: view at index 1, data at index 2, no
+        // mergeData. The receiver's view name is irrelevant (the nested
+        // view's safety record governs the sink).
+        $nestSpec = new MakeLikeMethodSpec(
+            viewArgIndices: [1],
+            dataArgIndex: 2,
+            mergeDataArgIndex: null,
+        );
+
+        // `Mailable::view($view, array $data = [])` and the markdown / text
+        // siblings; `MailMessage` has the same shape on its three methods.
+        // None of these have a separate mergeData slot — the second argument
+        // is the single data array.
+        $mailMethodSpec = new MakeLikeMethodSpec(
+            viewArgIndices: [0],
+            dataArgIndex: 1,
+            mergeDataArgIndex: null,
+        );
+
+        // `Content::__construct(?$view, ?$html, ?$text, $markdown, $with,
+        // ?$htmlString)`. Three view-name slots (view at 0, text at 2,
+        // markdown at 3) share the single `$with` data array at index 4.
+        // `$html` (index 1) and `$htmlString` (index 5) are pre-rendered
+        // HTML strings, not Blade view names; they are not registered. The
+        // dispatcher emits one sink per view slot that resolves to a
+        // literal string at the call site.
+        $contentConstructorSpec = new MakeLikeMethodSpec(
+            viewArgIndices: [0, 2, 3],
+            dataArgIndex: 4,
+            mergeDataArgIndex: null,
         );
 
         $specs = [];
 
         // `Illuminate\Contracts\View\Factory` (the interface) declares only
-        // `make()` from this set; `renderWhen` and `renderUnless` live on the
-        // concrete class. Apps using PSR-typed constructor injection
-        // (`__construct(\Illuminate\Contracts\View\Factory $views)`) emit a
-        // method id resolved to the contract for `make()`, NOT the concrete
-        // class — without the contract entry, that path would slip past the
-        // dispatcher.
+        // `make()` from this set; `renderWhen`, `renderUnless`, `first`,
+        // `renderEach` live on the concrete class. Apps using PSR-typed
+        // constructor injection emit method ids resolved to the contract
+        // for `make()`; without the contract entry, that path would slip
+        // past the dispatcher.
         $specs[\strtolower(\Illuminate\Contracts\View\Factory::class) . '::make'] = $makeSpec;
 
-        // The concrete class plus every facade alias that proxies to it.
-        // Facades inherit `make()` / `renderWhen()` / `renderUnless()` from
-        // the underlying class via __callStatic; the plugin's generated
+        // `Illuminate\Contracts\View\View` declares `with()` (but not
+        // `nest()`). Mirror the same routing as the concrete class.
+        $viewContractLc = \strtolower(\Illuminate\Contracts\View\View::class);
+        $specs[$viewContractLc . '::with'] = $withSpec;
+
+        // The concrete View\Factory plus every facade alias that proxies to
+        // it. Facades inherit make/renderWhen/renderUnless/first/renderEach
+        // from the underlying class via __callStatic; the plugin's generated
         // alias stubs surface them as real static methods at analysis time.
-        $concreteClasses = [
+        $factoryConcrete = [
             \Illuminate\View\Factory::class,
             ...$factoryFacadeClasses,
         ];
 
-        foreach ($concreteClasses as $class) {
+        foreach ($factoryConcrete as $class) {
             $classLc = \strtolower($class);
             $specs[$classLc . '::make'] = $makeSpec;
             $specs[$classLc . '::renderwhen'] = $renderWhenSpec;
             $specs[$classLc . '::renderunless'] = $renderWhenSpec;
+            $specs[$classLc . '::first'] = $firstSpec;
+            $specs[$classLc . '::rendereach'] = $renderEachSpec;
         }
 
-        // Known coverage gaps left for PR-4+:
-        //  - `Illuminate\View\Factory::first(array $views, $data = [], $mergeData = [])`
-        //    needs a union over multiple template safety records.
-        //  - `Illuminate\View\Factory::renderEach($view, $data, $iterator, $empty)`
-        //    binds each item under `$iterator`, not under the data array's keys.
-        //  - `Illuminate\Routing\ResponseFactory::view($view, $data, $status, $headers)`
-        //    same shape as Factory::make() but on a separate class.
-        //  - `Illuminate\View\View::with($key, $value)` and `::nest($key, $view, $data)`
-        //    chained data binding (e.g. `view('home')->with('user', $user)`); the
-        //    factory `view()` call has no `$data` arg, so the binding is invisible
-        //    here.
-        //  - `Illuminate\Mail\Mailable::view()/markdown()/text()` and
-        //    `Illuminate\Notifications\Messages\MailMessage::view()/markdown()/text()`
-        //    and `Illuminate\Mail\Mailables\Content::__construct()` — view name +
-        //    data are stored on the Mailable instance and replayed through
-        //    `Mailer::renderView()` inside the framework. The user's literal call
-        //    site is therefore not a direct `view()` / `Factory::make()` call,
-        //    and the eventual `make()` invocation reads the name from an
-        //    instance property (dynamic, not literal).
+        // `Illuminate\View\View` carries the chained `with()` and `nest()`.
+        $viewClassLc = \strtolower(\Illuminate\View\View::class);
+        $specs[$viewClassLc . '::with'] = $withSpec;
+        $specs[$viewClassLc . '::nest'] = $nestSpec;
+
+        // `Illuminate\Routing\ResponseFactory::view()` and its contract,
+        // plus every facade class that proxies to either binding (e.g.
+        // `\Illuminate\Support\Facades\Response`). Without the facade list,
+        // calls written as `\Response::view(...)` would slip past the
+        // dispatcher entirely — Psalm resolves the method id to the facade
+        // class, not to the contract.
+        $responseFactoryClasses = [
+            \Illuminate\Routing\ResponseFactory::class,
+            \Illuminate\Contracts\Routing\ResponseFactory::class,
+            ...$responseFactoryFacadeClasses,
+        ];
+
+        foreach ($responseFactoryClasses as $class) {
+            $specs[\strtolower($class) . '::view'] = $responseViewSpec;
+        }
+
+        // Mail / Notification view-binding methods: `view`, `markdown`, `text`
+        // on Mailable and MailMessage. Identical layout; one spec instance
+        // serves both.
+        $mailClasses = [
+            \Illuminate\Mail\Mailable::class,
+            \Illuminate\Notifications\Messages\MailMessage::class,
+        ];
+
+        foreach ($mailClasses as $class) {
+            $classLc = \strtolower($class);
+            $specs[$classLc . '::view'] = $mailMethodSpec;
+            $specs[$classLc . '::markdown'] = $mailMethodSpec;
+            $specs[$classLc . '::text'] = $mailMethodSpec;
+        }
+
+        // `Mail\Mailables\Content::__construct` — three view slots, one data
+        // slot, dispatched as a single multi-view spec.
+        $specs[\strtolower(\Illuminate\Mail\Mailables\Content::class) . '::__construct'] = $contentConstructorSpec;
+
+        // Known coverage gaps left for PR-5+:
+        //  - Component data flow `<x-foo :bar="$data" />` (PR-5 scope).
+        //  - `View::share()` global view data — the binding is replayed at
+        //    render-time across every subsequent `view()` call from any
+        //    caller, so the scanner's per-call dispatch model does not fit.
+        //  - Variable-bound view-builder chains
+        //    (`$v = view('home'); $v->with(...)`) — PR-5 may attach view
+        //    names to {@see \Psalm\Type\Union} via NodeTypeProvider metadata
+        //    to recover the view name through indirections.
+        //  - Caching the safety map across analysis runs — handled in a
+        //    follow-up after PR-5 stabilises the map shape.
 
         return $specs;
     }
