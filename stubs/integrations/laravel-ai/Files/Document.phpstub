@@ -4,10 +4,10 @@ namespace Laravel\Ai\Files;
 
 /**
  * Inline content paths into the agent attachments collection — they become
- * part of the prompt context. fromUpload() and fromStorage() carry taint
- * via their underlying types (UploadedFile already a source); fromString()
- * and fromBase64() take raw content from user code, so we mark them
- * explicitly.
+ * part of the prompt context. fromUpload(), fromStorage(), fromPath(),
+ * fromUrl() and fromId() carry taint via their underlying types
+ * (UploadedFile, Storage, etc.); fromString() and fromBase64() take raw
+ * content from user code, so we mark them explicitly.
  *
  * Stub keeps `extends File` to preserve the abstract base class relationship.
  */
@@ -16,10 +16,10 @@ abstract class Document extends File
     /**
      * @psalm-taint-sink llm_prompt $content
      */
-    public static function fromString(string $content, ?string $mimeType = null): InlineDocument {}
+    public static function fromString(string $content, ?string $mimeType = null): Base64Document {}
 
     /**
      * @psalm-taint-sink llm_prompt $base64
      */
-    public static function fromBase64(string $base64, ?string $mimeType = null): InlineDocument {}
+    public static function fromBase64(string $base64, ?string $mimeType = null): Base64Document {}
 }

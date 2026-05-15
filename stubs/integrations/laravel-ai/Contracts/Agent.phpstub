@@ -17,12 +17,12 @@ use Stringable;
 interface Agent
 {
     /**
-     * The agent's system prompt. The plugin treats the returned string as
-     * something that ends up inside the LLM context, so it is itself a sink:
-     * a dynamically-constructed system prompt that incorporates user input is
-     * a classic stored-prompt-injection pattern.
-     *
-     * @psalm-taint-sink llm_prompt return
+     * The agent's system prompt. Building it from user input is a classic
+     * stored-prompt-injection pattern, but Psalm does not honor a `return`
+     * target for `@psalm-taint-sink` (the docblock scanner only matches
+     * parameter names), so the annotation is omitted here rather than left in
+     * place as misleading coverage. Detection requires a dedicated handler;
+     * see https://github.com/psalm/psalm-plugin-laravel/issues/484.
      */
     public function instructions(): Stringable|string;
 

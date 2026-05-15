@@ -14,8 +14,8 @@ class AnonymousAgent
      * @psalm-taint-sink llm_prompt $messages
      */
     public function __construct(
-        \Stringable|string $instructions,
-        iterable $messages = [],
-        iterable $tools = [],
+        string $instructions,
+        iterable $messages,
+        iterable $tools,
     ) {}
 }

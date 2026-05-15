@@ -11,9 +11,10 @@ interface Tool
     /**
      * The description is read by the LLM to decide whether to call the tool;
      * a non-constant value here is the static signature of MCP-style tool
-     * poisoning (CVE-2025-54136, arXiv:2603.22489).
-     *
-     * @psalm-taint-sink llm_prompt return
+     * poisoning (CVE-2025-54136, arXiv:2603.22489). Psalm currently has no
+     * way to express a return-value sink in a docblock (`@psalm-taint-sink`
+     * only matches parameters by name), so this is left without a sink
+     * annotation until a dedicated handler is implemented (#484).
      */
     public function description(): Stringable|string;
 

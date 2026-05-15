@@ -80,7 +80,10 @@ final class Plugin implements PluginEntryPointInterface
     /**
      * Stubs for optional first/third-party AI packages. Each entry guards on
      * Composer's runtime metadata so absent packages contribute zero stubs and
-     * we avoid triggering the project autoloader for a class lookup.
+     * we avoid triggering the project autoloader for a class lookup. The
+     * version constraint additionally protects against a future major bump
+     * (e.g. laravel/ai 0.7) silently loading stubs that reference removed or
+     * renamed classes.
      *
      * @return list<string>
      */
@@ -88,11 +91,29 @@ final class Plugin implements PluginEntryPointInterface
     {
         $stubs = [];
 
-        if (\Composer\InstalledVersions::isInstalled('laravel/ai')) {
+        if (self::isInstalledAndSatisfies('laravel/ai', '^0.6')) {
             \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
         }
 
         return $stubs;
+    }
+
+    /**
+     * Composer's {@see \Composer\InstalledVersions::satisfies()} throws when the
+     * package is missing entirely. Pair it with the cheap presence check first
+     * so callers can express "installed AND in this range" as a single boolean.
+     */
+    private static function isInstalledAndSatisfies(string $package, string $constraint): bool
+    {
+        if (!\Composer\InstalledVersions::isInstalled($package)) {
+            return false;
+        }
+
+        return \Composer\InstalledVersions::satisfies(
+            new \Composer\Semver\VersionParser(),
+            $package,
+            $constraint,
+        );
     }
 
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
@@ -245,7 +266,7 @@ final class Plugin implements PluginEntryPointInterface
         // sinks declaratively; this handler covers the property-level `$response->text`
         // source because Psalm doesn't honor `@psalm-taint-source` on properties.
         // Guarded the same way as the matching stubs in optionalIntegrationStubs().
-        if (\Composer\InstalledVersions::isInstalled('laravel/ai')) {
+        if (self::isInstalledAndSatisfies('laravel/ai', '^0.6')) {
             require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
         }

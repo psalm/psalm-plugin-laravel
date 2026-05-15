@@ -5,14 +5,13 @@ namespace Laravel\Ai\Contracts;
 /**
  * Allows an Agent to be exposed as a tool to another agent (sub-agent pattern).
  * Same tool-poisoning concern as Tool::description() — a dynamically built
- * sub-agent description shipped to the parent LLM is a sink for `llm_prompt`.
+ * sub-agent description shipped to the parent LLM is a sink for `llm_prompt`,
+ * but Psalm does not honor `return` as a target for `@psalm-taint-sink`, so
+ * a follow-up handler is required to detect this (#484).
  */
 interface CanActAsTool
 {
     public function name(): string;
 
-    /**
-     * @psalm-taint-sink llm_prompt return
-     */
     public function description(): string;
 }

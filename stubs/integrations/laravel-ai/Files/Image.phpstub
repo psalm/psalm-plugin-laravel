@@ -7,5 +7,5 @@ abstract class Image extends File
     /**
      * @psalm-taint-sink llm_prompt $base64
      */
-    public static function fromBase64(string $base64, ?string $mimeType = null): InlineImage {}
+    public static function fromBase64(string $base64, ?string $mimeType = null): Base64Image {}
 }

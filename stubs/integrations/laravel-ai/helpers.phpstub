@@ -10,7 +10,7 @@ namespace Laravel\Ai;
  * @psalm-taint-sink llm_prompt $messages
  */
 function agent(
-    \Stringable|string $instructions = '',
+    string $instructions = '',
     iterable $messages = [],
     iterable $tools = [],
     ?\Closure $schema = null,

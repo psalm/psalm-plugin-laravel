@@ -15,8 +15,9 @@ class Message
      */
     public function __construct(MessageRole|string $role, ?string $content = '') {}
 
-    /**
-     * @psalm-taint-sink llm_prompt return
-     */
+    // tryFrom() coerces arbitrary input into a Message; the natural sink shape
+    // would be on the return value, but Psalm's docblock scanner only matches
+    // parameter names — `return` is silently dropped. Coverage would require a
+    // dedicated handler (#484), so no annotation is emitted here.
     public static function tryFrom(mixed $message): self {}
 }

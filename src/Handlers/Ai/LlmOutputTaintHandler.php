@@ -30,7 +30,8 @@ use Psalm\Type\TaintKind;
  *
  * Covered:
  * - `Laravel\Ai\Responses\TextResponse` (and subclasses, including
- *   `AgentResponse`).
+ *   `AgentResponse` and `StreamedAgentResponse` — the snapshot returned to
+ *   `Promptable::stream()->then()` callbacks).
  * - `Laravel\Ai\Responses\StreamableAgentResponse` (separate hierarchy in
  *   the real package — `$text` is populated after the stream completes).
  *
@@ -49,12 +50,15 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
 {
     /**
      * Classes whose `$text` property carries LLM-generated (untrusted) data.
+     * Subclasses are still covered via `classExtendsOrImplements`; the explicit
+     * list shortcuts the common case to a single `in_array()` check.
      *
      * @var list<string>
      */
     private const TAINTED_CLASSES = [
         'Laravel\\Ai\\Responses\\TextResponse',
         'Laravel\\Ai\\Responses\\AgentResponse',
+        'Laravel\\Ai\\Responses\\StreamedAgentResponse',
         'Laravel\\Ai\\Responses\\StreamableAgentResponse',
     ];
 
