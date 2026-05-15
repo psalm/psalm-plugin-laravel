@@ -8,6 +8,35 @@ nav_exclude: true
 
 Exploration document for [issue #581](https://github.com/psalm/psalm-plugin-laravel/issues/581).
 
+## Delivery and merge strategy
+
+The work lands in incremental sub-PRs that all target the umbrella branch
+[`worktree-581-blade-taint-exploration`](https://github.com/psalm/psalm-plugin-laravel/pull/872),
+not `master`. Merging the scanner epic piecewise into `master` would expose
+half-implementations (e.g. a scanner that classifies templates but no handler
+that consumes the classification), so each sub-PR stacks on the umbrella
+branch and is reviewed against it. Once every sub-PR (PR-1 through PR-5)
+is merged into the umbrella branch, the umbrella PR ships into `master` as
+a single reviewable unit.
+
+Status of the epic at the time of writing:
+
+| PR | Scope | Status |
+|----|-------|--------|
+| PR-1 [#920](https://github.com/psalm/psalm-plugin-laravel/pull/920) | Tri-state scanner via `BladeCompiler` + php-parser. `BladeViewSafetyKind`, `BladeUncertaintyReason`, `BladeSafetyMap`. | merged into umbrella |
+| PR-2 (TBD) | First-pass scanner precision: `@include` literal resolution, scope frame push/pop, source-mapped line numbers. | not started |
+| PR-3 (this PR) | `BladeAwareViewTaintHandler`. Wires `BladeSafetyMap` into Psalm's taint flow for `view()` / `Factory::make()` / facade `View::make()`. Per-key sinks for `UNSAFE_KEYS`, whole-data fallback for `UNKNOWN` and dynamic view names. | shipping |
+| PR-4 (TBD) | `Factory::first()` (union of safety records), `Factory::renderEach()` (per-iterator key shape), `ResponseFactory::view()`. Cross-template `@include` data-flow propagation when the include target is literal. | not started |
+| PR-5 (TBD) | Component data flow (`<x-foo :bar="$data" />`), section graph, scanner result caching across analysis runs. | not started |
+
+PR-3 deliberately does NOT include integration tests under `tests/Application/`.
+The Application test harness (`tests/Application/laravel-test.sh`) runs Psalm
+without `--taint-analysis`, so a taint-validating fixture would require either
+a new harness flow or a refactor of the existing one. The handler is covered
+end-to-end by `tests/Type/tests/Blade/` (PHPT) and unit tests; the Application
+test layer still exercises Plugin.php's boot path through `initBladeAwareViewTaintHandler`,
+so a boot crash would still surface there.
+
 ## Current state (baseline)
 
 After the regression in [#684](https://github.com/psalm/psalm-plugin-laravel/issues/684), all `html` taint sinks on view data parameters were removed:
@@ -169,9 +198,9 @@ Known v1 limitations:
 
 ### What the prototype deliberately does not include
 
-- **Plugin integration.** Wiring the map into a handler requires adding a taint sink via `Codebase::$taint_flow_graph`. The API surface exists (see "Psalm API notes" below) but the integration belongs in the actual PR, not the spike.
-- **Cross file data flow.** `@include('child', ['x' => $y])` is not propagated. A safe default is to treat a template with any unresolved `@include` call as "all keys unsafe", reverting to the conservative whole array sink for that template only.
-- **Components.** `<x-foo :bar="$data" />` is out of scope for v1.
+- **Plugin integration.** ~~Wiring the map into a handler requires adding a taint sink via `Codebase::$taint_flow_graph`. The API surface exists (see "Psalm API notes" below) but the integration belongs in the actual PR, not the spike.~~ Delivered in PR-3 (this PR) as `BladeAwareViewTaintHandler`. Reads the map at every `view()` / `Factory::make()` / facade `View::make()` call, dispatches per safety kind: SAFE no-op, UNSAFE_KEYS per-key html sink, UNKNOWN whole-data sink, dynamic view name whole-data sink. Boots once per analysis run in `Plugin::initBladeAwareViewTaintHandler()`; gated on `taint_flow_graph !== null` so non-taint runs pay no scan cost.
+- **Cross file data flow.** `@include('child', ['x' => $y])` is not propagated. A safe default is to treat a template with any unresolved `@include` call as "all keys unsafe", reverting to the conservative whole array sink for that template only. PR-3 implements this fallback by classifying the parent as UNKNOWN(IncludeDirective); PR-4 will resolve literal include targets and propagate the child's unsafe-keys into the parent.
+- **Components.** `<x-foo :bar="$data" />` is out of scope for v1. PR-5 territory.
 
 ## Psalm API notes (for the integration PR)
 
