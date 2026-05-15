@@ -25,6 +25,26 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     public function header($key = null, $default = null) {}
 
     /**
+     * Retrieve a file from the request.
+     *
+     * Stubbed on the class (not the InteractsWithInput trait) because Psalm 7
+     * collapses conditional return types when the trait's method storage is
+     * mutated by a stub override. The class-level declaration short-circuits
+     * the override path, so narrowing works on every Laravel version we
+     * support. See stubs/common/Http/Concerns/InteractsWithInput.phpstub for
+     * the long-form rationale and laravel/framework history.
+     *
+     * Refs: https://github.com/psalm/psalm-plugin-laravel/issues/925
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>> : \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>|null)
+     *
+     * @psalm-taint-source input
+     */
+    public function file($key = null, $default = null) {}
+
+    /**
      * Get the route handling the request.
      *
      * @template TDefault of object

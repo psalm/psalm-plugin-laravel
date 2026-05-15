@@ -81,30 +81,30 @@ trait InteractsWithInput
      */
     public function header($key = null, $default = null) {}
 
-    // Note: file() is intentionally NOT stubbed here.
+    // Note: file() is stubbed on the Illuminate\Http\Request class itself
+    // (stubs/common/Http/Request.phpstub), not on this trait.
     //
-    // Laravel 12.8.0+ and 13.x source carry the conditional return
-    // `($key is null ? array<string, UploadedFile|UploadedFile[]> : UploadedFile|UploadedFile[]|null)`
-    // on Illuminate\Http\Concerns\InteractsWithInput::file(), and Psalm honors
-    // it directly when we leave the source signature alone.
+    // Redeclaring file() on the trait — even verbatim against Laravel's source
+    // signature — triggers a Psalm 7 stub-override bug:
+    // FunctionLikeNodeScanner mutates the trait's MethodStorage and sets
+    // `$storage->stubbed = true`, after which MethodCallReturnTypeFetcher
+    // collapses the conditional `($key is null ? ... : ...)` return to the
+    // no-arg branch for every call. Declaring on the class instead bypasses
+    // the trait-override code path, so the conditional narrows correctly
+    // across every Laravel version we support (11.x via plugin 3.x, 12.x and
+    // 13.x via plugin 4.x).
     //
-    // Redeclaring file() in this stub (even verbatim) triggers a Psalm 7
-    // stub-override bug: FunctionLikeNodeScanner mutates the trait's
-    // MethodStorage and sets `$storage->stubbed = true`, after which
-    // MethodCallReturnTypeFetcher's conditional-return resolution path
-    // collapses both branches to the no-arg type. See issue #925 for the
-    // empirical traces. Taint on extracted UploadedFile data is already
-    // covered by the @psalm-taint-source annotations on UploadedFile's
-    // accessor methods (stubs/common/Http/UploadedFile.phpstub), so omitting
-    // the stub's @psalm-taint-source on file() does not weaken sink detection
-    // for realistic flows.
+    // Laravel source history for `Concerns\InteractsWithInput::file()`:
+    //   - <= v11.x and v12.0.0-12.3.x: flat union, no conditional.
+    //     `@return UploadedFile|UploadedFile[]|array|null`
+    //   - v12.4.0-12.7.x: conditional with buggy `array<int, ...>` keys.
+    //     https://github.com/laravel/framework/pull/55156
+    //   - v12.8.0+ and 13.x: corrected `array<string, ...>` keys.
+    //     https://github.com/laravel/framework/pull/55287
     //
-    // Laravel patch coverage:
-    //   - v12.0.0-12.3.x: no conditional in source (`@return UploadedFile|UploadedFile[]|array|null`).
-    //   - v12.4.0-12.7.x: buggy `array<int, ...>` keys from laravel/framework PR #55156.
-    //   - v12.8.0+ and 13.x: correctly-keyed `array<string, ...>` from PR #55287.
-    // Removing this stub gives the most precise inference on 12.8.0+/13 and
-    // an unchanged (or marginally less precise) flat union on older patches.
+    // Refs:
+    //   - psalm-plugin-laravel issue: https://github.com/psalm/psalm-plugin-laravel/issues/925
+    //   - Laravel source: vendor/laravel/framework/src/Illuminate/Http/Concerns/InteractsWithInput.php
 
     /**
      * Get all uploaded files for the request.

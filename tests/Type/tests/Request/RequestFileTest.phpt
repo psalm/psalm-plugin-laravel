@@ -6,14 +6,14 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 
 /**
- * Laravel's source carries a conditional return on `Request::file($key)`:
+ * Locks in the conditional return on `Request::file($key)`:
  *
  *     $request->file()         // array<string, UploadedFile|array<UploadedFile>>
  *     $request->file('avatar') // UploadedFile|array<UploadedFile>|null
  *
- * The plugin's InteractsWithInput stub intentionally does not redeclare
- * file() so the source-level conditional keeps narrowing. allFiles() is
- * stubbed for taint propagation and matches the no-arg shape.
+ * The conditional is declared on the Request class stub (not on the
+ * InteractsWithInput trait stub) because Psalm 7 collapses conditional
+ * returns when the override hits a trait. See issue #925.
  */
 final class RequestFileTest
 {
