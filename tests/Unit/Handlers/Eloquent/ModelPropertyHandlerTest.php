@@ -96,7 +96,7 @@ final class ModelPropertyHandlerTest extends TestCase
      *
      * MySQL returns SET as a comma-separated string at runtime (e.g. `'draft,published'`),
      * so a literal-union is an over-narrowing approximation, but strictly better than
-     * `mixed` for the common `in_array($column, [...])` pattern. Mirrors Larastan.
+     * `mixed` for the common `in_array($model->status, [...])` pattern. Mirrors Larastan.
      *
      * Without Psalm Config initialized, {@see \Psalm\Type\Atomic\TLiteralString::make()}
      * falls back to plain `TString` — so we assert against the string type rather than

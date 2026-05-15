@@ -245,7 +245,7 @@ final class ModelPropertyHandler
             SchemaColumn::TYPE_BOOL => Type::getBool(),
             // MySQL SET is comma-separated at runtime (e.g. 'draft,published'), so the
             // literal-union here is an over-narrowing approximation — strictly better than
-            // `mixed` for the common `in_array($column, [...])` check. Matches Larastan.
+            // `mixed` for the common `in_array($model->status, [...])` check. Matches Larastan.
             SchemaColumn::TYPE_ENUM, SchemaColumn::TYPE_SET => self::mapLiteralUnionFromOptions($column),
             SchemaColumn::TYPE_ARRAY => new Union([Type\Atomic\TKeyedArray::make(
                 [Type::getFloat()],
