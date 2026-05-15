@@ -85,9 +85,10 @@ Invoke Laravel's `BladeCompiler::compileString()` for each template, write the o
 - Bladestan's `BladeToPHPCompiler` is roughly 1 kLOC and handles `@include` expansion, component instantiation (via reflection), view composers, and shared data. Porting to Psalm is non trivial. The compiled output must then be stitched into Psalm's scanning phase so taint nodes flow through.
 - Error mapping back to `.blade.php` line numbers requires a line map, like Bladestan's.
 - Plugin startup cost: compiling every template at boot is O(templates) filesystem and CPU work.
-- Depends on Laravel's `BladeCompiler` being available at analysis time, which the plugin already has (Testbench booted), but surface area is wide.
 
-This is the long term target. C is a staging point towards D.
+`BladeCompiler::compileString()` itself is in fact available cheaply (Testbench is already booted), and walking the compiled PHP in-process via `nikic/php-parser` (already vendored by Psalm 7) covers most of what approach C's scanner needs. That partial use is incorporated into approach C's v2 backend (see "Prototype" below) — distinct from D's full Bladestan-style approach because it skips call-site bridging, synthetic stub generation, and feeding compiled PHP back to Psalm as an analyzed file.
+
+D in its full form (handler-level call-site bridging with stitched taint nodes) remains the long-term target; the C scanner is the staging point towards D.
 
 ### E. Standalone CLI tool
 
@@ -136,31 +137,35 @@ Any template whose scanner analysis is uncertain (unresolved `@include` targets,
 
 **C, then D.** Approach F (pre-compile via `view:cache`) is not a shortcut; if we ever pursue it, it should be as a v2 input to C's scanner (walk compiled PHP instead of raw `.blade.php`), not as a replacement for the call-site bridging work D requires.
 
-C delivers meaningful XSS coverage in weeks and preserves low FP behaviour on the common case. Its `template to unsafe keys` map is the same primitive D needs (for per call sink dispatch), so the work is not throwaway. The scanner can be incrementally upgraded:
+C delivers meaningful XSS coverage in weeks and preserves low FP behaviour on the common case. Its `template to unsafe keys` map is the same primitive D needs (for per call sink dispatch), so the work is not throwaway. The scanner is delivered in two stages:
 
-- **v1**: top level variables in `{!! !!}` and `@php`. Ignore includes.
-- **v2**: follow `@include('child', [...])` data flows. Propagate unsafe keys from child to parent when the parent passes a variable through. Optionally read compiled output from `view:cache` to get `@include` / `@extends` expansion for free.
-- **v3**: `@extends`, `@section`, components. At this point, compilation (D) is probably simpler than pattern extension.
+- **v1 backend (shipped in #920)**: `BladeCompiler::compileString()` + `nikic/php-parser` AST walking, in-process. Both deps are already vendored (Laravel pulls the compiler; Psalm 7 pulls the parser). A small subclass of `BladeCompiler` makes component-tag resolution non-fatal at analysis time and patches an upstream raw-block restoration quirk (see `PsalmBladeCompiler`). Cross-template constructs (`@extends`, `@yield`, `@stack`, `@include`, `<x-foo>` / `@component`) still classify UNKNOWN because the v1 scanner does not follow child templates. Inline `@php(...)`, mid-condition assignments, scope-local destructuring, `@inject` locals, `e()`/`htmlspecialchars`/`htmlentities`/`Js::from` safe-wrapper detection, and a conservative fallback for unrecognized echo shapes (`{!! request()->input(...) !!}`, variable variables, closure invocations) all work out of the box.
+- **v2 (long-term)**: full approach D with call-site bridging, line maps, and stubs for runtime-injected data (`View::share`, composers). The v1 scanner produces the same per-template safety map D needs, so it is not throwaway.
 
 D without C means shipping nothing for months. C without D means a permanent accuracy ceiling. Both together means a 2 to 4 week delivery with a credible path forward.
 
 ## Prototype
 
-`src/Blade/` contains a working spike of the C approach scanner:
+`src/Blade/` contains the C approach scanner:
 
-- `BladeEchoKind`: enum for `ESCAPED`, `RAW`, `PHP_BLOCK`.
-- `BladeVariableUsage`: `(name, line, kind)` record.
-- `BladeTemplateScanner::scan($source): list<BladeVariableUsage>`: extracts all variable references with their echo classification.
-- `BladeTemplateScanner::unsafeVariables($source): list<string>`: reduces to the set of unescaped top-level variables, excluding scope-introduced names (for example, `$item` in `@foreach (... as $item)`).
-- `BladeSafetyMap`: `array<string, list<string>>` keyed by Blade's dotted view name. Built via `BladeSafetyMap::build(array $viewPaths): self`, which walks view roots and applies first-match-wins like `FileViewFinder::findInPaths()`.
+- `BladeEchoKind`: enum for `ESCAPED`, `RAW`, `PHP_BLOCK` (the third case is reserved; the AST walker collapses `@php`-block echoes onto `RAW` because the compiled output is indistinguishable from `{!! ... !!}`).
+- `BladeVariableUsage`: `(name, line, kind)` record. Line numbers reflect the compiled PHP, not the original Blade source.
+- `BladeViewSafetyKind`: tri-state enum `SAFE` / `UNSAFE_KEYS` / `UNKNOWN`.
+- `BladeUncertaintyReason`: first-class enum naming the construct that forced UNKNOWN (`LAYOUT_SECTION_FLOW`, `INCLUDE_DIRECTIVE`, `COMPONENT_TAG`, `FILE_UNREADABLE`, `UNKNOWN_LOCAL_DEPENDENCY`, `UNPARSABLE_PHP_BLOCK`, plus reasons reserved for later PRs).
+- `BladeTemplateAnalysis`: `(kind, unsafeKeys, uncertainties)` value object with a private constructor and three named factories (`safe()`, `unsafeKeys()`, `unknown()`) that enforce kind-to-payload invariants. `unsafeKeys([])` collapses to `safe()`; `unknown()` requires a non-empty list of reasons.
+- `PsalmBladeCompiler`: subclass of Laravel's `BladeCompiler`. Overrides `compileComponentTags` to detect (not resolve) `<x-foo>` and `@component` / `@slot` tags, so an unregistered user component cannot throw at analysis time. Overrides `restoreRawContent` and preprocesses the source to work around an upstream raw-block placeholder collision when `@endphp` is immediately followed by `{{`/`{!!`. Owns its own `Filesystem` and temp cache path; no Laravel container access required.
+- `BladeTemplateScanner::analyze($source): BladeTemplateAnalysis`: compiles via `PsalmBladeCompiler::compileBladeSource()` then walks the resulting PHP AST with `nikic/php-parser`. The visitor records raw-echoed top-level variables, scope-locals from assignments and foreach value/key vars (including nested destructuring), `$__env` method calls indicating layout/section/stack/include/component/fragment/translation flow, and emits `UNKNOWN_LOCAL_DEPENDENCY` as a conservative fallback when a raw echo's expression yields no top-level variables and is not a pure literal (catches `request()->input(...)`, variable variables, closure invocations, and other shapes the extractor does not model).
+- `BladeTemplateScanner::scan($source): list<BladeVariableUsage>`: lower-level per-usage records for diagnostics.
+- `BladeViewSafety`: `(viewName, path, analysis)` map entry.
+- `BladeSafetyMap`: `array<string, BladeViewSafety>` keyed by dotted view name. Built via `BladeSafetyMap::build(array $viewPaths, ?BladeTemplateScanner $scanner = null): self`. One scanner instance is amortised across the whole build. First-match-wins applies to ALL kinds, including SAFE — a later UNSAFE shadow cannot displace a first-root SAFE view that Laravel would actually render. `file_get_contents` failures convert to `UNKNOWN(FILE_UNREADABLE)` instead of silent skip.
 
-Covered by `tests/Unit/Blade/BladeTemplateScannerTest.php` and `tests/Unit/Blade/BladeSafetyMapTest.php` (36 tests total). The scanner correctly handles `{{-- ... --}}` comments, `@verbatim` (including unclosed), `@{{ ... }}` and `@{!! ... !!}` escaped braces, legacy `{{{ ... }}}`, line number tracking across multi-line blanked regions, multi-line echoes, raw-echo literals inside `@php` strings, `@foreach` and `@forelse` loop aliases (key-value and single), simple inline assignments in `@if` / `@elseif` / `@while` conditions, and property or array access on top level variables. `BladeSafetyMap` tolerates missing view roots, filters non-blade siblings (including `.bak` and `~` editor files), and applies first-match-wins across multiple view paths.
+Covered by `tests/Unit/Blade/Blade*Test.php`. The scanner handles `{{-- ... --}}` comments and `@verbatim` (both stripped at compile time), `@{{ ... }}` / `@{!! ... !!}` escaped braces, legacy `{{{ ... }}}`, multi-line echoes, raw-echo literals inside `@php` strings, `@foreach` / `@forelse` aliases including list-destructuring `@foreach ($pairs as [$k, $v])`, inline assignments in `@if` / `@elseif` / `@while` conditions (any position, not just leading), `@inject` scope locals, `@php($foo = expr)` inline shorthand, property / array / method access top-level extraction, casts and unary operators (`(string) $x`, `!$x`, `-$x`), array literals and `match` expressions inside raw echoes, and chained `Js::from($data)->toHtml()`. `e($x, false)` and other multi-argument safe-wrapper calls correctly fall through to RAW. Cross-template directives (`@extends`, `@extendsFirst`, `@section`, `@yield`, `@show`, `@parent`, `@stack`, `@push`, `@prepend`, `@hasSection`, `@hasStack`, the `@include*` family, `@each`, `<x-...>` / `<x:...>` component tags, `@component`, `@slot`, `@fragment`, `@lang { ... }`) mark the template UNKNOWN with the appropriate `BladeUncertaintyReason`. `BladeSafetyMap` tolerates missing view roots, filters non-blade siblings (including `.bak` and `~` editor files), and applies first-match-wins across multiple view paths regardless of kind.
 
-Known scanner limitations (each pinned by a `test_known_limitation_*` test so intentional future improvements land with a visible test change):
+Known v1 limitations:
 
-- PHP string interpolation inside a raw echo (`{!! "hi {$x}" !!}`) extracts `x` as unsafe. Harmless at the sink layer (the outer expression is already unescaped), but worth knowing.
-- The inline `@php($foo = expr)` shorthand is not recognised as a scope-introducing directive.
-- `@if (call($x) && $y = expr)` style conditions with a preceding function call do not register `$y` as scope-local; the handler layer will need an explicit safe-list if that pattern matters.
+- The visitor's `scopeLocals` set is flat across the whole template. Assignments inside inner closures, arrow functions, function declarations, or unreachable `@if` branches still register the LHS as a scope-local for the outer raw-echo classification. Practical impact: a Blade `@php` block whose closure body shadows a view-data key with a literal silently filters that key out of the unsafe-key list. Push/pop scope frames is the fix; deferred.
+- Line numbers in `BladeVariableUsage` reflect the compiled PHP, not the Blade source. BladeCompiler does not preserve a source map, so per-occurrence line numbers are a hint, not a contract.
+- The catch-all `extractTopLevelVariables` branch for unknown calls (`FuncCall`, `StaticCall`, `New_`) recurses into arguments but does not surface the callable itself. `{!! random_fn($x) !!}` surfaces `x` (correct, since `$x` is the data flowing through), but `{!! $fn($x) !!}` does not surface `fn`. Acceptable: `$fn` is the callable identity, not the rendered data.
 
 ### What the prototype deliberately does not include
 

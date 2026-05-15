@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-use function str_ends_with;
-
 /**
- * Per-template record of which data keys reach a raw echo context.
+ * Per-template safety record for every Blade view discovered under the
+ * configured view roots.
  *
  * The map is built once during plugin boot (similar to how MissingViewHandler
  * loads view paths) and queried for every `view()` / `Factory::make()` call.
@@ -15,6 +14,19 @@ use function str_ends_with;
  * Entries are keyed by Blade's dotted view name (`emails.welcome`), matching
  * how the view() helper is called in user code. Dotted names are resolved
  * relative to the template roots supplied at construction.
+ *
+ * Every resolved Blade view is recorded — SAFE, UNSAFE_KEYS, or UNKNOWN.
+ * Earlier versions only recorded views with unsafe keys; that conflated "we
+ * scanned this view and it is safe" with "we never saw this view", which
+ * silently downgrades UNKNOWN to SAFE at the handler layer. Recording all
+ * three states is required for sound taint refinement.
+ *
+ * First-match-wins matches Laravel's {@see \Illuminate\View\FileViewFinder}:
+ * the finder iterates view paths in order and returns the first existing
+ * `.blade.php`. The map mirrors that, *including* when the first view is SAFE
+ * and a later view in the override path is unsafe — earlier versions skipped
+ * safe templates, which meant a later UNSAFE view would shadow the SAFE one
+ * the finder would actually load.
  *
  * Not marked `@psalm-immutable`: {@see build()} performs filesystem IO, which
  * is inherently impure. Instances returned by `build()` are, however, safe to
@@ -25,29 +37,44 @@ use function str_ends_with;
 final readonly class BladeSafetyMap
 {
     /**
-     * @param array<string, list<string>> $unsafeKeysByView
-     *   view name => list of top-level variable names referenced in {!! !!} or @php
+     * @param array<non-empty-string, BladeViewSafety> $safetyByView
+     *
+     * @psalm-mutation-free
      */
     public function __construct(
-        private array $unsafeKeysByView,
+        private array $safetyByView,
     ) {}
 
     /**
      * Build a map by scanning every `*.blade.php` file under the given roots.
      *
-     * @param list<string> $viewPaths absolute paths of view directories, in the order
-     *                                returned by FileViewFinder::getPaths()
+     * A single {@see BladeTemplateScanner} is constructed once per build and
+     * reused for every template, so the underlying {@see PsalmBladeCompiler}
+     * and {@see \PhpParser\Parser} instances are amortised across the scan.
+     * Tests that need to substitute a scanner can pass it in.
+     *
+     * @param list<string>             $viewPaths absolute paths of view directories, in the order
+     *                                            returned by FileViewFinder::getPaths()
+     * @param BladeTemplateScanner|null $scanner  optional scanner instance; default builds one
+     *                                            with {@see BladeTemplateScanner::withDefaults()}.
      *
      * @psalm-api
      */
-    public static function build(array $viewPaths): self
+    public static function build(array $viewPaths, ?BladeTemplateScanner $scanner = null): self
     {
+        $scanner ??= BladeTemplateScanner::withDefaults();
         $map = [];
 
         foreach ($viewPaths as $root) {
             $root = \rtrim($root, \DIRECTORY_SEPARATOR);
 
-            if (!\is_dir($root)) {
+            /*
+             * Empty-string check must precede is_dir(): is_dir('') emits a
+             * "Filename cannot be empty" warning under PHP 8+, which the
+             * plugin's error handler turns into a thrown RuntimeException
+             * during boot.
+             */
+            if ($root === '' || !\is_dir($root)) {
                 continue;
             }
 
@@ -57,24 +84,42 @@ final readonly class BladeSafetyMap
                 // `/var` -> `/private/var`) and would break prefix-stripping.
                 $path = $file->getPathname();
 
-                $source = \file_get_contents($path);
-
-                if ($source === false) {
+                if ($path === '') {
                     continue;
                 }
 
                 $viewName = self::viewNameFor($root, $path);
-                $unsafe = BladeTemplateScanner::unsafeVariables($source);
 
-                if ($unsafe === []) {
+                if ($viewName === '') {
                     continue;
                 }
 
-                // First path wins — matches FileViewFinder::findInPaths(),
+                // First match wins — matches FileViewFinder::findInPaths(),
                 // which iterates paths in order and returns the first match.
-                if (!isset($map[$viewName])) {
-                    $map[$viewName] = $unsafe;
+                // CRITICAL: this branch must run regardless of the analysis
+                // kind; skipping safe views here would let a later-root unsafe
+                // shadow take precedence over a first-root safe view that
+                // Laravel would actually render.
+                if (isset($map[$viewName])) {
+                    continue;
                 }
+
+                // `@` suppresses the "Permission denied" warning when the
+                // file becomes unreadable between the iterator's isFile()
+                // check and this call. The `=== false` branch converts the
+                // failure to UNKNOWN (FILE_UNREADABLE) so the data is
+                // recorded; PR-4+ (handler integration) will surface that
+                // state as an explicit Psalm issue or fallback policy
+                // decision. Until then there is no user-visible signal
+                // for an unreadable view — acceptable because the scanner
+                // is not yet wired into analysis output.
+                $source = @\file_get_contents($path);
+
+                $analysis = $source === false
+                    ? BladeTemplateAnalysis::unknown([BladeUncertaintyReason::FileUnreadable])
+                    : $scanner->analyze($source);
+
+                $map[$viewName] = new BladeViewSafety($viewName, $path, $analysis);
             }
         }
 
@@ -82,30 +127,64 @@ final readonly class BladeSafetyMap
     }
 
     /**
-     * @return list<string> keys whose values must be treated as html sinks
-     *                      when rendered through this view, empty for safe views
+     * The full safety record for a view, or null when the view is unknown to
+     * the map (e.g. dynamic include, package view we did not scan, or a typo).
+     * Callers needing to distinguish "scanned and safe" from "never seen"
+     * must use this, not {@see unsafeKeysFor()}.
      *
      * @psalm-api
+     * @psalm-mutation-free
      */
-    public function unsafeKeysFor(string $viewName): array
+    public function safetyFor(string $viewName): ?BladeViewSafety
     {
-        return $this->unsafeKeysByView[$viewName] ?? [];
-    }
-
-    /** @psalm-api */
-    public function hasUnsafeKeys(string $viewName): bool
-    {
-        return isset($this->unsafeKeysByView[$viewName]);
+        return $this->safetyByView[$viewName] ?? null;
     }
 
     /**
-     * @return list<string>
+     * Convenience for handlers that only need the unsafe-key list. Returns
+     * the empty list both for SAFE views and for views the map never saw, so
+     * it must NOT be used to decide whether to apply the UNKNOWN fallback —
+     * use {@see isUnknown()} or {@see safetyFor()} for that decision.
+     *
+     * @return list<non-empty-string>
      *
      * @psalm-api
+     * @psalm-mutation-free
+     */
+    public function unsafeKeysFor(string $viewName): array
+    {
+        return ($this->safetyByView[$viewName] ?? null)?->unsafeKeys() ?? [];
+    }
+
+    /**
+     * @psalm-api
+     * @psalm-mutation-free
+     */
+    public function isKnownSafe(string $viewName): bool
+    {
+        return ($this->safetyByView[$viewName] ?? null)?->kind() === BladeViewSafetyKind::Safe;
+    }
+
+    /**
+     * @psalm-api
+     * @psalm-mutation-free
+     */
+    public function isUnknown(string $viewName): bool
+    {
+        return ($this->safetyByView[$viewName] ?? null)?->kind() === BladeViewSafetyKind::Unknown;
+    }
+
+    /**
+     * Every view name the map recorded, in insertion order (first-root first).
+     *
+     * @return list<non-empty-string>
+     *
+     * @psalm-api
+     * @psalm-mutation-free
      */
     public function knownViews(): array
     {
-        return \array_keys($this->unsafeKeysByView);
+        return \array_keys($this->safetyByView);
     }
 
     /**

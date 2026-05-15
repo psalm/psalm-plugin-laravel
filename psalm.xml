@@ -14,8 +14,6 @@
             <directory name="vendor"/>
             <directory name="tests-app"/>
             <directory name="tests/Unit/Handlers/Eloquent/Schema/migrations"/>
-            <!-- Issue #581 spike: tighten purity/pure-callable annotations before wiring into Plugin -->
-            <directory name="src/Blade"/>
         </ignoreFiles>
     </projectFiles>
 

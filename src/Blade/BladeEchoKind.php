@@ -18,9 +18,9 @@ namespace Psalm\LaravelPlugin\Blade;
  */
 enum BladeEchoKind
 {
-    case ESCAPED;
-    case RAW;
-    case PHP_BLOCK;
+    case Escaped;
+    case Raw;
+    case PhpBlock;
 
     /**
      * True for any kind that does NOT pass through Blade's htmlspecialchars
@@ -30,6 +30,6 @@ enum BladeEchoKind
      */
     public function isUnescaped(): bool
     {
-        return $this !== self::ESCAPED;
+        return $this !== self::Escaped;
     }
 }
