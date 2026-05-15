@@ -107,7 +107,7 @@ final class ModelPropertyHandlerTest extends TestCase
     public function it_narrows_set_column_away_from_mixed(): void
     {
         $column = ModelPropertyHandler::resolveAllColumns(WorkOrder::class)['status'];
-        $union = self::invokeMapColumnType($column);
+        $union = $this->invokeMapColumnType($column);
 
         $this->assertFalse($union->isMixed(), 'SET column must not be inferred as `mixed`');
         $this->assertTrue($union->hasString(), 'SET column should map to a string-flavored union');
@@ -124,7 +124,7 @@ final class ModelPropertyHandlerTest extends TestCase
             options: ['draft', 'published'],
         );
 
-        $union = self::invokeMapColumnType($column);
+        $union = $this->invokeMapColumnType($column);
 
         $this->assertFalse($union->isMixed());
         $this->assertTrue($union->isNullable(), 'Nullable SET column must include null');
@@ -140,13 +140,13 @@ final class ModelPropertyHandlerTest extends TestCase
     {
         $column = new SchemaColumn('status', SchemaColumn::TYPE_SET, options: []);
 
-        $union = self::invokeMapColumnType($column);
+        $union = $this->invokeMapColumnType($column);
 
         $this->assertFalse($union->isMixed());
         $this->assertTrue($union->hasString());
     }
 
-    private static function invokeMapColumnType(SchemaColumn $column): \Psalm\Type\Union
+    private function invokeMapColumnType(SchemaColumn $column): \Psalm\Type\Union
     {
         $method = new \ReflectionMethod(ModelPropertyHandler::class, 'mapColumnType');
 
