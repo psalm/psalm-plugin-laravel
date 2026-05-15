@@ -4,6 +4,9 @@ namespace Laravel\Ai\Tools;
 
 use ArrayAccess;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\InteractsWithData;
+use Illuminate\Support\Traits\Macroable;
 
 /**
  * Arguments the LLM chose to pass to a tool. From the application's
@@ -20,10 +23,19 @@ use Illuminate\Contracts\Support\Arrayable;
  * (untyped, with original defaults) so docblock-only @param annotations
  * stay accurate against the real class.
  *
+ * Re-declaration copies the real `implements`/`use` clauses verbatim so Psalm
+ * does not strip the trait methods (`input()`, `query()`, `has()`, `filled()`,
+ * `when()`, etc.) when merging this stub with the reflected class. See
+ * CLAUDE.local.md "Class declarations wipe reflected metadata".
+ *
  * @template-implements ArrayAccess<string, mixed>
  */
 class Request implements Arrayable, ArrayAccess
 {
+    use Conditionable, InteractsWithData, Macroable;
+
+    public function __construct(protected array $arguments = []) {}
+
     /**
      * @param  mixed  $keys
      * @return array<string, mixed>

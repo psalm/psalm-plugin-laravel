@@ -14,7 +14,7 @@ interface Tool
      * poisoning (CVE-2025-54136, arXiv:2603.22489). Psalm currently has no
      * way to express a return-value sink in a docblock (`@psalm-taint-sink`
      * only matches parameters by name), so this is left without a sink
-     * annotation until a dedicated handler is implemented (#484).
+     * annotation until a dedicated handler is implemented (#938).
      */
     public function description(): Stringable|string;
 

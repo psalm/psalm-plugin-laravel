@@ -2,15 +2,58 @@
 
 namespace Laravel\Ai\Responses;
 
+use Closure;
+use Illuminate\Contracts\Support\Responsable;
+use Illuminate\Support\Collection;
+use IteratorAggregate;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
+use Symfony\Component\HttpFoundation\Response;
+use Traversable;
+
 /**
  * Streaming sibling of AgentResponse. NOT a TextResponse subclass in the
  * real package, but exposes the same `$text` property after the stream
  * completes. Listed explicitly in LlmOutputTaintHandler so property
  * reads carry taint without relying on inheritance.
+ *
+ * Hierarchy + member list copied from
+ * `vendor/laravel/ai/src/Responses/StreamableAgentResponse.php` so the
+ * stub re-declaration keeps `implements IteratorAggregate, Responsable`
+ * and the `CanStreamUsingVercelProtocol` trait surface intact. `$text` is
+ * `?string` because it is populated only after the stream is drained.
+ *
+ * @template-implements IteratorAggregate<int, \Laravel\Ai\Streaming\Events\StreamEvent>
  */
-class StreamableAgentResponse
+class StreamableAgentResponse implements IteratorAggregate, Responsable
 {
-    public string $text;
+    use Concerns\CanStreamUsingVercelProtocol;
+
+    public ?string $text;
+
+    public ?Usage $usage;
+
+    public Collection $events;
+
+    public ?string $conversationId = null;
+
+    public ?object $conversationUser = null;
+
+    public function __construct(public string $invocationId, protected Closure $generator, protected ?Meta $meta = null) {}
+
+    public function each(callable $callback): self {}
+
+    public function then(callable $callback): self {}
+
+    public function withinConversation(?string $conversationId, ?object $conversationUser = null): self {}
+
+    public function adoptStateFrom(StreamedAgentResponse $response): self {}
+
+    public function usingVercelDataProtocol(bool $value = true): self {}
+
+    public function toResponse($request): Response {}
+
+    public function getIterator(): Traversable {}
 
     /** @psalm-taint-source input */
     public function __toString(): string {}

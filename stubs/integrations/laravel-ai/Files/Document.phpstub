@@ -9,7 +9,11 @@ namespace Laravel\Ai\Files;
  * (UploadedFile, Storage, etc.); fromString() and fromBase64() take raw
  * content from user code, so we mark them explicitly.
  *
- * Stub keeps `extends File` to preserve the abstract base class relationship.
+ * The stub re-declares the full abstract surface from
+ * `vendor/laravel/ai/src/Files/Document.php` because re-declaring the class
+ * to add a taint annotation would otherwise strip the other factories
+ * (CLAUDE.local.md "Class declarations wipe reflected metadata"). Bodies are
+ * empty — Psalm only needs the signatures.
  */
 abstract class Document extends File
 {
@@ -22,4 +26,14 @@ abstract class Document extends File
      * @psalm-taint-sink llm_prompt $base64
      */
     public static function fromBase64(string $base64, ?string $mimeType = null): Base64Document {}
+
+    public static function fromId(string $id): ProviderDocument {}
+
+    public static function fromPath(string $path): LocalDocument {}
+
+    public static function fromUrl(string $url): RemoteDocument {}
+
+    public static function fromStorage(string $path, ?string $disk = null): StoredDocument {}
+
+    public static function fromUpload(\Illuminate\Http\UploadedFile $file, ?string $mimeType = null): Base64Document {}
 }

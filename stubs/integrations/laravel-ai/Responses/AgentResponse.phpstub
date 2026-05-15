@@ -2,13 +2,32 @@
 
 namespace Laravel\Ai\Responses;
 
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
+
 /**
- * The terminal response returned by `Agent::prompt()`. Inherits the
+ * Terminal response returned by `Agent::prompt()`. Inherits the
  * `$text` property from TextResponse; LlmOutputTaintHandler taints
  * the same property here automatically (it walks the class hierarchy).
+ *
+ * Full constructor and conversation-tracking surface restated verbatim
+ * from `vendor/laravel/ai/src/Responses/AgentResponse.php` — Psalm's
+ * stub re-declaration would otherwise erase these members.
  */
 class AgentResponse extends TextResponse
 {
+    public string $invocationId;
+
+    public ?string $conversationId = null;
+
+    public ?object $conversationUser = null;
+
+    public function __construct(string $invocationId, string $text, Usage $usage, Meta $meta) {}
+
+    public function withinConversation(string $conversationId, ?object $conversationUser = null): self {}
+
+    public function then(callable $callback): self {}
+
     /** @psalm-taint-source input */
     public function __toString(): string {}
 }

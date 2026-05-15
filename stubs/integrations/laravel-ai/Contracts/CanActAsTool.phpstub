@@ -7,7 +7,7 @@ namespace Laravel\Ai\Contracts;
  * Same tool-poisoning concern as Tool::description() — a dynamically built
  * sub-agent description shipped to the parent LLM is a sink for `llm_prompt`,
  * but Psalm does not honor `return` as a target for `@psalm-taint-sink`, so
- * a follow-up handler is required to detect this (#484).
+ * a follow-up handler is required to detect this (#938).
  */
 interface CanActAsTool
 {
