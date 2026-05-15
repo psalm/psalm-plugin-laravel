@@ -652,7 +652,7 @@ final class SchemaAggregator
                     break;
 
                 case 'enum':
-                    $table->setColumn(new SchemaColumn($column_name, 'enum', $nullable, $second_arg_array ?? [], default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, SchemaColumn::TYPE_ENUM, $nullable, $second_arg_array ?? [], default: $default));
                     break;
 
                 case 'numericmorphs':
@@ -703,7 +703,7 @@ final class SchemaAggregator
                     break;
 
                 case 'set':
-                    $table->setColumn(new SchemaColumn($column_name, 'set', $nullable, $second_arg_array ?? [], default: $default));
+                    $table->setColumn(new SchemaColumn($column_name, SchemaColumn::TYPE_SET, $nullable, $second_arg_array ?? [], default: $default));
                     break;
 
                 case 'year':

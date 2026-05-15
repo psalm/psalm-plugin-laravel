@@ -243,7 +243,10 @@ final class ModelPropertyHandler
             SchemaColumn::TYPE_STRING => Type::getString(),
             SchemaColumn::TYPE_FLOAT => Type::getFloat(),
             SchemaColumn::TYPE_BOOL => Type::getBool(),
-            SchemaColumn::TYPE_ENUM => self::mapEnumColumn($column),
+            // MySQL SET is comma-separated at runtime (e.g. 'draft,published'), so the
+            // literal-union here is an over-narrowing approximation — strictly better than
+            // `mixed` for the common `in_array($column, [...])` check. Matches Larastan.
+            SchemaColumn::TYPE_ENUM, SchemaColumn::TYPE_SET => self::mapLiteralUnionFromOptions($column),
             SchemaColumn::TYPE_ARRAY => new Union([Type\Atomic\TKeyedArray::make(
                 [Type::getFloat()],
                 fallback_params: [Type::getInt(), Type::getFloat()],
@@ -259,18 +262,31 @@ final class ModelPropertyHandler
         return $type;
     }
 
-    private static function mapEnumColumn(SchemaColumn $column): Union
+    /**
+     * Build a literal-string union from a column's options list. Shared by ENUM and SET
+     * because both store their option set the same way in {@see SchemaColumn::$options}
+     * and benefit from the same narrowing (with the SET caveat documented at the caller).
+     */
+    private static function mapLiteralUnionFromOptions(SchemaColumn $column): Union
     {
         if ($column->options === []) {
             return Type::getString();
         }
 
-        $literals = [];
-        foreach ($column->options as $option) {
-            $literals[] = Type\Atomic\TLiteralString::make($option);
-        }
+        try {
+            $literals = [];
+            foreach ($column->options as $option) {
+                $literals[] = Type\Atomic\TLiteralString::make($option);
+            }
 
-        return new Union($literals);
+            return new Union($literals);
+        } catch (\UnexpectedValueException|\InvalidArgumentException) {
+            // TLiteralString::make() throws InvalidArgumentException when an option
+            // exceeds Config::max_string_length, and UnexpectedValueException when
+            // called outside an initialized Psalm Config (e.g. unit tests). Mirrors
+            // {@see \Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer::inRuleToLiteralUnion}.
+            return Type::getString();
+        }
     }
 
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
