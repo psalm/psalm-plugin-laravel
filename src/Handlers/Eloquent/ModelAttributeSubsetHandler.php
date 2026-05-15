@@ -79,7 +79,7 @@ final class ModelAttributeSubsetHandler
     {
         $declaring = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($modelClass, 'only'));
 
-        return $declaring !== null
+        return $declaring instanceof \Psalm\Internal\MethodIdentifier
             && \strtolower($declaring->fq_class_name) === \strtolower(HasAttributes::class);
     }
 
