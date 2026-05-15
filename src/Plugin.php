@@ -259,7 +259,11 @@ final class Plugin implements PluginEntryPointInterface
         // (taint analysis disabled or view roots unavailable), but the registration
         // is unconditional so users get the refinement automatically once they
         // enable --taint-analysis.
+        require_once __DIR__ . '/Handlers/Views/ViewBindingSinkSpec.php';
         require_once __DIR__ . '/Handlers/Views/MakeLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/FirstLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/RenderEachLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/WithLikeMethodSpec.php';
         require_once __DIR__ . '/Handlers/Views/BladeAwareViewTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Views\BladeAwareViewTaintHandler::class);
     }
@@ -476,9 +480,24 @@ final class Plugin implements PluginEntryPointInterface
 
         $factoryFacadeClasses = FacadeMapProvider::getFacadeClasses(\Illuminate\View\Factory::class);
 
+        // Pull the facade classes for both the concrete `Routing\ResponseFactory`
+        // and its contract. Laravel ships `\Illuminate\Support\Facades\Response`
+        // as the facade for the contract; user-registered aliases may map to
+        // either binding. Without this routing, calls through `\Response::view(...)`
+        // bypass the dispatch table (the resolved method id lives on the facade
+        // class, not on the contract).
+        $responseFactoryFacadeClasses = [
+            ...FacadeMapProvider::getFacadeClasses(\Illuminate\Routing\ResponseFactory::class),
+            ...FacadeMapProvider::getFacadeClasses(\Illuminate\Contracts\Routing\ResponseFactory::class),
+        ];
+
+        require_once __DIR__ . '/Handlers/Views/ViewBindingSinkSpec.php';
         require_once __DIR__ . '/Handlers/Views/MakeLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/FirstLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/RenderEachLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/WithLikeMethodSpec.php';
         require_once __DIR__ . '/Handlers/Views/BladeAwareViewTaintHandler.php';
-        Handlers\Views\BladeAwareViewTaintHandler::init($map, $factoryFacadeClasses);
+        Handlers\Views\BladeAwareViewTaintHandler::init($map, $factoryFacadeClasses, $responseFactoryFacadeClasses);
     }
 
     private function buildSchema(PluginConfig $pluginConfig): void

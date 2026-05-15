@@ -45,13 +45,50 @@ enum BladeUncertaintyReason
     case LayoutSectionFlow;
 
     /**
-     * Template uses `@include`, `@includeIf`, `@includeWhen`, `@includeUnless`,
-     * `@includeFirst`, `@includeIsolated`, or `@each`. Every form compiles to
-     * `<?php echo $__env->make($view, ...)->render(); ?>` — raw output of a
-     * child template the v1 scanner does not visit. PR 2+ may resolve literal
-     * include targets by walking the included template.
+     * Template uses an include-family directive whose target view name or data
+     * shape the scanner could not resolve at parse time: non-literal `@include`
+     * target, `@includeFirst([...])`, `@includeWhen` / `@includeUnless` (which
+     * compile to `$__env->renderWhen` / `renderUnless` rather than `make`), or
+     * `@each`. The compiled output reaches `$__env->make($view, ...)` /
+     * `renderEach(...)` / `first(...)` with arguments the scanner cannot
+     * statically inspect. Forces UNKNOWN regardless of any other propagation
+     * pass {@see BladeSafetyMap} performs.
      */
     case IncludeDirective;
+
+    /**
+     * Template's `@include('child', ['k' => ...])` directives all resolve
+     * to literal view names with literal-or-absent data arrays. Emitted by
+     * {@see BladeTemplateScanner} alongside a list of {@see BladeIncludeEdge}
+     * records so {@see BladeSafetyMap::build()} can run a fixed-point pass
+     * that propagates child unsafe keys (mapped through the include's data
+     * array and through Laravel's `compileInclude` mergeData pass-through)
+     * into the parent template's safety record.
+     *
+     * Once propagation runs the parent is flipped to SAFE or UNSAFE_KEYS;
+     * this case only appears on intermediate {@see BladeTemplateAnalysis}
+     * values returned directly by the scanner. Callers that consume a fully
+     * built {@see BladeSafetyMap} will never see this case — they see the
+     * post-propagation kind/keys instead.
+     */
+    case IncludeResolved;
+
+    /**
+     * Template is a member of an `@include` cycle (template A includes
+     * template B includes template A, possibly transitively). The cycle
+     * defeats the fixed-point propagation pass: any of the participating
+     * templates' unsafe-keys list could in principle depend on its own
+     * (yet-to-be-computed) result, so the conservative answer for every
+     * cycle member is UNKNOWN. Emitted by {@see BladeSafetyMap::build()}
+     * after DFS detects a back-edge.
+     *
+     * Note: templates that *include into* a cycle member (but are not
+     * themselves on the cycle) inherit UNKNOWN through the normal
+     * "child is UNKNOWN → parent is UNKNOWN(IncludeDirective)" rule, not
+     * through this case. That keeps the {@see IncludeCycle} signal precise:
+     * it tags the actual cycle members, not their downstream consumers.
+     */
+    case IncludeCycle;
 
     /**
      * Template contains `<x-foo>` / `<x:foo>` component tags, `@component`, or

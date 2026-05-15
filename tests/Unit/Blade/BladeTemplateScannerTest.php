@@ -423,12 +423,43 @@ final class BladeTemplateScannerTest extends TestCase
         $this->assertContains(BladeUncertaintyReason::LayoutSectionFlow, $analysis->uncertainties);
     }
 
-    public function test_include_directive_marks_template_unknown(): void
+    public function test_literal_include_with_literal_data_array_emits_include_resolved(): void
     {
+        // Literal target + literal data array → scanner records an edge and
+        // emits IncludeResolved instead of IncludeDirective. BladeSafetyMap's
+        // propagation pass consumes the edge to compute parent unsafe-keys;
+        // see BladeSafetyMapTest for the post-propagation assertions.
         $analysis = $this->scanner->analyze("@include('partials.user', ['html' => \$html])");
 
         $this->assertSame(BladeViewSafetyKind::Unknown, $analysis->kind);
+        $this->assertContains(BladeUncertaintyReason::IncludeResolved, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::IncludeDirective, $analysis->uncertainties);
+        $this->assertCount(1, $analysis->includeEdges);
+        $this->assertSame('partials.user', $analysis->includeEdges[0]->childViewName);
+        $this->assertSame(['html' => ['html']], $analysis->includeEdges[0]->explicitKeyMap);
+    }
+
+    public function test_include_with_dynamic_data_array_stays_include_directive(): void
+    {
+        // Literal view name but a variable data array: scanner cannot
+        // enumerate the keys, so it must fall through to the unresolvable
+        // IncludeDirective path.
+        $analysis = $this->scanner->analyze("@include('partials.user', \$data)");
+
+        $this->assertSame(BladeViewSafetyKind::Unknown, $analysis->kind);
         $this->assertContains(BladeUncertaintyReason::IncludeDirective, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::IncludeResolved, $analysis->uncertainties);
+        $this->assertSame([], $analysis->includeEdges);
+    }
+
+    public function test_include_with_dynamic_view_name_stays_include_directive(): void
+    {
+        $analysis = $this->scanner->analyze("@include(\$view)");
+
+        $this->assertSame(BladeViewSafetyKind::Unknown, $analysis->kind);
+        $this->assertContains(BladeUncertaintyReason::IncludeDirective, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::IncludeResolved, $analysis->uncertainties);
+        $this->assertSame([], $analysis->includeEdges);
     }
 
     public function test_include_when_directive_marks_template_unknown(): void
@@ -630,25 +661,58 @@ final class BladeTemplateScannerTest extends TestCase
     }
 
     /**
+     * Include-family directives that compile to call shapes the scanner does
+     * NOT statically resolve: `@includeWhen` / `@includeUnless` emit
+     * `$__env->renderWhen` / `renderUnless`, `@includeFirst` emits
+     * `$__env->first`, `@each` emits `$__env->renderEach`. Each falls through
+     * to the conservative IncludeDirective uncertainty.
+     *
      * @return iterable<string, array{string}>
      */
-    public static function includeFamilyDirectiveProvider(): iterable
+    public static function unresolvedIncludeFamilyDirectiveProvider(): iterable
     {
-        yield 'include' => ["@include('p.x')"];
-        yield 'includeIf' => ["@includeIf('p.x')"];
         yield 'includeWhen' => ['@includeWhen($cond, \'p.x\')'];
         yield 'includeUnless' => ['@includeUnless($cond, \'p.x\')'];
         yield 'includeFirst' => ["@includeFirst(['a', 'b'])"];
         yield 'each' => ['@each(\'p.row\', $rows, \'row\')'];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('includeFamilyDirectiveProvider')]
-    public function test_include_family_directive_marks_template_unknown(string $source): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('unresolvedIncludeFamilyDirectiveProvider')]
+    public function test_unresolved_include_family_directive_marks_template_unknown(string $source): void
     {
         $analysis = $this->scanner->analyze($source);
 
         $this->assertSame(BladeViewSafetyKind::Unknown, $analysis->kind);
         $this->assertContains(BladeUncertaintyReason::IncludeDirective, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::IncludeResolved, $analysis->uncertainties);
+    }
+
+    /**
+     * `@include` and `@includeIf` compile to `$__env->make(...)` whose
+     * arguments the scanner CAN statically resolve when the target is a
+     * literal string. These cases now emit IncludeResolved (with an attached
+     * edge) so {@see BladeSafetyMap} can fold the child's unsafe keys into
+     * the parent's safety record.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function resolvedIncludeFamilyDirectiveProvider(): iterable
+    {
+        yield 'include' => ["@include('p.x')"];
+        yield 'includeIf' => ["@includeIf('p.x')"];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('resolvedIncludeFamilyDirectiveProvider')]
+    public function test_literal_include_directive_emits_include_resolved(string $source): void
+    {
+        $analysis = $this->scanner->analyze($source);
+
+        $this->assertSame(BladeViewSafetyKind::Unknown, $analysis->kind);
+        $this->assertContains(BladeUncertaintyReason::IncludeResolved, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::IncludeDirective, $analysis->uncertainties);
+        $this->assertNotEmpty($analysis->includeEdges);
+        $this->assertSame('p.x', $analysis->includeEdges[0]->childViewName);
+        $this->assertNull($analysis->includeEdges[0]->explicitKeyMap);
     }
 
     public function test_raw_echo_of_string_cast_surfaces_inner_variable(): void
@@ -776,9 +840,11 @@ final class BladeTemplateScannerTest extends TestCase
     public function test_multiple_uncertainties_accumulate_independently(): void
     {
         // The visitor collects every uncertainty it sees, without short-circuiting.
+        // `@include` here is dynamic-target so it stays IncludeDirective; a
+        // literal target would emit IncludeResolved (covered separately).
         $source = <<<'BLADE'
             @yield('content')
-            @include('partials.alert')
+            @include($name)
             <x-button :label="$label" />
             BLADE;
 

@@ -25,6 +25,15 @@ namespace Psalm\LaravelPlugin\Blade;
  * through paths the v1 scanner does not model, so the conservative answer is
  * "we cannot enumerate keys precisely".
  *
+ * `includeEdges` carries the literal `@include('child', [...])` directives
+ * the scanner resolved (see {@see BladeIncludeEdge}). The scanner emits one
+ * edge per resolvable include AND records {@see BladeUncertaintyReason::IncludeResolved}
+ * so the analysis stays UNKNOWN at the source-only layer (an include's
+ * contribution to the parent's unsafe keys cannot be computed without
+ * inspecting the child template). {@see BladeSafetyMap::build()} runs a
+ * fixed-point propagation pass that consumes these edges and flips eligible
+ * parents to SAFE or UNSAFE_KEYS.
+ *
  * The constructor is `private` so the kind-to-payload invariants in the bullet
  * list above are only reachable through {@see safe()}, {@see unsafeKeys()}, and
  * {@see unknown()}. A public constructor would let a caller produce e.g.
@@ -39,11 +48,13 @@ final readonly class BladeTemplateAnalysis
     /**
      * @param list<non-empty-string>       $unsafeKeys    top-level data keys reaching raw output
      * @param list<BladeUncertaintyReason> $uncertainties reasons the scanner could not model the template
+     * @param list<BladeIncludeEdge>       $includeEdges  resolvable `@include` edges observed in the template
      */
     private function __construct(
         public BladeViewSafetyKind $kind,
         public array $unsafeKeys,
         public array $uncertainties,
+        public array $includeEdges = [],
     ) {}
 
     /** @psalm-pure */
@@ -75,10 +86,11 @@ final readonly class BladeTemplateAnalysis
      *
      * @param list<BladeUncertaintyReason> $uncertainties non-empty at runtime; see throw
      * @param list<non-empty-string>       $unsafeKeys    keys observed before the uncertainty was hit
+     * @param list<BladeIncludeEdge>       $includeEdges  resolvable include edges captured during the scan
      *
      * @psalm-pure
      */
-    public static function unknown(array $uncertainties, array $unsafeKeys = []): self
+    public static function unknown(array $uncertainties, array $unsafeKeys = [], array $includeEdges = []): self
     {
         // Enforce the documented non-empty contract at runtime: an UNKNOWN
         // with no uncertainty reasons would be indistinguishable from a
@@ -90,6 +102,7 @@ final readonly class BladeTemplateAnalysis
             );
         }
 
-        return new self(BladeViewSafetyKind::Unknown, $unsafeKeys, $uncertainties);
+        return new self(BladeViewSafetyKind::Unknown, $unsafeKeys, $uncertainties, $includeEdges);
     }
+
 }
