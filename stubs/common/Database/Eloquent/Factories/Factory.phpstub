@@ -202,9 +202,37 @@ abstract class Factory
      * Define an attached relationship for the model. See `has()` for the
      * rationale behind the explicit template params on the `Factory` arg.
      *
+     * The collection-shaped argument is typed as `iterable<array-key, ...>`
+     * rather than the tighter `\Illuminate\Support\Enumerable<array-key, ...>
+     * |array<...>` to admit `\Illuminate\Database\Eloquent\Collection<int,
+     * TRelatedModel>` returned by chained `Factory::count()->create()` calls
+     * (#914).
+     *
+     * Both `Support\Collection` and `Eloquent\Collection` declare `TKey` as
+     * invariant (no `@template-covariant TKey` marker), so a caller's
+     * `Collection<int, X>` is not a subtype of `Collection<array-key, X>`,
+     * and `Psalm` enforces that invariance on regular generic object types.
+     * Empirically, `Psalm` does not enforce the same invariance on
+     * `iterable<TKey, TValue>`, so `iterable<int, X>` is accepted against
+     * `iterable<array-key, X>`. `Enumerable<...>` and `Support\Collection
+     * <...>` were both tried first and rejected by `Psalm` for this reason.
+     *
+     * Trade-off: `iterable` is wider than Laravel's documented runtime
+     * contract (`Factory|Collection|Model|array`). Laravel's runtime in
+     * `BelongsToManyRelationship::createFor()` wraps the argument with
+     * `Collection::wrap()` and iterates with `->each()`; for an iterable
+     * that is neither `Enumerable` nor an array (e.g. a raw `Generator`),
+     * `Collection::wrap()` falls through to `Arr::wrap()`, which yields a
+     * single-element list containing the iterator object. Callers passing
+     * a `Generator` would then reach `BelongsToMany::attach()` with the
+     * iterator object as the id argument, not the per-element iteration
+     * they expect. We accept this over-acceptance because the stricter
+     * type rejects the common `count()->create()` flow the issue exists
+     * to fix.
+     *
      * @template TRelatedModel of Model
      * @template TRelatedCount of int|null
-     * @param  Factory<TRelatedModel, TRelatedCount>|\Illuminate\Support\Collection<array-key, TRelatedModel>|TRelatedModel|array<array-key, TRelatedModel|array<string, mixed>>  $factory
+     * @param  Factory<TRelatedModel, TRelatedCount>|TRelatedModel|iterable<array-key, TRelatedModel|array<string, mixed>>  $factory
      * @param  (callable(): array<string, mixed>)|array<string, mixed>  $pivot
      * @return static
      */

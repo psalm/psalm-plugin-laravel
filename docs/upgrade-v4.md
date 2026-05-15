@@ -128,8 +128,8 @@ composer require --dev psalm/plugin-laravel:^4.0
 # 4. Update relation generic annotations (add declaring model parameter)
 #
 #    Option A — Psalter plugin (handles @return and @psalm-return, AST-aware):
-./vendor/bin/psalter --plugin=vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php --dry-run
-./vendor/bin/psalter --plugin=vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php
+./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php --dry-run
+./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php
 #
 #    Option B — AI prompt (paste into Claude Code / Cursor / Copilot):
 #
