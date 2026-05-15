@@ -4,6 +4,8 @@ namespace Illuminate\Http;
 
 use ArrayAccess;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
 /**
@@ -11,6 +13,13 @@ use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
  */
 class Request extends SymfonyRequest implements Arrayable, ArrayAccess
 {
+    use Concerns\CanBePrecognitive,
+        Concerns\InteractsWithContentTypes,
+        Concerns\InteractsWithFlashData,
+        Concerns\InteractsWithInput,
+        Conditionable,
+        Macroable;
+
     /**
      * Retrieve a header from the request.
      *
