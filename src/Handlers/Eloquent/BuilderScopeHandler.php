@@ -18,8 +18,11 @@ use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Storage\FunctionLikeParameter;
+use Psalm\Type;
+use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TString;
 use Psalm\Type\Union;
 
 /**
@@ -32,7 +35,11 @@ use Psalm\Type\Union;
  *    These are registered as Builder macros at runtime via global scopes
  *    (e.g., SoftDeletingScope::extend), and declared via @method static returning
  *    Builder<static> on the model trait.
- * 4. @method PHPDoc scopes are handled natively by Psalm
+ * 4. SoftDeletes runtime macros that have no Builder-returning @method declaration:
+ *    restore, restoreOrCreate, createOrRestore. Hardcoded in {@see SOFT_DELETES_MACROS},
+ *    mirroring Larastan's EloquentBuilderForwardsCallsExtension.
+ *    See https://github.com/psalm/psalm-plugin-laravel/issues/929.
+ * 5. @method PHPDoc scopes are handled natively by Psalm
  *
  * @internal
  */
@@ -67,6 +74,44 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     private static array $baseBuilderTraitMethods = [];
 
     /**
+     * Models known to use the SoftDeletes trait, populated during model registration.
+     *
+     * Used to resolve `Builder::restore()` / `Builder::restoreOrCreate()` /
+     * `Builder::createOrRestore()` — runtime macros registered by SoftDeletingScope::extend
+     * that are NOT covered by the trait's @method static annotations (restore has no
+     * declaration; restoreOrCreate/createOrRestore declare model returns, not Builder
+     * returns, so extractBuilderReturningMethods skips them).
+     *
+     * @var array<class-string<Model>, true>
+     */
+    private static array $softDeletesModels = [];
+
+    /**
+     * SoftDeletingScope runtime macros needing explicit Builder-instance handling.
+     *
+     * Keys are pre-lowercased to match {@see MethodReturnTypeProviderEvent::getMethodNameLowercase()}.
+     * Mirrors Larastan's EloquentBuilderForwardsCallsExtension hardcoded list. Returns:
+     * restore → int (count of restored rows from Builder::update),
+     * restoreOrCreate / createOrRestore → TModel (the model instance).
+     */
+    private const SOFT_DELETES_MACROS = [
+        'restore' => true,
+        'restoreorcreate' => true,
+        'createorrestore' => true,
+    ];
+
+    /**
+     * Lazily-initialised params for the SoftDeletes restore-family macros.
+     *
+     * Built on first read so we don't eagerly construct Union/TArray instances during
+     * class load. Signatures mirror SoftDeletingScope::addRestore* closures: restore
+     * takes no args, restoreOrCreate/createOrRestore take ($attributes = [], $values = []).
+     *
+     * @var array<lowercase-string, list<FunctionLikeParameter>>|null
+     */
+    private static ?array $softDeletesMacroParams = null;
+
+    /**
      * Register trait-declared builder methods discovered on a base-Builder model.
      *
      * Called by {@see ModelRegistrationHandler} after extracting @method static annotations
@@ -80,6 +125,20 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     {
         // array_merge would re-index; += preserves keys and keeps the first registration.
         self::$baseBuilderTraitMethods += $methods;
+    }
+
+    /**
+     * Register a model as using the SoftDeletes trait.
+     *
+     * Called by {@see ModelRegistrationHandler} during per-model setup so that
+     * Builder-instance restore-family macro calls can be resolved against the model.
+     *
+     * @param class-string<Model> $modelClass
+     * @psalm-external-mutation-free
+     */
+    public static function registerSoftDeletesModel(string $modelClass): void
+    {
+        self::$softDeletesModels[$modelClass] = true;
     }
 
     /**
@@ -113,12 +172,20 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         // without forwarding the LHS type params. We recover them from the LHS expression.
         $templateTypeParameters = $event->getTemplateTypeParameters();
 
-        // For trait-declared builder methods (e.g., withTrashed), extract from LHS when
-        // template params are missing. Scope methods are skipped here: providing a return
-        // type for scope methods via this path would cause Psalm to call checkMethodArgs
-        // for Builder::scopeMethod, which has no method params and would crash.
-        // Scope instance calls (Customer::query()->active()) remain a known limitation.
-        if ($templateTypeParameters === null && isset(self::$baseBuilderTraitMethods[$methodName])) {
+        // Cache the macro check: this hook fires for every Builder method call, so even
+        // a three-key array probe is worth doing once across both branches below.
+        $isSoftDeletesMacro = self::isSoftDeletesMacro($methodName);
+
+        // For trait-declared builder methods (e.g., withTrashed) and the SoftDeletes
+        // restore-family macros (restore/restoreOrCreate/createOrRestore), extract from
+        // the LHS when template params are missing. Scope methods are skipped here:
+        // providing a return type for scope methods via this path would cause Psalm to
+        // call checkMethodArgs for Builder::scopeMethod, which has no method params and
+        // would crash. Scope instance calls (Customer::query()->active()) remain a
+        // known limitation.
+        if ($templateTypeParameters === null && (
+            isset(self::$baseBuilderTraitMethods[$methodName]) || $isSoftDeletesMacro
+        )) {
             $templateTypeParameters = self::extractTemplateParamsFromCallStmt($event->getStmt(), $source);
         }
 
@@ -126,6 +193,14 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         $modelClass = ModelPropertyResolver::extractModelFromUnion($templateTypeParameters[0] ?? null);
         if ($modelClass === null) {
             return null;
+        }
+
+        // SoftDeletes runtime macros: restore → int, restoreOrCreate / createOrRestore → TModel.
+        // These come from SoftDeletingScope::extend at runtime; restore has no @method declaration
+        // anywhere, while restoreOrCreate/createOrRestore are declared as @method static returning
+        // the model on the SoftDeletes trait but are absent from Builder. See issue #929.
+        if ($isSoftDeletesMacro && isset(self::$softDeletesModels[$modelClass])) {
+            return self::softDeletesMacroReturnType($methodName, $modelClass);
         }
 
         $builderReturn = new Union([
@@ -171,7 +246,88 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     {
         /** @var lowercase-string $methodName */
         $methodName = $event->getMethodNameLowercase();
+
+        // SoftDeletes restore-family params: gated behind isSoftDeletesMacro so the lazy
+        // initializer in softDeletesMacroParams() is only invoked for the rare matching
+        // names, not for every Builder call (where, get, first, ...). Returning these
+        // regardless of the LHS model is safe — calls on non-SoftDeletes models never
+        // reach checkMethodArgs because the return type provider returns null for them
+        // (Builder::restore/restoreOrCreate/createOrRestore have no real declaration).
+        if (self::isSoftDeletesMacro($methodName)) {
+            return self::softDeletesMacroParams()[$methodName];
+        }
+
         return self::$baseBuilderTraitMethods[$methodName] ?? null;
+    }
+
+    /**
+     * @psalm-pure
+     */
+    private static function isSoftDeletesMacro(string $methodName): bool
+    {
+        return isset(self::SOFT_DELETES_MACROS[$methodName]);
+    }
+
+    /**
+     * @param class-string<Model> $modelClass
+     * @psalm-pure
+     */
+    private static function softDeletesMacroReturnType(string $methodName, string $modelClass): Union
+    {
+        if ($methodName === 'restore') {
+            return Type::getInt();
+        }
+
+        // restoreOrCreate / createOrRestore both return the model instance.
+        return new Union([new TNamedObject($modelClass)]);
+    }
+
+    /**
+     * Param shapes for the three SoftDeletes runtime macros, mirroring the closures in
+     * SoftDeletingScope::addRestore* (restore takes no args; restoreOrCreate and
+     * createOrRestore take ($attributes = [], $values = []) typed array<string, mixed>).
+     *
+     * Built lazily so we don't allocate Union/TArray instances at class load.
+     *
+     * @return array<lowercase-string, list<FunctionLikeParameter>>
+     * @psalm-external-mutation-free
+     */
+    private static function softDeletesMacroParams(): array
+    {
+        if (self::$softDeletesMacroParams !== null) {
+            return self::$softDeletesMacroParams;
+        }
+
+        // Build `array<string, mixed>` directly: Psalm's Type::getString() factory is not
+        // marked @psalm-pure (unlike its int / mixed siblings), so calling it from a
+        // mutation-free context surfaces ImpureMethodCall during self-analysis.
+        $arrayType = new Union([new TArray([new Union([new TString()]), Type::getMixed()])]);
+        $emptyArray = Type::getEmptyArray();
+
+        $createOrRestoreParams = [
+            new FunctionLikeParameter(
+                name: 'attributes',
+                by_ref: false,
+                type: $arrayType,
+                signature_type: $arrayType,
+                is_optional: true,
+                default_type: $emptyArray,
+            ),
+            new FunctionLikeParameter(
+                name: 'values',
+                by_ref: false,
+                type: $arrayType,
+                signature_type: $arrayType,
+                is_optional: true,
+                default_type: $emptyArray,
+            ),
+        ];
+
+        return self::$softDeletesMacroParams = [
+            'restore' => [],
+            'restoreorcreate' => $createOrRestoreParams,
+            'createorrestore' => $createOrRestoreParams,
+        ];
     }
 
     /**

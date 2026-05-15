@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
@@ -167,6 +168,21 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             if ($traitMethods !== []) {
                 BuilderScopeHandler::registerBaseBuilderTraitMethods($traitMethods);
             }
+        }
+
+        // SoftDeletes registers restore/restoreOrCreate/createOrRestore as runtime Builder
+        // macros via SoftDeletingScope::extend; none surface as Builder-returning trait
+        // declarations, so extractBuilderReturningMethods misses them. See {@see
+        // BuilderScopeHandler::registerSoftDeletesModel} and #929.
+        //
+        // Direct-trait check only: a model that inherits SoftDeletes through a parent
+        // class (no `use SoftDeletes` on the leaf) will not have it in `used_traits` and
+        // won't get the macro typing — this matches the existing convention used in
+        // {@see ModelPropertyHandler::resolveCasts}.
+        // Custom-builder models with SoftDeletes are also out of scope for this PR; the
+        // mirror in CustomBuilderMethodHandler is tracked separately.
+        if (isset($storage->used_traits[\strtolower(SoftDeletes::class)])) {
+            BuilderScopeHandler::registerSoftDeletesModel($className);
         }
 
         // Detect custom collection class via #[CollectedBy] attribute or newCollection() override.
