@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Database\Eloquent\Concerns\HasAttributes;
 use PhpParser\Node\Arg;
 use Psalm\Codebase;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type;
@@ -49,16 +51,36 @@ final class ModelAttributeSubsetHandler
         }
 
         $source = $event->getSource();
+        $codebase = $source->getCodebase();
+        $modelClass = $event->getFqClasslikeName();
+
+        // Bail if a subclass (or a user trait) overrides only() — the override may
+        // return a different shape, and narrowing it to Laravel's TKeyedArray would
+        // mis-infer it.
+        if (!self::isLaravelOnly($codebase, $modelClass)) {
+            return null;
+        }
+
         $keys = self::collectLiteralKeys($args, $source->getNodeTypeProvider());
         if ($keys === null || $keys === []) {
             return null;
         }
 
-        return self::buildKeyedArray(
-            $source->getCodebase(),
-            $event->getFqClasslikeName(),
-            $keys,
-        );
+        return self::buildKeyedArray($codebase, $modelClass, $keys);
+    }
+
+    /**
+     * True when `$modelClass::only()` resolves to Laravel's `HasAttributes::only()`
+     * (i.e., no override on the concrete class or an intervening trait).
+     *
+     * @psalm-mutation-free
+     */
+    private static function isLaravelOnly(Codebase $codebase, string $modelClass): bool
+    {
+        $declaring = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($modelClass, 'only'));
+
+        return $declaring !== null
+            && \strtolower($declaring->fq_class_name) === \strtolower(HasAttributes::class);
     }
 
     /**

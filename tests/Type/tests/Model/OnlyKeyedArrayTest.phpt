@@ -186,5 +186,34 @@ function test_object_property_value(Customer $customer): array
 
     return $slice;
 }
+
+/**
+ * A subclass overrides only() with a refined return type — the handler MUST defer
+ * to the override and not impose Laravel's TKeyedArray shape derived from the
+ * literal-key arg.
+ */
+class CustomerWithOnlyOverride extends Customer
+{
+    /**
+     * @param  array<string>|mixed  $attributes
+     * @return array{custom: int}
+     */
+    #[\Override]
+    public function only($attributes): array
+    {
+        return ['custom' => 42];
+    }
+}
+
+/**
+ * @return array{custom: int}
+ */
+function test_user_override_is_respected(CustomerWithOnlyOverride $customer): array
+{
+    /** @psalm-check-type-exact $slice = array{custom: int} */
+    $slice = $customer->only(['id']);
+
+    return $slice;
+}
 ?>
 --EXPECTF--
