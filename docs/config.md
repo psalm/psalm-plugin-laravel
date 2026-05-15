@@ -24,7 +24,9 @@ Full config example:
         <resolveDynamicWhereClauses value="false" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
+        <findOctaneIncompatibleBinding value="true" />
         <failOnInternalError value="true" />
+        <configDirectory name="app/Config" />
     </pluginClass>
 </plugins>
 ```
@@ -63,6 +65,33 @@ Disable if dynamic where resolution conflicts with your codebase.
 <resolveDynamicWhereClauses value="false" />
 ```
 
+## `configDirectory`
+
+**default**: the booted Laravel app's `config_path()`
+
+Controls which directories are treated as config directories by [`NoEnvOutsideConfig`](issues/NoEnvOutsideConfig.md). `env()` calls inside any of these directories are exempt from the check.
+
+Each entry can be an absolute path or a relative path resolved by PHP's `glob()` against the current working directory. Psalm sets the working directory to the directory containing `psalm.xml` by default (controlled by Psalm's `resolveFromConfigFile` option), so relative entries normally resolve from the project root. Absolute paths are recommended when running Psalm from a subdirectory or when several config files are in play. Glob patterns are supported and expanded once at plugin boot.
+
+**Defining any `<configDirectory>` replaces the default**, so include `config` (or whatever your project's standard config dir is) explicitly if you still want it covered. Test files (paths containing `/tests/`) are always exempt regardless of this setting.
+
+If no entry resolves to an existing directory at boot, the plugin emits a warning so the typo case (`<configDirectory name="cofnig" />`) is surfaced rather than silently flagging every `env()` call.
+
+### Examples
+
+A non-standard layout (e.g. BookStack's `app/Config/`):
+
+```xml
+<configDirectory name="app/Config" />
+```
+
+Standard `config/` plus monorepo package configs:
+
+```xml
+<configDirectory name="config" />
+<configDirectory name="packages/*/config" />
+```
+
 ## `findMissingTranslations`
 
 **default**: `false`
@@ -94,6 +123,25 @@ See [MissingView](issues/MissingView.md) for details.
 
 ```xml
 <findMissingViews value="true" />
+```
+
+## `findOctaneIncompatibleBinding`
+
+**default**: omit the element. The plugin then auto-detects: the rule registers if the project depends on `laravel/octane`, and stays off otherwise.
+
+The plugin flags `singleton()` and `singletonIf()` binding closures that resolve request-scoped Laravel services (Request, Session, Auth, Cookie, Config, UrlGenerator, Redirector). Under Laravel Octane the application instance is reused across requests, so these captures leak state from the first resolving request into every subsequent one. `scoped()` / `scopedIf()` bindings are not flagged: Octane flushes them between requests.
+
+To override the auto-detect:
+
+- `value="true"`: force the rule on. Useful for projects that don't install `laravel/octane` directly but still want the check (e.g. shared libraries that aim to stay Octane-safe).
+- `value="false"`: force the rule off, even when `laravel/octane` is installed.
+
+See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details.
+
+### Example
+
+```xml
+<findOctaneIncompatibleBinding value="true" />
 ```
 
 ## Cache directory

@@ -1,0 +1,54 @@
+<?php
+
+namespace Illuminate\Validation;
+
+class Rule
+{
+    /**
+     * Get an "in" rule builder instance.
+     *
+     * Accepts an array/Arrayable/UnitEnum or variadic string arguments via func_get_args().
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\UnitEnum|array|string  $values
+     * @return \Illuminate\Validation\Rules\In
+     *
+     * @psalm-variadic
+     */
+    public static function in($values) {}
+
+    /**
+     * Get a "not in" rule builder instance.
+     *
+     * Accepts an array/Arrayable/UnitEnum or variadic string arguments via func_get_args().
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\UnitEnum|array|string  $values
+     * @return \Illuminate\Validation\Rules\NotIn
+     *
+     * @psalm-variadic
+     */
+    public static function notIn($values) {}
+
+    /**
+     * Get a "contains" rule builder instance.
+     *
+     * Accepts an array/Arrayable/UnitEnum or variadic string arguments via func_get_args().
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\UnitEnum|array|string  $values
+     * @return \Illuminate\Validation\Rules\Contains
+     *
+     * @psalm-variadic
+     */
+    public static function contains($values) {}
+
+    /**
+     * Get a "doesnt contain" rule builder instance.
+     *
+     * Accepts an array/Arrayable/UnitEnum or variadic string arguments via func_get_args().
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable|\UnitEnum|array|string  $values
+     * @return \Illuminate\Validation\Rules\DoesntContain
+     *
+     * @psalm-variadic
+     */
+    public static function doesntContain($values) {}
+}

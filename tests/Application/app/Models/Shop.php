@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
 /**
  * Test model for non-generic relationship accessor resolution (#497).
@@ -114,5 +115,51 @@ final class Shop extends Model
     public function defaultCustomer(): BelongsTo
     {
         return $this->belongsTo(Customer::class)->withDefault();
+    }
+
+    // --- Helper-delegation pattern (regression for #882) ---
+    //
+    // A public relation method whose body delegates to a private helper that
+    // builds the relation. Without parser support for following helper calls,
+    // RelationMethodParser bails on `$this->workOrdersByStatus(...)` (not a
+    // factory name) and the handler returns null, causing Psalm to fall back
+    // to the untemplated stub default `HasMany<Model, Model>`.
+
+    /** @psalm-return HasMany<WorkOrder, self> */
+    public function activeWorkOrders(): HasMany
+    {
+        return $this->workOrdersByStatus('active');
+    }
+
+    /** @psalm-return HasMany<WorkOrder, self> */
+    public function completedWorkOrders(): HasMany
+    {
+        return $this->workOrdersByStatus('completed');
+    }
+
+    private function workOrdersByStatus(string $status): HasMany
+    {
+        return $this->hasMany(WorkOrder::class)
+            ->where('status', $status);
+    }
+
+    // --- Wrapper-method-on-this pattern (regression for #884) ---
+    //
+    // The wrapper body re-enters the chain via `$this->parts()->wherePivot(...)`.
+    // The Relation stubs return `$this` from `wherePivot`/`where`, so Psalm
+    // attaches `&static` to the outer atomic. If the wrapper's declaration is
+    // a concrete-class form like `@psalm-return BelongsToMany<Part, self, Pivot, 'pivot'>`,
+    // the outer `&static` must NOT block the assignment.
+
+    /** @psalm-return BelongsToMany<Part, self, Pivot, 'pivot'> */
+    public function suggestedParts(): BelongsToMany
+    {
+        return $this->parts()->wherePivot('priority', 'high');
+    }
+
+    /** @psalm-return HasMany<WorkOrder, self> */
+    public function recentWorkOrders(): HasMany
+    {
+        return $this->workOrders()->where('created_at', '>=', '2025-01-01');
     }
 }

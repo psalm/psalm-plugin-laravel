@@ -1,0 +1,17 @@
+# @see https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+changelog:
+  exclude:
+    labels:
+      - 'release:skip-changelog'
+  categories:
+    - title: Features
+      labels:
+        - 'release:feature'
+    - title: Fixes
+      labels:
+        - 'release:fix'
+    - title: Internal changes
+      labels:
+        - 'release:internal'
+        - 'release:typo'
+        - 'release:docs'

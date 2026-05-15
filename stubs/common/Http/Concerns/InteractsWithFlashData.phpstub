@@ -1,0 +1,17 @@
+<?php
+
+namespace Illuminate\Http\Concerns;
+
+trait InteractsWithFlashData
+{
+    /**
+     * Retrieve old input for the given key.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, mixed> : mixed)
+     *
+     * @psalm-taint-source input
+     */
+    public function old($key = null, $default = null) {}
+}

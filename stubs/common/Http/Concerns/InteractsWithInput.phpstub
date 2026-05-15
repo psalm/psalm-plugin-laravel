@@ -1,0 +1,155 @@
+<?php
+
+namespace Illuminate\Http\Concerns;
+
+trait InteractsWithInput
+{
+    /**
+     * Retrieve an input item from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, mixed> : mixed)
+     *
+     * @psalm-taint-source input
+     * @psalm-mutation-free
+     */
+    public function input($key = null, $default = null) {}
+
+    /**
+     * Get all of the input and files for the request.
+     *
+     * @param  string[]|string|null  $keys
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function all($keys = null) {}
+
+    /**
+     * Retrieve a query string item from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, mixed> : mixed)
+     *
+     * @psalm-taint-source input
+     */
+    public function query($key = null, $default = null) {}
+
+    /**
+     * Retrieve a request payload item from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, mixed> : mixed)
+     *
+     * @psalm-taint-source input
+     */
+    public function post($key = null, $default = null) {}
+
+    /**
+     * Retrieve a cookie from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, mixed> : mixed)
+     *
+     * @psalm-taint-source input
+     */
+    public function cookie($key = null, $default = null) {}
+
+    /**
+     * Retrieve a server variable from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, mixed> : mixed)
+     *
+     * @psalm-taint-source input
+     */
+    public function server($key = null, $default = null) {}
+
+    /**
+     * Retrieve a header from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, mixed> : mixed)
+     *
+     * @psalm-taint-source input
+     */
+    public function header($key = null, $default = null) {}
+
+    /**
+     * Retrieve a file from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return \Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]|null
+     *
+     * @psalm-taint-source input
+     */
+    public function file($key = null, $default = null) {}
+
+    /**
+     * Get all uploaded files for the request.
+     *
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function allFiles() {}
+
+    /**
+     * Get the JSON payload for the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function json($key = null, $default = null) {}
+
+    /**
+     * Get the bearer token from the request headers.
+     *
+     * @return string|null
+     *
+     * @psalm-taint-source input
+     */
+    public function bearerToken() {}
+
+    /**
+     * Retrieve input from the request as a Fluent object instance.
+     *
+     * @param  array|string|null  $key
+     * @param  array  $default
+     * @return \Illuminate\Support\Fluent
+     *
+     * @psalm-taint-source input
+     */
+    public function fluent($key = null, array $default = []) {}
+
+    // Note: str(), string(), integer(), float(), boolean(), clamp(), date(),
+    // enum(), enums(), array(), collect(), only(), except() live on
+    // Illuminate\Support\Traits\InteractsWithData in Laravel 11+
+    // (stubbed at stubs/common/Support/Traits/InteractsWithData.phpstub).
+    //
+    // Note: old() lives on Illuminate\Http\Concerns\InteractsWithFlashData
+    // (stubbed at stubs/common/Http/Concerns/InteractsWithFlashData.phpstub).
+
+    /**
+     * Dump the request input as a debug helper.
+     *
+     * Accepts an array of keys or variadic string arguments via func_get_args().
+     * When no arguments are given, dumps the entire input bag.
+     *
+     * @param  array<string>|string  $keys
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function dump($keys = []) {}
+}

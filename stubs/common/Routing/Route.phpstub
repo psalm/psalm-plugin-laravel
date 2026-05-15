@@ -1,0 +1,90 @@
+<?php
+
+namespace Illuminate\Routing;
+
+class Route
+{
+    /**
+     * Get or set the middlewares attached to the route.
+     *
+     * Laravel's source declares `@return ($middleware is null ? array : $this)`. The previous
+     * stub restated the same `$middleware is null` check (with `string[]` on the null branch
+     * instead of `array`), and that overlap interacts badly with Psalm's stub/source merge on
+     * some Psalm versions: chained calls (`->middleware([...])->withoutScopedBindings()`)
+     * collapse to the null branch (issue #888). Until the upstream Psalm bug is fixed, the
+     * proper layer for this is `vimeo/psalm` itself; this stub keeps only the setter branch
+     * (`$this`) as a workaround.
+     *
+     * Trade-off: the no-arg getter form `$route->middleware()` resolves to `$this` instead
+     * of `array`. That form is rarely called from user code. `@psalm-variadic` survives
+     * because issue #888's discriminating tests confirmed it isn't the cause; the new test
+     * pins the variadic call form.
+     *
+     * @param string[]|string|null $middleware
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function middleware($middleware = null) {}
+
+    /**
+     * Get the action array or one of its properties for the route.
+     *
+     * @param  string|null  $key
+     * @return ($key is null ? array : mixed)
+     */
+    public function getAction($key = null) {}
+
+    /**
+     * Get a given parameter from the route.
+     *
+     * @template TDefault
+     *
+     * @param  string  $name
+     * @param  TDefault  $default
+     * @return string|object|TDefault|null
+     *
+     * @psalm-taint-source input
+     */
+    public function parameter($name, $default = null) {}
+
+    /**
+     * Get the key / value list of parameters for the route.
+     *
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function parameters() {}
+
+    /**
+     * Get the key / value list of parameters without null values.
+     *
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function parametersWithoutNulls() {}
+
+    /**
+     * Get original value of a given parameter from the route.
+     *
+     * @template TDefault
+     *
+     * @param  string  $name
+     * @param  TDefault  $default
+     * @return string|TDefault|null
+     *
+     * @psalm-taint-source input
+     */
+    public function originalParameter($name, $default = null) {}
+
+    /**
+     * Get the key / value list of original parameters for the route.
+     *
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function originalParameters() {}
+}

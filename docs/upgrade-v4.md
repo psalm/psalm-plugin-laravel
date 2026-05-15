@@ -91,7 +91,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 
 - `InvalidConsoleArgumentName` -- `argument()` references an undefined name in the command's `$signature`
 - `InvalidConsoleOptionName` -- `option()` references an undefined name in the command's `$signature`
-- `NoEnvOutsideConfig` -- `env()` called outside the `config/` directory (`env()` returns `null` when the config is cached)
+- `NoEnvOutsideConfig` -- `env()` called outside the application's [`config_path()`](config.md#configdirectory) (`env()` returns `null` when the config is cached). Configurable via `<configDirectory>` for non-standard layouts.
 
 ```xml
 <issueHandlers>
@@ -117,7 +117,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 ## Upgrade steps
 
 ```bash
-# 1. Update PHP to 8.3+ and Laravel to 12+ if needed
+# 1. Update PHP to 8.2+ and Laravel to 12+ if needed
 
 # 2. Upgrade Psalm to v7
 composer require --dev vimeo/psalm:^7.0.0-beta17
@@ -128,8 +128,8 @@ composer require --dev psalm/plugin-laravel:^4.0
 # 4. Update relation generic annotations (add declaring model parameter)
 #
 #    Option A — Psalter plugin (handles @return and @psalm-return, AST-aware):
-./vendor/bin/psalter --plugin=vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php --dry-run
-./vendor/bin/psalter --plugin=vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php
+./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php --dry-run
+./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php
 #
 #    Option B — AI prompt (paste into Claude Code / Cursor / Copilot):
 #

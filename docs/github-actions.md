@@ -7,6 +7,9 @@ nav_order: 3
 
 Production-ready GitHub Actions workflows for Laravel projects using psalm-plugin-laravel.
 
+> **Fastest path.** Run `./vendor/bin/psalm-laravel add github` to have the plugin write a ready-to-commit workflow for you.
+> The generated workflow covers the same setup described below (PHP via `shivammathur/setup-php`, Composer cache, plugin-aware Psalm invocation), so the content of this page is primarily reference for customizing the generated workflow or hand-rolling your own.
+
 > **About psalm/psalm-github-actions and psalm/psalm-github-security-scan:**
 > These official Psalm Docker actions bundle their own Psalm binary (Psalm 5.x) and do not support Psalm 7 or Composer-installed plugins.
 > For projects using psalm-plugin-laravel (which requires Psalm 7), use the `shivammathur/setup-php` approach shown below instead.

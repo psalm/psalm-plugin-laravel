@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -62,6 +63,19 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 continue;
             }
 
+            // Anonymous Model subclasses (e.g. `new class extends Model {}`) get a
+            // synthetic FQCN from Psalm that no autoloader can resolve, so skip them
+            // before class_exists() to avoid a misleading warning. Psalm leaves
+            // $storage->location null for anonymous classes (there is no name node
+            // to locate); stmt_location carries the `class { ... }` position and is
+            // the correct source of the declaring file path.
+            if (
+                $storage->stmt_location !== null
+                && AnonymousClassNameDetector::isSynthetic($storage->name, $storage->stmt_location->file_path)
+            ) {
+                continue;
+            }
+
             // Force-load the class via Composer's autoloader so that runtime
             // reflection works in property handlers (e.g. getTable(), getCasts())
             try {
@@ -83,6 +97,28 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $className = $storage->name;
         $properties = $codebase->properties;
         $methods = $codebase->methods;
+
+        // Drop pseudo_static_methods that shadow real method declarations. Traits can declare
+        // `@method static Builder query()` (e.g. Koel's SupportsDeleteWhereValueNotIn); this
+        // injects a zero-param pseudo into every model that uses the trait. Psalm's static
+        // call analyzer checks pseudo_static_methods first for argument validation, so the
+        // pseudo rejects Song::query(type: $t, user: $u) with TooManyArguments even though
+        // Song declares `public static function query(?PlayableType $t, ?User $u)`. The same
+        // shadowing applies to Model's other static helpers (on, onWriteConnection, with, ...),
+        // so drop any pseudo whose name also corresponds to a real declaration on the class
+        // (declared here, inherited from Model, or imported via another trait); declaring_method_ids
+        // lists every such real declaration.
+        //
+        // Runs here (post-populator) rather than in an AfterClassLikeVisit hook because
+        // Populator::populateDataFromTrait() merges trait pseudo_static_methods into the
+        // model's storage AFTER the scan phase, so earlier removal is a no-op.
+        //
+        // Issue: https://github.com/psalm/psalm-plugin-laravel/issues/795
+        foreach (\array_keys($storage->pseudo_static_methods) as $methodName) {
+            if (isset($storage->declaring_method_ids[$methodName])) {
+                unset($storage->pseudo_static_methods[$methodName]);
+            }
+        }
 
         // Detect custom builder class via attribute, method override, or $builder property.
         // Class is already loaded by autoloader above.
@@ -161,6 +197,15 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $methods->return_type_provider->registerClosure(
             $className,
             CustomCollectionHandler::getModelMethodReturnType(...),
+        );
+        // Relationship method return types: precise generics for hasOne/belongsTo/etc.
+        // Registered AFTER the forwarding/collection providers because those handlers
+        // already returned null for relation method names. The first non-null result
+        // wins, so safe ordering — no return-type swap relative to the prior chain.
+        // See https://github.com/psalm/psalm-plugin-laravel/issues/760
+        $methods->return_type_provider->registerClosure(
+            $className,
+            ModelRelationReturnTypeHandler::getReturnType(...),
         );
 
         // Registration order matters — the first non-null result wins.
@@ -325,7 +370,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         string $modelClass,
         string $builderClass,
     ): void {
-        $traitMethods = self::extractBuilderReturningMethods($storage);
+        $traitMethods = self::extractBuilderReturningMethods($storage, $builderClass);
         if ($traitMethods === []) {
             return;
         }
@@ -360,18 +405,20 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     }
 
     /**
-     * Extract @method static declarations that return Builder<static> from
-     * a model's pseudo_static_methods. These typically originate from traits
-     * like SoftDeletes (which register builder macros via global scopes), but
-     * may also include model-level @method annotations; this is acceptable as
-     * we only act on methods whose return type is a generic Builder.
+     * Extract @method static declarations that return Builder<static> or the model's
+     * custom builder class from a model's pseudo_static_methods. These typically
+     * originate from traits like SoftDeletes (which register builder macros via
+     * global scopes), but may also include model-level @method annotations; this
+     * is acceptable as we only act on methods whose return type is a builder.
      *
+     * @param class-string<Builder>|null $customBuilderClass
      * @return array<lowercase-string, list<FunctionLikeParameter>>
      * @psalm-mutation-free
      */
-    private static function extractBuilderReturningMethods(ClassLikeStorage $storage): array
+    private static function extractBuilderReturningMethods(ClassLikeStorage $storage, ?string $customBuilderClass = null): array
     {
         $builderClassLower = \strtolower(Builder::class);
+        $customBuilderClassLower = $customBuilderClass !== null ? \strtolower($customBuilderClass) : null;
         $result = [];
 
         foreach ($storage->pseudo_static_methods as $methodName => $methodStorage) {
@@ -381,10 +428,16 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             foreach ($returnType->getAtomicTypes() as $type) {
-                if (
-                    $type instanceof TGenericObject
-                    && \strtolower($type->value) === $builderClassLower
-                ) {
+                // Laravel traits such as SoftDeletes declare Builder<static>, while apps often
+                // override those macros in model PHPDoc with a concrete custom builder return.
+                // Keep the generic and named-object checks separate so we do not treat arbitrary
+                // generic classes as builder macros, but still catch non-templated custom builders.
+                if ($type instanceof TGenericObject && \strtolower($type->value) === $builderClassLower) {
+                    $result[$methodName] = $methodStorage->params;
+                    break;
+                }
+
+                if ($customBuilderClassLower !== null && $type instanceof TNamedObject && \strtolower($type->value) === $customBuilderClassLower) {
                     $result[$methodName] = $methodStorage->params;
                     break;
                 }

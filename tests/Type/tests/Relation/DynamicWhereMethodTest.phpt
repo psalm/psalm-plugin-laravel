@@ -3,7 +3,6 @@
 
 use App\Models\Invoice;
 use App\Models\WorkOrder;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Tests for dynamic where{Column} method resolution on Eloquent Relation chains.
@@ -12,8 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * With resolveDynamicWhereClauses enabled (default), these are resolved on relation chains when the
  * column exists in the model's @property annotations.
  *
- * Uses HasOne<Invoice, WorkOrder> with an explicit @var annotation to get a stable
- * relation type regardless of batch analysis context.
+ * The relation generic type is supplied by ModelRelationReturnTypeHandler so the
+ * dynamic where() narrowing has a concrete model to reflect against.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/647
  */
@@ -22,7 +21,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 // Psalm lowercases method names, so "whereInvoiceNumber" → "whereinvoicenumber",
 // and "invoice_number" normalises to "invoicenumber" — they match.
 function test_dynamic_where_multi_word_column(): void {
-    /** @var HasOne<Invoice, WorkOrder> $r */
     $r = (new WorkOrder())->invoice();
     $_ = $r->whereInvoiceNumber('INV-2024-001')->first();
     /** @psalm-check-type-exact $_ = App\Models\Invoice|null */
@@ -30,7 +28,6 @@ function test_dynamic_where_multi_word_column(): void {
 
 // Single-word column: whereStatus matches @property string $status.
 function test_dynamic_where_single_word_column(): void {
-    /** @var HasOne<Invoice, WorkOrder> $r */
     $r = (new WorkOrder())->invoice();
     $_ = $r->whereStatus('paid')->first();
     /** @psalm-check-type-exact $_ = App\Models\Invoice|null */

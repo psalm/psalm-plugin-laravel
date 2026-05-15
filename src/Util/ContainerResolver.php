@@ -30,10 +30,14 @@ final class ContainerResolver
             return self::$cache[$abstract];
         }
 
-        // dynamic analysis to resolve the actual type from the container
+        // dynamic analysis to resolve the actual type from the container.
+        // Narrowed annotation: every abstract this resolver receives is a service or
+        // path-helper; both Container::make() return shapes are object|string. null
+        // covers the unbound-Authenticatable case below. Closure-bound abstracts that
+        // return arbitrary scalars/arrays are out of scope for this plugin.
         try {
+            /** @psalm-var object|string|null $concrete */
             $concrete = ApplicationProvider::getApp()->make($abstract);
-            assert(\is_object($concrete) || \is_string($concrete));
         } catch (\Throwable) {
             return null;
         }
@@ -41,9 +45,15 @@ final class ContainerResolver
         if (\is_string($concrete)) {
             // some path-helpers actually return a string when being resolved
             $concreteClass = $concrete;
-        } else {
+        } elseif (\is_object($concrete)) {
             // normally we have an object resolved
             $concreteClass = $concrete::class;
+        } else {
+            // Some Laravel bindings (e.g. Authenticatable on a fresh Testbench app
+            // with no authenticated user) resolve to null. The previous assert-based
+            // check was a no-op in production, letting `$concrete::class` crash on
+            // null. Return null so the caller falls back to mixed inference.
+            return null;
         }
 
         self::$cache[$abstract] = $concreteClass;

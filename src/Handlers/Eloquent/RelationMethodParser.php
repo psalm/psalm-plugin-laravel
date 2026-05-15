@@ -43,13 +43,24 @@ use Psalm\Type\Union;
 final class RelationMethodParser
 {
     /**
-     * Parsed result: the relationship factory method and optionally the related model FQCN.
+     * Parsed result: the relationship factory method, related model FQCN, and (for "through"
+     * relations only) the intermediate model FQCN. For BelongsToMany / MorphToMany only,
+     * the chain is also scanned for `->using(Pivot::class)` and `->as('accessor')` mutations
+     * which rebind TPivotModel / TAccessor on the relation.
      *
      * relatedModel is null when:
      * - The relation is polymorphic (morphTo) — the related type is not statically determinable
      * - The first argument could not be statically resolved (e.g. a variable or method call)
      *
-     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string}>
+     * intermediateModel is non-null only for hasOneThrough / hasManyThrough — for every other
+     * relation factory it stays null. Resolves the same way as relatedModel: missing or non-
+     * literal class-string arguments produce null.
+     *
+     * pivotModel / accessor are non-null only when an explicit `->using(...)` / `->as(...)` was
+     * detected on a BelongsToMany or MorphToMany chain with a statically resolvable argument.
+     * Other relations leave them null.
+     *
+     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}>
      */
     private static array $cache = [];
 
@@ -82,12 +93,17 @@ final class RelationMethodParser
     ];
 
     /**
-     * Parse a relationship method body and extract the relation class and related model.
+     * Parse a relationship method body and extract the relation class, related model, (for
+     * through relations only) the intermediate model, and (for BelongsToMany / MorphToMany
+     * only) any `->using()` / `->as()` mutations detected on the chain.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      *         null if the method cannot be parsed as a relationship method.
      *         relatedModel is null when polymorphic (morphTo) or when the first argument
-     *         could not be statically resolved.
+     *         could not be statically resolved. intermediateModel is non-null only for
+     *         hasOneThrough / hasManyThrough. pivotModel / accessor are non-null only when
+     *         an explicit `->using(Pivot::class)` / `->as('alias')` chain mutation was
+     *         detected with a statically resolvable argument.
      */
     public static function parse(Codebase $codebase, string $className, string $methodName): ?array
     {
@@ -104,7 +120,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
     private static function doParse(Codebase $codebase, string $className, string $methodName): ?array
     {
@@ -118,24 +134,57 @@ final class RelationMethodParser
             return null;
         }
 
-        return self::parseMethodBody($classMethod->stmts);
+        // Resolve the parent FQCN once so `parent::class` in factory args can be substituted
+        // without re-querying class storage per occurrence. `findClassMethodWithStatements`
+        // searches the file by `$className`, so a successful lookup means the method body
+        // lives in `$className` itself — `self::class` and (conservatively) `static::class`
+        // both resolve to `$className`. See {@see resolveClassConstFetch} for the trade-off.
+        $parentClass = self::resolveParentClass($codebase, $className);
+
+        return self::parseMethodBody($classMethod->stmts, $className, $parentClass);
+    }
+
+    /**
+     * Look up the immediate parent FQCN of `$className`, or null when the class has no
+     * parent (or storage isn't available). Used to substitute `parent::class` in relation
+     * factory arguments. The InvalidArgumentException catch mirrors the surrounding
+     * fail-soft style — a missing parent yields null and the handler defers, rather than
+     * crashing the analysis run.
+     */
+    private static function resolveParentClass(Codebase $codebase, string $className): ?string
+    {
+        try {
+            $storage = $codebase->classlike_storage_provider->get($className);
+        } catch (\InvalidArgumentException $invalidArgumentException) {
+            $codebase->progress->debug("Laravel plugin: could not resolve parent class for {$className}: {$invalidArgumentException->getMessage()}\n");
+            return null;
+        }
+
+        return $storage->parent_class;
     }
 
     /**
      * Walk the method body to find a return statement containing a relationship factory call
      * like $this->belongsTo(Vault::class).
      *
+     * `$declaringClass` and `$parentClass` thread down to {@see resolveClassConstFetch} so
+     * `self::class` / `static::class` / `parent::class` arguments resolve to real FQCNs
+     * instead of leaking the keyword as the related-model template parameter.
+     *
      * @param array<array-key, PhpParser\Node\Stmt> $stmts
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
-    private static function parseMethodBody(array $stmts): ?array
+    private static function parseMethodBody(array $stmts, string $declaringClass, ?string $parentClass): ?array
     {
         foreach ($stmts as $stmt) {
             if (!$stmt instanceof PhpParser\Node\Stmt\Return_ || !$stmt->expr instanceof PhpParser\Node\Expr) {
                 continue;
             }
 
-            return self::findRelationCallInExpr($stmt->expr);
+            $pivotModel = null;
+            $accessor = null;
+
+            return self::findRelationCallInExpr($stmt->expr, $declaringClass, $parentClass, $pivotModel, $accessor);
         }
 
         return null;
@@ -143,12 +192,23 @@ final class RelationMethodParser
 
     /**
      * Recursively search an expression for a relationship factory method call.
-     * Handles both direct calls and method chains.
+     * Handles both direct calls and method chains. While unwrapping the chain on the way
+     * to the inner factory call, also collect any `->using(Pivot::class)` and
+     * `->as('accessor')` mutations — these rebind TPivotModel / TAccessor on
+     * BelongsToMany and MorphToMany. Other chain calls (`->withDefault()`, `->wherePivot()`,
+     * etc.) are transparent: the recursion descends past them without recording anything.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string}
+     * @param ?string $pivotModel out-parameter: FQCN captured from `->using(...)` if found
+     * @param ?string $accessor   out-parameter: literal string captured from `->as(...)` if found
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
-    private static function findRelationCallInExpr(PhpParser\Node\Expr $expr): ?array
-    {
+    private static function findRelationCallInExpr(
+        PhpParser\Node\Expr $expr,
+        string $declaringClass,
+        ?string $parentClass,
+        ?string &$pivotModel,
+        ?string &$accessor,
+    ): ?array {
         if (!$expr instanceof PhpParser\Node\Expr\MethodCall) {
             return null;
         }
@@ -161,55 +221,179 @@ final class RelationMethodParser
             if ($relationClass !== null) {
                 return [
                     'relationClass' => $relationClass,
-                    'relatedModel' => self::extractClassStringArg($expr, $lowerName),
+                    'relatedModel' => self::extractClassStringArg($expr, $lowerName, 0, 'related', $declaringClass, $parentClass),
+                    // Through relations carry the intermediate model as the second class-string
+                    // argument: hasOneThrough(Related, Intermediate) / hasManyThrough(Related, Intermediate).
+                    // Every other factory leaves this null.
+                    'intermediateModel' => \in_array($lowerName, ['hasonethrough', 'hasmanythrough'], true)
+                        ? self::extractClassStringArg($expr, $lowerName, 1, 'through', $declaringClass, $parentClass)
+                        : null,
+                    'pivotModel' => $pivotModel,
+                    'accessor' => $accessor,
                 ];
+            }
+
+            // Pivot / accessor mutators: capture the first statically resolvable argument.
+            // Outside-in recursion visits the outermost call first, so the outermost
+            // `using()` / `as()` wins via `??=` — inner ones cannot overwrite once set.
+            if ($lowerName === 'using') {
+                $pivotModel ??= self::firstClassStringArg($expr, $declaringClass, $parentClass);
+            } elseif ($lowerName === 'as') {
+                $accessor ??= self::firstStringLiteralArg($expr);
             }
         }
 
         // Not a relationship call — try the inner expression (unwrap chain).
         // e.g. for $this->belongsTo(X::class)->withDefault(), $expr->var is $this->belongsTo(X::class)
-        return self::findRelationCallInExpr($expr->var);
+        return self::findRelationCallInExpr($expr->var, $declaringClass, $parentClass, $pivotModel, $accessor);
     }
 
     /**
-     * Extract the class-string first argument from a relationship factory call.
+     * Resolve the first argument of `->using(Pivot::class)` to its FQCN, or null when the
+     * argument is dynamic (a variable, a method call, etc.). The first physical arg is
+     * read regardless of whether it carries a name token — `using()` is a single-parameter
+     * method, so named (`->using(class: P::class)`) and positional (`->using(P::class)`)
+     * forms are both honored.
+     */
+    private static function firstClassStringArg(PhpParser\Node\Expr\MethodCall $call, string $declaringClass, ?string $parentClass): ?string
+    {
+        $first = $call->args[0] ?? null;
+        if (!$first instanceof PhpParser\Node\Arg) {
+            return null;
+        }
+
+        return self::resolveClassConstFetch($first->value, $declaringClass, $parentClass);
+    }
+
+    /**
+     * Resolve the first argument of `->as('accessor')` to its literal string value, or null
+     * when the argument is dynamic. Only literal scalars produce a usable TAccessor binding —
+     * variables and concatenation cannot be statically pinned.
+     *
+     * @psalm-mutation-free
+     */
+    private static function firstStringLiteralArg(PhpParser\Node\Expr\MethodCall $call): ?string
+    {
+        $first = $call->args[0] ?? null;
+        if (!$first instanceof PhpParser\Node\Arg) {
+            return null;
+        }
+
+        $value = $first->value;
+        if ($value instanceof PhpParser\Node\Scalar\String_) {
+            return $value->value;
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract the class-string argument at the given position from a relationship factory call.
+     *
+     * Resolves named arguments (`hasManyThrough(through: Vehicle::class, related: WorkOrder::class)`)
+     * by `$paramName` first, then falls back to positional lookup at `$positionalIndex` when the
+     * call uses bare positional args. The two arg-naming worlds are kept separate: a positional
+     * lookup ignores any arg that carries a `name` token, since named args may have shifted the
+     * positions and indexing into them would mis-identify the intended arg.
      *
      * morphTo() is special: it may have no arguments (Laravel infers the type from the method name),
      * or it may have string arguments rather than a class-string. Returns null for morphTo()
      * since the related model type is polymorphic and not statically determinable.
+     *
+     * $positionalIndex=0 / $paramName='related' captures the related model. $positionalIndex=1 /
+     * $paramName='through' captures the intermediate model on through relations.
      */
-    private static function extractClassStringArg(PhpParser\Node\Expr\MethodCall $call, string $lowerMethodName): ?string
-    {
+    private static function extractClassStringArg(
+        PhpParser\Node\Expr\MethodCall $call,
+        string $lowerMethodName,
+        int $positionalIndex,
+        string $paramName,
+        string $declaringClass,
+        ?string $parentClass,
+    ): ?string {
         // morphTo() doesn't take a class-string<Model> as first arg — the related type is polymorphic
         if ($lowerMethodName === 'morphto') {
             return null;
         }
 
         $args = $call->args;
-        if ($args === [] || !$args[0] instanceof PhpParser\Node\Arg) {
+
+        // Named-arg form: search by param name regardless of position.
+        foreach ($args as $arg) {
+            if (
+                $arg instanceof PhpParser\Node\Arg
+                && $arg->name instanceof PhpParser\Node\Identifier
+                && $arg->name->name === $paramName
+            ) {
+                return self::resolveClassConstFetch($arg->value, $declaringClass, $parentClass);
+            }
+        }
+
+        // Positional form: only valid when the arg at $positionalIndex is itself positional
+        // (named args may have shifted positions, so a positional lookup is unreliable).
+        if (
+            !isset($args[$positionalIndex])
+            || !$args[$positionalIndex] instanceof PhpParser\Node\Arg
+            || $args[$positionalIndex]->name instanceof \PhpParser\Node\Identifier
+        ) {
             return null;
         }
 
-        $firstArg = $args[0]->value;
+        return self::resolveClassConstFetch($args[$positionalIndex]->value, $declaringClass, $parentClass);
+    }
 
-        // Expect ClassName::class
+    /**
+     * Resolve a `ClassName::class` expression to the resolved FQCN, or null when the
+     * expression is anything else (a variable, a method call, a string literal, etc.).
+     *
+     * Handles the `self` / `static` / `parent` keywords specifically. PhpParser's
+     * `NameResolver` deliberately leaves them unresolved (`resolvedName` attribute is
+     * null) because they are context-sensitive — without substituting them here,
+     * `toString()` would return the literal keyword and the parser would emit, e.g.,
+     * `HasMany<self, User>` instead of `HasMany<User, User>` (#879).
+     *
+     * Substitution rules:
+     * - `self::class` → `$declaringClass` (always correct: PHP resolves `self` to the
+     *   class where the method body is declared).
+     * - `static::class` → `$declaringClass` (conservative). Late static binding would
+     *   resolve this to the receiver's runtime class, but the parser is keyed by the
+     *   declaring class only, so we cannot vary the result per binding without
+     *   defeating the cache. Yields a strictly better answer than leaking `'static'`.
+     * - `parent::class` → `$parentClass` (or null when the declaring class has no
+     *   parent — same path as a dynamic arg, which makes the upstream handler defer).
+     *   When the declaring class extends `Illuminate\Database\Eloquent\Model` directly,
+     *   `parent::class` legitimately resolves to that abstract base — that matches PHP's
+     *   runtime semantics; the resulting `Relation<Model, Self>` is well-formed but
+     *   semantically thin. Filtering Model out here would break faithfulness to the
+     *   user's source.
+     */
+    private static function resolveClassConstFetch(PhpParser\Node\Expr $expr, string $declaringClass, ?string $parentClass): ?string
+    {
         if (
-            $firstArg instanceof PhpParser\Node\Expr\ClassConstFetch
-            && $firstArg->class instanceof PhpParser\Node\Name
-            && $firstArg->name instanceof PhpParser\Node\Identifier
-            && $firstArg->name->name === 'class'
+            !$expr instanceof PhpParser\Node\Expr\ClassConstFetch
+            || !$expr->class instanceof PhpParser\Node\Name
+            || !$expr->name instanceof PhpParser\Node\Identifier
+            || $expr->name->name !== 'class'
         ) {
-            // Prefer the FQCN resolved by Psalm's name-resolution pass
-            /** @var string|null $resolved */
-            $resolved = $firstArg->class->getAttribute('resolvedName');
-            if (\is_string($resolved)) {
-                return $resolved;
-            }
-
-            return $firstArg->class->toString();
+            return null;
         }
 
-        return null;
+        if ($expr->class->isSpecialClassName()) {
+            return match ($expr->class->toLowerString()) {
+                'self', 'static' => $declaringClass,
+                'parent' => $parentClass,
+                default => null,
+            };
+        }
+
+        // Prefer the FQCN resolved by Psalm's name-resolution pass
+        /** @var string|null $resolved */
+        $resolved = $expr->class->getAttribute('resolvedName');
+        if (\is_string($resolved)) {
+            return $resolved;
+        }
+
+        return $expr->class->toString();
     }
 
     /**
@@ -260,11 +444,20 @@ final class RelationMethodParser
     private static function findClassMethodWithStatements(Codebase $codebase, string $className, string $methodName): ?array
     {
         $methodId = $className . '::' . $methodName;
+        $methodIdentifier = MethodIdentifier::wrap($methodId);
+
+        // Pre-check via the non-throwing API. The new ModelRelationReturnTypeHandler
+        // (see https://github.com/psalm/psalm-plugin-laravel/issues/760) calls this
+        // path for every method dispatch on every Model subclass — including Builder
+        // forwards (find/where/save/etc.) that aren't declared on the subclass at all.
+        // Falling through to getStorage() and catching the resulting UnexpectedValueException
+        // for each cold miss adds a real cost per (class, method) pair on first analysis.
+        if (!$codebase->methods->hasStorage($methodIdentifier)) {
+            return null;
+        }
 
         try {
-            $methodStorage = $codebase->methods->getStorage(
-                MethodIdentifier::wrap($methodId),
-            );
+            $methodStorage = $codebase->methods->getStorage($methodIdentifier);
         } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
             $codebase->progress->debug("Laravel plugin: could not get method storage for {$methodId}: {$e->getMessage()}\n");
             return null;

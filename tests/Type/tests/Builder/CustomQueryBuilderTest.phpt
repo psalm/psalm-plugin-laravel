@@ -1,12 +1,14 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Builders\BuilderMacroModelBuilder;
 use App\Builders\VehicleBuilder;
 use App\Builders\InvoiceBuilder;
 use App\Builders\MechanicBuilder;
 use App\Builders\WorkOrderBuilder;
 use App\Collections\InvoiceCollection;
 use App\Collections\WorkOrderCollection;
+use App\Models\BuilderMacroModel;
 use App\Models\Vehicle;
 use App\Models\Invoice;
 use App\Models\Mechanic;
@@ -54,17 +56,36 @@ function test_chain_multiple_custom_methods(): void
     /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder> */
 }
 
+/** Custom builder method chained into a base Builder method preserves the custom builder. */
+function test_custom_method_chain_to_base_builder_method(): void
+{
+    $_result = WorkOrder::query()->whereCompleted()->where('priority', 1);
+    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder>&static */
+}
+
 /**
  * Base Builder methods still work on the custom builder.
  *
- * Returns Builder<WorkOrder> rather than WorkOrderBuilder<WorkOrder> because the Builder stub's
- * where() uses @return self<TModel> and self resolves to Builder (the declaring class).
- * Custom builder methods that explicitly return self<TModel> preserve the WorkOrderBuilder type.
+ * Fluent Builder methods preserve the concrete custom builder type.
  */
-function test_base_builder_methods_still_work(): void
+function test_base_builder_methods_preserve_custom_builder(): void
 {
     $_result = WorkOrder::query()->where('title', 'Hello');
-    /** @psalm-check-type-exact $_result = Builder<WorkOrder> */
+    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder>&static */
+}
+
+/** Base Builder methods preserve custom builder type via static model forwarding. */
+function test_base_builder_static_methods_preserve_custom_builder(): void
+{
+    $_result = WorkOrder::where('title', 'Hello');
+    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder> */
+}
+
+/** Base Builder methods preserve custom builder type via instance model forwarding. */
+function test_base_builder_instance_methods_preserve_custom_builder(): void
+{
+    $_result = (new WorkOrder())->where('title', 'Hello');
+    /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder> */
 }
 
 /** Custom builder methods accessible via static call on the model. */
@@ -369,6 +390,54 @@ function test_non_template_builder_static_call(): void
     /** @psalm-check-type-exact $_result = InvoiceBuilder */
 }
 
+/** Non-template builder: base Builder method via static call preserves plain InvoiceBuilder. */
+function test_non_template_builder_base_static_call(): void
+{
+    $_result = Invoice::where('status', 'paid');
+    /** @psalm-check-type-exact $_result = InvoiceBuilder */
+}
+
+/** Non-template builder: base Builder method via instance call preserves plain InvoiceBuilder. */
+function test_non_template_builder_base_instance_call(): void
+{
+    $_result = (new Invoice())->where('status', 'paid');
+    /** @psalm-check-type-exact $_result = InvoiceBuilder */
+}
+
+/** Non-template builder: model-level @method returning the custom builder is also a builder macro. */
+function test_model_level_custom_builder_macro_static_call(): void
+{
+    $_result = BuilderMacroModel::activeOnly();
+    /** @psalm-check-type-exact $_result = BuilderMacroModelBuilder */
+}
+
+/** Model-level @method returning a custom builder preserves static-side SoftDeletes wiring. */
+function test_model_level_custom_builder_soft_deletes_static_call(): void
+{
+    $_result = BuilderMacroModel::onlyTrashed();
+    /** @psalm-check-type-exact $_result = BuilderMacroModelBuilder */
+}
+
+/** Model-level @method returning a custom builder is also a builder macro. */
+function test_model_level_custom_builder_macro_instance_call(BuilderMacroModelBuilder $query): void
+{
+    $_result = $query->activeOnly();
+    /** @psalm-check-type-exact $_result = BuilderMacroModelBuilder */
+}
+
+/** Non-template builder: base Builder method chain must keep model-level trait macros. */
+function test_model_level_custom_builder_macro_after_base_builder_method(BuilderMacroModelBuilder $query): void
+{
+    $_result = $query->where('deleted_at', '<', '2024-01-01')->onlyTrashed();
+    /** @psalm-check-type-exact $_result = BuilderMacroModelBuilder */
+}
+
+/** Negative: unrelated model-level @method returns are not registered as builder macros. */
+function test_unrelated_model_level_method_is_not_registered_on_custom_builder(BuilderMacroModelBuilder $query): void
+{
+    $_result = $query->unrelatedMacro();
+}
+
 /**
  * Non-template builder: terminal get() returns base Collection, not InvoiceCollection.
  *
@@ -400,3 +469,4 @@ function test_non_template_collection_all(): void
 InvalidStaticInvocation on line %d: Method App\Models\WorkOrder::completed is not static, but is called statically
 UndefinedMagicMethod on line %d: Magic method App\Builders\WorkOrderBuilder::completelyfakemethod does not exist
 UndefinedMagicMethod on line %d: Magic method App\Models\WorkOrder::completelyfakemethod does not exist
+UndefinedMagicMethod on line %d: Magic method App\Builders\BuilderMacroModelBuilder::unrelatedmacro does not exist

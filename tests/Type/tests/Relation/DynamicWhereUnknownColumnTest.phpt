@@ -3,7 +3,6 @@
 
 use App\Models\Invoice;
 use App\Models\WorkOrder;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * When resolveDynamicWhereClauses is enabled (default), a where{Column} call
@@ -15,7 +14,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  */
 
 function test_dynamic_where_unknown_column_falls_through_to_mixed(): void {
-    /** @var HasOne<Invoice, WorkOrder> $r */
     $r = (new WorkOrder())->invoice();
     // "nonexistent_column" is not a @property on Invoice — handler returns null,
     // Psalm falls to __call on the Relation, which returns mixed.

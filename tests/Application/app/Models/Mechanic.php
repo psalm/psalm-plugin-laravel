@@ -56,6 +56,70 @@ final class Mechanic extends Model
     }
 
     /**
+     * Specializations with both a custom pivot model and a custom accessor name —
+     * exercises the chain capture for `->as('alias')` in addition to `->using()`.
+     *
+     * @psalm-return BelongsToMany<MechanicSpecialization, $this, SpecializationPivot, 'details'>
+     */
+    public function specializationsWithCustomAccessor(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)
+            ->using(SpecializationPivot::class)
+            ->as('details');
+    }
+
+    /**
+     * Specializations with `->as()` but no `->using()` — verifies that when only
+     * the accessor is captured, slot 3 is still filled with the per-relation
+     * `Pivot` default. (The handler emits all 4 slots unconditionally for
+     * pivot-aware relations; this test pins the captured-vs-default split.)
+     *
+     * @psalm-return BelongsToMany<MechanicSpecialization, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'details'>
+     */
+    public function specializationsAccessorOnly(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->as('details');
+    }
+
+    /**
+     * Specializations with `->as()` then `->using()` — exercises order-independence
+     * of the chain-capture recursion (the outside-in walk should record both
+     * mutators regardless of their source-order).
+     *
+     * @psalm-return BelongsToMany<MechanicSpecialization, $this, SpecializationPivot, 'details'>
+     */
+    public function specializationsAsThenUsing(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)
+            ->as('details')
+            ->using(SpecializationPivot::class);
+    }
+
+    /**
+     * Tagging WorkOrders polymorphically with a custom pivot — used to test that the
+     * chain-capture also fires for MorphToMany (not just BelongsToMany).
+     *
+     * @psalm-return MorphToMany<WorkOrder, $this, SpecializationPivot, 'pivot'>
+     */
+    public function workOrderTagsWithPivot(): MorphToMany
+    {
+        return $this->morphedByMany(WorkOrder::class, 'taggable')->using(SpecializationPivot::class);
+    }
+
+    /**
+     * Tagging WorkOrders with `->as()` and no `->using()` — exercises the per-relation
+     * pivot default selection: MorphToMany's TPivotModel default is `MorphPivot`, not
+     * `Pivot`. A handler that hard-coded `Pivot` for the missing-mutator fallback
+     * would silently emit the wrong template here.
+     *
+     * @psalm-return MorphToMany<WorkOrder, $this, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'meta'>
+     */
+    public function workOrderTagsAccessorOnly(): MorphToMany
+    {
+        return $this->morphedByMany(WorkOrder::class, 'taggable')->as('meta');
+    }
+
+    /**
      * Admin bookmarks for this mechanic (inverse of Admin::mechanics()).
      *
      * @psalm-return MorphToMany<Admin>

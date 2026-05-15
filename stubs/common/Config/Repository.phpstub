@@ -1,0 +1,39 @@
+<?php
+
+namespace Illuminate\Config;
+
+use ArrayAccess;
+use Illuminate\Contracts\Config\Repository as ConfigContract;
+
+/**
+ * Class declaration mirrors Laravel's source. Psalm wipes the reflected
+ * class_implements list when a stub re-declares the class, so the clause
+ * must be repeated verbatim or callers typed on the contracts break.
+ */
+class Repository implements ArrayAccess, ConfigContract
+{
+    /**
+     * Get the specified array configuration value.
+     *
+     * Psalm tightens $default to reject plain scalar values (string, int, bool, etc.)
+     * because passing a non-array, non-null, non-Closure default guarantees an
+     * InvalidArgumentException at runtime when the key is absent (the method throws
+     * if the resolved value is not an array). Closures are accepted because
+     * Arr::get() invokes them via value() before the array check.
+     *
+     * @param  (\Closure():(array<array-key, mixed>|null))|array<array-key, mixed>|null  $default
+     * @return array<array-key, mixed>
+     */
+    public function array(string $key, \Closure|array|null $default = null): array {}
+
+    /**
+     * Get the specified array configuration value as a collection.
+     *
+     * Same $default restriction as array(): collection() delegates to array(),
+     * so the same runtime throw applies for non-array, non-null, non-Closure defaults.
+     *
+     * @param  (\Closure():(array<array-key, mixed>|null))|array<array-key, mixed>|null  $default
+     * @return \Illuminate\Support\Collection<array-key, mixed>
+     */
+    public function collection(string $key, \Closure|array|null $default = null): \Illuminate\Support\Collection {}
+}

@@ -15,7 +15,9 @@ use Illuminate\Support\Facades\Facade;
  * the facade. This map lets handlers discover which facade/alias classes proxy
  * to their service class so they can register for those names too.
  *
- * Built once during plugin init from the booted app's AliasLoader + Facade::getFacadeRoot().
+ * Seeded at plugin init from the booted app's AliasLoader + `Facade::getFacadeRoot()`
+ * ({@see self::init()}). Consumed at analysis time by handlers that call
+ * {@see self::getFacadeClasses()}.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/591
  */

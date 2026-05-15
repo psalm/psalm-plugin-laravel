@@ -2,7 +2,7 @@
 composer.lock
 /vendor/
 
-cache/*.stubphp
+cache/*.phpstub
 
 # CS
 .php-cs-fixer.cache
@@ -18,3 +18,7 @@ phpunit.xml
 # AI
 .claude
 CLAUDE.local.md
+
+## Codex agents
+.agents/
+AGENTS.md

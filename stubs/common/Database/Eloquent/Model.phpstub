@@ -1,0 +1,272 @@
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+use ArrayAccess;
+use JsonSerializable;
+use Stringable;
+use Illuminate\Contracts\Broadcasting\HasBroadcastChannel;
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Routing\UrlRoutable;
+use Illuminate\Contracts\Queue\QueueableEntity;
+use Illuminate\Support\Traits\ForwardsCalls;
+
+/**
+ * @implements \ArrayAccess<string, mixed>
+ * @mixin \Illuminate\Database\Eloquent\Builder<static>
+ */
+abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToString, HasBroadcastChannel, Jsonable, JsonSerializable, QueueableEntity, Stringable, UrlRoutable
+{
+    use Concerns\HasAttributes,
+            Concerns\HasEvents,
+            Concerns\HasGlobalScopes,
+            Concerns\HasRelationships,
+            Concerns\HasTimestamps,
+            Concerns\HidesAttributes,
+            Concerns\GuardsAttributes,
+            ForwardsCalls;
+
+    /**
+     * @var array<string, string>
+     */
+    protected $casts = [];
+
+    /**
+     * @var list<string>
+     */
+    protected $hidden = [];
+
+    /**
+     * @var list<string>
+     */
+    protected $visible = [];
+
+    /**
+     * @var list<string>
+     */
+    protected $appends = [];
+
+    /**
+     * @param  array|mixed  $columns
+     * @return \Illuminate\Database\Eloquent\Collection<int, static>
+     *
+     * @psalm-variadic
+     */
+    public static function all($columns = ['*']) {}
+
+    /**
+     * Begin querying a model with eager loading.
+     *
+     * Accepts an array of relation names or variadic string arguments via func_get_args().
+     *
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return \Illuminate\Database\Eloquent\Builder<static>
+     *
+     * @psalm-variadic
+     */
+    public static function with($relations) {}
+
+    /**
+     * The `<static>` template argument MUST stay literal. Replacing it with `<self>` or any
+     * concrete class collapses the `&static` intersection that `: static`-returning callers
+     * depend on, and `ModelMethodHandler::getMethodReturnType` deliberately defers to this
+     * annotation for plain models (see #799).
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<static>
+     */
+    public static function query() {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQuery() {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newModelQuery() {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQueryWithoutRelationships() {}
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder  $builder
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function registerGlobalScopes($builder) {}
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQueryWithoutScopes() {}
+
+    /**
+     * Get a new query instance without a given scope.
+     *
+     * @param  \Illuminate\Database\Eloquent\Scope|string  $scope
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQueryWithoutScope($scope) {}
+
+    /**
+     * @param  array|int  $ids
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newQueryForRestoration($ids) {}
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder<$this>
+     */
+    public function newEloquentBuilder($query) {}
+
+    /**
+     * Get the value of the model's primary key.
+     *
+     * @return int|string
+     */
+    public function getKey() {}
+
+    /**
+     * Get the attributes that have been changed since the last sync.
+     *
+     * @return array<string, mixed>
+     */
+    public function getDirty() {}
+
+    /**
+     * Get the attributes that were changed when the model was last saved.
+     *
+     * @return array<string, mixed>
+     */
+    public function getChanges() {}
+
+    /**
+     * Convert the model instance to an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray() {}
+
+    /**
+     * Get all of the current attributes on the model.
+     *
+     * @return array<string, mixed>
+     */
+    public function getAttributes() {}
+
+    /**
+     * Eager load relations on the model.
+     *
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function load($relations) {}
+
+    /**
+     * Eager load relations on the model if they are not already eager loaded.
+     *
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function loadMissing($relations) {}
+
+    /**
+     * Eager load relation counts on the model.
+     *
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function loadCount($relations) {}
+
+    /**
+     * Make the given, typically hidden, attributes visible.
+     *
+     * @param  array<string>|string  $attributes
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function makeVisible($attributes) {}
+
+    /**
+     * Make the given, typically visible, attributes hidden.
+     *
+     * @param  array<string>|string  $attributes
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function makeHidden($attributes) {}
+
+    /**
+     * Increment a column's value by a given amount.
+     *
+     * These methods are protected in Laravel's source but explicitly forwarded as public
+     * via Model::__call(). Redeclared here to match the runtime public API.
+     *
+     * @param  string  $column
+     * @param  float|int  $amount
+     * @param  array<string, mixed>  $extra
+     * @return int
+     */
+    public function increment($column, $amount = 1, array $extra = []) {}
+
+    /**
+     * Decrement a column's value by a given amount.
+     *
+     * @param  string  $column
+     * @param  float|int  $amount
+     * @param  array<string, mixed>  $extra
+     * @return int
+     */
+    public function decrement($column, $amount = 1, array $extra = []) {}
+
+    /**
+     * Increment a column's value by a given amount without raising any events.
+     *
+     * @param  string  $column
+     * @param  float|int  $amount
+     * @param  array<string, mixed>  $extra
+     * @return int
+     */
+    public function incrementQuietly($column, $amount = 1, array $extra = []) {}
+
+    /**
+     * Decrement a column's value by a given amount without raising any events.
+     *
+     * @param  string  $column
+     * @param  float|int  $amount
+     * @param  array<string, mixed>  $extra
+     * @return int
+     */
+    public function decrementQuietly($column, $amount = 1, array $extra = []) {}
+
+    /**
+     * Increment each given column's value by the given amounts.
+     *
+     * @param  array<string, float|int>  $columns
+     * @param  array<string, mixed>  $extra
+     * @return int
+     */
+    public function incrementEach(array $columns, array $extra = []) {}
+
+    /**
+     * Decrement each given column's value by the given amounts.
+     *
+     * @param  array<string, float|int>  $columns
+     * @param  array<string, mixed>  $extra
+     * @return int
+     */
+    public function decrementEach(array $columns, array $extra = []) {}
+}

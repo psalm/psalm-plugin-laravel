@@ -3,7 +3,15 @@
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
+use Illuminate\Database\Eloquent\Model;
 use App\Models\Customer;
+use App\Models\Vehicle;
+
+/**
+ * @mixin Builder<Customer>
+ */
+final class NonEloquentBuilderMixin {}
 
 final class EloquentBuilderCustomerRepository
 {
@@ -53,7 +61,9 @@ final class EloquentBuilderCustomerRepository
 
     /** @return Builder<Customer> */
     public function getWhereBuilderViaInstance(array $attributes): Builder {
-        return (new Customer())->where($attributes);
+        $query = (new Customer())->where($attributes);
+        /** @psalm-check-type-exact $query = Builder<Customer> */
+        return $query;
     }
 
     public function chunkReturnsTemplatedCollection(): void
@@ -86,7 +96,15 @@ final class EloquentBuilderCustomerRepository
     /** @return Builder<Customer> */
     public function getWhereBuilderViaStatic(array $attributes): Builder
     {
-      return Customer::where($attributes);
+      $query = Customer::where($attributes);
+      /** @psalm-check-type-exact $query = Builder<Customer> */
+      return $query;
+    }
+
+    public function setModelChangesBuilderTemplate(): void
+    {
+        $_result = Customer::query()->setModel(new Vehicle());
+        /** @psalm-check-type-exact $_result = Builder<Vehicle>&static */
     }
 
 //    /** @return Collection<int, Customer> */
@@ -120,6 +138,49 @@ function test_whereDateWithNull(Builder $builder): Builder
 function test_whereDateWithInt(Builder $builder): Builder
 {
     return $builder->whereDate('created_at', '>', 1);
+}
+
+/**
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/776
+ * Arrow-function closure returns the chained Builder (`mixed`-compatible),
+ * not `void` or `static`. Must not raise InvalidArgument.
+ */
+function test_where_arrow_closure(): Builder
+{
+    return Customer::query()->where(fn ($q) => $q->where('email', 'x')->orWhere('name', 'y'));
+}
+
+/**
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/776
+ * Long-form closure with explicit `void` return must remain accepted.
+ */
+function test_where_long_form_closure(): Builder
+{
+    return Customer::query()->where(function ($q): void {
+        $q->where('email', 'x')->orWhere('name', 'y');
+    });
+}
+
+/**
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/776
+ * Same closure shape on firstWhere (a sibling stub fixed in the same PR).
+ */
+function test_firstWhere_arrow_closure(): ?Customer
+{
+    return Customer::query()->firstWhere(fn ($q) => $q->where('email', 'x'));
+}
+
+function test_non_eloquent_mixin_does_not_use_model_builder_forwarding(): void
+{
+    $_result = (new NonEloquentBuilderMixin())->where(['id' => 1]);
+    /** @psalm-check-type-exact $_result = NonEloquentBuilderMixin */
+}
+
+function test_scopes_on_builder_contract_preserves_concrete_builder_surface(BuilderContract $query): BuilderContract
+{
+    $_result = $query->scopes(['active'])->whereNull('deleted_at');
+    /** @psalm-check-type-exact $_result = Builder<Model>&static */
+    return $_result;
 }
 ?>
 --EXPECTF--

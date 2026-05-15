@@ -1,0 +1,289 @@
+<?php
+
+/**
+ * Stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Support/helpers.php}
+ */
+
+/**
+* @see https://github.com/vimeo/psalm/issues/4816 for why this hack exists
+*/
+class NullObject {
+    /**
+     * @return null
+     */
+ 	public function __call(string $_name, array $args) {
+        return null;
+    }
+
+    /**
+     * @return null
+     */
+    public function __get(string $s) {
+        return null;
+    }
+
+    public function __set(string $_name, string $_value) : void {
+    }
+}
+
+// append_config: nothing to stub
+
+/**
+ * Determine if the given value is "blank".
+ *
+ * The conditional branches are nested (not unioned) to avoid a Psalm
+ * over-narrowing edge case. A unioned clause such as
+ * `$value is (null|''|array<never, never>)` collapses the whole
+ * conditional to the narrow branch for an input that only partially
+ * overlaps with the union (e.g. `string` intersects `''` but is not a
+ * subtype of the union), making `blank(?string)` infer literal `true`.
+ * Splitting each literal into its own `is null`, `is ''`,
+ * `is array<never, never>` check keeps non-matching inputs flowing
+ * through to `bool`. See
+ * https://github.com/psalm/psalm-plugin-laravel/issues/751.
+ *
+ * @param  mixed  $value
+ * @psalm-assert-if-false !null $value
+ * @psalm-return ($value is (bool|numeric|non-empty-array)
+ *  ? false
+ *  : ($value is null
+ *      ? true
+ *      : ($value is ''
+ *          ? true
+ *          : ($value is array<never, never> ? true : bool)
+ *      )
+ *    )
+ * )
+ */
+function blank($value) {}
+
+/**
+ * Get the class "basename" of the given object / class.
+ *
+ * @param  class-string|object  $class
+ * @return non-empty-string
+ */
+function class_basename($class) {}
+
+/**
+ * Returns all traits used by a class, its parent classes and trait of their traits.
+ *
+ * @param class-string|object $trait
+ * @return array<trait-string, trait-string>
+ */
+function class_uses_recursive($class) {}
+
+/**
+ * Encode HTML special characters in a string.
+ *
+ * Wraps htmlspecialchars() with ENT_QUOTES — escapes both HTML entities and quotes,
+ * used by Blade's {{ }} output to prevent XSS.
+ *
+ * @param  \Illuminate\Contracts\Support\DeferringDisplayableValue|\Illuminate\Contracts\Support\Htmlable|\BackedEnum|string|int|float|null  $value
+ * @param  bool  $doubleEncode
+ * @return string
+ *
+ * @psalm-taint-escape html
+ * @psalm-taint-escape has_quotes
+ * @psalm-flow ($value) -> return
+ */
+function e($value, $doubleEncode = true) {}
+
+// env: nothing to stub
+
+/**
+ * Determine if a value is "filled".
+ *
+ * See {@see blank()} for the rationale behind the nested conditional shape.
+ *
+ * Only `@psalm-assert-if-true !null` is applied, narrowing `?string` to
+ * `string` (not `non-empty-string`) inside the true branch. A previous
+ * iteration (#762) added `@psalm-assert-if-true !='' $value` to tighten
+ * the narrowing to `non-empty-string`, but Psalm applies that
+ * loose-equality assertion to every atomic of the input type, which
+ * caused:
+ *
+ * 1. `class-string<X>` gaining a spurious `non-empty-string` atomic in
+ *    the resulting union (the template atomic is preserved, but the
+ *    added `non-empty-string` makes `$classString::method()` call sites
+ *    report `InvalidStringClass`).
+ * 2. `TypeDoesNotContainType` and `RedundantCondition` diagnostics on
+ *    non-string inputs like arrays, enums, and objects.
+ *
+ * See https://github.com/psalm/psalm-plugin-laravel/issues/771 for the
+ * regression report and benchmark evidence (35 new issues on Filament
+ * v4.8.4). The tighter `?string` to `non-empty-string` narrowing can be
+ * reintroduced if Psalm grows input-type-guarded docblock assertions.
+ *
+ * @param  mixed  $value
+ * @psalm-assert-if-true !null $value
+ * @psalm-return ($value is (bool|numeric|non-empty-array)
+ *  ? true
+ *  : ($value is null
+ *      ? false
+ *      : ($value is ''
+ *          ? false
+ *          : ($value is array<never, never> ? false : bool)
+ *      )
+ *    )
+ * )
+ */
+function filled($value) {}
+
+// literal: @todo add stub
+
+/**
+ * Get an item from an object using "dot" notation.
+ *
+ * @template TObject
+ *
+ * @param  TObject  $object
+ * @param  string|null  $key
+ * @param  mixed  $default
+ * @return ($key is (null|'') ? TObject : mixed)
+ */
+function object_get($object, $key, $default = null) {}
+
+/**
+ * Provide access to optional objects.
+ *
+ * @template TValue
+ * @template TResult
+ * @template TCallback of null|callable(TValue): TResult
+ * @psalm-param TValue $value
+ * @psalm-return (
+ *  TValue is null
+ *      ? NullObject
+ *      : (TCallback is null ? TValue : TResult)
+ * )
+ */
+function optional($value = null, callable $callback = null) {}
+
+// preg_replace_array: nothing to stub
+
+/**
+ * Retry an operation a given number of times.
+ *
+ * @template TValue
+ * @param int|list<int> $times
+ * @param callable(int): TValue $callback
+ * @param int|\Closure(int, \Throwable): int $sleepMilliseconds
+ * @param null|callable(\Throwable): bool $when
+ * @psalm-return TValue
+ *
+ * @throws \Throwable
+ */
+function retry($times, callable $callback, $sleepMilliseconds = 0, $when = null) {}
+
+/**
+ * Get a new stringable object from the given string.
+ *
+ * Widened from Laravel's `string|null` to also accept \Stringable. `str()` forwards to
+ * Str::of() which wraps the value with `new Stringable($value)`; PHP's __toString
+ * coercion makes any stringable object safe here.
+ *
+ * @param  string|\Stringable|null  $string
+ * @return (func_num_args() is 0
+ *  ? (stringable-object&\Illuminate\Support\Str)
+ *  : \Illuminate\Support\Stringable
+ * )
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($string) -> return
+ */
+function str($string = null) {}
+
+/**
+ * Call the given Closure with the given value then return the value.
+ *
+ * @template TValue
+ *
+ * @param TValue $value
+ * @param null|callable(TValue): void $callback
+ * @return TValue
+ */
+function tap($value, $callback = null) {}
+
+/**
+ * Throw the given exception if the given condition is true.
+ *
+ * @template TCondition
+ * @template TException of \Throwable
+ *
+ * @param  TCondition  $condition
+ * @param  TException|class-string<TException>|string  $exception
+ * @param  mixed  ...$parameters
+ * @return (TCondition is empty ? TCondition : never)
+ * @psalm-assert empty $condition
+ * @psalm-mutation-free
+ */
+function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {}
+
+/**
+ * Throw the given exception unless the given condition is true.
+ *
+ * @template TCondition
+ * @template TException of \Throwable
+ *
+ * @param  TCondition  $condition
+ * @param  TException|class-string<TException>|string  $exception
+ * @param  mixed  ...$parameters
+ * @return (TCondition is empty ? never : TCondition)
+ * @psalm-assert !empty $condition
+ * @psalm-mutation-free
+ */
+function throw_unless($condition, $exception = 'RuntimeException', ...$parameters) {}
+
+/**
+ * Returns all traits used by a trait and its traits.
+ *
+ * @param class-string $trait
+ * @return array<trait-string, trait-string>
+ */
+function trait_uses_recursive($trait) {}
+
+/**
+ * Transform the given value if it is present.
+ *
+ * @template TValue
+ * @template TCallbackReturn
+ * @template TDefault
+ * @template TDefaultReturn
+ *
+ * @param  TValue  $value
+ * @param  callable(TValue): TCallbackReturn  $callback
+ * @param  TDefault|callable(TValue): TDefaultReturn  $default
+ * @return mixed|null
+ * @psalm-return ($value is (bool|numeric|non-empty-array)
+ *  ? TCallbackReturn
+ *  : ($value is (''|array<never, never>|null)
+ *      ? (TDefault is callable ? TDefaultReturn : TDefault)
+ *      : (TCallbackReturn|TDefaultReturn|TDefault)
+ *    )
+ *  )
+ */
+function transform($value, callable $callback, $default = null) {}
+
+// windows_os: nothing to stub
+
+/**
+ * Return the given value, optionally passed through the given callback.
+ *
+ * @template TValue
+ * @template TReturn
+ *
+ * @param  TValue  $value
+ * @param  (callable(TValue): TReturn)|null  $callback
+ * @return ($callback is null ? TValue : TReturn)
+ */
+function with($value, ?callable $callback = null) {}
+
+/**
+ * Ensures a callable is only called once, and returns the result on subsequent calls.
+ *
+ * @template TReturnType
+ *
+ * @param  callable(): TReturnType  $callback
+ * @return TReturnType
+ */
+function once(callable $callback) {}

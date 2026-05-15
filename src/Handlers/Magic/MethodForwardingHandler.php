@@ -322,6 +322,9 @@ final class MethodForwardingHandler implements
         }
 
         $stmt = $event->getStmt();
+        $callerType = $stmt instanceof MethodCall
+            ? $source->getNodeTypeProvider()->getType($stmt->var)
+            : null;
 
         if (!$stmt instanceof MethodCall) {
             return null;
@@ -330,8 +333,6 @@ final class MethodForwardingHandler implements
         // Get the ORIGINAL caller's type from the node type provider.
         // $stmt->var type is set BEFORE mixin resolution
         // (confirmed in MethodCallAnalyzer.php lines 67-69).
-        $callerType = $source->getNodeTypeProvider()->getType($stmt->var);
-
         if (!$callerType instanceof \Psalm\Type\Union) {
             return null;
         }

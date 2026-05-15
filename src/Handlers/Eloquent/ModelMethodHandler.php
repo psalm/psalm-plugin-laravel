@@ -9,13 +9,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
-use PhpParser\Node\Stmt\Class_;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
-use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
-use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -34,20 +31,24 @@ use Psalm\Type\Union;
  * 2. Method visibility — confirms magic methods are public
  * 3. Method params — provides parameter definitions for argument checking
  * 4. Return types — proxies calls to Builder<TModel> for type inference
- * 5. afterClassLikeVisit — removes pseudo static methods so the plugin can handle them
  *
  * Existence, visibility, params, and return type providers for concrete Model subclasses are
  * registered dynamically per-model by {@see ModelRegistrationHandler} because Psalm's
  * provider lookup requires exact class name matching — a handler registered for Model::class
  * is not consulted for concrete subclasses like App\Models\User.
  *
- * The getClassLikeNames() registration for Model::class still handles Model::query()
- * and the __callStatic proxy for methods resolvable through the single-hop mixin chain.
+ * The getClassLikeNames() registration for Model::class handles `Model::query()` only when
+ * a custom Eloquent builder is registered for the called model. For plain models (base
+ * `Builder`), `query()` is intentionally deferred to the stub at
+ * `stubs/common/Database/Eloquent/Model.phpstub` whose `@return Builder<static>` is the only
+ * way to preserve the `&static` intersection through Psalm's template binding (see #799).
+ * `__callStatic` is similarly proxied for methods resolvable through the single-hop mixin
+ * chain.
  *
  * Builder-instance handlers (trait methods and scopes on custom builders) are in
  * {@see CustomBuilderMethodHandler}.
  */
-final class ModelMethodHandler implements MethodReturnTypeProviderInterface, AfterClassLikeVisitInterface
+final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 {
     /**
      * Cache for isUnresolvedBuilderMethod results.
@@ -91,6 +92,17 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
     private static function getBuilderClassForModel(string $modelClass): string
     {
         return self::$customBuilderMap[$modelClass] ?? Builder::class;
+    }
+
+    /**
+     * Build the Psalm type for the builder used by a model.
+     *
+     * @internal Used by magic forwarding handlers that intercept Model's @mixin path
+     * @psalm-external-mutation-free
+     */
+    public static function resolvedBuilderTypeFor(string $modelClass, Codebase $codebase): Type\Atomic\TNamedObject
+    {
+        return self::builderType(self::getBuilderClassForModel($modelClass), $modelClass, $codebase);
     }
 
     /**
@@ -380,6 +392,16 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         if ($event->getMethodNameLowercase() === 'query') {
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
+            // For models without a custom builder, defer to the stub's
+            // `@return Builder<static>` annotation. Returning `Builder<ConcreteModel>`
+            // here flattens `static`, which then breaks return-type inference inside
+            // methods declared `: static` (e.g. `static::query()->firstOrCreate(...)`)
+            // because the `&static` intersection is lost across the template binding.
+            // See https://github.com/psalm/psalm-plugin-laravel/issues/799.
+            if ($builderClass === Builder::class) {
+                return null;
+            }
+
             return new Union([self::builderType($builderClass, $called_fq_classlike_name, $codebase)]);
         }
 
@@ -481,21 +503,4 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface, Aft
         return $params;
     }
 
-    /** @inheritDoc */
-    #[\Override]
-    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
-    {
-        $storage = $event->getStorage();
-        if (
-            $event->getStmt() instanceof Class_
-            && !$storage->abstract
-            && isset($storage->parent_classes[\strtolower(Model::class)])
-        ) {
-            unset(
-                $storage->pseudo_static_methods['newmodelquery'],
-                $storage->pseudo_static_methods['newquery'],
-                $storage->pseudo_static_methods['query'],
-            );
-        }
-    }
 }

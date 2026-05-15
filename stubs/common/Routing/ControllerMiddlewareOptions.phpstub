@@ -1,0 +1,30 @@
+<?php
+
+namespace Illuminate\Routing;
+
+class ControllerMiddlewareOptions
+{
+    /**
+     * Restrict the middleware to the given controller methods.
+     *
+     * Accepts an array of method names or variadic string arguments via func_get_args().
+     *
+     * @param  array<string>|string  $methods
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function only($methods) {}
+
+    /**
+     * Exclude the given controller methods from the middleware.
+     *
+     * Accepts an array of method names or variadic string arguments via func_get_args().
+     *
+     * @param  array<string>|string  $methods
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function except($methods) {}
+}

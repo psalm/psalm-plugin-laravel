@@ -198,7 +198,6 @@ final class TranslationKeyHandlerTest extends TestCase
     public function returns_null_when_translator_not_initialized(): void
     {
         $translator = new \ReflectionProperty(TranslationKeyHandler::class, 'translator');
-        $translator->setAccessible(true);
         $translator->setValue(null, null);
 
         $event = $this->createEvent('auth.failed');

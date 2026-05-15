@@ -1,17 +1,19 @@
-[![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-[![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-[![Type coverage](https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg)](https://shepherd.dev/github/psalm/psalm-plugin-laravel)
-[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test.yml)
-[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel.yml)
-
 # Psalm plugin for Laravel
 
 Laravel static analysis with built-in security scanning.
 
-The only free tool that combines deep Laravel type analysis with taint-based vulnerability detection.
-Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redirects — without running your code.
+[![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
+[![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
+[![Type coverage](https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg)](https://shepherd.dev/github/psalm/psalm-plugin-laravel)
+[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml)
+[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel-app.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel-app.yml)
 
-> Already using Larastan? psalm-plugin-laravel **complements** it with security analysis that PHPStan cannot provide.
+The only free tool that combines deep Laravel type analysis with taint-based vulnerability detection.
+Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redirects, without running your code.
+
+> [!NOTE]
+> Already using Larastan? psalm-laravel **complements** it with security analysis that PHPStan cannot provide.
+
 
 ![Screenshot](/docs/assets/screenshot.png)
 
@@ -19,55 +21,38 @@ Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redi
 ## Security scanning
 
 Plugin ships Laravel-specific taint stubs that track user input from source to sink across your entire codebase.
-Unlike pattern-matching tools, Psalm follows dataflow across function boundaries — catching vulnerabilities that simpler scanners miss.
+Unlike pattern-matching tools, Psalm follows dataflow across function boundaries, catching vulnerabilities that simpler scanners miss.
 
 ```php
-// psalm-plugin-laravel catches this:
+// psalm-laravel catches this:
 Route::get('/search', function (Request $request) {
-    $query = $request->input('q');
-    DB::statement("SELECT * FROM users WHERE name = '$query'");
-    // TaintedSql: user input flows directly to the SQL query
+    $sortByColumn = $request->input('sort'); // Tainted source: user input from HTTP request
+    User::where('name', $request->input('name'))
+        ->orderBy($sortByColumn) // 🚨 Tainted sink: unvalidated user input used in query builder
+        ->get();
+
+// Psalm output:
+// ERROR TaintedSql: Detected tainted SQL
 });
 ```
 
-Taint analysis also works across helper functions, service classes, and any number of call layers:
+Taint analysis also works across helper functions, service classes, and any number of call layers.
 
 ```php
-// Cross-function taint flow — pattern-matching tools miss this:
-function getUserQuery(Request $request): string {
-    return "SELECT * FROM users WHERE name = '" . $request->input('name') . "'";
-}
+// UserController.php
+$user->siteSettinsg['articles_sort'] = $request->input('sort'); // Tainted source: user input from HTTP request
+$user->save();
 
-Route::get('/users', function (Request $request) {
-    DB::statement(getUserQuery($request));
-    // Psalm catches this: taint flows Request -> getUserQuery() -> DB::statement()
-});
+// ArticlesConstoller.php
+Articles::query()
+    ->orderBy($user->siteSettinsg['articles_sort']) // 🚨 Tainted sink: unvalidated user input used in query builder
+    ->get();
+
+// Psalm output:
+// ERROR TaintedSql: Detected tainted SQL
 ```
 
-### What it detects
-
-| Vulnerability   | OWASP    | Examples                                                      |
-|-----------------|----------|---------------------------------------------------------------|
-| SQL Injection   | A03:2021 | `DB::statement()`, `DB::unprepared()`, raw query methods      |
-| Shell Injection | A03:2021 | `Process::run()`, `Process::command()`                        |
-| XSS             | A03:2021 | `Response::make()` with unescaped content                     |
-| SSRF            | A10:2021 | `Http::get()`, `Http::post()` with user-controlled URLs       |
-| File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |
-| Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
-| Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
-
-Security scanning runs automatically alongside type analysis — no extra configuration needed.
-
-### How it compares
-
-| Tool                     | Laravel-aware types | Taint analysis     | Free               |
-|--------------------------|---------------------|--------------------|--------------------|
-| **psalm-plugin-laravel** | Yes                 | Yes (dataflow)     | Yes                |
-| Larastan                 | Yes                 | No (PHPStan can't) | Yes                |
-| Enlightn Pro             | Partial             | No (rule-based)    | $99+/project       |
-| SonarQube                | Generic PHP         | Yes (generic)      | Paid editions only |
-| Semgrep                  | Pro tier only       | Pattern-based      | Limited free tier  |
-| Snyk Code                | Generic             | Yes (generic)      | Freemium           |
+You can read more about how the plugin's taint analysis works and what vulnerabilities it detects in [docs/security.md](docs/security.md).
 
 ## Quickstart
 
@@ -77,34 +62,24 @@ Since [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta,
 
 ```bash
 composer config minimum-stability dev && composer config prefer-stable true
-composer require --dev psalm/plugin-laravel
+composer require --dev psalm/plugin-laravel:^4.8
 ```
 
-### Step 2: Set up Psalm
-
-Initialize a config and enable the plugin:
+### Step 2: Generate a Laravel-tailored `psalm.xml`
 
 ```bash
-./vendor/bin/psalm --init
-./vendor/bin/psalm-plugin enable psalm/plugin-laravel
+./vendor/bin/psalm-laravel init
 ```
 
-Then add these recommended attributes to your `psalm.xml`:
-
-```xml
-<psalm
-    findUnusedCode="false"
-    ensureOverrideAttribute="false"
-/>
-```
+This writes a `psalm.xml` at the project root with the plugin already enabled, sensible `errorLevel`, and Laravel-friendly issue handler defaults. Pass `--level 1` (strictest) through `--level 8` (most lenient) to pick a starting strictness. Pass `--force` to overwrite an existing `psalm.xml` without prompting.
 
 ### Step 3: Run
 
 ```bash
-./vendor/bin/psalm
+./vendor/bin/psalm-laravel analyze
 ```
 
-Security taint analysis runs automatically — no extra flags needed.
+`analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can also invoke `./vendor/bin/psalm` directly. Security taint analysis runs automatically, no extra flags needed.
 
 **Existing projects:** the first run will likely report many issues. Create a [baseline](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/#using-a-baseline-file) to suppress them and focus only on new code:
 
@@ -114,6 +89,14 @@ Security taint analysis runs automatically — no extra flags needed.
 
 From here, gradually increase `errorLevel` (start at `4`, work toward `1`) and shrink the baseline over time.
 
+### Optional: wire up CI in one command
+
+```bash
+./vendor/bin/psalm-laravel add github
+```
+
+Writes a ready-to-commit `.github/workflows/psalm.yml` that runs the plugin on every push and pull request. See [docs/github-actions.md](docs/github-actions.md) for what the generated workflow does and how to customize it.
+
 ## Configuration
 
 You can customize Psalm configuration using [XML config](https://psalm.dev/docs/running_psalm/configuration/)
@@ -121,31 +104,24 @@ and/or [cli parameters](https://psalm.dev/docs/running_psalm/command_line_usage/
 
 See [docs/config.md](docs/config.md) for all configuration options.
 
-## Custom issues
+## Custom checks
 
-The plugin emits custom issues beyond Psalm's built-in checks:
-
-- [NoEnvOutsideConfig](docs/issues/NoEnvOutsideConfig.md) — `env()` called outside `config/` directory
-- [InvalidConsoleArgumentName](docs/issues/InvalidConsoleArgumentName.md) — `argument()` references undefined console command argument
-- [InvalidConsoleOptionName](docs/issues/InvalidConsoleOptionName.md) — `option()` references undefined console command option
-- [MissingView](docs/issues/MissingView.md) — `view()` references a non-existent Blade template (opt-in)
-- [MissingTranslation](docs/issues/MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
-- [ModelMakeDiscouraged](docs/issues/ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
+The plugin ships advanced Laravel-aware static analysis checks that extend Psalm's built-in diagnostics.
+See [docs/issues/index.md](docs/issues/index.md) for the full catalog.
 
 ## Versions & Dependencies
 
 Maintained versions:
 
-| Laravel Psalm Plugin | PHP   | Laravel   | Psalm | Status |
-|----------------------|-------|-----------|-------|--------|
-| 4.x                  | ^8.2  | 12, 13    | 7     | Stable |
-| 3.x                  | ^8.2  | 11, 12    | 6     | Stable |
-| 2.12+                | ^8.0  | 9, 10, 11 | 5, 6  | Legacy |
+| Laravel Psalm Plugin                      | PHP  | Laravel    | Psalm  | Status |
+|-------------------------------------------|------|------------|--------|--------|
+| 4.x                                       | ^8.2 | 12, 13     | 7-beta | Stable |
+| 3.x ([upgrade v4 to](docs/upgrade-v4.md)) | ^8.2 | 11, 12, 13 | 6      | Stable |
+| 2.12+                                     | ^8.0 | 9, 10, 11  | 5, 6   | Legacy |
 
 _(Older versions of Laravel, PHP, and Psalm were supported by version 1.x of the plugin, but they are no longer maintained)_
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
-Upgrading from v3? See the [v3 → v4 upgrade guide](docs/upgrade-v4.md).
 
 ## How it works
 
@@ -154,12 +130,12 @@ Under the hood it reads Laravel's native `@method` annotations on facade classes
 It also parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types in your database models.
 
 
-## psalm-plugin-laravel or Larastan?
+## Psalm-Laravel or Larastan?
 
 **Use both.** They solve different problems:
 
 - **Larastan** excels at Laravel-specific type rules: `model-property` validation, `view-string` checks, and 17+ custom rules.
-- **psalm-plugin-laravel** in addition to type checks, it provides taint-based security analysis that PHPStan structurally [cannot offer](https://github.com/phpstan/phpstan/issues/8038), plus deep type support for auth guards, Eloquent attributes, scopes, attributes, etc.
+- **Psalm-Laravel** in addition to type checks, it provides taint-based security analysis that PHPStan structurally [cannot offer](https://github.com/phpstan/phpstan/issues/8038), plus deep type support for auth guards, Eloquent attributes, scopes, attributes, etc.
 
 Psalm and PHPStan use almost the same annotation syntax, so they work side by side without conflicts.
 
@@ -169,10 +145,9 @@ Psalm and PHPStan use almost the same annotation syntax, so they work side by si
 ## Contributing
 
 Maintained by [@alies-dev](https://github.com/sponsors/alies-dev).
-PRs and issues welcome — first-time contributors too.
 There are [contributing docs](docs/contributing/README.md) that may help you (and your agents) with contributions.
 
 Areas where help is especially needed:
-- **Taint analysis coverage** — adding a stub is 5–15 lines of annotations and protects thousands of apps. See the [authoring guide](docs/contributing/taint-analysis.md).
-- **Type inference** for Laravel magic (Eloquent, Facades, Collections)
-- **New checks** that enforce Laravel best practices
+- **Taint analysis coverage**: adding a stub is 5 to 15 lines of annotations and protects thousands of apps. See the [authoring guide](docs/contributing/taint-analysis.md).
+- **Type inference** for Laravel magic (Eloquent, Facades, Collections).
+- **New checks** that enforce Laravel best practices.

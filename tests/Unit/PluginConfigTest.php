@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\ColumnFallback;
@@ -42,7 +43,75 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
+        // explicit true/false in XML overrides the auto-detection.
+        $this->assertNull($config->findOctaneIncompatibleBinding);
         $this->assertTrue($config->resolveDynamicWhereClauses);
+        $this->assertSame([], $config->configDirectories);
+    }
+
+    #[Test]
+    public function config_directories_single_entry(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><configDirectory name="app/Config" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertSame(['app/Config'], $config->configDirectories);
+    }
+
+    #[Test]
+    public function config_directories_multiple_entries_preserve_order(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<configDirectory name="app/Config" />'
+            . '<configDirectory name="packages/*/config" />'
+            . '<configDirectory name="vendor/foo/bar/config" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertSame(
+            ['app/Config', 'packages/*/config', 'vendor/foo/bar/config'],
+            $config->configDirectories,
+        );
+    }
+
+    #[Test]
+    public function config_directories_throw_on_empty_name_attribute(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<configDirectory name="app/Config" />'
+            . '<configDirectory name="" />'
+            . '</pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/<configDirectory> requires a non-empty `name` attribute/');
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function config_directories_throw_on_missing_name_attribute(): void
+    {
+        // Catches typos like <configDirectory path="..." /> where the user used the wrong
+        // attribute name — without this guard the element is silently dropped and the
+        // typo-warning behaviour kicks in only when *every* entry is malformed.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<configDirectory name="app/Config" />'
+            . '<configDirectory path="packages/forms/config" />'
+            . '</pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/<configDirectory> requires a non-empty `name` attribute/');
+
+        PluginConfig::fromXml($xml);
     }
 
     #[Test]
@@ -170,6 +239,50 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function find_octane_incompatible_binding_absent_yields_null(): void
+    {
+        // null is the auto-detect sentinel — Plugin::registerHandlers() falls
+        // back to class_exists('Laravel\Octane\Octane') when this is null.
+        $xml = new \SimpleXMLElement('<pluginClass />');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertNull($config->findOctaneIncompatibleBinding);
+    }
+
+    #[Test]
+    public function find_octane_incompatible_binding_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findOctaneIncompatibleBinding);
+    }
+
+    #[Test]
+    public function find_octane_incompatible_binding_false(): void
+    {
+        // Explicit false overrides auto-detect even when laravel/octane is installed.
+        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findOctaneIncompatibleBinding);
+    }
+
+    #[Test]
+    public function invalid_find_octane_incompatible_binding_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findOctaneIncompatibleBinding value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findOctaneIncompatibleBinding value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
     public function dynamic_where_methods_true(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="true" /></pluginClass>');
@@ -201,6 +314,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function cache_path_uses_env_var(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-custom');
@@ -211,6 +325,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function cache_path_trims_trailing_separator(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-custom/');
@@ -243,6 +358,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function get_cache_location_creates_and_returns_dir(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-cache-loc');
@@ -254,6 +370,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function get_alias_stub_location_ends_with_filename(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-cache');
@@ -261,10 +378,11 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml(null);
         $location = Plugin::getAliasStubLocation($config);
 
-        $this->assertSame('/tmp/psalm-test-cache' . \DIRECTORY_SEPARATOR . 'aliases.stubphp', $location);
+        $this->assertSame('/tmp/psalm-test-cache' . \DIRECTORY_SEPARATOR . 'aliases.phpstub', $location);
     }
 
     #[Test]
+    #[IgnoreDeprecations]
     public function full_config(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test');
@@ -276,6 +394,8 @@ final class PluginConfigTest extends TestCase
             . '<failOnInternalError value="true" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<configDirectory name="app/Config" />'
+            . '<configDirectory name="packages/*/config" />'
             . '</pluginClass>',
         );
 
@@ -287,5 +407,6 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->findMissingViews);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);
+        $this->assertSame(['app/Config', 'packages/*/config'], $config->configDirectories);
     }
 }

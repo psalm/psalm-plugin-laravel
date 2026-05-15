@@ -60,7 +60,6 @@ final class ReturnTypeResolverTest extends TestCase
     {
         $reflection = new \ReflectionClass(ReturnTypeResolver::class);
         $cacheProperty = $reflection->getProperty('selfReturnCache');
-        $cacheProperty->setAccessible(true);
 
         // Seed the cache with a fake entry
         $cacheProperty->setValue(null, ['test::key' => true]);

@@ -1,0 +1,34 @@
+<?php
+
+namespace Illuminate\Foundation\Http;
+
+use Illuminate\Contracts\Validation\ValidatesWhenResolved;
+
+/**
+ * Class declaration mirrors Laravel's source. Psalm wipes the reflected
+ * class_implements list when a stub re-declares the class, so the clause
+ * must be repeated verbatim or callers typed on the contract break.
+ */
+class FormRequest extends \Illuminate\Http\Request implements ValidatesWhenResolved
+{
+    /**
+     * Get the validated data from the request.
+     *
+     * @param  array|int|string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, mixed> : ($key is array ? array<string, mixed> : mixed))
+     *
+     * @psalm-taint-source input
+     */
+    public function validated($key = null, $default = null) {}
+
+    /**
+     * Get a validated input container for the validated input.
+     *
+     * @param  array|null  $keys
+     * @return ($keys is null ? \Illuminate\Support\ValidatedInput<static> : array<string, mixed>)
+     *
+     * @psalm-taint-source input
+     */
+    public function safe(?array $keys = null) {}
+}
