@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778849773346,
+  "lastUpdate": 1778862776059,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4127,6 +4127,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1099,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c956da3aaedd48436b0efbd23d5c6a4b7a1fbbbe",
+          "message": "Narrow `Model::only()` return shape from literal keys (#933)\n\n* feat(handlers): narrow Model::only() shape from literal keys #931\n\nAdds ModelAttributeSubsetHandler. When the keys argument to `only()` resolves\nto a sealed literal-string array shape (or pure string varargs), the return\ntype becomes a TKeyedArray keyed on those literals, with each value pulled\nfrom the model's @property declaration (mixed otherwise). Falls back to\nLaravel's `array<string, mixed>` signature for non-literal, unsealed\n(fallback_params), multi-atomic, or possibly-undefined inputs.\n\nRegistered per concrete Model class via ModelRegistrationHandler closure\nbecause Psalm's provider lookup uses exact class-name matching.\n\n`except()` is deferred: soundly narrowing its shape requires enumerating\nevery model attribute (not just @property declarations, which are usually a\nstrict subset of the database columns). The class is named after the\nHasAttributes trait so except() can land alongside once a complete attribute\nenumeration is available.\n\nCloses #931\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix(handlers): respect user-defined `only()` override on Model subclasses\n\nWhen a model (or an intervening trait) overrides `only()` with its own\nsignature/return type, the handler must defer to that declaration rather\nthan imposing the Laravel-derived TKeyedArray shape. Check via\n`Codebase::$methods->getDeclaringMethodId()` and bail unless the method\nresolves to `Illuminate\\Database\\Eloquent\\Concerns\\HasAttributes::only`.\n\nSpotted in Copilot review of #933.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-15T18:30:31+02:00",
+          "tree_id": "e6ce658c896c4cebda08e48aaebdc26cd7123835",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c956da3aaedd48436b0efbd23d5c6a4b7a1fbbbe"
+        },
+        "date": 1778862775648,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.08,
+            "range": "± 0.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
             "unit": "MB"
           }
         ]
