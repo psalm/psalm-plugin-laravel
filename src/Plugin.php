@@ -65,7 +65,7 @@ final class Plugin implements PluginEntryPointInterface
         $stubs = \array_merge(
             StubFileFinder::commonStubs($stubsRoot, $output),
             StubFileFinder::stubsForLaravelVersion($stubsRoot, Application::VERSION, $output),
-            self::optionalIntegrationStubs($stubsRoot, $output),
+            $this->optionalIntegrationStubs($stubsRoot, $output),
         );
 
         foreach ($stubs as $stubFilePath) {
@@ -84,7 +84,7 @@ final class Plugin implements PluginEntryPointInterface
      *
      * @return list<string>
      */
-    private static function optionalIntegrationStubs(string $stubsRoot, \Psalm\Progress\Progress $output): array
+    private function optionalIntegrationStubs(string $stubsRoot, \Psalm\Progress\Progress $output): array
     {
         $stubs = [];
 
@@ -249,6 +249,7 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
         }
+
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled

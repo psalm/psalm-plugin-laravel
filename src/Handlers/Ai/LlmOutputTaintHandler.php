@@ -73,7 +73,7 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
 
         // Pure performance gate: taint analysis is off → do nothing. Saves the per-expression
         // type lookup on every Psalm run that doesn't pass --taint-analysis.
-        if ($codebase->taint_flow_graph === null) {
+        if (!$codebase->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
             return null;
         }
 
@@ -96,7 +96,7 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
 
         $varType = $nodeTypeProvider->getType($expr->var);
 
-        if ($varType === null) {
+        if (!$varType instanceof \Psalm\Type\Union) {
             return null;
         }
 
