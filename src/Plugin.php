@@ -91,7 +91,7 @@ final class Plugin implements PluginEntryPointInterface
     {
         $stubs = [];
 
-        if (self::isInstalledAndSatisfies('laravel/ai', '^0.6')) {
+        if ($this->isInstalledAndSatisfies('laravel/ai', '^0.6')) {
             \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
         }
 
@@ -103,7 +103,7 @@ final class Plugin implements PluginEntryPointInterface
      * package is missing entirely. Pair it with the cheap presence check first
      * so callers can express "installed AND in this range" as a single boolean.
      */
-    private static function isInstalledAndSatisfies(string $package, string $constraint): bool
+    private function isInstalledAndSatisfies(string $package, string $constraint): bool
     {
         if (!\Composer\InstalledVersions::isInstalled($package)) {
             return false;
@@ -266,7 +266,7 @@ final class Plugin implements PluginEntryPointInterface
         // sinks declaratively; this handler covers the property-level `$response->text`
         // source because Psalm doesn't honor `@psalm-taint-source` on properties.
         // Guarded the same way as the matching stubs in optionalIntegrationStubs().
-        if (self::isInstalledAndSatisfies('laravel/ai', '^0.6')) {
+        if ($this->isInstalledAndSatisfies('laravel/ai', '^0.6')) {
             require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
         }
