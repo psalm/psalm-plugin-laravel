@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778535603746,
+  "lastUpdate": 1778845813110,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4057,6 +4057,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1097,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "114ad8a2cf90e7d3b324b88117c1a01352b7cdb6",
+          "message": "feat(handlers): list<T> from Collection::values()->all() (#921)\n\nAdds CollectionValuesAllHandler, a MethodReturnTypeProvider that\nnarrows `all()` to `list<TValue>` when the call is chained immediately\nafter `values()`. Registered on `Support\\Collection`, `LazyCollection`,\nand `Eloquent\\Collection`.\n\nWhy a handler and not a stub conditional:\nA stub-only approach (e.g. `(TKey is int<0, max> ? list<TValue> :\narray<TKey, TValue>)` on `all()`, paired with `values()` returning\n`static<int<0, max>, TValue>`) is unsound. `int<0, max>` only requires\nkeys to be non-negative — it does not guarantee they are contiguous\nand 0-based. A `Collection<int<0, max>, T>` with keys `[1 => ..., 3 => ...]`\nsatisfies the bound but is not list-shaped, so the conditional would\nincorrectly emit `list<T>`.\n\nAST chain detection keys on the literal `->values()->all()` shape, which\nis the only call form where the result is provably a list (`values()`\ncalls `array_values()` on the eager collection and a no-key-yielding\ngenerator on the lazy one, both producing sequential 0-based keys).\n\nDocumented limitations (both purely syntactic):\n - Variable-bound chains `$v = $c->values(); $v->all()` keep the\n   upstream `array<TKey, TValue>` shape.\n - Nullsafe operators `$c?->values()?->all()` keep the upstream shape;\n   Psalm desugars `?->all()` to a `VirtualMethodCall` whose receiver\n   is a synthesized temp, not the inner `values()` call.\n\nType test covers nine cases: list-producing chains on Support, Lazy,\nand Eloquent collections; array-preserving non-chained calls on int-,\nstring-, and Enumerable-typed inputs; and the two limitation cases.",
+          "timestamp": "2026-05-15T13:47:25+02:00",
+          "tree_id": "9bd1a7cc5273f35cafcdc215d315c225adb89f8f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/114ad8a2cf90e7d3b324b88117c1a01352b7cdb6"
+        },
+        "date": 1778845812160,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.56,
+            "range": "± 0.34",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
             "unit": "MB"
           }
         ]
