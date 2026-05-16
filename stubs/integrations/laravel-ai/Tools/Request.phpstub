@@ -37,12 +37,11 @@ class Request implements Arrayable, ArrayAccess
     public function __construct(protected array $arguments = []) {}
 
     /**
-     * @param  mixed  $keys
      * @return array<string, mixed>
      *
      * @psalm-taint-source input
      */
-    public function all($keys = null): array {}
+    public function all(mixed $keys = null): array {}
 
     /**
      * @return array<string, mixed>

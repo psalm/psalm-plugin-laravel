@@ -32,10 +32,7 @@ trait Promptable
 {
     use SerializesModels;
 
-    /**
-     * @return static
-     */
-    public static function make(mixed ...$arguments): self {}
+    public static function make(mixed ...$arguments): static {}
 
     /**
      * @psalm-taint-sink llm_prompt $prompt
