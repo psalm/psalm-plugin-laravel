@@ -67,7 +67,7 @@ Disable if dynamic where resolution conflicts with your codebase.
 
 ## `configDirectory`
 
-**default**: the booted Laravel app's `config_path()`
+**default**: the booted Laravel app's `config_path()` plus the project root's `config/` directory (if it exists)
 
 Controls which directories are treated as config directories by [`NoEnvOutsideConfig`](issues/NoEnvOutsideConfig.md). `env()` calls inside any of these directories are exempt from the check.
 
@@ -75,7 +75,9 @@ Each entry can be an absolute path or a relative path resolved by PHP's `glob()`
 
 **Defining any `<configDirectory>` replaces the default**, so include `config` (or whatever your project's standard config dir is) explicitly if you still want it covered. Test files (paths containing `/tests/`) are always exempt regardless of this setting.
 
-If no entry resolves to an existing directory at boot, the plugin emits a warning so the typo case (`<configDirectory name="cofnig" />`) is surfaced rather than silently flagging every `env()` call.
+The project-root anchor exists primarily for Laravel **packages**, where the plugin's booted-app `config_path()` falls back to Orchestra Testbench's vendored config dir and would never match the package's own `config/*.php`. If the project root has no `config/` directory and `<configDirectory>` is not configured, the plugin emits a one-shot warning at boot pointing here.
+
+If a user-provided `<configDirectory>` resolves to zero existing directories at boot, the plugin emits a separate warning so the typo case (`<configDirectory name="cofnig" />`) is surfaced rather than silently flagging every `env()` call.
 
 ### Examples
 
