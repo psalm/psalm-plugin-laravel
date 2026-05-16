@@ -133,8 +133,8 @@ final class ApplicationProvider
      */
     private function retargetConfigPathAtProjectRoot(LaravelApplication $app): void
     {
-        $envOverride = self::readEnvOverride('APP_BASE_PATH')
-            ?? self::readEnvOverride('TESTBENCH_APP_BASE_PATH');
+        $envOverride = $this->readEnvOverride('APP_BASE_PATH')
+            ?? $this->readEnvOverride('TESTBENCH_APP_BASE_PATH');
 
         if ($envOverride !== null) {
             $projectRoot = $envOverride;
@@ -161,7 +161,7 @@ final class ApplicationProvider
      * which is the documented escape hatch but not the most portable one — we widen
      * the check so the override actually takes effect across runtime configurations.
      */
-    private static function readEnvOverride(string $name): ?string
+    private function readEnvOverride(string $name): ?string
     {
         $candidates = [$_ENV[$name] ?? null, $_SERVER[$name] ?? null, \getenv($name)];
 
