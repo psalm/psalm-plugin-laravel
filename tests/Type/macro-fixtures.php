@@ -66,3 +66,15 @@ Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
     'testViteFacadeMacro',
     static fn(string $asset): string => "resources/images/{$asset}",
 );
+
+// Seed the static binding map used by AppFacadeRegistrationHandler (issue #942)
+// and ContainerResolver (issue #766) with the type-test fixture provider. In
+// production, BootTimeProviderHarvester discovers providers via composer
+// auto-discovery + bootstrap/providers.php / config/app.php. Neither file
+// exists for the plugin's own test fixtures, so we seed explicitly here. The
+// runtime call into harvestProvider() is the same one production uses for each
+// discovered FQCN.
+\Psalm\LaravelPlugin\Providers\BootTimeProviderHarvester::harvestProvider(
+    \App\Providers\SubscriptionServiceProvider::class,
+    new \Psalm\Progress\VoidProgress(),
+);

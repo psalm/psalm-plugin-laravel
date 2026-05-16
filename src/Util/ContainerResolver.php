@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Util;
 
 use PhpParser\Node\Arg;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\ContainerBindingMapProvider;
 use Psalm\NodeTypeProvider;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TLiteralString;
@@ -28,6 +29,18 @@ final class ContainerResolver
     {
         if (\array_key_exists($abstract, self::$cache)) {
             return self::$cache[$abstract];
+        }
+
+        // Statically-harvested bindings from vendor/user `ServiceProvider` classes
+        // (populated by `Psalm\LaravelPlugin\Providers\BootTimeProviderHarvester`).
+        // The Testbench app booted below cannot reliably run third-party providers
+        // (they often need real env/config), so `app('datatables.request')`-style
+        // calls would otherwise return `mixed` and cascade through every call site
+        // (issue #766). Checked before the Testbench `make()` to avoid catching
+        // and swallowing the BindingResolutionException we'd otherwise throw.
+        $mapped = ContainerBindingMapProvider::lookup($abstract);
+        if ($mapped !== null) {
+            return self::$cache[$abstract] = $mapped;
         }
 
         // dynamic analysis to resolve the actual type from the container.

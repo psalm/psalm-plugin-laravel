@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Providers\AliasStubProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Providers\BootTimeProviderHarvester;
 use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
@@ -40,6 +41,16 @@ final class Plugin implements PluginEntryPointInterface
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
             FacadeMapProvider::init($output);
+
+            // Statically parse every discoverable `ServiceProvider::register()` (and
+            // sibling methods) to extract accessor → service-class bindings, so the
+            // Facade resolver (issue #942) and `app('alias')` resolver (issue #766)
+            // can answer correctly without depending on Testbench having booted the
+            // vendor/user provider. Must run in the main process, before scan/analysis
+            // forks, so the populated map propagates via copy-on-write to every worker —
+            // see BootTimeProviderHarvester docblock for why an `AfterClassLikeVisit`
+            // hook would not work here.
+            BootTimeProviderHarvester::harvestAll($output);
 
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled

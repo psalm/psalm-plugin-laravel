@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Facades;
 
 use Illuminate\Support\Facades\Facade;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Providers\ContainerBindingMapProvider;
 use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
@@ -185,21 +186,40 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      */
     public static function tryGetFacadeRootClass(string $facadeClass, ?Progress $progress = null): ?string
     {
-        // $failedFacades gates both the short-circuit return AND the warning emission,
-        // so each failure reason is surfaced to the user exactly once per facade across
-        // scan-phase + populate-phase invocations (issue #787: silent losses of method
-        // resolution must be visible, not swallowed by the default progress sink).
-        if (isset(self::$failedFacades[$facadeClass])) {
-            return null;
-        }
-
         // is_subclass_of() invokes the autoloader; guard per FacadeMapProvider::init().
         try {
             if (!\is_subclass_of($facadeClass, Facade::class)) {
-                self::$failedFacades[$facadeClass] = true;
-                $progress?->warning(
-                    "Laravel plugin: skipping facade '{$facadeClass}': not a subclass of " . Facade::class,
-                );
+                if (!isset(self::$failedFacades[$facadeClass])) {
+                    self::$failedFacades[$facadeClass] = true;
+                    $progress?->warning(
+                        "Laravel plugin: skipping facade '{$facadeClass}': not a subclass of " . Facade::class,
+                    );
+                }
+                return null;
+            }
+
+            // Short-circuit via the statically-harvested binding map before the runtime
+            // probe. For facades whose accessor is a string alias bound by a vendor or
+            // user provider that doesn't run inside Testbench, `Facade::getFacadeRoot()`
+            // throws `BindingResolutionException` and the existing flow emits a warning
+            // on every Psalm run (issue #942). The map is populated at plugin init by
+            // {@see \Psalm\LaravelPlugin\Providers\BootTimeProviderHarvester}.
+            //
+            // Map lookup must happen BEFORE the `$failedFacades` short-circuit. Both this
+            // method and its populate-phase caller may run after a scan-phase invocation
+            // already tripped the runtime probe; reading the map first lets a later call
+            // succeed once the map answer arrives, instead of being permanently poisoned
+            // by the earlier failure (the regression that motivated reordering this gate).
+            $mappedRoot = self::resolveViaBindingMap($facadeClass);
+            if ($mappedRoot !== null) {
+                return $mappedRoot;
+            }
+
+            // $failedFacades gates both the short-circuit return AND the warning emission,
+            // so each failure reason is surfaced to the user exactly once per facade across
+            // scan-phase + populate-phase invocations (issue #787: silent losses of method
+            // resolution must be visible, not swallowed by the default progress sink).
+            if (isset(self::$failedFacades[$facadeClass])) {
                 return null;
             }
 
@@ -224,6 +244,44 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             );
             return null;
         }
+    }
+
+    /**
+     * Resolve the facade's underlying class via the statically-harvested binding map
+     * populated at plugin boot by {@see \Psalm\LaravelPlugin\Providers\BootTimeProviderHarvester}.
+     *
+     * Calls `getFacadeAccessor()` reflectively (it is `protected static` on `Facade`),
+     * looks the returned alias up in `ContainerBindingMapProvider`, returns the mapped
+     * service class. All failure modes (non-existent method, non-string return, missing
+     * mapping, reflection error) collapse to null so the caller falls through to the
+     * runtime probe — this path is a silent enrichment, not a hard authority.
+     *
+     * `getFacadeAccessor()` is documented (by Laravel) to be deterministic and free of
+     * container access, so calling it has no side effects in practice. Wrapping in
+     * `Throwable` is defensive against subclasses that override the contract.
+     *
+     * @param class-string $facadeClass
+     * @return ?class-string
+     */
+    private static function resolveViaBindingMap(string $facadeClass): ?string
+    {
+        try {
+            $reflection = new \ReflectionMethod($facadeClass, 'getFacadeAccessor');
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        try {
+            $accessor = $reflection->invoke(null);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (!\is_string($accessor) || $accessor === '') {
+            return null;
+        }
+
+        return ContainerBindingMapProvider::lookup($accessor);
     }
 
     /**
