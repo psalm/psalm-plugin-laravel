@@ -191,6 +191,6 @@ final class ModelAttributeSubsetHandler
             $properties[$key] = $classStorage->pseudo_property_get_types['$' . $key] ?? Type::getMixed();
         }
 
-        return new Union([TKeyedArray::make($properties)]);
+        return new Union([new TKeyedArray($properties)]);
     }
 }
