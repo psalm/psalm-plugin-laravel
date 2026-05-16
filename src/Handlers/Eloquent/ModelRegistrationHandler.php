@@ -207,6 +207,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             $className,
             ModelRelationReturnTypeHandler::getReturnType(...),
         );
+        // Model::only() shape narrowing from literal keys.
+        // See https://github.com/psalm/psalm-plugin-laravel/issues/931
+        $methods->return_type_provider->registerClosure(
+            $className,
+            ModelAttributeSubsetHandler::getReturnType(...),
+        );
 
         // Registration order matters — the first non-null result wins.
 

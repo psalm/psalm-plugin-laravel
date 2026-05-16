@@ -105,10 +105,12 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     ];
 
     /**
-     * Properties that Laravel populates during a framework-driven lifecycle hook (e.g. testing
-     * setUp(), createApplication()) rather than from any constructor. Listing them by the class
-     * the user typically extends; the entry is resolved to the actual declaring class storage
-     * (trait or parent) at codebase-populated time.
+     * Properties that Laravel populates through a framework-driven mechanism — a testing
+     * lifecycle hook (setUp(), createApplication()), a trait lifecycle hook (setUpFaker()), or
+     * a parent constructor chain (ServiceProvider::__construct() assigning $this->app) — rather
+     * than from the user subclass's own constructor. Listing them by the class the user
+     * typically extends or composes; the entry is resolved to the actual declaring class
+     * storage (trait or parent) at codebase-populated time.
      *
      * Marking a property as "initialized" on its declaring class storage is what Psalm itself
      * does for properties with a default value or promoted constructor params (see
@@ -141,12 +143,30 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         'Illuminate\Foundation\Testing\WithFaker' => [
             'faker',
         ],
+        // `$app` is declared on `Illuminate\Support\ServiceProvider` and assigned in its
+        // `__construct($app)`. Subclasses that declare their own constructor and call
+        // `parent::__construct($app)` (the documented pattern — packages routinely subclass
+        // EventServiceProvider / AuthServiceProvider / RouteServiceProvider and add their own
+        // constructor for runtime registration) get `PropertyNotSetInConstructor` because Psalm
+        // does not trace `parent::__construct` through to parent-property assignments when
+        // checking the child. Marking the property as initialized on the declaring class
+        // storage skips the check for every subclass without touching their own un-initialized
+        // property reports. See psalm/psalm-plugin-laravel#945.
+        'Illuminate\Support\ServiceProvider' => [
+            'app',
+        ],
     ];
 
     /** @var array<string, array<string, list<string>>> */
     private const METHOD_LEVEL_BY_PARENT_CLASS = [
         'PossiblyUnusedMethod' => [
-            'Illuminate\Console\Command' => ['handle'],
+            // __construct included because Console commands are instantiated by the framework
+            // exclusively through the container: `Console\Kernel::resolve()` and `Application::call()`
+            // route through `Container::build()`, which reflects on `__construct` to inject
+            // dependencies. The class name never appears as `new ConcreteCommand(...)` in user code,
+            // so Psalm marks the constructor unreachable from any visible entry point. `handle`
+            // is here for the same dispatch reason (called via Container::call). See psalm/psalm-plugin-laravel#943.
+            'Illuminate\Console\Command' => ['__construct', 'handle'],
             'Illuminate\Database\Migrations\Migration' => ['up', 'down'],
             'Illuminate\Database\Seeder' => ['run'],
             'Illuminate\Foundation\Http\FormRequest' => [
@@ -194,7 +214,14 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 'shouldSend',
                 'via',
             ],
-            'Illuminate\Support\ServiceProvider' => ['boot'],
+            // __construct included because service providers are instantiated by the framework
+            // via `Application::resolveProvider()`, which does `new $providerClass($this)` against
+            // the FQCN registered through `$this->app->register(Provider::class)` or
+            // `extra.laravel.providers` in composer.json. The class name never appears as
+            // `new ConcreteProvider(...)` in user code, so Psalm marks the constructor unreachable.
+            // `boot` is here for the same dispatch reason (called via Container::call).
+            // See psalm/psalm-plugin-laravel#943.
+            'Illuminate\Support\ServiceProvider' => ['__construct', 'boot'],
         ],
     ];
 

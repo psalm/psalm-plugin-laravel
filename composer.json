@@ -88,8 +88,6 @@
         "php-cs-fixer:dry": "php-cs-fixer fix --no-interaction --ansi --verbose --dry-run",
         "php-cs-fixer:run": "php-cs-fixer fix --no-interaction --ansi --quiet",
         "psalm": "psalm --find-dead-code --find-unused-psalm-suppress --long-progress",
-        "psalm-set-baseline": "psalm --set-baseline=psalm-baseline.xml",
-        "psalm:baseline:regenerate": "psalm --config=psalm.xml --set-baseline=psalm-baseline.xml --long-progress",
         "rector": "./vendor/bin/rector",
         "rector:dry": "./vendor/bin/rector --dry-run",
         "sa": "@psalm",

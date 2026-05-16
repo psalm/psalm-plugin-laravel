@@ -62,6 +62,8 @@ final class ApplicationProvider
         } else { // Laravel Packages
             /** @psalm-suppress InternalMethod */
             $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
+
+            $this->retargetConfigPathAtProjectRoot($app);
         }
 
         self::$app = $app;
@@ -92,6 +94,84 @@ final class ApplicationProvider
         }
 
         return $app;
+    }
+
+    /**
+     * Re-point the booted Laravel app's `config_path()` at the project root.
+     *
+     * Testbench's `createApplication()` anchors the booted app at its bundled
+     * `vendor/orchestra/testbench-core/laravel` skeleton. That works for the
+     * *infrastructure* paths (`bootstrap/cache/`, `storage/`) since the skeleton
+     * ships writable scaffolding, but it is wrong for `config_path()`: the
+     * NoEnvOutsideConfig rule resolves the skeleton's `vendor/orchestra/.../config`
+     * dir, which never matches the package's own `config/*.php` files and every
+     * `env()` call there gets reported (issue #940).
+     *
+     * We retarget *only* the config path on purpose. Sibling helpers
+     * (`database_path()` for migration discovery, `lang_path()` for translation
+     * lookups, `resource_path()` for view discovery) drive other handlers that
+     * may not handle a real-but-empty project tree well — leaving them at the
+     * Testbench skeleton keeps that behaviour unchanged.
+     *
+     * Resolution order for the project root:
+     *   1. Testbench's documented escape hatch — `$_ENV['APP_BASE_PATH']` or
+     *      `$_ENV['TESTBENCH_APP_BASE_PATH']`. Lets users pin a specific anchor
+     *      (monorepos, sub-directory Psalm runs).
+     *   2. `getcwd()` if it contains a `composer.json`. The composer manifest is
+     *      a strong signal that cwd IS the project we want Laravel to "see";
+     *      Psalm anchors at this directory by default. This handles every
+     *      conventional Laravel package without configuration.
+     *   3. No anchor identified — leave the Testbench skeleton path in place
+     *      (the previous behaviour). Better to keep working defaults than point
+     *      at a wrong path that wasn't requested.
+     *
+     * Only branch 3 of {@see self::doGetApp()} calls this — for projects with a
+     * real `bootstrap/app.php`, that file's Application instance is used verbatim
+     * and Testbench is never consulted.
+     *
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/940
+     */
+    private function retargetConfigPathAtProjectRoot(LaravelApplication $app): void
+    {
+        $envOverride = $this->readEnvOverride('APP_BASE_PATH')
+            ?? $this->readEnvOverride('TESTBENCH_APP_BASE_PATH');
+
+        if ($envOverride !== null) {
+            $projectRoot = $envOverride;
+        } else {
+            $cwd = \getcwd();
+
+            if (!\is_string($cwd) || !\is_file($cwd . \DIRECTORY_SEPARATOR . 'composer.json')) {
+                return;
+            }
+
+            $projectRoot = $cwd;
+        }
+
+        $app->useConfigPath($projectRoot . \DIRECTORY_SEPARATOR . 'config');
+    }
+
+    /**
+     * Read an environment variable across the three PHP surfaces.
+     *
+     * `$_ENV` alone is unreliable: the `variables_order` ini setting may omit `E`,
+     * leaving `$_ENV` empty even when the value was passed to the process. CGI/FPM
+     * deployments commonly route through `$_SERVER`; CLI invocations via `env VAR=...
+     * php ...` route through `getenv()`. Testbench's own helper reads only `$_ENV`,
+     * which is the documented escape hatch but not the most portable one — we widen
+     * the check so the override actually takes effect across runtime configurations.
+     */
+    private function readEnvOverride(string $name): ?string
+    {
+        $candidates = [$_ENV[$name] ?? null, $_SERVER[$name] ?? null, \getenv($name)];
+
+        foreach ($candidates as $value) {
+            if (\is_string($value) && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**
