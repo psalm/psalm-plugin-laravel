@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778932311038,
+  "lastUpdate": 1778945857667,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4227,6 +4227,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.43,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8a6f9366335269a924b978951dc4ee7190594686",
+          "message": "Type-check dynamic `where{Column}` arguments on Eloquent relations (#939)\n\n* fix(handlers): type-check dynamic where{Column} args #928\n\nDynamic where{Column}() calls on Relation chains previously accepted any\nvalue type because MethodForwardingHandler::getMethodParams returned a\nvariadic mixed signature. `$relation->whereEmail(123)` on a string column\nsilently passed analysis.\n\nMethodReturnTypeProvider now resolves the column type from the related\nmodel's @property annotation and hands it off to MethodParamsProvider via\na transient cache keyed by spl_object_id of the call's first Arg node.\ngetMethodParams returns a typed parameter so Psalm's standard argument\nchecker emits InvalidArgument / InvalidScalarArgument on mismatch.\n\nScope:\n- 1-argument value form only. 2+ argument calls fall through to the\n  variadic-mixed fallback. Laravel's runtime dynamicWhere silently drops\n  everything past the first argument, so the 2-arg \"operator form\" is\n  unsupported at runtime; tolerating it in static analysis matches the\n  issue caveats and Larastan's permissive variadic-mixed behavior.\n- Scalar column types only. Non-scalar columns (Carbon, BackedEnum,\n  json-cast arrays) skip the hand-off because Laravel coerces strings\n  and ints to these at the query layer; emitting InvalidArgument on\n  `whereCreatedAt('2024-01-01')` would mass-regress real codebases.\n- Path 2 (direct __call on the Relation class) only. The Path 1 mixin\n  interception fires for Builder, where MethodParamsProvider does not\n  run, so writing the hand-off there would leak.\n- Multi-segment forms (whereXxxAndYyy) keep the variadic-mixed fallback\n  and are tracked separately.\n\nTests cover: string column match + mismatch, float column propagation\n(verifies the typed param uses the resolved column type, not a hard-\ncoded scalar), Carbon non-regression, unknown column, and the 2-arg\nvariadic fallback.\n\n* fix(handlers): gate hand-off enqueue on 1-arg + add purity annotation #928\n\n- Only enqueue the column type in $pendingDynamicWhereColumnType when the\n  call has exactly one argument. 2+ arg calls fall through to the variadic\n  fallback in consumeDynamicWhereTypedParams, so storing for them leaked\n  the entry across the analysis run and risked a wrong-type lookup later\n  if PHP recycled the spl_object_id of a freed Arg node.\n- Add @psalm-external-mutation-free to consumeDynamicWhereTypedParams to\n  satisfy Psalm's MissingPureAnnotation (matches the existing annotation\n  on resolveDynamicWhereColumnType, which also mutates a static cache).\n- Drop the unused App\\Models\\Invoice import in the new PHPT.\n\n* fix(handlers): include method name in dynamic-where hand-off cache key #928\n\n`spl_object_id($firstArg)` alone risks PHP recycling the id from a freed\nArg node into an unrelated later call, which would let `getMethodParams`\nhand back a stale column type from a different where{Column} method.\nPrefix the key with the method name so a recycled id with a different\nmethod cannot collide with a pending entry.",
+          "timestamp": "2026-05-16T17:35:01+02:00",
+          "tree_id": "c3c72270522456fe75a5c2e0db19473080daf68c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8a6f9366335269a924b978951dc4ee7190594686"
+        },
+        "date": 1778945857334,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.26,
+            "range": "± 0.16",
             "unit": "s"
           },
           {
