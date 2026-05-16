@@ -34,17 +34,10 @@ final class ApplicationProviderConfigPathTest extends TestCase
         $app = ApplicationProvider::getApp();
 
         $cwd = \getcwd();
-        self::assertIsString($cwd, 'getcwd() must succeed in the test environment');
-        self::assertFileExists(
-            $cwd . \DIRECTORY_SEPARATOR . 'composer.json',
-            'pre-condition: the auto-detection requires composer.json at cwd',
-        );
+        $this->assertIsString($cwd, 'getcwd() must succeed in the test environment');
+        $this->assertFileExists($cwd . \DIRECTORY_SEPARATOR . 'composer.json', 'pre-condition: the auto-detection requires composer.json at cwd');
 
-        self::assertSame(
-            $cwd . \DIRECTORY_SEPARATOR . 'config',
-            $app->configPath(),
-            'config_path() must resolve to <project>/config so NoEnvOutsideConfig '
-                . 'sees the package config files instead of Testbench skeleton.',
-        );
+        $this->assertSame($cwd . \DIRECTORY_SEPARATOR . 'config', $app->configPath(), 'config_path() must resolve to <project>/config so NoEnvOutsideConfig '
+            . 'sees the package config files instead of Testbench skeleton.');
     }
 }

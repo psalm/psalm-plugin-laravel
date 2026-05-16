@@ -63,7 +63,7 @@ final class ApplicationProvider
             /** @psalm-suppress InternalMethod */
             $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
 
-            self::retargetConfigPathAtProjectRoot($app);
+            $this->retargetConfigPathAtProjectRoot($app);
         }
 
         self::$app = $app;
@@ -131,7 +131,7 @@ final class ApplicationProvider
      *
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/940
      */
-    private static function retargetConfigPathAtProjectRoot(LaravelApplication $app): void
+    private function retargetConfigPathAtProjectRoot(LaravelApplication $app): void
     {
         $envOverride = $_ENV['APP_BASE_PATH'] ?? $_ENV['TESTBENCH_APP_BASE_PATH'] ?? null;
 
