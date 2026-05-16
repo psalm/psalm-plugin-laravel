@@ -65,12 +65,13 @@ final class MethodForwardingHandler implements
     private static bool $enableDynamicWhere = false;
 
     /**
-     * Cache: "ModelClass:methodName" → bool (column matched).
+     * Cache: "ModelClass:methodName" → column type (or null when no column matched).
      *
      * Keyed by model class + method name to avoid repeating the property-name normalisation
-     * loop on subsequent calls with the same (model, method) pair.
+     * loop on subsequent calls with the same (model, method) pair. A null value records a
+     * negative match so we skip the loop on subsequent misses too.
      *
-     * @var array<string, bool>
+     * @var array<string, ?Union>
      */
     private static array $dynamicWhereCache = [];
 
@@ -89,6 +90,35 @@ final class MethodForwardingHandler implements
      * @var array<string, class-string<\Illuminate\Database\Eloquent\Model>>
      */
     private static array $scopeParamsCache = [];
+
+    /**
+     * Hand-off cache: spl_object_id of the call's first {@see \PhpParser\Node\Arg} → column type.
+     *
+     * Populated by {@see resolveDynamicWhereOnRelation} during return-type resolution and
+     * consumed by {@see getMethodParams} immediately after.
+     *
+     * Lifecycle (verified against vendor/vimeo/psalm/src/Psalm/Internal/Analyzer/
+     * Statements/Expression/Call/Method/MissingMethodCallHandler.php):
+     *   1. `handleMagicMethod` line 70 invokes the return-type provider — we store.
+     *   2. Line 94 invokes `CallAnalyzer::checkMethodArgs` synchronously in the same
+     *      worker; this routes through `Methods::getMethodParams` and fires our params
+     *      provider, which consumes and `unset()`s the entry.
+     *
+     * The key is `methodName . ':' . spl_object_id($firstArg)`. Both events read args
+     * from the same `$stmt->getArgs()` array, so the {@see \PhpParser\Node\Arg} nodes
+     * are object-identical and the id matches across the producer/consumer pair. The
+     * method-name prefix defends against PHP recycling an spl_object_id from a freed Arg
+     * node into an unrelated later call — without it, the consumer could pick up a stale
+     * column type from a different where{Column} method whose Arg node had the same id.
+     *
+     * Issue #928: the variadic-mixed signature previously returned by getMethodParams()
+     * accepted any value type. With this hand-off, getMethodParams returns typed params
+     * derived from the resolved column type and lets Psalm's standard argument checker
+     * emit InvalidArgument / InvalidScalarArgument on type mismatch.
+     *
+     * @var array<string, Union>
+     */
+    private static array $pendingDynamicWhereColumnType = [];
 
     /** @psalm-external-mutation-free */
     public static function init(ForwardingRule $rule): void
@@ -209,7 +239,7 @@ final class MethodForwardingHandler implements
         // Dynamic where{Column} fallback for Path 2 (opt-in).
         // This handles the case where the method arrives via __call rather than @mixin.
         if (self::$enableDynamicWhere && $templateParams !== null && self::isDynamicWhereMethod($methodName)) {
-            return self::resolveDynamicWhereOnRelation($codebase, $methodName, $fqClassName, $templateParams);
+            return self::resolveDynamicWhereOnRelation($event, $codebase, $methodName, $fqClassName, $templateParams);
         }
 
         return null;
@@ -221,9 +251,13 @@ final class MethodForwardingHandler implements
      * Only fires for Path 2 (QueryBuilder-only methods like orderBy, limit, groupBy).
      * Mixin-resolved methods (Path 1) already have params from the target class.
      *
-     * When resolveDynamicWhereClauses is enabled, also provides a permissive variadic signature
-     * for where{Column} methods so Psalm confirms they exist and doesn't emit
-     * UndefinedMagicMethod or TooManyArguments. This path does not validate value types.
+     * When resolveDynamicWhereClauses is enabled and the return-type provider has
+     * resolved a scalar column on the related model for a single-argument call,
+     * returns a typed param derived from the column type so Psalm's argument
+     * checker can emit InvalidArgument / InvalidScalarArgument on type mismatch
+     * (issue #928). All other shapes (0 or 2+ args, multi-segment, unknown column,
+     * non-scalar column) fall back to a permissive variadic-mixed signature so
+     * Psalm still confirms the call exists without spurious TooManyArguments.
      *
      * @return list<FunctionLikeParameter>|null
      */
@@ -294,6 +328,18 @@ final class MethodForwardingHandler implements
         // A variadic signature accepts both single-column (whereTitle($v)) and multi-column
         // (whereFirstNameAndLastName($a, $b)) patterns without raising TooManyArguments.
         if (self::$enableDynamicWhere && self::isDynamicWhereMethod($methodName)) {
+            // Issue #928: when the return-type provider resolved a scalar column on the
+            // related model and the call has exactly one argument, return a typed param
+            // so Psalm's argument checker can emit InvalidArgument / InvalidScalarArgument
+            // on type mismatch. Everything else (multi-segment, unknown column, non-scalar
+            // column, 0 or 2+ args) falls through to the permissive variadic-mixed
+            // signature. {@see consumeDynamicWhereTypedParams} for the full rationale.
+            $typedParams = self::consumeDynamicWhereTypedParams($methodName, $event->getCallArgs());
+
+            if ($typedParams !== null) {
+                return $typedParams;
+            }
+
             return [new FunctionLikeParameter('args', by_ref: false, type: Type::getMixed(), is_variadic: true)];
         }
 
@@ -388,6 +434,7 @@ final class MethodForwardingHandler implements
             // for non-where* methods (orderBy, limit, etc.) when dynamic where is enabled.
             if (self::$enableDynamicWhere && self::isDynamicWhereMethod($methodName)) {
                 return self::resolveDynamicWhereOnRelation(
+                    $event,
                     $codebase,
                     $methodName,
                     $atomicType->value,
@@ -473,10 +520,13 @@ final class MethodForwardingHandler implements
      *   - whereEmailAddress → matches @property string $email_address
      *   - whereFirstName   → matches @property string $first_name
      *
+     * When a column type is resolved, also queues it in {@see $pendingDynamicWhereColumnType}
+     * so {@see getMethodParams} can return typed params for argument validation. Issue #928.
+     *
      * @param non-empty-list<Union>|list<Union>|null $templateParams Relation's template type parameters
-     * @psalm-external-mutation-free
      */
     private static function resolveDynamicWhereOnRelation(
+        MethodReturnTypeProviderEvent $event,
         Codebase $codebase,
         string $methodName,
         string $relationClass,
@@ -493,14 +543,88 @@ final class MethodForwardingHandler implements
             return null;
         }
 
-        if (!self::columnMatchesDynamicWhere($codebase, $modelClass, $methodName)) {
+        $columnType = self::resolveDynamicWhereColumnType($codebase, $modelClass, $methodName);
+
+        if (!$columnType instanceof Union) {
             return null;
+        }
+
+        // Hand off the column type to getMethodParams() so it can build a typed parameter
+        // list and let Psalm validate arguments. See $pendingDynamicWhereColumnType for the
+        // lifecycle and rationale. Issue #928.
+        //
+        // Two gates on the store:
+        //   (a) Path 1 (mixin interception) writes are unconsumable — Builder is in
+        //       searchClassIndex, not sourceClassIndex, so our MethodParamsProvider
+        //       early-returns for it and the entry would leak. Only store when the event
+        //       fires for the relation class itself (Path 2 / direct __call).
+        //   (b) Skip non-scalar column types (Carbon, BackedEnum, json-cast arrays).
+        //       Laravel coerces strings/ints to these at the query layer, so narrowing
+        //       to the declared property type would mass-regress real codebases.
+        //   (c) Only enqueue when the call has exactly one argument — the only shape
+        //       consumeDynamicWhereTypedParams() actually consumes. Without this gate,
+        //       2+ arg calls would deposit entries that the consumer skips, leaking
+        //       across the analysis run (and risking a wrong-type lookup later if PHP
+        //       reuses the spl_object_id of a freed Arg node).
+        if (\strtolower($event->getFqClasslikeName()) !== \strtolower($relationClass)) {
+            return new Union([new TGenericObject($relationClass, $templateParams)]);
+        }
+
+        if ($columnType->hasObjectType() || $columnType->hasArray()) {
+            return new Union([new TGenericObject($relationClass, $templateParams)]);
+        }
+
+        $stmt = $event->getStmt();
+        if ($stmt instanceof MethodCall) {
+            $args = $stmt->getArgs();
+
+            if (\count($args) === 1) {
+                self::$pendingDynamicWhereColumnType[$methodName . ':' . \spl_object_id($args[0])] = $columnType;
+            }
         }
 
         // Column exists on the model → method is fluent, return the full Relation type.
         return new Union([
             new TGenericObject($relationClass, $templateParams),
         ]);
+    }
+
+    /**
+     * Read and remove the column type queued by {@see resolveDynamicWhereOnRelation},
+     * returning a typed single-parameter list when the call has exactly one argument.
+     * Returns null otherwise so the caller falls back to the permissive variadic-mixed
+     * signature.
+     *
+     * Only the 1-argument value form is type-checked. Laravel's runtime
+     * `Builder::dynamicWhere` always uses `=` as the operator and silently drops every
+     * argument past the first (see `Query\Builder::addDynamic`), so the 2-arg "operator
+     * form" (`whereTitle('=', 'foo')`) is a runtime bug. Rather than blessing it (which
+     * would over-accept invalid types in the value position) or rejecting it (which
+     * would surface as TooManyArguments on legacy code patterns that issue #928's
+     * caveats explicitly ask us to tolerate), we leave 2+ arg calls to the variadic
+     * fallback. Larastan does the same via a single-optional-mixed-variadic
+     * `DynamicWhereParameterReflection`.
+     *
+     * @param list<\PhpParser\Node\Arg>|null $callArgs
+     * @return list<FunctionLikeParameter>|null
+     * @psalm-external-mutation-free
+     */
+    private static function consumeDynamicWhereTypedParams(string $methodName, ?array $callArgs): ?array
+    {
+        if ($callArgs === null || \count($callArgs) !== 1) {
+            return null;
+        }
+
+        $key = $methodName . ':' . \spl_object_id($callArgs[0]);
+
+        if (!isset(self::$pendingDynamicWhereColumnType[$key])) {
+            return null;
+        }
+
+        $columnType = self::$pendingDynamicWhereColumnType[$key];
+        unset(self::$pendingDynamicWhereColumnType[$key]);
+
+        return [new FunctionLikeParameter('value', by_ref: false, type: $columnType, is_optional: false)];
     }
 
     /**
@@ -560,7 +684,8 @@ final class MethodForwardingHandler implements
     }
 
     /**
-     * Check if the column referenced by a dynamic where{Column} method exists on the model.
+     * Resolve the column type for a dynamic where{Column} method call, or null when no
+     * @property entry matches the suffix.
      *
      * The column suffix (method name minus "where") is compared against the model's
      * pseudo_property_get_types (populated from @property / @property-read annotations).
@@ -578,11 +703,11 @@ final class MethodForwardingHandler implements
      * @param class-string<\Illuminate\Database\Eloquent\Model> $modelClass
      * @psalm-external-mutation-free
      */
-    private static function columnMatchesDynamicWhere(
+    private static function resolveDynamicWhereColumnType(
         Codebase $codebase,
         string $modelClass,
         string $methodName,
-    ): bool {
+    ): ?Union {
         $key = $modelClass . ':' . $methodName;
 
         if (\array_key_exists($key, self::$dynamicWhereCache)) {
@@ -595,8 +720,8 @@ final class MethodForwardingHandler implements
         try {
             $storage = $codebase->classlike_storage_provider->get(\strtolower($modelClass));
         } catch (\InvalidArgumentException) {
-            self::$dynamicWhereCache[$key] = false;
-            return false;
+            self::$dynamicWhereCache[$key] = null;
+            return null;
         }
 
         // Use pseudo_property_get_types (from @property and @property-read) rather than
@@ -609,16 +734,17 @@ final class MethodForwardingHandler implements
         // snapshot taken on the first call could be incomplete for subsequent method checks.
         // The per-(model, method) $dynamicWhereCache still prevents redundant lookups.
         // "$first_name" → "firstname", "$title" → "title"
-        foreach (array_keys($storage->pseudo_property_get_types) as $propName) {
+        foreach ($storage->pseudo_property_get_types as $propName => $propType) {
             $normalized = \strtolower(\str_replace(['$', '_'], '', $propName));
 
             if ($normalized === $columnSuffix) {
-                self::$dynamicWhereCache[$key] = true;
-                return true;
+                self::$dynamicWhereCache[$key] = $propType;
+                return $propType;
             }
         }
 
-        self::$dynamicWhereCache[$key] = false;
-        return false;
+        self::$dynamicWhereCache[$key] = null;
+        return null;
     }
+
 }
