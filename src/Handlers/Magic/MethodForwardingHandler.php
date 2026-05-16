@@ -104,18 +104,19 @@ final class MethodForwardingHandler implements
      *      worker; this routes through `Methods::getMethodParams` and fires our params
      *      provider, which consumes and `unset()`s the entry.
      *
-     * The key is `spl_object_id($firstArg)` because both events read args from the same
-     * `$stmt->getArgs()` array, so the {@see \PhpParser\Node\Arg} nodes are object-identical.
-     * Using object identity avoids the false sharing that a `file_path:line:method` key
-     * would have for two dynamic-where calls on the same source line that target relations
-     * to different models — the previous keying could swap column types between calls.
+     * The key is `methodName . ':' . spl_object_id($firstArg)`. Both events read args
+     * from the same `$stmt->getArgs()` array, so the {@see \PhpParser\Node\Arg} nodes
+     * are object-identical and the id matches across the producer/consumer pair. The
+     * method-name prefix defends against PHP recycling an spl_object_id from a freed Arg
+     * node into an unrelated later call — without it, the consumer could pick up a stale
+     * column type from a different where{Column} method whose Arg node had the same id.
      *
      * Issue #928: the variadic-mixed signature previously returned by getMethodParams()
      * accepted any value type. With this hand-off, getMethodParams returns typed params
      * derived from the resolved column type and lets Psalm's standard argument checker
      * emit InvalidArgument / InvalidScalarArgument on type mismatch.
      *
-     * @var array<int, Union>
+     * @var array<string, Union>
      */
     private static array $pendingDynamicWhereColumnType = [];
 
@@ -333,7 +334,7 @@ final class MethodForwardingHandler implements
             // on type mismatch. Everything else (multi-segment, unknown column, non-scalar
             // column, 0 or 2+ args) falls through to the permissive variadic-mixed
             // signature. {@see consumeDynamicWhereTypedParams} for the full rationale.
-            $typedParams = self::consumeDynamicWhereTypedParams($event->getCallArgs());
+            $typedParams = self::consumeDynamicWhereTypedParams($methodName, $event->getCallArgs());
 
             if ($typedParams !== null) {
                 return $typedParams;
@@ -578,7 +579,7 @@ final class MethodForwardingHandler implements
             $args = $stmt->getArgs();
 
             if (\count($args) === 1) {
-                self::$pendingDynamicWhereColumnType[\spl_object_id($args[0])] = $columnType;
+                self::$pendingDynamicWhereColumnType[$methodName . ':' . \spl_object_id($args[0])] = $columnType;
             }
         }
 
@@ -608,13 +609,13 @@ final class MethodForwardingHandler implements
      * @return list<FunctionLikeParameter>|null
      * @psalm-external-mutation-free
      */
-    private static function consumeDynamicWhereTypedParams(?array $callArgs): ?array
+    private static function consumeDynamicWhereTypedParams(string $methodName, ?array $callArgs): ?array
     {
         if ($callArgs === null || \count($callArgs) !== 1) {
             return null;
         }
 
-        $key = \spl_object_id($callArgs[0]);
+        $key = $methodName . ':' . \spl_object_id($callArgs[0]);
 
         if (!isset(self::$pendingDynamicWhereColumnType[$key])) {
             return null;
