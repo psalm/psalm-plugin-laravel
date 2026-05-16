@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778952993192,
+  "lastUpdate": 1778953403927,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4337,6 +4337,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "171e82aed43805970d85bb43a50723336a878523",
+          "message": "chore: remove psalm-baseline.xml\n\nas it should be empty by an internal convention",
+          "timestamp": "2026-05-16T19:40:38+02:00",
+          "tree_id": "bfd07bb290679984d5041b71e14479092930dac3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/171e82aed43805970d85bb43a50723336a878523"
+        },
+        "date": 1778953403406,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.91,
+            "range": "± 0.44",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
             "unit": "MB"
           }
         ]
