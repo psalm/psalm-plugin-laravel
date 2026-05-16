@@ -14,6 +14,7 @@ use Psalm\Context;
 use Psalm\LaravelPlugin\Handlers\Rules\NoEnvOutsideConfigHandler;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\StatementsSource;
+use Tests\Psalm\LaravelPlugin\Unit\Support\RecordingProgress;
 
 /**
  * Tests use real filesystem fixtures because the handler resolves config directories
@@ -353,44 +354,5 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
         }
 
         \rmdir($path);
-    }
-}
-
-/**
- * Test-only Progress that records warnings without writing to STDERR.
- * Other Progress hooks are no-ops because the handler only uses warning().
- */
-final class RecordingProgress extends \Psalm\Progress\Progress
-{
-    public int $warningCount = 0;
-
-    public string $lastWarning = '';
-
-    #[\Override]
-    public function debug(string $message): void {}
-
-    #[\Override]
-    public function startPhase(\Psalm\Progress\Phase $phase, int $threads = 1): void {}
-
-    #[\Override]
-    public function expand(int $number_of_tasks): void {}
-
-    #[\Override]
-    public function taskDone(int $level): void {}
-
-    #[\Override]
-    public function finish(): void {}
-
-    #[\Override]
-    public function alterFileDone(string $file_name): void {}
-
-    #[\Override]
-    public function write(string $message): void {}
-
-    #[\Override]
-    public function warning(string $message): void
-    {
-        $this->warningCount++;
-        $this->lastWarning = $message;
     }
 }
