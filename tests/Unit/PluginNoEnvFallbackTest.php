@@ -85,7 +85,7 @@ final class PluginNoEnvFallbackTest extends TestCase
 
         $this->assertNull(
             NoEnvOutsideConfigHandler::getFunctionReturnType($event),
-            'env() inside the package\'s own config/ must be skipped under the implicit fallback',
+            "env() inside the package's own config/ must be skipped under the implicit fallback",
         );
     }
 
