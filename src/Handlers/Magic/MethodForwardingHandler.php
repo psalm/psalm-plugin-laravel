@@ -560,8 +560,11 @@ final class MethodForwardingHandler implements
         //   (b) Skip non-scalar column types (Carbon, BackedEnum, json-cast arrays).
         //       Laravel coerces strings/ints to these at the query layer, so narrowing
         //       to the declared property type would mass-regress real codebases.
-        //   (c) Skip when there is no first argument — nothing to type-check, and the
-        //       hand-off key derives from `spl_object_id($firstArg)`.
+        //   (c) Only enqueue when the call has exactly one argument — the only shape
+        //       consumeDynamicWhereTypedParams() actually consumes. Without this gate,
+        //       2+ arg calls would deposit entries that the consumer skips, leaking
+        //       across the analysis run (and risking a wrong-type lookup later if PHP
+        //       reuses the spl_object_id of a freed Arg node).
         if (\strtolower($event->getFqClasslikeName()) !== \strtolower($relationClass)) {
             return new Union([new TGenericObject($relationClass, $templateParams)]);
         }
@@ -572,10 +575,10 @@ final class MethodForwardingHandler implements
 
         $stmt = $event->getStmt();
         if ($stmt instanceof MethodCall) {
-            $firstArg = $stmt->getArgs()[0] ?? null;
+            $args = $stmt->getArgs();
 
-            if ($firstArg !== null) {
-                self::$pendingDynamicWhereColumnType[\spl_object_id($firstArg)] = $columnType;
+            if (\count($args) === 1) {
+                self::$pendingDynamicWhereColumnType[\spl_object_id($args[0])] = $columnType;
             }
         }
 
@@ -603,6 +606,7 @@ final class MethodForwardingHandler implements
      *
      * @param list<\PhpParser\Node\Arg>|null $callArgs
      * @return list<FunctionLikeParameter>|null
+     * @psalm-external-mutation-free
      */
     private static function consumeDynamicWhereTypedParams(?array $callArgs): ?array
     {

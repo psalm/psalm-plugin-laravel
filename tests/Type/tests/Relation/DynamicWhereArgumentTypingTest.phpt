@@ -2,7 +2,6 @@
 <?php declare(strict_types=1);
 
 use App\Models\Admin;
-use App\Models\Invoice;
 use App\Models\WorkOrder;
 
 /**
