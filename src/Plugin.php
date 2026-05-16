@@ -258,11 +258,28 @@ final class Plugin implements PluginEntryPointInterface
      * Resolve config directory paths and pass them to NoEnvOutsideConfigHandler.
      *
      * When the user has not configured any `<configDirectory>` elements, fall back to
-     * the booted Laravel app's `config_path()`. Relative paths and glob patterns are
-     * left as-is — the handler resolves them via glob() + realpath() at this boot step.
+     * BOTH the booted Laravel app's `config_path()` AND the project root's `config/`.
+     * Two anchors are needed because the plugin is used in two different shapes:
      *
-     * The handler emits a warning via $output if the resolution produces zero directories
-     * for a non-empty input — that's the typo case where every env() call would be flagged.
+     *   - App analysis: `ApplicationProvider::getApp()->configPath()` resolves to the
+     *     analysed app's own `config/`. This is the original #858 behaviour.
+     *   - Package analysis: `getApp()` falls back to Orchestra Testbench's vendored
+     *     Laravel app, whose `configPath()` points into `vendor/orchestra/.../config`
+     *     and never matches the package's own config files. Adding `getcwd()/config`
+     *     covers the package case without requiring `<configDirectory>` opt-in.
+     *
+     * Relative paths and glob patterns are left as-is — the handler resolves them via
+     * glob() + realpath() at boot. Non-existent entries are dropped silently there,
+     * so listing both anchors unconditionally is safe.
+     *
+     * Diagnostics:
+     *   - If neither anchor is a project-relevant directory (no `config/` at `getcwd()`),
+     *     emit a warning pointing to the `<configDirectory>` docs so users with a
+     *     non-standard layout know how to opt in.
+     *   - The handler itself emits a separate warning if a *non-empty* user input
+     *     resolves to zero directories (the typo case).
+     *
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/940
      */
     private function initNoEnvOutsideConfigHandler(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
     {
@@ -270,6 +287,27 @@ final class Plugin implements PluginEntryPointInterface
 
         if ($directories === []) {
             $directories = [ApplicationProvider::getApp()->configPath()];
+
+            $cwd = \getcwd();
+            $projectConfigDir = \is_string($cwd) ? $cwd . \DIRECTORY_SEPARATOR . 'config' : null;
+
+            if ($projectConfigDir !== null) {
+                $directories[] = $projectConfigDir;
+            }
+
+            // Surface the non-standard-layout case once at boot: the testbench fallback
+            // never matches user files, so without a project-relevant `config/` anchor
+            // every env() call outside the plugin's known dirs gets flagged.
+            if ($projectConfigDir === null || !\is_dir($projectConfigDir)) {
+                $output->warning(
+                    'Laravel plugin: expected a config/ directory at '
+                        . ($projectConfigDir !== null ? "'{$projectConfigDir}'" : 'the project root')
+                        . " but none exists. env() calls outside the plugin's known config directories will be "
+                        . 'reported as NoEnvOutsideConfig. If your project keeps config files elsewhere, declare '
+                        . 'them via <configDirectory name="..."/> inside <pluginClass> in psalm.xml. '
+                        . 'See https://psalm.github.io/psalm-plugin-laravel/config/#configdirectory',
+                );
+            }
         }
 
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
