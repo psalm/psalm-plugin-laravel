@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778951739353,
+  "lastUpdate": 1778952993192,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4297,6 +4297,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.56,
             "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "b30945d8b8bf4d1942a31f2028a38e530ec24d2e",
+          "message": "Suppress `PossiblyUnusedMethod` on container-bound `__construct` (#943)\nLaravel resolves every container-bound class through `Container::build()`,\nwhich reflects on `__construct` via a string FQCN. The class name never\nappears as `new Concrete(...)` in user code, so Psalm's reference graph\nmisses the constructor and reports `PossiblyUnusedMethod` on every bound\nconcrete, every console command, and every service provider that declares\nan injected constructor.",
+          "timestamp": "2026-05-16T19:32:53+02:00",
+          "tree_id": "d3a6dfd2e8513ecfafec9f9a38cb535a78851de5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b30945d8b8bf4d1942a31f2028a38e530ec24d2e"
+        },
+        "date": 1778952992211,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.26,
+            "range": "± 0.18",
             "unit": "s"
           },
           {
