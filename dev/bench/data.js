@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778953403927,
+  "lastUpdate": 1778954604388,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4372,6 +4372,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0d3217b24204926b50c9bec47a089c1d7ed3e429",
+          "message": "Anchor `config_path()` at project root under Testbench fallback (#949)\n\n* fix(application): anchor config_path() at project root for packages #940\n\nWhen `ApplicationProvider::doGetApp()` falls back to Orchestra\nTestbench (the package-analysis branch), the booted Laravel app\nis rooted at `vendor/orchestra/testbench-core/laravel`. Its\n`config_path()` returned the Testbench skeleton's config dir,\nwhich never matched the analysed package's own `config/*.php` —\nNoEnvOutsideConfig flagged every canonical `env()` call there.\n\nRe-point only `config_path()` post-creation via `useConfigPath()`,\nguarded by a `composer.json` presence check at `getcwd()`. Honors\nTestbench's documented `APP_BASE_PATH` / `TESTBENCH_APP_BASE_PATH`\nenv overrides so users can pin a different anchor.\n\nScope intentionally minimal: sibling helpers (`database_path()`\nfor migration discovery, `lang_path()` for translation lookups,\n`resource_path()` for views) drive other handlers whose behaviour\non a real-but-empty project tree is not yet verified — keep them\non the Testbench skeleton until a separate change validates each.\n\nComplements #944 (NoEnvOutsideConfigHandler cwd/config fallback)\nas defense-in-depth: this fix removes the root cause, #944 keeps\nworking for non-standard layouts and env-override scenarios.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix(application): widen env override + isolate test state #940\n\nAddress PR #949 review feedback:\n\n- env override (`APP_BASE_PATH`, `TESTBENCH_APP_BASE_PATH`) now reads\n  `$_ENV`, `$_SERVER`, and `getenv()` in order. PHP's `variables_order`\n  can omit `E`, leaving `$_ENV` empty even when the value was passed\n  to the process; CGI/FPM commonly routes through `$_SERVER`; `env VAR=\n  ...` CLI invocations route through `getenv()`. Testbench's own\n  helper reads only `$_ENV` (parity), but the override is documented\n  for users — make it work portably.\n\n- `ApplicationProviderConfigPathTest` now resets `ApplicationProvider`'s\n  memoised static state (`\\$app`, `\\$booted`) via reflection in setUp,\n  snapshots and restores it in tearDown, and chdirs to a deterministic\n  anchor derived from `__DIR__` instead of the inherited process cwd.\n  Removes ordering and runner dependence flagged by Copilot review.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-16T20:00:58+02:00",
+          "tree_id": "edc052e98575a1b200accd7b3dd5680392c4afa2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0d3217b24204926b50c9bec47a089c1d7ed3e429"
+        },
+        "date": 1778954603513,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.13,
+            "range": "± 0.3",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
             "unit": "MB"
           }
         ]
