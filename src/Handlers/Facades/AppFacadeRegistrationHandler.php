@@ -195,6 +195,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                         "Laravel plugin: skipping facade '{$facadeClass}': not a subclass of " . Facade::class,
                     );
                 }
+
                 return null;
             }
 

@@ -232,16 +232,10 @@ final class ProviderBindingHarvester
         ) {
             return true;
         }
-
         // app()->bind(...)
-        if ($receiver instanceof FuncCall
+        return $receiver instanceof FuncCall
             && $receiver->name instanceof Node\Name
-            && \strcasecmp((string) ($receiver->name->getAttribute('resolvedName') ?? $receiver->name->toString()), 'app') === 0
-        ) {
-            return true;
-        }
-
-        return false;
+            && \strcasecmp((string) ($receiver->name->getAttribute('resolvedName') ?? $receiver->name->toString()), 'app') === 0;
     }
 
     /**
@@ -273,7 +267,7 @@ final class ProviderBindingHarvester
 
         if ($expr instanceof Closure) {
             $lastReturn = self::findLastReturnExpr($expr->stmts);
-            return $lastReturn !== null ? self::classFromNewExpr($lastReturn) : null;
+            return $lastReturn instanceof \PhpParser\Node\Expr ? self::classFromNewExpr($lastReturn) : null;
         }
 
         return null;
@@ -321,9 +315,9 @@ final class ProviderBindingHarvester
      * to the raw text when the attribute is absent — happens for global-namespace names
      * resolved without a NameResolver run, which is unusual but defensively handled.
      *
-     * @return ?class-string
+     * @return class-string
      */
-    private static function resolveNameToClassString(Node\Name $name): ?string
+    private static function resolveNameToClassString(Node\Name $name): string
     {
         /** @psalm-var mixed $resolved */
         $resolved = $name->getAttribute('resolvedName');

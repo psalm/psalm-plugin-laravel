@@ -27,14 +27,12 @@ use Psalm\LaravelPlugin\Util\ProviderBindingHarvester;
 #[CoversClass(ProviderBindingHarvester::class)]
 final class ProviderBindingHarvesterTest extends TestCase
 {
-    #[\Override]
     protected function setUp(): void
     {
         parent::setUp();
         ContainerBindingMapProvider::reset();
     }
 
-    #[\Override]
     protected function tearDown(): void
     {
         ContainerBindingMapProvider::reset();
@@ -55,7 +53,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class SubscriptionClient {}
         PHP);
 
-        self::assertSame('Acme\\SubscriptionClient', ContainerBindingMapProvider::lookup('subscription'));
+        $this->assertSame('Acme\\SubscriptionClient', ContainerBindingMapProvider::lookup('subscription'));
     }
 
     #[Test]
@@ -72,7 +70,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class DriverConfig {}
         PHP);
 
-        self::assertSame('Acme\\DriverConfig', ContainerBindingMapProvider::lookup('config.driver'));
+        $this->assertSame('Acme\\DriverConfig', ContainerBindingMapProvider::lookup('config.driver'));
     }
 
     #[Test]
@@ -89,7 +87,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class Cfg {}
         PHP);
 
-        self::assertSame('Acme\\Cfg', ContainerBindingMapProvider::lookup('cfg'));
+        $this->assertSame('Acme\\Cfg', ContainerBindingMapProvider::lookup('cfg'));
     }
 
     #[Test]
@@ -106,7 +104,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class Real {}
         PHP);
 
-        self::assertSame('Acme\\Real', ContainerBindingMapProvider::lookup('real.alias'));
+        $this->assertSame('Acme\\Real', ContainerBindingMapProvider::lookup('real.alias'));
     }
 
     #[Test]
@@ -123,7 +121,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class Request {}
         PHP);
 
-        self::assertSame('Acme\\Request', ContainerBindingMapProvider::lookup('datatables.request'));
+        $this->assertSame('Acme\\Request', ContainerBindingMapProvider::lookup('datatables.request'));
     }
 
     #[Test]
@@ -143,7 +141,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class Builder { public function __construct(array $opts) {} }
         PHP);
 
-        self::assertSame('Acme\\Builder', ContainerBindingMapProvider::lookup('builder'));
+        $this->assertSame('Acme\\Builder', ContainerBindingMapProvider::lookup('builder'));
     }
 
     #[Test]
@@ -162,7 +160,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class Alpha {}
         PHP);
 
-        self::assertSame('Acme\\Alpha', ContainerBindingMapProvider::lookup('alpha'));
+        $this->assertSame('Acme\\Alpha', ContainerBindingMapProvider::lookup('alpha'));
     }
 
     #[Test]
@@ -179,7 +177,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class PerRequest {}
         PHP);
 
-        self::assertSame('Acme\\PerRequest', ContainerBindingMapProvider::lookup('per-request'));
+        $this->assertSame('Acme\\PerRequest', ContainerBindingMapProvider::lookup('per-request'));
     }
 
     #[Test]
@@ -196,7 +194,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class MaybeImpl {}
         PHP);
 
-        self::assertSame('Acme\\MaybeImpl', ContainerBindingMapProvider::lookup('maybe'));
+        $this->assertSame('Acme\\MaybeImpl', ContainerBindingMapProvider::lookup('maybe'));
     }
 
     #[Test]
@@ -213,7 +211,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class OnceImpl {}
         PHP);
 
-        self::assertSame('Acme\\OnceImpl', ContainerBindingMapProvider::lookup('once'));
+        $this->assertSame('Acme\\OnceImpl', ContainerBindingMapProvider::lookup('once'));
     }
 
     #[Test]
@@ -230,7 +228,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class ScopedOnceImpl {}
         PHP);
 
-        self::assertSame('Acme\\ScopedOnceImpl', ContainerBindingMapProvider::lookup('per-request-once'));
+        $this->assertSame('Acme\\ScopedOnceImpl', ContainerBindingMapProvider::lookup('per-request-once'));
     }
 
     #[Test]
@@ -248,7 +246,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class FacadeImpl {}
         PHP);
 
-        self::assertSame('Acme\\FacadeImpl', ContainerBindingMapProvider::lookup('via-facade'));
+        $this->assertSame('Acme\\FacadeImpl', ContainerBindingMapProvider::lookup('via-facade'));
     }
 
     #[Test]
@@ -280,8 +278,8 @@ final class ProviderBindingHarvesterTest extends TestCase
             class SomeImpl {}
         PHP);
 
-        self::assertSame('Acme\\SubscriptionClient', ContainerBindingMapProvider::lookup('subscription'));
-        self::assertSame('Acme\\ProductClient', ContainerBindingMapProvider::lookup('product'));
+        $this->assertSame('Acme\\SubscriptionClient', ContainerBindingMapProvider::lookup('subscription'));
+        $this->assertSame('Acme\\ProductClient', ContainerBindingMapProvider::lookup('product'));
     }
 
     #[Test]
@@ -298,7 +296,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class HelperImpl {}
         PHP);
 
-        self::assertSame('Acme\\HelperImpl', ContainerBindingMapProvider::lookup('helper.alias'));
+        $this->assertSame('Acme\\HelperImpl', ContainerBindingMapProvider::lookup('helper.alias'));
     }
 
     #[Test]
@@ -316,7 +314,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class Impl {}
         PHP);
 
-        self::assertNull(ContainerBindingMapProvider::lookup('dynamic'));
+        $this->assertNull(ContainerBindingMapProvider::lookup('dynamic'));
     }
 
     #[Test]
@@ -334,7 +332,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             }
         PHP);
 
-        self::assertNull(ContainerBindingMapProvider::lookup('foo'));
+        $this->assertNull(ContainerBindingMapProvider::lookup('foo'));
     }
 
     #[Test]
@@ -353,7 +351,7 @@ final class ProviderBindingHarvesterTest extends TestCase
             class Impl {}
         PHP);
 
-        self::assertNull(ContainerBindingMapProvider::lookup('not.container'));
+        $this->assertNull(ContainerBindingMapProvider::lookup('not.container'));
     }
 
     /**
@@ -366,7 +364,7 @@ final class ProviderBindingHarvesterTest extends TestCase
     {
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
         $stmts = $parser->parse("<?php\n" . $source);
-        self::assertIsArray($stmts, 'fixture failed to parse');
+        $this->assertIsArray($stmts, 'fixture failed to parse');
 
         $traverser = new NodeTraverser();
         $traverser->addVisitor(new NameResolver());
@@ -374,7 +372,7 @@ final class ProviderBindingHarvesterTest extends TestCase
         $resolved = $traverser->traverse($stmts);
 
         $registerStmts = $this->findRegisterStmts($resolved);
-        self::assertNotNull($registerStmts, 'fixture must declare a register() method');
+        $this->assertNotNull($registerStmts, 'fixture must declare a register() method');
 
         ProviderBindingHarvester::harvest($registerStmts);
     }
@@ -390,7 +388,7 @@ final class ProviderBindingHarvesterTest extends TestCase
     {
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
         $stmts = $parser->parse("<?php\n" . $source);
-        self::assertIsArray($stmts, 'fixture failed to parse');
+        $this->assertIsArray($stmts, 'fixture failed to parse');
 
         $traverser = new NodeTraverser();
         $traverser->addVisitor(new NameResolver());
@@ -398,7 +396,7 @@ final class ProviderBindingHarvesterTest extends TestCase
         $resolved = $traverser->traverse($stmts);
 
         $class = $this->findClassNode($resolved);
-        self::assertNotNull($class, 'fixture must declare at least one class');
+        $this->assertNotNull($class, 'fixture must declare at least one class');
 
         ProviderBindingHarvester::harvestClassMethods($class);
     }
@@ -411,9 +409,10 @@ final class ProviderBindingHarvesterTest extends TestCase
         foreach ($stmts as $stmt) {
             if ($stmt instanceof Namespace_) {
                 $found = $this->findClassNode($stmt->stmts);
-                if ($found !== null) {
+                if ($found instanceof \PhpParser\Node\Stmt\Class_) {
                     return $found;
                 }
+
                 continue;
             }
 
@@ -437,6 +436,7 @@ final class ProviderBindingHarvesterTest extends TestCase
                 if ($found !== null) {
                     return $found;
                 }
+
                 continue;
             }
 

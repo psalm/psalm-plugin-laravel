@@ -12,14 +12,12 @@ use Psalm\LaravelPlugin\Providers\ContainerBindingMapProvider;
 #[CoversClass(ContainerBindingMapProvider::class)]
 final class ContainerBindingMapProviderTest extends TestCase
 {
-    #[\Override]
     protected function setUp(): void
     {
         parent::setUp();
         ContainerBindingMapProvider::reset();
     }
 
-    #[\Override]
     protected function tearDown(): void
     {
         ContainerBindingMapProvider::reset();
@@ -29,7 +27,7 @@ final class ContainerBindingMapProviderTest extends TestCase
     #[Test]
     public function lookup_returns_null_for_unknown_accessor(): void
     {
-        self::assertNull(ContainerBindingMapProvider::lookup('unknown.alias'));
+        $this->assertNull(ContainerBindingMapProvider::lookup('unknown.alias'));
     }
 
     #[Test]
@@ -37,7 +35,7 @@ final class ContainerBindingMapProviderTest extends TestCase
     {
         ContainerBindingMapProvider::record('subscription', \stdClass::class);
 
-        self::assertSame(\stdClass::class, ContainerBindingMapProvider::lookup('subscription'));
+        $this->assertSame(\stdClass::class, ContainerBindingMapProvider::lookup('subscription'));
     }
 
     #[Test]
@@ -46,11 +44,7 @@ final class ContainerBindingMapProviderTest extends TestCase
         ContainerBindingMapProvider::record('alias', \stdClass::class);
         ContainerBindingMapProvider::record('alias', \ArrayObject::class);
 
-        self::assertSame(
-            \stdClass::class,
-            ContainerBindingMapProvider::lookup('alias'),
-            'subsequent writes must be ignored so scan ordering does not produce non-deterministic maps',
-        );
+        $this->assertSame(\stdClass::class, ContainerBindingMapProvider::lookup('alias'), 'subsequent writes must be ignored so scan ordering does not produce non-deterministic maps');
     }
 
     #[Test]
@@ -58,6 +52,6 @@ final class ContainerBindingMapProviderTest extends TestCase
     {
         ContainerBindingMapProvider::record('', \stdClass::class);
 
-        self::assertNull(ContainerBindingMapProvider::lookup(''));
+        $this->assertNull(ContainerBindingMapProvider::lookup(''));
     }
 }

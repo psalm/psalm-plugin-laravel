@@ -15,12 +15,12 @@ namespace App\Services;
  */
 final class SubscriptionClient
 {
-    public function googlePlay(?string $token = null): self
+    public function googlePlay(): self
     {
         return $this;
     }
 
-    public function appStore(?string $token = null): self
+    public function appStore(): self
     {
         return $this;
     }

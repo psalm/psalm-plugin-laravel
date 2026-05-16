@@ -7,7 +7,6 @@ namespace Psalm\LaravelPlugin\Providers;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ClassConstFetch;
-use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
@@ -192,7 +191,7 @@ final class BootTimeProviderHarvester
         $resolved = $traverser->traverse($stmts);
 
         $classNode = self::findClassNode($resolved, $providerFqcn);
-        if ($classNode === null) {
+        if (!$classNode instanceof \PhpParser\Node\Stmt\Class_) {
             // Warning, not debug: reflection said this class lives in this file and the
             // parser successfully parsed the file, yet `findClassNode` cannot find it.
             // The only plausible causes are a stale autoloader pointing at the wrong
@@ -217,13 +216,7 @@ final class BootTimeProviderHarvester
      */
     private static function collectProviderFqcns(array $extraProviders, Progress $progress): array
     {
-        /** @var list<class-string> $providers */
-        $providers = [];
-
-        foreach ($extraProviders as $fqcn) {
-            $providers[] = $fqcn;
-        }
-
+        $providers = $extraProviders;
         foreach (self::readVendorProviders($progress) as $fqcn) {
             $providers[] = $fqcn;
         }
@@ -575,12 +568,12 @@ final class BootTimeProviderHarvester
         $resolved = $traverser->traverse($stmts);
 
         $returnedArray = self::findTopLevelReturnArray($resolved);
-        if ($returnedArray === null) {
+        if (!$returnedArray instanceof \PhpParser\Node\Expr\Array_) {
             return [];
         }
 
         $targetArray = self::descendArrayByKeyPath($returnedArray, $keyPath);
-        if ($targetArray === null) {
+        if (!$targetArray instanceof \PhpParser\Node\Expr\Array_) {
             return [];
         }
 
@@ -630,18 +623,20 @@ final class BootTimeProviderHarvester
         foreach ($keyPath as $key) {
             $next = null;
             foreach ($current->items as $item) {
-                if (!$item instanceof ArrayItem || $item->key === null) {
+                if (!$item instanceof ArrayItem || !$item->key instanceof \PhpParser\Node\Expr) {
                     continue;
                 }
+
                 if ($item->key instanceof String_ && $item->key->value === $key) {
                     if ($item->value instanceof Array_) {
                         $next = $item->value;
                     }
+
                     break;
                 }
             }
 
-            if ($next === null) {
+            if (!$next instanceof \PhpParser\Node\Expr\Array_) {
                 return null;
             }
 
@@ -671,19 +666,14 @@ final class BootTimeProviderHarvester
                 /** @var class-string */
                 return \ltrim($resolved, '\\');
             }
+
             $raw = $expr->class->toString();
             /** @var class-string */
             return \ltrim($raw, '\\');
         }
 
         if ($expr instanceof String_ && $expr->value !== '') {
-            /** @var class-string */
             return $expr->value;
-        }
-
-        if ($expr instanceof ConstFetch) {
-            // `null`, `true`, etc. — not a provider.
-            return null;
         }
 
         return null;
@@ -705,17 +695,18 @@ final class BootTimeProviderHarvester
             if ($stmt instanceof Namespace_) {
                 foreach ($stmt->stmts as $inner) {
                     if ($inner instanceof Class_
-                        && $inner->name !== null
+                        && $inner->name instanceof \PhpParser\Node\Identifier
                         && $inner->name->toString() === $expectedShort
                     ) {
                         return $inner;
                     }
                 }
+
                 continue;
             }
 
             if ($stmt instanceof Class_
-                && $stmt->name !== null
+                && $stmt->name instanceof \PhpParser\Node\Identifier
                 && $stmt->name->toString() === $expectedShort
             ) {
                 return $stmt;

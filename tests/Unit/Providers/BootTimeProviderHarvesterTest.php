@@ -23,14 +23,12 @@ use Psalm\Progress\VoidProgress;
 #[CoversClass(BootTimeProviderHarvester::class)]
 final class BootTimeProviderHarvesterTest extends TestCase
 {
-    #[\Override]
     protected function setUp(): void
     {
         parent::setUp();
         ContainerBindingMapProvider::reset();
     }
 
-    #[\Override]
     protected function tearDown(): void
     {
         ContainerBindingMapProvider::reset();
@@ -45,10 +43,7 @@ final class BootTimeProviderHarvesterTest extends TestCase
             new VoidProgress(),
         );
 
-        self::assertSame(
-            SubscriptionClient::class,
-            ContainerBindingMapProvider::lookup('subscription'),
-        );
+        $this->assertSame(SubscriptionClient::class, ContainerBindingMapProvider::lookup('subscription'));
     }
 
     #[Test]
@@ -61,7 +56,7 @@ final class BootTimeProviderHarvesterTest extends TestCase
         );
 
         // No crash; map remains empty.
-        self::assertNull(ContainerBindingMapProvider::lookup('subscription'));
+        $this->assertNull(ContainerBindingMapProvider::lookup('subscription'));
     }
 
     #[Test]
@@ -83,9 +78,6 @@ final class BootTimeProviderHarvesterTest extends TestCase
             [SubscriptionServiceProvider::class],
         );
 
-        self::assertSame(
-            SubscriptionClient::class,
-            ContainerBindingMapProvider::lookup('subscription'),
-        );
+        $this->assertSame(SubscriptionClient::class, ContainerBindingMapProvider::lookup('subscription'));
     }
 }
