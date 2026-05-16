@@ -43,8 +43,8 @@ final class ApplicationProviderConfigPathTest extends TestCase
         // Snapshot ApplicationProvider's memoised state so a previous test that booted
         // the app from a different cwd cannot leak its `configPath()` into this one.
         $this->originalState = [
-            'app' => $this->reflectProperty('app')->getValue(null),
-            'booted' => $this->reflectProperty('booted')->getValue(null),
+            'app' => $this->reflectProperty('app')->getValue(),
+            'booted' => $this->reflectProperty('booted')->getValue(),
         ];
 
         $this->reflectProperty('app')->setValue(null, null);
