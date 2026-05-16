@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778863064246,
+  "lastUpdate": 1778932311038,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4191,6 +4191,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Wall time",
             "value": 28.58,
+            "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2cb6a8a5033c82168ff8c0cfb2a8917a3b91b009",
+          "message": "Narrow `Request::file()` via source-level conditional return (#935)\n\n* fix(stubs): narrow Request::file() per source #925\n\nRemove the file() trait stub redeclaration so Psalm honors Laravel\nsource's conditional `@return ($key is null ? array<string, ...> : ...|null)`\non Illuminate\\Http\\Concerns\\InteractsWithInput::file(). Redeclaring the\nmethod in our stub (even verbatim) triggered a Psalm 7 stub-override\nbug: FunctionLikeNodeScanner mutates the trait's MethodStorage and sets\n$storage->stubbed = true, after which MethodCallReturnTypeFetcher\ncollapses both conditional branches to the no-arg type.\n\nAlso tighten allFiles() @return from `array` to\n`array<string, UploadedFile|array<UploadedFile>>` to match Laravel\nsource.\n\nAdd tests/Type/tests/Request/RequestFileTest.phpt covering: no-arg\narray shape, string-key nullable union, foreach value narrowing,\nallFiles() parity, variable-key narrowing per `is null` branch,\nFormRequest subclass narrowing, and is_array() union splitting.\n\nPatch coverage: Laravel 12.8.0+ and 13.x carry the source-level\nconditional with correct `array<string, ...>` keys; 12.4-12.7 ship a\nbuggy `array<int, ...>` variant and pre-12.4 has no conditional. The\nin-stub comment documents this so the omission is intentional, not\noversight.\n\nRefs psalm/psalm-plugin-laravel#925\n\n* fix(stubs): declare Request::file() on class to bypass Psalm trait-override bug #925\n\nMove the conditional `@return` for Request::file() from the trait stub\n(InteractsWithInput.phpstub) to the class stub (Request.phpstub). The\nclass-level declaration short-circuits Psalm 7's trait-override path\n(FunctionLikeNodeScanner mutates trait MethodStorage and sets\n$storage->stubbed=true, after which MethodCallReturnTypeFetcher\ncollapses the conditional to its no-arg branch), so the conditional\nnarrows correctly on every supported Laravel version, including Laravel\n11.x consumed via plugin 3.x — not just the 12.8+/13 patches whose\nsource already carries the conditional.\n\nRestores `@psalm-taint-source input` on the file() return that the\nprevious \"drop the stub\" approach gave up.\n\nExpand the trait-stub comment with full laravel/framework PR links\n(#55156 introduced the conditional with buggy int keys, #55287\ncorrected the keys to string) and the psalm-plugin-laravel issue\nreference so future syncs don't re-add the redeclaration on the trait.\n\nRefs psalm/psalm-plugin-laravel#925\n\n* stubs(http): copy full `use` trait clause from Laravel source into Request stub",
+          "timestamp": "2026-05-16T13:49:14+02:00",
+          "tree_id": "ecae52697307c5e0179d2057eac8b57fc9632e11",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2cb6a8a5033c82168ff8c0cfb2a8917a3b91b009"
+        },
+        "date": 1778932310062,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.43,
             "range": "± 0.06",
             "unit": "s"
           },
