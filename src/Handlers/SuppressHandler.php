@@ -160,7 +160,13 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     /** @var array<string, array<string, list<string>>> */
     private const METHOD_LEVEL_BY_PARENT_CLASS = [
         'PossiblyUnusedMethod' => [
-            'Illuminate\Console\Command' => ['handle'],
+            // __construct included because Console commands are instantiated by the framework
+            // exclusively through the container: `Console\Kernel::resolve()` and `Application::call()`
+            // route through `Container::build()`, which reflects on `__construct` to inject
+            // dependencies. The class name never appears as `new ConcreteCommand(...)` in user code,
+            // so Psalm marks the constructor unreachable from any visible entry point. `handle`
+            // is here for the same dispatch reason (called via Container::call). See psalm/psalm-plugin-laravel#943.
+            'Illuminate\Console\Command' => ['__construct', 'handle'],
             'Illuminate\Database\Migrations\Migration' => ['up', 'down'],
             'Illuminate\Database\Seeder' => ['run'],
             'Illuminate\Foundation\Http\FormRequest' => [
@@ -208,7 +214,14 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 'shouldSend',
                 'via',
             ],
-            'Illuminate\Support\ServiceProvider' => ['boot'],
+            // __construct included because service providers are instantiated by the framework
+            // via `Application::resolveProvider()`, which does `new $providerClass($this)` against
+            // the FQCN registered through `$this->app->register(Provider::class)` or
+            // `extra.laravel.providers` in composer.json. The class name never appears as
+            // `new ConcreteProvider(...)` in user code, so Psalm marks the constructor unreachable.
+            // `boot` is here for the same dispatch reason (called via Container::call).
+            // See psalm/psalm-plugin-laravel#943.
+            'Illuminate\Support\ServiceProvider' => ['__construct', 'boot'],
         ],
     ];
 
