@@ -56,6 +56,36 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
     private static array $failedFacades = [];
 
     /**
+     * Scan-phase warnings deferred until {@see self::afterCodebasePopulated()} so they do
+     * not splice into Psalm's open `\rN / total...` progress counter (issue #941).
+     * `LongProgress::taskDone()` writes the counter without a trailing newline; emitting a
+     * warning from `afterClassLikeVisit` would otherwise glue `Warning: ...` onto the same
+     * line. Flushed at the top of `afterCodebasePopulated`, between the scan and analysis
+     * phases, where the output buffer is between progress writes.
+     *
+     * @var list<string>
+     */
+    private static array $pendingScanWarnings = [];
+
+    /**
+     * Lazy separator gate: the first warning emission writes a single `PHP_EOL` to terminate
+     * an open `\rN / total...` line. Zero-warning runs leave output untouched (no stray blank
+     * line). Persists for the lifetime of the process — additional warnings after the first
+     * already start at column 0.
+     */
+    private static bool $wroteScanSeparator = false;
+
+    /**
+     * Guards a one-time `register_shutdown_function` registration. Scan workers
+     * (`--threads N > 1`) fork the main process; the worker's copy of
+     * {@see self::$pendingScanWarnings} never propagates back, so without a shutdown hook a
+     * buffered warning would vanish when the worker exits. The hook flushes pending warnings
+     * directly to STDERR at worker exit; in the main process the same hook fires after
+     * `afterCodebasePopulated` already drained the buffer, so it's a no-op there.
+     */
+    private static bool $shutdownHookRegistered = false;
+
+    /**
      * Probe `Facade::getFacadeRoot()` at scan time and queue the resolved root class for
      * scanning. We can't do this in {@see self::afterCodebasePopulated()} because by then
      * the scanner has stopped — a root class not already pulled in via other references
@@ -87,7 +117,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
         }
 
         $progress = $event->getCodebase()->progress;
-        $rootClass = self::tryGetFacadeRootClass($storage->name, $progress);
+        $rootClass = self::tryGetFacadeRootClass($storage->name, $progress, true);
 
         if ($rootClass === null) {
             return;
@@ -101,6 +131,12 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
     {
         $codebase = $event->getCodebase();
         $progress = $codebase->progress;
+
+        // Drain warnings that the scan-phase hook deferred. Runs first so the lazy
+        // separator terminates Psalm's open `\rN / total...` progress line (issue #941)
+        // before any populate-phase warning could emit its own separator. Also re-arms
+        // the separator gate so a second analysis in the same process re-emits it.
+        self::flushScanWarnings($progress);
 
         foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
             // Abstract classes include the base Facade itself and user-defined abstract
@@ -132,14 +168,20 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                     // warning (not debug) — debug is a no-op in the default progress, and a user
                     // facade silently losing method resolution is exactly the class of failure
                     // issue #787 was filed to fix. Match ModelRegistrationHandler's convention.
-                    $progress->warning(
+                    // Routed through `emitWarning` so the lazy separator stays consistent with
+                    // scan-phase warnings flushed just above (issue #941).
+                    self::emitWarning(
+                        $progress,
                         "Laravel plugin: skipping facade '{$storage->name}': class could not be loaded by autoloader",
+                        false,
                     );
                     continue;
                 }
             } catch (\Error|\Exception $error) {
-                $progress->warning(
+                self::emitWarning(
+                    $progress,
                     "Laravel plugin: skipping facade '{$storage->name}': {$error->getMessage()}",
+                    false,
                 );
                 continue;
             }
@@ -151,7 +193,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             // process may re-probe; `$failedFacades` below prevents user-provider factories
             // from running a second time in that case. `tryGetFacadeRootClass()` emits its
             // own warning on first failure, so we simply `continue` here.
-            $rootClass = self::tryGetFacadeRootClass($storage->name, $progress);
+            $rootClass = self::tryGetFacadeRootClass($storage->name, $progress, false);
 
             if ($rootClass === null) {
                 continue;
@@ -181,10 +223,19 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      * Returns null when the accessor is a string alias bound only by a user service
      * provider that does not run in Testbench — nothing we can do at this layer.
      *
+     * `$deferWarnings` defers warning emission until {@see self::flushScanWarnings()} drains
+     * the buffer at the start of `afterCodebasePopulated`. `afterClassLikeVisit` passes
+     * `true` (issue #941: scan-phase warnings would otherwise glue onto the open `\rN / N...`
+     * progress line). `afterCodebasePopulated` passes `false` because the scan phase has
+     * already ended by then.
+     *
      * @return ?class-string
      */
-    public static function tryGetFacadeRootClass(string $facadeClass, ?Progress $progress = null): ?string
-    {
+    public static function tryGetFacadeRootClass(
+        string $facadeClass,
+        ?Progress $progress = null,
+        bool $deferWarnings = false,
+    ): ?string {
         // $failedFacades gates both the short-circuit return AND the warning emission,
         // so each failure reason is surfaced to the user exactly once per facade across
         // scan-phase + populate-phase invocations (issue #787: silent losses of method
@@ -197,9 +248,14 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
         try {
             if (!\is_subclass_of($facadeClass, Facade::class)) {
                 self::$failedFacades[$facadeClass] = true;
-                $progress?->warning(
-                    "Laravel plugin: skipping facade '{$facadeClass}': not a subclass of " . Facade::class,
-                );
+                if ($progress instanceof \Psalm\Progress\Progress) {
+                    self::emitWarning(
+                        $progress,
+                        "Laravel plugin: skipping facade '{$facadeClass}': not a subclass of " . Facade::class,
+                        $deferWarnings,
+                    );
+                }
+
                 return null;
             }
 
@@ -210,20 +266,152 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
 
             if ($rootClass === null) {
                 self::$failedFacades[$facadeClass] = true;
-                $progress?->warning(
-                    "Laravel plugin: skipping facade '{$facadeClass}': getFacadeRoot() returned a non-object value",
-                );
+                if ($progress instanceof \Psalm\Progress\Progress) {
+                    self::emitWarning(
+                        $progress,
+                        "Laravel plugin: skipping facade '{$facadeClass}': getFacadeRoot() returned a non-object value",
+                        $deferWarnings,
+                    );
+                }
+
                 return null;
             }
 
             return $rootClass;
         } catch (\Throwable $throwable) {
             self::$failedFacades[$facadeClass] = true;
-            $progress?->warning(
-                "Laravel plugin: getFacadeRoot() failed for '{$facadeClass}': {$throwable->getMessage()}",
-            );
+            if ($progress instanceof \Psalm\Progress\Progress) {
+                self::emitWarning(
+                    $progress,
+                    "Laravel plugin: getFacadeRoot() failed for '{$facadeClass}': {$throwable->getMessage()}",
+                    $deferWarnings,
+                );
+            }
+
             return null;
         }
+    }
+
+    /**
+     * Emit a plugin warning through Psalm's `Progress` sink, optionally deferring it until
+     * `afterCodebasePopulated` flushes the scan-phase buffer (issue #941).
+     *
+     * When emitting directly, the first call writes a single `PHP_EOL` to terminate Psalm's
+     * open `\rN / total...` scan-progress line. Subsequent direct emissions skip the
+     * separator — they already start at column 0.
+     *
+     * `@internal` so the surface area stays inside this handler. `tryGetFacadeRootClass`
+     * and the populate-phase autoload checks are the only call sites.
+     *
+     * @internal
+     */
+    private static function emitWarning(Progress $progress, string $message, bool $defer): void
+    {
+        if ($defer) {
+            self::registerShutdownFlushOnce();
+            self::$pendingScanWarnings[] = $message;
+            return;
+        }
+
+        if (!self::$wroteScanSeparator) {
+            self::$wroteScanSeparator = true;
+            $progress->write(\PHP_EOL);
+        }
+
+        $progress->warning($message);
+    }
+
+    /**
+     * Drain {@see self::$pendingScanWarnings} into the given progress sink. Called from
+     * {@see self::afterCodebasePopulated()} between the scan and analysis phases — that
+     * window is the only place where the output stream is guaranteed to be between
+     * `\rN / total...` writes, so the lazy separator can cleanly terminate the open line.
+     *
+     * Each drained message routes through {@see self::emitWarning()} with `$defer = false`
+     * so the separator is written once for the whole batch.
+     *
+     * Also re-arms {@see self::$wroteScanSeparator} so a second analysis run in the same
+     * process (CLI `checkPaths()` re-entry, daemon / LSP re-analyze loops) writes a fresh
+     * separator. Without this, the gate would stay `true` from the prior run and the new
+     * run's open `\rN / total...` line would not be terminated — reintroducing #941.
+     *
+     * @internal
+     */
+    private static function flushScanWarnings(Progress $progress): void
+    {
+        // Re-arm the gate first so the first emission below writes the terminating
+        // `PHP_EOL`. Skipping the early-return path: even when the buffer is empty, a
+        // prior run may have left the gate `true`; resetting unconditionally guarantees
+        // the next direct emission in this run (e.g. populate-phase autoload warnings)
+        // can still terminate the scan-counter line if one is open.
+        self::$wroteScanSeparator = false;
+
+        if (self::$pendingScanWarnings === []) {
+            return;
+        }
+
+        $messages = self::$pendingScanWarnings;
+        self::$pendingScanWarnings = [];
+
+        foreach ($messages as $message) {
+            self::emitWarning($progress, $message, false);
+        }
+    }
+
+    /**
+     * Last-resort drain for scan worker processes (`--threads N > 1`). Workers fork from
+     * the main process and inherit a copy of {@see self::$pendingScanWarnings} via
+     * copy-on-write; any push the worker makes is discarded on `exit`. Registering a
+     * shutdown function ensures the worker prints its buffered warnings to STDERR before
+     * dying. In the main process this fires only after `afterCodebasePopulated` already
+     * flushed the buffer, so the loop is a no-op.
+     *
+     * Direct `fwrite($stream, ...)` instead of `Progress::warning()` because we don't hold
+     * a `Progress` reference at PHP shutdown — and worker progress output is already wedged
+     * with its own per-task counter line at this point, so a wedged warning is the best we
+     * can do without leaking the data entirely.
+     *
+     * `$stream` defaults to `STDERR` for production use; the parameter is a test seam so
+     * unit tests can verify the format and drain semantics against a buffer they own.
+     * `register_shutdown_function` invokes this with no arguments, so the default is what
+     * fires in real runs.
+     *
+     * @param resource|null $stream
+     * @internal
+     */
+    public static function flushPendingOnShutdown($stream = null): void
+    {
+        // Symmetry with `flushScanWarnings`: any drain site that empties the buffer also
+        // re-arms the separator gate so subsequent emissions know to terminate an open
+        // scan-counter line. The worker process exits right after this drain so the gate's
+        // state never matters in practice; the reset hardens against future callers that
+        // might invoke this drain mid-process.
+        self::$wroteScanSeparator = false;
+
+        if (self::$pendingScanWarnings === []) {
+            return;
+        }
+
+        // Resolve at call time, not as a default parameter value — PHP disallows resource
+        // constants like `STDERR` in parameter defaults.
+        $stream ??= \STDERR;
+
+        $messages = self::$pendingScanWarnings;
+        self::$pendingScanWarnings = [];
+
+        foreach ($messages as $message) {
+            \fwrite($stream, \PHP_EOL . 'Warning: ' . $message . \PHP_EOL);
+        }
+    }
+
+    private static function registerShutdownFlushOnce(): void
+    {
+        if (self::$shutdownHookRegistered) {
+            return;
+        }
+
+        self::$shutdownHookRegistered = true;
+        \register_shutdown_function([self::class, 'flushPendingOnShutdown']);
     }
 
     /**
