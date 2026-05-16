@@ -52,7 +52,6 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         return [Collection::class, LazyCollection::class];
     }
 
-    /** @psalm-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -69,7 +68,6 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         return null;
     }
 
-    /** @psalm-mutation-free */
     private static function handleFilter(MethodReturnTypeProviderEvent $event): ?Union
     {
         // Only narrow when called with no arguments (or explicit null).
@@ -94,7 +92,6 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         return self::buildNarrowedReturn($event, $tKey, $narrowed);
     }
 
-    /** @psalm-mutation-free */
     private static function handleWhereNotNull(MethodReturnTypeProviderEvent $event): ?Union
     {
         // Only narrow when called with no key (or explicit null key).
@@ -142,8 +139,6 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      * Both filter(null) and whereNotNull(null) treat an explicit null argument as
      * equivalent to no argument — it means "no callback" and "filter by value itself",
      * respectively.
-     *
-     * @psalm-mutation-free
      */
     private static function isCalledWithoutArgOrNull(MethodReturnTypeProviderEvent $event): bool
     {

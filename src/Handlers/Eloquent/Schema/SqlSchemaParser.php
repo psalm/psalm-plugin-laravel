@@ -14,7 +14,6 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
  * can alter the base schema.
  *
  * @internal
- * @psalm-external-mutation-free
  */
 final readonly class SqlSchemaParser
 {
@@ -41,8 +40,6 @@ final readonly class SqlSchemaParser
      * Each CREATE TABLE statement becomes a SchemaTable with SchemaColumn entries.
      * Tables already present in the aggregator (e.g. from a previously parsed file)
      * are overwritten — this matches the behavior of loading a fresh schema dump.
-     *
-     * @psalm-external-mutation-free
      */
     public function addToAggregator(string $sql, SchemaAggregator $aggregator): void
     {

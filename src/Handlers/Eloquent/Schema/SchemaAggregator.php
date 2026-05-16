@@ -727,7 +727,6 @@ final class SchemaAggregator
      *
      * @param array<array-key, PhpParser\Node\Stmt> $stmts
      * @return list<PhpParser\Node\Stmt>
-     * @psalm-mutation-free
      */
     private static function flattenStatements(array $stmts): array
     {

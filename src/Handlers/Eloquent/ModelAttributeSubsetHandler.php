@@ -176,7 +176,6 @@ final class ModelAttributeSubsetHandler
      * @property declaration; missing keys fall back to mixed.
      *
      * @param non-empty-list<string> $keys
-     * @psalm-mutation-free
      */
     private static function buildKeyedArray(Codebase $codebase, string $modelClass, array $keys): ?Union
     {
