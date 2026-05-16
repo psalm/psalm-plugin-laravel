@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778945857667,
+  "lastUpdate": 1778951739353,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4262,6 +4262,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.26,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "08bcbc1efb5afb1de4cec90ccd33b1355ef5434d",
+          "message": "Treat `ServiceProvider::$app` as initialized (#947)\n\n* fix(stubs): mirror ServiceProvider $app and __construct from Laravel #945\n\nThe previous stub redeclared `Illuminate\\Support\\ServiceProvider` with\nonly `commands()`. Per the project rule \"Class declarations wipe\nreflected metadata\", redeclaring a class can drop interfaces and\nproperty storage that other plugin code expects to read. The\ncompanion handler entry in `FRAMEWORK_INITIALIZED_PROPERTIES_BY_FQCN`\nkeys off `$app`'s `declaring_property_ids`, so making sure the stub\nkeeps the same `$app` slot and `__construct` shape as the framework\nsource removes a latent dependency on Reflection winning the merge.\n\nAlso restores `$bootingCallbacks` and `$bootedCallbacks` defaults\n(the only other non-static non-default protected properties on the\nparent class).\n\n* fix(handlers): mark ServiceProvider::$app as initialized #945\n\n`Illuminate\\Support\\ServiceProvider::$app` is declared on the parent\nclass and assigned in its `__construct($app)`. Subclasses that\ndeclare their own constructor and call `parent::__construct($app)`\n(the documented pattern — packages routinely subclass\nEventServiceProvider / AuthServiceProvider / RouteServiceProvider\nand add their own constructor for runtime registration) trip\n`PropertyNotSetInConstructor` because Psalm does not trace\n`parent::__construct` through to parent-property assignments when\nchecking the child.\n\nApply the same fix shape that #912 used for `TestCase::$app`: add an\nentry to `FRAMEWORK_INITIALIZED_PROPERTIES_BY_FQCN` so the property\nis marked initialized on its declaring class storage. Every subclass\ninherits the signal via `declaring_property_ids` without touching the\nsubclass's own `suppressed_issues` — the user's genuinely uninitialised\nproperties on a ServiceProvider subclass keep being flagged.\n\nPositive test covers direct subclass, the three Foundation-shipped\nintermediate providers (Auth / Event / Route), and a multi-level\nabstract chain. Negative test exercises both private and protected\nuser-declared properties to lock in property-level scoping (Psalm's\nerror string differs between the two visibilities).",
+          "timestamp": "2026-05-16T19:12:51+02:00",
+          "tree_id": "202994b8dc1e19bf196352c221c3b1dfe10dadbb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/08bcbc1efb5afb1de4cec90ccd33b1355ef5434d"
+        },
+        "date": 1778951738830,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.56,
+            "range": "± 0.28",
             "unit": "s"
           },
           {
