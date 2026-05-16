@@ -133,9 +133,10 @@ final class ApplicationProvider
      */
     private function retargetConfigPathAtProjectRoot(LaravelApplication $app): void
     {
-        $envOverride = $_ENV['APP_BASE_PATH'] ?? $_ENV['TESTBENCH_APP_BASE_PATH'] ?? null;
+        $envOverride = self::readEnvOverride('APP_BASE_PATH')
+            ?? self::readEnvOverride('TESTBENCH_APP_BASE_PATH');
 
-        if (\is_string($envOverride) && $envOverride !== '') {
+        if ($envOverride !== null) {
             $projectRoot = $envOverride;
         } else {
             $cwd = \getcwd();
@@ -148,6 +149,29 @@ final class ApplicationProvider
         }
 
         $app->useConfigPath($projectRoot . \DIRECTORY_SEPARATOR . 'config');
+    }
+
+    /**
+     * Read an environment variable across the three PHP surfaces.
+     *
+     * `$_ENV` alone is unreliable: the `variables_order` ini setting may omit `E`,
+     * leaving `$_ENV` empty even when the value was passed to the process. CGI/FPM
+     * deployments commonly route through `$_SERVER`; CLI invocations via `env VAR=...
+     * php ...` route through `getenv()`. Testbench's own helper reads only `$_ENV`,
+     * which is the documented escape hatch but not the most portable one — we widen
+     * the check so the override actually takes effect across runtime configurations.
+     */
+    private static function readEnvOverride(string $name): ?string
+    {
+        $candidates = [$_ENV[$name] ?? null, $_SERVER[$name] ?? null, \getenv($name)];
+
+        foreach ($candidates as $value) {
+            if (\is_string($value) && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**
