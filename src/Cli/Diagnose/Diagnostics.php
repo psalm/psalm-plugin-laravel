@@ -190,15 +190,15 @@ class Diagnostics
     }
 
     /**
-     * @param array<array-key, mixed> $data
+     * @param array<array-key, mixed> $nestedData
      * @param list<string> $keys
      *
      * @psalm-pure
      */
-    private function readNestedString(array $data, array $keys): ?string
+    private function readNestedString(array $nestedData, array $keys): ?string
     {
-        /** @var mixed $cursor */
-        $cursor = $data;
+        /** @psalm-var mixed $cursor */
+        $cursor = $nestedData;
         foreach ($keys as $key) {
             if (!\is_array($cursor) || !\array_key_exists($key, $cursor)) {
                 return null;
