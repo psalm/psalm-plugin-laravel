@@ -138,17 +138,6 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * @psalm-mutation-free
      *
-     * @param  (callable(self<TKey, TValue>): int)|int|null  $number
-     * @param  bool  $preserveKeys
-     * @return ($number is null ? TValue : static<int, TValue>)
-     *
-     * @throws \InvalidArgumentException
-     */
-    public function random($number = null, $preserveKeys = false) {}
-
-    /**
-     * @psalm-mutation-free
-     *
      * @param  TValue|(callable(TValue,TKey): bool)  $value
      * @param  bool  $strict
      * @return TKey|false
