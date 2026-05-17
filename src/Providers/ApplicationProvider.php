@@ -55,7 +55,6 @@ final class ApplicationProvider
      */
     public static function getBootMode(): ?string
     {
-        /** @var 'user_kernel'|'vendor_bootstrap'|'testbench_fallback'|null */
         return self::$bootMode;
     }
 

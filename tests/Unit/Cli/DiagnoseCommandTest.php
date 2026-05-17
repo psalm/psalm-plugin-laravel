@@ -27,10 +27,10 @@ final class DiagnoseCommandTest extends TestCase
         $exit = $tester->execute([]);
         $display = $tester->getDisplay();
 
-        self::assertSame(Command::SUCCESS, $exit, $display);
-        self::assertStringContainsString('[Versions]', $display);
-        self::assertStringContainsString('[Boot mode (#766)]', $display);
-        self::assertStringNotContainsString('[Hard failures]', $display);
+        $this->assertSame(Command::SUCCESS, $exit, $display);
+        $this->assertStringContainsString('[Versions]', $display);
+        $this->assertStringContainsString('[Boot mode (#766)]', $display);
+        $this->assertStringNotContainsString('[Hard failures]', $display);
     }
 
     #[Test]
@@ -42,9 +42,9 @@ final class DiagnoseCommandTest extends TestCase
 
         $exit = $tester->execute([]);
 
-        self::assertSame(Command::FAILURE, $exit);
-        self::assertStringContainsString('[Hard failures]', $tester->getDisplay());
-        self::assertStringContainsString('Application boot failed: synthetic', $tester->getDisplay());
+        $this->assertSame(Command::FAILURE, $exit);
+        $this->assertStringContainsString('[Hard failures]', $tester->getDisplay());
+        $this->assertStringContainsString('Application boot failed: synthetic', $tester->getDisplay());
     }
 
     #[Test]
@@ -52,8 +52,8 @@ final class DiagnoseCommandTest extends TestCase
     {
         $report = (new Diagnostics())->collect();
 
-        self::assertNotEmpty($report['versions']['php']);
-        self::assertContains($report['boot']['mode'], ['user_kernel', 'vendor_bootstrap', 'testbench_fallback', null]);
+        $this->assertNotEmpty($report['versions']['php']);
+        $this->assertContains($report['boot']['mode'], ['user_kernel', 'vendor_bootstrap', 'testbench_fallback', null]);
     }
 
     private function testerFor(Diagnostics $diagnostics): CommandTester
