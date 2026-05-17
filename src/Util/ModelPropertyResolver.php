@@ -112,7 +112,7 @@ final class ModelPropertyResolver
         // still contain the *unsubstituted* template (TTemplateParam) instead of the
         // concrete model. Fall back to inspecting the call's LHS expression, whose
         // type carries the concrete generic arguments.
-        if ($modelClass === null && $lhsExpr !== null) {
+        if ($modelClass === null && $lhsExpr instanceof \PhpParser\Node\Expr) {
             $modelClass = self::extractModelFromLhsType(
                 $nodeTypeProvider->getType($lhsExpr),
                 $modelTemplateIndex,
@@ -204,6 +204,7 @@ final class ModelPropertyResolver
             if (!$keyArgType instanceof Union || !$keyArgType->isSingleStringLiteral()) {
                 return Type::getArrayKey();
             }
+
             $keyColumn = $keyArgType->getSingleStringLiteral()->value;
         } else {
             $keyColumn = $keyArg->value->value;
