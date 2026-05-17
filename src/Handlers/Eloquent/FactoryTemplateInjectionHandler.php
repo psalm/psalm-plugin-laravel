@@ -300,6 +300,7 @@ final class FactoryTemplateInjectionHandler implements AfterCodebasePopulatedInt
         if ($namespacedBase !== null && \str_ends_with($namespacedBase, 'Factory')) {
             $namespacedBase = \substr($namespacedBase, 0, -\strlen('Factory'));
         }
+
         if ($namespacedBase === '') {
             $namespacedBase = null;
         }
@@ -312,10 +313,12 @@ final class FactoryTemplateInjectionHandler implements AfterCodebasePopulatedInt
         if ($namespacedBase !== null) {
             $candidates[] = $appNamespace . 'Models\\' . $namespacedBase;
         }
+
         $candidates[] = $appNamespace . 'Models\\' . $factoryBasename;
         if ($namespacedBase !== null) {
             $candidates[] = $appNamespace . $namespacedBase;
         }
+
         $candidates[] = $appNamespace . $factoryBasename;
 
         foreach (\array_unique($candidates) as $candidate) {
@@ -389,10 +392,10 @@ final class FactoryTemplateInjectionHandler implements AfterCodebasePopulatedInt
             }
 
             return self::$appNamespaceCache = $app->getNamespace();
-        } catch (\RuntimeException $error) {
+        } catch (\RuntimeException $runtimeException) {
             $codebase->progress->warning(
                 'Laravel plugin: factory TModel injection disabled — app namespace unresolved: '
-                . $error->getMessage(),
+                . $runtimeException->getMessage(),
             );
 
             return self::$appNamespaceCache = null;
