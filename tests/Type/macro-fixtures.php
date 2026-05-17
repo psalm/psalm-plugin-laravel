@@ -66,3 +66,14 @@ Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
     'testViteFacadeMacro',
     static fn(string $asset): string => "resources/images/{$asset}",
 );
+
+// Seed the container binding map (issue #942) with the type-test fixture
+// provider. In production, vendor `ServiceProvider::register()` methods run
+// during composer auto-discovery (via Illuminate's PackageManifest, retargeted
+// at the project root by ApplicationProvider). The plugin's own fixtures are
+// not a composer package, so register the provider directly on the booted app
+// and re-init the snapshot to pick up the new 'subscription' binding.
+\Psalm\LaravelPlugin\Providers\ApplicationProvider::getApp()->register(
+    \App\Providers\SubscriptionServiceProvider::class,
+);
+\Psalm\LaravelPlugin\Providers\ContainerBindingMapProvider::init();

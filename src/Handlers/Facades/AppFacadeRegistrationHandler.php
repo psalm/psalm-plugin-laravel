@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Facades;
 
 use Illuminate\Support\Facades\Facade;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Providers\ContainerBindingMapProvider;
 use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
@@ -177,14 +178,40 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      * - The accessor is a string alias bound in our Testbench container (first-party
      *   services like `'cache'`, `'router'`, package bindings registered via discovered
      *   providers).
+     * - The accessor is a string alias whose binding is in the container map snapshot
+     *   maintained by {@see ContainerBindingMapProvider} — covers vendor facades whose
+     *   `register()` body binds via a factory closure ({@see https://github.com/psalm/psalm-plugin-laravel/issues/942})
+     *   and resolves silently without invoking the runtime probe (which would throw on
+     *   constructors with un-bound interface deps).
      *
-     * Returns null when the accessor is a string alias bound only by a user service
-     * provider that does not run in Testbench — nothing we can do at this layer.
+     * Returns null when the accessor is neither in the snapshot map nor resolvable via
+     * the runtime probe — typically a user provider that does not run inside our
+     * Testbench app at all.
      *
      * @return ?class-string
      */
     public static function tryGetFacadeRootClass(string $facadeClass, ?Progress $progress = null): ?string
     {
+        // Container binding map lookup runs BEFORE the $failedFacades gate so a facade
+        // visited and rejected during scan phase (e.g. before its provider has registered
+        // the alias) can still resolve once the populated map fills in. Map path is
+        // silent: a hit reports nothing because nothing failed. `getFacadeAccessor()`
+        // is protected on Facade subclasses, so we read it by reflection.
+        try {
+            if (\is_subclass_of($facadeClass, Facade::class)) {
+                /** @psalm-var mixed $accessor */
+                $accessor = (new \ReflectionMethod($facadeClass, 'getFacadeAccessor'))->invoke(null);
+                if (\is_string($accessor) && $accessor !== '') {
+                    $fromMap = ContainerBindingMapProvider::getClass($accessor);
+                    if ($fromMap !== null) {
+                        return $fromMap;
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            // Fall through to runtime probe.
+        }
+
         // $failedFacades gates both the short-circuit return AND the warning emission,
         // so each failure reason is surfaced to the user exactly once per facade across
         // scan-phase + populate-phase invocations (issue #787: silent losses of method
