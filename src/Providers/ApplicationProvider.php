@@ -34,9 +34,34 @@ final class ApplicationProvider
 
     private static ?string $bootPath = null;
 
+    /**
+     * Set when {@see doGetApp()} successfully `require`d a `bootstrap/app.php`
+     * but the subsequent `$consoleApp->bootstrap()` threw — typically because
+     * one of the user project's `config/*.php` files fatals during evaluation
+     * (e.g. `parse_url(env('UNSET_VAR'))` returning null on PHP 8.1+).
+     *
+     * Plugin continues with a partially-loaded app: `config` binding still
+     * exists (created before LoadConfiguration iterates files) but later
+     * bootstrappers (RegisterFacades, RegisterProviders, BootProviders) never
+     * ran. Handlers tolerate partial state — same swallow semantics as
+     * {@see Plugin::__invoke}.
+     */
+    private static ?\Throwable $bootstrapError = null;
+
     public static function bootApp(): void
     {
         self::getApp();
+    }
+
+    /**
+     * Throwable raised during eager Laravel bootstrap (LoadConfiguration etc.).
+     * Null when no bootstrap was attempted yet, or when bootstrap succeeded.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function getBootstrapError(): ?\Throwable
+    {
+        return self::$bootstrapError;
     }
 
     private static bool $booted = false;
@@ -116,7 +141,10 @@ final class ApplicationProvider
         }
 
         if (!self::$booted) {
-            // Bootstrap console app
+            // Bootstrap console app — runs Laravel's standard bootstrappers
+            // (LoadEnvironmentVariables, LoadConfiguration, RegisterFacades,
+            // RegisterProviders, BootProviders). Required because handlers
+            // read app('config'), facades, and provider-registered bindings.
             $consoleApp = $app->make(Kernel::class);
             $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function (): object {
                 return new class {
@@ -124,7 +152,17 @@ final class ApplicationProvider
                     public function bootstrap(): void {}
                 };
             });
-            $consoleApp->bootstrap();
+
+            // Tolerate partial bootstrap. One bad config file (`parse_url(env('UNSET'))`
+            // throwing TypeError on PHP 8.1+ is a common pattern) would otherwise
+            // abort the entire bootstrap chain and disable the plugin for the run.
+            // The 'config' binding is created BEFORE LoadConfiguration iterates files,
+            // so handlers reading config still see whatever loaded prior to the throw.
+            try {
+                $consoleApp->bootstrap();
+            } catch (\Throwable $bootstrapError) {
+                self::$bootstrapError = $bootstrapError;
+            }
 
             self::$booted = true;
         }
