@@ -138,7 +138,7 @@ final class ModelFactoryMethodTypeProvider implements MethodReturnTypeProviderIn
     private static function discoverFactoryClass(
         string $modelFqcn,
         ClassLikeStorage $storage,
-        \Psalm\Codebase $codebase
+        \Psalm\Codebase $codebase,
     ): ?string {
         $fromAttribute = self::factoryFromUseFactoryAttribute($storage);
         if ($fromAttribute !== null && $codebase->classlike_storage_provider->has($fromAttribute)) {
