@@ -19,6 +19,7 @@ final readonly class Report
     /**
      * @param 'bootstrap'|'testbench_fallback'|null $bootMode
      * @param 'runtime'|'config.platform.php' $phpAnalysisSource
+     * @param list<string> $bootstrapErrors
      * @param list<string> $hardFailures
      */
     public function __construct(
@@ -31,7 +32,7 @@ final readonly class Report
         public string $phpAnalysisSource,
         public ?string $bootMode,
         public ?string $bootPath,
-        public ?string $bootError,
+        public array $bootstrapErrors,
         public array $hardFailures,
     ) {}
 }

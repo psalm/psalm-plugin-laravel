@@ -39,13 +39,21 @@ final class TextRenderer
             '[Boot mode]',
         ];
 
-        if ($report->bootError !== null) {
+        // Null bootMode = boot pipeline never resolved (hard failure). Otherwise the app
+        // booted (possibly partially) and any captured errors are non-fatal warnings.
+        if ($report->bootMode === null) {
             $lines[] = 'Status: FAILED';
-            $lines[] = 'Error: ' . $report->bootError;
+            foreach ($report->bootstrapErrors as $bootstrapError) {
+                $lines[] = 'Error: ' . $bootstrapError;
+            }
         } else {
-            $label = $report->bootMode !== null ? self::BOOT_MODE_LABELS[$report->bootMode] ?? null : null;
+            $label = self::BOOT_MODE_LABELS[$report->bootMode] ?? null;
             $lines[] = 'Mode: ' . ($label ?? '(unknown)');
             $lines[] = 'Path: ' . ($report->bootPath ?? '(unknown)');
+
+            foreach ($report->bootstrapErrors as $bootstrapError) {
+                $lines[] = 'Bootstrap warning: ' . $bootstrapError;
+            }
         }
 
         if ($report->hardFailures !== []) {

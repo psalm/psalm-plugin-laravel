@@ -23,17 +23,28 @@ class Diagnostics
 
     public function collect(): Report
     {
-        $bootError = null;
+        $bootstrapErrors = [];
 
         try {
             ApplicationProvider::bootApp();
         } catch (\Throwable $throwable) {
-            $bootError = $throwable->getMessage();
+            $bootstrapErrors[] = $throwable->getMessage();
         }
 
+        // Throws swallowed inside `doGetApp()` (e.g. `$consoleApp->bootstrap()`
+        // failing on a bad `config/*.php`) never propagate to the catch above —
+        // ApplicationProvider stashes them so diagnose can surface partial-boot state.
+        $swallowed = ApplicationProvider::getBootstrapError();
+        if ($swallowed !== null) {
+            $bootstrapErrors[] = $swallowed->getMessage();
+        }
+
+        // A null bootMode means the boot pipeline never reached a resolution branch
+        // (the try/catch above swallowed a hard throw). Treat that as a hard failure
+        // so the CLI exits non-zero; partial-bootstrap warnings alone are informational.
         $hardFailures = [];
-        if ($bootError !== null) {
-            $hardFailures[] = "Application boot failed: {$bootError}";
+        if (ApplicationProvider::getBootMode() === null && $bootstrapErrors !== []) {
+            $hardFailures[] = 'Application boot failed: ' . $bootstrapErrors[0];
         }
 
         $rootComposer = $this->readRootComposerJson();
@@ -50,7 +61,7 @@ class Diagnostics
             phpAnalysisSource: $platformPhp !== null ? 'config.platform.php' : 'runtime',
             bootMode: ApplicationProvider::getBootMode(),
             bootPath: ApplicationProvider::getBootPath(),
-            bootError: $bootError,
+            bootstrapErrors: $bootstrapErrors,
             hardFailures: $hardFailures,
         );
     }

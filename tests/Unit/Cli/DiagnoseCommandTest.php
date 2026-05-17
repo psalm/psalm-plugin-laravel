@@ -49,7 +49,7 @@ final class DiagnoseCommandTest extends TestCase
             phpAnalysisSource: $base->phpAnalysisSource,
             bootMode: null,
             bootPath: null,
-            bootError: 'synthetic',
+            bootstrapErrors: ['synthetic'],
             hardFailures: ['Application boot failed: synthetic'],
         );
 
@@ -60,6 +60,33 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame(Command::FAILURE, $exit);
         $this->assertStringContainsString('[Hard failures]', $tester->getDisplay());
         $this->assertStringContainsString('Application boot failed: synthetic', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function bootstrap_warnings_render_under_boot_section(): void
+    {
+        $base = $this->okReport();
+        $warned = new Report(
+            pluginVersion: $base->pluginVersion,
+            laravelVersion: $base->laravelVersion,
+            psalmVersion: $base->psalmVersion,
+            phpRuntimeVersion: $base->phpRuntimeVersion,
+            phpRequiredVersion: $base->phpRequiredVersion,
+            phpAnalysisVersion: $base->phpAnalysisVersion,
+            phpAnalysisSource: $base->phpAnalysisSource,
+            bootMode: $base->bootMode,
+            bootPath: $base->bootPath,
+            bootstrapErrors: ['Call to a member function bar() on null in config/app.php:42'],
+            hardFailures: [],
+        );
+
+        $tester = $this->testerFor($this->fixtureProvider($warned));
+
+        $exit = $tester->execute([]);
+        $display = $tester->getDisplay();
+
+        $this->assertSame(Command::SUCCESS, $exit, $display);
+        $this->assertStringContainsString('Bootstrap warning: Call to a member function bar() on null in config/app.php:42', $display);
     }
 
     #[Test]
@@ -107,7 +134,7 @@ final class DiagnoseCommandTest extends TestCase
             phpAnalysisSource: 'runtime',
             bootMode: 'bootstrap',
             bootPath: '/app/bootstrap/app.php',
-            bootError: null,
+            bootstrapErrors: [],
             hardFailures: [],
         );
     }
