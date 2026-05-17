@@ -204,6 +204,7 @@ class Diagnostics
                 return null;
             }
 
+            /** @psalm-var mixed $cursor */
             $cursor = $cursor[$key];
         }
 
