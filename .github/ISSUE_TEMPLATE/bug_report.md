@@ -24,7 +24,7 @@ composer show | grep -E 'psalm|laravel/'
 **Plugin diagnose output**
 Run
 ```shell
-./vendor/bin/psalm-laravel diagnose --format=markdown
+./vendor/bin/psalm-laravel diagnose
 ```
 and paste the result below (helps us see boot mode, stubs, and integrations).
 ```text

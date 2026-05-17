@@ -20,12 +20,5 @@
     <issueHandlers>
         <LessSpecificReturnType errorLevel="info" />
         <ClassMustBeFinal errorLevel="info" />
-        <!-- Purity hints help stub authors but force a static or @psalm-immutable
-             style on plain internal code (CLI renderers, value builders). Demoted
-             to info so the signal stays without blocking the build. -->
-        <MissingImmutableAnnotation errorLevel="info" />
-        <MissingPureAnnotation errorLevel="info" />
-        <MissingInterfaceImmutableAnnotation errorLevel="info" />
-        <MissingAbstractPureAnnotation errorLevel="info" />
     </issueHandlers>
 </psalm>

@@ -19,9 +19,22 @@ final class ApplicationProvider
 
     private static ?\Illuminate\Foundation\Application $app = null;
 
-    private static ?BootMode $bootMode = null;
+    /**
+     * Records which {@see doGetApp()} branch resolved the Laravel app.
+     *
+     * Values: 'user_kernel' | 'vendor_bootstrap' | 'testbench_fallback'.
+     * Kept as a plain string (not an enum) since it's only read by
+     * `bin/psalm-laravel diagnose` and never compared against typed cases.
+     */
+    private static ?string $bootMode = null;
 
     private static ?string $bootPath = null;
+
+    private const BOOT_DESCRIPTIONS = [
+        'user_kernel' => 'user kernel (real bootstrap/app.php discovered)',
+        'vendor_bootstrap' => 'vendor-relative bootstrap (plugin installed in vendor/)',
+        'testbench_fallback' => 'Testbench fallback (no real bootstrap/app.php found — #766)',
+    ];
 
     public static function bootApp(): void
     {
@@ -36,17 +49,30 @@ final class ApplicationProvider
      * Null until the app has been booted via {@see bootApp()} or {@see getApp()}.
      * Read by `bin/psalm-laravel diagnose` to surface the #766 silent-Testbench-fallback case.
      *
+     * @return 'user_kernel'|'vendor_bootstrap'|'testbench_fallback'|null
+     *
      * @psalm-external-mutation-free
      */
-    public static function getBootMode(): ?BootMode
+    public static function getBootMode(): ?string
     {
+        /** @var 'user_kernel'|'vendor_bootstrap'|'testbench_fallback'|null */
         return self::$bootMode;
     }
 
     /**
+     * Human-readable description of the boot mode. Null until the app has been booted.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function getBootDescription(): ?string
+    {
+        return self::$bootMode !== null ? self::BOOT_DESCRIPTIONS[self::$bootMode] ?? null : null;
+    }
+
+    /**
      * Path actually used to bootstrap the Laravel app — either the resolved
-     * `bootstrap/app.php` (for {@see BootMode::UserKernel}, {@see BootMode::VendorBootstrap})
-     * or the Testbench skeleton root ({@see BootMode::TestbenchFallback}).
+     * `bootstrap/app.php` (user_kernel / vendor_bootstrap) or the Testbench
+     * skeleton root (testbench_fallback).
      *
      * Null until the app has been booted.
      *
@@ -86,20 +112,20 @@ final class ApplicationProvider
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
             assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
-            self::$bootMode = BootMode::UserKernel;
+            self::$bootMode = 'user_kernel';
             self::$bootPath = $applicationPath;
         } elseif (\file_exists($applicationPath = \dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
             assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
-            self::$bootMode = BootMode::VendorBootstrap;
+            self::$bootMode = 'vendor_bootstrap';
             self::$bootPath = $applicationPath;
         } else { // Laravel Packages
             /** @psalm-suppress InternalMethod */
             $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
 
             $this->retargetConfigPathAtProjectRoot($app);
-            self::$bootMode = BootMode::TestbenchFallback;
+            self::$bootMode = 'testbench_fallback';
             self::$bootPath = $app->basePath();
         }
 
