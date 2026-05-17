@@ -46,6 +46,9 @@ final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        $stmt = $event->getStmt();
+        $lhsExpr = $stmt instanceof \PhpParser\Node\Expr\MethodCall ? $stmt->var : null;
+
         // Collection<TKey, TValue> — TValue (the model) is template param at index 1.
         // For non-Model collections, resolvePluckReturnType returns null and Psalm uses
         // its default type inference.
@@ -55,6 +58,7 @@ final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
             modelTemplateIndex: 1,
             nodeTypeProvider: $event->getSource()->getNodeTypeProvider(),
             codebase: $event->getSource()->getCodebase(),
+            lhsExpr: $lhsExpr,
         );
     }
 }
