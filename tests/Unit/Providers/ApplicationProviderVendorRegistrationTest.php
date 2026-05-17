@@ -128,23 +128,21 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
             return;
         }
 
+        /** @var iterable<\SplFileInfo> $iterator */
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
             \RecursiveIteratorIterator::CHILD_FIRST,
         );
 
         foreach ($iterator as $entry) {
-            $this->assertInstanceOf(\SplFileInfo::class, $entry);
-            $entryPath = $entry->getPathname();
-
             if ($entry->isDir()) {
-                @\rmdir($entryPath);
+                \rmdir($entry->getPathname());
             } else {
-                @\unlink($entryPath);
+                \unlink($entry->getPathname());
             }
         }
 
-        @\rmdir($path);
+        \rmdir($path);
     }
 
     private function reflectProperty(string $name): \ReflectionProperty

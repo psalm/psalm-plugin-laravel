@@ -241,8 +241,8 @@ final class ApplicationProvider
      * may not handle a real-but-empty project tree well — leaving them at the
      * Testbench skeleton keeps that behaviour unchanged.
      *
-     * Project root resolution is delegated to {@see self::resolveProjectRoot()}
-     * (shared with {@see self::registerDiscoveredVendorProviders()}).
+     * Project root is supplied by the caller (computed once in branch 3 and shared
+     * with {@see self::registerDiscoveredVendorProviders()}).
      *
      * Only branch 3 of {@see self::doGetApp()} calls this — for projects with a
      * real `bootstrap/app.php`, that file's Application instance is used verbatim
@@ -288,28 +288,26 @@ final class ApplicationProvider
             return;
         }
 
-        // Per-process scratch manifest. `PackageManifest::build()` writes the discovered
-        // configuration to disk; PID + random fallback gives each Psalm run a unique
-        // file (`getmypid()` is documented as `int|false`, hence the fallback). We do
-        // not pre-check `vendor/composer/installed.json`: `PackageManifest` honors the
-        // `COMPOSER_VENDOR_DIR` env var internally and treats a missing file as an
-        // empty manifest (so the foreach below simply iterates zero providers).
+
+        // `PackageManifest::build()` writes the discovered configuration to disk; once
+        // `providers()` returns, the file is no longer needed — unlink synchronously in
+        // `finally` so there is no shutdown-handler or fork-race surface to reason about.
+        // `vendor/composer/installed.json` is intentionally NOT pre-checked: PackageManifest
+        // honors `COMPOSER_VENDOR_DIR` internally and treats a missing file as an empty
+        // manifest (so the foreach below simply iterates zero providers).
         //
-        // The shutdown cleanup runs in every PID that inherits this closure — Psalm 7
-        // forks scanner workers via pcntl, and their `exit()` triggers shutdown handlers
-        // too. The `@` is load-bearing: it suppresses warnings on the inevitable
-        // double-unlink race between parent and workers (and on any read-only $TMPDIR
-        // that lets PackageManifest::build() write but blocks unlink). The manifest is
-        // consumed synchronously before any fork, so post-fork removal is harmless.
-        $pid = \getmypid();
-        $manifestPath = \sys_get_temp_dir()
-            . \DIRECTORY_SEPARATOR
-            . 'psalm-laravel-pkg-'
-            . ($pid !== false ? (string) $pid : \bin2hex(\random_bytes(4)))
-            . '.php';
-        \register_shutdown_function(static function () use ($manifestPath): void {
-            @\unlink($manifestPath);
-        });
+        // `tempnam()` reserves a guaranteed-unique writable path AND creates an empty file
+        // at it. We unlink immediately so `PackageManifest::getManifest()` sees no file
+        // (its `is_file()` guard) and calls `build()` to populate it from scratch. Without
+        // the unlink, `getRequire()` would `require` an empty file and bind `$manifest`
+        // to the int `1` returned by require, causing `providers()` to return garbage.
+        $manifestPath = \tempnam(\sys_get_temp_dir(), 'psalm-laravel-pkg-');
+
+        if ($manifestPath === false) {
+            return; // tmp dir not writable (locked-down CI sandbox) — no recovery path
+        }
+
+        \unlink($manifestPath);
 
         $packageManifest = new PackageManifest(new Filesystem(), $projectRoot, $manifestPath);
 
@@ -317,10 +315,11 @@ final class ApplicationProvider
             /** @var list<string> $providers */
             $providers = $packageManifest->providers();
         } catch (\Throwable) {
-            // Malformed installed.json, or `PackageManifest::write()` threw because the
-            // tmp dir is not writable (locked-down CI sandboxes). Fall back to current
-            // Testbench-only behaviour (no vendor discovery) rather than aborting boot.
-            return;
+            // Malformed installed.json or other read failure. Fall back to Testbench-only
+            // behaviour (no vendor discovery) rather than aborting plugin boot.
+            $providers = [];
+        } finally {
+            @\unlink($manifestPath);
         }
 
         foreach ($providers as $providerFqcn) {
