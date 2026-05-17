@@ -78,9 +78,11 @@ jobs:
             echo "::error::Refusing to benchmark PR from a different repository (head: $HEAD_REPO, expected: $EXPECTED_REPO)"
             exit 1
           fi
-          echo "head_sha=$(echo "$PR_JSON" | jq -r .headRefOid)" >> "$GITHUB_OUTPUT"
-          echo "base_sha=$(echo "$PR_JSON" | jq -r .baseRefOid)" >> "$GITHUB_OUTPUT"
-          echo "pr_number=$(echo "$PR_JSON" | jq -r .number)" >> "$GITHUB_OUTPUT"
+          {
+            echo "head_sha=$(echo "$PR_JSON" | jq -r .headRefOid)"
+            echo "base_sha=$(echo "$PR_JSON" | jq -r .baseRefOid)"
+            echo "pr_number=$(echo "$PR_JSON" | jq -r .number)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Checkout PR branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -150,9 +152,9 @@ jobs:
       - name: Benchmark with hyperfine
         run: |
           HARNESS="$GITHUB_WORKSPACE/plugin-base/tests/Benchmark/run-psalm.sh"
-          > /tmp/mem-base.txt && > /tmp/mem-pr.txt
-          > /tmp/issues-base.txt && > /tmp/issues-pr.txt
-          > /tmp/stats-base.txt && > /tmp/stats-pr.txt
+          : > /tmp/mem-base.txt && : > /tmp/mem-pr.txt
+          : > /tmp/issues-base.txt && : > /tmp/issues-pr.txt
+          : > /tmp/stats-base.txt && : > /tmp/stats-pr.txt
           # No warmup: this job measures the diff between base and PR, both pay the same
           # first-run page-cache tax, so the comparison stays directionally correct.
           hyperfine \
@@ -162,7 +164,7 @@ jobs:
             --export-json /tmp/hyperfine.json \
             --ignore-failure
           echo "--- hyperfine results ---"
-          cat /tmp/hyperfine.json | jq '.results[] | {command, mean, stddev, min, max}'
+          jq '.results[] | {command, mean, stddev, min, max}' /tmp/hyperfine.json
 
       - name: Compare results
         id: compare
@@ -253,7 +255,7 @@ jobs:
 
       - name: Benchmark with hyperfine
         run: |
-          > /tmp/mem.txt
+          : > /tmp/mem.txt
           hyperfine \
             --warmup 1 \
             --runs "$HYPERFINE_RUNS" \
@@ -264,6 +266,7 @@ jobs:
 
       - name: Validate benchmark results
         run: |
+          # shellcheck disable=SC2016
           php -r '
           $data = json_decode(file_get_contents("/tmp/hyperfine.json"), true, 512, JSON_THROW_ON_ERROR);
           $exitCodes = $data["results"][0]["exit_codes"] ?? [];
@@ -277,6 +280,7 @@ jobs:
       # Transform to github-action-benchmark customSmallerIsBetter format
       - name: Build trend data
         run: |
+          # shellcheck disable=SC2016
           php -r '
           $h = json_decode(file_get_contents("/tmp/hyperfine.json"), true, 512, JSON_THROW_ON_ERROR)["results"][0];
           $memLines = array_filter(array_map("trim", file("/tmp/mem.txt")), fn($l) => $l !== "");
