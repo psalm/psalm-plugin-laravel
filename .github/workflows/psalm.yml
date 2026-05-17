@@ -25,6 +25,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            github.com:443
             packagist.org:443
             release-assets.githubusercontent.com:443
             repo.packagist.org:443
