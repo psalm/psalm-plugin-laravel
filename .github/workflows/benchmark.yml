@@ -50,19 +50,25 @@ jobs:
       issues: write  # needed for comment reactions
     steps:
 
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
       - name: React to comment
         env:
           GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
         run: |
-          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+          gh api repos/${{ github.repository }}/issues/comments/"$COMMENT_ID"/reactions \
             -f content=rocket --silent
 
       - name: Get PR refs
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
         run: |
-          PR_NUMBER="${{ github.event.issue.number }}"
           PR_JSON=$(gh pr view "$PR_NUMBER" \
             --repo ${{ github.repository }} \
             --json headRefOid,baseRefOid,headRefName,number,headRepository)
@@ -77,19 +83,19 @@ jobs:
           echo "pr_number=$(echo "$PR_JSON" | jq -r .number)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout PR branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.pr.outputs.head_sha }}
           path: plugin-pr
 
       - name: Checkout base branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.pr.outputs.base_sha }}
           path: plugin-base
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
         with:
           php-version: ${{ env.PHP_VERSION }}
           ini-values: opcache.enable_cli=1
@@ -110,7 +116,7 @@ jobs:
       # Key is safe to pin to MONICA_REF + PHP_VERSION because the ref points at a tag
       # with an immutable composer.lock.
       - name: Cache Monica vendor
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: /tmp/monica-source/vendor
           key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
@@ -198,11 +204,16 @@ jobs:
       contents: write  # needed for gh-pages auto-push (benchmark history)
     steps:
 
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
       - name: Checkout plugin
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
         with:
           php-version: ${{ env.PHP_VERSION }}
           ini-values: opcache.enable_cli=1
@@ -220,7 +231,7 @@ jobs:
             "https://github.com/$MONICA_REPO" /tmp/monica
 
       - name: Cache Monica vendor
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: /tmp/monica/vendor
           key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
@@ -278,7 +289,7 @@ jobs:
           cat /tmp/benchmark-trend.json
 
       - name: Upload benchmark artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: benchmark-${{ github.sha }}
           path: |
@@ -287,7 +298,7 @@ jobs:
           retention-days: 90
 
       - name: Store benchmark trend
-        uses: benchmark-action/github-action-benchmark@v1
+        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
         with:
           tool: customSmallerIsBetter
           name: Plugin Performance
