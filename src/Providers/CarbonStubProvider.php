@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Providers;
 
 use Composer\InstalledVersions;
+use Psalm\LaravelPlugin\Util\StubFileFinder;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\Progress\Progress;
 
@@ -79,6 +80,18 @@ final class CarbonStubProvider
                     . 'CarbonPeriod / Translator / MessageFormatterMapper types may not resolve.',
                 );
             }
+        }
+
+        // Plugin-shipped stubs for Carbon's public API live in stubs/integrations/carbon/.
+        // They are kept outside stubs/common/ because Carbon is not part of Laravel
+        // (it ships as a transitive dependency via illuminate/support) and downstream
+        // projects can pin different Carbon majors. Loading is gated on the
+        // `nesbot/carbon` install check above so the plugin does not register stubs for
+        // a package the consumer does not actually use.
+        $integrationStubsDir = \dirname(__DIR__, 2) . '/stubs/integrations/carbon';
+
+        foreach (StubFileFinder::findIn($integrationStubsDir, $output) as $stub) {
+            $registration->addStubFile($stub);
         }
     }
 
