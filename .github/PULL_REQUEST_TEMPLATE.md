@@ -5,7 +5,7 @@
 <!-- Reference related issues with "Fixes #123" or "Closes #123". -->
 
 ## Solution Description
-<!-- How did you verify the change works? e.g. new type test, unit test, manual testing -->
+<!-- How did you verify the change works? e.g., new type test, unit test, manual testing. Why over what. -->
 
 ## Checklist
 - [ ] Tests cover the change (type test in `tests/Type/` and/or unit test in `tests/Unit/`)

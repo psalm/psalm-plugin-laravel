@@ -21,7 +21,7 @@ jobs:
   typos:
     name: Check for typos
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
@@ -32,6 +32,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Check for typos
+        # Configuration lives in _typos.toml at the repo root.
+        # Default path (.) scans the whole tree; vendor/build and other noise
+        # are excluded via extend-exclude in _typos.toml.
         uses: crate-ci/typos@aca895bf05aec0cb7dffa6f94495e923224d9f17 # v1.46.2
-        with:
-          files: README.md src docs
