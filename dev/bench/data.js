@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779029824072,
+  "lastUpdate": 1779036122418,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4542,6 +4542,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.5,
             "range": "± 0.31",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "11cdaaba16d7f13a5d7ff79ac887e7e4ca73fad4",
+          "message": "fix(stubs): resolve Carbon cascade + narrow dual-purpose method returns #922 (#950)\n\n* fix(stubs): canonicalise Carbon lazy stub paths + narrow CarbonPeriod iterator #922\n\n`CarbonStubProvider` passed `InstalledVersions::getInstallPath('nesbot/carbon')`\nstraight into `RegistrationInterface::addStubFile()`. Composer returns that path\nwith a `..` segment (e.g. `vendor/composer/../nesbot/carbon`), but PHP's\n`ReflectionClass::getFileName()` returns the canonical realpath. When Psalm's\nstub scanner reaches `if (!class_exists(DatePeriodBase::class, false))` inside\nCarbon's lazy file:\n\n1. The plugin's `ApplicationProvider::bootApp()` boot has already autoloaded\n   `Carbon\\CarbonPeriod`, whose top-level `require` declared `DatePeriodBase`\n   at PHP runtime, so `class_exists()` returns true.\n2. `ExpressionResolver::enterConditional()` compares the reflected file name\n   against the scanner's `$file_path`. The `..` segment makes them differ.\n3. Psalm treats the class as \"declared elsewhere\", returns `true`, the\n   surrounding `BooleanNot` flips it to `false`, and `ReflectorVisitor` sets\n   `skip_if_descendants` — the guarded `class DatePeriodBase {}` declaration\n   is silently dropped.\n4. `CarbonPeriod`'s `extends DatePeriodBase` stays an `invalid_dependency` and\n   downstream callers see `MissingDependency` plus cascading\n   `MixedAssignment` / `RawObjectIteration` errors.\n\nRunning `realpath()` on the path before `addStubFile()` makes the comparison\nmatch and Psalm registers the stub class as intended.\n\n`stubs/common/Carbon/CarbonPeriod.phpstub` is kept on top of the realpath\nfix: even with `DatePeriodBase` resolved, Carbon's untemplated\n`getIterator(): Generator` collapses `collect(CarbonPeriod::create(...))` to\n`Collection<int, mixed>`. The stub pins\n`@implements IteratorAggregate<int, CarbonInterface>` so the iterable template\nbinds to `CarbonInterface`. `\\IteratorAggregate` is added to the explicit\n`implements` clause because Psalm's `implementTemplatedType()` validates\n`@implements` against `class_implements` at scan time, before parent-storage\nmerging.\n\n`tests/Type/tests/CarbonPeriodCollectTest.phpt` pins\n`Collection<int, CarbonInterface>` from\n`collect(CarbonPeriod::create(...))`. Verified empirically: each of the three\ndefects (realpath fix, IteratorAggregate template, CarbonPeriod existence\nitself) fails the test independently when reverted.\n\nReal-world impact on `vito` (per `psalm-pr-delta`): all three Carbon issues at\n`database/seeders/MetricsSeeder.php:25-26` — `MissingDependency`,\n`MixedAssignment`, `RawObjectIteration` — clear with this change.\n\n* feat(stubs): narrow Carbon dual-purpose getter/setter return types\n\nCarbon declares several methods as `static|int` or `static|string` unions\nbecause they double as getters and setters: passing `null` (default) acts as\na getter returning the unit, any non-null value acts as a setter returning a\nnew instance. Callers see the raw union and cannot rely on either branch.\n\nAdd stubs that pin a conditional return type for the affected methods:\n\n- `Carbon\\Traits\\Date::isoWeekday`  — `int<1, 7>` or `static`\n- `Carbon\\Traits\\Date::weekday`     — `int<0, 6>` or `static`\n- `Carbon\\Traits\\Date::dayOfYear`   — `int<1, 366>` or `static`\n- `Carbon\\Traits\\Date::utcOffset`   — `int` or `static`\n- `Carbon\\Traits\\Date::tz`          — `string` or `static`\n- `Carbon\\Traits\\Localization::locale` — `string` or `static`\n\nStubbing at the trait level propagates to every class using the trait\n(`Carbon\\Carbon`, `Carbon\\CarbonImmutable`) without duplicating the\ndeclarations per concrete class.\n\n`Carbon\\CarbonInterface` is also stubbed for the same six methods — interface\ndocblocks do not propagate down to trait method definitions in Psalm, so\ncallers typed on `CarbonInterface` need the narrowing repeated at the\ninterface layer. The class redeclarations copy the verbatim `extends` clause\nfrom upstream to avoid the \"class declarations wipe reflected metadata\"\ntrap documented in CLAUDE.md.\n\nRegression coverage:\n- `CarbonIsoWeekdayTest.phpt` covers concrete-class narrowing.\n- `CarbonIsoWeekdayInterfaceTest.phpt` covers interface-typed narrowing.",
+          "timestamp": "2026-05-17T18:39:18+02:00",
+          "tree_id": "8f9a2fccc39d6c17eed66b62ccf5368222d9249a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/11cdaaba16d7f13a5d7ff79ac887e7e4ca73fad4"
+        },
+        "date": 1779036121779,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.55,
+            "range": "± 0.29",
             "unit": "s"
           },
           {
