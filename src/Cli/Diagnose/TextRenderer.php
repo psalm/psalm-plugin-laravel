@@ -27,28 +27,32 @@ final class TextRenderer
     {
         $lines = [
             '[Versions]',
-            '  Plugin   : ' . ($report->pluginVersion ?? '(unknown)'),
-            '  Laravel  : ' . ($report->laravelVersion ?? '(unknown)'),
-            '  Psalm    : ' . ($report->psalmVersion ?? '(unknown)'),
-            '  PHP      : ' . $report->phpVersion,
+            'Plugin: ' . ($report->pluginVersion ?? '(unknown)'),
+            'Laravel: ' . ($report->laravelVersion ?? '(unknown)'),
+            'Psalm: ' . ($report->psalmVersion ?? '(unknown)'),
+            '',
+            '[PHP]',
+            'Runtime version: ' . $report->phpRuntimeVersion,
+            'composer.json required version: ' . ($report->phpRequiredVersion ?? '(unknown)'),
+            'Version for analysis: ' . $report->phpAnalysisVersion . ' (from ' . $report->phpAnalysisSource . ')',
             '',
             '[Boot mode]',
         ];
 
         if ($report->bootError !== null) {
-            $lines[] = '  Status   : FAILED';
-            $lines[] = '  Error    : ' . $report->bootError;
+            $lines[] = 'Status: FAILED';
+            $lines[] = 'Error: ' . $report->bootError;
         } else {
             $label = $report->bootMode !== null ? self::BOOT_MODE_LABELS[$report->bootMode] ?? null : null;
-            $lines[] = '  Mode     : ' . ($label ?? '(unknown)');
-            $lines[] = '  Path     : ' . ($report->bootPath ?? '(unknown)');
+            $lines[] = 'Mode: ' . ($label ?? '(unknown)');
+            $lines[] = 'Path: ' . ($report->bootPath ?? '(unknown)');
         }
 
         if ($report->hardFailures !== []) {
             $lines[] = '';
             $lines[] = '[Hard failures]';
             foreach ($report->hardFailures as $failure) {
-                $lines[] = '  ! ' . $failure;
+                $lines[] = '! ' . $failure;
             }
         }
 

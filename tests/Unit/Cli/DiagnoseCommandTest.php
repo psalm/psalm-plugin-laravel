@@ -43,7 +43,10 @@ final class DiagnoseCommandTest extends TestCase
             pluginVersion: $base->pluginVersion,
             laravelVersion: $base->laravelVersion,
             psalmVersion: $base->psalmVersion,
-            phpVersion: $base->phpVersion,
+            phpRuntimeVersion: $base->phpRuntimeVersion,
+            phpRequiredVersion: $base->phpRequiredVersion,
+            phpAnalysisVersion: $base->phpAnalysisVersion,
+            phpAnalysisSource: $base->phpAnalysisSource,
             bootMode: null,
             bootPath: null,
             bootError: 'synthetic',
@@ -64,7 +67,9 @@ final class DiagnoseCommandTest extends TestCase
     {
         $report = (new Diagnostics())->collect();
 
-        $this->assertNotEmpty($report->phpVersion);
+        $this->assertNotEmpty($report->phpRuntimeVersion);
+        $this->assertNotEmpty($report->phpAnalysisVersion);
+        $this->assertContains($report->phpAnalysisSource, ['runtime', 'config.platform.php']);
         $this->assertContains($report->bootMode, ['bootstrap', 'testbench_fallback', null]);
     }
 
@@ -96,7 +101,10 @@ final class DiagnoseCommandTest extends TestCase
             pluginVersion: '4.0.0',
             laravelVersion: '13.9.0',
             psalmVersion: '7.0.0-beta19',
-            phpVersion: '8.4.0',
+            phpRuntimeVersion: '8.4.0',
+            phpRequiredVersion: '8.2.0-9.0.0',
+            phpAnalysisVersion: '8.4.0',
+            phpAnalysisSource: 'runtime',
             bootMode: 'bootstrap',
             bootPath: '/app/bootstrap/app.php',
             bootError: null,

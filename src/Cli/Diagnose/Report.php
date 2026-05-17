@@ -18,13 +18,17 @@ final readonly class Report
 {
     /**
      * @param 'bootstrap'|'testbench_fallback'|null $bootMode
+     * @param 'runtime'|'config.platform.php' $phpAnalysisSource
      * @param list<string> $hardFailures
      */
     public function __construct(
         public ?string $pluginVersion,
         public ?string $laravelVersion,
         public ?string $psalmVersion,
-        public string $phpVersion,
+        public string $phpRuntimeVersion,
+        public ?string $phpRequiredVersion,
+        public string $phpAnalysisVersion,
+        public string $phpAnalysisSource,
         public ?string $bootMode,
         public ?string $bootPath,
         public ?string $bootError,
