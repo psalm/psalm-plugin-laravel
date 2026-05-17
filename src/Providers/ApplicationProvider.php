@@ -271,6 +271,12 @@ final class ApplicationProvider
      * {@see PackageManifest} against the project root. Per-provider try/catch keeps a
      * single bad vendor `register()`/`boot()` from disabling the plugin.
      *
+     * Two provider sources are merged:
+     *   1. `vendor/composer/installed.json` via `PackageManifest::build()` — covers dependencies.
+     *   2. Project root `composer.json` under `extra.laravel.providers` — covers the package's
+     *      OWN provider when Psalm analyses the package's source repo (corcel, laravel-excel,
+     *      imdhemy/laravel-purchases, etc.). `PackageManifest` never reads the root manifest.
+     *
      * Deliberate divergence from Laravel's own {@see \Illuminate\Foundation\ProviderRepository::load()}:
      * that loader partitions providers into eager vs deferred via `provides()` and wires
      * deferred providers to resolve on first container hit. We register every discovered
@@ -322,6 +328,8 @@ final class ApplicationProvider
             @\unlink($manifestPath);
         }
 
+        $providers = [...$providers, ...$this->readRootComposerProviders($projectRoot)];
+
         foreach ($providers as $providerFqcn) {
             try {
                 $app->register($providerFqcn);
@@ -329,6 +337,62 @@ final class ApplicationProvider
                 // vendor register()/boot() threw — keep going so other bindings still resolve
             }
         }
+    }
+
+    /**
+     * Read providers from the project root's `composer.json` under `extra.laravel.providers`.
+     *
+     * Used by {@see self::registerDiscoveredVendorProviders()} to cover the case where
+     * Psalm analyses a Laravel package's own source repo: the package's provider is
+     * declared in the ROOT manifest, not in `vendor/composer/installed.json`, so
+     * `PackageManifest::build()` never sees it. Returns an empty list on any read /
+     * decode failure or shape mismatch — vendor discovery is best-effort.
+     *
+     * @return list<string>
+     */
+    private function readRootComposerProviders(string $projectRoot): array
+    {
+        $composerPath = $projectRoot . \DIRECTORY_SEPARATOR . 'composer.json';
+
+        if (!\is_file($composerPath)) {
+            return [];
+        }
+
+        $contents = @\file_get_contents($composerPath);
+
+        if ($contents === false) {
+            return [];
+        }
+
+        try {
+            /** @var mixed $decoded */
+            $decoded = \json_decode($contents, true, 512, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return [];
+        }
+
+        if (!\is_array($decoded) || !isset($decoded['extra']) || !\is_array($decoded['extra'])) {
+            return [];
+        }
+
+        if (!isset($decoded['extra']['laravel']) || !\is_array($decoded['extra']['laravel'])) {
+            return [];
+        }
+
+        if (!isset($decoded['extra']['laravel']['providers']) || !\is_array($decoded['extra']['laravel']['providers'])) {
+            return [];
+        }
+
+        $providers = [];
+
+        /** @psalm-var mixed $provider */
+        foreach ($decoded['extra']['laravel']['providers'] as $provider) {
+            if (\is_string($provider) && $provider !== '') {
+                $providers[] = $provider;
+            }
+        }
+
+        return $providers;
     }
 
     /**
