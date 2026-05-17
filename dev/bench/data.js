@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779036122418,
+  "lastUpdate": 1779038324148,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4582,6 +4582,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "41392c4d84b1a7381ec8c137d5f37362bf214cd9",
+          "message": "fix(boot): tolerate partial Laravel bootstrap #952\n\nPlugin's eager `\\$consoleApp->bootstrap()` runs Laravel's standard\nbootstrappers (LoadConfiguration, RegisterFacades, RegisterProviders,\nBootProviders). LoadConfiguration `require`s every \\`config/*.php\\` —\na single fatal in any of them (e.g. \\`parse_url(env('UNSET_VAR'))\\`\nreturning null on PHP 8.1+, a common Laravel-app pattern) aborts the\nwhole bootstrap chain and disables the plugin for the run.\n\nWrap the bootstrap call in try/catch so partial state is acceptable.\nThe 'config' binding is created before LoadConfiguration iterates files,\nso handlers reading config still see whatever loaded prior to the\nthrow. RegisterFacades/Providers/BootProviders may not run; handlers\nthat depend on those bindings already tolerate misses (same swallow\nsemantics as Plugin::__invoke's outer try/catch).\n\nExpose the captured Throwable via getBootstrapError() so the diagnose\nreport can surface it as a soft warning rather than hard failure.\n\nVerified across 16 benchmark apps: vito 3406→3402 issues (noise),\nunit3d's diagnose moves from FAILED ('parse_url null') to clean boot,\n16/16 apps now report a successful bootMode.",
+          "timestamp": "2026-05-17T19:06:56+02:00",
+          "tree_id": "40f4d120ad2a2029654e65e64e133726dcb0566b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/41392c4d84b1a7381ec8c137d5f37362bf214cd9"
+        },
+        "date": 1779038323440,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.54,
+            "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
             "unit": "MB"
           }
         ]
