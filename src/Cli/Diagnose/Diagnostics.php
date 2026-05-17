@@ -107,6 +107,7 @@ class Diagnostics
         if (\count($parts) >= 4 && $parts[3] === '0') {
             $parts = \array_slice($parts, 0, 3);
         }
+
         return \implode('.', $parts);
     }
 
@@ -173,6 +174,7 @@ class Diagnostics
         if (!\is_string($envFile) || \trim($envFile) === '') {
             return 'composer.json';
         }
+
         return \basename(\trim($envFile));
     }
 
@@ -190,7 +192,7 @@ class Diagnostics
             if (!\is_array($cursor) || !\array_key_exists($key, $cursor)) {
                 return null;
             }
-            /** @var mixed $cursor */
+
             $cursor = $cursor[$key];
         }
 
