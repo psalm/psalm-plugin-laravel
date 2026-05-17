@@ -118,7 +118,7 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
 
         \file_put_contents(
             $this->fakeProjectRoot . '/vendor/composer/installed.json',
-            (string) \json_encode($installedJson, \JSON_THROW_ON_ERROR),
+            \json_encode($installedJson, \JSON_THROW_ON_ERROR),
         );
     }
 
@@ -134,7 +134,7 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
         );
 
         foreach ($iterator as $entry) {
-            \assert($entry instanceof \SplFileInfo);
+            $this->assertInstanceOf(\SplFileInfo::class, $entry);
             $entryPath = $entry->getPathname();
 
             if ($entry->isDir()) {
