@@ -35,7 +35,7 @@ class Diagnostics
         // failing on a bad `config/*.php`) never propagate to the catch above —
         // ApplicationProvider stashes them so diagnose can surface partial-boot state.
         $swallowed = ApplicationProvider::getBootstrapError();
-        if ($swallowed !== null) {
+        if ($swallowed instanceof \Throwable) {
             $bootstrapErrors[] = $swallowed->getMessage();
         }
 
