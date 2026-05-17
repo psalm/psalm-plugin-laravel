@@ -3,6 +3,7 @@
 namespace Illuminate\Foundation\Http;
 
 use Illuminate\Contracts\Validation\ValidatesWhenResolved;
+use Illuminate\Validation\ValidatesWhenResolvedTrait;
 
 /**
  * Class declaration mirrors Laravel's source. Psalm wipes the reflected
@@ -11,6 +12,8 @@ use Illuminate\Contracts\Validation\ValidatesWhenResolved;
  */
 class FormRequest extends \Illuminate\Http\Request implements ValidatesWhenResolved
 {
+    use ValidatesWhenResolvedTrait;
+
     /**
      * Get the validated data from the request.
      *
