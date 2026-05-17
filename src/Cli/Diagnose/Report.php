@@ -17,7 +17,7 @@ namespace Psalm\LaravelPlugin\Cli\Diagnose;
 final readonly class Report
 {
     /**
-     * @param 'user_kernel'|'vendor_bootstrap'|'testbench_fallback'|null $bootMode
+     * @param 'bootstrap'|'testbench_fallback'|null $bootMode
      * @param list<string> $hardFailures
      */
     public function __construct(

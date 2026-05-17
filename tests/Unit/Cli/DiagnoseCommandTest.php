@@ -31,7 +31,7 @@ final class DiagnoseCommandTest extends TestCase
 
         $this->assertSame(Command::SUCCESS, $exit, $display);
         $this->assertStringContainsString('[Versions]', $display);
-        $this->assertStringContainsString('[Boot mode (#766)]', $display);
+        $this->assertStringContainsString('[Boot mode]', $display);
         $this->assertStringNotContainsString('[Hard failures]', $display);
     }
 
@@ -65,7 +65,7 @@ final class DiagnoseCommandTest extends TestCase
         $report = (new Diagnostics())->collect();
 
         $this->assertNotEmpty($report->phpVersion);
-        $this->assertContains($report->bootMode, ['user_kernel', 'vendor_bootstrap', 'testbench_fallback', null]);
+        $this->assertContains($report->bootMode, ['bootstrap', 'testbench_fallback', null]);
     }
 
     private function testerFor(Diagnostics $diagnostics): CommandTester
@@ -97,7 +97,7 @@ final class DiagnoseCommandTest extends TestCase
             laravelVersion: '13.9.0',
             psalmVersion: '7.0.0-beta19',
             phpVersion: '8.4.0',
-            bootMode: 'user_kernel',
+            bootMode: 'bootstrap',
             bootPath: '/app/bootstrap/app.php',
             bootError: null,
             hardFailures: [],

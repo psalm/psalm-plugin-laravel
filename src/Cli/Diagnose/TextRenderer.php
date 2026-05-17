@@ -18,8 +18,7 @@ final class TextRenderer
 {
     /** Presentation labels for boot modes — kept here (not in ApplicationProvider) since this is purely UI text. */
     private const BOOT_MODE_LABELS = [
-        'user_kernel' => 'user kernel (real bootstrap/app.php discovered)',
-        'vendor_bootstrap' => 'vendor-relative bootstrap (plugin installed in vendor/)',
+        'bootstrap' => 'real bootstrap/app.php discovered',
         'testbench_fallback' => 'Testbench fallback',
     ];
 
@@ -33,7 +32,7 @@ final class TextRenderer
             '  Psalm    : ' . ($report->psalmVersion ?? '(unknown)'),
             '  PHP      : ' . $report->phpVersion,
             '',
-            '[Boot mode (#766)]',
+            '[Boot mode]',
         ];
 
         if ($report->bootError !== null) {

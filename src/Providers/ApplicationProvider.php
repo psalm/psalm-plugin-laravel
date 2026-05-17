@@ -22,9 +22,13 @@ final class ApplicationProvider
     /**
      * Records which {@see doGetApp()} branch resolved the Laravel app.
      *
-     * Values: 'user_kernel' | 'vendor_bootstrap' | 'testbench_fallback'.
+     * Values: 'bootstrap' | 'testbench_fallback'. The two `bootstrap/app.php`
+     * lookups (cwd-relative and vendor-parent-relative) collapse into one mode
+     * since {@see $bootPath} already discloses *which* file was loaded.
      * Kept as a plain string (not an enum) since it's only read by
      * `bin/psalm-laravel diagnose` and never compared against typed cases.
+     *
+     * @psalm-var 'bootstrap'|'testbench_fallback'|null
      */
     private static ?string $bootMode = null;
 
@@ -43,7 +47,7 @@ final class ApplicationProvider
      * Null until the app has been booted via {@see bootApp()} or {@see getApp()}.
      * Read by `bin/psalm-laravel diagnose` to surface the #766 silent-Testbench-fallback case.
      *
-     * @return 'user_kernel'|'vendor_bootstrap'|'testbench_fallback'|null
+     * @return 'bootstrap'|'testbench_fallback'|null
      *
      * @psalm-external-mutation-free
      */
@@ -53,9 +57,8 @@ final class ApplicationProvider
     }
 
     /**
-     * Path actually used to bootstrap the Laravel app — either the resolved
-     * `bootstrap/app.php` (user_kernel / vendor_bootstrap) or the Testbench
-     * skeleton root (testbench_fallback).
+     * Path actually used to bootstrap the Laravel app — either the resolved `bootstrap/app.php` (bootstrap mode)
+     * or the Testbench skeleton root (testbench_fallback).
      *
      * Null until the app has been booted.
      *
@@ -91,26 +94,13 @@ final class ApplicationProvider
             \define('LARAVEL_START', \microtime(true));
         }
 
-        if (\file_exists($applicationPath = (\getcwd() ?: '.') . '/bootstrap/app.php')) { // Applications and Local Dev
-            /** @psalm-suppress MixedAssignment */
-            $app = require $applicationPath;
-            assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
-            self::$bootMode = 'user_kernel';
-            self::$bootPath = $applicationPath;
-        } elseif (\file_exists($applicationPath = \dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
-            /** @psalm-suppress MixedAssignment */
-            $app = require $applicationPath;
-            assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
-            self::$bootMode = 'vendor_bootstrap';
-            self::$bootPath = $applicationPath;
-        } else { // Laravel Packages
-            /** @psalm-suppress InternalMethod */
-            $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
-
-            $this->retargetConfigPathAtProjectRoot($app);
-            self::$bootMode = 'testbench_fallback';
-            self::$bootPath = $app->basePath();
-        }
+        // Resolution order:
+        //   1. cwd-relative bootstrap/app.php — Applications and local dev (Psalm run from project root).
+        //   2. vendor-parent-relative bootstrap/app.php — plugin installed into a project's vendor/.
+        //   3. Orchestra Testbench skeleton — Laravel packages with no host app (e.g. test:type).
+        $app = $this->bootFromBootstrapFile((\getcwd() ?: '.') . '/bootstrap/app.php')
+            ?? $this->bootFromBootstrapFile(\dirname(__DIR__, 5) . '/bootstrap/app.php')
+            ?? $this->bootFromTestbench();
 
         self::$app = $app;
 
@@ -138,6 +128,44 @@ final class ApplicationProvider
 
             self::$booted = true;
         }
+
+        return $app;
+    }
+
+    /**
+     * Require a `bootstrap/app.php` from $path and return its Application, or
+     * null if the file does not exist. Records `bootMode = 'bootstrap'` and the
+     * resolved path as a side effect on success.
+     */
+    private function bootFromBootstrapFile(string $path): ?LaravelApplication
+    {
+        if (!\file_exists($path)) {
+            return null;
+        }
+
+        /** @psalm-suppress MixedAssignment */
+        $app = require $path;
+        assert($app instanceof LaravelApplication, 'bootstrap/app.php did not return an Application instance: ' . $path);
+
+        self::$bootMode = 'bootstrap';
+        self::$bootPath = $path;
+
+        return $app;
+    }
+
+    /**
+     * Fall back to Orchestra Testbench when no `bootstrap/app.php` is reachable
+     * (Laravel package analysis, plugin self-test).
+     */
+    private function bootFromTestbench(): LaravelApplication
+    {
+        /** @psalm-suppress InternalMethod */
+        $app = (new self())->createApplication();
+
+        $this->retargetConfigPathAtProjectRoot($app);
+
+        self::$bootMode = 'testbench_fallback';
+        self::$bootPath = $app->basePath();
 
         return $app;
     }
