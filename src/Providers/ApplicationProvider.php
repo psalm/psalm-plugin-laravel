@@ -6,7 +6,9 @@ namespace Psalm\LaravelPlugin\Providers;
 
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Application as LaravelApplication;
+use Illuminate\Foundation\PackageManifest;
 use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
@@ -129,7 +131,13 @@ final class ApplicationProvider
 
         self::$app = $app;
 
-        // Initialize view system first
+        // Initialize view system first. Must precede vendor-provider registration: the
+        // app is already booted by createApplication() / bootstrap/app.php, so each
+        // $app->register() in registerDiscoveredVendorProviders() triggers the
+        // provider's boot() inline. Many vendor packages (Filament, Livewire, Telescope,
+        // etc.) touch View::composer() or Blade::component() in boot(); without a 'view'
+        // binding those throw BindingResolutionException and the per-provider try/catch
+        // silently swallows the failure.
         if (!$app->bound('view')) {
             $filesystem = new \Illuminate\Filesystem\Filesystem();
             $viewFinder = new FileViewFinder($filesystem, []);
@@ -138,6 +146,14 @@ final class ApplicationProvider
             /** @var \Illuminate\Contracts\Events\Dispatcher $events */
             $events = $app['events'];
             $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events));
+        }
+
+        // Branch 3 only: register Composer-discovered vendor providers that Testbench's
+        // swapped PackageManifest filters out via `ignorePackageDiscoveriesFrom() === ['*']`.
+        // The `bootMode` sentinel is set by `bootFromTestbench()`. View must be bound first
+        // (handled above) — many vendor `boot()` methods touch `View::composer()`.
+        if (self::$bootMode === 'testbench_fallback') {
+            $this->registerDiscoveredVendorProviders($app);
         }
 
         if (!self::$booted) {
@@ -225,17 +241,8 @@ final class ApplicationProvider
      * may not handle a real-but-empty project tree well — leaving them at the
      * Testbench skeleton keeps that behaviour unchanged.
      *
-     * Resolution order for the project root:
-     *   1. Testbench's documented escape hatch — `$_ENV['APP_BASE_PATH']` or
-     *      `$_ENV['TESTBENCH_APP_BASE_PATH']`. Lets users pin a specific anchor
-     *      (monorepos, sub-directory Psalm runs).
-     *   2. `getcwd()` if it contains a `composer.json`. The composer manifest is
-     *      a strong signal that cwd IS the project we want Laravel to "see";
-     *      Psalm anchors at this directory by default. This handles every
-     *      conventional Laravel package without configuration.
-     *   3. No anchor identified — leave the Testbench skeleton path in place
-     *      (the previous behaviour). Better to keep working defaults than point
-     *      at a wrong path that wasn't requested.
+     * Project root resolution is delegated to {@see self::resolveProjectRoot()}
+     * (shared with {@see self::registerDiscoveredVendorProviders()}).
      *
      * Only branch 3 of {@see self::doGetApp()} calls this — for projects with a
      * real `bootstrap/app.php`, that file's Application instance is used verbatim
@@ -245,22 +252,111 @@ final class ApplicationProvider
      */
     private function retargetConfigPathAtProjectRoot(LaravelApplication $app): void
     {
+        $projectRoot = $this->resolveProjectRoot();
+
+        if ($projectRoot === null) {
+            return;
+        }
+
+        $app->useConfigPath($projectRoot . \DIRECTORY_SEPARATOR . 'config');
+    }
+
+    /**
+     * Register Composer-discovered vendor providers in branch-3 (package-source) boots.
+     *
+     * Testbench's swapped {@see \Orchestra\Testbench\Foundation\PackageManifest} honors
+     * `ignorePackageDiscoveriesFrom() === ['*']` and registers zero vendor providers,
+     * which breaks any custom Facade whose accessor is a string alias bound by a
+     * vendor's `register()`. We bypass that by running the framework's own
+     * {@see PackageManifest} against the project root. Per-provider try/catch keeps a
+     * single bad vendor `register()`/`boot()` from disabling the plugin.
+     *
+     * Deliberate divergence from Laravel's own {@see \Illuminate\Foundation\ProviderRepository::load()}:
+     * that loader partitions providers into eager vs deferred via `provides()` and wires
+     * deferred providers to resolve on first container hit. We register every discovered
+     * provider eagerly because static analysis never performs the container hit that
+     * would trigger a deferred provider, and the missing Facade-accessor binding the
+     * #942 fix targets typically lives in a deferred provider's `register()`.
+     *
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/942
+     */
+    private function registerDiscoveredVendorProviders(LaravelApplication $app): void
+    {
+        $projectRoot = $this->resolveProjectRoot();
+
+        if ($projectRoot === null) {
+            return;
+        }
+
+        // Per-process scratch manifest. `PackageManifest::build()` writes the discovered
+        // configuration to disk; PID + random fallback gives each Psalm run a unique
+        // file (`getmypid()` is documented as `int|false`, hence the fallback). We do
+        // not pre-check `vendor/composer/installed.json`: `PackageManifest` honors the
+        // `COMPOSER_VENDOR_DIR` env var internally and treats a missing file as an
+        // empty manifest (so the foreach below simply iterates zero providers).
+        //
+        // The shutdown cleanup runs in every PID that inherits this closure — Psalm 7
+        // forks scanner workers via pcntl, and their `exit()` triggers shutdown handlers
+        // too. The `@` is load-bearing: it suppresses warnings on the inevitable
+        // double-unlink race between parent and workers (and on any read-only $TMPDIR
+        // that lets PackageManifest::build() write but blocks unlink). The manifest is
+        // consumed synchronously before any fork, so post-fork removal is harmless.
+        $pid = \getmypid();
+        $manifestPath = \sys_get_temp_dir()
+            . \DIRECTORY_SEPARATOR
+            . 'psalm-laravel-pkg-'
+            . ($pid !== false ? (string) $pid : \bin2hex(\random_bytes(4)))
+            . '.php';
+        \register_shutdown_function(static function () use ($manifestPath): void {
+            @\unlink($manifestPath);
+        });
+
+        $packageManifest = new PackageManifest(new Filesystem(), $projectRoot, $manifestPath);
+
+        try {
+            /** @var list<string> $providers */
+            $providers = $packageManifest->providers();
+        } catch (\Throwable) {
+            // Malformed installed.json, or `PackageManifest::write()` threw because the
+            // tmp dir is not writable (locked-down CI sandboxes). Fall back to current
+            // Testbench-only behaviour (no vendor discovery) rather than aborting boot.
+            return;
+        }
+
+        foreach ($providers as $providerFqcn) {
+            try {
+                $app->register($providerFqcn);
+            } catch (\Throwable) {
+                // vendor register()/boot() threw — keep going so other bindings still resolve
+            }
+        }
+    }
+
+    /**
+     * Resolve the branch-3 project root (where the package being analysed lives).
+     *
+     * Order:
+     *   1. `$_ENV['APP_BASE_PATH']` / `$_ENV['TESTBENCH_APP_BASE_PATH']` — Testbench's
+     *      documented escape hatch (monorepos, sub-directory Psalm runs).
+     *   2. `getcwd()` if it contains a `composer.json` (Psalm's default anchor).
+     *   3. Null — callers leave Testbench defaults rather than guessing.
+     */
+    private function resolveProjectRoot(): ?string
+    {
         $envOverride = $this->readEnvOverride('APP_BASE_PATH')
             ?? $this->readEnvOverride('TESTBENCH_APP_BASE_PATH');
 
         if ($envOverride !== null) {
-            $projectRoot = $envOverride;
-        } else {
-            $cwd = \getcwd();
-
-            if (!\is_string($cwd) || !\is_file($cwd . \DIRECTORY_SEPARATOR . 'composer.json')) {
-                return;
-            }
-
-            $projectRoot = $cwd;
+            return $envOverride;
         }
 
-        $app->useConfigPath($projectRoot . \DIRECTORY_SEPARATOR . 'config');
+        $cwd = \getcwd();
+
+        if (!\is_string($cwd) || !\is_file($cwd . \DIRECTORY_SEPARATOR . 'composer.json')) {
+            return null;
+        }
+
+        return $cwd;
     }
 
     /**
