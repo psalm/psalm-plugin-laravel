@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779051733270,
+  "lastUpdate": 1779055817717,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4787,6 +4787,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.53,
             "range": "± 0.43",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1adca4d9cac880f31ac326b90ae53b82f9436f85",
+          "message": "Resolve `Model::factory()->create()` collapse on bare `HasFactory` (#964)\n\n* fix(eloquent): resolve Model::factory() concrete factory class #960\n\nAlternative to #961 — uses Laravel's `Factory::resolveFactoryName()` API\n(the same lookup Larastan does in\n`ModelFactoryDynamicStaticMethodReturnTypeExtension`) so that a model\nwritten as `use HasFactory;` resolves to its concrete `XFactory`\nsubclass when discoverable, not just the generic `Factory<X, null>`.\nThe downstream chain then exposes subclass-specific state methods\n(`forUser()`, `withOwner()`, etc.) without forcing the user to write\n`@use HasFactory<XFactory>` on every model.\n\nDiscovery, mirroring `HasFactory::newFactory()`:\n  1. `#[UseFactory(XFactory::class)]` attribute on the model.\n  2. `Factory::resolveFactoryName($modelFqcn)` — Laravel naming\n     convention, `App\\Models\\Bookshelf` → `Database\\Factories\\BookshelfFactory`.\n  3. Fallback to `Factory<modelFqcn, null>` so the chain still resolves\n     `count(N)->make()` to `Collection<int, modelFqcn>`.\n\nThe concrete factory is returned only when its storage carries\n`@extends Factory<X>` to a Model subclass; without that binding,\n`FactoryCountTypeProvider` cannot recover TModel from the receiver's\nclass alone and the chain would downgrade to base `Model`. Real-world\nfactories (BookStack, ChapterFactory, etc.) often omit `@extends` and\nrely on the runtime `protected $model = X::class` property, so the\ngeneric fallback is strictly more useful in that case.\n\n`FactoryCountTypeProvider` gains the same Tier-3 `Model` fallback as\n#961 for any path that emits a bare `Factory` (e.g. `__callStatic` on\na Facade), and `isModelType()` switches from `is_a()` to a\n`classlike_storage_provider` lineage check that handles PHPT fixture\nclasses Psalm has scanned but PHP cannot autoload at handler runtime.\n\nVerified on real apps (alt vs #961 baseline):\n  - bookstack v26.03.3: 2693 → 2693 (identical; no factory has @extends,\n    falls back equivalently)\n  - solidtime: 959 → 959 (identical; uses @use HasFactory<X> escape\n    hatch on every model, both branches defer to the stub)\n  - monica: 4466 → 4429 (-37; @extends Factory<X> factories trigger\n    Tier 2, exposing deeper analysis and eliminating Mixed/PossiblyNull\n    false positives on the chain)\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-18T00:07:45+02:00",
+          "tree_id": "d402d4a39e19061795277c7b1870927cb1d999bf",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1adca4d9cac880f31ac326b90ae53b82f9436f85"
+        },
+        "date": 1779055816664,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.06,
+            "range": "± 0.14",
             "unit": "s"
           },
           {
