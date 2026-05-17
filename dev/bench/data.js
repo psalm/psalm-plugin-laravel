@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779055817717,
+  "lastUpdate": 1779059138581,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4822,6 +4822,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.06,
             "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "22cd348723e533007bc4d89d5c828c7ff22a5f2e",
+          "message": "fix(stubs): ship Carbon\\Constants interface stubs #922\n\nCarbon 3.11 extracted DiffOptions, Format, TranslationOptions, and\nUnitValue into a dedicated Carbon\\Constants namespace and added them\nto CarbonInterface's extends clause. CarbonInterface.phpstub mirrors\nthat clause verbatim per the class-redeclaration rule, which makes\nplugin consumers pinned to Carbon <3.11 (e.g. Carbon 3.10.x) trip\nhundreds of MissingDependency errors for the four missing interfaces.\n\nShip the four Constants interfaces as plugin stubs (gated through the\nexisting nesbot/carbon install check in CarbonStubProvider) so they\nexist regardless of the consumer's Carbon minor version. Bodies are\ncopied verbatim from Carbon 3.11.4 source so projects that ARE on\n3.11+ get the same constant values that reflection would have given\nthem.\n\nBenchmark on monicahq/monica (Carbon 3.10.2): 6642 -> 5520 issues,\n1 -> 0 MissingDependency, type coverage 96.23% -> 96.24%.",
+          "timestamp": "2026-05-18T00:49:24+02:00",
+          "tree_id": "7ed07087dbd84f75c963f5060979013410985549",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/22cd348723e533007bc4d89d5c828c7ff22a5f2e"
+        },
+        "date": 1779059137545,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.52,
+            "range": "± 0.37",
             "unit": "s"
           },
           {
