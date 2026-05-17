@@ -108,6 +108,19 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
      *  2. The called class's `extends Factory<X>` binding (covers user
      *     subclasses like `class UserFactory extends Factory<User>` and
      *     static calls `UserFactory::times(N)`).
+     *  3. Last-resort fallback to base `Model`. Without this, an unbound
+     *     receiver (bare `Factory` with no template params and no subclass
+     *     binding — produced e.g. when a model uses `HasFactory` without
+     *     `@use HasFactory<XFactory>`) collapses through the stub's
+     *     `@return Factory<TModel, int|null>` and `make()`'s conditional
+     *     picks the single-model branch. Falling back to `Model` keeps the
+     *     `TCount` narrowing intact so `count(N)->make()` still resolves to
+     *     `Collection<int, Model>` (downgraded but iterable) rather than a
+     *     bare `Model`. Companion handler `ModelFactoryMethodTypeProvider`
+     *     covers the common case with precise `Factory<ConcreteModel>`.
+     *
+     * @see ModelFactoryMethodTypeProvider
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/960
      *
      * @psalm-mutation-free
      */
@@ -117,25 +130,53 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
 
         if ($templateParams !== null) {
             $modelType = $templateParams[0] ?? null;
-            if (self::isModelType($modelType)) {
+            if (self::isModelType($modelType, $codebase)) {
                 return $modelType;
             }
         }
 
         $calledClass = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
+        $resolved = self::resolveModelFromClass($calledClass, $codebase);
+        if ($resolved instanceof Union) {
+            return $resolved;
+        }
 
-        return self::resolveModelFromClass($calledClass, $codebase);
+        // Allocated per-fallback (rather than cached as a static) to keep
+        // resolveModelType()'s @psalm-mutation-free contract intact. This
+        // path only fires for unresolvable receivers — uncommon enough that
+        // the extra allocation does not warrant relaxing the purity marker.
+        return new Union([new TNamedObject(Model::class)]);
     }
 
-    /** @psalm-mutation-free */
-    private static function isModelType(?Union $type): bool
+    /**
+     * Lineage check via Psalm's class storage. `is_a()` was previously used here
+     * but breaks for classes Psalm scans yet PHP's autoloader cannot resolve
+     * at handler runtime (e.g. PHPT fixture models declared inline).
+     *
+     * @psalm-mutation-free
+     */
+    private static function isModelType(?Union $type, Codebase $codebase): bool
     {
         if (!$type instanceof Union) {
             return false;
         }
 
         foreach ($type->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject || !\is_a($atomic->value, Model::class, true)) {
+            if (!$atomic instanceof TNamedObject) {
+                return false;
+            }
+
+            if ($atomic->value === Model::class) {
+                continue;
+            }
+
+            try {
+                $storage = $codebase->classlike_storage_provider->get($atomic->value);
+            } catch (\InvalidArgumentException) {
+                return false;
+            }
+
+            if (!isset($storage->parent_classes[\strtolower(Model::class)])) {
                 return false;
             }
         }
@@ -170,7 +211,7 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
 
         $modelType = $extended['TModel'] ?? null;
 
-        return self::isModelType($modelType) ? $modelType : null;
+        return self::isModelType($modelType, $codebase) ? $modelType : null;
     }
 
     /**
