@@ -113,6 +113,10 @@ When a **class stub and a trait stub** both declare the same method, Psalm creat
 
 Stub files are loaded in alphabetical order (sorted by full path) to ensure deterministic results across OSes.
 
+### Duplicate FQCN detection
+
+Stubs are outside Composer's PSR-4 reach, so duplicate class declarations cause no autoloader error. Psalm silently lets the last-loaded one win. `composer detect:collisions` catches them. It runs per stub bucket (`stubs/common/`, each `stubs/<version>/`, each `stubs/integrations/<package>/`) so intentional cross-bucket overrides do not flag. Part of `composer test` and CI.
+
 ## How to add a handler
 
 Handlers implement Psalm event interfaces to override type inference.

@@ -9,6 +9,7 @@ on:
       - '**.phpt'
       - '**.yml'
       - 'composer.json'
+      - 'tests/scripts/**'
   pull_request:
     paths:
       - '**.php'
@@ -16,6 +17,7 @@ on:
       - '**.phpt'
       - 'composer.json'
       - '.github/workflows/tests.yml'
+      - 'tests/scripts/**'
   schedule:
     # Weekly on Friday at 06:00 UTC
     - cron: "0 6 * * 5"
@@ -54,6 +56,9 @@ jobs:
 
       - name: Run Unit tests
         run: composer test:unit
+
+      - name: Detect stub FQCN collisions
+        run: composer detect:collisions
 
 
   type_tests:
