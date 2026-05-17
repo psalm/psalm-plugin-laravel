@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779040166956,
+  "lastUpdate": 1779045103972,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4647,6 +4647,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.89,
             "range": "± 0.22",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "71ef9c82527e849749a03f1008be167636afc371",
+          "message": "fix(diagnose): annotate $cursor reassignment as mixed #952\n\n`$cursor[$key]` returns mixed, so without the docblock Psalm\nflags MixedAssignment on the reassignment inside readNestedString.\nThe existing annotation only covered the initial assignment.",
+          "timestamp": "2026-05-17T20:51:34+02:00",
+          "tree_id": "ab8f0dca3cf91dda7e1be82a772c1feb06b68c1c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/71ef9c82527e849749a03f1008be167636afc371"
+        },
+        "date": 1779045102954,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.89,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
