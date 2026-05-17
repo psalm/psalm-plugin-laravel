@@ -1,26 +1,36 @@
-# Lints GitHub Actions workflow files for syntactic correctness and supply-chain
-# security issues. Adapted from phpstan-src 2.2.x. Each tool emits SARIF that lands
-# in the repo's Security tab so findings are tracked alongside CodeQL results.
+# Lints GitHub Actions workflow files for syntactic correctness and supply-chain security issues.
+# Each tool emits SARIF that lands in the repo's Security tab so findings are tracked alongside CodeQL results.
 #
 # actionlint: shellcheck + YAML/expression syntax for workflows.
-# octoscan:   static analysis for GitHub Actions (untrusted input, injection sinks).
-# poutine:    supply-chain scanner (unpinned actions, dangerous triggers).
-# zizmor:     workflow auditor (script injection, pwn-request, self-hosted abuse).
+# octoscan: static analysis for GitHub Actions (untrusted input, injection sinks).
+# poutine: supply-chain scanner (unpinned actions, dangerous triggers).
+# zizmor: workflow auditor (script injection, pwn-request, self-hosted abuse).
 
 name: Lint GitHub Actions workflows
 
 on:
   pull_request:
+    paths:
+      - '.github/**'
   push:
     branches:
       - master
       - "3.x"
+    paths:
+      - '.github/**'
 
 permissions: {}
 
 concurrency:
   group: lint-workflows-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
+
+env:
+  # Pin actionlint version explicitly so we don't drift to a newer release between runs.
+  ACTIONLINT_VERSION: "1.7.12"
+  # Pin the download script to a commit SHA so a compromised `main` branch in rhysd/actionlint
+  # cannot replace the bootstrap with a malicious payload.
+  ACTIONLINT_INSTALL_SHA: "3795ba2f6cb243eeca54c9d22e5c531cb9dcfb4a"
 
 jobs:
   actionlint:
@@ -34,11 +44,13 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Check workflow files
         run: |
           echo "::add-matcher::.github/actionlint-matcher.json"
-          bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          bash <(curl -sSfL "https://raw.githubusercontent.com/rhysd/actionlint/${ACTIONLINT_INSTALL_SHA}/scripts/download-actionlint.bash") "${ACTIONLINT_VERSION}"
           ./actionlint -color
         shell: bash
 
@@ -55,6 +67,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Run octoscan
         id: octoscan
@@ -126,7 +140,7 @@ jobs:
         run: uvx zizmor@1.20.0 --persona=auditor --format=sarif --strict-collection . > results.sarif
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4.31.9
+        uses: github/codeql-action/upload-sarif@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4.32.4
         with:
           sarif_file: results.sarif
           category: zizmor
