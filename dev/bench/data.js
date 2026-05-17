@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779017820753,
+  "lastUpdate": 1779018161381,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4437,6 +4437,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.25,
             "range": "± 0.05",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "ee61d08abc78578b92ecd8e8721c918ca1e6e6da",
+          "message": "ci(benchmark): fix shellcheck issues flagged by actionlint\n\nActionlint surfaced shellcheck issues in benchmark.yml after the\nworkflow-lint scanners landed. Six fixes:\n\n* SC2129 in \"Get PR refs\": collapse three `echo X >> $GITHUB_OUTPUT`\n  lines into a single `{ ...; } >> $GITHUB_OUTPUT` group block.\n* SC2188 in PR-benchmark hyperfine setup: replace bare `> FILE`\n  truncations with `: > FILE` so each redirection has an explicit\n  no-op command.\n* SC2188 in master-benchmark hyperfine setup: same `: > FILE` fix.\n* SC2002 in PR-benchmark result print: drop the `cat | jq` pipeline\n  and pass the file to jq directly.\n* SC2016 false positives on two `php -r '...'` blocks (validate\n  results + build trend data): suppress inline with\n  `# shellcheck disable=SC2016`. The single quotes are required to\n  prevent shell expansion of `$data` and `$h`.",
+          "timestamp": "2026-05-17T13:37:57+02:00",
+          "tree_id": "0034b4653cec03086c1798cdee3d3db2732ae655",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ee61d08abc78578b92ecd8e8721c918ca1e6e6da"
+        },
+        "date": 1779018160449,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.12,
+            "range": "± 0.25",
             "unit": "s"
           },
           {
