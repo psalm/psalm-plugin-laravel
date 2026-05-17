@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779018161381,
+  "lastUpdate": 1779028856752,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4471,6 +4471,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Wall time",
             "value": 31.12,
+            "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0992fd3ab95fab706647f46a2d5b14c1e56eb375",
+          "message": "Add `diagnose` subcommand for runtime introspection (#959)\n\n* feat(cli): add `diagnose` subcommand for runtime introspection #952\n\nSurfaces plugin boot mode (#766), stub directories, integration probes,\nhandler counts and migration discovery so users (and maintainers\ntriaging bug reports) can see what state the plugin resolved to.\n\n- Boot mode tracked via new BootMode enum recorded by ApplicationProvider\n- Three formats: text, json, markdown (`--format`)\n- Hard failures (boot failure, zero stubs, zero handlers) → exit 1\n- Soft warnings (Testbench fallback) → exit 0\n- Bug-report template asks for `diagnose --format=markdown` output\n- laravel-test.sh runs `diagnose` as smoke check\n- psalm.xml demotes purity hints (rendering classes use plain instance\n  methods that don't fit the @psalm-immutable + static utility pattern)\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* refactor(cli): trim diagnose report to versions + boot mode #952\n\nStrip the diagnose output to the two highest-signal sections (versions and\nboot mode, the latter being the core #766 surface). Drop integrations,\nschema, stub listing, handler counts, plus the JSON / markdown formats —\nall addable as separate PRs when a concrete need surfaces.\n\n- BootMode enum collapsed to a plain string label in ApplicationProvider;\n  type narrowed via a literal-string return type so we keep autocomplete.\n- JsonRenderer + MarkdownRenderer deleted; DiagnoseCommand has no --format\n  option (text only).\n- TextRenderer collapsed to a single render() method (no private helpers),\n  so the @psalm-immutable + @psalm-pure pair on that one method is enough.\n- psalm.xml issueHandler additions reverted (no longer needed).\n- Test file shrinks from 6 cases to 3 covering the remaining surface.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* refactor(cli): introduce Report value object for diagnose #952\n\nReplace the @psalm-type array shape with a flat final-readonly Report class.\nRenderer reads typed properties instead of array keys — gives autocomplete,\nmakes the contract explicit, and removes a class of typo-induced bugs.\n\n- Drop bootDescription from Report and ApplicationProvider — UI label\n  belongs to the renderer, not the boot tracker.\n- BOOT_MODE_LABELS moved into TextRenderer.\n- \"Testbench fallback\" message no longer carries the #766 callout; the\n  section header already labels the area.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* chore: drop bug-report template + laravel-test.sh changes from diagnose PR #952\n\nKeep the PR focused on the diagnose subcommand itself. Template + smoke\nwiring can land separately once the command surface is reviewed.\n\n* fix: restore literal-string return cast on getBootMode #952\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-17T16:38:11+02:00",
+          "tree_id": "e0b6323dabf6427f2beda4789ebe0366941f7f15",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0992fd3ab95fab706647f46a2d5b14c1e56eb375"
+        },
+        "date": 1779028856050,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.87,
             "range": "± 0.25",
             "unit": "s"
           },
