@@ -66,3 +66,46 @@ Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
     'testViteFacadeMacro',
     static fn(string $asset): string => "resources/images/{$asset}",
 );
+
+// Locks in coverage for issue #899 idea #4 (multi-target facade dispatch). Each
+// registration targets a Macroable per-store concrete reached only through a
+// non-Macroable manager's `__call` forwarding:
+//
+//   Auth::macro(...)    -> AuthManager::__call -> SessionGuard / RequestGuard / TokenGuard
+//   Cache::macro(...)   -> CacheManager::__call -> Repository
+//   Session::macro(...) -> SessionManager extends Manager::__call -> Store
+//   Storage::macro(...) -> FilesystemManager::__call -> FilesystemAdapter
+//   Mail::macro(...)    -> MailManager::__call -> Mailer
+//
+// The macros land on the concrete's `$macros` storage at registration time; the
+// plugin's `FacadeMapProvider::MULTI_TARGET_FACADES` edge set links each
+// concrete back to the facade so the existing propagation pass injects the
+// macro pseudo-methods on the facade class itself.
+\Illuminate\Auth\SessionGuard::macro(
+    'testAuthSessionGuardMacro',
+    static fn(string $token): string => $token,
+);
+\Illuminate\Auth\RequestGuard::macro(
+    'testAuthRequestGuardMacro',
+    static fn(string $name): int => \strlen($name),
+);
+\Illuminate\Auth\TokenGuard::macro(
+    'testAuthTokenGuardMacro',
+    static fn(string $token): bool => $token !== '',
+);
+\Illuminate\Cache\Repository::macro(
+    'testCacheFacadeMacro',
+    static fn(string $key): string => "cached:{$key}",
+);
+\Illuminate\Session\Store::macro(
+    'testSessionFacadeMacro',
+    static fn(string $key): bool => $key !== '',
+);
+\Illuminate\Filesystem\FilesystemAdapter::macro(
+    'testStorageFacadeMacro',
+    static fn(string $path): int => \strlen($path),
+);
+\Illuminate\Mail\Mailer::macro(
+    'testMailFacadeMacro',
+    static fn(string $to): string => "queued:{$to}",
+);

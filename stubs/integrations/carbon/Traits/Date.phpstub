@@ -1,0 +1,48 @@
+<?php
+
+namespace Carbon\Traits;
+
+use Carbon\WeekDay;
+use DateTimeZone;
+
+/**
+ * Narrow Carbon's dual-purpose getter/setter trait methods to conditional
+ * return types. Carbon's source declares unions like `static|int` because
+ * each method does double duty: `null` (default) acts as a getter returning
+ * the unit, any non-null value acts as a setter returning a new instance.
+ *
+ * Stubbing at the trait level propagates the narrowing to every class that
+ * uses the trait (Carbon, CarbonImmutable) without duplicating the
+ * declarations per concrete class.
+ */
+trait Date
+{
+    /**
+     * @param WeekDay|int|null $value new value for weekday if using as setter
+     *
+     * @return ($value is null ? int<1, 7> : static)
+     */
+    public function isoWeekday(WeekDay|int|null $value = null): static|int {}
+
+    /**
+     * @param WeekDay|int|null $value new value for weekday if using as setter
+     *
+     * @return ($value is null ? int<0, 6> : static)
+     */
+    public function weekday(WeekDay|int|null $value = null): static|int {}
+
+    /**
+     * @return ($value is null ? int<1, 366> : static)
+     */
+    public function dayOfYear(?int $value = null): static|int {}
+
+    /**
+     * @return ($minuteOffset is null ? int : static)
+     */
+    public function utcOffset(?int $minuteOffset = null): static|int {}
+
+    /**
+     * @return ($value is null ? string : static)
+     */
+    public function tz(DateTimeZone|string|int|null $value = null): static|string {}
+}

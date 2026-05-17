@@ -68,6 +68,16 @@ final class ValidationRuleAnalyzer
         // before/after/before_or_equal/after_or_equal constraints — all of
         // which are themselves ALL_INPUT-escaped in ruleToRemovedTaints().
         'illuminate\\validation\\rules\\date' => TaintKind::ALL_INPUT,
+        // Mirrors the 'enum' synthetic segment: when validation succeeds, the
+        // validated value is necessarily a developer-declared case backing
+        // value (a source-code constant — same trust model as Rule::in([...])).
+        // UnitEnum scalar input is rejected outright by Enum::passes() because
+        // the rule short-circuits when the enum has no `tryFrom`, so no value
+        // reaches the sink either way for pure UnitEnums. The escape is
+        // therefore sound for both branches. Covers the fallback class: path
+        // when the enum class argument isn't statically resolvable (e.g.
+        // `new Enum($variable)`).
+        'illuminate\\validation\\rules\\enum' => TaintKind::ALL_INPUT,
     ];
 
     /**
@@ -335,6 +345,7 @@ final class ValidationRuleAnalyzer
                 new TNamedObject(\Illuminate\Http\UploadedFile::class),
             ]),
             'in' => self::inRuleToLiteralUnion($param),
+            'enum' => self::enumRuleToType($param),
             'uuid', 'ulid',
             'alpha', 'alpha_num', 'alpha_dash',
             'hex_color', 'mac_address',
@@ -361,8 +372,18 @@ final class ValidationRuleAnalyzer
     private static function ruleToRemovedTaints(string $rule): int
     {
         return match ($rule) {
-            // Strictly character-constrained — values cannot contain any meta-characters
-            // that matter to known input sinks, so we escape every INPUT_* kind.
+            // Safe across every INPUT_* kind. Two distinct rationales feed
+            // into this same arm:
+            //   1. Character-constrained rules (integer, numeric, boolean,
+            //      uuid, alpha*, hex_color, date*, timezone, …) — values
+            //      cannot contain any meta-characters that matter to known
+            //      input sinks.
+            //   2. Whitelist / provenance rules ('in', 'enum') — the
+            //      validated value is one of a fixed set of developer-
+            //      authored whitelist values (source-code constants), so it
+            //      is trusted by provenance regardless of content. The
+            //      per-rule inline comments below spell the rationale out
+            //      where it's non-obvious.
             'integer', 'numeric', 'boolean',
             'decimal', 'digits', 'digits_between',
             'accepted', 'accepted_if',
@@ -375,7 +396,18 @@ final class ValidationRuleAnalyzer
             'after', 'after_or_equal',
             'date_equals',
             'timezone',
-            'in' => TaintKind::ALL_INPUT,
+            'in',
+            // Enum rule (synthetic `enum:FQN` segment): the validated value is
+            // necessarily one of the developer-declared case backing values —
+            // i.e. a source-code constant. Same trust model as Rule::in([...]):
+            // we treat developer-authored whitelist values as trusted, even
+            // when an individual case happens to spell something risky like
+            // `case Evil = "'; DROP TABLE--"`. The escape is about provenance
+            // (source code, not user input), not a character-level guarantee.
+            // Pure UnitEnums never reach a sink via scalar input — passes()
+            // short-circuits without `tryFrom` — so the escape is vacuous for
+            // that branch and sound on both. Mirrors the 'in' escape.
+            'enum' => TaintKind::ALL_INPUT,
 
             // IP literals: restricted to digits / dots / colons / hex letters.
             // Safe everywhere except SSRF — a syntactically valid IP can still
@@ -404,6 +436,105 @@ final class ValidationRuleAnalyzer
             // string, json, regex, required, max, min, etc. → keep all taint
             default => 0,
         };
+    }
+
+    /**
+     * Resolve the synthetic `enum:FQN` rule segment to the literal-union type
+     * the enum's backing values produce in validated() output.
+     *
+     * Laravel's `Rules\Enum::passes()` accepts a raw scalar and runs it through
+     * `BackingEnum::tryFrom()` without mutating the validator's data, so the
+     * value stored in validated() is the original scalar — *not* an enum
+     * instance — and its type is exactly the enum's backing type. We narrow
+     * further to the literal union of the case backing values, mirroring how
+     * `'in:a,b,c'` already narrows whitelist string rules.
+     *
+     * Unit enums (no `tryFrom`) intentionally fall back to `mixed`: Laravel's
+     * `passes()` short-circuits to `false` for any scalar input when
+     * `method_exists($type, 'tryFrom')` is false, so the only way a UnitEnum
+     * field survives validation is via programmatic `$request->merge(...)`
+     * with an instance — that's an enum object, not a `string` case name as
+     * the `__toString()` form suggests. Returning `mixed` keeps us sound for
+     * both paths until Laravel grows real UnitEnum name-matching.
+     *
+     * Soundness escapes (return `mixed` or the base backing type):
+     *   - Class not resolvable in the codebase (mistyped FQN, scan order race) → mixed.
+     *   - Class is not an enum (no `enum_cases`)                                → mixed.
+     *   - `enum_type` is set but a case's value can't be resolved (deferred
+     *     constant expression, unresolvable docblock)                          → fall back
+     *     to the base backing type (`int` or `string`) so we never over-narrow.
+     */
+    private static function enumRuleToType(?string $param): Union
+    {
+        if ($param === null || $param === '') {
+            return Type::getMixed();
+        }
+
+        $enumFqn = \ltrim($param, '\\');
+
+        try {
+            $codebase = ProjectAnalyzer::getInstance()->getCodebase();
+        } catch (\RuntimeException|\Error) {
+            return Type::getMixed();
+        }
+
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($enumFqn));
+        } catch (\InvalidArgumentException) {
+            return Type::getMixed();
+        }
+
+        if ($storage->enum_cases === []) {
+            // Either not an enum at all, or an enum with no cases declared yet
+            // (rare; the rule is degenerate but harmless — leave as mixed).
+            return Type::getMixed();
+        }
+
+        $atomics = [];
+
+        if ($storage->enum_type === 'int') {
+            foreach ($storage->enum_cases as $case) {
+                try {
+                    $value = $case->getValue($codebase->classlikes);
+                } catch (\UnexpectedValueException) {
+                    return Type::getInt();
+                }
+
+                if (!$value instanceof TLiteralInt) {
+                    return Type::getInt();
+                }
+
+                $atomics[] = $value;
+            }
+
+            // $atomics is guaranteed non-empty here: enum_cases was verified
+            // non-empty above, every loop iteration either returns early or
+            // pushes one atomic, so reaching this line means at least one push.
+            return new Union($atomics);
+        }
+
+        if ($storage->enum_type === 'string') {
+            foreach ($storage->enum_cases as $case) {
+                try {
+                    $value = $case->getValue($codebase->classlikes);
+                } catch (\UnexpectedValueException) {
+                    return Type::getString();
+                }
+
+                if (!$value instanceof TLiteralString) {
+                    return Type::getString();
+                }
+
+                $atomics[] = $value;
+            }
+
+            return new Union($atomics);
+        }
+
+        // Pure UnitEnum (enum_type === null): see the soundness note in the
+        // docblock — Laravel's Enum rule rejects all scalar UnitEnum input, so
+        // any narrowing here would be wrong for one of the runtime paths.
+        return Type::getMixed();
     }
 
     /**
@@ -849,16 +980,29 @@ final class ValidationRuleAnalyzer
                         continue;
                     }
 
-                    // Rule::in(...) / Rule::notIn(...) with statically-extractable
-                    // string literals — emit the equivalent 'in:a,b,c' / 'not_in:a,b,c'
-                    // segment so resolveRuleSegments narrows the type via the existing
-                    // string-rule path. Falls through to the class: segment when the
-                    // arguments aren't statically resolvable (variables, enums,
-                    // Arrayable, spread, comma-bearing values, …).
+                    // Rule::in(...) / Rule::notIn(...) / `new In([...])` / `new NotIn([...])`
+                    // with statically-extractable string literals — emit the equivalent
+                    // 'in:a,b,c' / 'not_in:a,b,c' segment so resolveRuleSegments narrows
+                    // the type via the existing string-rule path. Falls through to the
+                    // class: segment when the arguments aren't statically resolvable
+                    // (variables, enum cases, Arrayable, spread, comma-bearing values, …).
                     $inLikeSegment = self::tryExtractInLikeRuleSegment($ruleItem->value);
 
                     if ($inLikeSegment !== null) {
                         $segments[] = $inLikeSegment;
+
+                        continue;
+                    }
+
+                    // `Rule::enum(EnumClass::class)` / `new Enum(EnumClass::class)` —
+                    // emit a synthetic `enum:FQN` segment so resolveRuleSegments can
+                    // narrow validated() output to the enum's backing-type literal union
+                    // via {@see enumRuleToType()}. Falls through to the class: segment
+                    // when the constructor argument is not a static `::class` literal.
+                    $enumSegment = self::tryExtractEnumRuleSegment($ruleItem->value);
+
+                    if ($enumSegment !== null) {
+                        $segments[] = $enumSegment;
 
                         continue;
                     }
@@ -886,13 +1030,15 @@ final class ValidationRuleAnalyzer
     }
 
     /**
-     * If the expression is a `Rule::in(...)` or `Rule::notIn(...)` static call
-     * (optionally wrapped in fluent method calls) whose arguments are all
-     * string literals, return the equivalent `in:a,b,c` / `not_in:a,b,c`
-     * rule segment. Returns null for any unsupported argument shape.
+     * If the expression is one of:
+     *   - `Rule::in(...)`  / `Rule::notIn(...)` static call
+     *   - `new \Illuminate\Validation\Rules\In(...)`  / `new NotIn(...)`
+     * (optionally wrapped in outer fluent method calls), and the arguments
+     * are all string literals, return the equivalent `in:a,b,c` /
+     * `not_in:a,b,c` rule segment. Returns null for any unsupported shape.
      *
-     * Reusing the string-rule segment funnels the fluent form through the
-     * same {@see inRuleToLiteralUnion()} narrowing and {@see ruleToRemovedTaints()}
+     * Reusing the string-rule segment funnels both forms through the same
+     * {@see inRuleToLiteralUnion()} narrowing and {@see ruleToRemovedTaints()}
      * escape path that `'in:a,b,c'` already takes. Identical taint contribution
      * for `in` (`TaintKind::ALL_INPUT` from both the class table and the rule
      * table) and `not_in` (0 from both) means swapping segment forms cannot
@@ -902,6 +1048,10 @@ final class ValidationRuleAnalyzer
      *   - `Rule::in('a', 'b')`         variadic
      *   - `Rule::in('a')`              single
      *   - `Rule::in(['a', 'b'])`       array literal
+     *   - `new In(['a', 'b'])`         constructor with array literal
+     *   - `new In('a', 'b')`           constructor with variadic-style args
+     *     (Laravel's In falls back to `func_get_args()` when the first
+     *     argument isn't an array — see Rules\In::__construct).
      *
      * Bails (returns null) for:
      *   - Any non-string-literal argument (variables, enum cases, method calls,
@@ -925,9 +1075,188 @@ final class ValidationRuleAnalyzer
             $expr = $expr->var;
         }
 
-        if (!$expr instanceof Node\Expr\StaticCall
-            || !$expr->class instanceof Node\Name
+        $detected = self::detectInLikeRuleRoot($expr);
+
+        if ($detected === null) {
+            return null;
+        }
+
+        [$ruleName, $args] = $detected;
+
+        $values = self::extractStringLiteralArgs($args);
+
+        if ($values === null) {
+            return null;
+        }
+
+        return $ruleName . ':' . \implode(',', $values);
+    }
+
+    /**
+     * Inspect an already-fluent-unwrapped expression and detect whether it is
+     * an `in` / `not_in` rule construct in either the `Rule::in(...)` static
+     * call form or the `new \Illuminate\Validation\Rules\In(...)` constructor
+     * form. Returns the canonical rule name (`'in'` or `'not_in'`) together
+     * with the construct's positional argument list, or null when the
+     * expression doesn't match either shape.
+     *
+     * Keeping detection in one place means a future `Rule::between(...)` /
+     * `new Between(...)` extension only has to extend two short maps below
+     * (the facade-method map and the constructor-FQN map), not duplicate the
+     * AST walk.
+     *
+     * @return array{0: 'in'|'not_in', 1: list<Node\Arg|Node\VariadicPlaceholder>}|null
+     */
+    private static function detectInLikeRuleRoot(Node\Expr $expr): ?array
+    {
+        if ($expr instanceof Node\Expr\StaticCall
+            && $expr->class instanceof Node\Name
+            && $expr->name instanceof Node\Identifier
+        ) {
+            /** @var string|null $resolved */
+            $resolved = $expr->class->getAttribute('resolvedName');
+
+            if (\is_string($resolved)
+                && \strtolower($resolved) === self::RULE_FACADE_LOWER_FQN
+            ) {
+                $ruleName = match (\strtolower($expr->name->name)) {
+                    'in' => 'in',
+                    'notin' => 'not_in',
+                    default => null,
+                };
+
+                if ($ruleName !== null) {
+                    return [$ruleName, \array_values($expr->args)];
+                }
+            }
+        }
+
+        if ($expr instanceof Node\Expr\New_ && $expr->class instanceof Node\Name) {
+            /** @var string|null $resolved */
+            $resolved = $expr->class->getAttribute('resolvedName');
+
+            if (\is_string($resolved)) {
+                $ruleName = match (\strtolower($resolved)) {
+                    'illuminate\\validation\\rules\\in' => 'in',
+                    'illuminate\\validation\\rules\\notin' => 'not_in',
+                    default => null,
+                };
+
+                if ($ruleName !== null) {
+                    return [$ruleName, \array_values($expr->args)];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * If the expression is `Rule::enum(EnumClass::class)` or
+     * `new \Illuminate\Validation\Rules\Enum(EnumClass::class)` (optionally
+     * wrapped in outer fluent method calls) whose first argument is a
+     * resolvable `::class` literal, return the synthetic `enum:FQN` rule
+     * segment. The {@see enumRuleToType()} resolver then narrows the
+     * validated() output to the enum's backing-type literal union.
+     *
+     * The outer fluent unwrap collapses `Rule::enum(X)->only(...)` /
+     * `->except(...)` to its `Rule::enum(X)` root, so the emitted segment
+     * narrows to the full case set rather than the runtime subset. That's a
+     * sound superset (the runtime subset is contained in the full case set,
+     * so no false positives reach downstream consumers) and a deliberate
+     * trade-off in favour of zero false positives over peak precision.
+     *
+     * Bails (returns null) for:
+     *   - First argument is not a `Class::class` literal (variable, string,
+     *     method call, …) → fall through to the class: segment so taint
+     *     still escapes via {@see FIRST_PARTY_RULE_ESCAPES}.
+     *   - Class reference is not statically resolvable (`$class::class`,
+     *     dynamic `::class`).
+     */
+    private static function tryExtractEnumRuleSegment(Node\Expr $expr): ?string
+    {
+        // Unwrap fluent calls so `Rule::enum(...)->only(...)` resolves to its
+        // `Rule::enum(...)` root. Mirrors tryExtractInLikeRuleSegment().
+        while ($expr instanceof Node\Expr\MethodCall
+            || $expr instanceof Node\Expr\NullsafeMethodCall
+        ) {
+            $expr = $expr->var;
+        }
+
+        $args = self::detectEnumRuleArgs($expr);
+
+        if ($args === null || $args === []) {
+            return null;
+        }
+
+        $firstArg = $args[0];
+
+        if (!$firstArg instanceof Node\Arg || $firstArg->unpack) {
+            return null;
+        }
+
+        $enumFqn = self::resolveClassConstLiteral($firstArg->value);
+
+        if ($enumFqn === null) {
+            return null;
+        }
+
+        return 'enum:' . $enumFqn;
+    }
+
+    /**
+     * Inspect an already-fluent-unwrapped expression and return the positional
+     * argument list iff the expression is one of the two Enum-rule construct
+     * shapes (`Rule::enum(...)` or `new Illuminate\Validation\Rules\Enum(...)`).
+     * Returns null when the expression isn't an enum-rule root.
+     *
+     * @return list<Node\Arg|Node\VariadicPlaceholder>|null
+     */
+    private static function detectEnumRuleArgs(Node\Expr $expr): ?array
+    {
+        if ($expr instanceof Node\Expr\StaticCall
+            && $expr->class instanceof Node\Name
+            && $expr->name instanceof Node\Identifier
+        ) {
+            /** @var string|null $resolved */
+            $resolved = $expr->class->getAttribute('resolvedName');
+
+            if (\is_string($resolved)
+                && \strtolower($resolved) === self::RULE_FACADE_LOWER_FQN
+                && \strtolower($expr->name->name) === 'enum'
+            ) {
+                return \array_values($expr->args);
+            }
+        }
+
+        if ($expr instanceof Node\Expr\New_ && $expr->class instanceof Node\Name) {
+            /** @var string|null $resolved */
+            $resolved = $expr->class->getAttribute('resolvedName');
+
+            if (\is_string($resolved)
+                && \strtolower($resolved) === 'illuminate\\validation\\rules\\enum'
+            ) {
+                return \array_values($expr->args);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve a `ClassName::class` literal to its FQN. Returns null for any
+     * other expression (variable `::class`, method call result, plain string).
+     *
+     * Not `@psalm-mutation-free` because `Node\Name::getAttribute()` reads
+     * mutable attribute state on the AST node — same reason
+     * {@see resolveRuleObjectClassName()} isn't annotated as pure.
+     */
+    private static function resolveClassConstLiteral(Node\Expr $expr): ?string
+    {
+        if (!$expr instanceof Node\Expr\ClassConstFetch
             || !$expr->name instanceof Node\Identifier
+            || \strtolower($expr->name->name) !== 'class'
+            || !$expr->class instanceof Node\Name
         ) {
             return null;
         }
@@ -935,29 +1264,7 @@ final class ValidationRuleAnalyzer
         /** @var string|null $resolved */
         $resolved = $expr->class->getAttribute('resolvedName');
 
-        if (!\is_string($resolved)
-            || \strtolower($resolved) !== self::RULE_FACADE_LOWER_FQN
-        ) {
-            return null;
-        }
-
-        $ruleName = match (\strtolower($expr->name->name)) {
-            'in' => 'in',
-            'notin' => 'not_in',
-            default => null,
-        };
-
-        if ($ruleName === null) {
-            return null;
-        }
-
-        $values = self::extractStringLiteralArgs(\array_values($expr->args));
-
-        if ($values === null) {
-            return null;
-        }
-
-        return $ruleName . ':' . \implode(',', $values);
+        return \is_string($resolved) ? \ltrim($resolved, '\\') : null;
     }
 
     /**

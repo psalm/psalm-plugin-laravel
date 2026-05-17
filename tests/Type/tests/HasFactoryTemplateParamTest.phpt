@@ -35,10 +35,17 @@ class ExplicitArticleFactory extends Factory
     }
 }
 
-/** @use HasFactory<ExplicitArticleFactory> */
 class ExplicitArticle extends Model
 {
+    /** @use HasFactory<ExplicitArticleFactory> */
     use HasFactory;
 }
+
+// Explicit binding wins over ModelFactoryMethodTypeProvider's default — the
+// handler returns null when @use HasFactory<X> is set, so the stub's @return
+// TFactory resolves to the user's Factory subclass (more precise than the
+// plugin's Factory<Model>). Guards the documented escape hatch from #960.
+$_explicitFactory = ExplicitArticle::factory();
+/** @psalm-check-type-exact $_explicitFactory = ExplicitArticleFactory */;
 ?>
 --EXPECTF--

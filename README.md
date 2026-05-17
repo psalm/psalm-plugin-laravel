@@ -40,12 +40,12 @@ Taint analysis also works across helper functions, service classes, and any numb
 
 ```php
 // UserController.php
-$user->siteSettinsg['articles_sort'] = $request->input('sort'); // Tainted source: user input from HTTP request
+$user->siteSettings['articles_sort'] = $request->input('sort'); // Tainted source: user input from HTTP request
 $user->save();
 
 // ArticlesConstoller.php
 Articles::query()
-    ->orderBy($user->siteSettinsg['articles_sort']) // 🚨 Tainted sink: unvalidated user input used in query builder
+    ->orderBy($user->siteSettings['articles_sort']) // 🚨 Tainted sink: unvalidated user input used in query builder
     ->get();
 
 // Psalm output:

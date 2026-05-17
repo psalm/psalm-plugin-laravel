@@ -96,14 +96,17 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/CustomCollectionHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
         if ($pluginConfig->shouldUseMigrations()) {
             require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
             Handlers\Eloquent\ModelRegistrationHandler::enableMigrations();
         }
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelFactoryMethodTypeProvider::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryCountTypeProvider::class);
 
         // Magic method forwarding: Relation -> Builder (decorated forwarding).
@@ -169,6 +172,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Collections\CollectionFlattenHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/CollectionValuesAllHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\CollectionValuesAllHandler::class);
         require_once __DIR__ . '/Handlers/Collections/HigherOrderCollectionProxyHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\HigherOrderCollectionProxyHandler::class);
 

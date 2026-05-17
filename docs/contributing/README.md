@@ -81,7 +81,6 @@ LARAVEL_INSTALLER_VERSION=12.12.2 composer test:app # run over a specific Larave
 ## Code style
 
 - PER Coding Style 3.0 (powered by php-cs-fixer: run `composer cs` to apply fixes)
-- Never use `@psalm-suppress` — fix the issue or add to `psalm-baseline.xml`
 - Explain decisions and ideas in comments
 
 ```bash
