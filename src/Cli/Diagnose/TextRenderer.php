@@ -5,48 +5,50 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Cli\Diagnose;
 
 /**
- * Plain-text renderer for the {@see Diagnostics} report.
+ * Plain-text renderer for the {@see Report} produced by {@see Diagnostics}.
  *
  * Designed for terminal use. No ANSI colour codes so the output is safe to
  * redirect into a file or pipe.
  *
  * @internal
  *
- * @psalm-import-type Report from Diagnostics
- *
  * @psalm-immutable
  */
 final class TextRenderer
 {
-    /**
-     * @param Report $report
-     *
-     * @psalm-pure
-     */
-    public function render(array $report): string
+    /** Presentation labels for boot modes — kept here (not in ApplicationProvider) since this is purely UI text. */
+    private const BOOT_MODE_LABELS = [
+        'user_kernel' => 'user kernel (real bootstrap/app.php discovered)',
+        'vendor_bootstrap' => 'vendor-relative bootstrap (plugin installed in vendor/)',
+        'testbench_fallback' => 'Testbench fallback',
+    ];
+
+    /** @psalm-pure */
+    public function render(Report $report): string
     {
         $lines = [
             '[Versions]',
-            '  Plugin   : ' . ($report['versions']['plugin'] ?? '(unknown)'),
-            '  Laravel  : ' . ($report['versions']['laravel'] ?? '(unknown)'),
-            '  Psalm    : ' . ($report['versions']['psalm'] ?? '(unknown)'),
-            '  PHP      : ' . $report['versions']['php'],
+            '  Plugin   : ' . ($report->pluginVersion ?? '(unknown)'),
+            '  Laravel  : ' . ($report->laravelVersion ?? '(unknown)'),
+            '  Psalm    : ' . ($report->psalmVersion ?? '(unknown)'),
+            '  PHP      : ' . $report->phpVersion,
             '',
             '[Boot mode (#766)]',
         ];
 
-        if ($report['boot']['error'] !== null) {
+        if ($report->bootError !== null) {
             $lines[] = '  Status   : FAILED';
-            $lines[] = '  Error    : ' . $report['boot']['error'];
+            $lines[] = '  Error    : ' . $report->bootError;
         } else {
-            $lines[] = '  Mode     : ' . ($report['boot']['description'] ?? '(unknown)');
-            $lines[] = '  Path     : ' . ($report['boot']['path'] ?? '(unknown)');
+            $label = $report->bootMode !== null ? self::BOOT_MODE_LABELS[$report->bootMode] ?? null : null;
+            $lines[] = '  Mode     : ' . ($label ?? '(unknown)');
+            $lines[] = '  Path     : ' . ($report->bootPath ?? '(unknown)');
         }
 
-        if ($report['hard_failures'] !== []) {
+        if ($report->hardFailures !== []) {
             $lines[] = '';
             $lines[] = '[Hard failures]';
-            foreach ($report['hard_failures'] as $failure) {
+            foreach ($report->hardFailures as $failure) {
                 $lines[] = '  ! ' . $failure;
             }
         }

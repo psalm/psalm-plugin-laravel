@@ -30,12 +30,6 @@ final class ApplicationProvider
 
     private static ?string $bootPath = null;
 
-    private const BOOT_DESCRIPTIONS = [
-        'user_kernel' => 'user kernel (real bootstrap/app.php discovered)',
-        'vendor_bootstrap' => 'vendor-relative bootstrap (plugin installed in vendor/)',
-        'testbench_fallback' => 'Testbench fallback (no real bootstrap/app.php found — #766)',
-    ];
-
     public static function bootApp(): void
     {
         self::getApp();
@@ -55,17 +49,8 @@ final class ApplicationProvider
      */
     public static function getBootMode(): ?string
     {
+        /** @var 'user_kernel'|'vendor_bootstrap'|'testbench_fallback'|null */
         return self::$bootMode;
-    }
-
-    /**
-     * Human-readable description of the boot mode. Null until the app has been booted.
-     *
-     * @psalm-external-mutation-free
-     */
-    public static function getBootDescription(): ?string
-    {
-        return self::$bootMode !== null ? self::BOOT_DESCRIPTIONS[self::$bootMode] ?? null : null;
     }
 
     /**

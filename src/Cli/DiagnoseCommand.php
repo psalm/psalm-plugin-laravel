@@ -43,6 +43,6 @@ final class DiagnoseCommand extends Command
         $report = ($this->diagnostics ?? new Diagnostics())->collect();
         $output->write((new TextRenderer())->render($report));
 
-        return $report['hard_failures'] === [] ? Command::SUCCESS : Command::FAILURE;
+        return $report->hardFailures === [] ? Command::SUCCESS : Command::FAILURE;
     }
 }

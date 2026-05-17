@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Cli\Diagnose\Diagnostics;
+use Psalm\LaravelPlugin\Cli\Diagnose\Report;
 use Psalm\LaravelPlugin\Cli\Diagnose\TextRenderer;
 use Psalm\LaravelPlugin\Cli\DiagnoseCommand;
 use Symfony\Component\Console\Application;
@@ -16,6 +17,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 
 #[CoversClass(DiagnoseCommand::class)]
 #[CoversClass(Diagnostics::class)]
+#[CoversClass(Report::class)]
 #[CoversClass(TextRenderer::class)]
 final class DiagnoseCommandTest extends TestCase
 {
@@ -27,24 +29,34 @@ final class DiagnoseCommandTest extends TestCase
         $exit = $tester->execute([]);
         $display = $tester->getDisplay();
 
-        $this->assertSame(Command::SUCCESS, $exit, $display);
-        $this->assertStringContainsString('[Versions]', $display);
-        $this->assertStringContainsString('[Boot mode (#766)]', $display);
-        $this->assertStringNotContainsString('[Hard failures]', $display);
+        self::assertSame(Command::SUCCESS, $exit, $display);
+        self::assertStringContainsString('[Versions]', $display);
+        self::assertStringContainsString('[Boot mode (#766)]', $display);
+        self::assertStringNotContainsString('[Hard failures]', $display);
     }
 
     #[Test]
     public function exits_failure_when_a_hard_failure_is_present(): void
     {
-        $report = $this->okReport();
-        $report['hard_failures'] = ['Application boot failed: synthetic'];
-        $tester = $this->testerFor($this->fixtureProvider($report));
+        $base = $this->okReport();
+        $failing = new Report(
+            pluginVersion: $base->pluginVersion,
+            laravelVersion: $base->laravelVersion,
+            psalmVersion: $base->psalmVersion,
+            phpVersion: $base->phpVersion,
+            bootMode: null,
+            bootPath: null,
+            bootError: 'synthetic',
+            hardFailures: ['Application boot failed: synthetic'],
+        );
+
+        $tester = $this->testerFor($this->fixtureProvider($failing));
 
         $exit = $tester->execute([]);
 
-        $this->assertSame(Command::FAILURE, $exit);
-        $this->assertStringContainsString('[Hard failures]', $tester->getDisplay());
-        $this->assertStringContainsString('Application boot failed: synthetic', $tester->getDisplay());
+        self::assertSame(Command::FAILURE, $exit);
+        self::assertStringContainsString('[Hard failures]', $tester->getDisplay());
+        self::assertStringContainsString('Application boot failed: synthetic', $tester->getDisplay());
     }
 
     #[Test]
@@ -52,8 +64,8 @@ final class DiagnoseCommandTest extends TestCase
     {
         $report = (new Diagnostics())->collect();
 
-        $this->assertNotEmpty($report['versions']['php']);
-        $this->assertContains($report['boot']['mode'], ['user_kernel', 'vendor_bootstrap', 'testbench_fallback', null]);
+        self::assertNotEmpty($report->phpVersion);
+        self::assertContains($report->bootMode, ['user_kernel', 'vendor_bootstrap', 'testbench_fallback', null]);
     }
 
     private function testerFor(Diagnostics $diagnostics): CommandTester
@@ -65,43 +77,30 @@ final class DiagnoseCommandTest extends TestCase
         return new CommandTester($app->find('diagnose'));
     }
 
-    /**
-     * @param array<string, mixed> $report
-     */
-    private function fixtureProvider(array $report): Diagnostics
+    private function fixtureProvider(Report $report): Diagnostics
     {
         return new class ($report) extends Diagnostics {
-            /** @param array<string, mixed> $report */
-            public function __construct(private readonly array $report) {}
+            public function __construct(private readonly Report $report) {}
 
             #[\Override]
-            public function collect(): array
+            public function collect(): Report
             {
-                /** @psalm-suppress InvalidReturnStatement */
                 return $this->report;
             }
         };
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function okReport(): array
+    private function okReport(): Report
     {
-        return [
-            'versions' => [
-                'plugin' => '4.0.0',
-                'laravel' => '13.9.0',
-                'psalm' => '7.0.0-beta19',
-                'php' => '8.4.0',
-            ],
-            'boot' => [
-                'mode' => 'user_kernel',
-                'description' => 'user kernel (real bootstrap/app.php discovered)',
-                'path' => '/app/bootstrap/app.php',
-                'error' => null,
-            ],
-            'hard_failures' => [],
-        ];
+        return new Report(
+            pluginVersion: '4.0.0',
+            laravelVersion: '13.9.0',
+            psalmVersion: '7.0.0-beta19',
+            phpVersion: '8.4.0',
+            bootMode: 'user_kernel',
+            bootPath: '/app/bootstrap/app.php',
+            bootError: null,
+            hardFailures: [],
+        );
     }
 }

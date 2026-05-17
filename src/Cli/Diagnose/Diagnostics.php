@@ -11,37 +11,16 @@ use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 /**
  * Collects runtime introspection data about the plugin's resolved state.
  *
- * Returns a plain associative array so the renderer stays decoupled from any
- * value-object shape.
+ * Subclassable so unit tests can override {@see collect()} with a fixture
+ * report without booting Laravel.
  *
  * @internal
- *
- * @psalm-type VersionSection = array{
- *     plugin: ?string,
- *     laravel: ?string,
- *     psalm: ?string,
- *     php: string,
- * }
- * @psalm-type BootSection = array{
- *     mode: ?string,
- *     description: ?string,
- *     path: ?string,
- *     error: ?string,
- * }
- * @psalm-type Report = array{
- *     versions: VersionSection,
- *     boot: BootSection,
- *     hard_failures: list<string>,
- * }
  */
 class Diagnostics
 {
     private const PLUGIN_PACKAGE = 'psalm/plugin-laravel';
 
-    /**
-     * @return Report
-     */
-    public function collect(): array
+    public function collect(): Report
     {
         $bootError = null;
 
@@ -56,21 +35,16 @@ class Diagnostics
             $hardFailures[] = "Application boot failed: {$bootError}";
         }
 
-        return [
-            'versions' => [
-                'plugin' => $this->safePrettyVersion(self::PLUGIN_PACKAGE),
-                'laravel' => \defined(LaravelApplication::class . '::VERSION') ? LaravelApplication::VERSION : null,
-                'psalm' => $this->safePrettyVersion('vimeo/psalm'),
-                'php' => \PHP_VERSION,
-            ],
-            'boot' => [
-                'mode' => ApplicationProvider::getBootMode(),
-                'description' => ApplicationProvider::getBootDescription(),
-                'path' => ApplicationProvider::getBootPath(),
-                'error' => $bootError,
-            ],
-            'hard_failures' => $hardFailures,
-        ];
+        return new Report(
+            pluginVersion: $this->safePrettyVersion(self::PLUGIN_PACKAGE),
+            laravelVersion: \defined(LaravelApplication::class . '::VERSION') ? LaravelApplication::VERSION : null,
+            psalmVersion: $this->safePrettyVersion('vimeo/psalm'),
+            phpVersion: \PHP_VERSION,
+            bootMode: ApplicationProvider::getBootMode(),
+            bootPath: ApplicationProvider::getBootPath(),
+            bootError: $bootError,
+            hardFailures: $hardFailures,
+        );
     }
 
     private function safePrettyVersion(string $package): ?string

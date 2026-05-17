@@ -1,0 +1,33 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Cli\Diagnose;
+
+/**
+ * Immutable result of {@see Diagnostics::collect()}.
+ *
+ * Flat shape on purpose — three short groups (versions, boot, failures) read
+ * better as direct properties than nested value objects for a CLI report.
+ *
+ * @internal
+ *
+ * @psalm-immutable
+ */
+final readonly class Report
+{
+    /**
+     * @param 'user_kernel'|'vendor_bootstrap'|'testbench_fallback'|null $bootMode
+     * @param list<string> $hardFailures
+     */
+    public function __construct(
+        public ?string $pluginVersion,
+        public ?string $laravelVersion,
+        public ?string $psalmVersion,
+        public string $phpVersion,
+        public ?string $bootMode,
+        public ?string $bootPath,
+        public ?string $bootError,
+        public array $hardFailures,
+    ) {}
+}
