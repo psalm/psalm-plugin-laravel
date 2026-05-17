@@ -225,6 +225,12 @@ quiet_run "composer require psalm/plugin-laravel" \
 PSALM_CONFIG="../../tests/Application/laravel-test-psalm.xml"
 PSALM_BASELINE="../../tests/Application/laravel-test-psalm-baseline.xml"
 
+# Acceptance check for #952: `bin/psalm-laravel diagnose` should boot the
+# user's real kernel here (not Testbench) and exit 0. Run it before Psalm so
+# any boot regression surfaces quickly, even when the Psalm step is skipped.
+info "Running plugin diagnose"
+./vendor/bin/psalm-laravel diagnose
+
 if [ "$UPDATE_BASELINE" = true ]; then
     info "Updating Psalm baseline"
     ./vendor/bin/psalm --config="$PSALM_CONFIG" --set-baseline="$PSALM_BASELINE" --no-progress --no-suggestions

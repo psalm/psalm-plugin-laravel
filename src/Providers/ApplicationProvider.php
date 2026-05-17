@@ -19,12 +19,43 @@ final class ApplicationProvider
 
     private static ?\Illuminate\Foundation\Application $app = null;
 
+    private static ?BootMode $bootMode = null;
+
+    private static ?string $bootPath = null;
+
     public static function bootApp(): void
     {
         self::getApp();
     }
 
     private static bool $booted = false;
+
+    /**
+     * Which {@see doGetApp()} branch resolved the Laravel app.
+     *
+     * Null until the app has been booted via {@see bootApp()} or {@see getApp()}.
+     * Read by `bin/psalm-laravel diagnose` to surface the #766 silent-Testbench-fallback case.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function getBootMode(): ?BootMode
+    {
+        return self::$bootMode;
+    }
+
+    /**
+     * Path actually used to bootstrap the Laravel app — either the resolved
+     * `bootstrap/app.php` (for {@see BootMode::UserKernel}, {@see BootMode::VendorBootstrap})
+     * or the Testbench skeleton root ({@see BootMode::TestbenchFallback}).
+     *
+     * Null until the app has been booted.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function getBootPath(): ?string
+    {
+        return self::$bootPath;
+    }
 
     public static function getApp(): LaravelApplication
     {
@@ -55,15 +86,21 @@ final class ApplicationProvider
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
             assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
+            self::$bootMode = BootMode::UserKernel;
+            self::$bootPath = $applicationPath;
         } elseif (\file_exists($applicationPath = \dirname(__DIR__, 5) . '/bootstrap/app.php')) { // plugin installed to vendor
             /** @psalm-suppress MixedAssignment */
             $app = require $applicationPath;
             assert($app instanceof LaravelApplication, 'Could not find Laravel bootstrap file.');
+            self::$bootMode = BootMode::VendorBootstrap;
+            self::$bootPath = $applicationPath;
         } else { // Laravel Packages
             /** @psalm-suppress InternalMethod */
             $app = (new self())->createApplication(); // Orchestra\Testbench (e.g., test:type command)
 
             $this->retargetConfigPathAtProjectRoot($app);
+            self::$bootMode = BootMode::TestbenchFallback;
+            self::$bootPath = $app->basePath();
         }
 
         self::$app = $app;
