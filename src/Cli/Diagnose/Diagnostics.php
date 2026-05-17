@@ -204,7 +204,6 @@ class Diagnostics
                 return null;
             }
 
-            /** @var mixed $cursor */
             $cursor = $cursor[$key];
         }
 
