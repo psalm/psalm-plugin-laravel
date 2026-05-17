@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779045103972,
+  "lastUpdate": 1779050156000,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4682,6 +4682,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.89,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df42ec96636153e8837354723e80d09d8dd612b7",
+          "message": "Multi-target facade dispatch for Auth/Cache/Session/Storage/Mail (#907)\n\n* feat(macro): propagate macros from manager-forwarded concretes to facades (#899 idea #4)\n\nSome Laravel facades resolve via `Facade::getFacadeRoot()` to a *manager*\nclass (AuthManager, CacheManager, SessionManager, FilesystemManager,\nMailManager) that does NOT use `Macroable`. Instead, the manager forwards\nunknown method calls via `__call` to a per-store concrete (SessionGuard /\nRequestGuard / TokenGuard, Cache Repository, Session Store, FilesystemAdapter,\nMailer) which DOES use `Macroable`. PR #905 introduced facade-class macro\npropagation but only walked the direct getFacadeRoot edge, so macros\nregistered on those per-store concretes were invisible at facade call sites.\n\nExtend `FacadeMapProvider` with a hardcoded `MULTI_TARGET_FACADES` edge set\nmapping each per-store concrete to its facade (canonical FQCN + global\nalias). The seed runs after the AliasLoader walk in `init()` with\nclass_exists guards: missing-but-expected (package trimmed, alias disabled)\ngoes to debug; actual exceptions or a missing canonical FQCN are raised to\nwarning so users can act on regressions.\n\nThe existing #905 propagation pass in `MacroHandler::afterCodebasePopulated`\npicks up the new edges unchanged. No handler changes required.\n\n| Facade   | Manager (non-Macroable)                 | Per-store Macroable concrete(s)    |\n|----------|-----------------------------------------|------------------------------------|\n| Auth     | Illuminate\\Auth\\AuthManager             | SessionGuard, RequestGuard, TokenGuard |\n| Cache    | Illuminate\\Cache\\CacheManager           | Repository                         |\n| Session  | Illuminate\\Session\\SessionManager       | Store                              |\n| Storage  | Illuminate\\Filesystem\\FilesystemManager | FilesystemAdapter                  |\n| Mail     | Illuminate\\Mail\\MailManager             | Mailer                             |\n\nTests:\n\n- Type-level: positive dispatch tests for every concrete (Auth via all three\n  guards; Cache, Session, Storage, Mail single-concrete); a global-alias\n  dispatch test through the Auth facade; and a negative argument-type test\n  through the multi-concrete Auth merge path (the only row where\n  `MacroHandler` array_merges defs from multiple concretes).\n- Unit-level: `init_seeds_multi_target_facade_edges` data-provider locks\n  every canonical-facade edge directly against `FacadeMapProvider::getFacadeClasses()`\n  so a `MULTI_TARGET_FACADES` typo / Laravel-version reshuffle fails at a\n  precise location rather than as a confusing macro-not-visible cascade.\n\nRefs #899 #905.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-17T22:33:21+02:00",
+          "tree_id": "8c5138ff1d222d01515501665e48210ea8f673cf",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/df42ec96636153e8837354723e80d09d8dd612b7"
+        },
+        "date": 1779050155564,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.36,
+            "range": "± 0.05",
             "unit": "s"
           },
           {
