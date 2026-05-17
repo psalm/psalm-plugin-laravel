@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779028856752,
+  "lastUpdate": 1779029824072,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4507,6 +4507,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.87,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1098,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "dc98387ae4c1de38d90de4f7fb28dd06b955e74f",
+          "message": "refactor(boot): collapse bootstrap modes, extract helpers #952\n\nThe `user_kernel` and `vendor_bootstrap` boot modes both loaded the\nsame `bootstrap/app.php`; they differed only in *how* the path was\ndiscovered (cwd-relative vs vendor-parent-relative). `bootPath`\nalready exposes which file was loaded, so the mode distinction was\nredundant on the diagnose report.\n\n- Collapse to a single `'bootstrap'` mode in ApplicationProvider,\n  Report, TextRenderer, and the diagnose test.\n- Extract `bootFromBootstrapFile()` and `bootFromTestbench()` from\n  the if/elseif/else ladder in `doGetApp()` so the resolution chain\n  reads as three named alternatives instead of duplicated require +\n  assert + state-assignment blocks.",
+          "timestamp": "2026-05-17T16:53:32+02:00",
+          "tree_id": "bbea47a0f51a36653f570f88854493572aa34a56",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/dc98387ae4c1de38d90de4f7fb28dd06b955e74f"
+        },
+        "date": 1779029823476,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.5,
+            "range": "± 0.31",
             "unit": "s"
           },
           {
