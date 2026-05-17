@@ -98,6 +98,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
         if ($pluginConfig->shouldUseMigrations()) {
             require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
             Handlers\Eloquent\ModelRegistrationHandler::enableMigrations();

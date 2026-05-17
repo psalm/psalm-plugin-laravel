@@ -312,8 +312,7 @@ final readonly class SqlSchemaParser
             }
 
             if (\str_starts_with($typeLower, 'set')) {
-                // No TYPE_SET constant — uses literal 'set' to match SchemaAggregator behavior
-                return 'set';
+                return SchemaColumn::TYPE_SET;
             }
         }
 
@@ -350,7 +349,7 @@ final readonly class SqlSchemaParser
 
             // enum/set without options (rare, but handle gracefully)
             'enum' => SchemaColumn::TYPE_ENUM,
-            'set' => 'set',
+            'set' => SchemaColumn::TYPE_SET,
 
             default => SchemaColumn::TYPE_MIXED,
         };

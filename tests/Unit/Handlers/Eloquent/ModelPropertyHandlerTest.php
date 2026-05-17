@@ -33,6 +33,11 @@ final class ModelPropertyHandlerTest extends TestCase
         $table->setColumn(new SchemaColumn('id', SchemaColumn::TYPE_INT));
         $table->setColumn(new SchemaColumn('title', SchemaColumn::TYPE_STRING));
         $table->setColumn(new SchemaColumn('published_at', SchemaColumn::TYPE_STRING, nullable: true));
+        $table->setColumn(new SchemaColumn(
+            'status',
+            SchemaColumn::TYPE_SET,
+            options: ['draft', 'published', 'archived'],
+        ));
         $schema->tables['work_orders'] = $table;
         SchemaStateProvider::setSchema($schema);
 
@@ -81,7 +86,71 @@ final class ModelPropertyHandlerTest extends TestCase
         $this->assertArrayHasKey('id', $columns);
         $this->assertArrayHasKey('title', $columns);
         $this->assertArrayHasKey('published_at', $columns);
-        $this->assertCount(3, $columns);
+        $this->assertArrayHasKey('status', $columns);
+        $this->assertCount(4, $columns);
+    }
+
+    /**
+     * Regression test for #924: MySQL SET columns previously fell through to `mixed`
+     * because `mapColumnType()` had no arm for {@see SchemaColumn::TYPE_SET}.
+     *
+     * MySQL returns SET as a comma-separated string at runtime (e.g. `'draft,published'`),
+     * so a literal-union is an over-narrowing approximation, but strictly better than
+     * `mixed` for the common `in_array($model->status, [...])` pattern. Mirrors Larastan.
+     *
+     * Without Psalm Config initialized, {@see \Psalm\Type\Atomic\TLiteralString::make()}
+     * falls back to plain `TString` — so we assert against the string type rather than
+     * the literals (see {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\Validation\ValidationRuleAnalyzerTest::in_rule_returns_string_type}
+     * for the same pattern). The literal narrowing is exercised end-to-end in integration runs.
+     */
+    #[Test]
+    public function it_narrows_set_column_away_from_mixed(): void
+    {
+        $column = ModelPropertyHandler::resolveAllColumns(WorkOrder::class)['status'];
+        $union = $this->invokeMapColumnType($column);
+
+        $this->assertFalse($union->isMixed(), 'SET column must not be inferred as `mixed`');
+        $this->assertTrue($union->hasString(), 'SET column should map to a string-flavored union');
+        $this->assertFalse($union->isNullable(), 'Non-nullable SET column must not include null');
+    }
+
+    #[Test]
+    public function it_includes_null_for_nullable_set_column(): void
+    {
+        $column = new SchemaColumn(
+            'status',
+            SchemaColumn::TYPE_SET,
+            nullable: true,
+            options: ['draft', 'published'],
+        );
+
+        $union = $this->invokeMapColumnType($column);
+
+        $this->assertFalse($union->isMixed());
+        $this->assertTrue($union->isNullable(), 'Nullable SET column must include null');
+    }
+
+    /**
+     * Edge case: a SET column whose options never get parsed (rare — e.g. a malformed
+     * migration or {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser}
+     * meeting `SET` without an option list). Should degrade to plain string, never `mixed`.
+     */
+    #[Test]
+    public function it_falls_back_to_string_for_set_column_without_options(): void
+    {
+        $column = new SchemaColumn('status', SchemaColumn::TYPE_SET, options: []);
+
+        $union = $this->invokeMapColumnType($column);
+
+        $this->assertFalse($union->isMixed());
+        $this->assertTrue($union->hasString());
+    }
+
+    private function invokeMapColumnType(SchemaColumn $column): \Psalm\Type\Union
+    {
+        $method = new \ReflectionMethod(ModelPropertyHandler::class, 'mapColumnType');
+
+        return $method->invoke(null, $column);
     }
 
     #[Test]

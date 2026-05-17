@@ -668,7 +668,7 @@ final class SqlSchemaParserTest extends TestCase
             SQL;
 
         $column = $this->parse($sql)->tables['test']->columns['permissions'];
-        $this->assertSame('set', $column->type);
+        $this->assertSame(SchemaColumn::TYPE_SET, $column->type);
         $this->assertSame(['read', 'write', 'execute'], $column->options);
     }
 

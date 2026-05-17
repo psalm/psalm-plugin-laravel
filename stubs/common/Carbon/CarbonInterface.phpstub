@@ -1,0 +1,62 @@
+<?php
+
+namespace Carbon;
+
+use Carbon\Constants\DiffOptions;
+use Carbon\Constants\Format;
+use Carbon\Constants\TranslationOptions;
+use Carbon\Constants\UnitValue;
+use DateTimeInterface;
+use DateTimeZone;
+use JsonSerializable;
+
+/**
+ * Narrow Carbon's dual-purpose getter/setter methods to conditional return
+ * types when callers are typed on `CarbonInterface` rather than the concrete
+ * `Carbon` / `CarbonImmutable` classes. The same narrowing for concrete-typed
+ * callers lives in `Carbon\Traits\Date.phpstub` and
+ * `Carbon\Traits\Localization.phpstub` — interface docblocks do not propagate
+ * down to trait method definitions, so the conditional return must be repeated
+ * at both layers.
+ *
+ * Class redeclaration wipes `class_implements` / `parent_interfaces` (CLAUDE.md),
+ * so the full `extends` clause is copied verbatim from
+ * vendor/nesbot/carbon/src/Carbon/CarbonInterface.php:858. Methods not
+ * redeclared here continue to come from reflection of the real interface.
+ */
+interface CarbonInterface extends DateTimeInterface, JsonSerializable, DiffOptions, Format, TranslationOptions, UnitValue
+{
+    /**
+     * @param WeekDay|int|null $value new value for weekday if using as setter
+     *
+     * @return ($value is null ? int<1, 7> : static)
+     */
+    public function isoWeekday(WeekDay|int|null $value = null): static|int;
+
+    /**
+     * @param WeekDay|int|null $value new value for weekday if using as setter
+     *
+     * @return ($value is null ? int<0, 6> : static)
+     */
+    public function weekday(WeekDay|int|null $value = null): static|int;
+
+    /**
+     * @return ($value is null ? int<1, 366> : static)
+     */
+    public function dayOfYear(?int $value = null): static|int;
+
+    /**
+     * @return ($minuteOffset is null ? int : static)
+     */
+    public function utcOffset(?int $minuteOffset = null): static|int;
+
+    /**
+     * @return ($value is null ? string : static)
+     */
+    public function tz(DateTimeZone|string|int|null $value = null): static|string;
+
+    /**
+     * @return ($locale is null ? string : static)
+     */
+    public function locale(?string $locale = null, string ...$fallbackLocales): static|string;
+}

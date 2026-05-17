@@ -1,0 +1,56 @@
+<?php
+
+namespace Carbon;
+
+use Carbon\Constants\UnitValue;
+use Carbon\Traits\IntervalRounding;
+use Carbon\Traits\LocalFactory;
+use Carbon\Traits\Mixin;
+use Carbon\Traits\Options;
+use Carbon\Traits\ToStringFormat;
+use Countable;
+use JsonSerializable;
+
+/**
+ * Real signature in vendor/nesbot/carbon/src/Carbon/CarbonPeriod.php:329 is
+ * `public function getIterator(): Generator` with no template — Psalm widens
+ * the yield to `mixed`, which collapses `collect(CarbonPeriod::create(...))`
+ * to `Collection<int, mixed>`. CarbonPeriod's own `current(): ?CarbonInterface`
+ * and `key(): ?int` accessors prove the iterator yields `int => CarbonInterface`
+ * once `valid()` gates it.
+ *
+ * `@implements IteratorAggregate<int, CarbonInterface>` is what `collect()` /
+ * `foreach` actually read to bind the iterable template; the `getIterator`
+ * stub is a backstop for callers that introspect the return type directly.
+ *
+ * `\IteratorAggregate` MUST appear in the explicit `implements` clause here,
+ * not just inherit through `DatePeriodBase → \DatePeriod`. Psalm's
+ * `ClassLikeNodeScanner::implementTemplatedType()` validates `@implements`
+ * against `class_implements` at scan time, *before* parent-storage merging,
+ * and silently rejects the template binding with `InvalidDocblock` if the
+ * interface is not already listed.
+ *
+ * Class declaration redeclaration wipes `class_implements` (CLAUDE.md), so
+ * the `extends` / `implements` / `use` clauses are copied verbatim from
+ * Carbon source. Methods not redeclared here continue to come from
+ * reflection of the real class.
+ *
+ * @implements \IteratorAggregate<int, CarbonInterface>
+ */
+class CarbonPeriod extends DatePeriodBase implements Countable, JsonSerializable, UnitValue, \IteratorAggregate
+{
+    use LocalFactory;
+    use IntervalRounding;
+    use Mixin {
+        Mixin::mixin as baseMixin;
+    }
+    use Options {
+        Options::__debugInfo as baseDebugInfo;
+    }
+    use ToStringFormat;
+
+    /**
+     * @return \Generator<int, CarbonInterface>
+     */
+    public function getIterator(): \Generator {}
+}

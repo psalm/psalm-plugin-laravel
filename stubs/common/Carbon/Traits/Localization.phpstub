@@ -1,0 +1,20 @@
+<?php
+
+namespace Carbon\Traits;
+
+/**
+ * Narrow `locale()` to a conditional return type. Carbon's source declares
+ * `static|string` because the method does double duty: `null` (default)
+ * acts as a getter returning the current locale, any non-null value acts as
+ * a setter returning `$this`.
+ *
+ * See `Carbon\Traits\Date.phpstub` for the broader rationale on stubbing at
+ * the trait level.
+ */
+trait Localization
+{
+    /**
+     * @return ($locale is null ? string : static)
+     */
+    public function locale(?string $locale = null, string ...$fallbackLocales): static|string {}
+}

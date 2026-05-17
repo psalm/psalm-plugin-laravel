@@ -60,8 +60,19 @@ final class CarbonStubProvider
         ];
 
         foreach ($lazyStubs as $stub) {
-            if (\is_file($stub)) {
-                $registration->addStubFile($stub);
+            $realPath = \realpath($stub);
+
+            if ($realPath !== false) {
+                // realpath() is load-bearing. InstalledVersions::getInstallPath() can return
+                // a path containing `..` segments (e.g. `vendor/composer/../nesbot/carbon`).
+                // When Psalm scans the stub it hits `if (!class_exists(X)) { class X {} }`,
+                // calls PHP's class_exists (which returns true because earlier plugin boot
+                // autoloaded Carbon\CarbonPeriod, whose top-level `require` already declared
+                // X), and compares ReflectionClass::getFileName() to the stub's $file_path.
+                // If those paths differ only by `..` normalisation, Psalm assumes the class
+                // lives elsewhere, sets skip_if_descendants, and the guarded class declaration
+                // is silently dropped. Downstream code then sees MissingDependency. See #922.
+                $registration->addStubFile($realPath);
             } else {
                 $output->warning(
                     "Laravel plugin: Carbon lazy stub not found at '{$stub}'. "
