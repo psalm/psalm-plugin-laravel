@@ -2,6 +2,18 @@
 
 namespace Illuminate\Database\Eloquent\Concerns;
 
+/**
+ * The TDeclaringModel slot in every relation factory's `@return` uses `static` rather
+ * than Laravel's source `$this`. Empirically, Psalm 7 substitutes `static` with the
+ * late-static-bound class at the call site, while `$this` in template position leaves
+ * the intermediate as `mixed`. A chained call like
+ * `$this->belongsTo(X::class)->withoutGlobalScopes()` inside a relation method then
+ * surfaces as MixedMethodCall. `static` and `$this` are semantically equivalent at the
+ * TDeclaringModel slot (the receiver of any relation factory is always the model
+ * itself), so the divergence is safe.
+ *
+ * Keep this divergence when syncing stubs against Laravel source (see #913).
+ */
 trait HasRelationships
 {
 
@@ -12,7 +24,7 @@ trait HasRelationships
      * @param  string  $related
      * @param  string  $foreignKey
      * @param  string  $localKey
-     * @return \Illuminate\Database\Eloquent\Relations\HasOne<TRelatedModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne<TRelatedModel, static>
      */
     public function hasOne($related, $foreignKey = null, $localKey = null) {}
 
@@ -28,7 +40,7 @@ trait HasRelationships
      * @param  string|null  $secondKey
      * @param  string|null  $localKey
      * @param  string|null  $secondLocalKey
-     * @return \Illuminate\Database\Eloquent\Relations\HasOneThrough<TRelatedModel, TIntermediateModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\HasOneThrough<TRelatedModel, TIntermediateModel, static>
      */
     public function hasOneThrough($related, $through, $firstKey = null, $secondKey = null, $localKey = null, $secondLocalKey = null) {}
 
@@ -41,7 +53,7 @@ trait HasRelationships
      * @param  string  $type
      * @param  string  $id
      * @param  string  $localKey
-     * @return \Illuminate\Database\Eloquent\Relations\MorphOne<TRelatedModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\MorphOne<TRelatedModel, static>
      */
     public function morphOne($related, $name, $type = null, $id = null, $localKey = null) {}
 
@@ -53,7 +65,7 @@ trait HasRelationships
      * @param  string  $foreignKey
      * @param  string  $ownerKey
      * @param  string  $relation
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<TRelatedModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<TRelatedModel, static>
      */
     public function belongsTo($related, $foreignKey = null, $ownerKey = null, $relation = null) {}
 
@@ -61,7 +73,7 @@ trait HasRelationships
      * The related model type cannot be determined statically for polymorphic relations,
      * so TRelatedModel defaults to Model.
      *
-     * @return \Illuminate\Database\Eloquent\Relations\MorphTo<\Illuminate\Database\Eloquent\Model, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\MorphTo<\Illuminate\Database\Eloquent\Model, static>
      */
     public function morphTo($name = null, $type = null, $id = null, $ownerKey = null) {}
 
@@ -72,7 +84,7 @@ trait HasRelationships
      * @param  string  $related
      * @param  string  $foreignKey
      * @param  string  $localKey
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany<TRelatedModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany<TRelatedModel, static>
      */
     public function hasMany($related, $foreignKey = null, $localKey = null) {}
 
@@ -88,7 +100,7 @@ trait HasRelationships
      * @param  string|null  $secondKey
      * @param  string|null  $localKey
      * @param  string|null  $secondLocalKey
-     * @return \Illuminate\Database\Eloquent\Relations\HasManyThrough<TRelatedModel, TIntermediateModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\HasManyThrough<TRelatedModel, TIntermediateModel, static>
      */
     public function hasManyThrough($related, $through, $firstKey = null, $secondKey = null, $localKey = null, $secondLocalKey = null) {}
 
@@ -101,7 +113,7 @@ trait HasRelationships
      * @param  string  $type
      * @param  string  $id
      * @param  string  $localKey
-     * @return \Illuminate\Database\Eloquent\Relations\MorphMany<TRelatedModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\MorphMany<TRelatedModel, static>
      */
     public function morphMany($related, $name, $type = null, $id = null, $localKey = null) {}
 
@@ -116,7 +128,7 @@ trait HasRelationships
      * @param  string  $parentKey
      * @param  string  $relatedKey
      * @param  string  $relation
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<TRelatedModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<TRelatedModel, static>
      */
     public function belongsToMany($related, $table = null, $foreignPivotKey = null, $relatedPivotKey = null,
                                   $parentKey = null, $relatedKey = null, $relation = null) {}
@@ -134,7 +146,7 @@ trait HasRelationships
      * @param  string  $relatedKey
      * @param  string  $relation
      * @param  bool  $inverse
-     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static>
      */
     public function morphToMany($related, $name, $table = null, $foreignPivotKey = null,
                                 $relatedPivotKey = null, $parentKey = null,
@@ -152,7 +164,7 @@ trait HasRelationships
      * @param  string  $parentKey
      * @param  string  $relatedKey
      * @param  string  $relation
-     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, $this>
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static>
      */
     public function morphedByMany($related, $name, $table = null, $foreignPivotKey = null,
                                   $relatedPivotKey = null, $parentKey = null,
