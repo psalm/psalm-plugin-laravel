@@ -46,6 +46,7 @@ final class MarkdownRenderer
             $lines[] = '- Mode: `' . ($report['boot']['mode'] ?? 'unknown') . '` — ' . ($report['boot']['description'] ?? '');
             $lines[] = '- Path: `' . ($report['boot']['path'] ?? 'unknown') . '`';
         }
+
         $lines[] = '';
 
         $lines[] = '### Stub loading';
@@ -59,6 +60,7 @@ final class MarkdownRenderer
                 $lines[] = '| `' . $dir['dir'] . '` | ' . $dir['reason'] . ' | ' . $dir['file_count'] . ' |';
             }
         }
+
         $lines[] = '';
 
         $lines[] = '### Integration stubs';
@@ -71,6 +73,7 @@ final class MarkdownRenderer
                 . $this->cell($entry['version']) . ' | '
                 . $entry['note'] . ' |';
         }
+
         $lines[] = '';
 
         $lines[] = '### Handlers';
@@ -84,6 +87,7 @@ final class MarkdownRenderer
                 $lines[] = '| ' . $category . ' | ' . $count . ' |';
             }
         }
+
         $lines[] = '';
 
         $lines[] = '### Schema parsing';
@@ -94,6 +98,7 @@ final class MarkdownRenderer
         foreach ($report['schema']['migration_dirs'] as $dir) {
             $lines[] = '  - `' . $dir . '`';
         }
+
         $lines[] = '';
 
         if ($report['hard_failures'] !== []) {
@@ -102,6 +107,7 @@ final class MarkdownRenderer
             foreach ($report['hard_failures'] as $failure) {
                 $lines[] = '- ' . $failure;
             }
+
             $lines[] = '';
         }
 

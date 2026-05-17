@@ -151,6 +151,7 @@ class Diagnostics
                 if (!$entry->isDir() || $entry->isDot()) {
                     continue;
                 }
+
                 $name = $entry->getFilename();
                 if ($name !== '' && \ctype_digit($name[0])) {
                     $candidates[] = $name;
@@ -281,7 +282,7 @@ class Diagnostics
         }
 
         return [
-            'state' => $aggregator !== null ? 'warm' : 'cold',
+            'state' => $aggregator instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator ? 'warm' : 'cold',
             'migration_dirs' => $migrationDirs,
             'migration_file_count' => $migrationFileCount,
             // SchemaAggregator does not expose a table count publicly; the diagnose CLI

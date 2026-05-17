@@ -31,14 +31,14 @@ final class DiagnoseCommandTest extends TestCase
         $exit = $tester->execute([]);
         $display = $tester->getDisplay();
 
-        self::assertSame(Command::SUCCESS, $exit, $display);
-        self::assertStringContainsString('[Versions]', $display);
-        self::assertStringContainsString('[Boot mode (#766)]', $display);
-        self::assertStringContainsString('[Stub loading]', $display);
-        self::assertStringContainsString('[Integration stubs]', $display);
-        self::assertStringContainsString('[Handlers]', $display);
-        self::assertStringContainsString('[Schema parsing]', $display);
-        self::assertStringNotContainsString('[Hard failures]', $display);
+        $this->assertSame(Command::SUCCESS, $exit, $display);
+        $this->assertStringContainsString('[Versions]', $display);
+        $this->assertStringContainsString('[Boot mode (#766)]', $display);
+        $this->assertStringContainsString('[Stub loading]', $display);
+        $this->assertStringContainsString('[Integration stubs]', $display);
+        $this->assertStringContainsString('[Handlers]', $display);
+        $this->assertStringContainsString('[Schema parsing]', $display);
+        $this->assertStringNotContainsString('[Hard failures]', $display);
     }
 
     #[Test]
@@ -50,13 +50,13 @@ final class DiagnoseCommandTest extends TestCase
         /** @var array<string, mixed> $decoded */
         $decoded = \json_decode($tester->getDisplay(), true, flags: \JSON_THROW_ON_ERROR);
 
-        self::assertArrayHasKey('versions', $decoded);
-        self::assertArrayHasKey('boot', $decoded);
-        self::assertArrayHasKey('stubs', $decoded);
-        self::assertArrayHasKey('integrations', $decoded);
-        self::assertArrayHasKey('handlers', $decoded);
-        self::assertArrayHasKey('schema', $decoded);
-        self::assertArrayHasKey('hard_failures', $decoded);
+        $this->assertArrayHasKey('versions', $decoded);
+        $this->assertArrayHasKey('boot', $decoded);
+        $this->assertArrayHasKey('stubs', $decoded);
+        $this->assertArrayHasKey('integrations', $decoded);
+        $this->assertArrayHasKey('handlers', $decoded);
+        $this->assertArrayHasKey('schema', $decoded);
+        $this->assertArrayHasKey('hard_failures', $decoded);
     }
 
     #[Test]
@@ -65,12 +65,13 @@ final class DiagnoseCommandTest extends TestCase
         $tester = $this->testerFor($this->fixtureProvider($this->okReport()));
 
         $tester->execute(['--format' => 'markdown']);
+
         $display = $tester->getDisplay();
 
-        self::assertStringContainsString('## psalm-plugin-laravel diagnose', $display);
-        self::assertStringContainsString('### Versions', $display);
-        self::assertStringContainsString('| --- | --- |', $display);
-        self::assertStringContainsString('### Schema parsing', $display);
+        $this->assertStringContainsString('## psalm-plugin-laravel diagnose', $display);
+        $this->assertStringContainsString('### Versions', $display);
+        $this->assertStringContainsString('| --- | --- |', $display);
+        $this->assertStringContainsString('### Schema parsing', $display);
     }
 
     #[Test]
@@ -82,9 +83,9 @@ final class DiagnoseCommandTest extends TestCase
 
         $exit = $tester->execute([]);
 
-        self::assertSame(Command::FAILURE, $exit);
-        self::assertStringContainsString('[Hard failures]', $tester->getDisplay());
-        self::assertStringContainsString('Application boot failed: synthetic', $tester->getDisplay());
+        $this->assertSame(Command::FAILURE, $exit);
+        $this->assertStringContainsString('[Hard failures]', $tester->getDisplay());
+        $this->assertStringContainsString('Application boot failed: synthetic', $tester->getDisplay());
     }
 
     #[Test]
@@ -94,8 +95,8 @@ final class DiagnoseCommandTest extends TestCase
 
         $exit = $tester->execute(['--format' => 'xml']);
 
-        self::assertSame(Command::INVALID, $exit);
-        self::assertStringContainsString("Unknown --format 'xml'", $tester->getDisplay());
+        $this->assertSame(Command::INVALID, $exit);
+        $this->assertStringContainsString("Unknown --format 'xml'", $tester->getDisplay());
     }
 
     #[Test]
@@ -103,10 +104,10 @@ final class DiagnoseCommandTest extends TestCase
     {
         $report = (new Diagnostics())->collect();
 
-        self::assertNotEmpty($report['versions']['php']);
-        self::assertContains($report['boot']['mode'], ['user_kernel', 'vendor_bootstrap', 'testbench_fallback', null]);
-        self::assertNotEmpty($report['stubs'], 'common/ stub dir must always resolve');
-        self::assertGreaterThan(0, $report['handlers']['total']);
+        $this->assertNotEmpty($report['versions']['php']);
+        $this->assertContains($report['boot']['mode'], ['user_kernel', 'vendor_bootstrap', 'testbench_fallback', null]);
+        $this->assertNotEmpty($report['stubs'], 'common/ stub dir must always resolve');
+        $this->assertGreaterThan(0, $report['handlers']['total']);
     }
 
     private function testerFor(Diagnostics $diagnostics): CommandTester

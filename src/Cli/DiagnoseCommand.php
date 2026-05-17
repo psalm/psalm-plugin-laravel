@@ -35,7 +35,9 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 final class DiagnoseCommand extends Command
 {
     private const FORMAT_TEXT = 'text';
+
     private const FORMAT_JSON = 'json';
+
     private const FORMAT_MARKDOWN = 'markdown';
 
     /**
