@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779038324148,
+  "lastUpdate": 1779040166956,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4612,6 +4612,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.54,
             "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "e87e64d932d4ad65e50dc6363ce5975b0390b1b5",
+          "message": "feat(diagnose): surface swallowed bootstrap errors #952\n\nThrows caught inside doGetApp's tolerant bootstrap path never reached\nthe diagnose report. They are now exposed via getBootstrapError() and\nfunnelled into a unified bootstrapErrors list together with hard boot\nfailures. bootMode==null is the hard-fail signal so the renderer can\ndistinguish FAILED from partial-boot warnings without a separate field.",
+          "timestamp": "2026-05-17T19:45:57+02:00",
+          "tree_id": "99f9778afd4ef22e2bc3f6e974d26a143fdc35ec",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e87e64d932d4ad65e50dc6363ce5975b0390b1b5"
+        },
+        "date": 1779040166395,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.89,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
