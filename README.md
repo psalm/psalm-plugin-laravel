@@ -111,11 +111,11 @@ See [docs/issues/index.md](docs/issues/index.md) for the full catalog.
 
 ## Pest framework support
 
-The plugin auto-enables Pest support when `pestphp/pest` is installed in your project. Inside files identified as Pest tests (any file with a top-level `test()`, `it()`, `describe()`, `uses()`, `beforeEach()`, `afterEach()`, `beforeAll()`, `afterAll()`, `todo()`, or `dataset()` call), it drops two classes of false positives.
+The plugin auto-enables Pest support when `pestphp/pest` is installed in your project. Inside files identified as Pest tests (any file with a top-level call to one of the Pest DSL functions: `test()`, `it()`, `describe()`, `uses()`, `beforeEach()`, `afterEach()`, `beforeAll()`, `afterAll()`, `todo()`, `dataset()`, `pest()`, `expect()`, `covers()`, or `mutates()`), it drops two classes of false positives.
 
-The first is `InvalidScope` on `$this` inside Pest closures. Pest binds the closure to the test case at runtime via `Closure::bind()`, which Psalm cannot see.
+The first is `InvalidScope` on `$this` inside Pest closures that Pest binds to the test case at runtime (`test`, `it`, `beforeEach`, `afterEach` callbacks). Pest performs the bind via `Closure::bind()`, which Psalm cannot see. Closures Pest does not bind, namely `beforeAll`/`afterAll` (static context) and the body of `describe`, are unaffected: a stray `$this` there stays reported as the real bug it is.
 
-The second is `InternalMethod` on calls into Pest's documented DSL surface (`Pest\PendingCalls\TestCall`, `Pest\PendingCalls\UsesCall`, `Pest\PendingCalls\BeforeEachCall`, `Pest\PendingCalls\AfterEachCall`, `Pest\Mixins\Expectation`, and the higher-order helpers under `Pest\Expectations\`). Pest tags these classes `@internal` but they are the only way to use the DSL.
+The second is `InternalMethod` on calls into Pest's documented DSL surface (`Pest\PendingCalls\*`, including `TestCall`, `UsesCall`, `BeforeEachCall`, `AfterEachCall`, and `DescribeCall`; `Pest\Mixins\Expectation`; the higher-order helpers under `Pest\Expectations\`; and `Pest\Configuration` returned by `pest()`). Pest tags these classes `@internal` but they are the only way to use the DSL.
 
 Non-Pest files in your `tests/` directory (for example, PHPUnit-style `TestCase` subclasses or fixture helpers) are unaffected.
 
