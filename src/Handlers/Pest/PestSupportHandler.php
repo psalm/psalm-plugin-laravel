@@ -134,6 +134,7 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
                 if (self::containsPestDslCall($stmt->stmts)) {
                     return true;
                 }
+
                 continue;
             }
 
