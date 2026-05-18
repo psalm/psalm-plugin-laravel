@@ -217,6 +217,7 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
                 if (self::containsTopLevelPestCall($stmt->stmts)) {
                     return true;
                 }
+
                 continue;
             }
 
