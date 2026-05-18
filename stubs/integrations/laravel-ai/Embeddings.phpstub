@@ -1,0 +1,21 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Laravel\Ai\PendingResponses\PendingEmbeddingsGeneration;
+
+class Embeddings
+{
+    /**
+     * The write-side of indirect prompt injection via RAG: anything embedded
+     * here can be retrieved into a future prompt verbatim. PoisonedRAG (Zou
+     * et al., USENIX Security 2025) shows 5 poisoned docs → 90% targeted
+     * attack success. Mark the inputs as an llm_prompt sink so that
+     * user-controlled text reaching this method surfaces a finding.
+     *
+     * @param  string[]  $inputs
+     *
+     * @psalm-taint-sink llm_prompt $inputs
+     */
+    public static function for(array $inputs): PendingEmbeddingsGeneration {}
+}
