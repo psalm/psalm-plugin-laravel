@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779059138581,
+  "lastUpdate": 1779091124132,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4857,6 +4857,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.52,
             "range": "± 0.37",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "67f38e894b488503eb4f81ef213c0faad34b1d36",
+          "message": "Narrow `pluck($value, $key)` key type and cover relation chains (#968)\n\n* fix(eloquent): narrow pluck key and cover relation chains #967\n\nTwo-argument pluck() now narrows both axes when @property metadata\nallows it:\n\n- TKey adopts the @property type when it is a subset of array-key\n  (int|string); falls back to array-key otherwise so Collection<TKey,\n  TValue> never receives an invalid key type.\n- $relation->pluck() now narrows the same way as Builder::pluck() and\n  Collection::pluck(). Psalm rewrites relation calls through @mixin\n  Builder<TRelatedModel> but leaves the template unsubstituted by the\n  time the return-type provider fires; the resolver inspects the\n  call's LHS expression as a fallback to recover the concrete model.\n\nCloses #967\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-18T09:55:57+02:00",
+          "tree_id": "06b94ad42dc79dca4eddca163a22ff54a5bc6186",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/67f38e894b488503eb4f81ef213c0faad34b1d36"
+        },
+        "date": 1779091123689,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.32,
+            "range": "± 0.06",
             "unit": "s"
           },
           {
