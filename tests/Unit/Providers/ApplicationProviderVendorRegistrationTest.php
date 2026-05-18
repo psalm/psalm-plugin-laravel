@@ -43,6 +43,9 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
         $this->originalState = [
             'app' => $this->reflectProperty('app')->getValue(),
             'booted' => $this->reflectProperty('booted')->getValue(),
+            'bootMode' => $this->reflectProperty('bootMode')->getValue(),
+            'bootPath' => $this->reflectProperty('bootPath')->getValue(),
+            'bootstrapError' => $this->reflectProperty('bootstrapError')->getValue(),
         ];
 
         $this->fakeProjectRoot = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR
@@ -64,6 +67,9 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
 
         $this->reflectProperty('app')->setValue(null, $this->originalState['app']);
         $this->reflectProperty('booted')->setValue(null, $this->originalState['booted']);
+        $this->reflectProperty('bootMode')->setValue(null, $this->originalState['bootMode']);
+        $this->reflectProperty('bootPath')->setValue(null, $this->originalState['bootPath']);
+        $this->reflectProperty('bootstrapError')->setValue(null, $this->originalState['bootstrapError']);
 
         $this->removeDirectory($this->fakeProjectRoot);
 

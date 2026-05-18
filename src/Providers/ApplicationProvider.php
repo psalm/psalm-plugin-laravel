@@ -241,9 +241,6 @@ final class ApplicationProvider
      * may not handle a real-but-empty project tree well — leaving them at the
      * Testbench skeleton keeps that behaviour unchanged.
      *
-     * Project root is supplied by the caller (computed once in branch 3 and shared
-     * with {@see self::registerDiscoveredVendorProviders()}).
-     *
      * Only branch 3 of {@see self::doGetApp()} calls this — for projects with a
      * real `bootstrap/app.php`, that file's Application instance is used verbatim
      * and Testbench is never consulted.
