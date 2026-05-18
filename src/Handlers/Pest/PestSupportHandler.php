@@ -14,51 +14,75 @@ use PhpParser\Node\Expr\NullsafeMethodCall;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
+use Psalm\Codebase;
 use Psalm\Issue\InternalMethod;
 use Psalm\Issue\InvalidScope;
 use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\BeforeFileAnalysisInterface;
+use Psalm\Plugin\EventHandler\BeforeStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 use Psalm\Plugin\EventHandler\Event\BeforeFileAnalysisEvent;
+use Psalm\Plugin\EventHandler\Event\BeforeStatementAnalysisEvent;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Union;
 
 /**
  * Pest framework support for Laravel projects.
  *
- * Pest is a test framework whose DSL deliberately diverges from class-based test conventions:
- * test files are plain PHP scripts that call top-level `test()` / `it()` / `describe()` etc.,
- * passing closures that Pest later binds to a generated TestCase subclass via Closure::bind().
- * The DSL chain (`expect(...)->toBe(...)`, `test(...)->with(...)`, `uses(...)->in(...)`) is
- * implemented on classes that Pest marks `@internal` even though they ARE the documented
- * public surface user code is expected to call.
+ * Pest test files are plain PHP scripts that call top-level `test()` / `it()` / `describe()`
+ * etc., passing closures that Pest later binds to a generated TestCase subclass via
+ * Closure::bind(). The DSL chain (`expect(...)->toBe(...)`, `test(...)->with(...)`,
+ * `uses(...)->in(...)`) is implemented on classes that Pest marks `@internal` even though
+ * they ARE the documented public surface user code is expected to call.
  *
- * Two Psalm checks misfire on this pattern:
+ * The handler addresses two Psalm misfires inside detected Pest files:
  *
- *  1. InvalidScope on `$this` inside Pest closures that Pest binds to the TestCase at
- *     runtime (`test`, `it`, `beforeEach`, `afterEach`). Suppressed only when the offending
- *     `$this` reference is inside a binding closure's file range — `beforeAll`/`afterAll`
- *     run in static context (no `$this`), `describe`'s own closure is unbound, so `$this`
- *     there stays flagged.
+ *  1. **`$this` in binding closures**: Pest binds the closure passed to `test`, `it`,
+ *     `beforeEach`, `afterEach` to a TestCase subclass at runtime. Before Psalm analyzes
+ *     a statement inside such a closure, we inject `$this` into the statement context with
+ *     the resolved TestCase type. This makes `$this->...` calls type-check naturally and
+ *     prevents the InvalidScope check from firing in the first place — no suppression
+ *     needed. Crucially this also avoids a cascade where suppressing InvalidScope alone
+ *     would leave `$this` as `mixed` and trip MixedMethodCall/MixedPropertyFetch on every
+ *     subsequent access (observed on real-world Laravel apps: ~2-3× the suppressed count
+ *     reappear as Mixed errors).
  *
- *  2. InternalMethod on the Pest DSL surface (`Pest\PendingCalls\*`, `Pest\Mixins\Expectation`,
- *     `Pest\Expectations\*` higher-order helpers, `Pest\Configuration` returned by `pest()`).
- *     Suppressed file-wide inside Pest test files because these DSL chains pepper the whole
- *     file and unrelated `@internal` namespaces are excluded by the prefix list.
+ *     `beforeAll` / `afterAll` are NOT bound (Pest runs them in static context per
+ *     `TestSuite::getInstance()->beforeAll->set($closure)`). `describe`'s own closure is
+ *     unbound — only the inner `test()`/`it()` calls inside it bind. `$this` in those
+ *     positions stays correctly flagged.
  *
- * Detection happens once per file in `beforeAnalyzeFile()` via AST inspection of the parsed
- * statements (Psalm already parsed the file at this point; we read its AST). Results are
- * stored in two per-process static maps: one boolean "is Pest file" status, one list of
- * binding-closure byte ranges. The hot `beforeAddIssue()` path is then an O(1) lookup
- * plus, for InvalidScope only, a linear scan over the binding ranges of the issue's file.
+ *  2. **`InternalMethod` on the Pest DSL surface**: dropped only when the called method
+ *     id starts with one of `Pest\PendingCalls\`, `Pest\Mixins\Expectation::`,
+ *     `Pest\Expectations\`, or `Pest\Configuration::`. Unrelated `@internal` calls from
+ *     Pest test files remain flagged.
  *
- * Out of scope (potential follow-ups):
- *  - Resolving `$this` inside Pest closures to the bound `TestCase` type, which would
- *    additionally fix downstream MixedMethodCall on `$this->...` calls.
+ * **TestCase resolution.** First time a Pest file is seen, the handler probes the user's
+ * codebase for the bound TestCase class. `Tests\TestCase` (the Laravel default) is tried
+ * first, then `PHPUnit\Framework\TestCase`. The result is cached for the rest of the
+ * process. Per-directory `uses(X::class)->in(...)` mappings from `tests/Pest.php` are not
+ * yet honored — a follow-up could parse them for projects with multiple test base classes.
+ *
+ * **Detection.** `beforeAnalyzeFile()` walks the parsed AST once per file. A file is
+ * marked Pest if it contains a top-level call to any Pest DSL function (including inside
+ * a top-level `namespace { ... }` block). For each binding-DSL call, the closure
+ * argument's byte range is recorded along with the resolved TestCase FQCN.
+ *
+ * **Hot path.** `beforeAddIssue` is a single class-instanceof gate plus an O(1) `isset()`
+ * lookup. `beforeStatementAnalysis` is gated on the file map first; non-Pest files exit
+ * in one isset check.
+ *
+ * Out of scope:
  *  - Higher-order expectation property access (`expect(x)->not->toBeFalse()`), where Pest
  *    resolves `->not` via `__get` and Psalm reports UndefinedPropertyFetch.
+ *  - Per-directory `uses()->in()` parsing.
  *
  * @internal
  */
-final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAddIssueInterface
+final class PestSupportHandler implements
+    BeforeFileAnalysisInterface,
+    BeforeStatementAnalysisInterface,
+    BeforeAddIssueInterface
 {
     /**
      * Lowercased prefixes that identify Pest's `@internal` DSL surface as method ids.
@@ -74,8 +98,7 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
         // Higher-order helpers: HigherOrderExpectation, EachExpectation, OppositeExpectation.
         // All three are `@internal` in Pest source.
         'pest\\expectations\\',
-        // Returned by `pest()` for the tests/Pest.php config-style DSL
-        // (e.g. `pest()->extend(TestCase::class)`).
+        // Returned by `pest()` for the tests/Pest.php config-style DSL.
         'pest\\configuration::',
     ];
 
@@ -121,29 +144,45 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
     ];
 
     /**
-     * Per-file detection status, keyed by the file path Psalm reports on the
-     * CodeLocation / StatementsSource. `true` = detected Pest file; `false` = inspected
-     * and not Pest (cached so long-lived processes don't re-walk the AST). Each Psalm
-     * worker process (pcntl_fork) keeps its own copy.
+     * TestCase class candidates probed at first Pest detection. Order matters: the
+     * Laravel default `Tests\TestCase` is checked first because Laravel scaffolds it
+     * and any Pest test in a Laravel app inherits from it. `PHPUnit\Framework\TestCase`
+     * is the fallback for non-Laravel Pest projects or sandboxes without Tests\TestCase.
+     */
+    private const TEST_CASE_CANDIDATES = [
+        'Tests\\TestCase',
+        'PHPUnit\\Framework\\TestCase',
+    ];
+
+    /**
+     * Per-file detection status. `true` = Pest file; `false` = inspected and not Pest
+     * (negative result cached so long-lived processes don't re-walk the AST). Each
+     * Psalm worker process (pcntl_fork) keeps its own copy.
      *
      * @var array<string, bool>
      */
     private static array $pestFileStatus = [];
 
     /**
-     * Per-file byte ranges of binding closures. An `$this` reference whose CodeLocation's
-     * raw_file_start falls inside any recorded range is treated as TestCase-bound and the
-     * InvalidScope check is suppressed for it.
+     * Per-file list of `[range_start, range_end, test_case_fqcn]` for every binding
+     * closure. A statement whose start position falls inside any range has its context
+     * `$this` populated with `TNamedObject($fqcn)` before analysis.
      *
-     * @var array<string, list<array{int, int}>>
+     * @var array<string, list<array{int, int, string}>>
      */
-    private static array $pestBindingRanges = [];
+    private static array $pestBindingScopes = [];
+
+    /**
+     * Resolved TestCase FQCN for this process. Computed once on the first Pest file
+     * and reused. Null means not yet resolved.
+     */
+    private static ?string $resolvedTestCaseClass = null;
 
     /**
      * Walk each file's AST once. Mark the file as Pest if it contains a top-level Pest
-     * DSL call (or a Pest DSL call inside a top-level `namespace { ... }` block for the
-     * Pest-3 style). Collect the byte ranges of every binding closure so InvalidScope
-     * can be suppressed precisely.
+     * DSL call (or a Pest DSL call inside a top-level `namespace { ... }` block).
+     * Collect the byte ranges of every binding closure so InvalidScope can be suppressed
+     * precisely.
      */
     #[\Override]
     public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void
@@ -163,7 +202,51 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
         }
 
         self::$pestFileStatus[$filePath] = true;
-        self::$pestBindingRanges[$filePath] = self::collectBindingClosureRanges($stmts);
+
+        $testCaseClass = self::resolveTestCaseClass($event->getCodebase());
+        self::$pestBindingScopes[$filePath] = self::collectBindingClosureScopes($stmts, $testCaseClass);
+    }
+
+    /**
+     * Inject `$this` into the analysis context for statements that sit inside a Pest
+     * binding closure. Mutation only happens when `$this` is not already present in
+     * scope, so we never override Psalm's own analysis (e.g. Closure::bind chains it
+     * already understands).
+     */
+    #[\Override]
+    public static function beforeStatementAnalysis(BeforeStatementAnalysisEvent $event): ?bool
+    {
+        $filePath = $event->getStatementsSource()->getFilePath();
+        $scopes = self::$pestBindingScopes[$filePath] ?? null;
+        if ($scopes === null) {
+            return null;
+        }
+
+        $context = $event->getContext();
+        if (isset($context->vars_in_scope['$this'])) {
+            return null;
+        }
+
+        $stmt = $event->getStmt();
+        $stmtStart = $stmt->getStartFilePos();
+        if ($stmtStart < 0) {
+            return null;
+        }
+
+        foreach ($scopes as [$rangeStart, $rangeEnd, $fqcn]) {
+            if ($stmtStart >= $rangeStart && $stmtStart <= $rangeEnd) {
+                $thisType = new Union([new TNamedObject($fqcn)]);
+                $context->vars_in_scope['$this'] = $thisType;
+                $context->vars_possibly_in_scope['$this'] = true;
+                // Mirror Psalm's own ClosureAnalyzer behaviour: set $context->self
+                // so `self::method()` and `static::method()` resolve to the bound class.
+                $context->self = $fqcn;
+
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -174,8 +257,6 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
     {
         $issue = $event->getIssue();
 
-        // BeforeAddIssue fires for every issue Psalm emits. The instanceof gate keeps
-        // the handler off the hot path for the ~99% of issues we never act on.
         if (! $issue instanceof InvalidScope && ! $issue instanceof InternalMethod) {
             return null;
         }
@@ -186,14 +267,23 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
         }
 
         if ($issue instanceof InvalidScope) {
+            // `BeforeStatementAnalysis` already injected `$this` into the context for
+            // statements inside binding closures, which prevents the cascade where
+            // `$this` would otherwise be `mixed` and trip MixedMethodCall everywhere.
+            // But Psalm has two InvalidScope emit sites: `VariableFetchAnalyzer`
+            // (consults `vars_in_scope`, so injection silences it) and
+            // `MethodCallAnalyzer` (checks `$statements_analyzer->getFQCLN()` only,
+            // bypassing the context). Closure FQCLN is not mutable from a plugin, so
+            // we still need to drop InvalidScope here for binding-closure ranges. The
+            // injection makes the subsequent type resolution work; this hook keeps
+            // the cosmetic error off the report.
             return self::isInsideBindingClosure($filePath, $issue->code_location->raw_file_start)
                 ? false
                 : null;
         }
 
-        // InternalMethod: only suppress Pest's own DSL. A user calling some unrelated
-        // `@internal` method from a Pest test file should still be flagged. The cheap
-        // `pest\\` short-circuit avoids walking the prefix list for non-Pest namespaces.
+        // Cheap short-circuit before the prefix walk: 99% of InternalMethod issues
+        // even inside Pest files reference non-Pest namespaces.
         if (! \str_starts_with($issue->method_id, 'pest\\')) {
             return null;
         }
@@ -208,6 +298,20 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
     }
 
     /**
+     * @psalm-external-mutation-free
+     */
+    private static function isInsideBindingClosure(string $filePath, int $rawFileStart): bool
+    {
+        foreach (self::$pestBindingScopes[$filePath] ?? [] as [$start, $end, $_fqcn]) {
+            if ($rawFileStart >= $start && $rawFileStart <= $end) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param array<Stmt> $stmts
      */
     private static function containsTopLevelPestCall(array $stmts): bool
@@ -217,7 +321,6 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
                 if (self::containsTopLevelPestCall($stmt->stmts)) {
                     return true;
                 }
-
                 continue;
             }
 
@@ -250,17 +353,17 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
     }
 
     /**
-     * Collect [start, end] byte ranges of every closure argument passed to a
-     * binding Pest DSL function anywhere in the AST. Walks nested expressions too,
-     * since `describe(..., function () { test(..., fn () => $this->x); })` puts the
-     * inner `test()` closure deep inside the describe callback.
+     * Collect `[start, end, fqcn]` for every closure argument passed to a binding Pest
+     * DSL function anywhere in the AST. Walks nested expressions, so an inner
+     * `it()`/`test()` inside a `describe()` callback is captured even though `describe`
+     * itself is not in the binding list.
      *
      * @param array<Stmt> $stmts
-     * @return list<array{int, int}>
+     * @return list<array{int, int, string}>
      */
-    private static function collectBindingClosureRanges(array $stmts): array
+    private static function collectBindingClosureScopes(array $stmts, string $testCaseClass): array
     {
-        $ranges = [];
+        $scopes = [];
 
         /** @var list<FuncCall> $funcCalls */
         $funcCalls = (new NodeFinder())->findInstanceOf($stmts, FuncCall::class);
@@ -288,27 +391,41 @@ final class PestSupportHandler implements BeforeFileAnalysisInterface, BeforeAdd
             $start = $closure->getStartFilePos();
             $end = $closure->getEndFilePos();
             if ($start < 0 || $end < 0) {
-                // Synthetic/un-positioned nodes; cannot range-check against.
+                // Synthetic / un-positioned nodes; cannot range-check against.
                 continue;
             }
 
-            $ranges[] = [$start, $end];
+            $scopes[] = [$start, $end, $testCaseClass];
         }
 
-        return $ranges;
+        return $scopes;
     }
 
     /**
+     * Resolve once per process. `Tests\TestCase` is the Laravel scaffold default and
+     * applies to virtually every Laravel + Pest project; `PHPUnit\Framework\TestCase`
+     * is the universal fallback. Caching here is safe — TestCase resolution does not
+     * depend on which file is being analyzed.
+     *
      * @psalm-external-mutation-free
      */
-    private static function isInsideBindingClosure(string $filePath, int $rawFileStart): bool
+    private static function resolveTestCaseClass(Codebase $codebase): string
     {
-        foreach (self::$pestBindingRanges[$filePath] ?? [] as [$start, $end]) {
-            if ($rawFileStart >= $start && $rawFileStart <= $end) {
-                return true;
+        if (self::$resolvedTestCaseClass !== null) {
+            return self::$resolvedTestCaseClass;
+        }
+
+        foreach (self::TEST_CASE_CANDIDATES as $candidate) {
+            if ($codebase->classOrInterfaceExists($candidate)) {
+                return self::$resolvedTestCaseClass = $candidate;
             }
         }
 
-        return false;
+        // Both candidates absent (e.g. user runs Psalm without PHPUnit installed).
+        // Default to PHPUnit\Framework\TestCase anyway — Psalm will then report
+        // UndefinedClass on `$this`, but that's a more accurate signal than the
+        // alternative of leaving `$this` unbound and re-introducing the InvalidScope
+        // false positive Pest users are trying to avoid.
+        return self::$resolvedTestCaseClass = 'PHPUnit\\Framework\\TestCase';
     }
 }
