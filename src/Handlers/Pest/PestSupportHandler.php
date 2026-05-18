@@ -321,6 +321,7 @@ final class PestSupportHandler implements
                 if (self::containsTopLevelPestCall($stmt->stmts)) {
                     return true;
                 }
+
                 continue;
             }
 
