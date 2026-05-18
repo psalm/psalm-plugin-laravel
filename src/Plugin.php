@@ -212,6 +212,16 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
         $registration->registerHooksFromClass(Handlers\Jobs\DispatchableHandler::class);
 
+        // Pest framework support: auto-enabled when pestphp/pest is installed. Drops
+        // InvalidScope on `$this` inside Pest test closures and InternalMethod on calls
+        // into Pest's DSL (Pest\PendingCalls\*, Pest\Mixins\Expectation, Pest\Expectations\*),
+        // both gated to files identified as Pest tests via AST inspection during file
+        // analysis. See PestSupportHandler for the detection logic and issue scope.
+        if (\Composer\InstalledVersions::isInstalled('pestphp/pest')) {
+            require_once __DIR__ . '/Handlers/Pest/PestSupportHandler.php';
+            $registration->registerHooksFromClass(Handlers\Pest\PestSupportHandler::class);
+        }
+
         // App-owned Facade subclasses: enumerate after codebase population and register
         // per-class method providers that resolve methods via a `getFacadeRoot()` runtime
         // probe. Covers the gap where FacadeMapProvider cannot discover a facade whose

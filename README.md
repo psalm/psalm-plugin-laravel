@@ -109,6 +109,16 @@ See [docs/config.md](docs/config.md) for all configuration options.
 The plugin ships advanced Laravel-aware static analysis checks that extend Psalm's built-in diagnostics.
 See [docs/issues/index.md](docs/issues/index.md) for the full catalog.
 
+## Pest framework support
+
+The plugin auto-enables Pest support when `pestphp/pest` is installed in your project. Inside files identified as Pest tests (any file with a top-level `test()`, `it()`, `describe()`, `uses()`, `beforeEach`, `afterEach`, `beforeAll`, or `afterAll` call), it drops two classes of false positive.
+
+The first is `InvalidScope` on `$this` inside Pest closures. Pest binds the closure to the test case at runtime via `Closure::bind()`, which Psalm cannot see.
+
+The second is `InternalMethod` on calls into Pest's documented DSL surface (`Pest\PendingCalls\TestCall`, `UsesCall`, `BeforeEachCall`, `AfterEachCall`, `Pest\Mixins\Expectation`, and the higher-order helpers under `Pest\Expectations\`). Pest tags these classes `@internal` but they are the only way to use the DSL.
+
+Non-Pest files in your `tests/` directory (for example, PHPUnit-style `TestCase` subclasses or fixture helpers) are unaffected.
+
 ## Versions & Dependencies
 
 Maintained versions:
