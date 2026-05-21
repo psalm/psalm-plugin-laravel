@@ -85,6 +85,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Auth/AuthHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\AuthHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/AuthHelperHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\AuthHelperHandler::class);
         require_once __DIR__ . '/Handlers/Auth/GuardHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
