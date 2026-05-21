@@ -23,6 +23,7 @@ final class AuthConfigAnalyzer
     private array $guardFqcnCache = [];
 
     private ?string $defaultGuardCache = null;
+
     private bool $defaultGuardResolved = false;
 
     /** @psalm-mutation-free */
