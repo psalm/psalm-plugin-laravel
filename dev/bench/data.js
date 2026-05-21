@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779091124132,
+  "lastUpdate": 1779369657450,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4892,6 +4892,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.32,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "85da41563f0296f5f6692d4d07fd836ad28c4544",
+          "message": "Add tips for the `diagnose` command and enhance config created by the `init` command (#971)\n\n* test(type): cover invoiceninja-found gaps and document remaining limitations\n\nAudited the 18 errors reported when running psalm-plugin-laravel on\ninvoiceninja (~50 Eloquent models, deep base-model hierarchy). Triage\nshowed 9 of 18 are already resolved on current master with no\nregression coverage, and the other 9 reflect 4 distinct plugin gaps\nplus 1 upstream Laravel contract gap.\n\nThese tests pin both halves:\n\nRegression coverage for behavior that now works (was broken in 4.x):\n  - tests/Type/tests/Model/StaticBuilderForwardingTest.phpt\n    Customer::cursor(), whereDoesntHave('vehicles'), where(c,v)/where(c,op,v).\n    Also pins LazyCollection<int, Customer&static>&static through\n    Model::__callStatic -> Builder::cursor() so dropping `&static` will\n    re-trigger the original UndefinedMagicMethod regression.\n  - tests/Type/tests/Foundation/AppBoundUnknownAbstractTest.phpt\n    app()->bound('<unknown>') stays bool; the negated early-return form\n    must not collapse to literal false (the invoiceninja sentry check).\n\nReproducers for current broken behavior, with fix vectors documented\ninline so flipping --EXPECTF-- to empty signals the fix:\n  - tests/Type/tests/RouteMiddlewareFacadeStaticVariadicTest.phpt\n    Route::middleware('a','b','c') variadic via the facade. Runtime\n    RouteRegistrar::__call accepts it; @method static does not.\n  - tests/Type/tests/Facades/StorageDiskUrlTest.phpt\n    Storage::disk()->url() — Filesystem contract lacks url(); Cloud\n    sub-contract / FilesystemAdapter has it. Larastan fix vector noted.\n  - tests/Type/tests/Database/ConnectionInterfaceGetNameTest.phpt\n    Builder::getConnection()->getName() — upstream Laravel contract gap.\n  - tests/Type/tests/Builder/FindMixedNarrowingTest.phpt\n    Builder::find($mixed) widens to Collection<int,T>|T|null because\n    the conditional return cannot be discriminated on mixed. Includes\n    scalar + array positive controls and a withTrashed() chain variant\n    that mirrors the exact invoiceninja shape.\n\n* feat(cli/diagnose): SymfonyStyle output and --tips flag #971\n\nDrop the standalone TextRenderer in favour of inline rendering via\nSymfonyStyle so the diagnose output uses the same colour/section\nconventions as the rest of the CLI. Adds a --tips/--no-tips option\ngated on TipsProvider so environment hints stay opt-in and tests can\ninject a deterministic stub. Also reorders Report fields so Psalm\nappears before Laravel — matches the new presentation order.\n\n* chore(cli/init): expand default psalm.xml template #971\n\nEnable taint analysis, list project directories explicitly (app,\nbootstrap, config, database, routes plus public/index.php and artisan)\ninstead of scanning \".\", surface the most common plugin tunables on\nthe pluginClass node, and forbid var_dump / dd via forbiddenFunctions.\nBrings the scaffolded config closer to what a real Laravel project\nneeds on day one.\n\n* fix(facades): skip Illuminate alias stubs during facade probing #971\n\nAliasStubProvider emits one global-namespace stub per AliasLoader\nentry (`class Redis extends \\Illuminate\\Support\\Facades\\Redis {}`),\nwhich AppFacadeRegistrationHandler::afterCodebasePopulated() then\nre-probes via getFacadeRoot(). That re-probe is redundant — those\nfacades are already mapped through the same alias loader by\nFacadeMapProvider::init() — and it produces user-visible warnings\nfor environment collisions FacadeMapProvider tolerates silently:\n\n  - `Redis` collides with ext-redis's global \\Redis class, so\n    is_subclass_of() resolves to the extension and returns false.\n  - `Concurrency` (and other manager-backed facades) need a service\n    provider binding that may not run in Testbench, so\n    getFacadeRoot() throws.\n\nDetect the alias-stub shape (no backslash in name, parent in\nIlluminate\\Support\\Facades\\) and skip — coverage stays intact via\nthe FacadeMapProvider path.\n\n* fix(provider): backfill dummy app.key on bootstrap path #971\n\nThe Testbench fallback already injected a constant dummy APP_KEY so\nEncryptionServiceProvider's lazy `encrypter` singleton could resolve\nwithout a real .env. The bootstrap/app.php branch did not, so any\nanalyzed Laravel project shipping its own bootstrap entry (most real\nprojects) would throw MissingAppKeyException the moment our facade\nscanner touched Crypt::getFacadeRoot() — surfacing as a noisy warning\non CI runs, fresh clones, and package analysis.\n\nExtract the backfill into ensureAppKey() and call it from both code\npaths. Only fills when the current value is empty so we never clobber\na real key a provider may have already branched on.\n\n* chore(test): clearer laravel-test.sh log messages #971\n\nDrop the unused leading \"v\" on the installer version banner and\nreplace the trailing bare `echo` with an explicit completion line so\nCI logs make it obvious when the fresh-Laravel-app run finished.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-21T15:17:50+02:00",
+          "tree_id": "a16c455ad8fbfb59aa61eea3c8dafe2f037745e6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/85da41563f0296f5f6692d4d07fd836ad28c4544"
+        },
+        "date": 1779369656344,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.44,
+            "range": "± 0.69",
             "unit": "s"
           },
           {
