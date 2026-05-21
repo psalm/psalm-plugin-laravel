@@ -15,7 +15,7 @@ The work lands in incremental sub-PRs that all target the umbrella branch
 not `master`. Merging the scanner epic piecewise into `master` would expose
 half-implementations (e.g. a scanner that classifies templates but no handler
 that consumes the classification), so each sub-PR stacks on the umbrella
-branch and is reviewed against it. Once every sub-PR (PR-1 through PR-5)
+branch and is reviewed against it. Once every sub-PR (PR-1 through PR-6)
 is merged into the umbrella branch, the umbrella PR ships into `master` as
 a single reviewable unit.
 
@@ -26,8 +26,9 @@ Status of the epic at the time of writing:
 | PR-1 [#920](https://github.com/psalm/psalm-plugin-laravel/pull/920) | Tri-state scanner via `BladeCompiler` + php-parser. `BladeViewSafetyKind`, `BladeUncertaintyReason`, `BladeSafetyMap`. | merged into umbrella |
 | PR-2 (TBD) | First-pass scanner precision: scope frame push/pop, source-mapped line numbers. (Literal `@include` resolution shipped in PR-4.) | not started |
 | PR-3 [#926](https://github.com/psalm/psalm-plugin-laravel/pull/926) | `BladeAwareViewTaintHandler`. Wires `BladeSafetyMap` into Psalm's taint flow for `view()` / `Factory::make()` / facade `View::make()`. Per-key sinks for `UNSAFE_KEYS`, whole-data fallback for `UNKNOWN` and dynamic view names. | merged into umbrella |
-| PR-4 (this PR) | Extended dispatch to `Factory::first()` (multi-template union), `Factory::renderEach()` (per-iterator key shape), `Routing\ResponseFactory::view()` (concrete + contract), `View::with()` / `View::nest()` (receiver-resolved view name), and the Mailable / MailMessage / Content view-binding methods. Scanner records literal `@include('child', [...])` edges; `BladeSafetyMap::build()` folds child unsafe keys into the parent via a fixed-point pass that accounts for Laravel's `compileInclude()` mergeData pass-through. Cycles in the include graph bail to `UNKNOWN(IncludeCycle)`. | shipping |
-| PR-5 (TBD) | Component data flow (`<x-foo :bar="$data" />`), section graph, scanner result caching across analysis runs, variable-bound view-builder chains (`$v = view('home'); $v->with(...)`). | not started |
+| PR-4 [#934](https://github.com/psalm/psalm-plugin-laravel/pull/934) | Extended dispatch to `Factory::first()` (multi-template union), `Factory::renderEach()` (per-iterator key shape), `Routing\ResponseFactory::view()` (concrete + contract), `View::with()` / `View::nest()` (receiver-resolved view name), and the Mailable / MailMessage / Content view-binding methods. Scanner records literal `@include('child', [...])` edges; `BladeSafetyMap::build()` folds child unsafe keys into the parent via a fixed-point pass that accounts for Laravel's `compileInclude()` mergeData pass-through. Cycles in the include graph bail to `UNKNOWN(IncludeCycle)`. | merged into umbrella |
+| PR-5 (this PR) | Refactor only: extracts the view-chain receiver-walk out of `BladeAwareViewTaintHandler` into a dedicated `ReceiverViewNameResolver` pure-AST utility. No behaviour change. Adds 26 direct AST-level unit tests covering the resolution table. Decouples the receiver-walk from the dispatcher so PR-6 can extend the chain-preserving allowlist (Mailable view/markdown/text chains) without touching taint sink construction. | shipping |
+| PR-6 (TBD) | Component data flow (`<x-foo :bar="$data" />`), section graph (`@extends`/`@section`/`@yield`), Mailable `view()`/`markdown()`/`text()` -> `with()` chain via receiver-walk extension, `View::share()` global data, scanner result caching across analysis runs. Variable-bound view-builder chains (`$v = view('home'); $v->with(...)`) remain deferred — see "Key decisions" below. | not started |
 
 Neither PR-3 nor PR-4 includes integration tests under `tests/Application/`.
 The Application test harness (`tests/Application/laravel-test.sh`) runs Psalm
@@ -36,6 +37,69 @@ a new harness flow or a refactor of the existing one. The handler is covered
 end-to-end by `tests/Type/tests/Blade/` (PHPT) and unit tests; the Application
 test layer still exercises Plugin.php's boot path through `initBladeAwareViewTaintHandler`,
 so a boot crash would still surface there.
+
+## Key decisions during PR-5
+
+PR-5 originally proposed wider scope (component data flow, scanner caching,
+variable-bound view-builder chains via a NodeTypeProvider tracker). During
+implementation the scope collapsed to a pure extraction after the following
+decisions:
+
+1. **NodeTypeProvider-based tracker rejected.** The intent was to attach a
+   marker to the `\Psalm\Type\Union` returned by `view()` / `Factory::make()`
+   so that variable-bound chains (`$v = view('home'); $v->with(...)`) would
+   resolve the same way as inline chains. Two encodings were evaluated and
+   both rejected:
+    - **Custom `\Psalm\Type\Atomic` subclass.** No third-party plugin in
+      `vendor/` extends `Atomic`. Psalm's `TypeCombiner::combine()` has
+      hardcoded match arms on built-in atomic classes; custom atomics fall
+      into the default branch and risk collapsing to `mixed` on union join.
+      Cache round-trip and intersection behaviour are also undocumented
+      plugin surface. Rejected.
+    - **Synthetic `DataFlowNode` in `Union->parent_nodes`.** Psalm's
+      existing taint machinery uses this channel, so cache and combine
+      behaviour are known-good. The blocker is `AssignmentAnalyzer`:
+      assignment typically wraps the right-hand side in a `variable-use:$v:N`
+      `DataFlowNode`, so at the chained `with()` site, the receiver's
+      `parent_nodes` only carries the wrapping node — the original marker
+      is reachable solely by walking `taint_flow_graph->forward_edges`
+      transitively, which is O(graph) on every method call. Too expensive
+      for the hot path. Rejected.
+
+   The variable-bound chain gap therefore stays open until a cheaper
+   resolution mechanism surfaces (or until real-world apps prove the gap
+   matters enough to absorb the cost). The `MissingViewHandler`-style
+   "view not in map -> no sink" policy is the conservative default.
+
+2. **PR-5 reduced to receiver-walk extraction only.** With the tracker
+   dropped, the remaining PR-5 deliverable was the prerequisite refactor
+   that PR-6 needs: lifting the receiver-walk into a standalone class
+   (`ReceiverViewNameResolver`) so the chain-preserving allowlist can be
+   extended (Mailable receiver gating) without touching the dispatcher.
+   No behaviour change in PR-5; 26 unit tests pin the resolution table
+   head-on for regression protection.
+
+3. **Mailable `view()`/`markdown()`/`text()` -> `with()` chain deferred to
+   PR-6.** The Mailable chain is reachable through receiver-walk alone
+   without a tracker, but the registration carries its own scope (class
+   gating, multi-view Content dispatch, the "last view() wins" semantic
+   when a chain calls more than one view-binding method). Split out so
+   PR-5 stays a pure refactor.
+
+4. **Components, sections, share, and scanner cache deferred to PR-6.**
+   PR-5's original brief grouped these with the tracker work; once the
+   tracker was dropped they no longer made sense in the same PR. PR-6
+   picks them up as four independent sub-PRs.
+
+5. **`x-tag` component compilation: don't reuse Laravel's
+   `ComponentTagCompiler` directly.** Reuse was prototyped: in the
+   plugin's bare Testbench-booted container, `componentClass()` throws
+   `InvalidArgumentException` for any unresolvable component, and the
+   compiler processes the whole template at once so one bad tag kills
+   compilation for all tags. Per-tag try/catch isolation would essentially
+   re-implement the tag loop. A local x-tag scanner that records
+   component edges into `BladeSafetyMap` (mirroring PR-4's include-edge
+   propagation) is the planned approach for PR-6's component sub-PR.
 
 ## Current state (baseline)
 
