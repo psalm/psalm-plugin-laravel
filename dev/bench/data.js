@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779398201700,
+  "lastUpdate": 1779400968033,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5032,6 +5032,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.23,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "69b2871171390e7ee15023727dac9f7d575630b2",
+          "message": "ci(psalm): mask Canonical telemetry units on runner #0\n\nThe harden-runner egress allowlist was dropping background calls from\n`apt-news`, `esm-cache`, `motd-news`, and `ua-timer` to Canonical IPs\n(185.125.188.0/24). Mask these units up-front so the egress log stays\nfocused on real workflow traffic.",
+          "timestamp": "2026-05-21T23:22:48+02:00",
+          "tree_id": "106b5bc6b93fee857630f7595b75d0a1ad3db396",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/69b2871171390e7ee15023727dac9f7d575630b2"
+        },
+        "date": 1779400966772,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.11,
+            "range": "± 0.16",
             "unit": "s"
           },
           {
