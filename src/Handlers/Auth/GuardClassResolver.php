@@ -26,13 +26,23 @@ use Psalm\Type\Atomic\TNamedObject;
  */
 final class GuardClassResolver
 {
-    public static function resolveUnion(string $guardName): ?Type\Union
+    /**
+     * Psalm hooks fire once per call site. Typical Laravel apps use 1–3 distinct
+     * guard classes total, so caching by FQCN turns N `auth('web')` / `Auth::guard('web')`
+     * call sites into one allocation. `Type\Union` is `ImmutableNonCloneableTrait`,
+     * so sharing the same instance across call sites is safe.
+     *
+     * @var array<class-string, Type\Union>
+     */
+    private static array $union_cache = [];
+
+    public static function resolve(string $guardName): ?Type\Union
     {
         $fqcn = AuthConfigAnalyzer::instance()->getGuardFQCN($guardName);
         if ($fqcn === null) {
             return null;
         }
 
-        return new Type\Union([new TNamedObject($fqcn)]);
+        return self::$union_cache[$fqcn] ??= new Type\Union([new TNamedObject($fqcn)]);
     }
 }

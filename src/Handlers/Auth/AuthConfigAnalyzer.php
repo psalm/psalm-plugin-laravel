@@ -11,6 +11,20 @@ final class AuthConfigAnalyzer
 {
     private static ?AuthConfigAnalyzer $instance = null;
 
+    /**
+     * Memoizes `getGuardFQCN()` so the per-call-site Psalm hook avoids
+     * re-walking `auth.guards.<name>.driver` through `Repository::get()`.
+     * The negative result (`null`) is cached too — `array_key_exists` is
+     * used at the call site to distinguish "not yet computed" from "known
+     * unresolvable" (custom driver / unknown guard).
+     *
+     * @var array<string, class-string<\Illuminate\Contracts\Auth\Guard>|null>
+     */
+    private array $guardFqcnCache = [];
+
+    private ?string $defaultGuardCache = null;
+    private bool $defaultGuardResolved = false;
+
     /** @psalm-mutation-free */
     private function __construct(private readonly ConfigRepository $config) {}
 
@@ -54,10 +68,16 @@ final class AuthConfigAnalyzer
 
     public function getDefaultGuard(): ?string
     {
+        if ($this->defaultGuardResolved) {
+            return $this->defaultGuardCache;
+        }
+
         /** @var string|null $guard */
         $guard = $this->config->get('auth.defaults.guard');
+        $this->defaultGuardCache = \is_string($guard) ? $guard : null;
+        $this->defaultGuardResolved = true;
 
-        return \is_string($guard) ? $guard : null;
+        return $this->defaultGuardCache;
     }
 
     /**
@@ -72,13 +92,17 @@ final class AuthConfigAnalyzer
      */
     public function getGuardFQCN(string $guard): ?string
     {
+        if (\array_key_exists($guard, $this->guardFqcnCache)) {
+            return $this->guardFqcnCache[$guard];
+        }
+
         $driver = $this->config->get("auth.guards.{$guard}.driver");
 
         if (! \is_string($driver)) {
-            return null;
+            return $this->guardFqcnCache[$guard] = null;
         }
 
-        return match ($driver) {
+        return $this->guardFqcnCache[$guard] = match ($driver) {
             'session' => \Illuminate\Auth\SessionGuard::class,
             'token' => \Illuminate\Auth\TokenGuard::class,
             default => null, // custom drivers cannot be statically resolved

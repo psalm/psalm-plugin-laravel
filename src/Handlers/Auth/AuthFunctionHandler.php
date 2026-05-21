@@ -71,6 +71,6 @@ final class AuthFunctionHandler implements FunctionReturnTypeProviderInterface
             return null;
         }
 
-        return GuardClassResolver::resolveUnion($first_arg->value);
+        return GuardClassResolver::resolve($first_arg->value);
     }
 }

@@ -124,7 +124,7 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
             return null; // dynamic guard name — cannot narrow statically
         }
 
-        return GuardClassResolver::resolveUnion($guard_name);
+        return GuardClassResolver::resolve($guard_name);
     }
 
     /**
