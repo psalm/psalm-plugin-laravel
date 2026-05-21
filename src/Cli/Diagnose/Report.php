@@ -24,8 +24,8 @@ final readonly class Report
      */
     public function __construct(
         public ?string $pluginVersion,
-        public ?string $laravelVersion,
         public ?string $psalmVersion,
+        public ?string $laravelVersion,
         public string $phpRuntimeVersion,
         public ?string $phpRequiredVersion,
         public string $phpAnalysisVersion,
