@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
 use Psalm\LaravelPlugin\Handlers\Auth\Concerns\ExtractsGuardNameFromCallLike;
+use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -38,21 +39,28 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
     use ExtractsGuardNameFromCallLike;
 
     /**
-     * Register for the Auth facade, the concrete AuthManager (common DI target), and the
-     * Factory contract (DI by interface). {@see getMethodReturnType} is class-agnostic and
-     * narrows uniformly across all three surfaces; {@see getMethodParams} has one carve-out
-     * for `guard()` on non-facade receivers (see that method's docblock).
+     * Register for the Auth facade, the concrete AuthManager (common DI target), the
+     * Factory contract (DI by interface), AND any root-namespace alias that proxies
+     * to AuthManager. {@see getMethodReturnType} is class-agnostic and narrows
+     * uniformly across all surfaces; {@see getMethodParams} has one carve-out for
+     * `guard()` on non-facade receivers (see that method's docblock).
+     *
+     * The `FacadeMapProvider::getFacadeClasses()` lookup is critical: Psalm dispatches
+     * `MethodReturnTypeProvider` hooks by exact class name, so a `use Auth;` import
+     * referring to the root-namespace `\Auth` alias (the default Laravel alias
+     * generated into `aliases.phpstub`) would otherwise miss this handler entirely
+     * and surface `Auth::guard('web')->logout()` as `Guard::logout does not exist`.
      *
      * @return list<string>
-     * @psalm-pure
+     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array
     {
         return [
-            \Illuminate\Support\Facades\Auth::class,
             \Illuminate\Auth\AuthManager::class,
             \Illuminate\Contracts\Auth\Factory::class,
+            ...FacadeMapProvider::getFacadeClasses(\Illuminate\Auth\AuthManager::class),
         ];
     }
 
