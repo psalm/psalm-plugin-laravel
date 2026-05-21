@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779372781937,
+  "lastUpdate": 1779383645124,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4962,6 +4962,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.35,
             "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a783f847eb9677c494050d49e42390ab28da8e51",
+          "message": "Narrow `auth($name)` return to concrete guard class (#981)\n\n* fix(auth): narrow auth($name) return to concrete guard #979\n\n`auth('web')->logout()` failed with UndefinedInterfaceMethod because the\nstub return type is `Guard|StatefulGuard` and `logout()` is declared only\non `StatefulGuard`. New `AuthHelperHandler` narrows literal-string guard\nnames to the concrete driver class (session → SessionGuard, token →\nTokenGuard) using the same `AuthConfigAnalyzer::getGuardFQCN()` mapping\nas `AuthHandler::resolveGuardReturnType()`.\n\nNo-arg / null-arg cases keep the stub's `AuthManager` return so\nmanager-only methods (`extend`, `provider`, `guard`, `viaRequest`, ...)\nstay reachable; AuthManager's `@mixin StatefulGuard` already covers\n`auth()->logout()`. Dynamic / unknown / custom-driver guards fall back\nto the stub union.\n\nCloses #979\n\n* refactor(auth): rename handlers + extract guard resolver #979\n\nRename auth-domain handlers to make the split by symbol-kind explicit,\nand extract the duplicated \"guard name → concrete class\" rule into a\nsingle resolver.\n\nRenames:\n- `AuthHandler` → `AuthMethodHandler` — method calls on `Auth` facade /\n  `AuthManager` / `Factory` contract.\n- `AuthHelperHandler` → `AuthFunctionHandler` — the global `auth($guard)`\n  helper function call.\n\n`GuardHandler` stays as-is; its scope (Guard contracts + concrete guard\nclasses) is already unambiguous.\n\nExtract `GuardClassResolver::resolveUnion(string)` as the single source\nof truth for the driver → concrete class mapping. Both\n`AuthMethodHandler::resolveGuardReturnType()` and\n`AuthFunctionHandler::getFunctionReturnType()` now delegate to it.\n\nNo behavior change.\n\n* perf(auth): cache guard resolution + rename to `resolve` #979\n\nAuth handler hooks fire once per call site — `auth()` / `Auth::guard()`\nappear in views, controllers, and middleware, so a typical Laravel\ncodebase has hundreds of call sites for a guard set of size 1–3.\n\n- `AuthConfigAnalyzer::getGuardFQCN()` memoizes per guard name (with\n  negative caching via `array_key_exists`, so unknown / custom-driver\n  guards don't re-walk `Repository::get()` on every hit).\n- `AuthConfigAnalyzer::getDefaultGuard()` memoizes its single config\n  read; called twice per `Auth::guard()` invocation.\n- `GuardClassResolver` reuses the `Type\\Union` instance per FQCN.\n  `Union` is `ImmutableNonCloneableTrait`, so sharing is safe.\n- Rename `GuardClassResolver::resolveUnion` → `resolve`. The `Union`\n  suffix described the return shape, not intent; the class name already\n  carries the \"guard class\" framing.\n\nNet: N call sites → 1 config lookup + 1 `Union` allocation per distinct\nguard / FQCN. No behavior change.\n\n* fix(auth): register handler for root-namespace alias #979\n\n`AuthMethodHandler::getClassLikeNames()` listed only the canonical facade\nFQCN (`Illuminate\\Support\\Facades\\Auth`), the underlying `AuthManager`,\nand the `Factory` contract. Psalm dispatches `MethodReturnTypeProvider`\nhooks by exact class name, so a `use Auth;` import that resolves to the\nroot-namespace alias (generated into `aliases.phpstub` as\n`class Auth extends \\Illuminate\\Support\\Facades\\Auth {}`) never reached\nthe handler. Real-world impact: invoiceninja's\n`Auth::guard('contact')->logout()` (and the 3 other identical call sites\nin vendor / portal controllers) kept surfacing as\n`UndefinedInterfaceMethod: Method Illuminate\\Contracts\\Auth\\Guard::logout\ndoes not exist`, exactly the failure issue #979 reports.\n\nUse `FacadeMapProvider::getFacadeClasses(AuthManager::class)` to pick up\nthe facade + every alias that proxies to AuthManager. Mirrors the\npattern in `MissingViewHandler` (`Factory::class +\n...FacadeMapProvider::getFacadeClasses(Factory::class)`).\n\nAnnotation flips from `@psalm-pure` to `@psalm-external-mutation-free`\nbecause the list now depends on static state initialised in\n`FacadeMapProvider::init()` (before handler registration in `Plugin.php`).\n\n* fix(auth): preserve params crash workaround for facade aliases #979\n\nPrevious condition deferred params to source for any class other than\nthe canonical `Illuminate\\Support\\Facades\\Auth`. With the alias `\\Auth`\nnow in `getClassLikeNames()`, that deferral path returned `null` for\nthe alias too — and the alias only has `guard()` as an inherited\n`@method`, not a real method. Psalm crashed with `Cannot get method\nparams for Auth::guard` (the #454 / #854 crash).\n\nInvert the check: defer ONLY for `AuthManager` / `Factory` (the real\ndeclaring classes); every facade / alias receiver gets the explicit\nparams arm.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-21T19:11:24+02:00",
+          "tree_id": "0b224e877488c4e2813a43ef20de106cdbe285cb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a783f847eb9677c494050d49e42390ab28da8e51"
+        },
+        "date": 1779383644687,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.3,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
