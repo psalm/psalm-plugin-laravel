@@ -48,6 +48,13 @@ final class MethodForwardingHandler implements
     MethodReturnTypeProviderInterface,
     MethodParamsProviderInterface
 {
+    /**
+     * Larastan parity: split a where{Column} suffix on And/Or boundaries followed by an
+     * uppercase letter. Mirrors `Illuminate\Database\Query\Builder::dynamicWhere`'s
+     * `(And|Or)(?=[A-Z])`; we use a non-capturing group since we don't need the connector.
+     */
+    private const SEGMENT_SPLIT_PATTERN = '/(?:And|Or)(?=[A-Z])/';
+
     private static ?ForwardingRule $rule = null;
 
     /** @var array<lowercase-string, bool> Indexed source classes for O(1) lookup */
@@ -578,15 +585,7 @@ final class MethodForwardingHandler implements
 
         $stmt = $event->getStmt();
 
-        // The AST preserves the original camel-cased method name; Psalm only lowercases
-        // it before fanning out to providers. For dynamic-method calls (`$x->{$var}()`)
-        // Psalm's MethodCallAnalyzer short-circuits and never invokes return-type providers,
-        // so the Expr branch here is unreachable for MethodCall in practice. Kept as a
-        // defensive fallback for StaticCall (whose $name is also Identifier|Expr) and
-        // future Psalm versions that might resolve literal-string dynamic names.
-        $originalMethodName = $stmt instanceof MethodCall && $stmt->name instanceof \PhpParser\Node\Identifier
-            ? $stmt->name->name
-            : $methodName;
+        $originalMethodName = self::originalMethodName($stmt, $methodName);
 
         $columnType = self::resolveDynamicWhereColumnType($codebase, $modelClass, $originalMethodName);
 
@@ -723,6 +722,28 @@ final class MethodForwardingHandler implements
     }
 
     /**
+     * Pull the original camel-cased method name from the AST, falling back to the
+     * already-lowercased event method name when the call uses a dynamic name
+     * (e.g. `$x->{$var}()`) or is a StaticCall. The camel case matters because
+     * the And/Or segment split requires uppercase boundaries that Psalm strips
+     * from getMethodNameLowercase().
+     *
+     * Psalm's MethodCallAnalyzer short-circuits dynamic-name MethodCalls before
+     * invoking return-type providers, so the fallback branch is effectively dead
+     * for the MethodCall case; kept for StaticCall and future Psalm versions.
+     *
+     * @psalm-mutation-free
+     */
+    private static function originalMethodName(
+        \PhpParser\Node\Expr\MethodCall|\PhpParser\Node\Expr\StaticCall $stmt,
+        string $lowercaseFallback,
+    ): string {
+        return $stmt instanceof MethodCall && $stmt->name instanceof \PhpParser\Node\Identifier
+            ? $stmt->name->name
+            : $lowercaseFallback;
+    }
+
+    /**
      * Validate a dynamic where{Column} method call against the model's declared @property
      * entries and return the column type when (and only when) a single scalar column was
      * matched.
@@ -766,12 +787,10 @@ final class MethodForwardingHandler implements
         // always "where" in some casing. substr is byte-safe for that ASCII prefix.
         $suffix = \substr($originalMethodName, 5);
 
-        // Larastan parity: split on And/Or capitalised boundaries. Non-capturing group so the
-        // delimiters themselves don't appear in the segment list. preg_split returns
-        // non-empty-list<string>|false; false would require a regex compile failure, impossible
-        // for this literal pattern, but we defend against it for completeness.
-        $segments = \preg_split('/(?:And|Or)(?=[A-Z])/', $suffix);
+        $segments = \preg_split(self::SEGMENT_SPLIT_PATTERN, $suffix);
 
+        // preg_split with this literal pattern cannot fail at runtime; the guard is
+        // a Psalm narrowing concession (return type is non-empty-list<string>|false).
         if ($segments === false) {
             return self::$dynamicWhereCache[$key] = false;
         }
@@ -784,37 +803,39 @@ final class MethodForwardingHandler implements
 
         // Build a normalised property map once per (model, method) pair. Cheaper than
         // re-running str_replace+strtolower over every property for every segment.
-        // We deliberately do NOT cache this map across calls: Psalm may populate
-        // pseudo_property_get_types lazily as it parses the class, and a stale snapshot
-        // could miss properties that appear after first invocation.
+        // The map is not memoized across calls: Psalm may populate pseudo_property_get_types
+        // lazily as it parses the class, and a stale snapshot could miss properties added
+        // after first invocation.
         //
-        // Uses pseudo_property_get_types (from @property and @property-read) rather than
-        // pseudo_property_set_types (@property-write). Dynamic WHERE filters on readable
-        // database columns; @property-write only properties are write-only computed fields
-        // (e.g. password hashing) that do not correspond to filterable columns.
+        // pseudo_property_get_types is sourced from @property/@property-read — readable
+        // columns. @property-write entries (password hashing etc.) don't correspond to
+        // filterable columns and are intentionally excluded.
         $normalizedProperties = [];
         foreach ($storage->pseudo_property_get_types as $propName => $propType) {
             $normalizedProperties[\strtolower(\str_replace(['$', '_'], '', $propName))] = $propType;
         }
 
-        // Validate every segment uniformly. An empty segment (e.g. `whereAndFoo` splitting
-        // to ['', 'Foo']) or any unmatched column rejects the whole call. The strlen > 5
-        // guard in isDynamicWhereMethod already filters out a bare `where()` upstream.
+        // Validate every segment and stash the matching column type. An empty segment
+        // (e.g. `whereAndFoo` splitting to ['', 'Foo']) or any unmatched column rejects
+        // the whole call.
+        $matchedColumnTypes = [];
         foreach ($segments as $segment) {
             $segmentKey = \strtolower($segment);
 
             if ($segmentKey === '' || !isset($normalizedProperties[$segmentKey])) {
                 return self::$dynamicWhereCache[$key] = false;
             }
+
+            $matchedColumnTypes[] = $normalizedProperties[$segmentKey];
         }
 
         // Multi-segment calls take one argument per segment with potentially different
         // column types — no single Union can stand in for the typed-param hand-off.
-        if (\count($segments) !== 1) {
+        if (\count($matchedColumnTypes) !== 1) {
             return self::$dynamicWhereCache[$key] = null;
         }
 
-        $columnType = $normalizedProperties[\strtolower($segments[0])];
+        $columnType = $matchedColumnTypes[0];
 
         // Object/array column types (Carbon, BackedEnum, json casts) skip the typed-param
         // hand-off — Laravel coerces strings/ints to these at the query layer, so narrowing
