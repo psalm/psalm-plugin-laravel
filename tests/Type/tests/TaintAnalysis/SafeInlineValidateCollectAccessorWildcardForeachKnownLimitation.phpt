@@ -1,5 +1,5 @@
 --ARGS--
---threads=1 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
 <?php declare(strict_types=1);
 
