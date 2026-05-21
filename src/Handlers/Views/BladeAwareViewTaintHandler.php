@@ -59,13 +59,19 @@ use Psalm\Type\Union;
  * same `extract()` call as `$data`, so it is subjected to identical rules:
  * the keys observed by the scanner apply to either source.
  *
- * Out of scope (tracked under issue #581 for PR-5+):
+ * Out of scope (tracked under issue #581 for PR-6+):
  *  - Component data flow (`<x-foo :bar="$data" />`).
  *  - Variable-bound view-builder chains (`$v = view('home'); $v->with(...)`)
- *    where the receiver-walk in {@see self::resolveReceiverViewName()} cannot
- *    recover the literal view name through the intermediate variable binding.
- *    PR-5 may attach view-name metadata to the {@see Union} returned by
- *    `view()` / `Factory::make()` so the chain resolves through the variable.
+ *    where the receiver-walk in
+ *    {@see ReceiverViewNameResolver::resolve()} cannot recover the literal
+ *    view name through the intermediate variable binding. PR-5 evaluated a
+ *    NodeTypeProvider-based tracker that would attach a marker to the
+ *    {@see Union} returned by `view()` / `Factory::make()`, but Psalm's
+ *    `AssignmentAnalyzer` typically wraps the right-hand side in a
+ *    `variable-use:$v:N` `DataFlowNode` on assignment, so the marker is
+ *    reachable from the receiver Union only by walking
+ *    `taint_flow_graph->forward_edges` on every method call — too expensive
+ *    for the hot path. Deferred until real-world apps surface the gap.
  *  - `Mailable::with($key, $value)` chained onto `Mailable::view(...)` /
  *    `Mailable::markdown(...)` / `Mailable::text(...)`. `Mailable::view`,
  *    `markdown`, `text` ARE registered as direct sink sites, but the
@@ -74,7 +80,10 @@ use Psalm\Type\Union;
  *    receiver-walk support would be a no-op). Users who write
  *    `(new InvoiceMail)->view('mail.invoice')->with('bio', $tainted)` will
  *    have the `view()` call analysed (no data array there) but `with()`
- *    silently miss. Same scope as variable-bound chains; same PR-5 fix.
+ *    silently miss. PR-6 ships this via a class-gated extension to
+ *    `ReceiverViewNameResolver`'s chain-preserving allowlist; the underlying
+ *    receiver-walk already handles the `MethodCall` chain shape without a
+ *    tracker.
  *  - `View::share()` global view data — runtime-injected across every
  *    subsequent `view()` call, with no per-call site for the dispatcher to
  *    hook.
@@ -673,7 +682,7 @@ final class BladeAwareViewTaintHandler implements
             return;
         }
 
-        $viewName = self::resolveReceiverViewName($callExpr->var);
+        $viewName = ReceiverViewNameResolver::resolve($callExpr->var);
 
         if ($viewName === null) {
             // Receiver does not name a literal view. Consistent with PR-3's
@@ -793,185 +802,6 @@ final class BladeAwareViewTaintHandler implements
         }
 
         return $value->name->toLowerString() === 'null';
-    }
-
-    /**
-     * Walk a `View::with()` receiver expression to recover the bound view
-     * name. Returns null when the receiver shape cannot be resolved (variable
-     * receiver, dynamic view name, chained call with no statically known
-     * source).
-     *
-     * Resolvable shapes:
-     *  - `view('home')->with(...)`
-     *    – `FuncCall(name='view', args=[String('home'), ...])`
-     *  - `View::make('home')->with(...)` or `app('view')->make('home')->with(...)`
-     *    – `MethodCall(name='make', args=[String('home'), ...])` /
-     *      `StaticCall(name='make', args=[String('home'), ...])`
-     *  - `view('home')->with('a', 1)->with(...)` — recurse into receiver's
-     *    receiver for any chain of `with()` calls.
-     *  - `View::first(['a', 'b'])->with(...)` — first literal in the array.
-     *
-     * PR-4 does not propagate view names through variable bindings; a future
-     * PR may attach metadata to {@see \Psalm\Type\Union} via NodeTypeProvider
-     * to cover the `$v = view('home'); $v->with(...)` pattern.
-     */
-    private static function resolveReceiverViewName(\PhpParser\Node\Expr $receiver): ?string
-    {
-        // Treat nullsafe and regular method calls uniformly. We re-dispatch
-        // by drilling into the same shape rather than constructing a fresh
-        // MethodCall node (which would trigger Psalm's purity guards on the
-        // node constructor).
-        if ($receiver instanceof \PhpParser\Node\Expr\NullsafeMethodCall) {
-            return self::resolveMethodCallReceiver($receiver->var, $receiver->name, $receiver->args);
-        }
-
-        if ($receiver instanceof \PhpParser\Node\Expr\FuncCall) {
-            return self::viewNameFromFuncCall($receiver);
-        }
-
-        if ($receiver instanceof \PhpParser\Node\Expr\MethodCall) {
-            return self::resolveMethodCallReceiver($receiver->var, $receiver->name, $receiver->args);
-        }
-
-        if ($receiver instanceof \PhpParser\Node\Expr\StaticCall) {
-            if (!$receiver->name instanceof \PhpParser\Node\Identifier) {
-                return null;
-            }
-
-            $methodName = $receiver->name->toLowerString();
-
-            if ($methodName === 'make') {
-                return self::viewNameFromArg($receiver->args[0] ?? null);
-            }
-
-            if ($methodName === 'first') {
-                return self::firstLiteralFromArrayArg($receiver->args[0] ?? null);
-            }
-
-            return null;
-        }
-
-        return null;
-    }
-
-    /**
-     * Shared resolution for `MethodCall` / `NullsafeMethodCall` receivers.
-     * Both shapes carry the same `(receiver, method-name, args)` triple; the
-     * caller pre-extracts them so this helper can run on either node type
-     * without constructing intermediate AST nodes (which would breach Psalm
-     * purity guards on the php-parser constructors).
-     *
-     * @param array<array-key, \PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\Arg> $args
-     */
-    private static function resolveMethodCallReceiver(
-        \PhpParser\Node\Expr $methodReceiver,
-        \PhpParser\Node\Identifier|\PhpParser\Node\Expr $methodName,
-        array $args,
-    ): ?string {
-        if (!$methodName instanceof \PhpParser\Node\Identifier) {
-            return null;
-        }
-
-        $methodNameLc = $methodName->toLowerString();
-
-        // Chained `with()` / `withErrors()` (and similar) preserve the
-        // view-builder identity. Recurse into the receiver's receiver to
-        // recover the underlying view name.
-        if ($methodNameLc === 'with' || $methodNameLc === 'witherrors') {
-            return self::resolveReceiverViewName($methodReceiver);
-        }
-
-        if ($methodNameLc === 'make') {
-            return self::viewNameFromArg($args[0] ?? null);
-        }
-
-        if ($methodNameLc === 'first') {
-            return self::firstLiteralFromArrayArg($args[0] ?? null);
-        }
-
-        return null;
-    }
-
-    private static function viewNameFromFuncCall(\PhpParser\Node\Expr\FuncCall $call): ?string
-    {
-        if (!$call->name instanceof \PhpParser\Node\Name) {
-            return null;
-        }
-
-        if ($call->name->toLowerString() !== self::FUNCTION_VIEW) {
-            return null;
-        }
-
-        return self::viewNameFromArg($call->args[0] ?? null);
-    }
-
-    /** @psalm-mutation-free */
-    private static function viewNameFromArg(\PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\Arg|null $arg): ?string
-    {
-        if (!$arg instanceof Arg) {
-            return null;
-        }
-
-        return self::literalString($arg);
-    }
-
-    /**
-     * Return the sole literal-string element of an array literal argument, or
-     * null if the argument is not an array literal, contains no literal
-     * strings, or contains MORE THAN ONE literal string.
-     *
-     * Used for `View::first(['a', 'b'])->with(...)` chains. Laravel's runtime
-     * semantics for `first()` are "render the first existing view"; at
-     * analysis time we cannot know which candidate exists, so picking ANY one
-     * literal would be unsound for the receiver-walk's single-view lookup.
-     * Consider:
-     *
-     *     view::first(['safe_layout', 'unsafe_show'])->with('html_body', $tainted);
-     *
-     * If `safe_layout` ships and `unsafe_show` doesn't, no XSS. If
-     * `safe_layout` is later renamed and Laravel falls back to `unsafe_show`,
-     * `$tainted` reaches a raw echo. Picking `safe_layout` for the with-
-     * dispatcher's safety lookup would silently miss this regression.
-     *
-     * The conservative fix is to refuse resolution entirely for multi-
-     * candidate arrays. `dispatchFirstLike` already takes the union across
-     * all literals at the direct `Factory::first(...)` call site; the
-     * receiver-walk path (chained `with()` off a `first()` receiver) does
-     * not have an equivalent union mechanism wired here yet. Treating the
-     * receiver as unresolvable is consistent with PR-3's "view not in map
-     * → no sink" policy.
-     *
-     * @psalm-mutation-free
-     */
-    private static function firstLiteralFromArrayArg(\PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\Arg|null $arg): ?string
-    {
-        if (!$arg instanceof Arg || $arg->unpack || !$arg->value instanceof Array_) {
-            return null;
-        }
-
-        $resolved = null;
-
-        foreach ($arg->value->items as $item) {
-            if (!$item instanceof ArrayItem) {
-                continue;
-            }
-
-            if (!$item->value instanceof String_) {
-                // Non-literal candidate: the runtime view name is opaque, so
-                // any earlier match we picked would be unsound. Bail.
-                return null;
-            }
-
-            if ($resolved !== null) {
-                // Second literal observed: cannot tell which Laravel will
-                // pick. Conservatively refuse resolution.
-                return null;
-            }
-
-            $resolved = $item->value->value;
-        }
-
-        return $resolved;
     }
 
     /**
@@ -1580,17 +1410,26 @@ final class BladeAwareViewTaintHandler implements
         // slot, dispatched as a single multi-view spec.
         $specs[\strtolower(\Illuminate\Mail\Mailables\Content::class) . '::__construct'] = $contentConstructorSpec;
 
-        // Known coverage gaps left for PR-5+:
-        //  - Component data flow `<x-foo :bar="$data" />` (PR-5 scope).
+        // Known coverage gaps left for PR-6+:
+        //  - Component data flow `<x-foo :bar="$data" />`.
+        //  - `Mailable::with(...)` chained onto `Mailable::view(...)` /
+        //    `markdown(...)` / `text(...)`. Reachable through receiver-walk
+        //    alone once the chain-preserving allowlist in
+        //    {@see ReceiverViewNameResolver} is extended for the Mailable
+        //    receiver class. See `.alies/docs/blade.md` (PR-6 plan).
         //  - `View::share()` global view data — the binding is replayed at
         //    render-time across every subsequent `view()` call from any
         //    caller, so the scanner's per-call dispatch model does not fit.
         //  - Variable-bound view-builder chains
-        //    (`$v = view('home'); $v->with(...)`) — PR-5 may attach view
-        //    names to {@see \Psalm\Type\Union} via NodeTypeProvider metadata
-        //    to recover the view name through indirections.
+        //    (`$v = view('home'); $v->with(...)`) — PR-5 evaluated a
+        //    NodeTypeProvider-based tracker and rejected it: Psalm's
+        //    `AssignmentAnalyzer` wraps the right-hand side in a
+        //    `variable-use:$v:N` `DataFlowNode`, so any marker attached to
+        //    the {@see \Psalm\Type\Union} returned by `view()` is reachable
+        //    only by walking `taint_flow_graph->forward_edges` on every
+        //    method call — too expensive for the hot path. Deferred.
         //  - Caching the safety map across analysis runs — handled in a
-        //    follow-up after PR-5 stabilises the map shape.
+        //    follow-up after PR-6 stabilises the map shape.
 
         return $specs;
     }
