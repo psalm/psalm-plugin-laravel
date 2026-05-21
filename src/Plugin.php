@@ -90,6 +90,10 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
 
+        // FilesystemConfigAnalyzer is loaded via PSR-4 from StorageHandler.
+        require_once __DIR__ . '/Handlers/Filesystem/StorageHandler.php';
+        $registration->registerHooksFromClass(Handlers\Filesystem\StorageHandler::class);
+
         // Model property handlers are registered dynamically by ModelRegistrationHandler
         // after Psalm populates its codebase (AfterCodebasePopulated event).
         require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
