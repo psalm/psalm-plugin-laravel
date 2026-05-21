@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779400968033,
+  "lastUpdate": 1779401763756,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5066,6 +5066,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Wall time",
             "value": 31.11,
+            "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "2dd6dbe1ac4392e0c6f6c8f3c320bc68900a6c54",
+          "message": "refactor(diagnose): parse psalm.xml directly with SimpleXML #952\n\nReplace the json_decode + nested-array cursor walk in Diagnostics\nwith SimpleXML for psalm.xml's phpVersion= attribute and a\nshape-typed json_decode for composer.json's require.php\nconstraint. Drops both Mixed expressions and ~65 LoC (the\nVersionParser range-formatter goes with it). Required now surfaces\nthe raw constraint (^8.2); Analysis only resolves from psalm.xml\nor runtime, since composer's require.php is a constraint, not a\nversion.\n\nConsidered Config::getConfigForPath() to mirror Psalm's own\nresolution, but it eagerly validates every $argv entry via\nCliUtils::getPathsToCheck() and exit(1)s on\n`bin/psalm-laravel diagnose` -- its Symfony bypass only spares\nthe psalm-plugin binary.",
+          "timestamp": "2026-05-22T00:10:46+02:00",
+          "tree_id": "d49dbecc14df5010a752d98633f1e9af325671ad",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2dd6dbe1ac4392e0c6f6c8f3c320bc68900a6c54"
+        },
+        "date": 1779401762732,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.23,
             "range": "± 0.16",
             "unit": "s"
           },
