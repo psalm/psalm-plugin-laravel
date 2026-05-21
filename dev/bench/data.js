@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779369657450,
+  "lastUpdate": 1779372781937,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4927,6 +4927,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.44,
             "range": "± 0.69",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d7e42e0b654a393b4351e8bc463bdcb7352fe7cb",
+          "message": "Narrow `Storage::disk()` return to `Cloud` for cloud-driver disks (#982)\n\n* feat(filesystem): narrow Storage::disk('s3') to Cloud #973\n\nStorage facade's `@method disk()` returns `Filesystem`, but `url()` lives\non `Cloud extends Filesystem`. `Storage::disk('s3')->url($path)` triggered\n`UndefinedInterfaceMethod` despite working at runtime.\n\nLarastan's fix vector blanket-narrows `disk()` to `FilesystemAdapter`, which\nsilently permits `disk('local')->url(...)` even though the file-only\n`Filesystem` contract does not declare `url()`. That conflates Laravel's\nintentional Cloud/Filesystem split.\n\nThis fix narrows at the correct layer: read `filesystems.disks.<name>.driver`\nand only emit `Cloud` when the driver is `'s3'` (the sole built-in\n`createXDriver()` typed `@return Cloud`). `local`/`ftp`/`sftp`/`scoped` keep\nthe contract-correct `Filesystem` return, and `disk('local')->url(...)`\nremains a correctly reported `UndefinedInterfaceMethod`.\n\nHandler registers for the Storage facade, FilesystemManager (DI target), and\nthe Factory contract (DI by interface). Mirrors Auth/ pattern: singleton\nconfig analyzer + paired MethodReturnTypeProvider/MethodParamsProvider (the\nparams override avoids Psalm 7's \"Cannot get method params\" crash documented\non AuthHandler::getMethodParams()).\n\nScope notes:\n- `download()`, `directoryExists()`, `temporaryUrl()`, `temporaryUploadUrl()`\n  live only on the concrete `FilesystemAdapter`, not on `Cloud` — issue #977\n  remains open for those.\n- `UnitEnum` literal disk-name args and `Storage::build(['driver'=>'s3',...])`\n  array-literal narrowing fall through (sound, but missed opportunities).\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-21T16:10:14+02:00",
+          "tree_id": "de5b8576c1736e856b89a3a17abc8be841779f65",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d7e42e0b654a393b4351e8bc463bdcb7352fe7cb"
+        },
+        "date": 1779372780973,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.35,
+            "range": "± 0.04",
             "unit": "s"
           },
           {
