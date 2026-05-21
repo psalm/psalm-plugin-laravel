@@ -52,6 +52,7 @@ final class FilesystemConfigAnalyzer
     public function getDefaultDisk(): ?string
     {
         if (!$this->default_disk_loaded) {
+            /** @psalm-var string|null $disk */
             $disk = $this->config->get('filesystems.default');
             $this->default_disk_cache = \is_string($disk) ? $disk : null;
             $this->default_disk_loaded = true;
@@ -71,6 +72,7 @@ final class FilesystemConfigAnalyzer
             return $this->driver_cache[$disk];
         }
 
+        /** @psalm-var string|null $driver */
         $driver = $this->config->get("filesystems.disks.{$disk}.driver");
 
         return $this->driver_cache[$disk] = \is_string($driver) ? $driver : null;
