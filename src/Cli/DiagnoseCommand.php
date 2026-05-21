@@ -150,7 +150,7 @@ final class DiagnoseCommand extends Command
             return;
         }
 
-        $width = \max(\array_map('strlen', \array_keys($rows)));
+        $width = \max(\array_map(\strlen(...), \array_keys($rows)));
         foreach ($rows as $key => $value) {
             $io->writeln(\sprintf('  %-' . $width . 's  %s', $key, $value));
         }
