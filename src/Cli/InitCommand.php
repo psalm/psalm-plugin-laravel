@@ -34,19 +34,34 @@ final class InitCommand extends Command
             errorLevel="{{LEVEL}}"
             findUnusedCode="false"
             ensureOverrideAttribute="false"
+            runTaintAnalysis="true"
         >
             <projectFiles>
-                <directory name="."/>
+                <directory name="app"/>
+                <directory name="bootstrap"/>
+                <directory name="config"/>
+                <directory name="database"/>
+                <directory name="routes"/>
+
+                <!-- composer require psalm/plugin-phpunit psalm/plugin-mockery for the full tests support -->
+                <!-- <directory name="tests"/>-->
+
+                <file name="public/index.php"/>
+                <file name="artisan"/>
                 <ignoreFiles allowMissingFiles="true">
-                    <directory name="vendor"/>
-                    <directory name="storage"/>
                     <directory name="bootstrap/cache"/>
-                    <directory name="tests"/><!-- install psalm/plugin-phpunit and psalm/plugin-mockery for the full tests support -->
+                    <directory name="storage"/>
+                    <directory name="vendor"/>
                 </ignoreFiles>
             </projectFiles>
 
             <plugins>
-                <pluginClass class="Psalm\LaravelPlugin\Plugin"/>
+                <pluginClass class="Psalm\LaravelPlugin\Plugin">
+                    <!-- see https://github.com/psalm/psalm-plugin-laravel/blob/master/docs/config.md for the full list -->
+                    <resolveDynamicWhereClauses value="false" />
+                    <findMissingTranslations value="false" />
+                    <findMissingViews value="false" />
+                </pluginClass>
             </plugins>
 
             <issueHandlers>
@@ -62,6 +77,11 @@ final class InitCommand extends Command
                 <RedundantCondition errorLevel="info"/>
                 <UnnecessaryVarAnnotation errorLevel="suppress"/>
             </issueHandlers>
+
+            <forbiddenFunctions>
+                <function name="var_dump" />
+                <function name="dd" />
+            </forbiddenFunctions>
         </psalm>
 
         XML;

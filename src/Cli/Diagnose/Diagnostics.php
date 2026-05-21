@@ -53,8 +53,8 @@ class Diagnostics
 
         return new Report(
             pluginVersion: $this->safePrettyVersion(self::PLUGIN_PACKAGE),
-            laravelVersion: \defined(LaravelApplication::class . '::VERSION') ? LaravelApplication::VERSION : null,
             psalmVersion: $this->safePrettyVersion('vimeo/psalm'),
+            laravelVersion: \defined(LaravelApplication::class . '::VERSION') ? LaravelApplication::VERSION : null,
             phpRuntimeVersion: \PHP_VERSION,
             phpRequiredVersion: $phpRequiredConstraint !== null ? $this->formatPhpRequiredRange($phpRequiredConstraint) : null,
             phpAnalysisVersion: $platformPhp ?? \PHP_VERSION,
