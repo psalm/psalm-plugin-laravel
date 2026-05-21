@@ -160,7 +160,7 @@ final class ApplicationProvider
             // so handlers reading config still see whatever loaded prior to the throw.
             try {
                 $consoleApp->bootstrap();
-                self::ensureAppKey($app);
+                $this->ensureAppKey($app);
             } catch (\Throwable $bootstrapError) {
                 self::$bootstrapError = $bootstrapError;
             }
@@ -189,7 +189,7 @@ final class ApplicationProvider
      * that some provider may have already branched on (e.g. conditional registration
      * based on `config('app.key')` presence).
      */
-    private static function ensureAppKey(LaravelApplication $app): void
+    private function ensureAppKey(LaravelApplication $app): void
     {
         if (!$app->bound('config')) {
             return;
@@ -409,7 +409,7 @@ final class ApplicationProvider
         // during boot sees the dummy. doGetApp() also calls ensureAppKey() after the
         // console bootstrap completes — that covers the bootstrap-file branch, which
         // never enters this method. Single constant lives in ensureAppKey().
-        self::ensureAppKey($app);
+        $this->ensureAppKey($app);
 
         /** @var \Illuminate\Config\Repository $config */
         $config = $app['config'];
