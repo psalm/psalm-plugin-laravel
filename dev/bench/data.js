@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779401763756,
+  "lastUpdate": 1779402284072,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5102,6 +5102,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.23,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "bac01e7627455879a50a0af86d6f85a54cb85df0",
+          "message": "fix(cli/diagnose): use variadic strlen for row width calc\n\nSimplifies the lambda to use `strlen(...)` in `array_map`, improving clarity and maintaining compatibility with PHP 8+.",
+          "timestamp": "2026-05-22T00:22:11+02:00",
+          "tree_id": "7b311053e3a6bb74784aa4284232c1290852cf04",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bac01e7627455879a50a0af86d6f85a54cb85df0"
+        },
+        "date": 1779402283667,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.2,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
