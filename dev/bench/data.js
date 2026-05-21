@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779383645124,
+  "lastUpdate": 1779398201700,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -4997,6 +4997,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.3,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ffc6bff1cf71b99602c29be378485ddbd2288b4a",
+          "message": "fix(auth): keep canonical facade in handler list (#984)\n\n`AuthMethodHandler::getClassLikeNames()` previously sourced\n`Illuminate\\Support\\Facades\\Auth` only via `FacadeMapProvider`, which\niterates Laravel's `AliasLoader`. Apps that trim `config/app.php`'s\n`aliases` array (e.g. dropping `Facade::defaultAliases()` and\nregistering only a single project-specific alias) end up with an empty\n`AliasLoader` entry for `Auth`, so `getFacadeClasses(AuthManager)`\nreturns an empty list — silently dropping the canonical facade from\nthis handler and skipping narrowing for every\n`Illuminate\\Support\\Facades\\Auth::guard(...)` call site.\n\nReal-world impact (regression introduced by the earlier alias-discovery\ncommit): `Auth::guard('member')->login(...)` calls surface as\n`UndefinedInterfaceMethod: Method Illuminate\\Contracts\\Auth\\Guard::login\ndoes not exist` — the canonical facade path lost narrowing, so the stub\n`@method` union fell back to the failing `Guard` branch.\n\nHardcode the canonical facade FQCN; keep the `FacadeMapProvider` spread\nfor alias discovery on apps that DO register them.",
+          "timestamp": "2026-05-21T23:13:32+02:00",
+          "tree_id": "52a0523fb57a93946265e8a66aa51f3218f48b6a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ffc6bff1cf71b99602c29be378485ddbd2288b4a"
+        },
+        "date": 1779398201226,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.23,
+            "range": "± 0.06",
             "unit": "s"
           },
           {
