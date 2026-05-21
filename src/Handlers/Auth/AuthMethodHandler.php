@@ -167,9 +167,16 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
     {
         $method_name_lowercase = $event->getMethodNameLowercase();
 
-        // Defer guard()'s params to Laravel source for non-facade receivers — see method docblock.
+        // Defer guard()'s params to Laravel source for the real declaring classes
+        // (AuthManager / Factory), where `guard()` is a concrete method Psalm can resolve.
+        // For facade and root-alias receivers (`Illuminate\Support\Facades\Auth`, `\Auth`, ...)
+        // `guard()` only exists as a parent `@method` annotation, so returning null here
+        // re-triggers the #454/#854 `Cannot get method params for ...::guard` crash.
         if ($method_name_lowercase === 'guard'
-            && $event->getFqClasslikeName() !== \Illuminate\Support\Facades\Auth::class
+            && \in_array($event->getFqClasslikeName(), [
+                \Illuminate\Auth\AuthManager::class,
+                \Illuminate\Contracts\Auth\Factory::class,
+            ], true)
         ) {
             return null;
         }
