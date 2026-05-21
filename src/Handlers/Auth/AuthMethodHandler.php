@@ -57,7 +57,15 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
     #[\Override]
     public static function getClassLikeNames(): array
     {
+        // The canonical facade FQCN is hardcoded (not sourced from FacadeMapProvider)
+        // because apps that trim `config/app.php`'s `aliases` array (e.g. IxDF
+        // registering only `Vite`) end up with an empty AliasLoader entry for `Auth`.
+        // FacadeMapProvider iterates AliasLoader, so its lookup returns an empty list
+        // for AuthManager in that setup — relying on it alone would silently drop the
+        // canonical facade from this handler and skip narrowing for every
+        // `Illuminate\Support\Facades\Auth::guard(...)` call site.
         return [
+            \Illuminate\Support\Facades\Auth::class,
             \Illuminate\Auth\AuthManager::class,
             \Illuminate\Contracts\Auth\Factory::class,
             ...FacadeMapProvider::getFacadeClasses(\Illuminate\Auth\AuthManager::class),
