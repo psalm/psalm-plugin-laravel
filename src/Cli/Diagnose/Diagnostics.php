@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Cli\Diagnose;
 
 use Composer\InstalledVersions;
-use Composer\Semver\VersionParser;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 
@@ -47,18 +46,19 @@ class Diagnostics
             $hardFailures[] = 'Application boot failed: ' . $bootstrapErrors[0];
         }
 
-        $rootComposer = $this->readRootComposerJson();
-        $phpRequiredConstraint = $this->readNestedString($rootComposer, ['require', 'php']);
-        $platformPhp = $this->readNestedString($rootComposer, ['config', 'platform', 'php']);
+        $cwd = \getcwd();
+        $projectRoot = \is_string($cwd) ? $cwd : null;
+
+        [$analysisVersion, $analysisSource] = $this->resolveAnalysisPhpVersion($projectRoot);
 
         return new Report(
             pluginVersion: $this->safePrettyVersion(self::PLUGIN_PACKAGE),
             psalmVersion: $this->safePrettyVersion('vimeo/psalm'),
             laravelVersion: \defined(LaravelApplication::class . '::VERSION') ? LaravelApplication::VERSION : null,
             phpRuntimeVersion: \PHP_VERSION,
-            phpRequiredVersion: $phpRequiredConstraint !== null ? $this->formatPhpRequiredRange($phpRequiredConstraint) : null,
-            phpAnalysisVersion: $platformPhp ?? \PHP_VERSION,
-            phpAnalysisSource: $platformPhp !== null ? 'config.platform.php' : 'runtime',
+            phpRequiredVersion: $projectRoot !== null ? $this->readComposerRequirePhp($projectRoot) : null,
+            phpAnalysisVersion: $analysisVersion,
+            phpAnalysisSource: $analysisSource,
             bootMode: ApplicationProvider::getBootMode(),
             bootPath: ApplicationProvider::getBootPath(),
             bootstrapErrors: $bootstrapErrors,
@@ -67,59 +67,90 @@ class Diagnostics
     }
 
     /**
-     * Resolve a Composer `require.php` constraint to a human-readable
-     * `min-max` range using composer/semver bounds.
+     * Resolve the PHP version Psalm uses for analysis. Only `psalm.xml`'s
+     * `phpVersion=` attribute is a concrete version; otherwise we fall back
+     * to the runtime. We deliberately do NOT consume `composer.json`'s
+     * `require.php` here — that's a constraint (`^8.2`), not a resolved
+     * version, and surfacing it under "Analysis" would mislead. The
+     * constraint is reported separately under `phpRequiredVersion`.
      *
-     * Unlike phpstan we don't cap the upper bound at "max known PHP minor"
-     * (e.g. `8.5.99`) — that requires shipping a per-release constants table.
-     * We surface the exclusive upper bound as-is (e.g. `^8.2` → `8.2.0-9.0.0`).
+     * We parse `psalm.xml` directly with SimpleXML instead of
+     * `Config::getConfigForPath()` because the latter eagerly validates every
+     * entry in `$argv` as a filesystem path (see Psalm's
+     * {@see \Psalm\Internal\CliUtils::getPathsToCheck()}) and `exit(1)`s on
+     * `bin/psalm-laravel diagnose` — its Symfony bypass only spares the `psalm-plugin` binary.
      *
-     * Returns the original constraint string if parsing fails.
+     * @return array{string, 'runtime'|'psalm.xml'}
      */
-    private function formatPhpRequiredRange(string $constraint): string
+    private function resolveAnalysisPhpVersion(?string $projectRoot): array
     {
-        try {
-            $parsed = (new VersionParser())->parseConstraints($constraint);
-        } catch (\UnexpectedValueException) {
-            return $constraint;
+        if ($projectRoot !== null) {
+            $fromXml = $this->readPsalmXmlPhpVersion($projectRoot);
+            if ($fromXml !== null) {
+                return [$fromXml, 'psalm.xml'];
+            }
         }
 
-        $lower = $parsed->getLowerBound();
-        $upper = $parsed->getUpperBound();
-
-        $minStr = $lower->isZero() ? null : $this->trimSemverVersion($lower->getVersion());
-        $maxStr = $upper->isPositiveInfinity() ? null : $this->trimSemverVersion($upper->getVersion());
-
-        if ($minStr !== null && $maxStr !== null) {
-            return $minStr === $maxStr ? $minStr : "{$minStr}-{$maxStr}";
-        }
-
-        if ($minStr !== null) {
-            return ">={$minStr}";
-        }
-
-        if ($maxStr !== null) {
-            return "<{$maxStr}";
-        }
-
-        return $constraint;
+        return [\PHP_VERSION, 'runtime'];
     }
 
     /**
-     * composer/semver bounds return 4-segment versions with `-dev` markers
-     * (e.g. `8.2.0.0-dev`). Reduce to standard `major.minor.patch` for display.
-     *
-     * @psalm-pure
+     * Read the `phpVersion` attribute from `<projectRoot>/psalm.xml`. We don't
+     * walk parent directories — diagnose is intended for the project root.
      */
-    private function trimSemverVersion(string $version): string
+    private function readPsalmXmlPhpVersion(string $projectRoot): ?string
     {
-        $version = \preg_replace('/-dev$/', '', $version) ?? $version;
-        $parts = \explode('.', $version);
-        if (\count($parts) >= 4 && $parts[3] === '0') {
-            $parts = \array_slice($parts, 0, 3);
+        $path = $projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml';
+        if (!\is_file($path)) {
+            return null;
         }
 
-        return \implode('.', $parts);
+        $contents = \file_get_contents($path);
+        if ($contents === false) {
+            return null;
+        }
+
+        // Toggle libxml's internal error buffer so a malformed psalm.xml never
+        // bubbles a warning to STDOUT and breaks the diagnose report layout.
+        $previous = \libxml_use_internal_errors(true);
+        $xml = \simplexml_load_string($contents);
+        \libxml_clear_errors();
+        \libxml_use_internal_errors($previous);
+
+        if (!$xml instanceof \SimpleXMLElement) {
+            return null;
+        }
+
+        $attr = $xml['phpVersion'] ?? null;
+        if (!$attr instanceof \SimpleXMLElement) {
+            return null;
+        }
+
+        $value = (string) $attr;
+        return $value === '' ? null : $value;
+    }
+
+    /**
+     * Return the raw `require.php` constraint string from `composer.json`
+     * (e.g. `^8.2`). We don't resolve to a single minor like Psalm does — the
+     * raw constraint is more informative for diagnose, and resolving it
+     * requires shipping a per-release PHP version table.
+     */
+    private function readComposerRequirePhp(string $projectRoot): ?string
+    {
+        $path = $projectRoot . \DIRECTORY_SEPARATOR . 'composer.json';
+        if (!\is_file($path)) {
+            return null;
+        }
+
+        $contents = \file_get_contents($path);
+        if ($contents === false) {
+            return null;
+        }
+
+        /** @psalm-var array{require?: array{php?: string}} $decoded */
+        $decoded = \json_decode($contents, true);
+        return $decoded['require']['php'] ?? null;
     }
 
     private function safePrettyVersion(string $package): ?string
@@ -133,81 +164,5 @@ class Diagnostics
         } catch (\OutOfBoundsException) {
             return null;
         }
-    }
-
-    /**
-     * Read the root project's composer.json (the one Composer treats as
-     * the project under analysis). Returns [] on any failure — diagnose
-     * must never crash on missing or malformed files.
-     *
-     * @return array<array-key, mixed>
-     */
-    private function readRootComposerJson(): array
-    {
-        try {
-            /** @var array{install_path?: string, ...} $root */
-            $root = InstalledVersions::getRootPackage();
-            $installPath = $root['install_path'] ?? null;
-            if (!\is_string($installPath)) {
-                return [];
-            }
-
-            $path = \rtrim($installPath, \DIRECTORY_SEPARATOR . '/') . '/' . $this->resolveComposerFileName();
-            if (!\is_file($path)) {
-                return [];
-            }
-
-            $contents = \file_get_contents($path);
-            if ($contents === false) {
-                return [];
-            }
-
-            /** @var mixed $decoded */
-            $decoded = \json_decode($contents, true);
-            return \is_array($decoded) ? $decoded : [];
-        } catch (\Throwable) {
-            return [];
-        }
-    }
-
-    /**
-     * Honor the documented `COMPOSER` environment variable for composer.json
-     * filename overrides (matches what Composer itself and phpstan do).
-     *
-     * Hardened with `basename()` — the envvar may only redirect to a different
-     * filename within the project root, never to an absolute path or traversal.
-     *
-     * @psalm-pure
-     */
-    private function resolveComposerFileName(): string
-    {
-        $envFile = \getenv('COMPOSER');
-        if (!\is_string($envFile) || \trim($envFile) === '') {
-            return 'composer.json';
-        }
-
-        return \basename(\trim($envFile));
-    }
-
-    /**
-     * @param array<array-key, mixed> $nestedData
-     * @param list<string> $keys
-     *
-     * @psalm-pure
-     */
-    private function readNestedString(array $nestedData, array $keys): ?string
-    {
-        /** @psalm-var mixed $cursor */
-        $cursor = $nestedData;
-        foreach ($keys as $key) {
-            if (!\is_array($cursor) || !\array_key_exists($key, $cursor)) {
-                return null;
-            }
-
-            /** @psalm-var mixed $cursor */
-            $cursor = $cursor[$key];
-        }
-
-        return \is_string($cursor) ? $cursor : null;
     }
 }

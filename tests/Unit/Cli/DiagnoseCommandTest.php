@@ -143,7 +143,7 @@ final class DiagnoseCommandTest extends TestCase
 
         $this->assertNotEmpty($report->phpRuntimeVersion);
         $this->assertNotEmpty($report->phpAnalysisVersion);
-        $this->assertContains($report->phpAnalysisSource, ['runtime', 'config.platform.php']);
+        $this->assertContains($report->phpAnalysisSource, ['runtime', 'psalm.xml']);
         $this->assertContains($report->bootMode, ['bootstrap', 'testbench_fallback', null]);
     }
 

@@ -18,7 +18,7 @@ final readonly class Report
 {
     /**
      * @param 'bootstrap'|'testbench_fallback'|null $bootMode
-     * @param 'runtime'|'config.platform.php' $phpAnalysisSource
+     * @param 'runtime'|'psalm.xml' $phpAnalysisSource
      * @param list<string> $bootstrapErrors
      * @param list<string> $hardFailures
      */
