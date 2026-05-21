@@ -83,8 +83,10 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Application/OffsetHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\OffsetHandler::class);
 
-        require_once __DIR__ . '/Handlers/Auth/AuthHandler.php';
-        $registration->registerHooksFromClass(Handlers\Auth\AuthHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/AuthMethodHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\AuthMethodHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/AuthFunctionHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\AuthFunctionHandler::class);
         require_once __DIR__ . '/Handlers/Auth/GuardHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';

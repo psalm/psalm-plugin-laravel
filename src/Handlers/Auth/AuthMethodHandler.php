@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
 use Psalm\LaravelPlugin\Handlers\Auth\Concerns\ExtractsGuardNameFromCallLike;
+use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -33,26 +34,33 @@ use Psalm\Type;
  * Subsequent calls on the returned Guard instance (e.g. `Auth::guard('web')->user()`) are
  * narrowed by {@see \Psalm\LaravelPlugin\Handlers\Auth\GuardHandler}.
  */
-final class AuthHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
+final class AuthMethodHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
     use ExtractsGuardNameFromCallLike;
 
     /**
-     * Register for the Auth facade, the concrete AuthManager (common DI target), and the
-     * Factory contract (DI by interface). {@see getMethodReturnType} is class-agnostic and
-     * narrows uniformly across all three surfaces; {@see getMethodParams} has one carve-out
-     * for `guard()` on non-facade receivers (see that method's docblock).
+     * Register for the Auth facade, the concrete AuthManager (common DI target), the
+     * Factory contract (DI by interface), AND any root-namespace alias that proxies
+     * to AuthManager. {@see getMethodReturnType} is class-agnostic and narrows
+     * uniformly across all surfaces; {@see getMethodParams} has one carve-out for
+     * `guard()` on non-facade receivers (see that method's docblock).
+     *
+     * The `FacadeMapProvider::getFacadeClasses()` lookup is critical: Psalm dispatches
+     * `MethodReturnTypeProvider` hooks by exact class name, so a `use Auth;` import
+     * referring to the root-namespace `\Auth` alias (the default Laravel alias
+     * generated into `aliases.phpstub`) would otherwise miss this handler entirely
+     * and surface `Auth::guard('web')->logout()` as `Guard::logout does not exist`.
      *
      * @return list<string>
-     * @psalm-pure
+     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array
     {
         return [
-            \Illuminate\Support\Facades\Auth::class,
             \Illuminate\Auth\AuthManager::class,
             \Illuminate\Contracts\Auth\Factory::class,
+            ...FacadeMapProvider::getFacadeClasses(\Illuminate\Auth\AuthManager::class),
         ];
     }
 
@@ -124,12 +132,7 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
             return null; // dynamic guard name — cannot narrow statically
         }
 
-        $fqcn = AuthConfigAnalyzer::instance()->getGuardFQCN($guard_name);
-        if ($fqcn === null) {
-            return null; // unknown guard or custom driver
-        }
-
-        return new Type\Union([new Type\Atomic\TNamedObject($fqcn)]);
+        return GuardClassResolver::resolve($guard_name);
     }
 
     /**
@@ -164,9 +167,16 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
     {
         $method_name_lowercase = $event->getMethodNameLowercase();
 
-        // Defer guard()'s params to Laravel source for non-facade receivers — see method docblock.
+        // Defer guard()'s params to Laravel source for the real declaring classes
+        // (AuthManager / Factory), where `guard()` is a concrete method Psalm can resolve.
+        // For facade and root-alias receivers (`Illuminate\Support\Facades\Auth`, `\Auth`, ...)
+        // `guard()` only exists as a parent `@method` annotation, so returning null here
+        // re-triggers the #454/#854 `Cannot get method params for ...::guard` crash.
         if ($method_name_lowercase === 'guard'
-            && $event->getFqClasslikeName() !== \Illuminate\Support\Facades\Auth::class
+            && \in_array($event->getFqClasslikeName(), [
+                \Illuminate\Auth\AuthManager::class,
+                \Illuminate\Contracts\Auth\Factory::class,
+            ], true)
         ) {
             return null;
         }
