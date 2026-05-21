@@ -33,7 +33,7 @@ use Psalm\Type;
  * Subsequent calls on the returned Guard instance (e.g. `Auth::guard('web')->user()`) are
  * narrowed by {@see \Psalm\LaravelPlugin\Handlers\Auth\GuardHandler}.
  */
-final class AuthHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
+final class AuthMethodHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
     use ExtractsGuardNameFromCallLike;
 
@@ -124,12 +124,7 @@ final class AuthHandler implements MethodReturnTypeProviderInterface, MethodPara
             return null; // dynamic guard name — cannot narrow statically
         }
 
-        $fqcn = AuthConfigAnalyzer::instance()->getGuardFQCN($guard_name);
-        if ($fqcn === null) {
-            return null; // unknown guard or custom driver
-        }
-
-        return new Type\Union([new Type\Atomic\TNamedObject($fqcn)]);
+        return GuardClassResolver::resolveUnion($guard_name);
     }
 
     /**

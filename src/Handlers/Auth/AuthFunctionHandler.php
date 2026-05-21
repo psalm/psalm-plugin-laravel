@@ -9,7 +9,6 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
-use Psalm\Type\Atomic\TNamedObject;
 
 /**
  * Narrows the return type of the global `auth($guard)` helper to the concrete guard
@@ -31,11 +30,13 @@ use Psalm\Type\Atomic\TNamedObject;
  * Dynamic guard names (variable, unknown string) and custom drivers fall back to the
  * stub-declared union.
  *
- * @see \Psalm\LaravelPlugin\Handlers\Auth\AuthHandler::resolveGuardReturnType()
+ * @see \Psalm\LaravelPlugin\Handlers\Auth\AuthMethodHandler::resolveGuardReturnType()
  *      for the equivalent narrowing on `Auth::guard()` / `AuthManager::guard()`.
+ * @see \Psalm\LaravelPlugin\Handlers\Auth\GuardClassResolver
+ *      for the shared guard-name → concrete-class mapping.
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/979
  */
-final class AuthHelperHandler implements FunctionReturnTypeProviderInterface
+final class AuthFunctionHandler implements FunctionReturnTypeProviderInterface
 {
     /**
      * @inheritDoc
@@ -70,11 +71,6 @@ final class AuthHelperHandler implements FunctionReturnTypeProviderInterface
             return null;
         }
 
-        $fqcn = AuthConfigAnalyzer::instance()->getGuardFQCN($first_arg->value);
-        if ($fqcn === null) {
-            return null; // unknown guard or custom driver — fall back to stub
-        }
-
-        return new Type\Union([new TNamedObject($fqcn)]);
+        return GuardClassResolver::resolveUnion($first_arg->value);
     }
 }

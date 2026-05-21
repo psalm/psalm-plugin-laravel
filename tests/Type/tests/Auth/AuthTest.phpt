@@ -4,7 +4,7 @@
 $_user = \Illuminate\Support\Facades\Auth::user();
 /** @psalm-check-type-exact $_user = \Illuminate\Foundation\Auth\User|null */
 
-// All facade methods handled by AuthHandler must not crash Psalm 7
+// All facade methods handled by AuthMethodHandler must not crash Psalm 7
 // (previously getUser/authenticate/etc. caused UnexpectedValueException
 // because getMethodParams returned null for @method-annotated methods)
 $_getUser = \Illuminate\Support\Facades\Auth::getUser();
