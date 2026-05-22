@@ -188,6 +188,16 @@ final class MacroRegistry
             self::$macros[\strtolower($className)] = $classMacros;
             self::$knownMacroableClasses[] = $className;
         }
+
+        // Drop the AST-scan cache now that every macro definition is built.
+        // The cache holds full `Closure` / `ArrowFunction` PhpParser subtrees
+        // per visited file; once we're past the foreach above, none of those
+        // nodes are reachable from `MacroDefinition` instances anymore. Holding
+        // them until session teardown would (a) keep the AST pinned for the
+        // rest of analysis and (b) replicate it into every pcntl fork worker
+        // via copy-on-write, which is exactly the cost we wanted to avoid by
+        // not re-parsing in the first place.
+        CachedClosureTypeFactory::reset();
     }
 
     /**

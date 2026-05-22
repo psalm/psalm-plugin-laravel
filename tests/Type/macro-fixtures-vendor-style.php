@@ -64,3 +64,29 @@ MacroFixtureBag::macro('astDocblockParamOnlyTest', static function (int $count):
  * @return non-empty-string
  */
 MacroFixtureBag::macro('astDocblockArrowFnTest', static fn(int $count) => \str_repeat('a', $count));
+
+// PR #994 fixtures — body-flow inference. None of the closures below have a
+// docblock @return OR a native return type, so storage-only and reflection
+// recovery both bottom out at `mixed`. The factory's new body-flow inference
+// is the only path that can produce a narrower return type.
+
+// Literal string: `fn () => 'hello'` should surface as `'hello'`.
+MacroFixtureBag::macro('astBodyInferLiteralStringTest', static fn() => 'hello');
+
+// Multi-return union: each branch is a literal, the result is their union.
+MacroFixtureBag::macro('astBodyInferUnionTest', static function () {
+    if (\random_int(0, 1) === 0) {
+        return 1;
+    }
+    return 'x';
+});
+
+// Unhandled node (`new` expression) — body inference bails. `Expr\New_` is
+// firmly outside the PR's rule table; adding it later would be a deliberate
+// spec change, not a sloppy refactor of `inferExpression()`. Without any
+// source of narrowing, the factory falls back to its null-return path and
+// the caller's reflection-only pseudo-method surfaces `mixed`.
+MacroFixtureBag::macro('astBodyInferBailsOnComplex', static fn() => new \stdClass());
+
+// Concat of two literal strings should fold to a single literal.
+MacroFixtureBag::macro('astBodyInferConcatTest', static fn() => 'a' . 'b');
