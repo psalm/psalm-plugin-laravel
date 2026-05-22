@@ -6,9 +6,19 @@ namespace Illuminate\Support\Traits;
  * Simplify return types for Conditionable methods.
  *
  * Laravel's PHPDoc uses `@return $this|TWhenReturnType` with template inference,
- * but Psalm 7 resolves callable return types to `mixed`, breaking fluent chains.
- * Stubbing as `@return $this` makes ->when() and ->unless() chainable on
- * Builder, Collection, Stringable, and any other class using this trait.
+ * but Psalm 7 resolves the callable return type to `mixed`, breaking fluent chains.
+ *
+ * We stub as `@return static` (per #993, Option A). This is an accepted
+ * trade-off rather than a fully sound typing. Laravel's runtime collapses a
+ * `null` callback return to `$this` via `$callback($this, $value) ?? $this`,
+ * so the common case (callback returns void / null) is correctly typed. A
+ * callback that intentionally returns a non-`static`, truthy value (rare in
+ * real Laravel code) is also widened back to `static` here, as is the
+ * `HigherOrderWhenProxy` returned by the 0/1-arg branches. Option B (a
+ * MethodReturnTypeProvider) would be needed to recover those cases.
+ *
+ * `static` over `$this` follows the project's Psalm 7 stub convention (see
+ * CLAUDE.md: "Use `static` instead of `$this` in template positions").
  */
 trait Conditionable
 {
@@ -18,7 +28,7 @@ trait Conditionable
      * @param  mixed  $value
      * @param  callable|null  $callback
      * @param  callable|null  $default
-     * @return $this
+     * @return static
      */
     public function when($value = null, ?callable $callback = null, ?callable $default = null) {}
 
@@ -28,7 +38,7 @@ trait Conditionable
      * @param  mixed  $value
      * @param  callable|null  $callback
      * @param  callable|null  $default
-     * @return $this
+     * @return static
      */
     public function unless($value = null, ?callable $callback = null, ?callable $default = null) {}
 }

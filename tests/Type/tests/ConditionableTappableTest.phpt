@@ -92,6 +92,43 @@ function test_eloquent_builder_unless_with_real_callback(Builder $query): void
     /** @psalm-check-type-exact $_result = Builder<Customer>&static */
 }
 
+/**
+ * Issue #993 reproducer shape: when() at the tail of a function whose declared
+ * return type is the parameterized Builder. Guards against re-loss of the
+ * Conditionable stub — if the stub is removed, this regresses to
+ * LessSpecificReturnStatement (callback return collapses to mixed).
+ *
+ * Note: `@return $this` and `@return static` are observationally equivalent
+ * here; this test does not discriminate between them. The stub's `static`
+ * choice is motivated by Psalm 7 convention (CLAUDE.md), not by behavior at
+ * this call shape.
+ *
+ * @param Builder<Customer> $query
+ * @return Builder<Customer>
+ */
+function test_eloquent_builder_when_returned_directly(Builder $query, ?string $search): Builder
+{
+    return $query->when($search, function (Builder $q, string $term): Builder {
+        return $q->where('name', 'like', "%{$term}%");
+    });
+}
+
+/**
+ * Mirror of the issue #993 reproducer for unless(). Same regression-guard
+ * intent: a tail-position unless() must not collapse the callback return to
+ * mixed and surface LessSpecificReturnStatement against the declared
+ * `Builder<Customer>` return.
+ *
+ * @param Builder<Customer> $query
+ * @return Builder<Customer>
+ */
+function test_eloquent_builder_unless_returned_directly(Builder $query, bool $skip): Builder
+{
+    return $query->unless($skip, function (Builder $q, bool $_v): Builder {
+        return $q->where('active', true);
+    });
+}
+
 // --- Query\Builder (via BuildsQueries trait) ---
 
 /**
