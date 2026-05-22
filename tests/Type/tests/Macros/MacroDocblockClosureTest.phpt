@@ -21,12 +21,14 @@ use Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureChild;
  *   docblockReturnTest(int):  mixed         (no native return type at all)
  *   docblockGenericTest():    mixed         (no native return type)
  *
- * `MacroRegistry::recoverClosureStorage()` matches the closure to Psalm's
- * pre-scanned `FunctionLikeStorage` by file + line, and
- * `MacroRegistry::buildDefinitionFromStorage()` copies the docblock-derived
- * Union types into the synthesised pseudo-method. The autoloader file is
- * deep-scanned by `Psalm\Config` so its closure storage is populated by the
- * time `AfterCodebasePopulated` runs.
+ * After issue #991 the recovery pipeline tries AST first
+ * ({@see \Psalm\LaravelPlugin\Util\Ast\CachedClosureTypeFactory::fromClosureObject()}):
+ * the autoloader file is on disk, php-parser parses it on demand, the closure
+ * node's own docblock is read directly. The pre-#991 Psalm-storage path
+ * ({@see \Psalm\LaravelPlugin\Providers\MacroRegistry::recoverClosureStorage()}
+ * / `buildDefinitionFromStorage()`) is still the second-tier fallback for
+ * closures whose source AST fails to recover (parse error, ambiguous start
+ * line, no usable docblock).
  *
  * The Collection import here matches the import in `macro-fixtures.php`, so the
  * generic-return assertion below resolves against the same FQCN that the

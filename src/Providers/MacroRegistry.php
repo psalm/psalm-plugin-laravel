@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Providers;
 
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Util\Ast\CachedClosureTypeFactory;
+use Psalm\LaravelPlugin\Util\Ast\ClosureTypeFactory;
 use Psalm\Progress\Progress;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\FunctionLikeStorage;
@@ -186,6 +188,16 @@ final class MacroRegistry
             self::$macros[\strtolower($className)] = $classMacros;
             self::$knownMacroableClasses[] = $className;
         }
+
+        // Drop the AST-scan cache now that every macro definition is built.
+        // The cache holds full `Closure` / `ArrowFunction` PhpParser subtrees
+        // per visited file; once we're past the foreach above, none of those
+        // nodes are reachable from `MacroDefinition` instances anymore. Holding
+        // them until session teardown would (a) keep the AST pinned for the
+        // rest of analysis and (b) replicate it into every pcntl fork worker
+        // via copy-on-write, which is exactly the cost we wanted to avoid by
+        // not re-parsing in the first place.
+        CachedClosureTypeFactory::reset();
     }
 
     /**
@@ -244,6 +256,11 @@ final class MacroRegistry
     {
         self::$macros = [];
         self::$knownMacroableClasses = [];
+        // Cascade into the AST docblock cache — tests rely on this for isolation
+        // between runs, and the cache is keyed by realpath+mtime so leaking it
+        // across test cases would produce phantom hits on fixture files that
+        // were rewritten between runs.
+        CachedClosureTypeFactory::reset();
     }
 
     /**
@@ -286,23 +303,66 @@ final class MacroRegistry
             return null;
         }
 
-        // Strategy C / issue #899 idea #1: docblock-aware closure type extraction.
-        // For Closure callables whose source Psalm has scanned (autoloader files via
-        // `addFileToDeepScan`, projectFiles, stubs), prefer Psalm's
-        // {@see FunctionLikeStorage} over reflection. Storage holds docblock-merged
-        // types — `@return Builder<TModel>`, `@param Collection<int, string> $items`,
-        // generic templates — none of which reflection can surface. Falls back to
-        // reflection-based extraction when storage is unavailable (no codebase,
-        // closure source not scanned, or multiple closures share the start line).
-        if ($callable instanceof \Closure && $codebase instanceof \Psalm\Codebase) {
-            $closureStorage = self::recoverClosureStorage($reflection, $codebase);
-            if ($closureStorage instanceof FunctionLikeStorage) {
-                return self::buildDefinitionFromStorage(
-                    $declaringClass,
-                    $name,
-                    $closureStorage,
-                );
+        // Docblock-aware closure type extraction (Strategy C / issue #899 idea #1,
+        // expanded by issue #991).
+        //
+        // Two recovery paths in priority order:
+        //
+        // 1. **AST scan** ({@see CachedClosureTypeFactory}, wrapping
+        //    {@see ClosureTypeFactory}): builds a {@see TClosure} from the
+        //    closure's
+        //    source file with `nikic/php-parser`, locates the closure by start
+        //    line, and lifts `@param` / `@return` from the docblock attached
+        //    either directly to the closure node OR to the wrapping
+        //    `Stmt\Expression` (Inertia's `Router::macro('inertia', fn () { ... })`
+        //    pattern). This works regardless of whether Psalm scanned the file,
+        //    so it catches both project source and vendor packages outside
+        //    `<projectFiles>`.
+        //
+        // 2. **Psalm storage** ({@see self::recoverClosureStorage()}): looks up
+        //    Psalm's pre-scanned {@see FunctionLikeStorage} for the closure. This
+        //    only fires when AST scan yielded nothing — file unreadable /
+        //    unparseable, no closure starts at the reflected line, or no docblock.
+        //    For closures with a docblock attached directly to the closure node,
+        //    storage and AST produce the same types; for the Stmt\Expression
+        //    docblock pattern, storage's scan does not attach the outer docblock
+        //    to the inner closure, which is exactly why AST is tried first.
+        //
+        // 3. Falls through to **native reflection** when neither path yields data.
+        $closureType = null;
+        if ($callable instanceof \Closure) {
+            $closureType = CachedClosureTypeFactory::fromClosureObject($callable);
+
+            if (!$closureType instanceof \Psalm\Type\Atomic\TClosure && $codebase instanceof \Psalm\Codebase) {
+                $closureStorage = self::recoverClosureStorage($reflection, $codebase);
+                if ($closureStorage instanceof FunctionLikeStorage) {
+                    return self::buildDefinitionFromStorage(
+                        $declaringClass,
+                        $name,
+                        $closureStorage,
+                    );
+                }
             }
+        }
+
+        // For Closure callables, the factory's TClosure already carries the
+        // narrowed params + return type. Unpack and short-circuit the rest of
+        // the build pipeline — no `self`/`static` host expansion needed here
+        // (closures don't bind a host class at definition site; see the
+        // long-form comment below).
+        if ($closureType instanceof \Psalm\Type\Atomic\TClosure) {
+            return new MacroDefinition(
+                declaringClass: $declaringClass,
+                methodName: \strtolower($name),
+                casedName: $name,
+                params: $closureType->params ?? [],
+                returnType: $closureType->return_type ?? Type::getMixed(),
+                // `signature_return_type` carries only the native PHP type;
+                // grab it from reflection so the docblock-narrowed
+                // `return_type` and the native `signature_return_type` stay
+                // independent slots.
+                signatureReturnType: self::reflectionTypeToUnion($reflection->getReturnType()),
+            );
         }
 
         // Native `self`/`static`/`parent` references in a `\ReflectionMethod`'s signature
@@ -338,6 +398,11 @@ final class MacroRegistry
             }
         }
 
+        // Non-closure callables (string `'Class::method'`, array
+        // `[$obj, 'method']`, invokable objects) reach this branch. Their
+        // docblock — if any — lives on the resolved method/function and is
+        // recovered by Psalm's normal scan, so no AST extraction is needed
+        // here; reflection alone produces the param + return types.
         $params = [];
         foreach ($reflection->getParameters() as $reflParam) {
             $params[] = self::buildParameter($reflParam, $selfHostClass, $staticHostClass);
@@ -588,11 +653,11 @@ final class MacroRegistry
 
     /**
      * @param class-string|null $selfHostClass The method's declaring class (binds `self`,
-     *                                          `parent`). Null for free functions and Closures.
+     *                                          `parent`). Null for free functions.
      * @param class-string|null $staticHostClass The class `static` should expand to: for
      *                                            object callables, `get_class($obj)`; otherwise
      *                                            same as `$selfHostClass`. Null for free
-     *                                            functions and Closures.
+     *                                            functions.
      */
     private static function buildParameter(\ReflectionParameter $reflParam, ?string $selfHostClass, ?string $staticHostClass): FunctionLikeParameter
     {
