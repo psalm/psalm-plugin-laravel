@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779402284072,
+  "lastUpdate": 1779428069946,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5137,6 +5137,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.2,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1d6717d05294e07b0d855c998542f4ed962dd858",
+          "message": "Merge pull request #987 from psalm/worktree-899-macro-fluent-static-out",
+          "timestamp": "2026-05-22T07:31:48+02:00",
+          "tree_id": "c01235a34b45097f90652deda8a481140613cabf",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1d6717d05294e07b0d855c998542f4ed962dd858"
+        },
+        "date": 1779428068932,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.05,
+            "range": "± 0.26",
             "unit": "s"
           },
           {
