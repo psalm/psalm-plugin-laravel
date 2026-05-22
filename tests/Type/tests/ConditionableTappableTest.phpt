@@ -171,6 +171,56 @@ function test_stringable_when_fluent_chain(): void
     /** @psalm-check-type-exact $_result = Stringable&static */
 }
 
+// --- Callback-return shapes ---
+//
+// The stub returns `static` unconditionally (#993 Option A), so a callback
+// returning a non-static value is widened back to the calling class. The
+// cases below lock that current behavior so a future Option B
+// (MethodReturnTypeProvider) or a conditional `@return` rewrite has to
+// update them deliberately.
+
+/** Callback returns void → stays on the calling class. */
+function test_when_callback_void(): void
+{
+    $_result = (new Stringable('hello'))->when(true, static function (Stringable $_s): void {
+        // no-op
+    });
+    /** @psalm-check-type-exact $_result = Stringable&static */
+}
+
+/** Callback returns null → stays on the calling class (Laravel collapses null via ?? $this). */
+function test_when_callback_returns_null(): void
+{
+    $_result = (new Stringable('hello'))->when(true, static function (Stringable $_s) { return null; });
+    /** @psalm-check-type-exact $_result = Stringable&static */
+}
+
+/**
+ * Callback returns a non-static value — current stub widens back to the
+ * calling class instead of narrowing to the callback's return. Documented
+ * trade-off in the stub's docblock; lock the behavior here so a future
+ * stub rewrite that aims to narrow has to update this assertion.
+ */
+function test_when_callback_returns_int(): void
+{
+    $_result = (new Stringable('hello'))->when(true, static function (Stringable $_s): int { return random_int(0, 10); });
+    /** @psalm-check-type-exact $_result = Stringable&static */
+}
+
+/**
+ * Builder<Customer> + callback returning Builder narrows back to Builder<Customer>
+ * because `static` resolves to the calling Builder generic.
+ *
+ * @param Builder<Customer> $query
+ */
+function test_when_builder_callback_returns_builder(Builder $query): void
+{
+    $_result = $query->when(true, static function (Builder $q): Builder {
+        return $q->whereNull('name');
+    });
+    /** @psalm-check-type-exact $_result = Builder<Customer>&static */
+}
+
 // --- Tappable::tap() ---
 
 /** tap() with a callback returns $this — preserves the calling type in the chain. */
