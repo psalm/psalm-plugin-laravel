@@ -424,6 +424,35 @@ PHP);
     }
 
     #[Test]
+    public function body_infer_bails_on_empty_body(): void
+    {
+        // PHPStan's own `ClosureTypeFactoryTest` returns `mixed` for an
+        // empty-body closure (`function () {}`). Our factory bails (the
+        // visitor finds no returns AND `bodyAlwaysTerminates([])` is false),
+        // so the caller falls back to its reflection-only pseudo-method
+        // which has no native return → surfaces as `mixed`. Same effective
+        // outcome on a different code path; lock both branches in.
+        $this->assertBailsForBody(<<<'PHP'
+<?php
+$register(static function () {});
+PHP);
+    }
+
+    #[Test]
+    public function body_infer_bails_on_non_literal_const_fetch(): void
+    {
+        // ConstFetch handling only resolves globally-namespaced `true`,
+        // `false`, `null`. Anything else (`PHP_EOL`, user-defined
+        // constants, `use const` aliases) bails — adding general constant
+        // resolution would require a constant resolver and is firmly out
+        // of the PR's scope.
+        $this->assertBailsForBody(<<<'PHP'
+<?php
+$register(static fn () => PHP_EOL);
+PHP);
+    }
+
+    #[Test]
     public function body_infer_bails_on_implicit_null_fallthrough(): void
     {
         // Conservatively bail when the body has a code path that reaches the
