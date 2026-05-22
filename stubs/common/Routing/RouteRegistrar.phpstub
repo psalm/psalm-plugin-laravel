@@ -15,21 +15,24 @@ namespace Illuminate\Routing;
  * is patched here because chains like `Route::prefix('foo')->middleware('a', 'b')`
  * dispatch through the RouteRegistrar pseudo-method table.
  *
- * @method \Illuminate\Routing\RouteRegistrar middleware(string|array|null ...$middleware)
+ * @method \Illuminate\Routing\RouteRegistrar middleware(string|array<array-key, string|null>|null ...$middleware)
  */
 class RouteRegistrar
 {
     /**
-     * The broad `string|array<string>|null` param is intentional. With `@psalm-variadic`
-     * each variadic slot accepts this union, matching the runtime forms
-     * `middleware('a', 'b', 'c')`, `middleware('a')`, `middleware(['a', 'b'])`, and
-     * `middleware(null)`. Tightening the type to `string` would reject the documented
-     * array form; tightening it to drop `null` would reject the no-op `middleware(null)`
-     * call. Mixed forms like `middleware(['a'], 'b')` slip through this typing but
-     * Laravel's `__call` silently drops the second arg at runtime; no useful Psalm
-     * signature can express that asymmetry, so we mirror Laravel's permissive surface.
+     * Narrowed value type — accepts `array<array-key, string|null>` rather than plain
+     * `array`. The inner `null` slot matches Laravel's runtime behaviour: `attribute()`
+     * runs `array_filter(Arr::wrap($value))` before casting, which silently drops null
+     * (and any falsy) elements. The common pattern
+     * `Route::middleware(['auth', config('jetstream.auth_session'), 'verified'])`
+     * type-checks once `config(...)` is narrowed to `string|null` (a separate concern
+     * of the config-helper handler — see #972 PR delta on monica/solidtime).
      *
-     * @param string|array<string>|null $middleware
+     * `@psalm-variadic` lifts the single-arg `@method` declaration so
+     * `middleware('a', 'b', 'c')` is accepted; the per-element type stays meaningful
+     * to flag genuine `mixed`/object misuse at call sites.
+     *
+     * @param string|array<array-key, string|null>|null $middleware
      * @return $this
      *
      * @psalm-variadic

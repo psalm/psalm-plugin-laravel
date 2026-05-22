@@ -14,12 +14,15 @@ namespace Illuminate\Support\Facades;
  * entry is what Psalm consults during `__callStatic` resolution; the concrete method
  * keeps the stub self-consistent if Psalm ever switches to native lookup.
  *
- * @method static \Illuminate\Routing\RouteRegistrar middleware(string|array|null ...$middleware)
+ * @method static \Illuminate\Routing\RouteRegistrar middleware(string|array<array-key, string|null>|null ...$middleware)
  */
 class Route extends Facade
 {
     /**
-     * @param string|array<string>|null $middleware
+     * Narrowed value type — accepts `array<array-key, string|null>`. See the rationale
+     * on the concrete method in `stubs/common/Routing/RouteRegistrar.phpstub`.
+     *
+     * @param string|array<array-key, string|null>|null $middleware
      * @return \Illuminate\Routing\RouteRegistrar
      *
      * @psalm-variadic
