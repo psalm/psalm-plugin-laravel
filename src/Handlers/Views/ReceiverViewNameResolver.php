@@ -66,6 +66,19 @@ final class ReceiverViewNameResolver
     private const FUNCTION_VIEW = 'view';
 
     /**
+     * Sentinel pushed into the candidate list when a view-binder method
+     * call is observed with a non-literal first argument
+     * (`view($dynamic)`, `markdown($var)`, ...). View names cannot
+     * contain a NUL byte, so this string can never collide with a real
+     * candidate. {@see self::resolve()} treats any presence of the
+     * sentinel as forced refusal — Laravel binds the dynamic value at
+     * runtime ("last call wins" for `$this->view`), so a literal
+     * candidate further up the chain could be silently overridden, and
+     * picking it would be unsound.
+     */
+    private const NON_LITERAL_BINDER = "\x00non-literal-binder";
+
+    /**
      * Seal the static-only contract. The class holds no instance state and
      * exposes only static methods; instantiation would be a programmer
      * error. {@see self::resolve()} is the single public entry point.
@@ -107,14 +120,28 @@ final class ReceiverViewNameResolver
     ): ?string {
         $candidates = self::collectCandidates($receiver, $extraViewBinders, $recurseThroughUnknownMethods);
 
-        // Exactly one literal binding observed: the unambiguous view for this
-        // chain. Zero means the receiver carries no resolvable literal
-        // (variable-bound, dynamic, unsupported shape). Two-or-more means
-        // multiple view-binding method calls appeared in the chain (Mailable's
-        // `view('a')->text('b')` or repeated `view('a')->view('b')`); cannot
-        // pick a single template safely, so refuse — same soundness rule as
-        // multi-literal `View::first(['a', 'b'])`.
-        return \count($candidates) === 1 ? $candidates[0] : null;
+        // Exactly one literal binding AND no dynamic-binder sentinel: the
+        // unambiguous view for this chain. Zero candidates means the
+        // receiver carries no resolvable literal (variable-bound,
+        // dynamic, unsupported shape). Two-or-more, or any
+        // sentinel-marked entry, means multiple view-binding method
+        // calls appeared in the chain (Mailable's `view('a')->text('b')`
+        // / repeated `view('a')->view('b')` / mixed
+        // `view('a')->view($dynamic)`); cannot pick a single template
+        // safely, so refuse — same soundness rule as multi-literal
+        // `View::first(['a', 'b'])`. The sentinel check is what makes
+        // the mixed literal/dynamic case sound: without it, `view('a')
+        // ->view($dynamic)` would silently resolve to 'a' even though
+        // Laravel's runtime `$this->view = $dynamic` overrides 'a'.
+        if (\count($candidates) !== 1) {
+            return null;
+        }
+
+        if ($candidates[0] === self::NON_LITERAL_BINDER) {
+            return null;
+        }
+
+        return $candidates[0];
     }
 
     /**
@@ -197,16 +224,18 @@ final class ReceiverViewNameResolver
         }
 
         // Mailable-style view-binders: BOTH record arg[0] as a candidate AND
-        // recurse into the receiver. Chains like `view('a')->text('b')` thus
-        // accumulate every literal binder, and `resolve()` refuses at the
-        // top when the candidate count exceeds one.
+        // recurse into the receiver. Every binder invocation contributes
+        // an entry (literal name when arg[0] is a `String_`, the
+        // {@see self::NON_LITERAL_BINDER} sentinel otherwise) so the
+        // count-based refusal in `resolve()` covers BOTH multi-literal
+        // chains (`view('a')->text('b')`) AND mixed literal/dynamic
+        // chains (`view('a')->view($dynamic)`). The mixed case is the
+        // load-bearing one: Laravel binds the dynamic value at runtime
+        // ("last call wins" for `$this->view`), so an upstream literal
+        // is not the unambiguous winner.
         if (\in_array($methodNameLc, $extraViewBinders, true)) {
             $candidates = self::collectCandidates($methodReceiver, $extraViewBinders, $recurseThroughUnknownMethods);
-            $name = self::viewNameFromArg($args[0] ?? null);
-
-            if ($name !== null) {
-                $candidates[] = $name;
-            }
+            $candidates[] = self::viewNameFromArg($args[0] ?? null) ?? self::NON_LITERAL_BINDER;
 
             return $candidates;
         }

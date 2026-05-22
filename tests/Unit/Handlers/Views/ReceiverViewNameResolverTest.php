@@ -422,6 +422,75 @@ final class ReceiverViewNameResolverTest extends TestCase
     }
 
     #[Test]
+    public function refuses_mailable_chain_with_literal_then_dynamic_binder(): void
+    {
+        // (new InvoiceMail)->view('a')->view($dynamic) — Laravel binds
+        // `$this->view = $dynamic` at runtime (last call wins). A naive
+        // resolver that counts only literal candidates would return 'a';
+        // but 'a' is silently overridden at runtime and could be SAFE
+        // while $dynamic resolves to an UNSAFE_KEYS template. Refuse.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewA = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('a')]);
+        $viewDynamic = new MethodCall($viewA, new Identifier('view'), [new Arg(new Variable('dynamic'))]);
+
+        $this->assertNull(
+            ReceiverViewNameResolver::resolve(
+                $viewDynamic,
+                ['view', 'markdown', 'text'],
+                recurseThroughUnknownMethods: true,
+            ),
+        );
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_with_dynamic_then_literal_binder(): void
+    {
+        // Symmetric: (new InvoiceMail)->view($dynamic)->view('a'). The
+        // dynamic binder is upstream; same soundness rule — the chain
+        // has two binders, only one is statically recoverable, so we
+        // cannot prove `'a'` is the runtime view.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewDynamic = new MethodCall(
+            $mailableConstruct,
+            new Identifier('view'),
+            [new Arg(new Variable('dynamic'))],
+        );
+        $viewA = new MethodCall($viewDynamic, new Identifier('view'), [$this->string('a')]);
+
+        $this->assertNull(
+            ReceiverViewNameResolver::resolve(
+                $viewA,
+                ['view', 'markdown', 'text'],
+                recurseThroughUnknownMethods: true,
+            ),
+        );
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_with_literal_view_then_dynamic_text(): void
+    {
+        // Cross-binder variant: (new InvoiceMail)->view('a')->text($dynamic).
+        // Mailable binds 'a' to $view AND $dynamic to $textView; both
+        // slots receive the with() data. Refuse — same rule as the
+        // multi-literal cross-binder case.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewA = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('a')]);
+        $textDynamic = new MethodCall(
+            $viewA,
+            new Identifier('text'),
+            [new Arg(new Variable('dynamic'))],
+        );
+
+        $this->assertNull(
+            ReceiverViewNameResolver::resolve(
+                $textDynamic,
+                ['view', 'markdown', 'text'],
+                recurseThroughUnknownMethods: true,
+            ),
+        );
+    }
+
+    #[Test]
     public function resolves_mailable_view_with_intervening_with_call(): void
     {
         // (new InvoiceMail)->view('mail.invoice')->with('a', 1) — `with()`

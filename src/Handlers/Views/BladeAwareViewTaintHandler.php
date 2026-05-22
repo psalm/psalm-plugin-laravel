@@ -263,11 +263,12 @@ final class BladeAwareViewTaintHandler implements
         // the analyzed codebase; skipping `strtolower` on the >99% reject path
         // is a measurable analysis-time win on large projects.
         $methodId = $event->getMethodId();
+        $appearingMethodId = $event->getAppearingMethodId();
 
         if (!self::isViewLikeMethodId($methodId)) {
             // Facade aliases may inherit make() rather than re-declare it, so
             // also probe the appearing id. Same suffix gate.
-            $methodId = $event->getAppearingMethodId();
+            $methodId = $appearingMethodId;
 
             if (!self::isViewLikeMethodId($methodId)) {
                 return;
@@ -277,8 +278,10 @@ final class BladeAwareViewTaintHandler implements
         // We deliberately check both the resolved and the appearing method ids
         // so facade aliases (which inherit `make()` rather than re-declaring
         // it) are also caught when the resolved id is a non-Factory class.
+        // Both ids are lowercased once and reused; the appearing-id getter
+        // is also read once into a local above.
         $spec = self::$methodSpecs[\strtolower($methodId)]
-            ?? self::$methodSpecs[\strtolower($event->getAppearingMethodId())]
+            ?? self::$methodSpecs[\strtolower($appearingMethodId)]
             ?? null;
 
         if ($spec === null) {
