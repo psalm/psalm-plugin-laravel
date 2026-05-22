@@ -57,14 +57,6 @@ use Psalm\Type\Union;
 final class ClosureTypeFactory
 {
     /**
-     * Constant return type of {@see self::inferArithmetic()}. The value never
-     * depends on operands (see that method's docblock for why), so building
-     * it once and re-handing the same `Union` saves a `combineUnionTypes` +
-     * `TypeCombiner::combine` call per arithmetic body return.
-     */
-    private static ?Union $intOrFloatUnion = null;
-
-    /**
      * Build a {@see TClosure} from a runtime closure object.
      *
      * Public shape matches PHPStan's `ClosureTypeFactory::fromClosureObject()`:
@@ -497,7 +489,15 @@ final class ClosureTypeFactory
             return null;
         }
 
-        return self::$intOrFloatUnion ??= Type::combineUnionTypes(Type::getInt(), Type::getFloat());
+        // Build a fresh Union per call rather than memoizing. Psalm 7's Union
+        // has public mutable fields (`from_docblock`, `ignore_nullable_issues`,
+        // …). The instance flows into every `TClosure->return_type` we hand
+        // to `MacroDefinition`; an aliased memo would let a downstream
+        // mutation on one macro pollute every other arithmetic macro built
+        // this run. Psalm itself uses functional setters in practice, but
+        // the savings (one `combineUnionTypes` call per arithmetic body
+        // return, typically <10 per run) are not worth the risk.
+        return Type::combineUnionTypes(Type::getInt(), Type::getFloat());
     }
 
     /**
