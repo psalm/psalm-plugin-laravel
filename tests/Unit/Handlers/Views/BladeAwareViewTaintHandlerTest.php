@@ -1310,6 +1310,398 @@ final class BladeAwareViewTaintHandlerTest extends TestCase
     }
 
     #[Test]
+    public function mailable_with_chained_off_view_installs_per_key_sink(): void
+    {
+        // (new InvoiceMail)->view('emails.welcome')->with('bio', $bio) —
+        // the Mailable `with` registration carries extra chain terminals
+        // ['view','markdown','text'], so the receiver-walk resolves
+        // 'emails.welcome' from the upstream view() call. The 'bio' key is
+        // unsafe in the welcome template, so the dispatcher installs a
+        // per-key sink keyed by 'bio'.
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $mailableConstruct = $this->mailableReceiverFqn();
+        $viewCall = new \PhpParser\Node\Expr\MethodCall(
+            $mailableConstruct,
+            'view',
+            [new Arg(new String_('emails.welcome'))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::with',
+            $viewCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(emails.welcome, 'bio')");
+    }
+
+    #[Test]
+    public function mailable_with_chained_off_markdown_installs_per_key_sink(): void
+    {
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $mailableConstruct = $this->mailableReceiverFqn();
+        $markdownCall = new \PhpParser\Node\Expr\MethodCall(
+            $mailableConstruct,
+            'markdown',
+            [new Arg(new String_('emails.welcome'))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::with',
+            $markdownCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(emails.welcome, 'bio')");
+    }
+
+    #[Test]
+    public function mailable_with_chained_off_text_installs_per_key_sink(): void
+    {
+        $this->initWithMap([
+            'emails.welcome-text' => new BladeViewSafety(
+                'emails.welcome-text',
+                '/views/emails/welcome-text.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $mailableConstruct = $this->mailableReceiverFqn();
+        $textCall = new \PhpParser\Node\Expr\MethodCall(
+            $mailableConstruct,
+            'text',
+            [new Arg(new String_('emails.welcome-text'))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::with',
+            $textCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(emails.welcome-text, 'bio')");
+    }
+
+    #[Test]
+    public function mailable_with_chained_off_view_then_with_recurses_through_prior_with(): void
+    {
+        // Mailable receiver-walk preserves prior `with()` calls in the chain
+        // — `view('x')->with(...)->with(...)`. Guards against a regression
+        // where the chain-preserving with arm forgets to thread
+        // extraViewBinders through the recursion.
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $mailableConstruct = $this->mailableReceiverFqn();
+        $viewCall = new \PhpParser\Node\Expr\MethodCall(
+            $mailableConstruct,
+            'view',
+            [new Arg(new String_('emails.welcome'))],
+        );
+        $innerWith = new \PhpParser\Node\Expr\MethodCall(
+            $viewCall,
+            'with',
+            [new Arg(new String_('subject')), new Arg(new String_('Invoice'))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::with',
+            $innerWith,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(emails.welcome, 'bio')");
+    }
+
+    #[Test]
+    public function mailable_with_multi_binder_chain_installs_no_sink(): void
+    {
+        // (new InvoiceMail)->view('a')->text('b')->with('bio', $bio) —
+        // chain binds two view names. Resolver refuses; dispatcher installs
+        // no sink (conservative — same rule as multi-literal
+        // View::first(['a','b'])). Documented limitation in
+        // `docs/issues/581-blade-taint-exploration.md`.
+        $this->initWithMap([
+            'a' => new BladeViewSafety(
+                'a',
+                '/views/a.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+            'b' => new BladeViewSafety(
+                'b',
+                '/views/b.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $mailableConstruct = $this->mailableReceiverFqn();
+        $viewA = new \PhpParser\Node\Expr\MethodCall(
+            $mailableConstruct,
+            'view',
+            [new Arg(new String_('a'))],
+        );
+        $textB = new \PhpParser\Node\Expr\MethodCall(
+            $viewA,
+            'text',
+            [new Arg(new String_('b'))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::with',
+            $textB,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function mailable_with_chain_through_decorator_methods_installs_per_key_sink(): void
+    {
+        // Real-world Mailable chain shape: build() in a Mailable subclass
+        // typically reads
+        //   `return $this->subject('Hi')->from(...)->view('emails.welcome')
+        //                ->with('bio', $bio);`
+        // The non-binder decorators (`subject`, `from`, ...) must NOT
+        // mask the upstream `view()` binder. Resolver's Mailable-mode
+        // "recurse through unknown methods" rule covers this; without
+        // it, real-world taint coverage would be near-zero.
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $mailableConstruct = $this->mailableReceiverFqn();
+        $subjectCall = new \PhpParser\Node\Expr\MethodCall(
+            $mailableConstruct,
+            'subject',
+            [new Arg(new String_('Hi'))],
+        );
+        $fromCall = new \PhpParser\Node\Expr\MethodCall(
+            $subjectCall,
+            'from',
+            [new Arg(new String_('noreply@example.com'))],
+        );
+        $viewCall = new \PhpParser\Node\Expr\MethodCall(
+            $fromCall,
+            'view',
+            [new Arg(new String_('emails.welcome'))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::with',
+            $viewCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(emails.welcome, 'bio')");
+    }
+
+    #[Test]
+    public function mailable_with_subclass_dispatch_uses_appearing_method_id(): void
+    {
+        // In production, Mailable is always subclassed: `class InvoiceMail
+        // extends \Illuminate\Mail\Mailable {}`. Psalm reports
+        //   - methodId           = App\Mail\InvoiceMail::with     (resolved)
+        //   - appearingMethodId  = Illuminate\Mail\Mailable::with (declared)
+        // The spec table only registers the parent id. Dispatch must fall
+        // through the second `??` arm on the appearing id to recover the
+        // registration; otherwise every real-world Mailable subclass call
+        // would silently lose Blade taint coverage.
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $mailableConstruct = $this->mailableReceiverFqn();
+        $viewCall = new \PhpParser\Node\Expr\MethodCall(
+            $mailableConstruct,
+            'view',
+            [new Arg(new String_('emails.welcome'))],
+        );
+
+        $event = $this->makeInstanceMethodEventWithIds(
+            methodId: 'App\\Mail\\InvoiceMail::with',
+            appearingMethodId: \Illuminate\Mail\Mailable::class . '::with',
+            receiver: $viewCall,
+            args: [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            codebase: $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSinkLabelExists($this->graphSinks($graph), "(emails.welcome, 'bio')");
+    }
+
+    #[Test]
+    public function mailable_with_variable_receiver_installs_no_sink(): void
+    {
+        // $m->with('bio', $bio) where $m is a bare variable — same null
+        // resolution as View::with's variable-bound case. The dispatcher
+        // must not synthesise a sink for the Mailable variant (no
+        // whole-data fallback for the variable-bound chain — see the
+        // explanatory comment in dispatchWithLike).
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\Mail\Mailable::class . '::with',
+            $this->taintedVariable('mailable'),
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
+    public function mail_message_with_is_intentionally_unregistered(): void
+    {
+        // Regression guard for the load-bearing exclusion at
+        // buildMethodSpecs(): `MailMessage::with($line)` is inherited from
+        // `SimpleMessage` with single-arg "append a notification text
+        // line" semantics, NOT key/value view-data binding. Reusing
+        // WithLikeMethodSpec(keyArgIndex=0, valueArgIndex=1) would mis-
+        // dispatch the `$line` content as a sink key, producing real
+        // false positives on every notification builder call. An
+        // accidental `$specs[MailMessage::class . '::with'] =
+        // $mailableWithSpec;` during a future buildMethodSpecs refactor
+        // would silently turn this on. This test fails such a
+        // regression.
+        $this->initWithMap([
+            'emails.welcome' => new BladeViewSafety(
+                'emails.welcome',
+                '/views/emails/welcome.blade.php',
+                BladeTemplateAnalysis::unsafeKeys(['bio']),
+            ),
+        ]);
+
+        $graph = new TaintFlowGraph();
+        $codebase = $this->createCodebase($graph);
+
+        $mailMessageConstruct = new \PhpParser\Node\Expr\New_(
+            new Name(\Illuminate\Notifications\Messages\MailMessage::class),
+        );
+        $viewCall = new \PhpParser\Node\Expr\MethodCall(
+            $mailMessageConstruct,
+            'view',
+            [new Arg(new String_('emails.welcome'))],
+        );
+
+        $event = $this->makeInstanceMethodEvent(
+            \Illuminate\Notifications\Messages\MailMessage::class . '::with',
+            $viewCall,
+            [
+                new Arg(new String_('bio')),
+                new Arg($this->taintedVariable('bio')),
+            ],
+            $codebase,
+        );
+
+        BladeAwareViewTaintHandler::afterMethodCallAnalysis($event);
+
+        $this->assertSame([], $this->graphSinks($graph));
+    }
+
+    #[Test]
     public function content_constructor_installs_sinks_for_each_view_slot(): void
     {
         // Content(?view, ?html, ?text, ?markdown, with = []). When view AND
@@ -1787,6 +2179,37 @@ final class BladeAwareViewTaintHandlerTest extends TestCase
         array $args,
         Codebase $codebase,
     ): AfterMethodCallAnalysisEvent {
+        return $this->makeInstanceMethodEventWithIds(
+            methodId: $methodId,
+            appearingMethodId: $methodId,
+            receiver: $receiver,
+            args: $args,
+            codebase: $codebase,
+        );
+    }
+
+    /**
+     * Variant of {@see makeInstanceMethodEvent} that lets the test pass a
+     * different `methodId` (the resolved/subclass id Psalm reports for the
+     * call site) and `appearingMethodId` (the parent-class id where the
+     * method is declared). In production, every Mailable subclass call
+     * (`class InvoiceMail extends \Illuminate\Mail\Mailable {}` →
+     * `(new InvoiceMail)->with(...)`) carries divergent ids — Psalm
+     * resolves `methodId` to `App\Mail\InvoiceMail::with` while the spec
+     * table only holds `Illuminate\Mail\Mailable::with`. The dispatcher's
+     * second `??` arm at {@see BladeAwareViewTaintHandler::afterMethodCallAnalysis}
+     * relies on `appearingMethodId` to recover the parent registration;
+     * without this helper, no unit test exercises that load-bearing path.
+     *
+     * @param list<Arg> $args
+     */
+    private function makeInstanceMethodEventWithIds(
+        string $methodId,
+        string $appearingMethodId,
+        \PhpParser\Node\Expr $receiver,
+        array $args,
+        Codebase $codebase,
+    ): AfterMethodCallAnalysisEvent {
         $methodName = \explode('::', $methodId)[1];
 
         $methodCall = new \PhpParser\Node\Expr\MethodCall($receiver, $methodName, $args);
@@ -1798,12 +2221,27 @@ final class BladeAwareViewTaintHandlerTest extends TestCase
         return new AfterMethodCallAnalysisEvent(
             $methodCall,
             $methodId,
-            $methodId,
-            $methodId,
+            $appearingMethodId,
+            $appearingMethodId,
             new Context(),
             $source,
             $codebase,
         );
+    }
+
+    /**
+     * Synthetic `new App\Mail\InvoiceMail()` node used as the chain head
+     * of Mailable receiver-walk dispatcher tests. The class name is
+     * documentation-only (resolver is class-agnostic, dispatcher gates on
+     * method id), but the fully-qualified shape mirrors what Psalm
+     * reports for a real subclass call site. The matching helper in
+     * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\Views\ReceiverViewNameResolverTest::mailableReceiverBare()}
+     * uses a bare class name because the resolver is class-agnostic and
+     * the divergence between the two test files is intentional.
+     */
+    private function mailableReceiverFqn(): \PhpParser\Node\Expr\New_
+    {
+        return new \PhpParser\Node\Expr\New_(new Name('App\\Mail\\InvoiceMail'));
     }
 
     /**

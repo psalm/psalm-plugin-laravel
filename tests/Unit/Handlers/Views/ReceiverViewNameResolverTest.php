@@ -318,12 +318,321 @@ final class ReceiverViewNameResolverTest extends TestCase
         $this->assertSame('home', ReceiverViewNameResolver::resolve($chain));
     }
 
+    #[Test]
+    public function resolves_mailable_view_to_with_chain(): void
+    {
+        // (new InvoiceMail)->view('mail.invoice')->with('bio', $tainted) —
+        // the Mailable `with` registration passes ['view','markdown','text']
+        // as extra view binders; the resolver records 'mail.invoice' from
+        // the view() call's first arg.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewCall = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('mail.invoice')]);
+
+        $this->assertSame(
+            'mail.invoice',
+            ReceiverViewNameResolver::resolve($viewCall, ['view', 'markdown', 'text']),
+        );
+    }
+
+    #[Test]
+    public function resolves_mailable_markdown_to_with_chain(): void
+    {
+        $mailableConstruct = $this->mailableReceiverBare();
+        $markdownCall = new MethodCall(
+            $mailableConstruct,
+            new Identifier('markdown'),
+            [$this->string('mail.invoice-markdown')],
+        );
+
+        $this->assertSame(
+            'mail.invoice-markdown',
+            ReceiverViewNameResolver::resolve($markdownCall, ['view', 'markdown', 'text']),
+        );
+    }
+
+    #[Test]
+    public function resolves_mailable_text_to_with_chain(): void
+    {
+        $mailableConstruct = $this->mailableReceiverBare();
+        $textCall = new MethodCall(
+            $mailableConstruct,
+            new Identifier('text'),
+            [$this->string('mail.invoice-text')],
+        );
+
+        $this->assertSame(
+            'mail.invoice-text',
+            ReceiverViewNameResolver::resolve($textCall, ['view', 'markdown', 'text']),
+        );
+    }
+
+    #[Test]
+    public function refuses_mailable_view_chain_without_extra_view_binders(): void
+    {
+        // Default mode (no extra view binders): `view('mail.invoice')` is a
+        // MethodCall named 'view' on a non-Laravel receiver — the resolver
+        // does not recognise it as a view-binder and falls through to []. The
+        // existing `View::with` registration MUST continue to behave this way
+        // (the chain head `(new InvoiceMail)->view(...)` is NOT a Laravel
+        // view-builder receiver, so any positive resolution here would be a
+        // regression).
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewCall = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('mail.invoice')]);
+
+        $this->assertNull(ReceiverViewNameResolver::resolve($viewCall));
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_with_double_view_binders(): void
+    {
+        // (new InvoiceMail)->view('a')->view('b') — Laravel keeps 'b' for
+        // the $view slot, but the resolver refuses rather than pick a
+        // single binder. Same soundness rule as multi-literal
+        // `View::first(['a','b'])`.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewA = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('a')]);
+        $viewB = new MethodCall($viewA, new Identifier('view'), [$this->string('b')]);
+
+        $this->assertNull(ReceiverViewNameResolver::resolve($viewB, ['view', 'markdown', 'text']));
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_with_view_and_text_binders(): void
+    {
+        // (new InvoiceMail)->view('a')->text('b') — Laravel binds 'a' to
+        // the $view slot AND 'b' to the $textView slot; with() data flows
+        // to both. The resolver cannot pick one safely, so refuse.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewA = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('a')]);
+        $textB = new MethodCall($viewA, new Identifier('text'), [$this->string('b')]);
+
+        $this->assertNull(ReceiverViewNameResolver::resolve($textB, ['view', 'markdown', 'text']));
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_with_view_and_markdown_binders(): void
+    {
+        // (new InvoiceMail)->markdown('m')->view('v') — same multi-binder
+        // refusal across the view/markdown pair.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $markdownM = new MethodCall($mailableConstruct, new Identifier('markdown'), [$this->string('m')]);
+        $viewV = new MethodCall($markdownM, new Identifier('view'), [$this->string('v')]);
+
+        $this->assertNull(ReceiverViewNameResolver::resolve($viewV, ['view', 'markdown', 'text']));
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_with_literal_then_dynamic_binder(): void
+    {
+        // (new InvoiceMail)->view('a')->view($dynamic) — Laravel binds
+        // `$this->view = $dynamic` at runtime (last call wins). A naive
+        // resolver that counts only literal candidates would return 'a';
+        // but 'a' is silently overridden at runtime and could be SAFE
+        // while $dynamic resolves to an UNSAFE_KEYS template. Refuse.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewA = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('a')]);
+        $viewDynamic = new MethodCall($viewA, new Identifier('view'), [new Arg(new Variable('dynamic'))]);
+
+        $this->assertNull(
+            ReceiverViewNameResolver::resolve(
+                $viewDynamic,
+                ['view', 'markdown', 'text'],
+                recurseThroughUnknownMethods: true,
+            ),
+        );
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_with_dynamic_then_literal_binder(): void
+    {
+        // Symmetric: (new InvoiceMail)->view($dynamic)->view('a'). The
+        // dynamic binder is upstream; same soundness rule — the chain
+        // has two binders, only one is statically recoverable, so we
+        // cannot prove `'a'` is the runtime view.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewDynamic = new MethodCall(
+            $mailableConstruct,
+            new Identifier('view'),
+            [new Arg(new Variable('dynamic'))],
+        );
+        $viewA = new MethodCall($viewDynamic, new Identifier('view'), [$this->string('a')]);
+
+        $this->assertNull(
+            ReceiverViewNameResolver::resolve(
+                $viewA,
+                ['view', 'markdown', 'text'],
+                recurseThroughUnknownMethods: true,
+            ),
+        );
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_with_literal_view_then_dynamic_text(): void
+    {
+        // Cross-binder variant: (new InvoiceMail)->view('a')->text($dynamic).
+        // Mailable binds 'a' to $view AND $dynamic to $textView; both
+        // slots receive the with() data. Refuse — same rule as the
+        // multi-literal cross-binder case.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewA = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('a')]);
+        $textDynamic = new MethodCall(
+            $viewA,
+            new Identifier('text'),
+            [new Arg(new Variable('dynamic'))],
+        );
+
+        $this->assertNull(
+            ReceiverViewNameResolver::resolve(
+                $textDynamic,
+                ['view', 'markdown', 'text'],
+                recurseThroughUnknownMethods: true,
+            ),
+        );
+    }
+
+    #[Test]
+    public function resolves_mailable_view_with_intervening_with_call(): void
+    {
+        // (new InvoiceMail)->view('mail.invoice')->with('a', 1) — `with()`
+        // is chain-preserving; the resolver still finds the single
+        // view-binder upstream.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewCall = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('mail.invoice')]);
+        $withCall = new MethodCall($viewCall, new Identifier('with'), [$this->string('a'), $this->int(1)]);
+
+        $this->assertSame(
+            'mail.invoice',
+            ReceiverViewNameResolver::resolve($withCall, ['view', 'markdown', 'text']),
+        );
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_when_extra_view_binders_empty(): void
+    {
+        // Explicit regression guard: even a single-binder chain is invisible
+        // when extraViewBinders is empty. The pre-PR-6 caller (`View::with`)
+        // must not start resolving Mailable chains it never supported.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewCall = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('mail.invoice')]);
+        $withCall = new MethodCall($viewCall, new Identifier('with'), [$this->string('a'), $this->int(1)]);
+
+        $this->assertNull(ReceiverViewNameResolver::resolve($withCall, []));
+    }
+
+    #[Test]
+    public function refuses_mailable_chain_with_variable_view_argument(): void
+    {
+        // (new InvoiceMail)->view($dynamic)->with(...) — view-binder
+        // argument is non-literal, so no candidate is recorded and the
+        // chain resolves to null (zero candidates, not multi-binder).
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewCall = new MethodCall(
+            $mailableConstruct,
+            new Identifier('view'),
+            [new Arg(new Variable('dynamic'))],
+        );
+
+        $this->assertNull(ReceiverViewNameResolver::resolve($viewCall, ['view', 'markdown', 'text']));
+    }
+
+    #[Test]
+    public function resolves_mailable_chain_through_intervening_decorator(): void
+    {
+        // (new InvoiceMail)->view('emails.invoice')->subject('Hi')->with(...)
+        // — `subject()` is not a view-binder; it returns $this. In Mailable
+        // mode the resolver recurses through unknown methods so the
+        // upstream `view()` binder is not silently lost. This is the
+        // common production chain shape; without the recurse-unknowns
+        // rule, real-world Mailable taint coverage would be near-zero.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $viewCall = new MethodCall($mailableConstruct, new Identifier('view'), [$this->string('emails.invoice')]);
+        $subjectCall = new MethodCall($viewCall, new Identifier('subject'), [$this->string('Hi')]);
+
+        $this->assertSame(
+            'emails.invoice',
+            ReceiverViewNameResolver::resolve(
+                $subjectCall,
+                ['view', 'markdown', 'text'],
+                recurseThroughUnknownMethods: true,
+            ),
+        );
+    }
+
+    #[Test]
+    public function resolves_mailable_chain_through_multiple_decorators(): void
+    {
+        // (new InvoiceMail)->subject('Hi')->from('a@b')->view('emails.invoice')
+        //                   ->locale('en')->with(...) — multiple non-binders
+        // upstream and downstream of the view binder. Mailable mode recurses
+        // through every unknown method without contributing a candidate.
+        $mailableConstruct = $this->mailableReceiverBare();
+        $subjectCall = new MethodCall($mailableConstruct, new Identifier('subject'), [$this->string('Hi')]);
+        $fromCall = new MethodCall($subjectCall, new Identifier('from'), [$this->string('a@b')]);
+        $viewCall = new MethodCall($fromCall, new Identifier('view'), [$this->string('emails.invoice')]);
+        $localeCall = new MethodCall($viewCall, new Identifier('locale'), [$this->string('en')]);
+
+        $this->assertSame(
+            'emails.invoice',
+            ReceiverViewNameResolver::resolve(
+                $localeCall,
+                ['view', 'markdown', 'text'],
+                recurseThroughUnknownMethods: true,
+            ),
+        );
+    }
+
+    #[Test]
+    public function refuses_view_chain_through_unknown_method_in_default_mode(): void
+    {
+        // Default `View::with` mode: an unknown method in the chain (e.g.
+        // `$builder->customMethod()`) MUST stop the walk. PR-3's "view
+        // not in map → no sink" precision policy applies to View::with;
+        // recursing through unknown methods is a Mailable-mode-only
+        // relaxation justified by Illuminate\Mail\Mailable's decorator-
+        // heavy API shape.
+        $viewCall = $this->funcCall('view', [$this->string('home')]);
+        $unknownCall = new MethodCall($viewCall, new Identifier('customMethod'), []);
+
+        $this->assertNull(ReceiverViewNameResolver::resolve($unknownCall));
+    }
+
+    #[Test]
+    public function refuses_interleaved_view_binders_through_with(): void
+    {
+        // view('a')->with('x', 1)->view('b')->with('y', 2) — the
+        // interleaved `with()` does not hide the upstream `view('a')`
+        // binder. Two binders observed → refuse. Guards against a regression
+        // where the chain-preserving `with` arm forgets to recurse before
+        // recording the outer view().
+        $viewA = $this->funcCall('view', [$this->string('a')]);
+        $withX = new MethodCall($viewA, new Identifier('with'), [$this->string('x'), $this->int(1)]);
+        $viewB = new MethodCall($withX, new Identifier('view'), [$this->string('b')]);
+
+        $this->assertNull(ReceiverViewNameResolver::resolve($viewB, ['view', 'markdown', 'text']));
+    }
+
     /**
      * @param list<Arg> $args
      */
     private function funcCall(string $name, array $args): FuncCall
     {
         return new FuncCall(new Name($name), $args);
+    }
+
+    /**
+     * Synthetic `new InvoiceMail()` node used as the chain head of Mailable
+     * receiver-walk tests. The class name is documentation-only — the
+     * resolver is class-agnostic — so all callers share the bare
+     * `InvoiceMail` form here. The matching helper
+     * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\Views\BladeAwareViewTaintHandlerTest::mailableReceiverFqn()}
+     * uses the fully-qualified `App\Mail\InvoiceMail` form to better
+     * mirror what Psalm reports for a real codebase; the naming
+     * asymmetry is deliberate so a future "consolidate into shared
+     * helper" refactor cannot silently flip either test's behaviour.
+     */
+    private function mailableReceiverBare(): \PhpParser\Node\Expr\New_
+    {
+        return new \PhpParser\Node\Expr\New_(new Name('InvoiceMail'));
     }
 
     private function string(string $value): Arg
