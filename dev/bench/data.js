@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779471478029,
+  "lastUpdate": 1779480698336,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5347,6 +5347,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.38,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a4b52c9529df22510d8436401881778f68670e18",
+          "message": "feat(eloquent): suppress unused-method on #[Scope] methods #874 (#998)\n\nEloquent dispatches modern scopes through Builder::callNamedScope() /\nBuilder::__call() via reflection, so Psalm cannot link\n`$builder->published()` back to the model method and reports\nPossiblyUnusedMethod (or UnusedMethod under findUnusedCode=true) on\nevery #[Scope]-attributed method.\n\nExtends SuppressHandler with a new pass over Eloquent model classes\nthat pushes both issues into MethodStorage->suppressed_issues when\nthe #[Scope] attribute is present. Routed through\nsuppressInternalDispatchMethod() so public/protected stay silenced\nbut private stays flagged - Eloquent dispatches the scope from a\nforeign scope and a private override would fatal at runtime.\n\nLegacy scopeXxx() methods are deferred to a follow-up (per #874).\nThe accompanying PHPT follows the smoke pattern of NotificationTest /\nMailableTest; lock-in under findUnusedCode is deferred to #869. The\nprivate negative case is structurally untestable in Psalm 7: the\nunused-method check at ClassLikes.php:1994 skips private methods on\nclasses with __call, and Model declares __call.",
+          "timestamp": "2026-05-22T22:08:55+02:00",
+          "tree_id": "9f885e859c017816d4f1714c6cb03567934ce6ee",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a4b52c9529df22510d8436401881778f68670e18"
+        },
+        "date": 1779480697724,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.76,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
