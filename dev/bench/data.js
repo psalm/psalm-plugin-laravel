@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779428375427,
+  "lastUpdate": 1779434679111,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5207,6 +5207,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.66,
             "range": "± 0.22",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ca6862856bdd412947a9c173e5b0a36594b4a688",
+          "message": "Merge pull request #986 from psalm/972-route-middleware-variadic\n\nAccept variadic strings on `Route::middleware` facade and `RouteRegistrar`",
+          "timestamp": "2026-05-22T09:22:05+02:00",
+          "tree_id": "903275d2336d4d55da4d7ff20aaf3d34f3a23b99",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ca6862856bdd412947a9c173e5b0a36594b4a688"
+        },
+        "date": 1779434678561,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.98,
+            "range": "± 0.23",
             "unit": "s"
           },
           {
