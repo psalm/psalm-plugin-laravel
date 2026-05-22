@@ -26,10 +26,14 @@ use Illuminate\Support\Facades\Route as RouteFacade;
  *     `stubs/common/Routing/RouteRegistrar.phpstub` overrides.
  */
 
-// Variadic strings (the exact invoiceninja shape).
+// Variadic strings (the exact invoiceninja shape). Pin the exact type so a future
+// regression that widens to `RouteRegistrar|mixed` can't slip through under the
+// covariant return-type-only signal.
 function test_route_facade_middleware_variadic_strings(): RouteRegistrar
 {
-    return RouteFacade::middleware('contact_db', 'api_secret_check', 'contact_token_auth');
+    $_x = RouteFacade::middleware('contact_db', 'api_secret_check', 'contact_token_auth');
+    /** @psalm-check-type-exact $_x = RouteRegistrar */
+    return $_x;
 }
 
 // Single-string form: still valid, must not regress.
@@ -54,6 +58,14 @@ function test_route_facade_middleware_chain_intermediate(): void
         ->prefix('api/v1/contact')
         ->name('api.contact.');
     /** @psalm-check-type-exact $_chain = RouteRegistrar */
+
+    // Full invoiceninja chain including the terminal ->group(\Closure) call. Once the
+    // intermediate is RouteRegistrar the source's `@method group(\Closure ...)` resolves,
+    // but pin the full shape so a future regression of either link surfaces here.
+    RouteFacade::middleware('contact_db', 'api_secret_check')
+        ->prefix('api/v1/contact')
+        ->name('api.contact.')
+        ->group(static fn () => null);
 }
 
 // Reverse-chain: registrar produced by ->prefix(), then ->middleware(...) with

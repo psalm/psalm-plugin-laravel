@@ -20,6 +20,15 @@ namespace Illuminate\Routing;
 class RouteRegistrar
 {
     /**
+     * The broad `string|array<string>|null` param is intentional. With `@psalm-variadic`
+     * each variadic slot accepts this union, matching the runtime forms
+     * `middleware('a', 'b', 'c')`, `middleware('a')`, `middleware(['a', 'b'])`, and
+     * `middleware(null)`. Tightening the type to `string` would reject the documented
+     * array form; tightening it to drop `null` would reject the no-op `middleware(null)`
+     * call. Mixed forms like `middleware(['a'], 'b')` slip through this typing but
+     * Laravel's `__call` silently drops the second arg at runtime; no useful Psalm
+     * signature can express that asymmetry, so we mirror Laravel's permissive surface.
+     *
      * @param string|array<string>|null $middleware
      * @return $this
      *
