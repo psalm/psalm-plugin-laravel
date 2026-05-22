@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Util\Ast\CachedClosureTypeFactory;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Union;
+use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;
 
 /**
  * Targeted coverage for the memoizing decorator. The stateless build
@@ -31,6 +32,8 @@ use Psalm\Type\Union;
 #[CoversClass(CachedClosureTypeFactory::class)]
 final class CachedClosureTypeFactoryTest extends TestCase
 {
+    use InitializesPsalmConfigSingleton;
+
     /** @var list<string> */
     private array $tempFiles = [];
 
@@ -183,6 +186,30 @@ PHP,
         $second = CachedClosureTypeFactory::fromClosureObject($this->loadClosureFromFile($file));
         $this->assertInstanceOf(TClosure::class, $second);
         $this->assertSame('literal-string', $second->return_type?->getId());
+    }
+
+    #[Test]
+    public function delegates_to_body_flow_inference_when_docblock_absent(): void
+    {
+        // PR #994: the cached wrapper must also reach the body-flow path.
+        // Without this test, an accidental "cache `null` results forever"
+        // bug in the wrapper could silently keep callers on `mixed` for
+        // closures that should now narrow via body inference. The
+        // un-cached factory has its own coverage for the rule table; this
+        // test only verifies the wrapper does not block the inference
+        // result from surfacing.
+        $file = $this->writeTempFile(
+            <<<'PHP'
+<?php
+$register(static fn () => 'cached-hello');
+PHP,
+        );
+
+        $closure = $this->loadClosureFromFile($file);
+        $result = CachedClosureTypeFactory::fromClosureObject($closure);
+
+        $this->assertInstanceOf(TClosure::class, $result);
+        $this->assertSame("'cached-hello'", $result->return_type?->getId());
     }
 
     private function writeTempFile(string $contents): string

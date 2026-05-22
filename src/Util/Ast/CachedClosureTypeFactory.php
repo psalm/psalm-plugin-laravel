@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Util\Ast;
 
 use PhpParser\Comment\Doc;
+use PhpParser\Node;
 use Psalm\Aliases;
 use Psalm\Type\Atomic\TClosure;
 
@@ -41,7 +42,7 @@ use Psalm\Type\Atomic\TClosure;
 final class CachedClosureTypeFactory
 {
     /**
-     * @var array<string, array{mtime: int, entries: array<int, list<array{0: ?Doc, 1: Aliases}>>|null}>
+     * @var array<string, array{mtime: int, entries: array<int, list<array{0: ?Doc, 1: Aliases, 2: Node\Expr\Closure|Node\Expr\ArrowFunction}>>|null}>
      */
     private static array $cache = [];
 
@@ -81,7 +82,7 @@ final class CachedClosureTypeFactory
      * inside `buildWithIndexer`). Mtime stamp guards against in-run rewrites
      * (rare, but happens in test fixtures); a fresh mtime forces a re-parse.
      *
-     * @return array<int, list<array{0: ?Doc, 1: Aliases}>>|null
+     * @return array<int, list<array{0: ?Doc, 1: Aliases, 2: Node\Expr\Closure|Node\Expr\ArrowFunction}>>|null
      */
     private static function indexFile(string $realpath): ?array
     {

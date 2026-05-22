@@ -21,6 +21,13 @@ return RectorConfig::configure()
     // that never matches the lowercase method id. (::class IS valid in const arrays on
     // PHP 8.3+; the problem is the casing, not the const-context.)
     ->withSkipPath('src/Handlers/Rules/OctaneIncompatibleBindingHandler.php')
+    // The vendor-style macro fixture (PR #991 + PR #994) deliberately exercises
+    // closures without native return types or docblock `@return` so the
+    // AST-scan + body-inference paths are the only sources of narrowing.
+    // Rector's `typeDeclarations` set keeps "fixing" them back to declared
+    // return types, which silently turns the body-inference assertions into
+    // native-return-type assertions and the feature stops being tested.
+    ->withSkipPath('tests/Type/macro-fixtures-vendor-style.php')
     ->withPhpVersion(PhpVersion::PHP_82)
     ->withSets([PHPUnitSetList::PHPUNIT_120])
     ->withPreparedSets(deadCode: true, codingStyle: true, typeDeclarations: true, codeQuality: true, phpunitCodeQuality: true)

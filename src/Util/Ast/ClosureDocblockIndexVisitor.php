@@ -28,11 +28,16 @@ use Psalm\Aliases;
  * files don't bleed aliases across sections, and pre-namespace top-level `use`
  * statements don't leak into a later `namespace { ... }` block.
  *
+ * Each entry also retains the raw `Closure` / `ArrowFunction` node. PR #994 uses
+ * it for body-flow return inference when neither docblock `@return` nor native
+ * reflection covers the closure — without the node the factory would have to
+ * re-parse the file just to walk the body, defeating the per-run cache.
+ *
  * @internal Helper for {@see ClosureTypeFactory::indexFile()}.
  */
 final class ClosureDocblockIndexVisitor extends NodeVisitorAbstract
 {
-    /** @var array<int, list<array{0: ?Doc, 1: Aliases}>> startLine => list of (doc, aliases) */
+    /** @var array<int, list<array{0: ?Doc, 1: Aliases, 2: Node\Expr\Closure|Node\Expr\ArrowFunction}>> startLine => list of (doc, aliases, node) */
     private array $entries = [];
 
     /** @var list<Node> stack of currently-open ancestor nodes (parent at the tail). */
@@ -65,7 +70,7 @@ final class ClosureDocblockIndexVisitor extends NodeVisitorAbstract
      * exclusively from `beforeTraverse` / `enterNode`. Exposed via a method
      * rather than a public field so callers cannot tamper with the storage.
      *
-     * @return array<int, list<array{0: ?Doc, 1: Aliases}>>
+     * @return array<int, list<array{0: ?Doc, 1: Aliases, 2: Node\Expr\Closure|Node\Expr\ArrowFunction}>>
      */
     public function getEntries(): array
     {
@@ -133,7 +138,7 @@ final class ClosureDocblockIndexVisitor extends NodeVisitorAbstract
                 $doc = $this->findWrappingExpressionDoc();
             }
 
-            $this->entries[$node->getStartLine()][] = [$doc, $this->aliasesForCurrentFrame()];
+            $this->entries[$node->getStartLine()][] = [$doc, $this->aliasesForCurrentFrame(), $node];
         }
 
         $this->nodeStack[] = $node;
