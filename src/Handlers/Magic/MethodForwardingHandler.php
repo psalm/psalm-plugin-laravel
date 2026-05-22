@@ -83,8 +83,9 @@ final class MethodForwardingHandler implements
      * the {@see DynamicWhereResolver} hand-off cache, where a stale entry could be
      * consumed by a future call whose first Arg happens to share an spl_object_id.
      *
-     * The DynamicWhereResolver enable flag is owned by `Plugin::registerHandlers()` and
-     * is intentionally NOT reset here (init may run after enable() in tests).
+     * The DynamicWhereResolver enable flag is also cleared by the reset; Plugin
+     * re-applies it from XML config after init() returns, so a true→false config flip
+     * across re-bootstraps takes effect instead of inheriting the previous state.
      *
      * @psalm-external-mutation-free
      */
@@ -479,10 +480,10 @@ final class MethodForwardingHandler implements
      *   - whereFirstNameAndLastName → ['FirstName', 'LastName']        → both @property
      *   - whereTitleOrSlug        → ['Title', 'Slug']                  → both @property
      *
-     * For SINGLE-segment scalar-typed columns, the column type is queued in
-     * {@see $pendingDynamicWhereColumnType} so {@see getMethodParams} can return
-     * typed params for argument validation (issue #928). Multi-segment calls have
-     * one argument per segment with different types, which doesn't fit the
+     * For SINGLE-segment scalar-typed columns, the column type is queued via
+     * {@see DynamicWhereResolver::storePendingColumnType} so {@see getMethodParams}
+     * can return typed params for argument validation (issue #928). Multi-segment
+     * calls have one argument per segment with different types, which doesn't fit the
      * single-typed-param hand-off; they get the variadic-mixed fallback.
      *
      * @param non-empty-list<Union>|list<Union>|null $templateParams Relation's template type parameters

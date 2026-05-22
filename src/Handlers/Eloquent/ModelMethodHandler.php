@@ -318,21 +318,33 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
         // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
         // doesMethodExist has already confirmed via DynamicWhereResolver::methodMatchesColumns
-        // that the lowercase suffix matches columns. Here we run the strict camel-cased
-        // validation against the ORIGINAL method name to (a) decide whether to queue the
-        // typed-param hand-off for #928 and (b) keep behaviour aligned with the
-        // relation-chain path. Either way the return is Builder<calledClass> — existence
-        // has already been confirmed, so even when the strict validation rejects (e.g.
-        // the camel-cased segments don't all map to columns) we return the builder type
-        // rather than letting it fall through to mixed.
+        // that the lowercase suffix matches columns. The gate excludes both Query\Builder
+        // methods (handled by the fake-call branch below) AND methods declared on the
+        // registered builder class itself — for a custom builder that defines `whereFoo()`
+        // directly, the fake-call path resolves it with the method's actual return type
+        // instead of unconditionally substituting Builder<TModel>.
+        //
+        // Strict camel-cased validation (`resolveColumnType`) decides whether to queue the
+        // typed-param hand-off for #928 and gates the final return: a `false` result means
+        // the lowercase backtracker over-accepted (e.g. `wherefoobar` with @property `foo`
+        // and `bar` only matches via lowercase, not the camel-cased And/Or split that
+        // Laravel's runtime requires). Returning null in that case avoids claiming
+        // Builder<TModel> for a call Laravel would parse differently — existence remains
+        // confirmed so Psalm doesn't raise UndefinedMagicMethod, but the return type stays
+        // Psalm's default rather than a fabricated builder.
         if (
             DynamicWhereResolver::isEnabled()
             && DynamicWhereResolver::isDynamicWhereMethod($methodName)
             && !$codebase->methodExists(new MethodIdentifier(QueryBuilder::class, $methodName))
+            && !$codebase->methodExists(new MethodIdentifier($builderClass, $methodName))
         ) {
             $stmt = $event->getStmt();
             $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
             $columnType = DynamicWhereResolver::resolveColumnType($codebase, $modelClass, $originalMethodName);
+
+            if ($columnType === false) {
+                return null;
+            }
 
             // Queue typed param hand-off (issue #928) only when the producer/consumer
             // contract holds: single-segment scalar column + exactly one argument. Mirrors

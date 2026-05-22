@@ -125,14 +125,20 @@ final class DynamicWhereResolver
     }
 
     /**
-     * Reset all state. Called by handler init() pathways so a re-bootstrap doesn't leak
-     * caches across analysis runs. The {@see $enabled} flag is preserved it's owned by
-     * Plugin config, not by any single handler's init().
+     * Reset all state, including the enable flag. Called by handler init() pathways so a
+     * re-bootstrap doesn't leak caches OR a previously-enabled flag across analysis runs.
+     *
+     * Plugin::registerHandlers() re-runs enable() after init() when the config still has
+     * `<resolveDynamicWhereClauses value="true" />`, so a config flip true->false in a
+     * second bootstrap correctly leaves the resolver disabled. Without resetting the flag,
+     * the second bootstrap would inherit "enabled" from the first run and silently ignore
+     * the new config value.
      *
      * @psalm-external-mutation-free
      */
     public static function reset(): void
     {
+        self::$enabled = false;
         self::$columnTypeCache = [];
         self::$pendingColumnType = [];
         self::$normalizedPropertiesCache = [];

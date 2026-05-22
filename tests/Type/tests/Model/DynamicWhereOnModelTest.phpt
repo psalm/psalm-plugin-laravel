@@ -98,6 +98,23 @@ function test_static_dynamic_where_unknown_column_still_undefined(): void {
     Part::whereNonExistentColumn('x');
 }
 
+// Custom builder declares a where* method directly (VehicleBuilder::whereByMake).
+// The dynamic-where path must NOT shadow the declared method — the fake-call branch
+// resolves it from the custom builder's actual signature. Without the
+// `!methodExists($builderClass, ...)` gate this would return Builder<Vehicle> generically.
+function test_static_custom_builder_where_method_not_shadowed(): void {
+    $_ = Vehicle::whereByMake('Toyota');
+    /** @psalm-check-type-exact $_ = App\Builders\VehicleBuilder<Vehicle> */
+}
+
+// Lowercase non-splittable spelling (`whereid` vs `whereId`) still resolves to
+// Builder<Customer> — Laravel's runtime lowercases method names too and treats
+// `whereid` as the single-segment column `id`.
+function test_static_dynamic_where_lowercase_spelling(): void {
+    $_ = Customer::whereid('cust-1');
+    /** @psalm-check-type-exact $_ = Builder<Customer> */
+}
+
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of App\Models\Part::wherename expects string, but 123 provided
