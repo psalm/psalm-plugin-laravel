@@ -48,6 +48,13 @@ final class MethodForwardingHandler implements
     MethodReturnTypeProviderInterface,
     MethodParamsProviderInterface
 {
+    /**
+     * Larastan parity: split a where{Column} suffix on And/Or boundaries followed by an
+     * uppercase letter. Mirrors `Illuminate\Database\Query\Builder::dynamicWhere`'s
+     * `(And|Or)(?=[A-Z])`; we use a non-capturing group since we don't need the connector.
+     */
+    private const SEGMENT_SPLIT_PATTERN = '/(?:And|Or)(?=[A-Z])/';
+
     private static ?ForwardingRule $rule = null;
 
     /** @var array<lowercase-string, bool> Indexed source classes for O(1) lookup */
@@ -65,13 +72,24 @@ final class MethodForwardingHandler implements
     private static bool $enableDynamicWhere = false;
 
     /**
-     * Cache: "ModelClass:methodName" → column type (or null when no column matched).
+     * Cache: "ModelClass:originalMethodName" → three-state validation result.
      *
-     * Keyed by model class + method name to avoid repeating the property-name normalisation
-     * loop on subsequent calls with the same (model, method) pair. A null value records a
-     * negative match so we skip the loop on subsequent misses too.
+     * Keyed by model class + ORIGINAL-CASE method name (not lowercase). The original case
+     * is needed because Laravel's runtime `Builder::dynamicWhere` splits the suffix on
+     * `(?:And|Or)(?=[A-Z])`, which only fires on properly camel-cased boundaries. The same
+     * lowercase name can therefore come from a splittable call (`whereFooAndBar`) or a
+     * non-splittable one (`wherefooandbar`), and they validate differently.
      *
-     * @var array<string, ?Union>
+     * Values:
+     *   - `false`: validation failed (one or more segments don't match a declared
+     *     pseudo property). Caller falls through to mixed.
+     *   - `null`: validation passed but no scalar column type can be handed off to the
+     *     typed-parameter checker (multi-segment call, or single-segment whose type is
+     *     object/array — Carbon, BackedEnum, json casts).
+     *   - `Union`: validation passed AND the call is single-segment with a scalar column
+     *     type. The typed-param hand-off path (issue #928) consumes this.
+     *
+     * @var array<string, false|null|Union>
      */
     private static array $dynamicWhereCache = [];
 
@@ -120,13 +138,23 @@ final class MethodForwardingHandler implements
      */
     private static array $pendingDynamicWhereColumnType = [];
 
-    /** @psalm-external-mutation-free */
+    /**
+     * Reset all static state. Called once per Plugin::__construct in production, plus
+     * by test fixtures that re-bootstrap the handler. Every cache MUST be cleared so
+     * leftover entries from a previous run can't leak across boundaries — in particular
+     * $pendingDynamicWhereColumnType, where a stale entry could be consumed by a future
+     * call whose first Arg happens to share an spl_object_id.
+     *
+     * @psalm-external-mutation-free
+     */
     public static function init(ForwardingRule $rule): void
     {
         self::$rule = $rule;
         self::$sourceClassIndex = [];
         self::$searchClassIndex = [];
         self::$scopeParamsCache = [];
+        self::$dynamicWhereCache = [];
+        self::$pendingDynamicWhereColumnType = [];
 
         foreach ($rule->allSourceClasses() as $class) {
             self::$sourceClassIndex[\strtolower($class)] = true;
@@ -511,17 +539,29 @@ final class MethodForwardingHandler implements
     /**
      * Attempt to resolve a dynamic where{Column} method call on a relation.
      *
-     * Returns the relation's generic type (e.g. HasMany<Post, User>) when the method
-     * name matches the where{Column} pattern and the column is declared on the related model
-     * via @property annotations. Returns null otherwise (falling through to Psalm default).
+     * Returns the relation's generic type (e.g. HasMany<Post, User>) when every
+     * segment of the where suffix corresponds to a declared @property on the related
+     * model. Returns null otherwise (falling through to Psalm default).
      *
-     * Column matching normalises both sides to lowercase-without-underscores so that:
-     *   - whereTitle       → matches @property string $title
-     *   - whereEmailAddress → matches @property string $email_address
-     *   - whereFirstName   → matches @property string $first_name
+     * The suffix is split on `(?:And|Or)(?=[A-Z])` (Larastan parity), so multi-segment
+     * forms like `whereFirstNameAndLastName($a, $b)` and `whereTitleOrSlug($x)` are
+     * recognised. Splitting requires the ORIGINAL camel-cased method name from the
+     * AST — Psalm lowercases the method name before invoking providers, which would
+     * erase every `And`/`Or` boundary and collapse all multi-segment calls to a
+     * single unrecognised token (see issue #927).
      *
-     * When a column type is resolved, also queues it in {@see $pendingDynamicWhereColumnType}
-     * so {@see getMethodParams} can return typed params for argument validation. Issue #928.
+     * Each segment is normalised (lowercased, `$` and `_` stripped) and compared
+     * against `pseudo_property_get_types`, so:
+     *   - whereTitle              → ['Title']                        → @property $title
+     *   - whereEmailAddress       → ['EmailAddress']                  → @property $email_address
+     *   - whereFirstNameAndLastName → ['FirstName', 'LastName']        → both @property
+     *   - whereTitleOrSlug        → ['Title', 'Slug']                  → both @property
+     *
+     * For SINGLE-segment scalar-typed columns, the column type is queued in
+     * {@see $pendingDynamicWhereColumnType} so {@see getMethodParams} can return
+     * typed params for argument validation (issue #928). Multi-segment calls have
+     * one argument per segment with different types, which doesn't fit the
+     * single-typed-param hand-off; they get the variadic-mixed fallback.
      *
      * @param non-empty-list<Union>|list<Union>|null $templateParams Relation's template type parameters
      */
@@ -543,39 +583,37 @@ final class MethodForwardingHandler implements
             return null;
         }
 
-        $columnType = self::resolveDynamicWhereColumnType($codebase, $modelClass, $methodName);
+        $stmt = $event->getStmt();
 
-        if (!$columnType instanceof Union) {
+        $originalMethodName = self::originalMethodName($stmt, $methodName);
+
+        $columnType = self::resolveDynamicWhereColumnType($codebase, $modelClass, $originalMethodName);
+
+        if ($columnType === false) {
             return null;
         }
 
-        // Hand off the column type to getMethodParams() so it can build a typed parameter
-        // list and let Psalm validate arguments. See $pendingDynamicWhereColumnType for the
-        // lifecycle and rationale. Issue #928.
+        // Hand off the scalar column type to getMethodParams() so it can build a typed
+        // parameter list and let Psalm validate arguments. See $pendingDynamicWhereColumnType
+        // for the lifecycle and rationale. Issue #928.
         //
-        // Two gates on the store:
+        // Gates on the store:
         //   (a) Path 1 (mixin interception) writes are unconsumable — Builder is in
         //       searchClassIndex, not sourceClassIndex, so our MethodParamsProvider
         //       early-returns for it and the entry would leak. Only store when the event
         //       fires for the relation class itself (Path 2 / direct __call).
-        //   (b) Skip non-scalar column types (Carbon, BackedEnum, json-cast arrays).
-        //       Laravel coerces strings/ints to these at the query layer, so narrowing
-        //       to the declared property type would mass-regress real codebases.
+        //   (b) Only single-segment scalar columns produce a Union here; multi-segment
+        //       and non-scalar single-segment results were cached as `null` upstream.
         //   (c) Only enqueue when the call has exactly one argument — the only shape
         //       consumeDynamicWhereTypedParams() actually consumes. Without this gate,
         //       2+ arg calls would deposit entries that the consumer skips, leaking
         //       across the analysis run (and risking a wrong-type lookup later if PHP
         //       reuses the spl_object_id of a freed Arg node).
-        if (\strtolower($event->getFqClasslikeName()) !== \strtolower($relationClass)) {
-            return new Union([new TGenericObject($relationClass, $templateParams)]);
-        }
-
-        if ($columnType->hasObjectType() || $columnType->hasArray()) {
-            return new Union([new TGenericObject($relationClass, $templateParams)]);
-        }
-
-        $stmt = $event->getStmt();
-        if ($stmt instanceof MethodCall) {
+        if (
+            $columnType instanceof Union
+            && \strtolower($event->getFqClasslikeName()) === \strtolower($relationClass)
+            && $stmt instanceof MethodCall
+        ) {
             $args = $stmt->getArgs();
 
             if (\count($args) === 1) {
@@ -583,7 +621,7 @@ final class MethodForwardingHandler implements
             }
         }
 
-        // Column exists on the model → method is fluent, return the full Relation type.
+        // Every segment matched → method is fluent, return the full Relation type.
         return new Union([
             new TGenericObject($relationClass, $templateParams),
         ]);
@@ -684,21 +722,51 @@ final class MethodForwardingHandler implements
     }
 
     /**
-     * Resolve the column type for a dynamic where{Column} method call, or null when no
-     * @property entry matches the suffix.
+     * Pull the original camel-cased method name from the AST, falling back to the
+     * already-lowercased event method name when the call uses a dynamic name
+     * (e.g. `$x->{$var}()`) or is a StaticCall. The camel case matters because
+     * the And/Or segment split requires uppercase boundaries that Psalm strips
+     * from getMethodNameLowercase().
      *
-     * The column suffix (method name minus "where") is compared against the model's
-     * pseudo_property_get_types (populated from @property / @property-read annotations).
+     * Psalm's MethodCallAnalyzer short-circuits dynamic-name MethodCalls before
+     * invoking return-type providers, so the fallback branch is effectively dead
+     * for the MethodCall case; kept for StaticCall and future Psalm versions.
      *
-     * Psalm lowercases all method names before passing them to providers, so the suffix is
-     * already lowercase (e.g. "wherefirstname" → suffix "firstname"). The @property names
-     * are normalised to the same form by stripping "$" and underscores and lowercasing, so:
-     *   - whereTitle (→ "title") matches @property string $title (→ "title")
-     *   - whereFirstName (→ "firstname") matches @property string $first_name (→ "firstname")
-     *   - whereEmailAddress (→ "emailaddress") matches @property string $email_address (→ "emailaddress")
+     * @psalm-mutation-free
+     */
+    private static function originalMethodName(
+        \PhpParser\Node\Expr\MethodCall|\PhpParser\Node\Expr\StaticCall $stmt,
+        string $lowercaseFallback,
+    ): string {
+        return $stmt instanceof MethodCall && $stmt->name instanceof \PhpParser\Node\Identifier
+            ? $stmt->name->name
+            : $lowercaseFallback;
+    }
+
+    /**
+     * Validate a dynamic where{Column} method call against the model's declared @property
+     * entries and return the column type when (and only when) a single scalar column was
+     * matched.
      *
-     * Note: PHP method names use camelCase, so underscores in the suffix only arise for
-     * non-standard calls that would not match Laravel's dynamicWhere convention anyway.
+     * Mirrors Larastan's `BuilderHelper::dynamicWhere` (split on And/Or capitalised boundaries,
+     * every segment must correspond to a declared column). The suffix after "where" is split
+     * by `(?:And|Or)(?=[A-Z])`, so the ORIGINAL camel-cased method name from the AST is
+     * required — see the caller for why we pull it from $stmt->name rather than the
+     * lowercased event method name.
+     *
+     * @property entries are normalised by stripping `$` and underscores and lowercasing
+     * (so `$email_address` collapses to `emailaddress`); each segment goes through the
+     * same normalisation and the call is rejected on the first mismatch.
+     *
+     * Return values:
+     *   - `false`: at least one segment doesn't match a declared property. Caller skips
+     *     the dynamic where resolution entirely.
+     *   - `null`: every segment matched but no scalar column type is suitable for the
+     *     typed-parameter hand-off (multi-segment, or single-segment whose type contains
+     *     an object/array — Carbon, BackedEnum, json casts). Caller returns the Relation
+     *     type without populating the hand-off cache.
+     *   - `Union`: every segment matched, the call is single-segment, and the column
+     *     type is scalar. Caller queues this type for {@see getMethodParams} (issue #928).
      *
      * @param class-string<\Illuminate\Database\Eloquent\Model> $modelClass
      * @psalm-external-mutation-free
@@ -706,45 +774,77 @@ final class MethodForwardingHandler implements
     private static function resolveDynamicWhereColumnType(
         Codebase $codebase,
         string $modelClass,
-        string $methodName,
-    ): ?Union {
-        $key = $modelClass . ':' . $methodName;
+        string $originalMethodName,
+    ): false|Union|null {
+        $key = $modelClass . ':' . $originalMethodName;
 
         if (\array_key_exists($key, self::$dynamicWhereCache)) {
             return self::$dynamicWhereCache[$key];
         }
 
-        // Extract the column suffix: "wheretitle" → "title", "wherefirstname" → "firstname"
-        $columnSuffix = \substr($methodName, 5);
+        // Strip "where" / "WHERE" prefix — original-case may be anything from "Where" to "WHERE",
+        // but our isDynamicWhereMethod gate ran on the lowercase form so the first 5 chars are
+        // always "where" in some casing. substr is byte-safe for that ASCII prefix.
+        $suffix = \substr($originalMethodName, 5);
+
+        $segments = \preg_split(self::SEGMENT_SPLIT_PATTERN, $suffix);
+
+        // preg_split with this literal pattern cannot fail at runtime; the guard is
+        // a Psalm narrowing concession (return type is non-empty-list<string>|false).
+        if ($segments === false) {
+            return self::$dynamicWhereCache[$key] = false;
+        }
 
         try {
             $storage = $codebase->classlike_storage_provider->get(\strtolower($modelClass));
         } catch (\InvalidArgumentException) {
-            self::$dynamicWhereCache[$key] = null;
-            return null;
+            return self::$dynamicWhereCache[$key] = false;
         }
 
-        // Use pseudo_property_get_types (from @property and @property-read) rather than
-        // pseudo_property_set_types (@property-write). Dynamic WHERE filters on readable
-        // database columns; @property-write only properties are write-only computed fields
-        // (e.g. password hashing) that do not correspond to filterable columns.
+        // Build a normalised property map once per (model, method) pair. Cheaper than
+        // re-running str_replace+strtolower over every property for every segment.
+        // The map is not memoized across calls: Psalm may populate pseudo_property_get_types
+        // lazily as it parses the class, and a stale snapshot could miss properties added
+        // after first invocation.
         //
-        // We do NOT cache the per-model normalised property set separately. Psalm may populate
-        // pseudo_property_get_types lazily (adding entries as it parses the class), so a
-        // snapshot taken on the first call could be incomplete for subsequent method checks.
-        // The per-(model, method) $dynamicWhereCache still prevents redundant lookups.
-        // "$first_name" → "firstname", "$title" → "title"
+        // pseudo_property_get_types is sourced from @property/@property-read — readable
+        // columns. @property-write entries (password hashing etc.) don't correspond to
+        // filterable columns and are intentionally excluded.
+        $normalizedProperties = [];
         foreach ($storage->pseudo_property_get_types as $propName => $propType) {
-            $normalized = \strtolower(\str_replace(['$', '_'], '', $propName));
-
-            if ($normalized === $columnSuffix) {
-                self::$dynamicWhereCache[$key] = $propType;
-                return $propType;
-            }
+            $normalizedProperties[\strtolower(\str_replace(['$', '_'], '', $propName))] = $propType;
         }
 
-        self::$dynamicWhereCache[$key] = null;
-        return null;
+        // Validate every segment and stash the matching column type. An empty segment
+        // (e.g. `whereAndFoo` splitting to ['', 'Foo']) or any unmatched column rejects
+        // the whole call.
+        $matchedColumnTypes = [];
+        foreach ($segments as $segment) {
+            $segmentKey = \strtolower($segment);
+
+            if ($segmentKey === '' || !isset($normalizedProperties[$segmentKey])) {
+                return self::$dynamicWhereCache[$key] = false;
+            }
+
+            $matchedColumnTypes[] = $normalizedProperties[$segmentKey];
+        }
+
+        // Multi-segment calls take one argument per segment with potentially different
+        // column types — no single Union can stand in for the typed-param hand-off.
+        if (\count($matchedColumnTypes) !== 1) {
+            return self::$dynamicWhereCache[$key] = null;
+        }
+
+        $columnType = $matchedColumnTypes[0];
+
+        // Object/array column types (Carbon, BackedEnum, json casts) skip the typed-param
+        // hand-off — Laravel coerces strings/ints to these at the query layer, so narrowing
+        // to the property type would mass-regress real codebases.
+        if ($columnType->hasObjectType() || $columnType->hasArray()) {
+            return self::$dynamicWhereCache[$key] = null;
+        }
+
+        return self::$dynamicWhereCache[$key] = $columnType;
     }
 
 }

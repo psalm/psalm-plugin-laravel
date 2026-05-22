@@ -21,5 +21,14 @@ function test_dynamic_where_not_resolved_when_disabled(): void {
     $_ = $r->whereInvoiceNumber('INV-2024-001');
     /** @psalm-check-type-exact $_ = mixed */
 }
+
+// Multi-segment dynamic where (issue #927) must respect the disabled flag too.
+// A regression that wired the segment-split path outside the $enableDynamicWhere
+// gate would still resolve here; verify the call collapses to mixed.
+function test_dynamic_where_multi_segment_not_resolved_when_disabled(): void {
+    $r = (new WorkOrder())->invoice();
+    $_ = $r->whereInvoiceNumberAndStatus('INV-2024-001', 'paid');
+    /** @psalm-check-type-exact $_ = mixed */
+}
 ?>
 --EXPECTF--
