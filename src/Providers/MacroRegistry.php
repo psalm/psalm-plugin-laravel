@@ -323,7 +323,7 @@ final class MacroRegistry
         if ($callable instanceof \Closure) {
             $closureType = CachedClosureTypeFactory::fromClosureObject($callable);
 
-            if ($closureType === null && $codebase instanceof \Psalm\Codebase) {
+            if (!$closureType instanceof \Psalm\Type\Atomic\TClosure && $codebase instanceof \Psalm\Codebase) {
                 $closureStorage = self::recoverClosureStorage($reflection, $codebase);
                 if ($closureStorage instanceof FunctionLikeStorage) {
                     return self::buildDefinitionFromStorage(
