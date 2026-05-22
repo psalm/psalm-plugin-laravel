@@ -53,9 +53,9 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 
 **default**: `true`
 
-When enabled, the plugin resolves Laravel's [dynamic where methods](https://laravel.com/docs/queries#dynamic-where-clauses) (e.g. `whereTitle('foo')`, `whereFirstName('John')`) on Eloquent relation chains, preserving the relation's generic type instead of returning `mixed`.
+When enabled, the plugin resolves Laravel's [dynamic where methods](https://laravel.com/docs/queries#dynamic-where-clauses) (e.g. `whereTitle('foo')`, `whereFirstName('John')`) on both Eloquent relation chains and direct Model static / instance calls (`User::whereEmail('a@b')`, `$user->whereEmail('a@b')`), preserving the relation or `Builder<TModel>` generic type instead of returning `mixed` or raising `UndefinedMagicMethod`.
 
-Column names are validated against the model's `@property` annotations. Unmatched columns fall through to `mixed` without an error, so partial annotation is safe.
+Column names are validated against the model's `@property` annotations. Unmatched columns fall through to `mixed` (relations) or `UndefinedMagicMethod` (direct Model calls) without altering Psalm's default behaviour, so partial annotation is safe.
 
 Disable if dynamic where resolution conflicts with your codebase.
 

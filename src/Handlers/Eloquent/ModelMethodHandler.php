@@ -12,6 +12,7 @@ use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Util\DynamicWhereResolver;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -248,7 +249,25 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
         // Scope method — params from the scope definition minus the first $query param.
         /** @var class-string<Model> $modelClass */
-        return self::getScopeParams($codebase, $modelClass, $methodName);
+        $scopeParams = self::getScopeParams($codebase, $modelClass, $methodName);
+        if ($scopeParams !== null) {
+            return $scopeParams;
+        }
+
+        // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
+        // Mirrors the relation-chain fallback: typed single param when the return-type
+        // provider resolved a scalar column (issue #928 hand-off), variadic mixed
+        // otherwise so Psalm doesn't raise TooManyArguments on multi-segment forms
+        // like whereFirstNameAndLastName($a, $b).
+        if (
+            DynamicWhereResolver::isEnabled()
+            && DynamicWhereResolver::isDynamicWhereMethod($methodName)
+        ) {
+            return DynamicWhereResolver::consumeTypedParams($methodName, $event->getCallArgs())
+                ?? DynamicWhereResolver::variadicMixedParams();
+        }
+
+        return null;
     }
 
     /**
@@ -294,6 +313,39 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
         // Trait-declared builder methods (e.g., SoftDeletes::withTrashed): return custom builder type.
         if (CustomBuilderMethodHandler::hasTraitMethod($modelClass, $methodName)) {
+            return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+        }
+
+        // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
+        // doesMethodExist has already confirmed via DynamicWhereResolver::methodMatchesColumns
+        // that the lowercase suffix matches columns. Here we run the strict camel-cased
+        // validation against the ORIGINAL method name to (a) decide whether to queue the
+        // typed-param hand-off for #928 and (b) keep behaviour aligned with the
+        // relation-chain path. Either way the return is Builder<calledClass> — existence
+        // has already been confirmed, so even when the strict validation rejects (e.g.
+        // the camel-cased segments don't all map to columns) we return the builder type
+        // rather than letting it fall through to mixed.
+        if (
+            DynamicWhereResolver::isEnabled()
+            && DynamicWhereResolver::isDynamicWhereMethod($methodName)
+            && !$codebase->methodExists(new MethodIdentifier(QueryBuilder::class, $methodName))
+        ) {
+            $stmt = $event->getStmt();
+            $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
+            $columnType = DynamicWhereResolver::resolveColumnType($codebase, $modelClass, $originalMethodName);
+
+            // Queue typed param hand-off when the call is single-segment + scalar + 1-arg.
+            // Path stays close to MethodForwardingHandler::resolveDynamicWhereOnRelation
+            // for the Path-2 (direct __call) gating: only enqueue on instance/static call
+            // forms that the params provider will reach, with exactly one argument.
+            if ($columnType instanceof Union) {
+                $args = $stmt->getArgs();
+
+                if (\count($args) === 1) {
+                    DynamicWhereResolver::storePendingColumnType($methodName, $args[0], $columnType);
+                }
+            }
+
             return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
         }
 
@@ -368,7 +420,28 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // Scope methods (e.g., scopeActive → active, #[Scope] verified → verified).
         // These are defined on the model and forwarded via __callStatic → Builder.
         /** @var class-string<Model> $modelClass */
-        return self::$unresolvedCache[$key] = BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName);
+        if (BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
+            return self::$unresolvedCache[$key] = true;
+        }
+
+        // Dynamic where{Column} methods (e.g., whereUuid, whereFirstNameAndLastName).
+        // Laravel's `Builder::dynamicWhere` resolves these at runtime when the suffix
+        // segments match column names. When `<resolveDynamicWhereClauses value="true" />`
+        // is set (default), confirm existence so a direct Model::whereCol(...) call
+        // doesn't raise UndefinedMagicMethod (issue #1000).
+        //
+        // The match is lowercase-only because the existence hook receives no AST node
+        // (so we can't reconstruct the original camel-cased suffix here). The return-
+        // type and params providers still run the strict camel-cased validation via
+        // DynamicWhereResolver::resolveColumnType when they fire on the confirmed call.
+        if (
+            DynamicWhereResolver::isEnabled()
+            && DynamicWhereResolver::methodMatchesColumns($codebase, $modelClass, $methodName)
+        ) {
+            return self::$unresolvedCache[$key] = true;
+        }
+
+        return self::$unresolvedCache[$key] = false;
     }
 
     /** @inheritDoc */
