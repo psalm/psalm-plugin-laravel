@@ -6,32 +6,35 @@ use Illuminate\Routing\RouteRegistrar;
 use Illuminate\Support\Facades\Route as RouteFacade;
 
 /**
- * Reproducer (documented broken behavior) for the `routes/contact.php` form in
- * invoiceninja:
+ * Regression test for issue #972 — the `routes/contact.php` form in invoiceninja:
  *
  *   Route::middleware('contact_db', 'api_secret_check', 'contact_token_auth')
  *       ->prefix('api/v1/contact')->name('api.contact.')->group(function () { ... });
  *
  * The Laravel framework's `RouteRegistrar::__call` resolves `middleware(...)` by
  * collecting variadic strings (`is_array($parameters[0]) ? $parameters[0] : $parameters`),
- * so this call shape is valid at runtime. The `@method static` annotation on
- * `Illuminate\Support\Facades\Route` and on `Illuminate\Routing\RouteRegistrar`
- * declares it as single-arg (`array|string|null $middleware`), so Psalm reports
- * `TooManyArguments` even though the runtime accepts the call.
+ * so this call shape is valid at runtime. Laravel's source declares
+ * `@method static middleware(array|string|null $middleware)` (single-arg) on both
+ * `Illuminate\Support\Facades\Route` and `Illuminate\Routing\RouteRegistrar`,
+ * which previously caused Psalm to report `TooManyArguments`.
  *
- * The existing RouteMiddlewareTest covers the Route *instance* form via the
- * `@psalm-variadic` stub on `Illuminate\Routing\Route::middleware`. The facade
- * / RouteRegistrar entry point lacks the same override.
- *
- * Once a plugin stub adds `@psalm-variadic` to RouteRegistrar::middleware (or the
- * Route facade @method static is overridden), the EXPECTF below should be cleared
- * and this becomes a positive regression test.
+ * Fix uses two stubs:
+ *   - `stubs/common/Routing/RouteRegistrar.phpstub` declares `middleware` as a
+ *     real method with `@psalm-variadic` (covers the instance form).
+ *   - `stubs/common/Support/Facades/Route.phpstub` overrides the facade's
+ *     `@method static middleware(...)` to use variadic syntax (covers the
+ *     facade form, which Psalm resolves via the facade's own pseudo method
+ *     before any rootClass lookup runs).
  */
 
-// Variadic strings (the exact invoiceninja shape).
+// Variadic strings (the exact invoiceninja shape). Pin the exact type so a future
+// regression that widens to `RouteRegistrar|mixed` can't slip through under the
+// covariant return-type-only signal.
 function test_route_facade_middleware_variadic_strings(): RouteRegistrar
 {
-    return RouteFacade::middleware('contact_db', 'api_secret_check', 'contact_token_auth');
+    $_x = RouteFacade::middleware('contact_db', 'api_secret_check', 'contact_token_auth');
+    /** @psalm-check-type-exact $_x = RouteRegistrar */
+    return $_x;
 }
 
 // Single-string form: still valid, must not regress.
@@ -56,9 +59,15 @@ function test_route_facade_middleware_chain_intermediate(): void
         ->prefix('api/v1/contact')
         ->name('api.contact.');
     /** @psalm-check-type-exact $_chain = RouteRegistrar */
+
+    // Full invoiceninja chain including the terminal ->group(\Closure) call. Once the
+    // intermediate is RouteRegistrar the source's `@method group(\Closure ...)` resolves,
+    // but pin the full shape so a future regression of either link surfaces here.
+    RouteFacade::middleware('contact_db', 'api_secret_check')
+        ->prefix('api/v1/contact')
+        ->name('api.contact.')
+        ->group(static fn () => null);
 }
 
 ?>
---EXPECTF--
-TooManyArguments on line %d: Too many arguments for Illuminate\Support\Facades\Route::middleware - expecting 1 but saw 3
-TooManyArguments on line %d: Too many arguments for Illuminate\Support\Facades\Route::middleware - expecting 1 but saw 2
+--EXPECT--

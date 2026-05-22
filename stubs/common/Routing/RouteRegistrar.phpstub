@@ -1,0 +1,48 @@
+<?php
+
+namespace Illuminate\Routing;
+
+/**
+ * RouteRegistrar's source `@method` annotations declare `middleware` as
+ * single-arg, but `RouteRegistrar::__call` actually collects variadic strings:
+ *
+ *     if ($method === 'middleware') {
+ *         return $this->attribute($method, is_array($parameters[0]) ? $parameters[0] : $parameters);
+ *     }
+ *
+ * The variadic call shape `(new RouteRegistrar(...))->middleware('a', 'b', 'c')`
+ * is valid at runtime but Psalm reports `TooManyArguments` against the
+ * single-arg `@method` tag.
+ *
+ * Override that single tag here as a real method with `@psalm-variadic`. Psalm
+ * preserves the source's other `@method` tags (`prefix`, `name`, `group`, etc.)
+ * because the class-stub merge only resets `class_implements` /
+ * `parent_interfaces`, not `pseudo_static_methods` (see
+ * `Psalm\Internal\PhpVisitor\Reflector\ClassLikeNodeScanner::start()`).
+ *
+ * The companion facade override lives in `stubs/common/Support/Facades/Route.phpstub`
+ * because `Illuminate\Support\Facades\Route` declares its own
+ * `@method static middleware(...)` tag that takes precedence over this class
+ * during static-call resolution.
+ */
+class RouteRegistrar
+{
+    /**
+     * Set the middleware attached to the route group.
+     *
+     * The broad `string[]|string|null` param is intentional. With `@psalm-variadic`
+     * each variadic slot accepts this union, matching the runtime forms
+     * `middleware('a', 'b', 'c')`, `middleware('a')`, `middleware(['a', 'b'])`, and
+     * `middleware(null)`. Tightening the type to `string` would reject the documented
+     * array form; tightening it to drop `null` would reject the no-op `middleware(null)`
+     * call. Mixed forms like `middleware(['a'], 'b')` slip through this typing but
+     * Laravel's `__call` silently drops the second arg at runtime; no useful Psalm
+     * signature can express that asymmetry, so we mirror Laravel's permissive surface.
+     *
+     * @param string[]|string|null $middleware
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function middleware($middleware = null) {}
+}

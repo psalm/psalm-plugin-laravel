@@ -1,0 +1,28 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * The `Illuminate\Support\Facades\Route` source declares
+ * `@method static \Illuminate\Routing\RouteRegistrar middleware(array|string|null $middleware)`
+ * as single-arg, but the underlying `RouteRegistrar::__call` collects variadic
+ * strings (see `stubs/common/Routing/RouteRegistrar.phpstub`). Without this
+ * override Psalm reports `TooManyArguments` on the common routes-file shape:
+ *
+ *     Route::middleware('contact_db', 'api_secret_check', 'contact_token_auth')
+ *         ->prefix('api/v1/contact')->name('api.contact.')->group(fn () => ...);
+ *
+ * Re-declaring the facade with a single overriding `@method static` tag is
+ * enough: Psalm's stub/source merge keeps the source's other `@method static`
+ * declarations on `pseudo_static_methods` and overwrites only the `middleware`
+ * key. The plugin's FacadeMethodHandler short-circuits when a `@method` tag
+ * exists, so the variadic pseudo signature is the one Psalm uses for the static
+ * call.
+ */
+
+/**
+ * @method static \Illuminate\Routing\RouteRegistrar middleware(array|string|null ...$middleware)
+ */
+class Route extends Facade
+{
+}
