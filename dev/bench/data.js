@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779480698336,
+  "lastUpdate": 1779481175742,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5382,6 +5382,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.76,
             "range": "± 0.22",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b39d43beeb275e0e0c03fa430a3e69d5ed3c2191",
+          "message": "feat(eloquent): suppress unused-method on legacy scopeXxx() methods #874 (#999)\n\nFollow-up to #874 / #998 (which covered the modern #[Scope] variant).\nSame dispatch problem, older shape: $builder->active() resolves to\n$model->scopeActive(...) via Model::callNamedScope(), which does\n$this->{'scope'.ucfirst($scope)}(...) on the model instance from\nBuilder's foreign scope. Psalm cannot link the call site back to the\nmethod, so PossiblyUnusedMethod (and UnusedMethod under\nfindUnusedCode=true) fires on every legacy scope.\n\nDetection requires both the lowercase-keyed name to start with `scope`\nAND the cased_name to have an uppercase ASCII letter at index 5 -\nthis matches Laravel's `ucfirst()` resolution and rejects names like\n`scopeactive` (unreachable) and a literal `scope()` method.\n\nVisibility routing mirrors the modern variant: private stays flagged\nbecause a private subclass override cannot be dispatched from\nModel::callNamedScope() in the parent's scope and would fatal.\n\nThe accompanying PHPT follows the smoke pattern of the modern sibling;\nlock-in under findUnusedCode remains deferred to #869.",
+          "timestamp": "2026-05-22T22:16:40+02:00",
+          "tree_id": "08d34faff9a14e451c23c3c1347d19ed70d0c7bb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b39d43beeb275e0e0c03fa430a3e69d5ed3c2191"
+        },
+        "date": 1779481175258,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.72,
+            "range": "± 0.41",
             "unit": "s"
           },
           {
