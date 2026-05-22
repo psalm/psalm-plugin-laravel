@@ -208,6 +208,39 @@ PHP,
     /**
      * @return iterable<string, array{string}>
      */
+    public static function mixedNumericOperands(): iterable
+    {
+        // `inferArithmetic()` accepts float-flavoured operands on either side
+        // and on both sides. All three shapes must still widen to `int|float`.
+        yield 'int + float' => ['1 + 2.5'];
+        yield 'float + int' => ['1.5 + 2'];
+        yield 'float * float' => ['1.5 * 2.5'];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('mixedNumericOperands')]
+    public function body_infer_arithmetic_accepts_mixed_numeric_operands(string $expression): void
+    {
+        $result = $this->buildInferredFromBody("static fn () => {$expression}");
+        $this->assertSame('float|int', $result->return_type?->getId());
+    }
+
+    #[Test]
+    public function body_infer_arithmetic_bails_on_non_numeric_operand(): void
+    {
+        // Without `isNumericUnion()` gate, `1 + 'x'` would widen to `int|float`
+        // — but runtime is a `TypeError`. The inferArithmetic docblock calls
+        // out the operand inference as the load-bearing numeric gate; this
+        // test locks it in so any "simplification" of that gate fails loud.
+        $this->assertBailsForBody(<<<'PHP'
+<?php
+$register(static fn () => 1 + 'x');
+PHP);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
     public static function arithmeticOperators(): iterable
     {
         // All six arithmetic operators share a single branch in
@@ -242,6 +275,20 @@ PHP,
     }
 
     #[Test]
+    public function body_infer_concat_bails_on_non_string_operand(): void
+    {
+        // PHP coerces `'a' . 1` to `'a1'` at runtime, but `inferConcat()`
+        // requires both operands to be single string literals — the gate
+        // exists so we don't accidentally fold types Psalm renders as
+        // `numeric-string` or `int`. Lock it in so future "obvious" relaxation
+        // doesn't silently produce wrong literals.
+        $this->assertBailsForBody(<<<'PHP'
+<?php
+$register(static fn () => 'a' . 1);
+PHP);
+    }
+
+    #[Test]
     public function body_infer_bails_on_unary_minus(): void
     {
         // PhpParser models `-1` as `UnaryMinus(Int_(1))` — not a literal
@@ -256,7 +303,7 @@ PHP);
     }
 
     #[Test]
-    public function body_infer_accepts_throw_only_terminator(): void
+    public function body_infer_bails_on_throw_only_terminator(): void
     {
         // `bodyAlwaysTerminates()` considers a `Stmt\Expression(Expr\Throw_)`
         // tail as terminating, but there is no `return` to feed the inference

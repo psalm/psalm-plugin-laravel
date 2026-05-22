@@ -71,14 +71,13 @@ MacroFixtureBag::macro('astDocblockArrowFnTest', static fn(int $count) => \str_r
 // is the only path that can produce a narrower return type.
 
 // Literal string: `fn () => 'hello'` should surface as `'hello'`.
-MacroFixtureBag::macro('astBodyInferLiteralStringTest', static fn(): string => 'hello');
+MacroFixtureBag::macro('astBodyInferLiteralStringTest', static fn() => 'hello');
 
 // Multi-return union: each branch is a literal, the result is their union.
-MacroFixtureBag::macro('astBodyInferUnionTest', static function (): int|string {
+MacroFixtureBag::macro('astBodyInferUnionTest', static function () {
     if (\random_int(0, 1) === 0) {
         return 1;
     }
-
     return 'x';
 });
 
@@ -87,7 +86,11 @@ MacroFixtureBag::macro('astBodyInferUnionTest', static function (): int|string {
 // spec change, not a sloppy refactor of `inferExpression()`. Without any
 // source of narrowing, the factory falls back to its null-return path and
 // the caller's reflection-only pseudo-method surfaces `mixed`.
-MacroFixtureBag::macro('astBodyInferBailsOnComplex', static fn(): \stdClass => new \stdClass());
+MacroFixtureBag::macro('astBodyInferBailsOnComplex', static fn() => new \stdClass());
 
-// Concat of two literal strings should fold to a single literal.
-MacroFixtureBag::macro('astBodyInferConcatTest', static fn(): string => 'ab');
+// Concat of two literal strings should fold to a single literal. The fixture
+// MUST keep the `.` operator (not a pre-folded `'ab'`) — rector's
+// `typeDeclarations` set is configured to skip this file, but any future
+// constant-folding pass would defeat the test if it collapses the concat at
+// authoring time. See rector.php skip-path comment.
+MacroFixtureBag::macro('astBodyInferConcatTest', static fn() => 'a' . 'b');
