@@ -88,7 +88,7 @@ final class BodyReturnCollectorVisitor extends NodeVisitorAbstract
         }
 
         if ($node instanceof Node\Stmt\Return_) {
-            if ($node->expr === null) {
+            if (!$node->expr instanceof \PhpParser\Node\Expr) {
                 $this->bailed = true;
                 return NodeVisitor::STOP_TRAVERSAL;
             }

@@ -71,13 +71,14 @@ MacroFixtureBag::macro('astDocblockArrowFnTest', static fn(int $count) => \str_r
 // is the only path that can produce a narrower return type.
 
 // Literal string: `fn () => 'hello'` should surface as `'hello'`.
-MacroFixtureBag::macro('astBodyInferLiteralStringTest', static fn() => 'hello');
+MacroFixtureBag::macro('astBodyInferLiteralStringTest', static fn(): string => 'hello');
 
 // Multi-return union: each branch is a literal, the result is their union.
-MacroFixtureBag::macro('astBodyInferUnionTest', static function () {
+MacroFixtureBag::macro('astBodyInferUnionTest', static function (): int|string {
     if (\random_int(0, 1) === 0) {
         return 1;
     }
+
     return 'x';
 });
 
@@ -86,7 +87,7 @@ MacroFixtureBag::macro('astBodyInferUnionTest', static function () {
 // spec change, not a sloppy refactor of `inferExpression()`. Without any
 // source of narrowing, the factory falls back to its null-return path and
 // the caller's reflection-only pseudo-method surfaces `mixed`.
-MacroFixtureBag::macro('astBodyInferBailsOnComplex', static fn() => new \stdClass());
+MacroFixtureBag::macro('astBodyInferBailsOnComplex', static fn(): \stdClass => new \stdClass());
 
 // Concat of two literal strings should fold to a single literal.
-MacroFixtureBag::macro('astBodyInferConcatTest', static fn() => 'a' . 'b');
+MacroFixtureBag::macro('astBodyInferConcatTest', static fn(): string => 'ab');

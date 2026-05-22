@@ -224,11 +224,11 @@ final class ClosureTypeFactory
         // existing precedence already wins — body inference would at best
         // duplicate work, at worst contradict the explicit declaration.
         $bodyReturn = null;
-        if ($docblock === null && $nativeReturn === null && $node !== null) {
+        if ($docblock === null && !$nativeReturn instanceof \Psalm\Type\Union && $node !== null) {
             $bodyReturn = self::inferReturnFromBody($node);
         }
 
-        if ($docblock === null && $bodyReturn === null) {
+        if ($docblock === null && !$bodyReturn instanceof \Psalm\Type\Union) {
             return null;
         }
 
@@ -294,6 +294,7 @@ final class ClosureTypeFactory
             if (!$inferred instanceof Union) {
                 return null;
             }
+
             $unions[] = $inferred;
         }
 
@@ -561,6 +562,7 @@ final class ClosureTypeFactory
                 if ($keyExpr->value >= $nextAutoIndex) {
                     $nextAutoIndex = $keyExpr->value + 1;
                 }
+
                 continue;
             }
 
