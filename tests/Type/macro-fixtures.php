@@ -63,7 +63,7 @@ MacroFixtureBag::macro(
     /**
      * @return Collection<int, string>
      */
-    static function () {
+    static function (): \Illuminate\Support\Collection {
         return new Collection(['a', 'b']);
     },
 );

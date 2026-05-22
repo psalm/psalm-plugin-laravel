@@ -294,7 +294,7 @@ final class MacroRegistry
         // generic templates — none of which reflection can surface. Falls back to
         // reflection-based extraction when storage is unavailable (no codebase,
         // closure source not scanned, or multiple closures share the start line).
-        if ($callable instanceof \Closure && $codebase !== null) {
+        if ($callable instanceof \Closure && $codebase instanceof \Psalm\Codebase) {
             $closureStorage = self::recoverClosureStorage($reflection, $codebase);
             if ($closureStorage instanceof FunctionLikeStorage) {
                 return self::buildDefinitionFromStorage(
@@ -393,6 +393,7 @@ final class MacroRegistry
         if (!\is_string($resolved)) {
             return null;
         }
+
         $normalisedPath = \strtolower(\str_replace(['/', '\\'], \DIRECTORY_SEPARATOR, $resolved));
 
         if (!$codebase->file_storage_provider->has($normalisedPath)) {
