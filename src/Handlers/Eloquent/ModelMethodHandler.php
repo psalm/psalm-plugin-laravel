@@ -334,10 +334,9 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
             $columnType = DynamicWhereResolver::resolveColumnType($codebase, $modelClass, $originalMethodName);
 
-            // Queue typed param hand-off when the call is single-segment + scalar + 1-arg.
-            // Path stays close to MethodForwardingHandler::resolveDynamicWhereOnRelation
-            // for the Path-2 (direct __call) gating: only enqueue on instance/static call
-            // forms that the params provider will reach, with exactly one argument.
+            // Queue typed param hand-off (issue #928) only when the producer/consumer
+            // contract holds: single-segment scalar column + exactly one argument. Mirrors
+            // {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler::resolveDynamicWhereOnRelation}.
             if ($columnType instanceof Union) {
                 $args = $stmt->getArgs();
 

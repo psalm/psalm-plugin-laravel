@@ -50,7 +50,7 @@ final class DynamicWhereResolver
      * uppercase letter. Mirrors `Illuminate\Database\Query\Builder::dynamicWhere`'s
      * `(And|Or)(?=[A-Z])`; we use a non-capturing group since we don't need the connector.
      */
-    public const SEGMENT_SPLIT_PATTERN = '/(?:And|Or)(?=[A-Z])/';
+    private const SEGMENT_SPLIT_PATTERN = '/(?:And|Or)(?=[A-Z])/';
 
     private static bool $enabled = false;
 
@@ -214,7 +214,7 @@ final class DynamicWhereResolver
             return false;
         }
 
-        return self::backtrackMatch(\substr($methodNameLower, 5), \array_keys($normalized), expectingConnector: false);
+        return self::partitionExists(\substr($methodNameLower, 5), \array_keys($normalized));
     }
 
     /**
@@ -386,39 +386,62 @@ final class DynamicWhereResolver
     }
 
     /**
-     * Recursive backtracking matcher: try to consume the remaining suffix as a chain of
-     * normalised property names joined by `and`/`or` connectors.
+     * Iterative DP partition check: can the suffix be consumed as `prop( (and|or) prop )*`?
+     *
+     * `$reachable[$offset]` is a 2-bit mask:
+     *   - bit 0 = offset reached in "expecting property" state
+     *   - bit 1 = offset reached in "expecting connector" state
+     *
+     * Equivalent to the recursive backtracker but with O(n * |props|) worst case instead
+     * of exponential — guards against adversarial property sets with overlapping prefixes
+     * (e.g. `a`, `aa`, `aaa`) feeding a long `where{...}` call.
      *
      * @param list<string> $normalizedProps
      * @psalm-pure
      */
-    private static function backtrackMatch(
-        string $suffix,
-        array $normalizedProps,
-        bool $expectingConnector,
-    ): bool {
-        if ($suffix === '') {
-            return $expectingConnector;
+    private static function partitionExists(string $suffix, array $normalizedProps): bool
+    {
+        $n = \strlen($suffix);
+
+        if ($n === 0) {
+            return false;
         }
 
-        if ($expectingConnector) {
-            if (\str_starts_with($suffix, 'and') && self::backtrackMatch(\substr($suffix, 3), $normalizedProps, expectingConnector: false)) {
-                return true;
-            }
+        $reachable = \array_fill(0, $n + 1, 0);
+        $reachable[0] = 1; // start: expecting a property at offset 0
 
-            return \str_starts_with($suffix, 'or') && self::backtrackMatch(\substr($suffix, 2), $normalizedProps, expectingConnector: false);
-        }
+        for ($i = 0; $i <= $n; $i++) {
+            $state = $reachable[$i];
 
-        foreach ($normalizedProps as $prop) {
-            if ($prop === '' || !\str_starts_with($suffix, $prop)) {
+            if ($state === 0) {
                 continue;
             }
 
-            if (self::backtrackMatch(\substr($suffix, \strlen($prop)), $normalizedProps, expectingConnector: true)) {
-                return true;
+            if (($state & 1) !== 0) {
+                foreach ($normalizedProps as $prop) {
+                    $len = \strlen($prop);
+
+                    if ($len === 0 || $i + $len > $n) {
+                        continue;
+                    }
+
+                    if (\substr_compare($suffix, $prop, $i, $len) === 0) {
+                        $reachable[$i + $len] |= 2;
+                    }
+                }
+            }
+
+            if (($state & 2) !== 0) {
+                if ($i + 3 <= $n && \substr_compare($suffix, 'and', $i, 3) === 0) {
+                    $reachable[$i + 3] |= 1;
+                }
+
+                if ($i + 2 <= $n && \substr_compare($suffix, 'or', $i, 2) === 0) {
+                    $reachable[$i + 2] |= 1;
+                }
             }
         }
 
-        return false;
+        return ($reachable[$n] & 2) !== 0;
     }
 }
