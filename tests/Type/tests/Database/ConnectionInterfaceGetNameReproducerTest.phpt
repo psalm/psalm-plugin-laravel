@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Reproducer (documented broken behavior): `$query->getConnection()->getName()`.
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/974
  *
  * From invoiceninja's app/Console/Commands/Elastic/ImportElasticSearchableModels.php:
  *
