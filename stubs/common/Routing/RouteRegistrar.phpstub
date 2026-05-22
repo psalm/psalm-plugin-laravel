@@ -1,0 +1,38 @@
+<?php
+
+namespace Illuminate\Routing;
+
+/**
+ * Laravel declares `middleware` only via class-level `@method` on `RouteRegistrar`
+ * (the runtime resolution lives in `RouteRegistrar::__call`, which collects variadic
+ * strings via `is_array($parameters[0]) ? $parameters[0] : $parameters`). The source
+ * `@method ... middleware(array|string|null $middleware)` is single-arg, so calls like
+ * `$registrar->middleware('a', 'b', 'c')` raise `TooManyArguments`.
+ *
+ * We expose a concrete `middleware()` method here with `@psalm-variadic` so chained
+ * calls on the registrar accept the runtime-valid variadic form. The matching facade
+ * fix lives in {@see stubs/common/Support/Facades/Route.phpstub}; the registrar form
+ * is patched here because chains like `Route::prefix('foo')->middleware('a', 'b')`
+ * dispatch through the RouteRegistrar pseudo-method table.
+ *
+ * @method \Illuminate\Routing\RouteRegistrar middleware(string|array|null ...$middleware)
+ */
+class RouteRegistrar
+{
+    /**
+     * The broad `string|array<string>|null` param is intentional. With `@psalm-variadic`
+     * each variadic slot accepts this union, matching the runtime forms
+     * `middleware('a', 'b', 'c')`, `middleware('a')`, `middleware(['a', 'b'])`, and
+     * `middleware(null)`. Tightening the type to `string` would reject the documented
+     * array form; tightening it to drop `null` would reject the no-op `middleware(null)`
+     * call. Mixed forms like `middleware(['a'], 'b')` slip through this typing but
+     * Laravel's `__call` silently drops the second arg at runtime; no useful Psalm
+     * signature can express that asymmetry, so we mirror Laravel's permissive surface.
+     *
+     * @param string|array<string>|null $middleware
+     * @return $this
+     *
+     * @psalm-variadic
+     */
+    public function middleware($middleware = null) {}
+}
