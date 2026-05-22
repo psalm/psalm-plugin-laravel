@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779434679111,
+  "lastUpdate": 1779439382458,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5242,6 +5242,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.98,
             "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "a420452c4db2e780488db36292034903995956e7",
+          "message": "refactor(routing): narrow middleware array value to string|null #972\n\nRestore `array<array-key, string|null>` on the middleware stub param\nafter the temporary broadening to plain `array`. The inner `null`\nslot matches Laravel's runtime: `RouteRegistrar::attribute()` runs\n`array_filter(Arr::wrap($value))` before the per-element string\ncast, so null elements are silently dropped.\n\nThe common Jetstream pattern\n`Route::middleware(['auth', config('jetstream.auth_session'), 'verified'])`\ncurrently raises `MixedArgumentTypeCoercion` because `config(...)`\nis `mixed`. The right layer for that signal is the config-helper\nhandler (a planned follow-up): once `config('jetstream.auth_session')`\nnarrows to `string|null`, the literal fits cleanly into\n`array<array-key, string|null>` and the finding clears without\nneeding any change here. Keeping the value narrowing now also\npreserves the ability to flag genuine `int`/`bool`/object misuse\nat middleware call sites.",
+          "timestamp": "2026-05-22T10:01:06+02:00",
+          "tree_id": "3b4f3240049a912c1c749d91f84b0935ac007f23",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a420452c4db2e780488db36292034903995956e7"
+        },
+        "date": 1779439381459,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.67,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
