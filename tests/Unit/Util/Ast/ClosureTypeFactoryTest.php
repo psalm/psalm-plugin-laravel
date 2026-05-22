@@ -8,12 +8,11 @@ use Closure;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\Config;
-use Psalm\Internal\EventDispatcher;
 use Psalm\LaravelPlugin\Util\Ast\ClosureDocblockIndexVisitor;
 use Psalm\LaravelPlugin\Util\Ast\ClosureTypeFactory;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Union;
+use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;
 
 /**
  * Unit coverage for the stateless AST-scan path that recovers `@param` /
@@ -37,34 +36,10 @@ use Psalm\Type\Union;
 #[CoversClass(ClosureDocblockIndexVisitor::class)]
 final class ClosureTypeFactoryTest extends TestCase
 {
+    use InitializesPsalmConfigSingleton;
+
     /** @var list<string> */
     private array $tempFiles = [];
-
-    public static function setUpBeforeClass(): void
-    {
-        // PR #994 literal-string body inference constructs `TLiteralString`
-        // directly, which reads `max_string_length` from Psalm's singleton
-        // {@see Config}. Production callers always have a `Config` (the
-        // plugin runs inside Psalm), but the unit-test harness does not
-        // bootstrap one. Populate just enough to make the literal-string
-        // path succeed — heavier alternatives (loading `tests/Type/psalm.xml`
-        // through `Config::loadFromXMLFile`) pull in schema validation and
-        // composer-classmap warmups that aren't relevant here.
-        $rc = new \ReflectionClass(Config::class);
-        $instance = $rc->newInstanceWithoutConstructor();
-        $rc->getProperty('instance')->setValue(null, $instance);
-        $rc->getProperty('eventDispatcher')->setValue($instance, new EventDispatcher());
-    }
-
-    public static function tearDownAfterClass(): void
-    {
-        // Restore the "no Config initialized" precondition other unit tests
-        // (notably `NoEnvOutsideConfigHandlerTest`) rely on. Without this
-        // teardown the singleton planted in setUpBeforeClass leaks across
-        // test classes within one PHPUnit run, masking real "config not yet
-        // bootstrapped" guard tests.
-        (new \ReflectionClass(Config::class))->getProperty('instance')->setValue(null, null);
-    }
 
     #[\Override]
     protected function tearDown(): void
@@ -274,15 +249,10 @@ PHP,
         // `UnaryMinus`, so signed-literal closures bail. Lock that in so a
         // later "obvious" widening doesn't silently start producing `-1`
         // (or worse, `1`) for sloppy callers that wrote `fn() => -1`.
-        $file = $this->writeTempFile(
-            <<<'PHP'
+        $this->assertBailsForBody(<<<'PHP'
 <?php
 $register(static fn () => -1);
-PHP,
-        );
-        $closure = $this->loadClosureFromFile($file);
-
-        $this->assertNull(ClosureTypeFactory::fromClosureObject($closure));
+PHP);
     }
 
     #[Test]
@@ -292,15 +262,10 @@ PHP,
         // tail as terminating, but there is no `return` to feed the inference
         // engine — so we still bail to `null`, just on a different code path
         // than `bodyAlwaysTerminates() === false`. Lock both branches in.
-        $file = $this->writeTempFile(
-            <<<'PHP'
+        $this->assertBailsForBody(<<<'PHP'
 <?php
 $register(static function () { throw new \RuntimeException(); });
-PHP,
-        );
-        $closure = $this->loadClosureFromFile($file);
-
-        $this->assertNull(ClosureTypeFactory::fromClosureObject($closure));
+PHP);
     }
 
     #[Test]
@@ -313,17 +278,12 @@ PHP,
         // Documenting the limit here ensures a future relaxation (e.g.
         // teaching `bodyAlwaysTerminates()` to peek inside `try/catch`)
         // is a deliberate change, not a silent drift.
-        $file = $this->writeTempFile(
-            <<<'PHP'
+        $this->assertBailsForBody(<<<'PHP'
 <?php
 $register(static function () {
     try { return 1; } catch (\Throwable) { return 2; }
 });
-PHP,
-        );
-        $closure = $this->loadClosureFromFile($file);
-
-        $this->assertNull(ClosureTypeFactory::fromClosureObject($closure));
+PHP);
     }
 
     #[Test]
@@ -386,31 +346,21 @@ PHP;
         // Variable returns are out of scope (the spec explicitly excludes
         // variable type-flow). Without docblock and without a native return,
         // body inference bails and the factory returns `null`.
-        $file = $this->writeTempFile(
-            <<<'PHP'
+        $this->assertBailsForBody(<<<'PHP'
 <?php
 $register(static function () { $x = 1; return $x; });
-PHP,
-        );
-        $closure = $this->loadClosureFromFile($file);
-
-        $this->assertNull(ClosureTypeFactory::fromClosureObject($closure));
+PHP);
     }
 
     #[Test]
     public function body_infer_bails_on_unhandled_node(): void
     {
-        // Method call inside the return is outside the rule table — the
+        // Property fetch inside the return is outside the rule table — the
         // factory bails the entire inference rather than guess.
-        $file = $this->writeTempFile(
-            <<<'PHP'
+        $this->assertBailsForBody(<<<'PHP'
 <?php
 $register(static fn () => (new \stdClass())->foo);
-PHP,
-        );
-        $closure = $this->loadClosureFromFile($file);
-
-        $this->assertNull(ClosureTypeFactory::fromClosureObject($closure));
+PHP);
     }
 
     #[Test]
@@ -420,15 +370,10 @@ PHP,
         // native) wins. Body inference is suppressed, and since the closure
         // also has no docblock the factory falls back to `null` — caller
         // keeps its reflection-only pseudo-method path.
-        $file = $this->writeTempFile(
-            <<<'PHP'
+        $this->assertBailsForBody(<<<'PHP'
 <?php
 $register(static function (): int { return 7; });
-PHP,
-        );
-        $closure = $this->loadClosureFromFile($file);
-
-        $this->assertNull(ClosureTypeFactory::fromClosureObject($closure));
+PHP);
     }
 
     #[Test]
@@ -438,19 +383,14 @@ PHP,
         // closing brace without an explicit `return` — PHP returns `null` in
         // that case, and inferring just the explicit return value would
         // silently disagree with runtime.
-        $file = $this->writeTempFile(
-            <<<'PHP'
+        $this->assertBailsForBody(<<<'PHP'
 <?php
 $register(static function () {
     if (\random_int(0, 1) === 0) {
         return 1;
     }
 });
-PHP,
-        );
-        $closure = $this->loadClosureFromFile($file);
-
-        $this->assertNull(ClosureTypeFactory::fromClosureObject($closure));
+PHP);
     }
 
     #[Test]
@@ -490,6 +430,19 @@ PHP,
         $this->assertInstanceOf(TClosure::class, $result, 'Body inference should have produced a TClosure');
 
         return $result;
+    }
+
+    /**
+     * Companion to {@see self::buildInferredFromBody()} for the bail tests.
+     * Same fixture-load pipeline, but asserts the factory returned `null`
+     * (caller falls back to its reflection-only pseudo-method path).
+     */
+    private function assertBailsForBody(string $fixturePhp): void
+    {
+        $file = $this->writeTempFile($fixturePhp);
+        $closure = $this->loadClosureFromFile($file);
+
+        $this->assertNull(ClosureTypeFactory::fromClosureObject($closure));
     }
 
     #[Test]

@@ -57,6 +57,14 @@ use Psalm\Type\Union;
 final class ClosureTypeFactory
 {
     /**
+     * Constant return type of {@see self::inferArithmetic()}. The value never
+     * depends on operands (see that method's docblock for why), so building
+     * it once and re-handing the same `Union` saves a `combineUnionTypes` +
+     * `TypeCombiner::combine` call per arithmetic body return.
+     */
+    private static ?Union $intOrFloatUnion = null;
+
+    /**
      * Build a {@see TClosure} from a runtime closure object.
      *
      * Public shape matches PHPStan's `ClosureTypeFactory::fromClosureObject()`:
@@ -215,8 +223,8 @@ final class ClosureTypeFactory
      */
     private static function buildClosureType(\ReflectionFunctionAbstract $reflection, ?array $recovered): ?TClosure
     {
-        $docblock = $recovered['docblock'] ?? null;
-        $node = $recovered['node'] ?? null;
+        $docblock = $recovered === null ? null : $recovered['docblock'];
+        $node = $recovered === null ? null : $recovered['node'];
         $nativeReturn = self::reflectionTypeToUnion($reflection->getReturnType());
 
         // Body-flow inference (PR #994) only runs when both the docblock and
@@ -489,7 +497,7 @@ final class ClosureTypeFactory
             return null;
         }
 
-        return Type::combineUnionTypes(Type::getInt(), Type::getFloat());
+        return self::$intOrFloatUnion ??= Type::combineUnionTypes(Type::getInt(), Type::getFloat());
     }
 
     /**
