@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779439382458,
+  "lastUpdate": 1779441325163,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5277,6 +5277,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 26.67,
             "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b87ff0942c0176804ec831ee75cf9e2544d4e083",
+          "message": "Use `Macroable` return type info from docblock Psalm storage (#989)\n\n* feat(magic): recover docblock-aware closure types from Psalm storage #899\n\nImplement issue #899 idea #1 (Strategy C for closure macros). For Closure\ncallables registered via `Macroable::macro()`, look up the closure in Psalm's\npre-scanned `FunctionLikeStorage` by file + line and copy docblock-merged\nparam/return Unions into the synthesised pseudo-method. Closures whose source\nPsalm has not scanned (vendor outside projectFiles, eval'd code, or multiple\nclosures sharing a start line) fall back to the existing reflection-based\nextraction unchanged.\n\nCoverage:\n- Closures registered in App\\Providers\\*::boot() are scanned as projectFiles.\n- Closures registered in autoloader files (e.g. test fixtures) are picked up\n  via `Config::collectPredefinedFunctions` -> `addFileToDeepScan`.\n- Closures registered in stubs are scanned as part of the stub pass.\n\nDefensive `clone` on `FunctionLikeParameter` preserves the public mutable\nfields (`out_type`, `default_type`, `attributes`, `has_docblock_type`, etc.)\nthat the analyser reads through but the 7-arg constructor would silently drop.\n\nPlumbing: `MacroRegistry::init` now takes an optional `Codebase` parameter so\nunit tests can continue to construct the registry without booting Psalm. The\ntest-only seam (`overrideForTesting`) is unchanged.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-22T11:12:39+02:00",
+          "tree_id": "d8dff75d205a209861ce9aad5b09d13e4e8cd4d8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b87ff0942c0176804ec831ee75cf9e2544d4e083"
+        },
+        "date": 1779441324540,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.01,
+            "range": "± 0.38",
             "unit": "s"
           },
           {
