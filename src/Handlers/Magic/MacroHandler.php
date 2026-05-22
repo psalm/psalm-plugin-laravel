@@ -88,6 +88,16 @@ use Psalm\Storage\MethodStorage;
  * because `Builder<User>` is the direct dispatch target.
  *
  * TODO Strategy C / follow-up:
+ * - **Docblock-aware closure types** (issue #899 idea #1): IMPLEMENTED for closures
+ *   whose source Psalm has scanned. {@see MacroRegistry::recoverClosureStorage()}
+ *   looks up the closure in Psalm's pre-scanned {@see \Psalm\Storage\FunctionLikeStorage}
+ *   by file + line and lifts docblock-merged `@return` / `@param` types into the
+ *   pseudo-method. Coverage: autoloader files
+ *   ({@see \Psalm\Config::collectPredefinedFunctions} routes them through
+ *   `addFileToDeepScan`), projectFiles, and stubs. Out of scope: vendor closures
+ *   when those paths sit outside `<projectFiles>`, eval'd code, and the
+ *   Testbench-fallback case where the analysed package's own provider is never
+ *   booted (covered by the AST-scan follow-up below).
  * - **AST scan** (Strategy C proper): cover macros registered in the analysed
  *   package's own provider when running on a package without `bootstrap/app.php`
  *   (Testbench fallback path — issue #766). Walk every literal
@@ -203,7 +213,7 @@ final class MacroHandler implements AfterCodebasePopulatedInterface
     {
         $codebase = $event->getCodebase();
 
-        MacroRegistry::init($codebase->progress);
+        MacroRegistry::init($codebase->progress, $codebase);
 
         $macroableClasses = MacroRegistry::getKnownMacroableClasses();
         if ($macroableClasses === []) {
