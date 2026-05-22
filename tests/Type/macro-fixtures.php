@@ -24,10 +24,49 @@ declare(strict_types=1);
 require_once __DIR__ . '/macro-fixtures-class.phpstub';
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureBag;
 
 MacroFixtureBag::macro('shoutTest', static fn(): string => 'OK');
 MacroFixtureBag::macro('countCharsTest', static fn(string $needle): int => 0);
+
+// Locks in coverage for issue #899 idea #1: docblock-aware closure type extraction.
+// The closure has NO native return type but a `@return non-empty-string` docblock,
+// and `@param positive-int $count` narrows what reflection's plain `int` would surface.
+// Reflection cannot see the docblock at all — only Psalm's pre-scanned
+// {@see \Psalm\Storage\FunctionLikeStorage} carries the parsed `@param` / `@return`
+// Union types. `MacroRegistry::recoverClosureStorage()` looks them up by file + line
+// and `MacroRegistry::buildDefinitionFromStorage()` copies the docblock Unions into
+// the pseudo-method's params and return type.
+//
+// Without docblock recovery, the registered macro would surface as `function (int): mixed`
+// because the closure declares no native return type. With recovery, it surfaces as
+// `function (positive-int): non-empty-string`.
+MacroFixtureBag::macro(
+    'docblockReturnTest',
+    /**
+     * @param positive-int $count
+     * @return non-empty-string
+     */
+    static function (int $count) {
+        return \str_repeat('x', $count);
+    },
+);
+
+// Generic return-type recovery — the closure's `@return Collection<int, string>`
+// docblock cannot be expressed natively (PHP has no generics), so reflection sees
+// `Collection` at best and `mixed` at worst. The plugin lifts the full generic
+// shape from Psalm's storage so chained calls retain `Collection<int, string>`
+// rather than degrading to `mixed` or the raw class.
+MacroFixtureBag::macro(
+    'docblockGenericTest',
+    /**
+     * @return Collection<int, string>
+     */
+    static function () {
+        return new Collection(['a', 'b']);
+    },
+);
 
 // Fluent macro returning `static` — locks in issue #899 §C signal 1
 // (fluent return narrowing). Macroable rebinds the closure to the calling
