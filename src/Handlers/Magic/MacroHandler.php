@@ -104,9 +104,23 @@ use Psalm\Storage\MethodStorage;
  *   redirects through the mixin path before consulting the host's pseudo-methods),
  *   and risks `self`/`static` mis-expansion in the macro signature. Tracked as a
  *   follow-up — needs a Psalm-side change or a different lookup hook.
- * - **Fluent return narrowing**: a macro whose body returns `$this` should narrow
- *   to the calling instance type (`@psalm-this-out` / `self_out_type`). Out of
- *   scope for the foundation.
+ * - **Fluent return narrowing**: a closure registered as a macro with an
+ *   explicit `: static` (or `: $this`) native return type ALREADY narrows to
+ *   the calling instance type. `MacroRegistry` preserves the `static` token in
+ *   the parsed return type for Closure callables (Macroable rebinds the
+ *   closure via `bindTo($this, static::class)` so the binding semantics
+ *   match), and `MissingMethodCallHandler::handleMagicMethod()` runs the
+ *   pseudo-method's `return_type` through `TypeExpander::expandUnion` with the
+ *   lhs caller as `$static_class_type`. Locked in by
+ *   `tests/Type/tests/Macros/MacroFluentStaticTest.phpt`. What is still out of
+ *   scope: closures with NO native return type whose body is structurally
+ *   `return $this;`, and `@return static` / `@psalm-return $this` docblock-only
+ *   annotations. Both require Strategy C (AST scan) to reach inside the
+ *   closure. `MethodStorage::$self_out_type` would be the natural plumbing
+ *   point but is NOT consulted on pseudo-method dispatch in Psalm 7 (read only
+ *   by the real-method dispatch path — `ExistingAtomicMethodCallAnalyzer` and
+ *   `NewAnalyzer`), so it cannot substitute for the `return_type`-driven
+ *   narrowing path here.
  * - **Memory footprint**: each propagated macro materialises two `MethodStorage`
  *   instances on every descendant class (one per `pseudo_methods` array). Scales
  *   roughly as `descendants × macros × 2`. Acceptable for the foundation's typical

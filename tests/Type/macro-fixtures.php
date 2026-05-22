@@ -29,6 +29,27 @@ use Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureBag;
 MacroFixtureBag::macro('shoutTest', static fn(): string => 'OK');
 MacroFixtureBag::macro('countCharsTest', static fn(string $needle): int => 0);
 
+// Fluent macro returning `static` — locks in issue #899 §C signal 1
+// (fluent return narrowing). Macroable rebinds the closure to the calling
+// instance via `bindTo($this, static::class)`, so `static` resolves to the
+// caller's runtime class. Psalm's pseudo-method dispatch expands a
+// `TNamedObject('static')` in the return type against the lhs caller, so the
+// registry must preserve the literal `static` token rather than flattening
+// it to the declaring-class FQCN.
+//
+// Use a non-`static` closure so `Macroable::__call` can `bindTo($this, ...)`
+// successfully — a `static fn(): static => $this` closure can't rebind to a
+// non-null `$this` (PHP raises a warning, `bindTo` returns null), forcing the
+// `bindTo(null, static::class)` fallback. The current shape avoids that
+// detour while still exercising the `: static` return-type expansion.
+MacroFixtureBag::macro(
+    'fluentTest',
+    function (): static {
+        /** @var static $this */
+        return $this;
+    },
+);
+
 // Locks in coverage for the issue #648 motivating case: a Builder macro
 // registered at runtime should resolve when reached through the typed
 // `Customer::query()->testBuilderMacro()` path. Builder is a Macroable owner,

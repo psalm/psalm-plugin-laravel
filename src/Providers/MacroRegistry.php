@@ -283,6 +283,17 @@ final class MacroRegistry
         //   class. The conservative-but-correct approximation is `get_class($obj)`. For
         //   `[Class::class, 'method']` and `'Class::method'` string callables there's no
         //   instance to bind to, so `static` collapses to the declaring class.
+        //
+        // **Why this branch deliberately excludes Closure callables.** Macroable's
+        // `__call` rebinds closure macros via `bindTo($this, static::class)`, so
+        // `static` in a closure body resolves to the call site's class, not the
+        // declaring class. Leaving `$selfHostClass`/`$staticHostClass` null for
+        // closures keeps the literal `static` token in the parsed return type
+        // (`TNamedObject('static')`), which Psalm's pseudo-method dispatch then
+        // expands against the lhs caller via `TypeExpander::expandUnion` —
+        // delivering fluent narrowing on `: static` closure return types. Issue
+        // #899 §C signal 1; locked in by
+        // `tests/Type/tests/Macros/MacroFluentStaticTest.phpt`.
         $selfHostClass = null;
         $staticHostClass = null;
         if ($reflection instanceof \ReflectionMethod) {
