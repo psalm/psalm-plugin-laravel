@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779428069946,
+  "lastUpdate": 1779428375427,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5172,6 +5172,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.05,
             "range": "± 0.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f721a75803c47452242efb28655ac4287d7051cb",
+          "message": "Merge pull request #980 from psalm/worktree-927-multi-segment-dynamic-where",
+          "timestamp": "2026-05-22T07:36:47+02:00",
+          "tree_id": "19131904c9ffa13e80e026919c1cdcc760a99344",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f721a75803c47452242efb28655ac4287d7051cb"
+        },
+        "date": 1779428374709,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.66,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
