@@ -65,8 +65,11 @@ use Psalm\Type\Union;
 final class BuilderFindMixedHandler implements MethodReturnTypeProviderInterface
 {
     private const METHOD_FIND = 'find';
+
     private const METHOD_FIND_OR_FAIL = 'findorfail';
+
     private const METHOD_FIND_OR_NEW = 'findornew';
+
     private const METHOD_FIND_OR = 'findor';
 
     /**
@@ -138,7 +141,7 @@ final class BuilderFindMixedHandler implements MethodReturnTypeProviderInterface
 
         $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
         $idType = $nodeTypeProvider->getType($args[0]->value);
-        if ($idType === null || !$idType->isMixed()) {
+        if (!$idType instanceof \Psalm\Type\Union || !$idType->isMixed()) {
             return null;
         }
 
@@ -226,7 +229,7 @@ final class BuilderFindMixedHandler implements MethodReturnTypeProviderInterface
             }
 
             $argType = $nodeTypeProvider->getType($args[$argIndex]->value);
-            if ($argType === null) {
+            if (!$argType instanceof \Psalm\Type\Union) {
                 continue;
             }
 
@@ -234,7 +237,8 @@ final class BuilderFindMixedHandler implements MethodReturnTypeProviderInterface
                 if (!$atomic instanceof TClosure) {
                     continue;
                 }
-                if ($atomic->return_type !== null) {
+
+                if ($atomic->return_type instanceof \Psalm\Type\Union) {
                     return $atomic->return_type;
                 }
             }
