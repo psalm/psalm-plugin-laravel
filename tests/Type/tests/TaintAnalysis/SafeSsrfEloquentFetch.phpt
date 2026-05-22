@@ -31,8 +31,10 @@ class StatusModel extends \Illuminate\Database\Eloquent\Model
     }
 }
 
-// find/findOrFail pass mixed $id into a typed template parameter → MixedArgument needed
-/** @psalm-suppress MixedAssignment, MixedArgument */
+// BuilderFindMixedHandler (#975) collapses find/findOrFail($mixed) to TModel|null / TModel,
+// so the call site no longer raises MixedArgument; only the $id = $request->input('id')
+// assignment needs suppressing.
+/** @psalm-suppress MixedAssignment */
 function noSsrfViaFindOrFail(\Illuminate\Http\Request $request): void
 {
     $id = $request->input('id');
@@ -40,7 +42,7 @@ function noSsrfViaFindOrFail(\Illuminate\Http\Request $request): void
     redirect($status->getRedirectUrl());
 }
 
-/** @psalm-suppress MixedAssignment, MixedArgument */
+/** @psalm-suppress MixedAssignment */
 function noSsrfViaFind(\Illuminate\Http\Request $request): void
 {
     $id = $request->input('id');

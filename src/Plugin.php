@@ -170,6 +170,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderScopeHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/BuilderPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderFindMixedHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderFindMixedHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\CustomCollectionHandler::class);
 
         require_once __DIR__ . '/Handlers/Collections/CollectionFilterHandler.php';
