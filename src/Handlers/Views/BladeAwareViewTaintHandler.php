@@ -72,18 +72,6 @@ use Psalm\Type\Union;
  *    reachable from the receiver Union only by walking
  *    `taint_flow_graph->forward_edges` on every method call — too expensive
  *    for the hot path. Deferred until real-world apps surface the gap.
- *  - `Mailable::with($key, $value)` chained onto `Mailable::view(...)` /
- *    `Mailable::markdown(...)` / `Mailable::text(...)`. `Mailable::view`,
- *    `markdown`, `text` ARE registered as direct sink sites, but the
- *    receiver-walk does not recognise their return-`$this` chain shape, and
- *    `Mailable::with` is NOT registered as a sink site (registration without
- *    receiver-walk support would be a no-op). Users who write
- *    `(new InvoiceMail)->view('mail.invoice')->with('bio', $tainted)` will
- *    have the `view()` call analysed (no data array there) but `with()`
- *    silently miss. PR-6 ships this via a class-gated extension to
- *    `ReceiverViewNameResolver`'s chain-preserving allowlist; the underlying
- *    receiver-walk already handles the `MethodCall` chain shape without a
- *    tracker.
  *  - `View::share()` global view data — runtime-injected across every
  *    subsequent `view()` call, with no per-call site for the dispatcher to
  *    hook.
@@ -682,14 +670,31 @@ final class BladeAwareViewTaintHandler implements
             return;
         }
 
-        $viewName = ReceiverViewNameResolver::resolve($callExpr->var);
+        $viewName = ReceiverViewNameResolver::resolve(
+            $callExpr->var,
+            $spec->extraViewBinders,
+            $spec->recurseThroughUnknownMethods,
+        );
 
         if ($viewName === null) {
-            // Receiver does not name a literal view. Consistent with PR-3's
-            // "view not in map → no sink" policy — silently passing the
-            // whole-data fallback here would create false positives for
-            // common variable-bound view-builder patterns
-            // (`$v = view('home'); $v->with(...)`).
+            // Receiver does not name a literal view. Three causes collapse
+            // here:
+            //  - variable-bound chain
+            //    (`$v = view('home'); $v->with(...)`) — refusing avoids a
+            //    whole-data false positive on the common pattern. PR-5
+            //    evaluated and rejected a NodeTypeProvider tracker; see
+            //    `docs/issues/581-blade-taint-exploration.md` "Key
+            //    decisions during PR-5".
+            //  - Mailable multi-binder chain
+            //    (`view('a')->text('b')->with(...)`) — same soundness
+            //    rule as multi-literal `View::first(['a', 'b'])`. A
+            //    whole-data fallback for this specific shape is deferred
+            //    until the variable-bound gap closes, since the resolver
+            //    currently collapses all three causes to a single null
+            //    return and a fallback would re-introduce false positives
+            //    on the variable-bound case.
+            //  - dynamic view name reaching the chain head.
+            // Coverage gap here is conservative (no sink), not unsound.
             return;
         }
 
@@ -1324,6 +1329,33 @@ final class BladeAwareViewTaintHandler implements
             mergeDataArgIndex: null,
         );
 
+        // `Mailable::with($key, $value)` — same `(key, value)` shape as
+        // `View::with` but with Mailable's view-binders (`view`, `markdown`,
+        // `text`) as additional chain terminals for the receiver-walk. The
+        // dispatcher hands `extraViewBinders` straight to
+        // {@see ReceiverViewNameResolver::resolve()}; the resolver itself
+        // stays class-agnostic, with class gating performed here at
+        // registration (passing the receiver-class FQN into the resolver
+        // was the alternative; keeping it class-agnostic preserves the
+        // pure-AST contract).
+        // `MailMessage::with($line)` (inherited from
+        // `Illuminate\Notifications\Messages\SimpleMessage`; see
+        // vendor/laravel/framework/src/Illuminate/Notifications/Messages/SimpleMessage.php)
+        // is intentionally NOT registered: it has a single-argument
+        // "append a notification text line" semantic, NOT a key/value
+        // view-data binding. Reusing `WithLikeMethodSpec(keyArgIndex=0,
+        // valueArgIndex=1)` would mis-dispatch the `$line` content as a
+        // sink key against whatever view the receiver-walk happened to
+        // resolve — a real false positive, not just a no-op. MailMessage
+        // does declare `view()` / `markdown()` / `text()` returning
+        // `$this`, but its `with()` is not the chained view-data API.
+        $mailableWithSpec = new WithLikeMethodSpec(
+            keyArgIndex: 0,
+            valueArgIndex: 1,
+            extraViewBinders: ['view', 'markdown', 'text'],
+            recurseThroughUnknownMethods: true,
+        );
+
         // `Content::__construct(?$view, ?$html, ?$text, $markdown, $with,
         // ?$htmlString)`. Three view-name slots (view at 0, text at 2,
         // markdown at 3) share the single `$with` data array at index 4.
@@ -1406,17 +1438,20 @@ final class BladeAwareViewTaintHandler implements
             $specs[$classLc . '::text'] = $mailMethodSpec;
         }
 
+        // `Mailable::with` chained onto `Mailable::view(...)` /
+        // `markdown(...)` / `text(...)`. Registered against the concrete
+        // `Illuminate\Mail\Mailable` class only — `MailMessage::with`
+        // (inherited from `SimpleMessage` as a single-arg "append text
+        // line" method, not a key/value view-data binding) is
+        // intentionally excluded; see the spec construction above.
+        $specs[\strtolower(\Illuminate\Mail\Mailable::class) . '::with'] = $mailableWithSpec;
+
         // `Mail\Mailables\Content::__construct` — three view slots, one data
         // slot, dispatched as a single multi-view spec.
         $specs[\strtolower(\Illuminate\Mail\Mailables\Content::class) . '::__construct'] = $contentConstructorSpec;
 
         // Known coverage gaps left for PR-6+:
         //  - Component data flow `<x-foo :bar="$data" />`.
-        //  - `Mailable::with(...)` chained onto `Mailable::view(...)` /
-        //    `markdown(...)` / `text(...)`. Reachable through receiver-walk
-        //    alone once the chain-preserving allowlist in
-        //    {@see ReceiverViewNameResolver} is extended for the Mailable
-        //    receiver class. See `.alies/docs/blade.md` (PR-6 plan).
         //  - `View::share()` global view data — the binding is replayed at
         //    render-time across every subsequent `view()` call from any
         //    caller, so the scanner's per-call dispatch model does not fit.
@@ -1428,6 +1463,13 @@ final class BladeAwareViewTaintHandler implements
         //    the {@see \Psalm\Type\Union} returned by `view()` is reachable
         //    only by walking `taint_flow_graph->forward_edges` on every
         //    method call — too expensive for the hot path. Deferred.
+        //  - Mailable multi-binder chains
+        //    (`view('a')->text('b')->with(...)`): the resolver refuses,
+        //    returning null, so no sink is installed. Whole-data fallback
+        //    would re-introduce false positives on the variable-bound
+        //    Mailable chain pattern that collapses to the same null
+        //    return. Tracked for a follow-up alongside the variable-bound
+        //    gap.
         //  - Caching the safety map across analysis runs — handled in a
         //    follow-up after PR-6 stabilises the map shape.
 
