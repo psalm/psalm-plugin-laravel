@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/929
  * It documents existing issue as is, ideally this test should have zero expected Psalm output.
- * There is https://github.com/psalm/psalm-plugin-laravel/pull/936 but we are looking for a more ellegant solution.
+ * There is https://github.com/psalm/psalm-plugin-laravel/pull/936 but we are looking for a more elegant solution.
  *
  * Tests for SoftDeletingScope-registered macros that are NOT declared as
  * @method static on the SoftDeletes trait: restore() on Builder instances.

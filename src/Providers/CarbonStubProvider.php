@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Providers;
 
 use Composer\InstalledVersions;
+use Psalm\LaravelPlugin\Util\StubFileFinder;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\Progress\Progress;
 
@@ -60,14 +61,37 @@ final class CarbonStubProvider
         ];
 
         foreach ($lazyStubs as $stub) {
-            if (\is_file($stub)) {
-                $registration->addStubFile($stub);
+            $realPath = \realpath($stub);
+
+            if ($realPath !== false) {
+                // realpath() is load-bearing. InstalledVersions::getInstallPath() can return
+                // a path containing `..` segments (e.g. `vendor/composer/../nesbot/carbon`).
+                // When Psalm scans the stub it hits `if (!class_exists(X)) { class X {} }`,
+                // calls PHP's class_exists (which returns true because earlier plugin boot
+                // autoloaded Carbon\CarbonPeriod, whose top-level `require` already declared
+                // X), and compares ReflectionClass::getFileName() to the stub's $file_path.
+                // If those paths differ only by `..` normalisation, Psalm assumes the class
+                // lives elsewhere, sets skip_if_descendants, and the guarded class declaration
+                // is silently dropped. Downstream code then sees MissingDependency. See #922.
+                $registration->addStubFile($realPath);
             } else {
                 $output->warning(
                     "Laravel plugin: Carbon lazy stub not found at '{$stub}'. "
                     . 'CarbonPeriod / Translator / MessageFormatterMapper types may not resolve.',
                 );
             }
+        }
+
+        // Plugin-shipped stubs for Carbon's public API live in stubs/integrations/carbon/.
+        // They are kept outside stubs/common/ because Carbon is not part of Laravel
+        // (it ships as a transitive dependency via illuminate/support) and downstream
+        // projects can pin different Carbon majors. Loading is gated on the
+        // `nesbot/carbon` install check above so the plugin does not register stubs for
+        // a package the consumer does not actually use.
+        $integrationStubsDir = \dirname(__DIR__, 2) . '/stubs/integrations/carbon';
+
+        foreach (StubFileFinder::findIn($integrationStubsDir, $output) as $stub) {
+            $registration->addStubFile($stub);
         }
     }
 

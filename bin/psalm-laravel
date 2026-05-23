@@ -5,10 +5,18 @@ declare(strict_types=1);
 
 use Psalm\LaravelPlugin\Cli\AddCommand;
 use Psalm\LaravelPlugin\Cli\AnalyzeCommand;
+use Psalm\LaravelPlugin\Cli\DiagnoseCommand;
 use Psalm\LaravelPlugin\Cli\InitCommand;
 use Symfony\Component\Console\Application;
 
+// IMPORTANT: try the cwd-relative project autoload FIRST so symlinked plugin
+// installations (Composer path repository with `symlink: true`) don't load
+// the plugin's own dev autoloader. PHP's __DIR__ resolves through symlinks,
+// so falling back to __DIR__-based paths first would pick up the plugin
+// source's vendor/, hiding the consuming project's classes (issue #952).
 $autoloadCandidates = [
+    // Project root vendor: works when invoked from the consuming project root.
+    (getcwd() ?: '.') . '/vendor/autoload.php',
     // Installed as a dependency: vendor/psalm/plugin-laravel/bin/psalm-laravel
     __DIR__ . '/../../../autoload.php',
     // Running from a clone of this repo
@@ -28,9 +36,14 @@ if (! class_exists(InitCommand::class)) {
 }
 
 $application = new Application('psalm-laravel');
-$application->addCommand(new InitCommand());
-$application->addCommand(new AnalyzeCommand());
-$application->addCommand(new AddCommand());
+
+// Symfony Console: `addCommand()` was added in 7.4 and `add()` was removed in 8.x.
+// The cwd-relative autoloader (above) may pull either version from the consuming
+// project, so dispatch through the method name that the runtime version exposes.
+$register = method_exists($application, 'addCommand') ? 'addCommand' : 'add';
+foreach ([new InitCommand(), new AnalyzeCommand(), new AddCommand(), new DiagnoseCommand()] as $command) {
+    $application->{$register}($command);
+}
 
 // When invoked with no command, pick one based on workspace state: `init` if
 // psalm.xml is missing (first-run setup), otherwise `analyze` (everyday use).

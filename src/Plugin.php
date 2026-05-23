@@ -83,12 +83,18 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Application/OffsetHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\OffsetHandler::class);
 
-        require_once __DIR__ . '/Handlers/Auth/AuthHandler.php';
-        $registration->registerHooksFromClass(Handlers\Auth\AuthHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/AuthMethodHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\AuthMethodHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/AuthFunctionHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\AuthFunctionHandler::class);
         require_once __DIR__ . '/Handlers/Auth/GuardHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
+
+        // FilesystemConfigAnalyzer is loaded via PSR-4 from StorageHandler.
+        require_once __DIR__ . '/Handlers/Filesystem/StorageHandler.php';
+        $registration->registerHooksFromClass(Handlers\Filesystem\StorageHandler::class);
 
         // Model property handlers are registered dynamically by ModelRegistrationHandler
         // after Psalm populates its codebase (AfterCodebasePopulated event).
@@ -96,27 +102,35 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/CustomCollectionHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
+        // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
+        // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
+        // even when migrations are disabled (the @property branch still applies).
+        // Schema population (ModelRegistrationHandler::enableMigrations) stays gated.
+        require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
         if ($pluginConfig->shouldUseMigrations()) {
-            require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
             Handlers\Eloquent\ModelRegistrationHandler::enableMigrations();
         }
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelFactoryMethodTypeProvider::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryCountTypeProvider::class);
 
         // Magic method forwarding: Relation -> Builder (decorated forwarding).
         // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and
         // CustomCollectionHandler — the handler returns null for non-Relation callers
         // (fast O(1) check), so downstream handlers fire unaffected.
+        require_once __DIR__ . '/Util/DynamicWhereResolver.php';
         require_once __DIR__ . '/Handlers/Magic/ForwardingRule.php';
         require_once __DIR__ . '/Handlers/Magic/ReturnTypeResolver.php';
         require_once __DIR__ . '/Handlers/Magic/MethodForwardingHandler.php';
         require_once __DIR__ . '/Handlers/Magic/MacroHandler.php';
         $registration->registerHooksFromClass(Handlers\Magic\MacroHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
+        Handlers\Eloquent\ModelMethodHandler::init();
         require_once __DIR__ . '/Handlers/Eloquent/ModelBuilderMixinHandler.php';
         Handlers\Magic\MethodForwardingHandler::init(new Handlers\Magic\ForwardingRule(
             sourceClass: \Illuminate\Database\Eloquent\Relations\Relation::class,
@@ -146,7 +160,7 @@ final class Plugin implements PluginEntryPointInterface
             interceptMixin: true,
         ));
         if ($pluginConfig->resolveDynamicWhereClauses) {
-            Handlers\Magic\MethodForwardingHandler::enableDynamicWhere();
+            Util\DynamicWhereResolver::enable();
         }
 
         // Eloquent's Model -> Builder @mixin host correction is intentionally separate
@@ -162,6 +176,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderScopeHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/BuilderPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderAggregateHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderAggregateHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\CustomCollectionHandler::class);
 
         require_once __DIR__ . '/Handlers/Collections/CollectionFilterHandler.php';

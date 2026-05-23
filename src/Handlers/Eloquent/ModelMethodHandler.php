@@ -12,6 +12,7 @@ use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Util\DynamicWhereResolver;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -56,6 +57,12 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * This method is called up to 4 times per static method call (existence, visibility,
      * params, return type), so caching avoids redundant methodExists lookups.
      *
+     * The dynamic-where branch of isUnresolvedBuilderMethod consults
+     * {@see DynamicWhereResolver::isEnabled}, so a stale entry produced under a
+     * previous "enabled" configuration could leak into a subsequent "disabled"
+     * bootstrap in the same process. Plugin re-bootstrap clears this cache via
+     * {@see init} to keep the cached verdict consistent with the active config.
+     *
      * @var array<string, bool>
      */
     private static array $unresolvedCache = [];
@@ -70,6 +77,21 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * @var array<class-string<Model>, class-string<Builder>>
      */
     private static array $customBuilderMap = [];
+
+    /**
+     * Reset per-process caches. Called once per Plugin::__construct so a re-bootstrap
+     * doesn't carry stale verdicts across analysis runs. In particular, the
+     * dynamic-where branch of {@see isUnresolvedBuilderMethod} depends on the
+     * runtime-mutable {@see DynamicWhereResolver::isEnabled} flag; clearing the cache
+     * here ensures a `resolveDynamicWhereClauses` flip is honoured on the next run.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function init(): void
+    {
+        self::$unresolvedCache = [];
+        self::$customBuilderMap = [];
+    }
 
     /**
      * Register a custom Eloquent builder class for a model.
@@ -248,7 +270,25 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
         // Scope method — params from the scope definition minus the first $query param.
         /** @var class-string<Model> $modelClass */
-        return self::getScopeParams($codebase, $modelClass, $methodName);
+        $scopeParams = self::getScopeParams($codebase, $modelClass, $methodName);
+        if ($scopeParams !== null) {
+            return $scopeParams;
+        }
+
+        // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
+        // Mirrors the relation-chain fallback: typed single param when the return-type
+        // provider resolved a scalar column (issue #928 hand-off), variadic mixed
+        // otherwise so Psalm doesn't raise TooManyArguments on multi-segment forms
+        // like whereFirstNameAndLastName($a, $b).
+        if (
+            DynamicWhereResolver::isEnabled()
+            && DynamicWhereResolver::isDynamicWhereMethod($methodName)
+        ) {
+            return DynamicWhereResolver::consumeTypedParams($methodName, $event->getCallArgs())
+                ?? DynamicWhereResolver::variadicMixedParams();
+        }
+
+        return null;
     }
 
     /**
@@ -294,6 +334,50 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
         // Trait-declared builder methods (e.g., SoftDeletes::withTrashed): return custom builder type.
         if (CustomBuilderMethodHandler::hasTraitMethod($modelClass, $methodName)) {
+            return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+        }
+
+        // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
+        // doesMethodExist has already confirmed via DynamicWhereResolver::methodMatchesColumns
+        // that the lowercase suffix matches columns. The gate excludes both Query\Builder
+        // methods (handled by the fake-call branch below) AND methods declared on the
+        // registered builder class itself — for a custom builder that defines `whereFoo()`
+        // directly, the fake-call path resolves it with the method's actual return type
+        // instead of unconditionally substituting Builder<TModel>.
+        //
+        // Strict camel-cased validation (`resolveColumnType`) decides whether to queue the
+        // typed-param hand-off for #928 and gates the final return: a `false` result means
+        // the lowercase backtracker over-accepted (e.g. `wherefoobar` with @property `foo`
+        // and `bar` only matches via lowercase, not the camel-cased And/Or split that
+        // Laravel's runtime requires). Returning null in that case avoids claiming
+        // Builder<TModel> for a call Laravel would parse differently — existence remains
+        // confirmed so Psalm doesn't raise UndefinedMagicMethod, but the return type stays
+        // Psalm's default rather than a fabricated builder.
+        if (
+            DynamicWhereResolver::isEnabled()
+            && DynamicWhereResolver::isDynamicWhereMethod($methodName)
+            && !$codebase->methodExists(new MethodIdentifier(QueryBuilder::class, $methodName))
+            && !$codebase->methodExists(new MethodIdentifier($builderClass, $methodName))
+        ) {
+            $stmt = $event->getStmt();
+            $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
+            $columnType = DynamicWhereResolver::resolveColumnType($codebase, $modelClass, $originalMethodName);
+
+            if ($columnType === false) {
+                return null;
+            }
+
+            // Queue typed param hand-off (issue #928) only when the producer/consumer
+            // contract holds: single-segment scalar column + exactly one argument. Mirrors
+            // {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler::resolveDynamicWhereOnRelation}.
+            if ($columnType instanceof Union) {
+                $args = $stmt->getArgs();
+
+                if (\count($args) === 1) {
+                    DynamicWhereResolver::storePendingColumnType($methodName, $args[0], $columnType);
+                }
+            }
+
             return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
         }
 
@@ -368,7 +452,28 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // Scope methods (e.g., scopeActive → active, #[Scope] verified → verified).
         // These are defined on the model and forwarded via __callStatic → Builder.
         /** @var class-string<Model> $modelClass */
-        return self::$unresolvedCache[$key] = BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName);
+        if (BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
+            return self::$unresolvedCache[$key] = true;
+        }
+
+        // Dynamic where{Column} methods (e.g., whereUuid, whereFirstNameAndLastName).
+        // Laravel's `Builder::dynamicWhere` resolves these at runtime when the suffix
+        // segments match column names. When `<resolveDynamicWhereClauses value="true" />`
+        // is set (default), confirm existence so a direct Model::whereCol(...) call
+        // doesn't raise UndefinedMagicMethod (issue #1000).
+        //
+        // The match is lowercase-only because the existence hook receives no AST node
+        // (so we can't reconstruct the original camel-cased suffix here). The return-
+        // type and params providers still run the strict camel-cased validation via
+        // DynamicWhereResolver::resolveColumnType when they fire on the confirmed call.
+        if (
+            DynamicWhereResolver::isEnabled()
+            && DynamicWhereResolver::methodMatchesColumns($codebase, $modelClass, $methodName)
+        ) {
+            return self::$unresolvedCache[$key] = true;
+        }
+
+        return self::$unresolvedCache[$key] = false;
     }
 
     /** @inheritDoc */

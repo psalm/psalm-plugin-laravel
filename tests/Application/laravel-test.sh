@@ -148,7 +148,7 @@ if [ -d "$APP_INSTALLATION_PATH" ]; then
 fi
 
 RELATIVE_PATH="${APP_INSTALLATION_PATH#"$PROJECT_ROOT"/}"
-info "Creating a new Laravel project using installer v${LARAVEL_INSTALLER_VERSION} at ${RELATIVE_PATH}"
+info "Creating a new Laravel project using installer ${LARAVEL_INSTALLER_VERSION} at ${RELATIVE_PATH}"
 info "Tip: set LARAVEL_INSTALLER_VERSION to test a different Laravel. Use --verbose for full tool output."
 # --no-security-blocking: laravel/laravel's pinned phpunit/phpunit range can become
 # fully covered by a fresh advisory, which would otherwise make `composer create-project`
@@ -235,7 +235,7 @@ else
     ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --no-progress --no-suggestions --output-format=text
 fi
 
-echo
+info "Fresh Laravel app test is completed"
 
 # Psalm succeeded — mark for cleanup by the EXIT trap
 PSALM_PASSED=true
