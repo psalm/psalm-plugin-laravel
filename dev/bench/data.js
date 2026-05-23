@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779533177938,
+  "lastUpdate": 1779540780853,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5592,6 +5592,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.34,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "01adcd05134d8e2524077f0515ad7707782b2181",
+          "message": "feat(cli): tailor init psalm.xml to project layout #786\n\nScan composer autoload.psr-4 entries, presence of artisan, and\nconventional Laravel directories before emitting them in\npsalm.xml. Honour composer config.vendor-dir. Skip tests/ unless\npsalm/plugin-phpunit is installed. Filter ignore targets to those\nactually present on disk so the generated config stays free of\ndangling paths.\n\nReorganize execute() into named steps (validate level, decide\noverwrite, write file, report) and group helpers by concern for\nreadability.",
+          "timestamp": "2026-05-23T14:49:22+02:00",
+          "tree_id": "cd50746a5b504796af5afd61b101c4de72c9f33a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/01adcd05134d8e2524077f0515ad7707782b2181"
+        },
+        "date": 1779540780433,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.76,
+            "range": "± 0.8",
             "unit": "s"
           },
           {
