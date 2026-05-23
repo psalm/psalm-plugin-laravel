@@ -81,6 +81,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
         if (!$argType instanceof Union || !$argType->isSingleStringLiteral()) {
             return null;
         }
+
         $columnName = $argType->getSingleStringLiteral()->value;
 
         $modelClass = self::resolveModelClass($event);
@@ -133,6 +134,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
             if (!$atomic instanceof Type\Atomic\TGenericObject) {
                 continue;
             }
+
             $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null);
             if ($model !== null) {
                 return $model;
@@ -153,6 +155,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
         if ($shape === 'int') {
             return Type::getInt();
         }
+
         if ($shape === 'float') {
             return Type::getFloat();
         }
@@ -204,19 +207,23 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
                 $hasInt = true;
                 continue;
             }
+
             if ($atomic instanceof TFloat) {
                 $hasFloat = true;
                 continue;
             }
+
             if ($atomic instanceof TNull) {
                 continue;
             }
+
             return null;
         }
 
         if ($hasInt && !$hasFloat) {
             return 'int';
         }
+
         if ($hasFloat && !$hasInt) {
             return 'float';
         }

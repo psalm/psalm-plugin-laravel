@@ -60,8 +60,8 @@ final class ResolveColumnTypeTest extends TestCase
 
         $type = ModelPropertyHandler::resolveColumnType($this->codebase, WorkOrder::class, 'amount_cents');
 
-        self::assertNotNull($type);
-        self::assertSame('int', (string) $type);
+        $this->assertNotNull($type);
+        $this->assertSame('int', (string) $type);
     }
 
     #[Test]
@@ -77,8 +77,8 @@ final class ResolveColumnTypeTest extends TestCase
 
         $type = ModelPropertyHandler::resolveColumnType($this->codebase, WorkOrder::class, 'created_at');
 
-        self::assertNotNull($type);
-        self::assertSame('Carbon\CarbonInterface|null', (string) $type);
+        $this->assertNotNull($type);
+        $this->assertSame('Carbon\CarbonInterface|null', (string) $type);
     }
 
     #[Test]
@@ -91,6 +91,6 @@ final class ResolveColumnTypeTest extends TestCase
 
         $type = ModelPropertyHandler::resolveColumnType($this->codebase, WorkOrder::class, 'unknown_column');
 
-        self::assertNull($type);
+        $this->assertNull($type);
     }
 }
