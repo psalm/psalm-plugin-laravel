@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779541258697,
+  "lastUpdate": 1779541944253,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5662,6 +5662,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.57,
             "range": "± 0.52",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6cc619d89fdddb6a8e6beb4a5ed4131fc86ea15",
+          "message": "Resolve custom Facades in Laravel package source repos (#957)\n\n* fix(providers): register vendor providers in package boots #942\n\nWhen Psalm runs inside a Laravel package source repo (no\n`bootstrap/app.php`), `ApplicationProvider::doGetApp()` falls into\nbranch 3 and calls Testbench's `createApplication()`. Testbench swaps\nin its own `PackageManifest` that honors\n`CreatesApplication::ignorePackageDiscoveriesFrom()` (defaulting to\n`['*']`), so no vendor providers register. Custom Facades whose accessor\nis a string alias (e.g. `imdhemy/laravel-purchases`'s `Subscription` →\n`'subscription'`, bound in `LiapServiceProvider::register()`) then fail\n`Facade::getFacadeRoot()` with `Target class [subscription] does not\nexist`, emit a noisy warning, and the plugin falls back to the\n`@method` catalogue, losing handler-derived type narrowing for methods\nnot in the docblock.\n\nAdd a branch-3-only step that instantiates Laravel's own framework\n`PackageManifest` against the project root (bypassing the Testbench\nswap), and calls `$app->register()` on each discovered provider in\ntry/catch so a single bad vendor `register()`/`boot()` does not disable\nthe rest. Vendor `boot()` runs inline because the app is already booted\nby `createApplication()` — the existing `view` binding is hoisted above\nthe new registration step to keep providers that touch\n`View::composer`/`Blade::component` working.\n\n`resolveProjectRoot()` extracted as a shared helper now used by both\n`retargetConfigPathAtProjectRoot()` and the new method. Reproducer:\npackage-source repo with `imdhemy/laravel-purchases` installed — calls\nto `Subscription::id(...)` (not in the `@method` docblock) now resolve\nto `\\Imdhemy\\Purchases\\Subscription` and the warning is gone.\n\nSupersedes #951 and #955.\n\nCloses #942\n\n* test(providers): cover per-provider isolation in branch-3 boot #942\n\nAdds a unit test that locks in the isolation contract introduced in the\nprevious commit: when `registerDiscoveredVendorProviders()` iterates the\nlist returned by Laravel's `PackageManifest`, a throwing provider must\nNOT prevent subsequent providers from registering.\n\nThe fixture pins a fake project root via `APP_BASE_PATH` (Testbench's\ndocumented escape hatch, also honored by `resolveProjectRoot()`). The\nsynthetic `vendor/composer/installed.json` lists `ThrowingServiceProvider`\nbefore `BindingServiceProvider` so the assertion is order-sensitive —\nverifying both that exceptions are swallowed AND that iteration continues.\n\nCloses the test-coverage gap noted in the PR description for #942.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* refactor(providers): simplify manifest lifecycle + share project root #942\n\nReplace the PID + random-fallback + register_shutdown_function dance\nwith tempnam() + try/finally synchronous cleanup. tempnam() reserves a\nunique writable path; we unlink it immediately so PackageManifest::build()\npopulates a fresh file, then unlink in finally once providers() has\nread the manifest into memory. The pcntl-fork shutdown-race reasoning\ndisappears alongside the load-bearing @-suppression.\n\nCompute resolveProjectRoot() once at the branch-3 call site and pass\nthe result into both helpers. Each call previously scanned three env\nsurfaces twice and probed cwd — cheap, but the dedup is obvious now\nthat both helpers take the same input.\n\nTest cleanup: drop the SplFileInfo assert (RecursiveDirectoryIterator\nalready yields SplFileInfo) and drop the @-suppression from rmdir() /\nunlink() in the test teardown so a real disk-full / permission failure\nsurfaces during CI rather than being silently swallowed.\n\nNet: -9 lines in ApplicationProvider.\n\n* feat(providers): merge root composer.json providers in branch-3 boot #942\n\n`PackageManifest::build()` reads only `vendor/composer/installed.json`, so a\nmaintainer running Psalm on their own Laravel package's source repo\n(imdhemy/laravel-purchases, corcel, laravel-excel, etc.) loses the package's\nOWN ServiceProvider — it lives in the ROOT `composer.json:extra.laravel.providers`.\nWithout it, custom-Facade accessors stay unbound and `Facade::getFacadeRoot()`\nwarns at every static-call site.\n\nAdd `readRootComposerProviders()` helper that reads the root manifest,\ndecodes with `JSON_THROW_ON_ERROR`, walks `extra.laravel.providers` via\npaired `isset` + `is_array` guards, filters non-empty strings, and returns\n`list<string>`. All failure modes return `[]` (best-effort discovery).\n\nMerge into the existing provider list before the per-provider `try/catch\n\\Throwable` loop — Laravel `$app->register()` is idempotent so duplicate\nFQCNs across vendor + root are safe no-ops.\n\nRefs #942\n\n* chore(providers): drop stale docblock + reset static boot state in test #942\n\n`retargetConfigPathAtProjectRoot()` docblock claimed the project root was\n\"supplied by the caller (computed once in branch 3 and shared with\nregisterDiscoveredVendorProviders())\". False — the method calls\n`resolveProjectRoot()` itself, as does the sibling. Drop the misleading\nsentence rather than backfill the refactor it implied.\n\nTest tearDown was restoring only `$app` + `$booted`. The static `$bootMode`,\n`$bootPath`, `$bootstrapError` properties were left pointing at deleted\n`/tmp/psalm-plugin-laravel-test-*` paths between test runs. Latent today\n(no test reads the getters), but `bin/psalm-laravel diagnose` and any\nfuture consumer would see stale state. Capture + restore all five.\n\nRefs #942\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-23T15:09:50+02:00",
+          "tree_id": "8edf589deb974945cc0ddbae05c9ed147e945e32",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d6cc619d89fdddb6a8e6beb4a5ed4131fc86ea15"
+        },
+        "date": 1779541943194,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.93,
+            "range": "± 0.09",
             "unit": "s"
           },
           {
