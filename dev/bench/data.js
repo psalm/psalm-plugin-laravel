@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779527918620,
+  "lastUpdate": 1779530027257,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5487,6 +5487,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.41,
             "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "5544eaa272e5ae6c1abf76e4722f54bc663e9921",
+          "message": "fix: suppress MissingReturnType on migrations",
+          "timestamp": "2026-05-23T11:51:08+02:00",
+          "tree_id": "e9d29d996242f40b788926340ae41ab859e66f26",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5544eaa272e5ae6c1abf76e4722f54bc663e9921"
+        },
+        "date": 1779530026225,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.75,
+            "range": "± 0.92",
             "unit": "s"
           },
           {
