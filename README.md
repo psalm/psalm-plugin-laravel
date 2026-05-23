@@ -1,20 +1,5 @@
 # Psalm plugin for Laravel
 
-## The package is seeking maintainers
-
-⚠️ This is a perfect opportunity to learn Laravel very deep and collaborate with other high-skilled developers.
-At this moment, the package is maintained almost solely by [@alies-dev](https://github.com/sponsors/alies-dev), and he is looking for developers to build a team
-who can constantly improve this package and the whole Psalm ecosystem.
-
-Some ideas to implement:
- - [ ] Fully support custom Model Query Builders (medium)
- - [ ] Add an option to rely on Model `@property` declarations only
- - [ ] Get rid of `barryvdh/laravel-ide-helper` dependency and be more accurate with attribute types
- - [ ] Support .sql files for migrations (to find information about attributes and their types)
-
-________
-
-
 [![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
 [![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
 [![Type coverage](https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg)](https://shepherd.dev/github/psalm/psalm-plugin-laravel)
@@ -33,13 +18,14 @@ Find bugs without the overhead of writing tests!
 
 Maintained versions:
 
-| Laravel Psalm Plugin | PHP   | Laravel   | Psalm |
-|----------------------|-------|-----------|-------|
-| 3.x                  | ^8.2  | 11, 12    | 6     |
-| 2.12+                | ^8.0  | 9, 10, 11 | 5, 6  |
-| 2.9.x                | ^8.0  | 9, 10, 11 | 4, 5  |
-| 1.6.x                | >=7.3 | 6, 8      | 4     |
-| 1.4.x                | >=7.2 | 6, 7, 8   | 3, 4  |
+| Laravel Psalm Plugin | PHP   | Laravel    | Psalm |
+|----------------------|-------|------------|-------|
+| 3.x                  | ^8.2  | 12, 13     | 7     |
+| 3.x                  | ^8.2  | 11, 12, 13 | 6, 7  |
+| 2.12+                | ^8.0  | 9, 10, 11  | 5, 6  |
+| 2.9.x                | ^8.0  | 9, 10, 11  | 4, 5  |
+| 1.6.x                | >=7.3 | 6, 8       | 4     |
+| 1.4.x                | >=7.2 | 6, 7, 8    | 3, 4  |
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
 
@@ -79,7 +65,7 @@ and/or [cli parameters](https://psalm.dev/docs/running_psalm/command_line_usage/
 
 ## How it works
 
-Under the hood it just runs https://github.com/barryvdh/laravel-ide-helper and feeds the resultant stubs into Psalm, which can read PhpStorm meta stubs.
+Under the hood it runs https://github.com/barryvdh/laravel-ide-helper and feeds the resultant stubs into Psalm, which can read PhpStorm meta stubs.
 
 It also parses any database migrations it can find to try to understand property types in your database models.
 
