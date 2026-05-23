@@ -160,6 +160,9 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
     /** @var array<string, array<string, list<string>>> */
     private const METHOD_LEVEL_BY_PARENT_CLASS = [
+        'MissingReturnType' => [
+            'Illuminate\Database\Migrations\Migration' => ['up', 'down'],
+        ],
         'PossiblyUnusedMethod' => [
             // __construct included because Console commands are instantiated by the framework
             // exclusively through the container: `Console\Kernel::resolve()` and `Application::call()`
