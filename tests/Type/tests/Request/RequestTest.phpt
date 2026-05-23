@@ -17,19 +17,25 @@ function testConditionalReturnTypes(Request $request): void
     $_singleInput = $request->input('key');
     /** @psalm-check-type-exact $_singleInput = mixed */
 
-    // query() with no args -> array, with key -> mixed
+    // query() with no args -> array of string|array, with key -> string|array|null
     $_allQuery = $request->query();
-    /** @psalm-check-type-exact $_allQuery = array<string, mixed> */
+    /** @psalm-check-type-exact $_allQuery = array<string, array<array-key, mixed>|string> */
 
     $_singleQuery = $request->query('key');
-    /** @psalm-check-type-exact $_singleQuery = mixed */
+    /** @psalm-check-type-exact $_singleQuery = array<array-key, mixed>|string|null */
 
-    // post() with no args -> array, with key -> mixed
+    $_queryWithDefault = $request->query('theme', '');
+    /** @psalm-check-type-exact $_queryWithDefault = array<array-key, mixed>|string */
+
+    // post() with no args -> array of string|array, with key -> string|array|null
     $_allPost = $request->post();
-    /** @psalm-check-type-exact $_allPost = array<string, mixed> */
+    /** @psalm-check-type-exact $_allPost = array<string, array<array-key, mixed>|string> */
 
     $_singlePost = $request->post('key');
-    /** @psalm-check-type-exact $_singlePost = mixed */
+    /** @psalm-check-type-exact $_singlePost = array<array-key, mixed>|string|null */
+
+    $_postWithDefault = $request->post('name', 'anon');
+    /** @psalm-check-type-exact $_postWithDefault = array<array-key, mixed>|string */
 }
 ?>
 --EXPECTF--
