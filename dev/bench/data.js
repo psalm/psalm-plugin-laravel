@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779540780853,
+  "lastUpdate": 1779541258697,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5627,6 +5627,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.76,
             "range": "± 0.8",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "7de27ac50d6867265395abce64dd24eb8d383448",
+          "message": "refactor(cli): refine array annotations for composer handling\n\nUpdate type annotations for composer-related methods to use `array<array-key, mixed>` instead of `array<string, mixed>` for better accuracy. Add `@psalm-pure` and `@psalm-var mixed` annotations where applicable to enhance static analysis.",
+          "timestamp": "2026-05-23T14:58:05+02:00",
+          "tree_id": "72c4b3a7e5e824bd0838f97f3d8db600cac27275",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7de27ac50d6867265395abce64dd24eb8d383448"
+        },
+        "date": 1779541257651,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.57,
+            "range": "± 0.52",
             "unit": "s"
           },
           {
