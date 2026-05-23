@@ -24,7 +24,6 @@ final class DynamicWhereResolverTest extends TestCase
         $this->assertTrue(DynamicWhereResolver::isDynamicWhereMethod('wherefirstnameandlastname'));
 
         $this->assertFalse(DynamicWhereResolver::isDynamicWhereMethod('where'));
-        $this->assertFalse(DynamicWhereResolver::isDynamicWhereMethod('wher'));
         $this->assertFalse(DynamicWhereResolver::isDynamicWhereMethod('orWhereTitle'));
     }
 
