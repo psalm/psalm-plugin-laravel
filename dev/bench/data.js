@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779553798881,
+  "lastUpdate": 1779555465393,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5872,6 +5872,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.09,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "250d7832c9c6785376210c366e8c25bd281ac6fd",
+          "message": "feat(cli): respect existing psalm.xml.dist on init #786\n\nPsalm itself loads psalm.xml.dist when psalm.xml is absent, so the\ninit subcommand must treat either filename as the existing config.\nOtherwise running init in a project that ships only a .dist would\nsilently create a second config file and orphan the original.\n\nReuses Psalm's precedence (psalm.xml beats psalm.xml.dist) when\nboth are present, writing in place so generated content lands\nwhere Psalm and the user already look.",
+          "timestamp": "2026-05-23T18:51:15+02:00",
+          "tree_id": "1ccab515980015493e48f2ef4d545f54af52e8a2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/250d7832c9c6785376210c366e8c25bd281ac6fd"
+        },
+        "date": 1779555464986,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.32,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
