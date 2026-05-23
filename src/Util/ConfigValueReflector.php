@@ -120,9 +120,13 @@ final class ConfigValueReflector
             $value,
         );
 
-        // TKeyedArray::make requires non-empty-array; the empty branch is handled
-        // above. Make returns TKeyedArray|TArray (TArray only when properties
-        // collapse to never, which cannot happen here).
-        return new Union([TKeyedArray::make($properties, null, null, is_list: $is_list)]);
+        // TKeyedArray ctor requires non-empty-array; the empty branch is handled
+        // above. The post-check narrows array_map's loose `array<array-key, Union>`
+        // return type back to non-empty for Psalm.
+        if ($properties === []) {
+            return Type::getEmptyArray();
+        }
+
+        return new Union([new TKeyedArray($properties, null, null, $is_list)]);
     }
 }
