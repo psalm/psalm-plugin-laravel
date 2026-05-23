@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779552953747,
+  "lastUpdate": 1779553798881,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5837,6 +5837,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.63,
             "range": "± 0.3",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "f792af9198d3ada37af517f1041f96fd28c1ac9a",
+          "message": "ci(tests): declare explicit GITHUB_TOKEN permissions #88\n\noctoscan `excessive-permissions` flags workflows without an explicit\n`permissions:` block because GITHUB_TOKEN then inherits the repo\ndefault, which may grant write scopes the workflow never needs.\n\nTests only read code and run composer, so a top-level\n`contents: read` is sufficient.",
+          "timestamp": "2026-05-23T18:27:17+02:00",
+          "tree_id": "61c2febc636d25c4c4bdd0fafc90f5573657b81a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f792af9198d3ada37af517f1041f96fd28c1ac9a"
+        },
+        "date": 1779553798214,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.09,
+            "range": "± 0.17",
             "unit": "s"
           },
           {
