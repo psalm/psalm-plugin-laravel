@@ -3,7 +3,9 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Models\Customer;
 use App\Models\Invoice;
+use App\Models\Part;
 use App\Models\WorkOrder;
 
 /**
@@ -11,7 +13,12 @@ use App\Models\WorkOrder;
  * dynamic where{Column} methods must NOT be resolved even for valid @property columns.
  * The call falls through to __call on the Relation and returns mixed.
  *
+ * The same gating applies to direct Model static/instance calls (issue #1000) — without
+ * the flag, ModelMethodHandler must continue to raise UndefinedMagicMethod for
+ * `Customer::whereId(...)` etc. so users can opt out.
+ *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/647
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1000
  */
 
 function test_dynamic_where_not_resolved_when_disabled(): void {
@@ -23,12 +30,25 @@ function test_dynamic_where_not_resolved_when_disabled(): void {
 }
 
 // Multi-segment dynamic where (issue #927) must respect the disabled flag too.
-// A regression that wired the segment-split path outside the $enableDynamicWhere
-// gate would still resolve here; verify the call collapses to mixed.
+// A regression that wired the segment-split path outside the enable gate would
+// still resolve here; verify the call collapses to mixed.
 function test_dynamic_where_multi_segment_not_resolved_when_disabled(): void {
     $r = (new WorkOrder())->invoice();
     $_ = $r->whereInvoiceNumberAndStatus('INV-2024-001', 'paid');
     /** @psalm-check-type-exact $_ = mixed */
 }
+
+// Issue #1000: a direct Model static call MUST raise UndefinedMagicMethod when the
+// resolveDynamicWhereClauses flag is off — the feature is opt-out gated.
+function test_static_dynamic_where_on_model_disabled(): void {
+    Customer::whereId('cust-1');
+}
+
+// Same gating for instance calls.
+function test_instance_dynamic_where_on_model_disabled(): void {
+    (new Part())->whereName('Brake Pads');
+}
 ?>
 --EXPECTF--
+UndefinedMagicMethod on line %d: Magic method App\Models\Customer::whereid does not exist
+UndefinedMagicMethod on line %d: Magic method App\Models\Part::wherename does not exist
