@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779544166674,
+  "lastUpdate": 1779551762906,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5767,6 +5767,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.48,
             "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2d30bc2283a9aeca50205010b46bee748d1c9d49",
+          "message": "Narrow `Request::query()` and `Request::post()` return types (#1009)\n\nBoth methods read from Symfony's `InputBag`, which only stores scalars\nand arrays. Laravel's own docblock documents the return as\n`string|array|null`, but the plugin stub previously widened it to\n`mixed`, forcing `MixedAssignment` at every call site such as\n`request()->query('theme') ?? ''`.\n\nThis swaps the stub return to\n`($key is null ? array<string, string|array> : string|array|TDefault)`\nwhere `TDefault` is templated from the `$default` parameter, mirroring\nLarastan's signature (without the `__benevolent` PHPStan-only form).\nThe `null` default still produces the documented `string|array|null`.\n\n`input()` is intentionally left as `mixed` because it merges JSON\nbodies via `all()`, where any scalar/array/object can legitimately\nappear.",
+          "timestamp": "2026-05-23T17:53:18+02:00",
+          "tree_id": "be739c4db244b69c27154d310dbb69709c4e0ca1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2d30bc2283a9aeca50205010b46bee748d1c9d49"
+        },
+        "date": 1779551760717,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.86,
+            "range": "± 0.06",
             "unit": "s"
           },
           {
