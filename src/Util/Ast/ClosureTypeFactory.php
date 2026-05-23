@@ -439,7 +439,8 @@ final class ClosureTypeFactory
      * (notably during unit tests). Returns `null` on `max_string_length`
      * overflow or when `Config` itself is missing.
      *
-     * @psalm-pure
+     * Not `@psalm-pure`: {@see TLiteralString::make} reads `Config::getInstance()`
+     * to enforce `max_string_length`, which Psalm considers impure.
      */
     private static function literalStringUnion(string $value): ?Union
     {
@@ -587,7 +588,7 @@ final class ClosureTypeFactory
         // (`ArrayAnalyzer::analyzeArray()` calls `TKeyedArray::make` with the
         // default `false`). `from_docblock=true` relaxes comparison strictness
         // at call sites — wrong choice for a value we recovered from PHP source.
-        return new Union([TKeyedArray::make($properties, null, null, $isList)]);
+        return new Union([new TKeyedArray($properties, null, null, $isList)]);
     }
 
     /**
