@@ -1,4 +1,4 @@
-# Psalm plugin for Laravel
+# Laravel Psalm Plugin 
 
 Laravel static analysis with built-in security scanning.
 
