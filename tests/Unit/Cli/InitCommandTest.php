@@ -27,19 +27,44 @@ final class InitCommandTest extends TestCase
 
     protected function tearDown(): void
     {
-        $target = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        if (\file_exists($target) && ! @\unlink($target)) {
+        $this->removeRecursively($this->tempDir);
+    }
+
+    private function removeRecursively(string $path): void
+    {
+        if (\is_file($path) || \is_link($path)) {
+            @\unlink($path);
             return;
         }
 
-        if (\is_dir($this->tempDir)) {
-            @\rmdir($this->tempDir);
+        if (! \is_dir($path)) {
+            return;
         }
+
+        $entries = @\scandir($path);
+        if ($entries !== false) {
+            foreach ($entries as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+
+                $this->removeRecursively($path . \DIRECTORY_SEPARATOR . $entry);
+            }
+        }
+
+        @\rmdir($path);
     }
 
     #[Test]
     public function writes_psalm_xml_when_absent(): void
     {
+        // Pre-create the conventional ignore targets so the generator emits them.
+        // Without these, the dir-existence filter (correctly) skips them.
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'vendor');
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'storage');
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'bootstrap');
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'bootstrap' . \DIRECTORY_SEPARATOR . 'cache');
+
         $tester = $this->makeTester();
 
         $exit = $tester->execute([]);
