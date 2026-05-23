@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779551762906,
+  "lastUpdate": 1779552953747,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5802,6 +5802,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.86,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fdfd3118fd8a78aa690334bd5fd458dccfc1b0b4",
+          "message": "fix(stubs): specialize Js taint flow to prevent callsite pollution (#1007) (#1010)\n\nWithout `@psalm-taint-specialize`, `Js::from()` and `Js::encode()` pool\ninput from every caller into one global return node. A single legitimate\ntaint flow (e.g. `decrypt() -> implode() -> Js::from()`) then re-emerges\nas a tainted source at every other `<?= Js::from(...) ?>` sink, even when\nthose callsites pass a hardcoded literal or a bool: the reproduction on\nfilamentphp/filament@4.x produces ~60 false-positive errors from one real\nflow.\n\n`@psalm-taint-escape html` only strips `html` / `has_quotes`; every other\ntaint (`sql`, `user_secret`, `system_secret`, etc.) continues to pool\nthrough `@psalm-flow` unless the function is specialized. Adding\n`@psalm-taint-specialize` to both methods makes the flow per-callsite and\neliminates the cascade.\n\nThe new regression test pins the fix via `Js::encode()`: a tainted SQL\nsource at one callsite must not poison `Connection::unprepared()` at an\nunrelated callsite whose argument is a hardcoded string. `Js::from()`\nshares the same stub annotation and cannot be exercised in isolation\nbecause Psalm does not propagate taint through `Js::toHtml()`'s property\nread; the test docblock spells this out.\n\n`docs/contributing/taint-analysis.md` previously claimed escape functions\ncould omit specialization. Issue #1007 disproves that for Js, so the\nparagraph is rewritten to state the correct rule, mark empirical\nverification as mandatory, and warn that the triple is not mechanically\nsafe on every stub shape in Psalm 7. A spot-check on the issue's\nfollow-up candidates (`Connection::escape`, `SessionGuard::hashPasswordForCookie`,\n`Encrypter::*String`) showed that adding `@psalm-taint-specialize`\nsilently breaks within-callsite flow on those methods, even though\n`Js::encode` with the identical triple keeps propagating SQL taint\ncorrectly. That asymmetry is left for a follow-up Psalm 7 bisect; the\nknown-broken candidates are listed in the doc so contributors do not\nblanket-apply the annotation.\n\nCloses #1007",
+          "timestamp": "2026-05-23T18:13:14+02:00",
+          "tree_id": "05911b9c452e333b440e0c368411cf18dee63f4f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fdfd3118fd8a78aa690334bd5fd458dccfc1b0b4"
+        },
+        "date": 1779552952676,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.63,
+            "range": "± 0.3",
             "unit": "s"
           },
           {
