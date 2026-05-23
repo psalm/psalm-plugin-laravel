@@ -32,6 +32,13 @@ final class InitCommand extends Command
 {
     private const DEFAULT_ERROR_LEVEL = '4';
 
+    /**
+     * Config file names Psalm itself recognises, in the same precedence order
+     * Psalm uses when locating a project's config. `psalm.xml` wins over
+     * `psalm.xml.dist` when both are present.
+     */
+    private const PSALM_CONFIG_FILENAMES = ['psalm.xml', 'psalm.xml.dist'];
+
     /** Conventional Laravel app directories. Only emitted if present on disk. */
     private const LARAVEL_APP_DIRS = ['app', 'bootstrap', 'config', 'database', 'lang', 'routes'];
 
@@ -132,8 +139,13 @@ final class InitCommand extends Command
             return Command::FAILURE;
         }
 
-        $targetPath = \rtrim($cwd, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        if (! $this->shouldWrite($targetPath, $input, $io)) {
+        $cwdNormalized = \rtrim($cwd, \DIRECTORY_SEPARATOR);
+        // Reuse the existing config path (psalm.xml or psalm.xml.dist) so the
+        // generated file lands where Psalm and the user already expect it,
+        // rather than silently creating a second config file alongside the old one.
+        $existingPath = $this->findExistingConfig($cwdNormalized);
+        $targetPath = $existingPath ?? $cwdNormalized . \DIRECTORY_SEPARATOR . 'psalm.xml';
+        if (! $this->shouldWrite($targetPath, $existingPath !== null, $input, $io)) {
             return Command::SUCCESS;
         }
 
@@ -173,19 +185,36 @@ final class InitCommand extends Command
         return null;
     }
 
-    /** True when no psalm.xml exists, --force is set, or the user confirms overwrite. */
-    private function shouldWrite(string $targetPath, InputInterface $input, SymfonyStyle $io): bool
+    /**
+     * Return the first existing Psalm config path under $cwd, following Psalm's
+     * own precedence (psalm.xml beats psalm.xml.dist). Returns null when neither exists.
+     */
+    private function findExistingConfig(string $cwd): ?string
     {
-        if (! \file_exists($targetPath) || $input->getOption('force') === true) {
+        foreach (self::PSALM_CONFIG_FILENAMES as $name) {
+            $candidate = $cwd . \DIRECTORY_SEPARATOR . $name;
+            if (\file_exists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /** True when no Psalm config exists, --force is set, or the user confirms overwrite. */
+    private function shouldWrite(string $targetPath, bool $exists, InputInterface $input, SymfonyStyle $io): bool
+    {
+        if (! $exists || $input->getOption('force') === true) {
             return true;
         }
 
+        $filename = \basename($targetPath);
         $overwrite = $io->confirm(
-            \sprintf('psalm.xml already exists at %s. Overwrite?', $targetPath),
+            \sprintf('%s already exists at %s. Overwrite?', $filename, $targetPath),
             false,
         );
         if (! $overwrite) {
-            $io->note('Left existing psalm.xml untouched.');
+            $io->note(\sprintf('Left existing %s untouched.', $filename));
         }
 
         return $overwrite;
