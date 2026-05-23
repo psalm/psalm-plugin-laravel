@@ -3,12 +3,13 @@ name: Tests
 on:
   workflow_dispatch:
   push:
+    branches: [master]
     paths:
       - '**.php'
       - '**.phpstub'
       - '**.phpt'
-      - '**.yml'
       - 'composer.json'
+      - '.github/workflows/tests.yml'
   pull_request:
     paths:
       - '**.php'

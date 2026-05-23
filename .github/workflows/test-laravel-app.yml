@@ -3,6 +3,7 @@ name: Test Laravel app
 on:
   workflow_dispatch:
   push:
+    branches: [master]
     paths:
       - '**.php'
       - '**.phpstub'
