@@ -57,6 +57,12 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * This method is called up to 4 times per static method call (existence, visibility,
      * params, return type), so caching avoids redundant methodExists lookups.
      *
+     * The dynamic-where branch of isUnresolvedBuilderMethod consults
+     * {@see DynamicWhereResolver::isEnabled}, so a stale entry produced under a
+     * previous "enabled" configuration could leak into a subsequent "disabled"
+     * bootstrap in the same process. Plugin re-bootstrap clears this cache via
+     * {@see init} to keep the cached verdict consistent with the active config.
+     *
      * @var array<string, bool>
      */
     private static array $unresolvedCache = [];
@@ -71,6 +77,21 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * @var array<class-string<Model>, class-string<Builder>>
      */
     private static array $customBuilderMap = [];
+
+    /**
+     * Reset per-process caches. Called once per Plugin::__construct so a re-bootstrap
+     * doesn't carry stale verdicts across analysis runs. In particular, the
+     * dynamic-where branch of {@see isUnresolvedBuilderMethod} depends on the
+     * runtime-mutable {@see DynamicWhereResolver::isEnabled} flag; clearing the cache
+     * here ensures a `resolveDynamicWhereClauses` flip is honoured on the next run.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function init(): void
+    {
+        self::$unresolvedCache = [];
+        self::$customBuilderMap = [];
+    }
 
     /**
      * Register a custom Eloquent builder class for a model.

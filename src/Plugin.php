@@ -126,6 +126,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Magic/MacroHandler.php';
         $registration->registerHooksFromClass(Handlers\Magic\MacroHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
+        Handlers\Eloquent\ModelMethodHandler::init();
         require_once __DIR__ . '/Handlers/Eloquent/ModelBuilderMixinHandler.php';
         Handlers\Magic\MethodForwardingHandler::init(new Handlers\Magic\ForwardingRule(
             sourceClass: \Illuminate\Database\Eloquent\Relations\Relation::class,
