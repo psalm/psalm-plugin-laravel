@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779542326774,
+  "lastUpdate": 1779544166674,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5732,6 +5732,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.49,
             "range": "± 0.33",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df1cd9db5eb1e5b092fb8fab40b3c52518fb381d",
+          "message": "Narrow `config()` and `Repository::get()` return types (#1006)\n\n* feat(config): narrow config() and Repository::get() #752\n\nAdds a Psalm type provider for the three call shapes that previously\ncollapsed to `mixed`: the `config()` helper, `Repository::get()` on\nboth the concrete class and the contract, and `Config::get()` via the\nfacade pipeline. Each call is resolved against the booted Laravel app\nand reflected back as a Psalm Union.\n\nScalars are intentionally generalised (env-driven `app.debug` stays\n`bool`, never `false`; `app.name` stays `string`, never the observed\n`'Laravel'` literal). Collapsing to the boot-time observation would\nbreak every `===` and `if (config(...))` against a runtime override.\nArrays preserve shape up to depth 5 with a 64-key cap per level;\nbeyond that the type degrades to `array<array-key, mixed>` to avoid\nmegabyte-scale type strings.\n\nDefault-arg merge mirrors `Arr::get` runtime behavior:\n - key absent in config: generalised default\n - key present, value not null: reflected value (default ignored)\n - key present, value is null: `null | generalised default`\n\nClosure defaults are followed through to their declared return type;\nuntyped closures contribute `mixed` without discarding the other union\nmembers. Literal defaults are inferred from the raw AST first because\nPsalm's NodeTypeProvider returns null for argument nodes inside the\nfacade `__callStatic` dispatch.\n\nThe Config facade route required `MethodParamsProviderInterface`\nalongside the return-type hook to avoid the Psalm 7\n`Cannot get method params for ...::get` crash on `@method`-declared\nsignatures (same crash class as #454 / #854).\n\nThe singleton resolver swallows Repository binding failures via a\n`ThrowingConfigRepository` sentinel so handler hooks never propagate\nexceptions out of Psalm. The booted Repository is immutable for the\nPsalm process lifetime, so per-key reflection is memoised.\n\nCloses #752\n\n* docs(config): trim verbose narrowing docblocks #752\n\nKeep the non-obvious WHYs (cache trichotomy, Psalm 7 facade\n`__callStatic` null-NodeTypeProvider, Psalm 7 `@method` getMethodParams\ncrash, scalar generalization rationale); drop prose that repeats\nidentifier names or restates structure visible in the code.\n\n* feat(config): add resolveConfigReturnTypes opt-out flag #752\n\nMirrors the `resolveDynamicWhereClauses` shape: enabled by default, opt\nout via `<resolveConfigReturnTypes value=\"false\" />` in psalm.xml.\n\nEscape hatch for apps that construct ad-hoc `Repository` instances\n(`new Repository([...])->get()`). The handler narrows against the\nbooted app's config and cannot statically tell that receiver apart\nfrom the booted singleton, so users with that pattern see false\npositives. Disabling the flag drops both handlers and returns the\nstub's mixed ceiling everywhere.\n\n* fix(config): address review findings on narrowing #752\n\nSoundness:\n- Present-null values now return the stored null without merging with\n  the default. `Arr::get` uses `array_key_exists` for presence, so a\n  stored null returns verbatim and the default never fires when the key\n  exists. Previous code returned `null | default`, breaking\n  `if ($v === null)` callsites downstream.\n- Named arguments (`config(default: 'x', key: 'app.debug')`) now defer\n  to the stub. Positional extraction would otherwise treat the `default:`\n  arg as the key.\n\nCorrectness:\n- Stored closures reflect to `\\Closure` (named object) instead of mixed.\n  `Repository::get` does not invoke them — `value()` only runs on the\n  `$default` branch inside `Arr::get`.\n\nHardening:\n- `warm()`'s catch now wraps only the Repository `has()` / `get()` calls.\n  Reflector failures (plugin bugs) propagate instead of silently caching\n  mixed.\n- Reflector adds `MAX_TOTAL_PROPERTIES = 512` cross-level budget so a\n  branching shape can't build a megabyte-scale type string before the\n  per-level / depth caps fire.\n\nRendering:\n- `IssueUrlGenerator` now includes the new `resolveConfigReturnTypes`\n  property so the structural test that walks PluginConfig's public\n  properties stays green.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-23T15:46:56+02:00",
+          "tree_id": "7196fa56b31ce6020a3c9445810777062bb60846",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/df1cd9db5eb1e5b092fb8fab40b3c52518fb381d"
+        },
+        "date": 1779544166185,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.48,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
