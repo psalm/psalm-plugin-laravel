@@ -402,29 +402,17 @@ final class ApplicationProvider
         }
 
         try {
-            /** @var mixed $decoded */
+            // Composer schema is documented and stable; trust the declared shape
+            // for the keys we read. Anything not matching falls through ?? [] below.
+            /** @psalm-var array{extra?: array{laravel?: array{providers?: list<string>}}}|null $decoded */
             $decoded = \json_decode($contents, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
             return [];
         }
 
-        if (!\is_array($decoded) || !isset($decoded['extra']) || !\is_array($decoded['extra'])) {
-            return [];
-        }
-
-        if (!isset($decoded['extra']['laravel']) || !\is_array($decoded['extra']['laravel'])) {
-            return [];
-        }
-
-        if (!isset($decoded['extra']['laravel']['providers']) || !\is_array($decoded['extra']['laravel']['providers'])) {
-            return [];
-        }
-
         $providers = [];
-
-        /** @psalm-var mixed $provider */
-        foreach ($decoded['extra']['laravel']['providers'] as $provider) {
-            if (\is_string($provider) && $provider !== '') {
+        foreach ($decoded['extra']['laravel']['providers'] ?? [] as $provider) {
+            if ($provider !== '') {
                 $providers[] = $provider;
             }
         }
