@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779541944253,
+  "lastUpdate": 1779542326774,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5697,6 +5697,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 27.93,
             "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "f5d37e3ff9deff5fec72d501196171624344afbb",
+          "message": "refactor: declare composer.json shape for 100% type coverage\n\nReplace `@psalm-var mixed` annotations on json_decode results with\na typed ComposerJson shape. Psalm narrows values at access so the\nruntime is_array/is_string guards become redundant.\n\nBrings src/Cli/InitCommand.php and src/Providers/ApplicationProvider.php\nfrom 98.187% / 99.561% to 100% type coverage with no behaviour change.",
+          "timestamp": "2026-05-23T15:15:19+02:00",
+          "tree_id": "22666b1dae63610cceeae0d0bbaa424968971606",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f5d37e3ff9deff5fec72d501196171624344afbb"
+        },
+        "date": 1779542326334,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.49,
+            "range": "± 0.33",
             "unit": "s"
           },
           {
