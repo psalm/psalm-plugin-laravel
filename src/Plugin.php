@@ -119,12 +119,14 @@ final class Plugin implements PluginEntryPointInterface
         // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and
         // CustomCollectionHandler — the handler returns null for non-Relation callers
         // (fast O(1) check), so downstream handlers fire unaffected.
+        require_once __DIR__ . '/Util/DynamicWhereResolver.php';
         require_once __DIR__ . '/Handlers/Magic/ForwardingRule.php';
         require_once __DIR__ . '/Handlers/Magic/ReturnTypeResolver.php';
         require_once __DIR__ . '/Handlers/Magic/MethodForwardingHandler.php';
         require_once __DIR__ . '/Handlers/Magic/MacroHandler.php';
         $registration->registerHooksFromClass(Handlers\Magic\MacroHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
+        Handlers\Eloquent\ModelMethodHandler::init();
         require_once __DIR__ . '/Handlers/Eloquent/ModelBuilderMixinHandler.php';
         Handlers\Magic\MethodForwardingHandler::init(new Handlers\Magic\ForwardingRule(
             sourceClass: \Illuminate\Database\Eloquent\Relations\Relation::class,
@@ -154,7 +156,7 @@ final class Plugin implements PluginEntryPointInterface
             interceptMixin: true,
         ));
         if ($pluginConfig->resolveDynamicWhereClauses) {
-            Handlers\Magic\MethodForwardingHandler::enableDynamicWhere();
+            Util\DynamicWhereResolver::enable();
         }
 
         // Eloquent's Model -> Builder @mixin host correction is intentionally separate

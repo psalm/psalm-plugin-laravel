@@ -30,15 +30,13 @@ function test_static_cursor(): void
 }
 
 // Dynamic where{Column}: Customer has @property string $id, so whereId() must resolve
-// via Model::__callStatic forwarding to Builder::__call.
-//
-// Known limitation on bare static (no relation chain): MethodForwardingHandler enables
-// dynamic where{Column} only on relation chains. The static-on-Model form raises
-// UndefinedMagicMethod — see issue #647 follow-up.
+// via Model::__callStatic forwarding to Builder::__call. With resolveDynamicWhereClauses
+// enabled (default), ModelMethodHandler confirms existence via DynamicWhereResolver and
+// returns Builder<Customer>. See https://github.com/psalm/psalm-plugin-laravel/issues/1000.
 function test_static_dynamic_where_column(): void
 {
     $_result = Customer::whereId('cust-1');
-    /** @psalm-check-type-exact $_result = mixed */
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
 }
 
 // QueriesRelationships::whereDoesntHave called statically. Maps to Builder::whereDoesntHave.
@@ -80,4 +78,3 @@ function test_static_cursor_chain_each(): void
 
 ?>
 --EXPECTF--
-UndefinedMagicMethod on line %d: Magic method App\Models\Customer::whereid does not exist
