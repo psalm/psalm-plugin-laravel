@@ -13,6 +13,192 @@ use Illuminate\Contracts\Cache\Repository as CacheContract;
 class Repository implements ArrayAccess, CacheContract
 {
     /**
+     * Retrieve an item from the cache by key.
+     *
+     * Cache contents commonly originate from request input. Treating reads
+     * as `input` taint sources mirrors Session::Store, since cache and
+     * session are both developer-controlled stores that frequently relay
+     * user-supplied data back to HTTP responses.
+     *
+     * @param  \UnitEnum|array|string  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function get($key, $default = null) {}
+
+    /**
+     * ArrayAccess read: `$cache['key']` delegates to get().
+     *
+     * The annotation fires for direct method calls (`$cache->offsetGet($k)`)
+     * but Psalm 7 does not currently propagate stub-level taint through the
+     * `$cache['k']` array-access syntax — the form lands at MixedArgument
+     * without the TaintedHtml chain. Mirrors the same limitation on
+     * `Illuminate\Support\ValidatedInput::offsetGet`.
+     *
+     * @param  \UnitEnum|string  $offset
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function offsetGet($offset) {}
+
+    /**
+     * Retrieve multiple items from the cache by key.
+     *
+     * @param  array  $keys
+     * @return array
+     *
+     * @psalm-taint-source input
+     */
+    public function many(array $keys) {}
+
+    /**
+     * PSR-16 alias for many(): retrieve multiple items from the cache.
+     *
+     * @param  iterable<string>  $keys
+     * @param  mixed  $default
+     * @return iterable
+     *
+     * @psalm-taint-source input
+     */
+    public function getMultiple($keys, $default = null) {}
+
+    /**
+     * Retrieve an item from the cache and delete it.
+     *
+     * @param  \UnitEnum|array|string  $key
+     * @param  mixed  $default
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function pull($key, $default = null) {}
+
+    /**
+     * Retrieve a string item from the cache.
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  (\Closure():(string|null))|string|null  $default
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function string($key, $default = null) {}
+
+    /**
+     * Retrieve an integer item from the cache.
+     *
+     * Not a taint source: (int) cast cannot produce an injection payload.
+     * e.g. (int) "1; DROP TABLE users" → 1.
+     * Matches the integer()/float()/boolean()/clamp() carve-outs already
+     * documented on InteractsWithData (Request) and FormRequest.
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  (\Closure():(int|null))|int|null  $default
+     * @return int
+     */
+    public function integer($key, $default = null) {}
+
+    /**
+     * Retrieve a float item from the cache.
+     *
+     * Not a taint source: see integer() rationale.
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  (\Closure():(float|null))|float|null  $default
+     * @return float
+     */
+    public function float($key, $default = null) {}
+
+    /**
+     * Retrieve a boolean item from the cache.
+     *
+     * Not a taint source: a boolean cannot carry an injection payload.
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  (\Closure():(bool|null))|bool|null  $default
+     * @return bool
+     */
+    public function boolean($key, $default = null) {}
+
+    /**
+     * Retrieve an array item from the cache.
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  (\Closure():(array<array-key, mixed>|null))|array<array-key, mixed>|null  $default
+     * @return array<array-key, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function array($key, $default = null) {}
+
+    /**
+     * Get an item from the cache, or execute the given Closure and store the result.
+     *
+     * The return value is sourced from the cache when the key exists, so the
+     * same `input` taint applies as for get(). When the cache misses, the
+     * Closure's return flows through unchanged; both branches share the source
+     * annotation because Psalm cannot statically pick a branch.
+     *
+     * @template TCacheValue
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  \Closure|\DateTimeInterface|\DateInterval|int|null  $ttl
+     * @param  \Closure(): TCacheValue  $callback
+     * @return TCacheValue
+     *
+     * @psalm-taint-source input
+     */
+    public function remember($key, $ttl, \Closure $callback) {}
+
+    /**
+     * Alias for rememberForever(): get-or-cache-forever.
+     *
+     * @template TCacheValue
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  \Closure(): TCacheValue  $callback
+     * @return TCacheValue
+     *
+     * @psalm-taint-source input
+     */
+    public function sear($key, \Closure $callback) {}
+
+    /**
+     * Get an item from the cache, or execute the given Closure and store the result forever.
+     *
+     * @template TCacheValue
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  \Closure(): TCacheValue  $callback
+     * @return TCacheValue
+     *
+     * @psalm-taint-source input
+     */
+    public function rememberForever($key, \Closure $callback) {}
+
+    /**
+     * Retrieve an item from the cache by key, refreshing it in the background if it is stale.
+     *
+     * Same source rationale as remember(). Available in Laravel 11.32+; the
+     * plugin's minimum supported Laravel is 12.
+     *
+     * @template TCacheValue
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  array{0: \DateTimeInterface|\DateInterval|int, 1: \DateTimeInterface|\DateInterval|int}  $ttl
+     * @param  (callable(): TCacheValue)  $callback
+     * @param  array{seconds?: int, owner?: string}|null  $lock
+     * @param  bool  $alwaysDefer
+     * @return TCacheValue
+     *
+     * @psalm-taint-source input
+     */
+    public function flexible($key, $ttl, $callback, $lock = null, $alwaysDefer = false) {}
+
+    /**
      * Begin executing a new tags operation if the store supports it.
      *
      * Accepts an array of tag names or variadic string arguments via func_get_args().
