@@ -39,6 +39,8 @@ class Plugin implements PluginEntryPointInterface
 {
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
     {
+        $this->printLegacyVersionNotice();
+
         try {
             ApplicationProvider::bootApp();
             $this->generateStubFiles();
@@ -49,6 +51,22 @@ class Plugin implements PluginEntryPointInterface
 
         $this->registerHandlers($registration);
         $this->registerStubs($registration);
+    }
+
+    /**
+     * The 2.x line is end-of-life. Surface a notice on every Psalm invocation
+     * pointing at the upgrade guide so legacy installs can find their way to
+     * the 3.x / 4.x releases where active development and security scanning
+     * live.
+     */
+    private function printLegacyVersionNotice(): void
+    {
+        fwrite(
+            \STDERR,
+            "\npsalm/plugin-laravel 2.x is end-of-life and no longer receives fixes."
+            . "\nUpgrade to 3.x or 4.x for taint analysis and modern Laravel/Psalm support: "
+            . "https://github.com/psalm/psalm-plugin-laravel/blob/master/UPGRADING.md#2x--3x\n\n",
+        );
     }
 
     /** @return list<string> */

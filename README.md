@@ -29,6 +29,13 @@ Maintained versions:
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
 
+> [!IMPORTANT]
+> You are reading the docs for the **end-of-life `2.x` line**. It no longer
+> receives fixes, security or otherwise. New development happens on `3.x`
+> (Laravel 11–13, Psalm 6–7) and `4.x` (Laravel 12–13, Psalm 7), which add
+> taint-based security scanning and better Eloquent inference. See the
+> [upgrade guide](UPGRADING.md) for the (small) migration steps.
+
 
 ## Quickstart
 
