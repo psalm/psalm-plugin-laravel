@@ -11,6 +11,11 @@ on:
       - '**.php'
       - 'composer.json'
 
+# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   fix:
     name: Auto-fix code style

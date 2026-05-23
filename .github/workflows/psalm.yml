@@ -2,6 +2,7 @@ name: Psalm
 
 on:
   push:
+    branches: [master]
     paths:
       - '**.php'
       - 'psalm*'
@@ -13,6 +14,11 @@ on:
       - 'psalm*'
       - 'composer.json'
       - '.github/workflows/psalm.yml'
+
+# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   psalm:
