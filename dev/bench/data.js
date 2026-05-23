@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779526050338,
+  "lastUpdate": 1779527918620,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5452,6 +5452,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.45,
             "range": "± 0.8",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "e0c27854271c986f4e48a07c5e306e6004d4a494",
+          "message": "fix: reorganize custom issues by levels",
+          "timestamp": "2026-05-23T11:15:44+02:00",
+          "tree_id": "c9bf37f1e525769aa14cff9a1fe0d918a1a0903d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e0c27854271c986f4e48a07c5e306e6004d4a494"
+        },
+        "date": 1779527917583,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.41,
+            "range": "± 0.08",
             "unit": "s"
           },
           {
