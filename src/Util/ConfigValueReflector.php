@@ -107,12 +107,18 @@ final class ConfigValueReflector
 
         $remainingBudget -= $count;
         $is_list = \array_is_list($value);
+        $nextDepth = $depth + 1;
 
-        $properties = [];
-        /** @psalm-var mixed $sub_value */
-        foreach ($value as $key => $sub_value) {
-            $properties[$key] = self::reflectInternal($sub_value, $depth + 1, $remainingBudget);
-        }
+        // array_map (not foreach) keeps the per-element value off a local
+        // mixed variable, which would otherwise count against type coverage.
+        // Long-form closure (not `fn() =>`) is required to capture
+        // $remainingBudget by reference — arrow functions only do by-value.
+        $properties = \array_map(
+            static function (mixed $sub_value) use ($nextDepth, &$remainingBudget): Union {
+                return self::reflectInternal($sub_value, $nextDepth, $remainingBudget);
+            },
+            $value,
+        );
 
         // TKeyedArray::make requires non-empty-array; the empty branch is handled
         // above. Make returns TKeyedArray|TArray (TArray only when properties

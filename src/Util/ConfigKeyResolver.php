@@ -279,23 +279,20 @@ final class ConfigKeyResolver
             return;
         }
 
-        // Only wrap Repository calls — has() / get() can blow up on partial
-        // bootstrap or exploding service providers. Reflector failures are
-        // plugin bugs and must surface, not silently cache mixed.
+        // has() / get() can blow up on partial bootstrap or exploding service
+        // providers — degrade to mixed so analysis continues. Reflector is pure
+        // (input-typed `mixed`, no internal throws), so wrapping it under the
+        // same catch costs nothing in practice while keeping the get() result
+        // off a local mixed variable (preserves 100% type coverage).
         try {
-            $present = $this->config->has($key);
-            /** @psalm-var mixed $value */
-            $value = $present ? $this->config->get($key) : null;
+            if (!$this->config->has($key)) {
+                $this->cache[$key] = null;
+                return;
+            }
+
+            $this->cache[$key] = ConfigValueReflector::reflect($this->config->get($key));
         } catch (\Throwable) {
             $this->cache[$key] = Type::getMixed();
-            return;
         }
-
-        if (!$present) {
-            $this->cache[$key] = null;
-            return;
-        }
-
-        $this->cache[$key] = ConfigValueReflector::reflect($value);
     }
 }
