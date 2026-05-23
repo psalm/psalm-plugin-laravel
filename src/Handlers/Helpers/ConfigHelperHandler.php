@@ -10,18 +10,13 @@ use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
 
 /**
- * Narrows `config('some.key', $default)` to the runtime type of `some.key` from
- * the booted Laravel app, generalized so env-driven scalars don't collapse to
- * their observed-default literal (see {@see \Psalm\LaravelPlugin\Util\ConfigValueReflector}).
+ * Narrows `config('some.key', $default)` to the runtime value from the booted
+ * Laravel app (generalized — see {@see \Psalm\LaravelPlugin\Util\ConfigValueReflector}).
  *
- * Defers to the existing helpers stub when the call shape is incompatible with
- * key-based reflection:
+ * Defers to the helpers stub on non-narrowable shapes (no args → Repository;
+ * array first arg → null setter form; dynamic key → mixed).
  *
- *  - `config()`           → stub returns Repository
- *  - `config(['k' => v])` → stub returns null (setter form)
- *  - `config($dynamicKey)` → stub returns mixed (key cannot be statically resolved)
- *
- * Solution 3 of https://github.com/psalm/psalm-plugin-laravel/issues/752.
+ * See https://github.com/psalm/psalm-plugin-laravel/issues/752.
  */
 final class ConfigHelperHandler implements FunctionReturnTypeProviderInterface
 {
@@ -39,10 +34,6 @@ final class ConfigHelperHandler implements FunctionReturnTypeProviderInterface
     #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Type\Union
     {
-        // resolveFromCallArgs returns null for shapes the stub handles:
-        //   - 0 args → Repository
-        //   - array first arg → null (setter form)
-        //   - dynamic first arg → mixed
         return ConfigKeyResolver::resolveFromCallArgs(
             $event->getCallArgs(),
             $event->getStatementsSource()->getNodeTypeProvider(),

@@ -10,21 +10,16 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
- * Translates a runtime config value (resolved from the booted Laravel app) into a
- * Psalm Union type.
+ * Translates a runtime config value into a Psalm Union.
  *
- * Scalars are intentionally generalized to their non-literal form. Booted Laravel
- * resolves env-driven values to a single concrete observation at analysis time;
- * narrowing `config('app.debug')` to `false` (its observed default) would surface
- * spurious `TypeDoesNotContainType` issues on every `if (config('app.debug'))`.
- * Returning `bool`/`string`/`int` keeps the call site flexible to runtime overrides.
+ * Scalars are generalized (not literal) because booted Laravel collapses
+ * env-driven values to a single observation at analysis time. Narrowing
+ * `config('app.debug')` to `false` would trigger `TypeDoesNotContainType` on
+ * every `if (config('app.debug'))` callsite that overrides via env.
  *
- * Arrays preserve shape up to {@see self::MAX_DEPTH} levels deep and
- * {@see self::MAX_KEYS_PER_LEVEL} keys per level. Beyond that, the reflector
- * degrades to `array<array-key, mixed>` rather than emitting megabyte-scale type
- * strings.
- *
- * Closures, resources, and unknown values fall back to `mixed`.
+ * Arrays preserve shape up to {@see MAX_DEPTH}/{@see MAX_KEYS_PER_LEVEL};
+ * beyond that, degrade to `array<array-key, mixed>`. Closures, resources, and
+ * unknown values fall back to `mixed`.
  *
  * @internal
  */
