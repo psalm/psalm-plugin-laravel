@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779481175742,
+  "lastUpdate": 1779526050338,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5417,6 +5417,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.72,
             "range": "± 0.41",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e7001da2730f25f417368b869a138149e735422",
+          "message": "Resolve dynamic `where{Column}` on Model direct calls (#1001)\n\n* feat(eloquent): dynamic where{Column} on Model direct calls #1000\n\nPreviously the plugin resolved dynamic where{Column} magic methods only on\nEloquent Relation chains. Direct calls on a Model (Customer::whereId(...),\n(new Customer)->whereId(...)) emitted UndefinedMagicMethod even when the\ncolumn existed as @property.\n\nExtract the validation cache, segment splitter, column-type lookup, and\ntyped-param hand-off cache from MethodForwardingHandler into a shared\nUtil\\DynamicWhereResolver. Extend ModelMethodHandler to consult the same\nhelpers in its existence, params, and return-type providers, gated on the\nexisting resolveDynamicWhereClauses config flag.\n\nMethodExistenceProvider has no AST access, so existence on the Model-direct\npath uses a bounded lowercase backtracking matcher\n(DynamicWhereResolver::methodMatchesColumns) over the normalised pseudo\nproperty map. The return-type and params providers still run the strict\ncamel-cased validation via resolveColumnType when the call's AST is\navailable, preserving the #928 typed-param hand-off for single-segment\nscalar columns.\n\n* refactor(eloquent): harden dynamic-where existence matcher #1000\n\n- Replace the recursive backtracking matcher with an iterative DP partition\n  check. Worst case drops from exponential to O(n * |props|), guarding against\n  adversarial property sets with overlapping prefixes (e.g. a/aa/aaa) feeding\n  a long where{Column} call.\n- Privatise SEGMENT_SPLIT_PATTERN — no caller outside the resolver references it.\n- Tighten the typed-param hand-off comment in ModelMethodHandler to point at the\n  sibling implementation instead of narrating the gating shape.\n\n* fix(eloquent): tighten dynamic-where gating on direct Model calls #1000\n\n- Gate the Model-direct dynamic-where path on `!methodExists($builderClass, $methodName)`\n  in addition to QueryBuilder. Without this, a custom Eloquent builder declaring a\n  `where{Column}` method (whose suffix matches an @property) had its declared return type\n  shadowed by Builder<TModel>; the fake-call branch now resolves it normally.\n- Return null from the dynamic-where branch when the strict camel-cased validation\n  (`DynamicWhereResolver::resolveColumnType`) returns false. Existence remains confirmed\n  by the lowercase backtracker, so no `UndefinedMagicMethod` regression, but the plugin\n  no longer claims `Builder<TModel>` for partitions Laravel's runtime would not accept.\n- `DynamicWhereResolver::reset()` now also clears the enable flag. Plugin re-applies it\n  from XML config after init() runs, so a `true -> false` config flip across re-bootstraps\n  takes effect instead of inheriting the previous run's state.\n- Fix stale `{@see $pendingDynamicWhereColumnType}` reference left over from the\n  resolver extraction.\n- Add type tests for the custom-builder shadowing regression and lowercase\n  non-splittable spelling (`whereid` vs `whereId`).\n- Clarify `docs/config.md` on the new fall-through behaviour for custom-builder\n  where* methods.\n\n* fix(eloquent): reset ModelMethodHandler caches across bootstraps #1000\n\n`ModelMethodHandler::$unresolvedCache` stores the dynamic-where existence verdict,\nwhich depends on the runtime-mutable `DynamicWhereResolver::isEnabled()` flag. A\nprevious \"enabled\" bootstrap that cached `Model::whereId => true` could leak into a\nsubsequent \"disabled\" bootstrap in the same process, suppressing the expected\n`UndefinedMagicMethod`.\n\n- Add `ModelMethodHandler::init()` that clears `$unresolvedCache` and\n  `$customBuilderMap`. Plugin calls it once per construction alongside\n  `DynamicWhereResolver::reset()`.\n- Add unit tests pinning the reset invariants: `DynamicWhereResolverTest::reset_*`\n  asserts the enable flag clears; `ModelMethodHandlerInitTest::init_*` asserts both\n  caches clear via reflection. Same-process bootstrap regression coverage that\n  `psalm-no-dynamic-where.xml` (separate process) can't provide.",
+          "timestamp": "2026-05-23T10:44:50+02:00",
+          "tree_id": "2090085b5ffaf4b03be7aede8330f4c9e2aa9e2e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6e7001da2730f25f417368b869a138149e735422"
+        },
+        "date": 1779526049933,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.45,
+            "range": "± 0.8",
             "unit": "s"
           },
           {
