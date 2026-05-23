@@ -65,24 +65,23 @@ jobs:
 
       - name: Get PR refs
         id: pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          PR_JSON=$(gh pr view "$PR_NUMBER" \
-            --repo ${{ github.repository }} \
-            --json headRefOid,baseRefOid,headRefName,number,headRepository)
-          HEAD_REPO=$(echo "$PR_JSON" | jq -r .headRepository.nameWithOwner)
-          EXPECTED_REPO="${{ github.repository }}"
-          if [ "$HEAD_REPO" != "$EXPECTED_REPO" ]; then
-            echo "::error::Refusing to benchmark PR from a different repository (head: $HEAD_REPO, expected: $EXPECTED_REPO)"
-            exit 1
-          fi
-          {
-            echo "head_sha=$(echo "$PR_JSON" | jq -r .headRefOid)"
-            echo "base_sha=$(echo "$PR_JSON" | jq -r .baseRefOid)"
-            echo "pr_number=$(echo "$PR_JSON" | jq -r .number)"
-          } >> "$GITHUB_OUTPUT"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            const expectedRepo = `${context.repo.owner}/${context.repo.repo}`;
+            const headRepo = pr.head.repo ? pr.head.repo.full_name : null;
+            if (headRepo !== expectedRepo) {
+              core.setFailed(`Refusing to benchmark PR from a different repository (head: ${headRepo}, expected: ${expectedRepo})`);
+              return;
+            }
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_sha', pr.base.sha);
+            core.setOutput('pr_number', String(pr.number));
 
       - name: Checkout PR branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
