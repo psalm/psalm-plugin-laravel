@@ -138,6 +138,48 @@ final class ModelPropertyHandler
     }
 
     /**
+     * Public resolver mirroring {@see getPropertyType} (user `@property` → cast →
+     * schema), for handlers that need column types outside `PropertyTypeProviderEvent`
+     * (e.g. {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderAggregateHandler}).
+     *
+     * Slated to migrate behind `ModelMetadataRegistry::for($fqcn)` once the registry
+     * lands (see `.alies/docs/model-metadata-registry.md`); kept as a static here to
+     * minimize change surface for #1004.
+     *
+     * @param class-string<Model> $fqClasslikeName
+     */
+    public static function resolveColumnType(
+        \Psalm\Codebase $codebase,
+        string $fqClasslikeName,
+        string $columnName,
+    ): ?Union {
+        // Defensive vs. `getPropertyType`: the caller's FQCN can come from mixin
+        // template inference and may not be in the storage provider.
+        try {
+            $classStorage = $codebase->classlike_storage_provider->get($fqClasslikeName);
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
+
+        $propertyType = $classStorage->pseudo_property_get_types['$' . $columnName] ?? null;
+        if ($propertyType instanceof Union) {
+            return $propertyType;
+        }
+
+        $column = self::resolveColumn($fqClasslikeName, $columnName);
+        if (!$column instanceof SchemaColumn) {
+            return null;
+        }
+
+        $casts = self::resolveCasts($codebase, $fqClasslikeName);
+        if (isset($casts[$columnName])) {
+            return CastResolver::resolve($casts[$columnName], $column->nullable);
+        }
+
+        return self::mapColumnType($column);
+    }
+
+    /**
      * Resolve all migration-inferred columns for a model.
      *
      * @return array<string, SchemaColumn>
