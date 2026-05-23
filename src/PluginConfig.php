@@ -25,6 +25,7 @@ final readonly class PluginConfig
         public ColumnFallback $modelPropertiesColumnFallback,
         public array $configDirectories,
         public bool $resolveDynamicWhereClauses,
+        public bool $resolveConfigReturnTypes,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         /**
@@ -60,12 +61,14 @@ final readonly class PluginConfig
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
+        $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
 
         return new self(
             modelPropertiesColumnFallback: $columnFallback,
             configDirectories: $configDirectories,
             resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
+            resolveConfigReturnTypes: $resolveConfigReturnTypes,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,

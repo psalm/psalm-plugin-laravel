@@ -22,6 +22,7 @@ Full config example:
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
         <modelProperties columnFallback="none" />
         <resolveDynamicWhereClauses value="false" />
+        <resolveConfigReturnTypes value="false" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
@@ -63,6 +64,33 @@ Disable if dynamic where resolution conflicts with your codebase.
 
 ```xml
 <resolveDynamicWhereClauses value="false" />
+```
+
+## `resolveConfigReturnTypes`
+
+**default**: `true`
+
+When enabled, the plugin narrows `config('some.key')`, `Config::get('some.key')`, and `Repository::get('some.key')` (both the concrete `\Illuminate\Config\Repository` and the contract) from `mixed` to the runtime type reflected from the booted Laravel app.
+
+Scalar values are intentionally generalised (`config('app.debug')` stays `bool`, not the boot-time literal `false`) so env-driven overrides keep working at the call site without triggering spurious `TypeDoesNotContainType` warnings.
+Arrays preserve shape up to depth 5 with a 64-key per-level cap and a 512-property cross-level budget; beyond any cap, the value degrades to `array<array-key, mixed>`.
+
+Three call-site rules mirror `Arr::get` runtime behavior:
+
+- key absent → generalised default
+- key present, value not null → reflected value (default ignored)
+- key present, value is null → stored null (default ignored, even when supplied)
+
+Closure values stored in config reflect to `\Closure`. Closure defaults resolve to their declared return type (typed closures); untyped closures contribute `mixed` without dropping other union members.
+
+### When to disable
+
+When you always use `Config::ineteger()`, `Config::string()` and other typed calls consistently.
+
+### Example
+
+```xml
+<resolveConfigReturnTypes value="false" />
 ```
 
 ## `configDirectory`

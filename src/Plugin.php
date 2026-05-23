@@ -214,6 +214,24 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Helpers\NowTodayHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\PathHandler::class);
+
+        // config() helper + Repository::get() narrowing — reflect runtime config
+        // values from the booted Laravel app. See
+        // https://github.com/psalm/psalm-plugin-laravel/issues/752.
+        // Opt-out via `<resolveConfigReturnTypes value="false" />` for apps that
+        // construct ad-hoc Repository instances (false positives possible — the
+        // handler can't tell a fresh `new Repository([])` apart from the booted
+        // singleton at analysis time).
+        if ($pluginConfig->resolveConfigReturnTypes) {
+            require_once __DIR__ . '/Util/ConfigValueReflector.php';
+            require_once __DIR__ . '/Util/ThrowingConfigRepository.php';
+            require_once __DIR__ . '/Util/ConfigKeyResolver.php';
+            require_once __DIR__ . '/Handlers/Helpers/ConfigHelperHandler.php';
+            $registration->registerHooksFromClass(Handlers\Helpers\ConfigHelperHandler::class);
+            require_once __DIR__ . '/Handlers/Config/ConfigRepositoryMethodHandler.php';
+            $registration->registerHooksFromClass(Handlers\Config\ConfigRepositoryMethodHandler::class);
+        }
+
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         $registration->registerHooksFromClass(Handlers\Translations\TranslationKeyHandler::class);
 

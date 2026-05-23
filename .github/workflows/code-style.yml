@@ -11,6 +11,14 @@ on:
       - '**.php'
       - 'composer.json'
 
+# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   fix:
     name: Auto-fix code style
@@ -18,17 +26,20 @@ jobs:
     # Fork contributors: run `composer rector && composer cs` locally.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # git-auto-commit-action pushes the style fix back to the branch
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.head_ref }}
-          token: ${{ github.token }}
+          # Pin to immutable SHA, not branch name, to close TOCTOU window
+          # from a force-push landing mid-run between checkout and commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup PHP
         uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
@@ -51,15 +62,19 @@ jobs:
         with:
           commit_message: 'style: auto-fix (rector + php-cs-fixer)'
           commit_author: 'GitHub Actions <actions@github.com>'
+          # Explicit branch is required because we checked out a detached SHA.
+          branch: ${{ github.head_ref || github.ref_name }}
 
   check:
     name: Verify code style (forks)
     # Only run the check job on fork PRs where we can't auto-fix.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 

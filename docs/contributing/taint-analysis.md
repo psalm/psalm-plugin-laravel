@@ -286,7 +286,15 @@ When a function has `@psalm-flow ($param) -> return` without `@psalm-taint-speci
 public static function of($string) {}
 ```
 
-This differs from **escape functions** like `e()`, where `@psalm-taint-specialize` is not needed because the escape annotation removes the dangerous taint kind regardless of call site. Pure flow-through functions (no escape/unescape) must always pair `@psalm-taint-specialize` with `@psalm-flow`.
+**Escape functions still need `@psalm-taint-specialize`** when the stub returns a `mixed`-or-wider value that can pool. `@psalm-taint-escape` only strips the listed kind(s) (e.g. `html`, `has_quotes`); every other taint that flows through `@psalm-flow` (`sql`, `shell`, `user_secret`, `system_secret`, etc.) continues to pool into the single global return node and re-emerges at every other callsite (issue #1007). For `Js::from()` / `Js::encode()` adding `@psalm-taint-specialize` cleanly isolates per-callsite flow and is verified by `SafeJsEncodeSpecializePerCallsite.phpt`.
+
+**Empirical verification is mandatory.** Adding `@psalm-taint-specialize` to a `@psalm-flow` + `@psalm-taint-escape` (or `@psalm-taint-unescape`) stub is NOT mechanically safe in Psalm 7. Spot-checking issue #1007's follow-up list showed that the same triple breaks within-callsite taint propagation on `Connection::escape()`, `SessionGuard::hashPasswordForCookie()`, and `Encrypter::*String` — the `TaintedHtml*` tests for those methods stopped firing after `@psalm-taint-specialize` was added, even though `Js::encode()` with the same triple keeps propagating SQL taint correctly in `TaintedSqlJsEncodePreservesTaint.phpt`. The asymmetry is not localized yet (likely a Psalm-7 interaction between `@psalm-taint-specialize` and the `input` group alias on narrow parameter types). Before adding `@psalm-taint-specialize` to any other escape/unescape stub:
+
+1. Identify the existing test that asserts within-callsite non-escaped-kind flow through the stub. If no such test exists, write one.
+2. Add `@psalm-taint-specialize` and re-run the test. If it now reports zero errors, the stub falls into the broken-asymmetry class — revert the annotation and open a Psalm 7 bug report with a minimal repro.
+3. Add a per-callsite regression test under `tests/Type/tests/TaintAnalysis/Safe<Stub><Method>SpecializePerCallsite.phpt` modeled on `SafeJsEncodeSpecializePerCallsite.phpt`.
+
+The known-broken candidates (`e()`, `encrypt()` / `decrypt()` and `*String` variants, `SessionGuard::hashPasswordForCookie()`, `Connection::escape()`, `DB::escape()`) are tracked as follow-ups to #1007. Do not blanket-apply the annotation; treat every site as its own bisect.
 
 ## Per-rule escape on Rule objects
 
@@ -363,7 +371,7 @@ final class EmailWithDnsRule implements ValidationRule
 2. **For database methods, check whether values are PDO-bound or raw SQL**. See [PDO parameterized queries](#pdo-parameterized-queries). Column names go into SQL identifiers (sink); values go into bindings (escape).
 3. **Choose the correct annotation type**: source, sink, escape, or flow
 4. **If using `@psalm-taint-escape` or `@psalm-taint-unescape`**: always add `@psalm-flow` to preserve other taint kinds (unless the return value's other taints are truly irrelevant)
-5. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution. This applies whether or not `@psalm-taint-escape` is also present
+5. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution, then run the existing `Tainted<NonEscapedKind>*` test for the stub to confirm within-callsite flow still propagates. The combination is not mechanically safe on every stub shape in Psalm 7 — see [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the empirical-verification protocol
 6. **Match parameter types exactly** to Laravel's signatures. Do not narrow types.
 7. **Place in `stubs/common/`** under a path matching the Laravel namespace
 8. **Keep taint and type annotations together**. If a method already has type stubs, add taint annotations to the same file (see [Stub merging](README.md#stub-merging-how-psalm-combines-annotations))
