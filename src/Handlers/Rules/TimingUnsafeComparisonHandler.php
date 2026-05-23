@@ -197,7 +197,7 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
         if ($expr instanceof ConstFetch) {
             $name = $expr->name->toLowerString();
 
-            return $name === 'null' || $name === 'true' || $name === 'false';
+            return in_array($name, ['null', 'true', 'false'], true);
         }
 
         if ($expr instanceof UnaryMinus || $expr instanceof UnaryPlus) {
