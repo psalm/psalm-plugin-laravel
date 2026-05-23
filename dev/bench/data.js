@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779530027257,
+  "lastUpdate": 1779532757099,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5522,6 +5522,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 27.75,
             "range": "± 0.92",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d00984f90d572110403a7c18eec497e7589539de",
+          "message": "Narrow Eloquent `Builder` aggregate returns using known column type (#1005)\n\n* feat(eloquent): narrow Builder::sum/avg/min/max returns by column type #1004\n\nThe Query\\Builder aggregate stubs declare `numeric-string|int|float[|null]`\nbecause PDO can return any of those for unknown columns. When the column\ntype is known (user @property, $casts, or schema), narrow per-call so\nstrict-operand chains like `$base + Customer::sum('size')` stop triggering\nInvalidOperand at every call site.\n\n- sum() → int or float (no null, Laravel's `?: 0` fallback)\n- avg()/average() → float|int|null\n- min()/max() → column type | null\n\nDefers to the stub when the column is decimal/numeric without a cast,\nwhen the column name is dynamic, or when the model can't be resolved.\n\nKnown limitation: aggregates on Relation receivers (e.g.\n$customer->vehicles()->max('make')) go through a double @mixin chain\n(Relation → Builder → Query\\Builder) that the current LHS-type fallback\ndoesn't unwind. Direct query and chained where() / static-call forms are\ncovered.\n\nCloses #1004\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-05-23T12:36:10+02:00",
+          "tree_id": "a40df96c0dcd92fa339c1d19a44097cec3e8366c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d00984f90d572110403a7c18eec497e7589539de"
+        },
+        "date": 1779532755925,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.67,
+            "range": "± 0.11",
             "unit": "s"
           },
           {
