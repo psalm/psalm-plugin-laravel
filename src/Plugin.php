@@ -231,6 +231,7 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Config/ConfigRepositoryMethodHandler.php';
             $registration->registerHooksFromClass(Handlers\Config\ConfigRepositoryMethodHandler::class);
         }
+
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         $registration->registerHooksFromClass(Handlers\Translations\TranslationKeyHandler::class);
 

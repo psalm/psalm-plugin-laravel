@@ -55,7 +55,7 @@ final class ConfigKeyResolver
      */
     public static function instance(): self
     {
-        if (self::$instance !== null) {
+        if (self::$instance instanceof \Psalm\LaravelPlugin\Util\ConfigKeyResolver) {
             return self::$instance;
         }
 
@@ -189,7 +189,7 @@ final class ConfigKeyResolver
         $expr = $call_args[$index]->value;
 
         $literal = self::inferLiteralFromAst($expr);
-        if ($literal !== null) {
+        if ($literal instanceof \Psalm\Type\Union) {
             return $literal;
         }
 
@@ -257,7 +257,7 @@ final class ConfigKeyResolver
         }
 
         foreach ($closureReturnTypes as $returnType) {
-            if ($returnType === null) {
+            if (!$returnType instanceof \Psalm\Type\Union) {
                 // Untyped closure body — contribute mixed without discarding
                 // siblings already collected.
                 $atomics[] = new TMixed();

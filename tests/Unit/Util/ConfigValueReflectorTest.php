@@ -113,6 +113,7 @@ final class ConfigValueReflectorTest extends TestCase
         for ($i = 0; $i < ConfigValueReflector::MAX_DEPTH + 1; $i++) {
             $tree = ['n' => $tree];
         }
+
         $type = ConfigValueReflector::reflect($tree);
 
         // Walk the keyed arrays until we hit the degraded floor. Assert exact
@@ -121,6 +122,7 @@ final class ConfigValueReflectorTest extends TestCase
         while ($current instanceof \Psalm\Type\Atomic\TKeyedArray) {
             $current = $current->properties['n']?->getSingleAtomic() ?? $current->properties['leaf']->getSingleAtomic();
         }
+
         $this->assertInstanceOf(\Psalm\Type\Atomic\TArray::class, $current);
         $this->assertSame('array<array-key, mixed>', (new \Psalm\Type\Union([$current]))->getId());
     }
@@ -148,11 +150,13 @@ final class ConfigValueReflectorTest extends TestCase
         for ($i = 0; $i < 32; $i++) {
             $branch["k_{$i}"] = $i;
         }
+
         $tree = [];
         for ($i = 0; $i < 32; $i++) {
             // 32 branches × 32 leaves each = 1024 > MAX_TOTAL_PROPERTIES (512).
             $tree["b_{$i}"] = $branch;
         }
+
         $type = ConfigValueReflector::reflect($tree);
 
         // The top-level shape is still keyed (within budget for level 0),

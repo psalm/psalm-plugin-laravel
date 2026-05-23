@@ -68,7 +68,7 @@ final class ConfigKeyResolverTest extends TestCase
             }
 
             #[\Override]
-            public function get($key, $default = null)
+            public function get($key, $default = null): void
             {
                 throw new \RuntimeException('config exploded');
             }
@@ -268,6 +268,7 @@ final class ConfigKeyResolverTest extends TestCase
                     foreach ($key as $k => $v) {
                         $this->values[$k] = $v;
                     }
+
                     return;
                 }
 
