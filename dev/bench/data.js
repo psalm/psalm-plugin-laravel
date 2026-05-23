@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779532757099,
+  "lastUpdate": 1779533177938,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5557,6 +5557,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.67,
             "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1100,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "2b598066b9d4faabbd613019cca3a4ee17058f90",
+          "message": "feat: enable resolveDynamicWhereClauses by default on plugin init",
+          "timestamp": "2026-05-23T12:43:38+02:00",
+          "tree_id": "5c2d031f3c9ea5dd089432348afdb0759eeaafad",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2b598066b9d4faabbd613019cca3a4ee17058f90"
+        },
+        "date": 1779533177518,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.34,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
