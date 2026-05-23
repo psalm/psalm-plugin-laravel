@@ -40,12 +40,12 @@ Taint analysis also works across helper functions, service classes, and any numb
 
 ```php
 // UserController.php
-$user->siteSettinsg['articles_sort'] = $request->input('sort'); // Tainted source: user input from HTTP request
+$user->siteSettings['articles_sort'] = $request->input('sort'); // Tainted source: user input from HTTP request
 $user->save();
 
 // ArticlesConstoller.php
 Articles::query()
-    ->orderBy($user->siteSettinsg['articles_sort']) // 🚨 Tainted sink: unvalidated user input used in query builder
+    ->orderBy($user->siteSettings['articles_sort']) // 🚨 Tainted sink: unvalidated user input used in query builder
     ->get();
 
 // Psalm output:
@@ -113,11 +113,11 @@ See [docs/issues/index.md](docs/issues/index.md) for the full catalog.
 
 Maintained versions:
 
-| Laravel Psalm Plugin                      | PHP  | Laravel    | Psalm  | Status |
-|-------------------------------------------|------|------------|--------|--------|
-| 4.x                                       | ^8.2 | 12, 13     | 7-beta | Stable |
-| 3.x ([upgrade v4 to](docs/upgrade-v4.md)) | ^8.2 | 11, 12, 13 | 6      | Stable |
-| 2.12+                                     | ^8.0 | 9, 10, 11  | 5, 6   | Legacy |
+| Laravel Psalm Plugin                         | PHP  | Laravel    | Psalm  | Status |
+|----------------------------------------------|------|------------|--------|--------|
+| 4.x                                          | ^8.2 | 12, 13     | 7-beta | Stable |
+| 3.x ([upgrade to v4](docs/upgrade-v4.md)) | ^8.2 | 11, 12, 13 | 6      | Stable |
+| 2.12+                                        | ^8.0 | 9, 10, 11  | 5, 6   | Legacy |
 
 _(Older versions of Laravel, PHP, and Psalm were supported by version 1.x of the plugin, but they are no longer maintained)_
 

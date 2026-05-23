@@ -2,8 +2,39 @@
 
 namespace Illuminate\Support;
 
+/**
+ * Property + constructor declarations mirror Laravel's source so the stub-merged storage Psalm
+ * uses keeps a visible `$app` slot with its declaring-class link intact. Init propagation for
+ * subclasses that override `__construct` and call `parent::__construct($app)` is patched in
+ * SuppressHandler::FRAMEWORK_INITIALIZED_PROPERTIES_BY_FQCN (see psalm/psalm-plugin-laravel#945)
+ * because Psalm does not trace `parent::__construct` through to parent-property assignments
+ * when checking the child.
+ */
 abstract class ServiceProvider
 {
+    /**
+     * The application instance.
+     *
+     * @var \Illuminate\Contracts\Foundation\Application
+     */
+    protected $app;
+
+    /** @var array<int, \Closure> */
+    protected $bootingCallbacks = [];
+
+    /** @var array<int, \Closure> */
+    protected $bootedCallbacks = [];
+
+    /**
+     * Create a new service provider instance.
+     *
+     * @param  \Illuminate\Contracts\Foundation\Application  $app
+     */
+    public function __construct($app)
+    {
+        $this->app = $app;
+    }
+
     /**
      * Register the package's custom Artisan commands.
      *

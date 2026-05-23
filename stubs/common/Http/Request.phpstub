@@ -4,6 +4,8 @@ namespace Illuminate\Http;
 
 use ArrayAccess;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
 /**
@@ -11,6 +13,13 @@ use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
  */
 class Request extends SymfonyRequest implements Arrayable, ArrayAccess
 {
+    use Concerns\CanBePrecognitive,
+        Concerns\InteractsWithContentTypes,
+        Concerns\InteractsWithFlashData,
+        Concerns\InteractsWithInput,
+        Conditionable,
+        Macroable;
+
     /**
      * Retrieve a header from the request.
      *
@@ -23,6 +32,26 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * @psalm-taint-source input
      */
     public function header($key = null, $default = null) {}
+
+    /**
+     * Retrieve a file from the request.
+     *
+     * Stubbed on the class (not the InteractsWithInput trait) because Psalm 7
+     * collapses conditional return types when the trait's method storage is
+     * mutated by a stub override. The class-level declaration short-circuits
+     * the override path, so narrowing works on every Laravel version we
+     * support. See stubs/common/Http/Concerns/InteractsWithInput.phpstub for
+     * the long-form rationale and laravel/framework history.
+     *
+     * Refs: https://github.com/psalm/psalm-plugin-laravel/issues/925
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>> : \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>|null)
+     *
+     * @psalm-taint-source input
+     */
+    public function file($key = null, $default = null) {}
 
     /**
      * Get the route handling the request.

@@ -1,0 +1,27 @@
+<?php
+
+namespace Carbon\Constants;
+
+/**
+ * Carbon 3.11+ extracted these constants into a dedicated interface and
+ * added it to `CarbonInterface`'s `extends` clause. We ship a stub so
+ * downstream projects pinned to Carbon <3.11 (e.g. 3.10.x) don't trip
+ * `MissingDependency` when our `CarbonInterface.phpstub` references it.
+ * Copy verbatim from vendor/nesbot/carbon/src/Carbon/Constants/DiffOptions.php.
+ */
+interface DiffOptions
+{
+    public const NO_ZERO_DIFF = 01;
+    public const JUST_NOW = 02;
+    public const ONE_DAY_WORDS = 04;
+    public const TWO_DAY_WORDS = 010;
+    public const SEQUENTIAL_PARTS_ONLY = 020;
+    public const ROUND = 040;
+    public const FLOOR = 0100;
+    public const CEIL = 0200;
+
+    public const DIFF_ABSOLUTE = 1;
+    public const DIFF_RELATIVE_AUTO = 0;
+    public const DIFF_RELATIVE_TO_NOW = 2;
+    public const DIFF_RELATIVE_TO_OTHER = 3;
+}

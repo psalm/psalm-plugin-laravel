@@ -1,0 +1,70 @@
+# Configuration for crate-ci/typos (https://github.com/crate-ci/typos)
+#
+# Run locally:
+#   typos
+#   typos --write-changes      # auto-apply suggested fixes
+#
+# CI invocation lives in .github/workflows/spelling.yml.
+
+[files]
+extend-exclude = [
+    "vendor/",
+    "build/",
+]
+
+[default]
+# Intentional misspellings used as test/doc fixtures. Each pattern is
+# scoped narrowly enough that an accidental real typo would still be caught.
+extend-ignore-re = [
+    # README + MissingProperty fixtures: simulated typo'd Eloquent attribute
+    "siteSettinsg",
+    # MissingView fixture: deliberately mistyped Blade template name
+    "emails\\.welcom",
+    # MissingTranslation fixture: deliberately mistyped translation key
+    "mesages\\.welcome",
+    # docs/config.md + NoEnvOutsideConfigHandlerTest: <configDirectory name="cofnig" />
+    # demonstrates the warning path for a non-existent directory.
+    "cofnig",
+    "cofnig-typo",
+    # ValidationRuleAnalyzer comment: explains that `heder` (a misspelled rule
+    # name) contributes no escape — i.e. the typo IS the example.
+    "`heder`",
+    "heder` instead",
+    # tests/Type/psalm-with-optin-custom-issues.xml — fixture filename
+    # ("opt-in" mashed into one word); renaming would churn many test refs.
+    "optin",
+]
+
+[default.extend-identifiers]
+# Laravel's `Illuminate\Encryption\Encrypter` is a real public class name;
+# typos suggests "Encryptor" but the framework spelling is canonical.
+Encrypter = "Encrypter"
+EncrypterContract = "EncrypterContract"
+StringEncrypter = "StringEncrypter"
+encrypter = "encrypter"
+encrypterImplementsContract = "encrypterImplementsContract"
+encrypterImplementsStringEncrypter = "encrypterImplementsStringEncrypter"
+TaintedHtmlEncrypterDecryptString = "TaintedHtmlEncrypterDecryptString"
+SafeEncrypterEscapesSecret = "SafeEncrypterEscapesSecret"
+
+# "Invokable" is the established PHP/Laravel term for an object exposing
+# `__invoke()`. Typos prefers "Invocable"; reject the suggestion.
+Invokable = "Invokable"
+invokable = "invokable"
+MacroInvokableFixture = "MacroInvokableFixture"
+viaInvokable = "viaInvokable"
+discovers_invokable_object_macro = "discovers_invokable_object_macro"
+
+# IIFE acronym (Immediately Invoked Function Expression). typos parses the `IIF` sub-token and flags it as a typo of "IF".
+IIF = "IIF"
+IIFE = "IIFE"
+IIFEs = "IIFEs"
+
+[default.extend-words]
+# `mis-` is a valid English prefix (mis-cased, mis-infer, mis-identify, etc.).
+# typos tokenizes the bare `mis` and flags it as a typo of "miss"/"mist".
+mis = "mis"
+# `look-alikes` is a valid compound word; typos flags the trailing token.
+alikes = "alikes"
+# `Unparseable` is an accepted variant spelling of `Unparsable`.
+Unparseable = "Unparseable"

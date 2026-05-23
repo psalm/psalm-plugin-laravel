@@ -22,6 +22,7 @@ Full config example:
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
         <modelProperties columnFallback="none" />
         <resolveDynamicWhereClauses value="false" />
+        <resolveConfigReturnTypes value="false" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
@@ -53,9 +54,9 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 
 **default**: `true`
 
-When enabled, the plugin resolves Laravel's [dynamic where methods](https://laravel.com/docs/queries#dynamic-where-clauses) (e.g. `whereTitle('foo')`, `whereFirstName('John')`) on Eloquent relation chains, preserving the relation's generic type instead of returning `mixed`.
+When enabled, the plugin resolves Laravel's [dynamic where methods](https://laravel.com/docs/queries#dynamic-where-clauses) (e.g. `whereTitle('foo')`, `whereFirstName('John')`) on both Eloquent relation chains and direct Model static / instance calls (`User::whereEmail('a@b')`, `$user->whereEmail('a@b')`), preserving the relation or `Builder<TModel>` generic type instead of returning `mixed` or raising `UndefinedMagicMethod`.
 
-Column names are validated against the model's `@property` annotations. Unmatched columns fall through to `mixed` without an error, so partial annotation is safe.
+Column names are validated against the model's `@property` annotations. Columns with no matching declaration are not claimed by the plugin: relation chains fall through to `mixed`, and direct Model calls fall through to `UndefinedMagicMethod`. Custom Eloquent builder methods that happen to start with `where` (e.g. `whereByMake(string)`) are also left to Psalm's normal resolution so their declared return types win. Partial `@property` annotation is therefore safe.
 
 Disable if dynamic where resolution conflicts with your codebase.
 
@@ -63,6 +64,33 @@ Disable if dynamic where resolution conflicts with your codebase.
 
 ```xml
 <resolveDynamicWhereClauses value="false" />
+```
+
+## `resolveConfigReturnTypes`
+
+**default**: `true`
+
+When enabled, the plugin narrows `config('some.key')`, `Config::get('some.key')`, and `Repository::get('some.key')` (both the concrete `\Illuminate\Config\Repository` and the contract) from `mixed` to the runtime type reflected from the booted Laravel app.
+
+Scalar values are intentionally generalised (`config('app.debug')` stays `bool`, not the boot-time literal `false`) so env-driven overrides keep working at the call site without triggering spurious `TypeDoesNotContainType` warnings.
+Arrays preserve shape up to depth 5 with a 64-key per-level cap and a 512-property cross-level budget; beyond any cap, the value degrades to `array<array-key, mixed>`.
+
+Three call-site rules mirror `Arr::get` runtime behavior:
+
+- key absent → generalised default
+- key present, value not null → reflected value (default ignored)
+- key present, value is null → stored null (default ignored, even when supplied)
+
+Closure values stored in config reflect to `\Closure`. Closure defaults resolve to their declared return type (typed closures); untyped closures contribute `mixed` without dropping other union members.
+
+### When to disable
+
+When you always use `Config::ineteger()`, `Config::string()` and other typed calls consistently.
+
+### Example
+
+```xml
+<resolveConfigReturnTypes value="false" />
 ```
 
 ## `configDirectory`
