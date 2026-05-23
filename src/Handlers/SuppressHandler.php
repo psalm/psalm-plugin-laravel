@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers;
 
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
@@ -159,6 +160,9 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
     /** @var array<string, array<string, list<string>>> */
     private const METHOD_LEVEL_BY_PARENT_CLASS = [
+        'MissingReturnType' => [
+            'Illuminate\Database\Migrations\Migration' => ['up', 'down'],
+        ],
         'PossiblyUnusedMethod' => [
             // __construct included because Console commands are instantiated by the framework
             // exclusively through the container: `Console\Kernel::resolve()` and `Application::call()`
@@ -381,6 +385,8 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
         if (\in_array('Illuminate\Database\Eloquent\Model', $parents, true)) {
             self::suppressEloquentAccessorMethods($classStorage);
+            self::suppressEloquentScopeMethods($classStorage);
+            self::suppressLegacyEloquentScopeMethods($classStorage);
         }
 
         if (\in_array('Illuminate\Notifications\Notification', $parents, true)) {
@@ -447,6 +453,94 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 self::suppressInternalDispatchMethod('PossiblyUnusedMethod', $methodStorage);
             }
         }
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod / UnusedMethod for methods annotated with #[Scope].
+     *
+     * Eloquent dispatches modern scopes through `Builder::callNamedScope()` / `Builder::__call()`
+     * (which routes via `Model::__call()` and reflection). The call site `$builder->published()`
+     * never references the model method directly, so Psalm cannot link it back to the declaration
+     * and reports `PossiblyUnusedMethod` (or `UnusedMethod` under `findUnusedCode=true`). The plugin
+     * already covers the type/visibility side via `BuilderScopeHandler` / `ModelMethodHandler` —
+     * this fixes the suppression side. See psalm/psalm-plugin-laravel#874.
+     *
+     * Visibility: routed through `suppressInternalDispatchMethod()` so `public` and `protected`
+     * stay silenced, but `private` stays flagged. At runtime Eloquent invokes the scope on the
+     * model instance from `Builder`'s foreign scope — a `private` scope is unreachable from that
+     * dispatch site and would fatal, so leaving it reported surfaces the real bug.
+     */
+    private static function suppressEloquentScopeMethods(ClassLikeStorage $classStorage): void
+    {
+        foreach ($classStorage->methods as $methodStorage) {
+            if (!self::hasScopeAttribute($methodStorage)) {
+                continue;
+            }
+
+            self::suppressInternalDispatchMethod('PossiblyUnusedMethod', $methodStorage);
+            self::suppressInternalDispatchMethod('UnusedMethod', $methodStorage);
+        }
+    }
+
+    /** @psalm-mutation-free */
+    private static function hasScopeAttribute(MethodStorage $methodStorage): bool
+    {
+        foreach ($methodStorage->attributes as $attribute) {
+            if ($attribute->fq_class_name === Scope::class) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod / UnusedMethod for legacy `scopeXxx()` Eloquent methods.
+     *
+     * Same dispatch problem as `#[Scope]` (see `suppressEloquentScopeMethods()` above), only
+     * older: `$builder->active()` resolves to `$model->scopeActive(...)` via
+     * `Model::callNamedScope()` (`{'scope'.ucfirst($scope)}(...)`). The call site never
+     * references the model method directly, so Psalm reports the scope method as unused.
+     * Sibling of psalm/psalm-plugin-laravel#874, deferred there to keep the diff focused.
+     *
+     * Detection: lowercase method key starts with `scope` AND the original-cased name has an
+     * uppercase ASCII letter directly after `scope` (matches Laravel's `ucfirst()` resolution
+     * at `Model.php:1981`). The cased-name check prevents misclassifying methods like
+     * `scopeactive` (which Laravel cannot dispatch — `ucfirst()` produces `scopeActive`) or
+     * a literal `scope()` method.
+     *
+     * Visibility: same routing as the modern variant — `private` stays flagged because the
+     * dispatch lives on `$this` in `Model::callNamedScope()` and a `private` override on a
+     * subclass would not be resolvable from the parent scope (PHP private scoping).
+     */
+    private static function suppressLegacyEloquentScopeMethods(ClassLikeStorage $classStorage): void
+    {
+        foreach ($classStorage->methods as $methodName => $methodStorage) {
+            if (!self::isLegacyScopeMethodName($methodName, $methodStorage->cased_name)) {
+                continue;
+            }
+
+            self::suppressInternalDispatchMethod('PossiblyUnusedMethod', $methodStorage);
+            self::suppressInternalDispatchMethod('UnusedMethod', $methodStorage);
+        }
+    }
+
+    /** @psalm-pure */
+    private static function isLegacyScopeMethodName(string $lowercaseName, ?string $casedName): bool
+    {
+        if ($casedName === null || \strlen($casedName) < 6) {
+            return false;
+        }
+
+        if (!\str_starts_with($lowercaseName, 'scope')) {
+            return false;
+        }
+
+        // Laravel resolves $builder->active() via `scope` . ucfirst('active') => `scopeActive`.
+        // A `scopeactive()` method is dispatch-unreachable, so don't suppress it.
+        $firstNameChar = $casedName[5];
+
+        return $firstNameChar >= 'A' && $firstNameChar <= 'Z';
     }
 
     /**

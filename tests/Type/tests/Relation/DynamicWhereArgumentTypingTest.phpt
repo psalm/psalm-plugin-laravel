@@ -70,6 +70,21 @@ function test_dynamic_where_unknown_column_skips_validation(): void {
     $r->whereNonExistentColumn(123);
 }
 
+function test_dynamic_where_multi_segment_falls_back_to_variadic(): void {
+    // Multi-segment forms (issue #927) take one argument per segment, each with
+    // potentially different column types. The validator caches multi-segment
+    // success as `null` so getMethodParams() does NOT consume a Union and apply
+    // single-typed-param checking — that would otherwise narrow segment 1's
+    // arg to invoice_number's type and reject correct values in segment 2.
+    // Passing the wrong type in either position is therefore silently accepted
+    // (the variadic-mixed fallback governs argument arity only).
+    $r = (new WorkOrder())->invoice();
+    // invoice_number AND status are both strings, but the multi-segment path
+    // intentionally skips the typed-param hand-off; int args don't error.
+    $r->whereInvoiceNumberAndStatus(123, 456);
+    $r->whereInvoiceNumberOrStatus(123, 456);
+}
+
 function test_dynamic_where_multi_arg_form_falls_back_to_variadic(): void {
     // Laravel's Builder::dynamicWhere silently drops the second+ arguments and
     // always uses '=' as the operator (see Query\Builder::addDynamic). The 2-arg

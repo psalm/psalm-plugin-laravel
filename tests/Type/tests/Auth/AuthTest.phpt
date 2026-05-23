@@ -4,7 +4,7 @@
 $_user = \Illuminate\Support\Facades\Auth::user();
 /** @psalm-check-type-exact $_user = \Illuminate\Foundation\Auth\User|null */
 
-// All facade methods handled by AuthHandler must not crash Psalm 7
+// All facade methods handled by AuthMethodHandler must not crash Psalm 7
 // (previously getUser/authenticate/etc. caused UnexpectedValueException
 // because getMethodParams returned null for @method-annotated methods)
 $_getUser = \Illuminate\Support\Facades\Auth::getUser();
@@ -150,5 +150,37 @@ function _diStatefulGuard(\Illuminate\Contracts\Auth\StatefulGuard $guard): void
     $_stLogin = $guard->loginUsingId(1);
     /** @psalm-check-type-exact $_stLogin = \Illuminate\Foundation\Auth\User|false */
 }
+
+// `auth()` helper narrowing — issue #979.
+// String-literal guard names resolve to the concrete driver class so calls like
+// `auth('web')->logout()` succeed (logout is on StatefulGuard, not the Guard contract).
+$_authWeb = auth('web');
+/** @psalm-check-type-exact $_authWeb = \Illuminate\Auth\SessionGuard */
+
+// Regression assertion for #979: the original failure was UndefinedInterfaceMethod on
+// `auth('web')->logout()`. Once auth('web') narrows to SessionGuard, the call resolves.
+auth('web')->logout();
+
+$_authApi = auth('api');
+/** @psalm-check-type-exact $_authApi = \Illuminate\Auth\TokenGuard */
+
+// No-arg / literal-null preserve the stub's AuthManager return so the manager-only
+// methods (extend, provider, guard, …) stay reachable. AuthManager's @mixin StatefulGuard
+// still covers `auth()->logout()`.
+$_authNoArg = auth();
+/** @psalm-check-type-exact $_authNoArg = \Illuminate\Auth\AuthManager */
+
+$_authNullArg = auth(null);
+/** @psalm-check-type-exact $_authNullArg = \Illuminate\Auth\AuthManager */
+
+/** @var string $dynamicGuardName */
+$dynamicGuardName = 'web';
+$_authDynamic = auth($dynamicGuardName);
+// dynamic guard name — falls back to the stub-declared union
+/** @psalm-check-type-exact $_authDynamic = \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard */
+
+$_authUnknown = auth('nonexistent-guard');
+// unknown guard name — falls back to the stub-declared union
+/** @psalm-check-type-exact $_authUnknown = \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard */
 ?>
 --EXPECT--

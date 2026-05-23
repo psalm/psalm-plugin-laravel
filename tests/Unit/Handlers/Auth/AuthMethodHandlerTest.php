@@ -7,11 +7,11 @@ namespace Psalm\LaravelPlugin\Tests\Unit\Handlers\Auth;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Handlers\Auth\AuthHandler;
+use Psalm\LaravelPlugin\Handlers\Auth\AuthMethodHandler;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 
-#[CoversClass(AuthHandler::class)]
-final class AuthHandlerTest extends TestCase
+#[CoversClass(AuthMethodHandler::class)]
+final class AuthMethodHandlerTest extends TestCase
 {
     /**
      * Methods with no parameters should return an empty array.
@@ -34,7 +34,7 @@ final class AuthHandlerTest extends TestCase
             $method,
         );
 
-        $params = AuthHandler::getMethodParams($event);
+        $params = AuthMethodHandler::getMethodParams($event);
 
         $this->assertNotNull($params, "getMethodParams() must not return null for '{$method}' — Psalm 7 crashes on null for @method-annotated facade methods");
         $this->assertEmpty($params);
@@ -47,7 +47,7 @@ final class AuthHandlerTest extends TestCase
             'loginusingid',
         );
 
-        $params = AuthHandler::getMethodParams($event);
+        $params = AuthMethodHandler::getMethodParams($event);
 
         $this->assertNotNull($params);
         $this->assertCount(2, $params);
@@ -64,7 +64,7 @@ final class AuthHandlerTest extends TestCase
             'onceusingid',
         );
 
-        $params = AuthHandler::getMethodParams($event);
+        $params = AuthMethodHandler::getMethodParams($event);
 
         $this->assertNotNull($params);
         $this->assertCount(1, $params);
@@ -79,7 +79,7 @@ final class AuthHandlerTest extends TestCase
             'logoutotherdevices',
         );
 
-        $params = AuthHandler::getMethodParams($event);
+        $params = AuthMethodHandler::getMethodParams($event);
 
         $this->assertNotNull($params);
         $this->assertCount(1, $params);
@@ -94,7 +94,7 @@ final class AuthHandlerTest extends TestCase
             'guard',
         );
 
-        $params = AuthHandler::getMethodParams($event);
+        $params = AuthMethodHandler::getMethodParams($event);
 
         $this->assertNotNull($params, "getMethodParams() must not return null for 'guard' — Psalm 7 crashes on null for @method-annotated facade methods");
         $this->assertCount(1, $params);
@@ -109,7 +109,7 @@ final class AuthHandlerTest extends TestCase
             'unknown',
         );
 
-        $params = AuthHandler::getMethodParams($event);
+        $params = AuthMethodHandler::getMethodParams($event);
 
         $this->assertNull($params);
     }
@@ -143,7 +143,7 @@ final class AuthHandlerTest extends TestCase
         $event = new MethodParamsProviderEvent($fqClassLikeName, $method);
 
         $this->assertNotNull(
-            AuthHandler::getMethodParams($event),
+            AuthMethodHandler::getMethodParams($event),
             "getMethodParams() must not return null for {$fqClassLikeName}::{$method} — Psalm 7 crashes when the method is reached via __call (issue #854)",
         );
     }
@@ -172,7 +172,7 @@ final class AuthHandlerTest extends TestCase
         $event = new MethodParamsProviderEvent($fqClassLikeName, 'guard');
 
         $this->assertNull(
-            AuthHandler::getMethodParams($event),
+            AuthMethodHandler::getMethodParams($event),
             "getMethodParams() must return null for {$fqClassLikeName}::guard so Psalm uses the native signature",
         );
     }

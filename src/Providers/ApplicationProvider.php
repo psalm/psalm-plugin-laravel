@@ -176,6 +176,7 @@ final class ApplicationProvider
             // so handlers reading config still see whatever loaded prior to the throw.
             try {
                 $consoleApp->bootstrap();
+                $this->ensureAppKey($app);
             } catch (\Throwable $bootstrapError) {
                 self::$bootstrapError = $bootstrapError;
             }
@@ -184,6 +185,45 @@ final class ApplicationProvider
         }
 
         return $app;
+    }
+
+    /**
+     * Backfill `config('app.key')` when the analyzed project has no APP_KEY available.
+     *
+     * Laravel's `EncryptionServiceProvider` registers `encrypter` as a singleton whose
+     * closure reads `config('app.key')` lazily at first resolve. The plugin's facade
+     * scanner probes `Crypt::getFacadeRoot()` during `afterCodebasePopulated`, which
+     * triggers that closure and throws `MissingAppKeyException` when the key is empty —
+     * surfacing as a noisy warning for every analyzed Laravel project that hasn't
+     * shipped an `.env` (CI runs without secrets, fresh clones, package analysis).
+     *
+     * Static analysis never encrypts real data, so a constant dummy key is safe and
+     * sufficient: it lets the `encrypter` singleton initialize and the facade method
+     * provider register without affecting any analyzer output.
+     *
+     * Only fills when the current value is empty — never overrides a real user key
+     * that some provider may have already branched on (e.g. conditional registration
+     * based on `config('app.key')` presence).
+     */
+    private function ensureAppKey(LaravelApplication $app): void
+    {
+        if (!$app->bound('config')) {
+            return;
+        }
+
+        /** @var \Illuminate\Contracts\Config\Repository $config */
+        $config = $app['config'];
+
+        // Cast through string keeps Psalm out of MixedAssignment territory; the encrypter
+        // only treats non-empty strings as a real key anyway, so any non-string is "empty".
+        $current = (string) $config->get('app.key', '');
+
+        if ($current !== '') {
+            return;
+        }
+
+        // 32-byte ASCII key — valid for AES-256-CBC, matches getEnvironmentSetUp() above.
+        $config->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
     }
 
     /**
@@ -520,9 +560,15 @@ final class ApplicationProvider
 
     protected function getEnvironmentSetUp(LaravelApplication $app): void
     {
+        // Backfill app.key BEFORE testbench's BootProviders runs (called next in
+        // resolveApplicationBootstrappers) so any provider that reads config('app.key')
+        // during boot sees the dummy. doGetApp() also calls ensureAppKey() after the
+        // console bootstrap completes — that covers the bootstrap-file branch, which
+        // never enters this method. Single constant lives in ensureAppKey().
+        $this->ensureAppKey($app);
+
         /** @var \Illuminate\Config\Repository $config */
         $config = $app['config'];
-        $config->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
 
         // Register a token-driver guard so Auth::guard('api') narrows to TokenGuard in type tests.
         // The testbench default auth.php only ships a 'web' (session) guard; without this the

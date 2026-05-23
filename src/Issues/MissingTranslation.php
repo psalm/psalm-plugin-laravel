@@ -14,5 +14,5 @@ final class MissingTranslation extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/MissingTranslation/';
 
-    public const ERROR_LEVEL = 1;
+    // No ERROR_LEVEL override: controller by the plugin setting findMissingTranslations
 }
