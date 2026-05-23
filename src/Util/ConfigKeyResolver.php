@@ -81,9 +81,11 @@ final class ConfigKeyResolver
     /**
      * Mirrors `Arr::get` runtime semantics:
      *
-     *   - key absent      → generalized default
-     *   - present non-null → reflected (default ignored)
-     *   - present null     → null | generalized default
+     *   - key absent → generalized default
+     *   - key present → reflected value (default ignored, even if null)
+     *
+     * The default fires only when {@see Arr::exists()} returns false. A
+     * stored null with `array_key_exists` === true is returned verbatim.
      */
     public function resolveCallReturnType(string $key, Union $defaultType): Union
     {
@@ -97,11 +99,7 @@ final class ConfigKeyResolver
             return self::generalizeDefault($defaultType);
         }
 
-        if (!$reflected->isNullable()) {
-            return $reflected;
-        }
-
-        return Type::combineUnionTypes($reflected, self::generalizeDefault($defaultType));
+        return $reflected;
     }
 
     /**
@@ -141,6 +139,14 @@ final class ConfigKeyResolver
     {
         if ($call_args === []) {
             return null;
+        }
+
+        // Named args (`config(default: 'x', key: 'app.debug')`) — positional
+        // extraction would treat the wrong slot as the key. Bail to the stub.
+        foreach ($call_args as $arg) {
+            if ($arg->name !== null) {
+                return null;
+            }
         }
 
         $expr = $call_args[0]->value;
@@ -273,17 +279,23 @@ final class ConfigKeyResolver
             return;
         }
 
+        // Only wrap Repository calls — has() / get() can blow up on partial
+        // bootstrap or exploding service providers. Reflector failures are
+        // plugin bugs and must surface, not silently cache mixed.
         try {
-            if (!$this->config->has($key)) {
-                $this->cache[$key] = null;
-                return;
-            }
-
-            $this->cache[$key] = ConfigValueReflector::reflect($this->config->get($key));
+            $present = $this->config->has($key);
+            /** @psalm-var mixed $value */
+            $value = $present ? $this->config->get($key) : null;
         } catch (\Throwable) {
-            // Cache mixed so retries stay cheap. Silent by design — matches
-            // the pre-PR stub ceiling at the call site.
             $this->cache[$key] = Type::getMixed();
+            return;
         }
+
+        if (!$present) {
+            $this->cache[$key] = null;
+            return;
+        }
+
+        $this->cache[$key] = ConfigValueReflector::reflect($value);
     }
 }

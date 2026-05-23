@@ -90,12 +90,16 @@ final class ConfigValueReflectorTest extends TestCase
     }
 
     #[Test]
-    public function reflects_closure_to_mixed(): void
+    public function reflects_closure_value_to_Closure_named_object(): void
     {
-        // The reflector cannot follow a closure body without execution. value()
-        // resolves it at runtime — analysis must keep mixed at the call site.
-        $type = ConfigValueReflector::reflect(static fn(): string => 'x');
-        $this->assertTrue($type->isMixed());
+        // Repository::get returns the closure object verbatim — `value()` only
+        // runs on the $default branch inside Arr::get, never on stored values.
+        $closure = static fn(): string => 'x';
+        $type = ConfigValueReflector::reflect($closure);
+        $atomic = $type->getSingleAtomic();
+
+        $this->assertInstanceOf(TNamedObject::class, $atomic);
+        $this->assertSame(\Closure::class, $atomic->value);
     }
 
     #[Test]
@@ -131,6 +135,30 @@ final class ConfigValueReflectorTest extends TestCase
 
         $type = ConfigValueReflector::reflect($wide);
         $this->assertSame('array<array-key, mixed>', $type->getId());
+    }
+
+    #[Test]
+    public function degrades_when_total_property_budget_exhausted(): void
+    {
+        // Branching shape that fits within MAX_DEPTH and the per-level cap, but
+        // explodes total atomic count without the cross-level budget. Each
+        // top-level entry holds a smaller keyed array; together they cross
+        // MAX_TOTAL_PROPERTIES.
+        $branch = [];
+        for ($i = 0; $i < 32; $i++) {
+            $branch["k_{$i}"] = $i;
+        }
+        $tree = [];
+        for ($i = 0; $i < 32; $i++) {
+            // 32 branches × 32 leaves each = 1024 > MAX_TOTAL_PROPERTIES (512).
+            $tree["b_{$i}"] = $branch;
+        }
+        $type = ConfigValueReflector::reflect($tree);
+
+        // The top-level shape is still keyed (within budget for level 0),
+        // but at least one sub-tree degrades to array<array-key, mixed>.
+        $id = $type->getId();
+        $this->assertStringContainsString('array<array-key, mixed>', $id, 'Budget exhaustion must surface as array<array-key, mixed> somewhere in the tree.');
     }
 
     #[Test]

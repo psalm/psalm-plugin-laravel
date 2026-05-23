@@ -178,7 +178,7 @@ final class ConfigKeyResolverTest extends TestCase
     }
 
     #[Test]
-    public function resolveCallReturnType_unions_null_with_default_when_value_is_null(): void
+    public function resolveCallReturnType_returns_null_when_value_is_null_ignoring_default(): void
     {
         $repo = $this->fakeRepository(['app.providers' => null]);
         $resolver = new ConfigKeyResolver($repo);
@@ -188,9 +188,9 @@ final class ConfigKeyResolverTest extends TestCase
             new \Psalm\Type\Union([\Psalm\Type\Atomic\TLiteralString::make('fallback')]),
         );
 
-        // null | string
-        $this->assertTrue($type->isNullable());
-        $this->assertTrue($type->hasString());
+        // Laravel's Arr::get returns the stored null when the key exists
+        // (array_key_exists === true) — the default is NOT applied.
+        $this->assertTrue($type->isNull());
     }
 
     #[Test]

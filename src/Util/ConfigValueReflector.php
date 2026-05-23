@@ -17,9 +17,12 @@ use Psalm\Type\Union;
  * `config('app.debug')` to `false` would trigger `TypeDoesNotContainType` on
  * every `if (config('app.debug'))` callsite that overrides via env.
  *
- * Arrays preserve shape up to {@see MAX_DEPTH}/{@see MAX_KEYS_PER_LEVEL};
- * beyond that, degrade to `array<array-key, mixed>`. Closures, resources, and
- * unknown values fall back to `mixed`.
+ * Arrays preserve shape up to {@see MAX_DEPTH}/{@see MAX_KEYS_PER_LEVEL}; a
+ * per-tree {@see MAX_TOTAL_PROPERTIES} budget guards against a branching
+ * shallow array building a megabyte-scale type string before the depth cap
+ * fires. Beyond any cap, degrade to `array<array-key, mixed>`.
+ *
+ * Resources and unknown values fall back to `mixed`.
  *
  * @internal
  */
@@ -29,7 +32,24 @@ final class ConfigValueReflector
 
     public const MAX_KEYS_PER_LEVEL = 64;
 
-    public static function reflect(mixed $value, int $depth = 0): Union
+    /**
+     * Total keyed-array properties allowed across one top-level reflection.
+     * 512 covers Filament-scale configs (~hundreds of keyed leaves) without
+     * letting a branching shape produce multi-MB type identifiers.
+     */
+    public const MAX_TOTAL_PROPERTIES = 512;
+
+    public static function reflect(mixed $value): Union
+    {
+        $remainingBudget = self::MAX_TOTAL_PROPERTIES;
+
+        return self::reflectInternal($value, 0, $remainingBudget);
+    }
+
+    /**
+     * @param int<0, max> $depth
+     */
+    private static function reflectInternal(mixed $value, int $depth, int &$remainingBudget): Union
     {
         if ($value === null) {
             return Type::getNull();
@@ -52,16 +72,13 @@ final class ConfigValueReflector
         }
 
         if (\is_array($value)) {
-            return self::reflectArray($value, $depth);
-        }
-
-        if ($value instanceof \Closure) {
-            // value() (used by Repository::get) invokes closures lazily — static
-            // analysis cannot follow the body without an explicit return type.
-            return Type::getMixed();
+            return self::reflectArray($value, $depth, $remainingBudget);
         }
 
         if (\is_object($value)) {
+            // Stored closures: `Repository::get` does NOT auto-invoke them
+            // (`value()` only runs on the $default branch inside `Arr::get`).
+            // Return Closure as a plain named object so callers can $closure().
             return new Union([new TNamedObject($value::class)]);
         }
 
@@ -71,23 +88,30 @@ final class ConfigValueReflector
 
     /**
      * @param array<array-key, mixed> $value
+     * @param int<0, max> $depth
      */
-    private static function reflectArray(array $value, int $depth): Union
+    private static function reflectArray(array $value, int $depth, int &$remainingBudget): Union
     {
         if ($value === []) {
             return Type::getEmptyArray();
         }
 
-        if ($depth >= self::MAX_DEPTH || \count($value) > self::MAX_KEYS_PER_LEVEL) {
+        $count = \count($value);
+
+        if ($depth >= self::MAX_DEPTH
+            || $count > self::MAX_KEYS_PER_LEVEL
+            || $count > $remainingBudget
+        ) {
             return Type::getArray();
         }
 
+        $remainingBudget -= $count;
         $is_list = \array_is_list($value);
 
         $properties = [];
         /** @psalm-var mixed $sub_value */
         foreach ($value as $key => $sub_value) {
-            $properties[$key] = self::reflect($sub_value, $depth + 1);
+            $properties[$key] = self::reflectInternal($sub_value, $depth + 1, $remainingBudget);
         }
 
         // TKeyedArray::make requires non-empty-array; the empty branch is handled

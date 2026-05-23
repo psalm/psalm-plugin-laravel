@@ -66,5 +66,13 @@ function config_dynamic_key_remains_mixed(string $key): void
     $_result = config($key);
     /** @psalm-check-type-exact $_result = mixed */
 }
+
+function config_with_named_args_defers_to_stub(): void
+{
+    // Named args could let `default:` masquerade as the key in a positional
+    // scan. The handler bails and the stub's mixed return stands.
+    $_result = config(default: 'x', key: 'app.debug');
+    /** @psalm-check-type-exact $_result = mixed */
+}
 ?>
 --EXPECTF--
