@@ -100,8 +100,8 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 | `shell`         | Command injection                         | `Process::run()`                              | `escapeshellarg()`                            |
 | `ssrf`          | Server-side request forgery               | `Http::get($url)`                             | N/A                                           |
 | `file`          | Path traversal                            | `Filesystem::get()`, `response()->download()` | N/A                                           |
-| `user_secret`   | Password/token exposure in logs or output | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
-| `system_secret` | Internal secret exposure                  | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
+| `user_secret`   | Password/token exposure in logs or output | `echo`, log sinks, `md5()`, `sha1()`          | `Hash::make()`, `Encrypter::encrypt()`        |
+| `system_secret` | Internal secret exposure                  | `echo`, log sinks, `md5()`, `sha1()`          | `Hash::make()`, `Encrypter::encrypt()`        |
 
 ### All available kinds
 
