@@ -151,6 +151,7 @@ final class InitCommand extends Command
     /** Returns the validated level string, or null after emitting an error. */
     private function validateLevel(InputInterface $input, SymfonyStyle $io): ?string
     {
+        /** @psalm-var mixed $level */
         $level = $input->getOption('level');
         if (\is_string($level) && \preg_match('/^[1-8]$/', $level) === 1) {
             return $level;
@@ -231,7 +232,7 @@ final class InitCommand extends Command
      * package mode based on the presence of artisan. Falls back to the Laravel
      * default if both branches produce empty results.
      *
-     * @param array<string, mixed>|null $composer
+     * @param array<array-key, mixed>|null $composer
      * @return array{0: list<string>, 1: list<string>} [directories, files]
      */
     private function detectSourceRoots(string $cwd, ?array $composer, bool $hasPhpunitPlugin): array
@@ -281,7 +282,7 @@ final class InitCommand extends Command
     }
 
     /**
-     * @param array<string, mixed>|null $composer
+     * @param array<array-key, mixed>|null $composer
      * @return array{0: list<string>, 1: list<string>}
      */
     private function detectPackageRoots(string $cwd, ?array $composer): array
@@ -311,7 +312,7 @@ final class InitCommand extends Command
      * `config.vendor-dir` so projects that relocate vendor/ still ignore the
      * right path.
      *
-     * @param array<string, mixed>|null $composer
+     * @param array<array-key, mixed>|null $composer
      * @return list<string>
      */
     private function detectIgnoreDirs(string $cwd, ?array $composer): array
@@ -334,7 +335,7 @@ final class InitCommand extends Command
      * Decode composer.json once. Returns null on any read/decode failure so
      * callers can keep using the project as if composer.json weren't there.
      *
-     * @return array<string, mixed>|null
+     * @return array<array-key, mixed>|null
      */
     private function readComposerJson(string $cwd): ?array
     {
@@ -362,7 +363,8 @@ final class InitCommand extends Command
      * True when $package is listed in `require` or `require-dev`. Version
      * constraints are ignored: presence is the only signal we need.
      *
-     * @param array<string, mixed>|null $composer
+     * @param array<array-key, mixed>|null $composer
+     * @psalm-pure
      */
     private function composerHasPackage(?array $composer, string $package): bool
     {
@@ -371,6 +373,7 @@ final class InitCommand extends Command
         }
 
         foreach (['require', 'require-dev'] as $section) {
+            /** @psalm-var mixed $deps */
             $deps = $composer[$section] ?? null;
             if (\is_array($deps) && \array_key_exists($package, $deps)) {
                 return true;
@@ -383,7 +386,7 @@ final class InitCommand extends Command
     /**
      * Read composer's relocated vendor directory if configured, else 'vendor'.
      *
-     * @param array<string, mixed>|null $composer
+     * @param array<array-key, mixed>|null $composer
      */
     private function resolveVendorDir(?array $composer): string
     {
@@ -403,7 +406,7 @@ final class InitCommand extends Command
      * Extract `autoload.psr-4` directories from composer.json. Order preserved,
      * duplicates removed, trailing slashes stripped.
      *
-     * @param array<string, mixed>|null $composer
+     * @param array<array-key, mixed>|null $composer
      * @return list<string>
      */
     private function extractComposerAutoloadDirs(?array $composer): array
@@ -418,8 +421,10 @@ final class InitCommand extends Command
         }
 
         $dirs = [];
+        /** @psalm-var mixed $paths */
         foreach ($psr4 as $paths) {
             $paths = \is_array($paths) ? $paths : [$paths];
+            /** @psalm-var mixed $candidate */
             foreach ($paths as $candidate) {
                 if (! \is_string($candidate) || $candidate === '') {
                     continue;
@@ -444,6 +449,7 @@ final class InitCommand extends Command
      * @param list<string> $directories
      * @param list<string> $files
      * @param list<string> $ignores
+     * @psalm-pure
      */
     private function buildProjectFiles(array $directories, array $files, array $ignores, bool $hasPhpunitPlugin): string
     {
