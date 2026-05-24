@@ -23,10 +23,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * Writes are atomic (tmp file + rename) so a killed process cannot leave a
  * half-written workflow that would then fail CI on the next push.
  */
-#[AsCommand(
-    name: 'add',
-    description: 'Wire psalm-plugin-laravel into your project (currently: CI workflows).',
-)]
+#[AsCommand(name: 'add', description: 'Wire psalm-plugin-laravel into your project (currently: CI workflows).')]
 final class AddCommand extends Command
 {
     public function __construct(
@@ -53,12 +50,7 @@ final class AddCommand extends Command
             InputArgument::REQUIRED,
             'What to install: "ci" (auto-detect) or an explicit provider name such as "github".',
         );
-        $this->addOption(
-            'force',
-            'f',
-            InputOption::VALUE_NONE,
-            'Overwrite the destination file without prompting.',
-        );
+        $this->addOption('force', 'f', InputOption::VALUE_NONE, 'Overwrite the destination file without prompting.');
     }
 
     #[\Override]
@@ -101,12 +93,9 @@ final class AddCommand extends Command
         $io->writeln(\sprintf('  %s %s', $action, $plan->path));
 
         if ($plan->targetExists && $input->getOption('force') !== true) {
-            $overwrite = $io->confirm(
-                \sprintf('%s already exists. Overwrite?', $plan->path),
-                false,
-            );
+            $overwrite = $io->confirm(\sprintf('%s already exists. Overwrite?', $plan->path), false);
 
-            if (! $overwrite) {
+            if (!$overwrite) {
                 $io->note('Left existing file untouched.');
                 return Command::SUCCESS;
             }
@@ -136,7 +125,7 @@ final class AddCommand extends Command
     private function writeAtomically(string $path, string $contents): ?string
     {
         $parentDir = \dirname($path);
-        if (! \is_dir($parentDir) && ! @\mkdir($parentDir, 0755, true) && ! \is_dir($parentDir)) {
+        if (!\is_dir($parentDir) && !@\mkdir($parentDir, 0755, true) && !\is_dir($parentDir)) {
             return \sprintf('Failed to create directory %s%s', $parentDir, $this->lastErrorSuffix());
         }
 
@@ -150,7 +139,7 @@ final class AddCommand extends Command
             return \sprintf('Failed to write %s%s', $tmp, $suffix);
         }
 
-        if (! @\rename($tmp, $path)) {
+        if (!@\rename($tmp, $path)) {
             $suffix = $this->lastErrorSuffix();
             @\unlink($tmp);
             return \sprintf('Failed to finalize write to %s%s', $path, $suffix);

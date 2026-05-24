@@ -35,11 +35,11 @@ final class MigrationSchemaBuilder
         $sqlDumpFiles = $this->discoverSqlDumpFiles($progress);
         $migrationFiles = $this->discoverMigrationFiles($progress);
 
-        $tables = $this->cache->remember(
-            $migrationFiles,
+        $tables = $this->cache->remember($migrationFiles, $sqlDumpFiles, fn(): array => $this->parse(
             $sqlDumpFiles,
-            fn(): array => $this->parse($sqlDumpFiles, $migrationFiles, $progress),
-        );
+            $migrationFiles,
+            $progress,
+        ));
 
         $this->reportCacheStatus($progress);
 
@@ -66,9 +66,7 @@ final class MigrationSchemaBuilder
             try {
                 $aggregator->addStatements($this->codebase->getStatementsForFile($file));
             } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-                $progress->warning(
-                    "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}",
-                );
+                $progress->warning("Laravel plugin: skipping migration '{$file}': {$e->getMessage()}");
             }
         }
 
@@ -139,11 +137,8 @@ final class MigrationSchemaBuilder
      *
      * @param list<string> $sqlDumpFiles
      */
-    private function parseSqlDumps(
-        array $sqlDumpFiles,
-        SchemaAggregator $schemaAggregator,
-        Progress $progress,
-    ): void {
+    private function parseSqlDumps(array $sqlDumpFiles, SchemaAggregator $schemaAggregator, Progress $progress): void
+    {
         if ($sqlDumpFiles === []) {
             return;
         }
@@ -181,7 +176,9 @@ final class MigrationSchemaBuilder
         try {
             $iterator = new \DirectoryIterator($directory);
         } catch (\UnexpectedValueException $unexpectedValueException) {
-            $progress->warning("Laravel plugin: could not read schema directory '{$directory}': {$unexpectedValueException->getMessage()}");
+            $progress->warning(
+                "Laravel plugin: could not read schema directory '{$directory}': {$unexpectedValueException->getMessage()}",
+            );
             return [];
         }
 
@@ -231,11 +228,14 @@ final class MigrationSchemaBuilder
         }
 
         try {
-            $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-            );
+            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(
+                $directory,
+                \FilesystemIterator::SKIP_DOTS,
+            ));
         } catch (\UnexpectedValueException $unexpectedValueException) {
-            $progress->warning("Laravel plugin: could not read migration directory '{$directory}': {$unexpectedValueException->getMessage()}");
+            $progress->warning(
+                "Laravel plugin: could not read migration directory '{$directory}': {$unexpectedValueException->getMessage()}",
+            );
             return [];
         }
 
@@ -255,7 +255,9 @@ final class MigrationSchemaBuilder
             }
         } catch (\UnexpectedValueException $unexpectedValueException) {
             // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories
-            $progress->warning("Laravel plugin: error scanning migration directory '{$directory}': {$unexpectedValueException->getMessage()}");
+            $progress->warning(
+                "Laravel plugin: error scanning migration directory '{$directory}': {$unexpectedValueException->getMessage()}",
+            );
         }
 
         return $files;

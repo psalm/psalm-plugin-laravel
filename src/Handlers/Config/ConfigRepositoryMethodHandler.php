@@ -78,7 +78,8 @@ final class ConfigRepositoryMethodHandler implements MethodReturnTypeProviderInt
 
         $fqcn = $event->getFqClasslikeName();
 
-        if ($fqcn === \Illuminate\Config\Repository::class
+        if (
+            $fqcn === \Illuminate\Config\Repository::class
             || $fqcn === \Illuminate\Contracts\Config\Repository::class
         ) {
             return null;

@@ -67,7 +67,7 @@ final class AuthFunctionHandler implements FunctionReturnTypeProviderInterface
         }
 
         // Only narrow when the guard name is a literal string we can resolve.
-        if (! $first_arg instanceof String_) {
+        if (!$first_arg instanceof String_) {
             return null;
         }
 

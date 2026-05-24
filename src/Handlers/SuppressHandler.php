@@ -96,10 +96,25 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         'NonInvariantDocblockPropertyType' => [
             'Illuminate\Console\Command' => ['description'],
             'Illuminate\Database\Eloquent\Model' => [
-                'fillable', 'guarded', 'hidden', 'casts', 'appends', 'touches',
-                'with', 'withCount', 'connection', 'table', 'primaryKey', 'keyType',
-                'perPage', 'incrementing', 'timestamps', 'dateFormat',
-                'attributes', 'dispatchesEvents', 'observables',
+                'fillable',
+                'guarded',
+                'hidden',
+                'casts',
+                'appends',
+                'touches',
+                'with',
+                'withCount',
+                'connection',
+                'table',
+                'primaryKey',
+                'keyType',
+                'perPage',
+                'incrementing',
+                'timestamps',
+                'dateFormat',
+                'attributes',
+                'dispatchesEvents',
+                'observables',
             ],
             'Illuminate\View\Component' => ['componentName'],
         ],
@@ -422,7 +437,8 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
      */
     private static function suppressFactoryMissingTCount(ClassLikeStorage $classStorage): void
     {
-        $factoryParams = $classStorage->template_extended_params['Illuminate\Database\Eloquent\Factories\Factory'] ?? null;
+        $factoryParams
+            = $classStorage->template_extended_params['Illuminate\Database\Eloquent\Factories\Factory'] ?? null;
 
         if (\is_array($factoryParams) && isset($factoryParams['TModel'])) {
             self::suppress('MissingTemplateParam', $classStorage);

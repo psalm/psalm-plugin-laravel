@@ -45,7 +45,7 @@ final class AnalyzeCommand extends Command
             . \DIRECTORY_SEPARATOR . 'bin'
             . \DIRECTORY_SEPARATOR . 'psalm';
 
-        if (! \is_file($psalmBin)) {
+        if (!\is_file($psalmBin)) {
             $io->error(\sprintf(
                 'Could not find %s. Install Psalm with `composer require --dev vimeo/psalm`.',
                 $psalmBin,
@@ -56,7 +56,7 @@ final class AnalyzeCommand extends Command
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
         $process = \proc_open([$psalmBin], $descriptors, $pipes, $cwd);
 
-        if (! \is_resource($process)) {
+        if (!\is_resource($process)) {
             $io->error('Failed to launch Psalm.');
             return Command::FAILURE;
         }

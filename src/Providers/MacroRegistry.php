@@ -336,11 +336,7 @@ final class MacroRegistry
             if (!$closureType instanceof \Psalm\Type\Atomic\TClosure && $codebase instanceof \Psalm\Codebase) {
                 $closureStorage = self::recoverClosureStorage($reflection, $codebase);
                 if ($closureStorage instanceof FunctionLikeStorage) {
-                    return self::buildDefinitionFromStorage(
-                        $declaringClass,
-                        $name,
-                        $closureStorage,
-                    );
+                    return self::buildDefinitionFromStorage($declaringClass, $name, $closureStorage);
                 }
             }
         }
@@ -445,8 +441,10 @@ final class MacroRegistry
      * name is run through `realpath()` first to canonicalise symlinks and `..`
      * segments, then lowercased and separator-normalised to match Psalm's key shape.
      */
-    private static function recoverClosureStorage(\ReflectionFunctionAbstract $reflection, Codebase $codebase): ?FunctionLikeStorage
-    {
+    private static function recoverClosureStorage(
+        \ReflectionFunctionAbstract $reflection,
+        Codebase $codebase,
+    ): ?FunctionLikeStorage {
         $filePath = $reflection->getFileName();
         $line = $reflection->getStartLine();
         if (!\is_string($filePath) || !\is_int($line)) {
@@ -519,10 +517,7 @@ final class MacroRegistry
         string $name,
         FunctionLikeStorage $storage,
     ): MacroDefinition {
-        $params = \array_map(
-            static fn(FunctionLikeParameter $p): FunctionLikeParameter => clone $p,
-            $storage->params,
-        );
+        $params = \array_map(static fn(FunctionLikeParameter $p): FunctionLikeParameter => clone $p, $storage->params);
 
         return new MacroDefinition(
             declaringClass: $declaringClass,
@@ -648,7 +643,7 @@ final class MacroRegistry
      */
     private static function ifPublicStatic(\ReflectionMethod $method): ?\ReflectionMethod
     {
-        return ($method->isPublic() && $method->isStatic()) ? $method : null;
+        return $method->isPublic() && $method->isStatic() ? $method : null;
     }
 
     /**
@@ -659,8 +654,11 @@ final class MacroRegistry
      *                                            same as `$selfHostClass`. Null for free
      *                                            functions.
      */
-    private static function buildParameter(\ReflectionParameter $reflParam, ?string $selfHostClass, ?string $staticHostClass): FunctionLikeParameter
-    {
+    private static function buildParameter(
+        \ReflectionParameter $reflParam,
+        ?string $selfHostClass,
+        ?string $staticHostClass,
+    ): FunctionLikeParameter {
         $reflType = $reflParam->getType();
         $type = self::reflectionTypeToUnion($reflType, $selfHostClass, $staticHostClass);
 
@@ -704,8 +702,11 @@ final class MacroRegistry
      * @param class-string|null $selfHostClass
      * @param class-string|null $staticHostClass
      */
-    private static function reflectionTypeToUnion(?\ReflectionType $type, ?string $selfHostClass = null, ?string $staticHostClass = null): ?Union
-    {
+    private static function reflectionTypeToUnion(
+        ?\ReflectionType $type,
+        ?string $selfHostClass = null,
+        ?string $staticHostClass = null,
+    ): ?Union {
         if (!$type instanceof \ReflectionType) {
             return null;
         }
@@ -746,8 +747,11 @@ final class MacroRegistry
      * @param class-string $staticHostClass
      * @psalm-pure
      */
-    private static function expandSelfStaticParent(string $typeString, string $selfHostClass, string $staticHostClass): string
-    {
+    private static function expandSelfStaticParent(
+        string $typeString,
+        string $selfHostClass,
+        string $staticHostClass,
+    ): string {
         $parent = null;
         try {
             $parent = (new \ReflectionClass($selfHostClass))->getParentClass();

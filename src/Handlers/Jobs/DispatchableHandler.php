@@ -45,12 +45,12 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
      * @var array<lowercase-string, bool>
      */
     private const DISPATCH_METHODS = [
-        'dispatch'              => false,  // all args → constructor
-        'dispatchsync'          => false,  // Bus\Dispatchable only
-        'dispatchafterresponse' => false,  // Bus\Dispatchable only
-        'dispatchif'            => true,   // skip first $boolean arg
-        'dispatchunless'        => true,   // skip first $boolean arg
-        'broadcast'             => false,  // Events\Dispatchable only, all args → constructor
+        'dispatch' => false, // all args → constructor
+        'dispatchsync' => false, // Bus\Dispatchable only
+        'dispatchafterresponse' => false, // Bus\Dispatchable only
+        'dispatchif' => true, // skip first $boolean arg
+        'dispatchunless' => true, // skip first $boolean arg
+        'broadcast' => false, // Events\Dispatchable only, all args → constructor
     ];
 
     /**

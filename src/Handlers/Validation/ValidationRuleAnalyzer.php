@@ -55,8 +55,7 @@ final class ValidationRuleAnalyzer
         // Mirrors the 'email' string rule: Laravel's email validators reject
         // raw whitespace and control characters, so the value is safe for
         // header/cookie sinks. Other taints (HTML, SQL, …) are preserved.
-        'illuminate\\validation\\rules\\email'
-            => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
+        'illuminate\\validation\\rules\\email' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
         // Mirrors the 'numeric' string rule: the value contains no meta-chars.
         'illuminate\\validation\\rules\\numeric' => TaintKind::ALL_INPUT,
         // Mirrors the 'in:' string rule: whitelist-bounded values.
@@ -263,9 +262,7 @@ final class ValidationRuleAnalyzer
             // the taint escape bitmask — the rule's runtime behavior (type,
             // nullable, required) is opaque to the plugin.
             if (\str_starts_with($segment, self::CLASS_SEGMENT_PREFIX)) {
-                $removedTaints |= self::classRuleRemovedTaints(
-                    \substr($segment, \strlen(self::CLASS_SEGMENT_PREFIX)),
-                );
+                $removedTaints |= self::classRuleRemovedTaints(\substr($segment, \strlen(self::CLASS_SEGMENT_PREFIX)));
 
                 continue;
             }
@@ -289,8 +286,7 @@ final class ValidationRuleAnalyzer
             // Conditional variants (required_if, present_with, accepted_if, etc.) depend on
             // runtime conditions we cannot evaluate statically — they don't guarantee presence.
             // Keep in sync with Laravel's validation rules in Illuminate\Validation\Concerns\ValidatesAttributes.
-            if (\in_array($ruleName, ['required', 'present', 'accepted', 'declined'], true)
-            ) {
+            if (\in_array($ruleName, ['required', 'present', 'accepted', 'declined'], true)) {
                 $required = true;
             }
 
@@ -326,8 +322,7 @@ final class ValidationRuleAnalyzer
             'string' => Type::getString(),
             'integer' => new Union([new TInt(), new TNumericString()]),
             'numeric' => new Union([new TInt(), new TFloat(), new TNumericString()]),
-            'decimal',
-            'digits', 'digits_between' => new Union([new TNumericString()]),
+            'decimal', 'digits', 'digits_between' => new Union([new TNumericString()]),
             // Laravel's boolean rule accepts: true, false, 0, 1, '0', '1'
             'boolean' => self::booleanRuleType(),
             // Laravel's accepted rule accepts: 'yes', 'on', 1, '1', true
@@ -340,23 +335,34 @@ final class ValidationRuleAnalyzer
             'list' => new Union([
                 Type::getListAtomic(Type::getMixed()),
             ]),
-            'file', 'image',
-            'mimes', 'mimetypes' => new Union([
+            'file', 'image', 'mimes', 'mimetypes' => new Union([
                 new TNamedObject(\Illuminate\Http\UploadedFile::class),
             ]),
             'in' => self::inRuleToLiteralUnion($param),
             'enum' => self::enumRuleToType($param),
-            'uuid', 'ulid',
-            'alpha', 'alpha_num', 'alpha_dash',
-            'hex_color', 'mac_address',
-            'date', 'date_format',
-            'before', 'before_or_equal',
-            'after', 'after_or_equal',
+            'uuid',
+            'ulid',
+            'alpha',
+            'alpha_num',
+            'alpha_dash',
+            'hex_color',
+            'mac_address',
+            'date',
+            'date_format',
+            'before',
+            'before_or_equal',
+            'after',
+            'after_or_equal',
             'date_equals',
             'timezone',
-            'email', 'url', 'active_url',
-            'ip', 'ipv4', 'ipv6',
-            'json' => Type::getString(),
+            'email',
+            'url',
+            'active_url',
+            'ip',
+            'ipv4',
+            'ipv6',
+            'json',
+            => Type::getString(),
             default => null,
         };
     }
@@ -384,16 +390,29 @@ final class ValidationRuleAnalyzer
             //      is trusted by provenance regardless of content. The
             //      per-rule inline comments below spell the rationale out
             //      where it's non-obvious.
-            'integer', 'numeric', 'boolean',
-            'decimal', 'digits', 'digits_between',
-            'accepted', 'accepted_if',
-            'declined', 'declined_if',
-            'uuid', 'ulid',
-            'alpha', 'alpha_num', 'alpha_dash',
-            'hex_color', 'mac_address',
-            'date', 'date_format',
-            'before', 'before_or_equal',
-            'after', 'after_or_equal',
+            'integer',
+            'numeric',
+            'boolean',
+            'decimal',
+            'digits',
+            'digits_between',
+            'accepted',
+            'accepted_if',
+            'declined',
+            'declined_if',
+            'uuid',
+            'ulid',
+            'alpha',
+            'alpha_num',
+            'alpha_dash',
+            'hex_color',
+            'mac_address',
+            'date',
+            'date_format',
+            'before',
+            'before_or_equal',
+            'after',
+            'after_or_equal',
             'date_equals',
             'timezone',
             'in',
@@ -407,13 +426,12 @@ final class ValidationRuleAnalyzer
             // Pure UnitEnums never reach a sink via scalar input — passes()
             // short-circuits without `tryFrom` — so the escape is vacuous for
             // that branch and sound on both. Mirrors the 'in' escape.
-            'enum' => TaintKind::ALL_INPUT,
-
+            'enum',
+            => TaintKind::ALL_INPUT,
             // IP literals: restricted to digits / dots / colons / hex letters.
             // Safe everywhere except SSRF — a syntactically valid IP can still
             // resolve to an internal host (169.254.169.254, 127.0.0.1, ::1, etc.).
             'ip', 'ipv4', 'ipv6' => TaintKind::ALL_INPUT & ~TaintKind::INPUT_SSRF,
-
             // Emails: Laravel's email validators reject raw whitespace and control
             // characters, which is sufficient to prevent CRLF header injection in
             // practice. We only escape header (and cookie, which is header-framed)
@@ -425,13 +443,11 @@ final class ValidationRuleAnalyzer
             // `email:strict` or `email:filter`. The plugin does not yet distinguish
             // these modes, so we take the pragmatic stance.
             'email' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
-
             // URLs: filter_var / RFC validation rejects CRLF and raw whitespace,
             // so it's safe for header/cookie sinks. A validated URL is still the
             // primary SSRF vector, and path / query components may carry HTML,
             // SQL, shell, or XPath payloads — those taints are preserved.
             'url', 'active_url' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
-
             // file, image, mimes, mimetypes → keep taint (file names/paths/contents are user-controlled)
             // string, json, regex, required, max, min, etc. → keep all taint
             default => 0,
@@ -548,10 +564,7 @@ final class ValidationRuleAnalyzer
 
         try {
             $values = \explode(',', $param);
-            $atomics = \array_map(
-                static fn(string $v): TLiteralString => TLiteralString::make(\trim($v)),
-                $values,
-            );
+            $atomics = \array_map(static fn(string $v): TLiteralString => TLiteralString::make(\trim($v)), $values);
 
             return new Union($atomics);
         } catch (\UnexpectedValueException|\InvalidArgumentException) {
@@ -573,20 +586,14 @@ final class ValidationRuleAnalyzer
     private static function booleanRuleType(): Union
     {
         try {
-            return Type::combineUnionTypes(
-                Type::getBool(),
-                new Union([
-                    new TLiteralInt(0),
-                    new TLiteralInt(1),
-                    TLiteralString::make('0'),
-                    TLiteralString::make('1'),
-                ]),
-            );
+            return Type::combineUnionTypes(Type::getBool(), new Union([
+                new TLiteralInt(0),
+                new TLiteralInt(1),
+                TLiteralString::make('0'),
+                TLiteralString::make('1'),
+            ]));
         } catch (\UnexpectedValueException|\InvalidArgumentException) {
-            return Type::combineUnionTypes(
-                Type::getBool(),
-                new Union([new TLiteralInt(0), new TLiteralInt(1)]),
-            );
+            return Type::combineUnionTypes(Type::getBool(), new Union([new TLiteralInt(0), new TLiteralInt(1)]));
         }
     }
 
@@ -609,10 +616,7 @@ final class ValidationRuleAnalyzer
                 TLiteralString::make('true'),
             ]);
         } catch (\UnexpectedValueException|\InvalidArgumentException) {
-            return Type::combineUnionTypes(
-                Type::getTrue(),
-                new Union([new TLiteralInt(1)]),
-            );
+            return Type::combineUnionTypes(Type::getTrue(), new Union([new TLiteralInt(1)]));
         }
     }
 
@@ -635,10 +639,7 @@ final class ValidationRuleAnalyzer
                 TLiteralString::make('false'),
             ]);
         } catch (\UnexpectedValueException|\InvalidArgumentException) {
-            return Type::combineUnionTypes(
-                Type::getFalse(),
-                new Union([new TLiteralInt(0)]),
-            );
+            return Type::combineUnionTypes(Type::getFalse(), new Union([new TLiteralInt(0)]));
         }
     }
 
@@ -917,9 +918,7 @@ final class ValidationRuleAnalyzer
             }
 
             foreach ($classStmt->stmts as $methodStmt) {
-                if ($methodStmt instanceof Node\Stmt\Return_
-                    && $methodStmt->expr instanceof Node\Expr\Array_
-                ) {
+                if ($methodStmt instanceof Node\Stmt\Return_ && $methodStmt->expr instanceof Node\Expr\Array_) {
                     return $methodStmt->expr;
                 }
             }
@@ -1069,9 +1068,7 @@ final class ValidationRuleAnalyzer
         // and __toString), so this loop is defensive future-proofing: a future
         // Laravel version, a user-authored subclass, or a `__call`-magic chain
         // would carry the In/NotIn root through the outer method calls.
-        while ($expr instanceof Node\Expr\MethodCall
-            || $expr instanceof Node\Expr\NullsafeMethodCall
-        ) {
+        while ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\NullsafeMethodCall) {
             $expr = $expr->var;
         }
 
@@ -1109,16 +1106,15 @@ final class ValidationRuleAnalyzer
      */
     private static function detectInLikeRuleRoot(Node\Expr $expr): ?array
     {
-        if ($expr instanceof Node\Expr\StaticCall
+        if (
+            $expr instanceof Node\Expr\StaticCall
             && $expr->class instanceof Node\Name
             && $expr->name instanceof Node\Identifier
         ) {
             /** @var string|null $resolved */
             $resolved = $expr->class->getAttribute('resolvedName');
 
-            if (\is_string($resolved)
-                && \strtolower($resolved) === self::RULE_FACADE_LOWER_FQN
-            ) {
+            if (\is_string($resolved) && \strtolower($resolved) === self::RULE_FACADE_LOWER_FQN) {
                 $ruleName = match (\strtolower($expr->name->name)) {
                     'in' => 'in',
                     'notin' => 'not_in',
@@ -1177,9 +1173,7 @@ final class ValidationRuleAnalyzer
     {
         // Unwrap fluent calls so `Rule::enum(...)->only(...)` resolves to its
         // `Rule::enum(...)` root. Mirrors tryExtractInLikeRuleSegment().
-        while ($expr instanceof Node\Expr\MethodCall
-            || $expr instanceof Node\Expr\NullsafeMethodCall
-        ) {
+        while ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\NullsafeMethodCall) {
             $expr = $expr->var;
         }
 
@@ -1214,14 +1208,16 @@ final class ValidationRuleAnalyzer
      */
     private static function detectEnumRuleArgs(Node\Expr $expr): ?array
     {
-        if ($expr instanceof Node\Expr\StaticCall
+        if (
+            $expr instanceof Node\Expr\StaticCall
             && $expr->class instanceof Node\Name
             && $expr->name instanceof Node\Identifier
         ) {
             /** @var string|null $resolved */
             $resolved = $expr->class->getAttribute('resolvedName');
 
-            if (\is_string($resolved)
+            if (
+                \is_string($resolved)
                 && \strtolower($resolved) === self::RULE_FACADE_LOWER_FQN
                 && \strtolower($expr->name->name) === 'enum'
             ) {
@@ -1233,9 +1229,7 @@ final class ValidationRuleAnalyzer
             /** @var string|null $resolved */
             $resolved = $expr->class->getAttribute('resolvedName');
 
-            if (\is_string($resolved)
-                && \strtolower($resolved) === 'illuminate\\validation\\rules\\enum'
-            ) {
+            if (\is_string($resolved) && \strtolower($resolved) === 'illuminate\\validation\\rules\\enum') {
                 return \array_values($expr->args);
             }
         }
@@ -1253,7 +1247,8 @@ final class ValidationRuleAnalyzer
      */
     private static function resolveClassConstLiteral(Node\Expr $expr): ?string
     {
-        if (!$expr instanceof Node\Expr\ClassConstFetch
+        if (
+            !$expr instanceof Node\Expr\ClassConstFetch
             || !$expr->name instanceof Node\Identifier
             || \strtolower($expr->name->name) !== 'class'
             || !$expr->class instanceof Node\Name
@@ -1289,7 +1284,8 @@ final class ValidationRuleAnalyzer
         // Single array argument: Rule::in(['a', 'b']).
         $first = $args[0];
 
-        if (\count($args) === 1
+        if (
+            \count($args) === 1
             && $first instanceof Node\Arg
             && !$first->unpack
             && $first->value instanceof Node\Expr\Array_
@@ -1301,7 +1297,8 @@ final class ValidationRuleAnalyzer
         $values = [];
 
         foreach ($args as $arg) {
-            if (!$arg instanceof Node\Arg
+            if (
+                !$arg instanceof Node\Arg
                 || $arg->unpack
                 || !$arg->value instanceof Node\Scalar\String_
                 || !self::isLosslessInValue($arg->value->value)
@@ -1331,7 +1328,8 @@ final class ValidationRuleAnalyzer
         $values = [];
 
         foreach ($array->items as $item) {
-            if ($item === null
+            if (
+                $item === null
                 || $item->unpack
                 || $item->key !== null
                 || !$item->value instanceof Node\Scalar\String_
@@ -1370,9 +1368,7 @@ final class ValidationRuleAnalyzer
      */
     private static function isLosslessInValue(string $value): bool
     {
-        return $value !== ''
-            && !\str_contains($value, ',')
-            && $value === \trim($value);
+        return $value !== '' && !\str_contains($value, ',') && $value === \trim($value);
     }
 
     /**
@@ -1414,9 +1410,7 @@ final class ValidationRuleAnalyzer
         // Unwrap outer fluent calls (standard and nullsafe): chained calls
         // like `Rule::email()->preventSpoofing()` or `Rule::email()?->strict()`
         // resolve to the class of the innermost receiver.
-        while ($expr instanceof Node\Expr\MethodCall
-            || $expr instanceof Node\Expr\NullsafeMethodCall
-        ) {
+        while ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\NullsafeMethodCall) {
             $expr = $expr->var;
         }
 
@@ -1446,8 +1440,7 @@ final class ValidationRuleAnalyzer
                     return $resolved;
                 }
 
-                return self::RULE_FACADE_METHOD_RETURN_CLASS[\strtolower($expr->name->name)]
-                    ?? $resolved;
+                return self::RULE_FACADE_METHOD_RETURN_CLASS[\strtolower($expr->name->name)] ?? $resolved;
             }
 
             return $resolved;
@@ -1493,8 +1486,7 @@ final class ValidationRuleAnalyzer
         // `Rule::numeric()`, …) would silently lose the taint-escape that
         // its string equivalent ('email', 'numeric') already provides.
         if (isset(self::FIRST_PARTY_RULE_ESCAPES[$cacheKey])) {
-            return self::$classTaintCache[$cacheKey]
-                = self::FIRST_PARTY_RULE_ESCAPES[$cacheKey];
+            return self::$classTaintCache[$cacheKey] = self::FIRST_PARTY_RULE_ESCAPES[$cacheKey];
         }
 
         try {
@@ -1573,7 +1565,8 @@ final class ValidationRuleAnalyzer
                 $namespaceName = $stmt->name?->toString() ?? '';
 
                 foreach ($stmt->stmts as $nsStmt) {
-                    if ($nsStmt instanceof Node\Stmt\Class_
+                    if (
+                        $nsStmt instanceof Node\Stmt\Class_
                         && self::classNameMatches($nsStmt, $className, $namespaceName)
                     ) {
                         return $nsStmt;
@@ -1583,9 +1576,7 @@ final class ValidationRuleAnalyzer
                 continue;
             }
 
-            if ($stmt instanceof Node\Stmt\Class_
-                && self::classNameMatches($stmt, $className, '')
-            ) {
+            if ($stmt instanceof Node\Stmt\Class_ && self::classNameMatches($stmt, $className, '')) {
                 return $stmt;
             }
         }

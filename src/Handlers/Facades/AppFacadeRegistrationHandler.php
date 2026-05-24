@@ -155,9 +155,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                     continue;
                 }
             } catch (\Error|\Exception $error) {
-                $progress->warning(
-                    "Laravel plugin: skipping facade '{$storage->name}': {$error->getMessage()}",
-                );
+                $progress->warning("Laravel plugin: skipping facade '{$storage->name}': {$error->getMessage()}");
                 continue;
             }
 
@@ -258,28 +256,22 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
     }
 
     /** @param class-string $rootClass */
-    private static function registerHandlersForFacade(
-        Codebase $codebase,
-        string $facadeClass,
-        string $rootClass,
-    ): void {
+    private static function registerHandlersForFacade(Codebase $codebase, string $facadeClass, string $rootClass): void
+    {
         $methods = $codebase->methods;
 
-        $methods->existence_provider->registerClosure(
-            $facadeClass,
-            static fn(MethodExistenceProviderEvent $event): ?bool
-                => FacadeMethodHandler::doesMethodExist($event, $rootClass),
-        );
-        $methods->params_provider->registerClosure(
-            $facadeClass,
-            static fn(MethodParamsProviderEvent $event): ?array
-                => FacadeMethodHandler::getMethodParams($event, $rootClass),
-        );
-        $methods->return_type_provider->registerClosure(
-            $facadeClass,
-            static fn(MethodReturnTypeProviderEvent $event): ?Union
-                => FacadeMethodHandler::getReturnType($event, $rootClass),
-        );
+        $methods->existence_provider->registerClosure($facadeClass, static fn(MethodExistenceProviderEvent $event): ?bool => FacadeMethodHandler::doesMethodExist(
+            $event,
+            $rootClass,
+        ));
+        $methods->params_provider->registerClosure($facadeClass, static fn(MethodParamsProviderEvent $event): ?array => FacadeMethodHandler::getMethodParams(
+            $event,
+            $rootClass,
+        ));
+        $methods->return_type_provider->registerClosure($facadeClass, static fn(MethodReturnTypeProviderEvent $event): ?Union => FacadeMethodHandler::getReturnType(
+            $event,
+            $rootClass,
+        ));
     }
 
     /**
@@ -295,10 +287,12 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      */
     private static function isSkippedFacade(string $fqcn): bool
     {
-        return \str_starts_with($fqcn, 'Illuminate\\')
+        return (
+            \str_starts_with($fqcn, 'Illuminate\\')
             || \str_starts_with($fqcn, 'Laravel\\')
             || \str_starts_with($fqcn, 'Mockery\\')
-            || \str_starts_with($fqcn, 'PHPUnit\\');
+            || \str_starts_with($fqcn, 'PHPUnit\\')
+        );
     }
 
     /**
@@ -316,9 +310,10 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      */
     private static function isIlluminateAliasStub(string $fqcn, ?string $parentClass): bool
     {
-        return $parentClass !== null
+        return (
+            $parentClass !== null
             && !\str_contains($fqcn, '\\')
-            && \str_starts_with($parentClass, 'Illuminate\\Support\\Facades\\');
+            && \str_starts_with($parentClass, 'Illuminate\\Support\\Facades\\')
+        );
     }
-
 }

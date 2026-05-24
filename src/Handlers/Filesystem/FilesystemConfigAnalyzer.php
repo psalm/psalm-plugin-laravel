@@ -38,7 +38,9 @@ final class FilesystemConfigAnalyzer
     private array $driver_cache = [];
 
     /** @psalm-mutation-free */
-    private function __construct(private readonly ConfigRepository $config) {}
+    private function __construct(
+        private readonly ConfigRepository $config,
+    ) {}
 
     public static function instance(): self
     {

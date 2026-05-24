@@ -83,8 +83,9 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
             return self::resolveGuardReturnType($event);
         }
 
-        if (
-            ! \in_array($method_name_lowercase, [
+        if (!\in_array(
+            $method_name_lowercase,
+            [
                 'user',
                 'loginusingid',
                 'onceusingid',
@@ -92,19 +93,20 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
                 'getlastattempted',
                 'getuser',
                 'authenticate',
-            ], true)
-        ) {
+            ],
+            true,
+        )) {
             return null;
         }
 
         $default_guard = AuthConfigAnalyzer::instance()->getDefaultGuard();
-        if (! \is_string($default_guard)) {
+        if (!\is_string($default_guard)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
         $authenticatable_fqcn = AuthConfigAnalyzer::instance()->getAuthenticatableFQCN($default_guard);
 
-        if (! \is_string($authenticatable_fqcn)) {
+        if (!\is_string($authenticatable_fqcn)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
@@ -206,23 +208,19 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
                     default_type: Type::getNull(),
                 ),
             ],
-
             // SessionGuard::logoutOtherDevices(#[\SensitiveParameter] string $password)
             'logoutotherdevices' => [
                 new FunctionLikeParameter('password', false, Type::getString(), Type::getString(), is_optional: false),
             ],
-
             // StatefulGuard::loginUsingId(mixed $id, bool $remember = false)
             'loginusingid' => [
                 new FunctionLikeParameter('id', false, Type::getMixed(), Type::getMixed(), is_optional: false),
                 new FunctionLikeParameter('remember', false, Type::getBool(), Type::getBool(), is_optional: true, default_type: Type::getFalse()),
             ],
-
             // StatefulGuard::onceUsingId(mixed $id)
             'onceusingid' => [
                 new FunctionLikeParameter('id', false, Type::getMixed(), Type::getMixed(), is_optional: false),
             ],
-
             default => null,
         };
     }

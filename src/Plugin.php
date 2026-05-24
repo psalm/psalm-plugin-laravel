@@ -58,8 +58,11 @@ final class Plugin implements PluginEntryPointInterface
         }
     }
 
-    private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
-    {
+    private function registerStubs(
+        RegistrationInterface $registration,
+        PluginConfig $pluginConfig,
+        \Psalm\Progress\Progress $output,
+    ): void {
         $stubsRoot = \dirname(__DIR__) . '/stubs';
 
         $stubs = \array_merge(

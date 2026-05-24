@@ -74,7 +74,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     {
         // Only narrow when called with no arguments (or explicit null).
         // With a callback, we can't know what it filters — let Psalm use the default.
-        if (! self::isCalledWithoutArgOrNull($event)) {
+        if (!self::isCalledWithoutArgOrNull($event)) {
             return null;
         }
 
@@ -87,7 +87,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         $tValue = $templateTypeParameters[1];
 
         $narrowed = self::removeFalsyTypes($tValue);
-        if (! $narrowed instanceof Union) {
+        if (!$narrowed instanceof Union) {
             return null; // nothing to narrow, or would become empty
         }
 
@@ -99,7 +99,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     {
         // Only narrow when called with no key (or explicit null key).
         // With a string key, whereNotNull filters by a nested field — TValue type is unchanged.
-        if (! self::isCalledWithoutArgOrNull($event)) {
+        if (!self::isCalledWithoutArgOrNull($event)) {
             return null;
         }
 
@@ -112,7 +112,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         $tValue = $templateTypeParameters[1];
 
         $narrowed = self::removeNullType($tValue);
-        if (! $narrowed instanceof Union) {
+        if (!$narrowed instanceof Union) {
             return null; // nothing to narrow, or would become empty
         }
 
@@ -156,8 +156,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         // Explicit null literal is equivalent to no argument for both filter() and whereNotNull()
         if (\count($args) === 1) {
             $argValue = $args[0]->value;
-            if ($argValue instanceof ConstFetch
-                && \strtolower((string) $argValue->name) === 'null') {
+            if ($argValue instanceof ConstFetch && \strtolower((string) $argValue->name) === 'null') {
                 return true;
             }
         }
@@ -189,7 +188,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             $filtered[] = $atomic;
         }
 
-        if (! $changed || $filtered === []) {
+        if (!$changed || $filtered === []) {
             return null;
         }
 
@@ -225,7 +224,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             $filtered[] = $narrowed;
         }
 
-        if (! $changed || $filtered === []) {
+        if (!$changed || $filtered === []) {
             return null;
         }
 

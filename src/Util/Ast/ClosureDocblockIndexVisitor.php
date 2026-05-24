@@ -211,15 +211,7 @@ final class ClosureDocblockIndexVisitor extends NodeVisitorAbstract
             return $frame['aliases_obj'];
         }
 
-        $aliases = new Aliases(
-            $frame['namespace'],
-            $frame['uses'],
-            [],
-            [],
-            $frame['uses_flipped'],
-            [],
-            [],
-        );
+        $aliases = new Aliases($frame['namespace'], $frame['uses'], [], [], $frame['uses_flipped'], [], []);
 
         $this->aliasStack[$tipIndex]['aliases_obj'] = $aliases;
 

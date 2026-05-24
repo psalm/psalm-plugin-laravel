@@ -47,8 +47,12 @@ final class ConfigValueReflector
     }
 
     /** @param int<0, max> $depth */
-    private static function reflectInternal(#[\SensitiveParameter] mixed $value, int $depth, int &$remainingBudget): Union
-    {
+    private static function reflectInternal(
+        #[\SensitiveParameter]
+        mixed $value,
+        int $depth,
+        int &$remainingBudget,
+    ): Union {
         if ($value === null) {
             return Type::getNull();
         }
@@ -96,10 +100,7 @@ final class ConfigValueReflector
 
         $count = \count($value);
 
-        if ($depth >= self::MAX_DEPTH
-            || $count > self::MAX_KEYS_PER_LEVEL
-            || $count > $remainingBudget
-        ) {
+        if ($depth >= self::MAX_DEPTH || $count > self::MAX_KEYS_PER_LEVEL || $count > $remainingBudget) {
             return Type::getArray();
         }
 
@@ -111,12 +112,12 @@ final class ConfigValueReflector
         // mixed variable, which would otherwise count against type coverage.
         // Long-form closure (not `fn() =>`) is required to capture
         // $remainingBudget by reference — arrow functions only do by-value.
-        $properties = \array_map(
-            static function (#[\SensitiveParameter] mixed $sub_value) use ($nextDepth, &$remainingBudget): Union {
-                return self::reflectInternal($sub_value, $nextDepth, $remainingBudget);
-            },
-            $value,
-        );
+        $properties = \array_map(static function (#[\SensitiveParameter] mixed $sub_value) use (
+            $nextDepth,
+            &$remainingBudget,
+        ): Union {
+            return self::reflectInternal($sub_value, $nextDepth, $remainingBudget);
+        }, $value);
 
         // TKeyedArray::make requires non-empty-array; the empty branch is handled
         // above. Make returns TKeyedArray|TArray (TArray only when properties
