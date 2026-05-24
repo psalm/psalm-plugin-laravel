@@ -5,10 +5,10 @@ Laravel static analysis with built-in security scanning.
     <img src="https://raw.githubusercontent.com/psalm/psalm-plugin-laravel/master/docs/assets/screenshot.png" alt="Psalm Laravel Example" height="300">
 </p>
 <p align="center">
-[![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-[![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-[![Type coverage](https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg)](https://shepherd.dev/github/psalm/psalm-plugin-laravel)
-[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml)
+<a href="https://packagist.org/packages/psalm/plugin-laravel"><img src="https://img.shields.io/packagist/v/psalm/plugin-laravel.svg" alt="Packagist version"></a>
+<a href="https://packagist.org/packages/psalm/plugin-laravel"><img src="https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg" alt="Packagist downloads"></a>
+<a href="https://shepherd.dev/github/psalm/psalm-plugin-laravel"><img src="https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg" alt="Type coverage"></a>
+<a href="https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml"><img src="https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
 </p>
 The only free tool that combines deep Laravel type analysis with taint-based vulnerability detection.
 Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redirects, without running your code.
