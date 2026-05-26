@@ -187,8 +187,8 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      * throwing user-provider factory from re-running in the main process.
      *
      * Works when:
-     * - The accessor is a class-string (e.g. `protected static function getFacadeAccessor()
-     *   { return MyService::class; }`) — the container auto-wires it via reflection.
+     * - The accessor is a class-string (e.g. a `getFacadeAccessor()` that returns
+     *   `MyService::class`) — the container auto-wires it via reflection.
      * - The accessor is a string alias bound in our Testbench container (first-party
      *   services like `'cache'`, `'router'`, package bindings registered via discovered
      *   providers).

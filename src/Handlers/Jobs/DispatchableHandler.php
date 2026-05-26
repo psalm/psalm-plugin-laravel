@@ -76,7 +76,8 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
             return null;
         }
 
-        $methodName = \strtolower($expr->name->name);
+        $methodIdentifierName = $expr->name->name;
+        $methodName = \strtolower($methodIdentifierName);
 
         if (!isset(self::DISPATCH_METHODS[$methodName])) {
             return null;
@@ -125,7 +126,7 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
                 IssueBuffer::maybeAdd(
                     new TooManyArguments(
                         'Class ' . $className . ' has no constructor, but arguments were passed to '
-                            . self::shortClassName($className) . '::' . $expr->name->name . '()',
+                            . self::shortClassName($className) . '::' . $methodIdentifierName . '()',
                         new CodeLocation($source, $expr),
                         $className . '::__construct',
                     ),
