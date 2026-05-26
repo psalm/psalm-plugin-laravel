@@ -46,6 +46,12 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             \Illuminate\Foundation\Http\FormRequest::class,
             \Illuminate\Http\Request::class,
             \Illuminate\Support\ValidatedInput::class,
+            // input() is declared on the InteractsWithInput trait, not on
+            // FormRequest/Request directly. Without this entry Psalm's method
+            // provider only matches the declaring class chain, so the
+            // resolveSelfInput dispatch below never fires for
+            // `$this->input(...)` inside a FormRequest subclass. See #1015.
+            \Illuminate\Http\Concerns\InteractsWithInput::class,
         ];
     }
 
@@ -65,8 +71,74 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             'validated' => self::resolveValidated($event),
             'safe' => self::resolveSafe($event),
             'validate' => self::resolveInlineValidate($event),
+            'input' => self::resolveSelfInput($event),
             default => null,
         };
+    }
+
+    /**
+     * FormRequest subclass::input('field') → rule type, when the field's rule
+     * guarantees presence (required / present / accepted / declined).
+     *
+     * Covers `$this->input(...)` called inside the FormRequest itself
+     * (prepareForValidation, passedValidation, withValidator, custom helpers)
+     * — the controller-side narrowing already flows through `validated()` and
+     * `safe()->input()`. See issue #1015.
+     *
+     * Soundness: input() reads pre-validation request data, so a narrowed type
+     * is only safe when the field is presence-guaranteed by the rule. Optional
+     * fields (sometimes / no required-style rule) fall through to the stub's
+     * mixed return — same trade-off documented in the issue's "Option 2".
+     * Mirrors the `required`-gated `setPossiblyUndefined` branch in
+     * {@see buildUnionFromTree}.
+     *
+     * The `validated()`-style escape for taint already covers `input` via
+     * {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS}, so narrowing here
+     * does not change the taint flow.
+     */
+    private static function resolveSelfInput(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $callArgs = $event->getCallArgs();
+
+        if ($callArgs === []) {
+            return null;
+        }
+
+        $rules = self::getRulesForCalledClass($event);
+
+        if ($rules === null) {
+            return null;
+        }
+
+        $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
+        $firstArgType = $nodeTypeProvider->getType($callArgs[0]->value);
+
+        if (!$firstArgType instanceof Union || !$firstArgType->isSingleStringLiteral()) {
+            return null;
+        }
+
+        $key = $firstArgType->getSingleStringLiteral()->value;
+        $rule = $rules[$key] ?? null;
+
+        // Bail when the field has no rule, the rule does not guarantee
+        // presence, or `sometimes` overrides the presence guarantee.
+        //
+        // Laravel's `sometimes|required` means "if the field is present it
+        // must be valid", so the field can still be legitimately absent at
+        // the input() call site — same treatment {@see buildUnionFromTree}
+        // gives the validated() output (marks the field possibly_undefined
+        // when `sometimes || !required`).
+        //
+        // Reads through prepareForValidation() and friends may also run
+        // before validation has filled in optional fields, so anything
+        // weaker than an unconditional `required` (or its present /
+        // accepted / declined siblings, see
+        // {@see ValidationRuleAnalyzer::resolveRuleSegments}) stays mixed.
+        if ($rule === null || !$rule->required || $rule->sometimes) {
+            return null;
+        }
+
+        return self::resolveFieldType($rules, $callArgs, $event);
     }
 
     /**
