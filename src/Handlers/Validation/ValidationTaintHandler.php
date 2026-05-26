@@ -359,7 +359,9 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
     }
 
     /**
-     * Whether the expression is validated()/validate()/safe() on Request/FormRequest.
+     * Whether the expression is validated()/validate()/safe() on Request/FormRequest,
+     * or input() on a FormRequest subclass (which ValidatedTypeHandler also narrows
+     * for `$this->input(...)` reads inside the request itself — see #1015).
      */
     private static function isValidationMethodCall(AddRemoveTaintsEvent $event): bool
     {
@@ -373,15 +375,18 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         // rationale as KEYED_ACCESSOR_METHODS.
         $methodName = $expr->name->name;
 
-        if (!\in_array($methodName, ['validated', 'validate', 'safe'], true)) {
+        if (!\in_array($methodName, ['validated', 'validate', 'safe', 'input'], true)) {
             return false;
         }
 
-        // validated() and safe() are FormRequest methods, validate() is on Request
+        // validate() lives on Request; everything else (including the
+        // FormRequest-narrowed input(...) path) is gated on FormRequest so we
+        // do not re-source taint on a plain Request::input(...) call where
+        // ValidatedTypeHandler does not override the return type.
         $baseClass
-            = $methodName === 'validated' || $methodName === 'safe'
-                ? \Illuminate\Foundation\Http\FormRequest::class
-                : \Illuminate\Http\Request::class;
+            = $methodName === 'validate'
+                ? \Illuminate\Http\Request::class
+                : \Illuminate\Foundation\Http\FormRequest::class;
 
         return self::resolveCallerClass($event, $baseClass) !== null;
     }
