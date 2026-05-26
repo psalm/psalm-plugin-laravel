@@ -12,9 +12,12 @@ use Illuminate\Foundation\Http\FormRequest;
  * the direct-FormRequest resolution path (distinct from safe()->input()).
  * With 'integer' rule the escape clears all input taint.
  *
- * The MixedArgument suppression is for the echo — input() returns mixed.
  * The asserted behavior is taint: when the rule is 'integer', no Tainted*
- * error must fire even though echo is an html/quotes sink.
+ * error must fire even though echo is an html/quotes sink. The
+ * `'integer'` rule used to leave the return type as `mixed` here; since
+ * ValidatedTypeHandler also narrows `$req->input('age')` to
+ * `int|numeric-string` on a required field, no MixedArgument suppression
+ * is needed and the taint-escape behaviour is unchanged.
  */
 final class DirectInputAgeRequest extends FormRequest
 {
@@ -25,7 +28,6 @@ final class DirectInputAgeRequest extends FormRequest
 }
 
 function render(DirectInputAgeRequest $request): void {
-    /** @psalm-suppress MixedArgument */
     echo $request->input('age');
 }
 ?>
