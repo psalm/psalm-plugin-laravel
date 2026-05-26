@@ -97,9 +97,12 @@ class SelfEmailRequest extends FormRequest
         /** @psalm-check-type-exact $_unknown = mixed */
 
         // Default-value form: union of rule type and default expression type,
-        // matching the validated($key, $default) behaviour.
-        $_emailWithDefault = $this->input('email', 'fallback@example.com');
-        /** @psalm-check-type-exact $_emailWithDefault = string */
+        // matching the validated($key, $default) behaviour. Uses a non-string
+        // default so the union is observable in the asserted type — a string
+        // default would collapse to the rule's `string` type and not prove
+        // the unioning fired.
+        $_ageWithDefault = $this->input('age', false);
+        /** @psalm-check-type-exact $_ageWithDefault = false|int|numeric-string */
 
         // Dotted nesting: required leaf narrows the leaf read.
         $_city = $this->input('profile.city');
@@ -122,6 +125,14 @@ class SelfEmailRequest extends FormRequest
         // Same narrowing applies in every lifecycle hook on the subclass.
         $_email = $this->input('email');
         /** @psalm-check-type-exact $_email = string */
+    }
+
+    public function withValidator(\Illuminate\Validation\Validator $validator): void
+    {
+        // Mid-validation hook (convention, not an abstract on FormRequest)
+        // — same narrowing fires here.
+        $_role = $this->input('role');
+        /** @psalm-check-type-exact $_role = 'admin'|'guest'|'user' */
     }
 
     public function customHelper(): string
