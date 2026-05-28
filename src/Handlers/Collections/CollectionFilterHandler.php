@@ -271,9 +271,11 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         if ($param->variadic) {
             return null;
         }
+
         if (!$param->var instanceof Variable || !\is_string($param->var->name)) {
             return null;
         }
+
         $paramName = $param->var->name;
 
         if ($expr instanceof ArrowFunction) {
@@ -286,7 +288,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         }
 
         $stmt = $expr->stmts[0];
-        if (!$stmt instanceof Return_ || $stmt->expr === null) {
+        if (!$stmt instanceof Return_ || !$stmt->expr instanceof \PhpParser\Node\Expr) {
             return null;
         }
 
@@ -307,12 +309,12 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     private static function narrowByTypeCheck(Expr $body, string $paramName, Union $tValue, Codebase $codebase): ?Union
     {
         $target = self::predicateTargetType($body, $paramName);
-        if ($target === null) {
+        if (!$target instanceof \Psalm\Type\Union) {
             return null;
         }
 
         $intersected = Type::intersectUnionTypes($tValue, $target, $codebase);
-        if ($intersected === null || $intersected->getAtomicTypes() === []) {
+        if (!$intersected instanceof \Psalm\Type\Union || $intersected->getAtomicTypes() === []) {
             return null;
         }
 
