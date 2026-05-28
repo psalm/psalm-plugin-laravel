@@ -6,25 +6,65 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
+use PhpParser\Node\Arg;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\ArrowFunction;
+use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\ConstFetch;
+use PhpParser\Node\Expr\FuncCall;
+use PhpParser\Node\Expr\Instanceof_;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Name;
+use PhpParser\Node\Stmt\Return_;
+use Psalm\Codebase;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TBool;
+use Psalm\Type\Atomic\TCallable;
 use Psalm\Type\Atomic\TFalse;
+use Psalm\Type\Atomic\TFloat;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNonEmptyArray;
 use Psalm\Type\Atomic\TNonFalsyString;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TObject;
 use Psalm\Type\Atomic\TString;
 use Psalm\Type\Union;
 
 /**
- * Narrows Collection::filter() and Collection::whereNotNull() return types.
+ * Narrows Collection::filter(), Collection::where(), and Collection::whereNotNull() return types.
  *
- * filter() without a callback:
+ * filter() without a callback (or with an explicit null):
  *   Calls array_filter(), removing all falsy values. Removes `null` and `false` from
  *   TValue and narrows `string` → `non-falsy-string`, `array` → `non-empty-array`.
+ *   With any callback we can't statically prove what it filters; defer to Psalm's default.
+ *
+ * where() with a recognized predicate body:
+ *   Laravel forwards a callable where() to filter() at runtime. The handler narrows
+ *   TValue when the closure body matches one of these AST shapes:
+ *
+ *   - Identity: `fn ($x) => $x` / `function ($x) { return $x; }` → removeFalsy (drops
+ *     null/false, narrows string→non-falsy-string, array→non-empty-array).
+ *   - Instanceof: `fn ($x) => $x instanceof Foo` → intersect TValue with `Foo` (keeps
+ *     Foo and its subclasses; `mixed` collapses to `Foo`).
+ *   - Type-check function: `fn ($x) => is_string($x)` and friends (is_int, is_array,
+ *     is_object, is_bool, is_float, is_null, is_callable) → intersect TValue with the
+ *     primitive type.
+ *
+ *   Anything else (property access, complex comparisons, negation, multi-statement
+ *   bodies) is opaque to this AST matcher and Psalm uses its default static return.
+ *   Larastan does scope-based predicate evaluation via PHPStan's filterByTruthyValue,
+ *   which Psalm has no public equivalent for. See issue #1018.
+ *
+ *   Why where() and not filter(): Laravel's where() declares `callable|string $key`
+ *   loosely, so any closure shape passes Psalm's type check. filter() requires
+ *   `callable(TValue, TKey): bool`, which rejects identity closures returning the value
+ *   (not bool) upstream, so those never reach this handler.
  *
  * whereNotNull() without a key argument:
  *   Removes only `null` from TValue (does not narrow other falsy types).
@@ -36,9 +76,12 @@ use Psalm\Type\Union;
  *   concrete types, not the Enumerable interface.
  * - whereNotNull($key) with a string key — we don't narrow TValue when filtering by a
  *   nested field key, since the item type itself is unchanged.
+ * - reject() with a callback — symmetric truthy-removal is rarely the predicate's intent.
+ * - where(column, operator, value) — column/operator/value form leaves TValue unchanged.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/441
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/706
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1018
  */
 final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
 {
@@ -52,7 +95,6 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         return [Collection::class, LazyCollection::class];
     }
 
-    /** @psalm-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -60,6 +102,10 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
 
         if ($method === 'filter') {
             return self::handleFilter($event);
+        }
+
+        if ($method === 'where') {
+            return self::handleWhere($event);
         }
 
         if ($method === 'wherenotnull') {
@@ -73,7 +119,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     private static function handleFilter(MethodReturnTypeProviderEvent $event): ?Union
     {
         // Only narrow when called with no arguments (or explicit null).
-        // With a callback, we can't know what it filters — let Psalm use the default.
+        // With a callback we can't know what it filters — let Psalm use the default.
         if (!self::isCalledWithoutArgOrNull($event)) {
             return null;
         }
@@ -83,15 +129,55 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $tKey = $templateTypeParameters[0];
-        $tValue = $templateTypeParameters[1];
-
-        $narrowed = self::removeFalsyTypes($tValue);
+        $narrowed = self::removeFalsyTypes($templateTypeParameters[1]);
         if (!$narrowed instanceof Union) {
             return null; // nothing to narrow, or would become empty
         }
 
-        return self::buildNarrowedReturn($event, $tKey, $narrowed);
+        return self::buildNarrowedReturn($event, $templateTypeParameters[0], $narrowed);
+    }
+
+    /**
+     * Narrow Collection::where(callable) when the closure body matches a recognized
+     * shape (identity, instanceof, is_*). Returns null for anything else so Psalm's
+     * default static return stands.
+     *
+     * Not annotated `@psalm-mutation-free` because the instanceof / is_* branches
+     * reach into Psalm's codebase (`getCodebase()`, `Type::intersectUnionTypes`) and
+     * PhpParser attributes (`Name::getAttribute`), which Psalm treats as impure.
+     */
+    private static function handleWhere(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $args = $event->getCallArgs();
+        if (\count($args) !== 1) {
+            return null;
+        }
+
+        $body = self::extractSingleParamClosureBody($args[0]->value);
+        if ($body === null) {
+            return null;
+        }
+
+        $templateTypeParameters = $event->getTemplateTypeParameters();
+        if ($templateTypeParameters === null || \count($templateTypeParameters) < 2) {
+            return null;
+        }
+
+        [$paramName, $bodyExpr] = $body;
+        $tValue = $templateTypeParameters[1];
+
+        // Identity closure body — same value passes the predicate iff truthy.
+        if (self::isVarRef($bodyExpr, $paramName)) {
+            $narrowed = self::removeFalsyTypes($tValue);
+        } else {
+            $narrowed = self::narrowByTypeCheck($bodyExpr, $paramName, $tValue, $event->getSource()->getCodebase());
+        }
+
+        if (!$narrowed instanceof Union) {
+            return null;
+        }
+
+        return self::buildNarrowedReturn($event, $templateTypeParameters[0], $narrowed);
     }
 
     /** @psalm-mutation-free */
@@ -108,15 +194,12 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $tKey = $templateTypeParameters[0];
-        $tValue = $templateTypeParameters[1];
-
-        $narrowed = self::removeNullType($tValue);
+        $narrowed = self::removeNullType($templateTypeParameters[1]);
         if (!$narrowed instanceof Union) {
             return null; // nothing to narrow, or would become empty
         }
 
-        return self::buildNarrowedReturn($event, $tKey, $narrowed);
+        return self::buildNarrowedReturn($event, $templateTypeParameters[0], $narrowed);
     }
 
     /**
@@ -153,7 +236,6 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             return true;
         }
 
-        // Explicit null literal is equivalent to no argument for both filter() and whereNotNull()
         if (\count($args) === 1) {
             $argValue = $args[0]->value;
             if ($argValue instanceof ConstFetch && \strtolower((string) $argValue->name) === 'null') {
@@ -162,6 +244,146 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         }
 
         return false;
+    }
+
+    /**
+     * For a single-param Closure or ArrowFunction, return [$paramName, $bodyExpr].
+     * Returns null for unrecognized shapes (variadic, multi-param, multi-statement
+     * Closure bodies, variable-variable param names).
+     *
+     * @return array{string, Expr}|null
+     * @psalm-mutation-free
+     */
+    private static function extractSingleParamClosureBody(Expr $expr): ?array
+    {
+        if (!$expr instanceof Closure && !$expr instanceof ArrowFunction) {
+            return null;
+        }
+
+        if (\count($expr->params) !== 1) {
+            return null;
+        }
+
+        $param = $expr->params[0];
+        // Variadic captures all callback args as an array — `fn (...$xs) => $xs` returns
+        // [$value, $key] at runtime (always truthy when non-empty), breaking the narrowing
+        // semantics for every supported predicate shape.
+        if ($param->variadic) {
+            return null;
+        }
+        if (!$param->var instanceof Variable || !\is_string($param->var->name)) {
+            return null;
+        }
+        $paramName = $param->var->name;
+
+        if ($expr instanceof ArrowFunction) {
+            return [$paramName, $expr->expr];
+        }
+
+        // Closure body must be exactly `return $expr;` (single statement, non-empty return).
+        if (\count($expr->stmts) !== 1) {
+            return null;
+        }
+
+        $stmt = $expr->stmts[0];
+        if (!$stmt instanceof Return_ || $stmt->expr === null) {
+            return null;
+        }
+
+        return [$paramName, $stmt->expr];
+    }
+
+    /** @psalm-mutation-free */
+    private static function isVarRef(Expr $expr, string $name): bool
+    {
+        return $expr instanceof Variable && $expr->name === $name;
+    }
+
+    /**
+     * Match instanceof and is_* type-check predicates whose argument is the closure
+     * param. Returns the intersected TValue, or null if the predicate shape isn't
+     * recognized or the intersection is empty.
+     */
+    private static function narrowByTypeCheck(Expr $body, string $paramName, Union $tValue, Codebase $codebase): ?Union
+    {
+        $target = self::predicateTargetType($body, $paramName);
+        if ($target === null) {
+            return null;
+        }
+
+        $intersected = Type::intersectUnionTypes($tValue, $target, $codebase);
+        if ($intersected === null || $intersected->getAtomicTypes() === []) {
+            return null;
+        }
+
+        return $intersected;
+    }
+
+    /**
+     * Map a recognized type-check predicate body to the Union it narrows TValue toward.
+     *
+     * Supported shapes:
+     *   - `$x instanceof Foo` → `Foo`
+     *   - `is_string($x)` / `is_int($x)` / `is_array($x)` / `is_object($x)` /
+     *     `is_bool($x)` / `is_float($x)` / `is_null($x)` / `is_callable($x)`
+     */
+    private static function predicateTargetType(Expr $body, string $paramName): ?Union
+    {
+        if ($body instanceof Instanceof_
+            && self::isVarRef($body->expr, $paramName)
+            && $body->class instanceof Name
+        ) {
+            $fqcn = self::resolveClassName($body->class);
+            if ($fqcn === '') {
+                return null;
+            }
+
+            return new Union([new TNamedObject($fqcn)]);
+        }
+
+        if ($body instanceof FuncCall
+            && $body->name instanceof Name
+            && \count($body->args) >= 1
+        ) {
+            $firstArg = $body->args[0];
+            if (!$firstArg instanceof Arg || !self::isVarRef($firstArg->value, $paramName)) {
+                return null;
+            }
+
+            // `is_*()` functions are global; the resolved name should match the lowercased short name.
+            $name = \strtolower($body->name->toString());
+
+            return match ($name) {
+                'is_string' => new Union([new TString()]),
+                'is_int', 'is_integer', 'is_long' => new Union([new TInt()]),
+                'is_array' => new Union([new TArray([Type::getArrayKey(), Type::getMixed()])]),
+                'is_object' => new Union([new TObject()]),
+                'is_bool' => new Union([new TBool()]),
+                'is_float', 'is_double', 'is_real' => new Union([new TFloat()]),
+                'is_null' => new Union([new TNull()]),
+                'is_callable' => new Union([new TCallable()]),
+                default => null,
+            };
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve a class name node to its FQCN. Prefers Psalm's `resolvedName` attribute
+     * (Psalm's SimpleNameResolver stores it as a string via `.toString()`) and falls
+     * back to the source spelling.
+     *
+     * `@psalm-var` (not `@var`) so Rector preserves it (CLAUDE.md). Declaring the local
+     * as `string|null` rather than letting it default to mixed avoids the coverage hit
+     * that a bare `mixed` assignment would cause.
+     */
+    private static function resolveClassName(Name $name): string
+    {
+        /** @psalm-var string|null $resolved */
+        $resolved = $name->getAttribute('resolvedName');
+
+        return $resolved ?? $name->toString();
     }
 
     /**
