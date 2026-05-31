@@ -4,12 +4,23 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
+use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\AssignOp;
+use PhpParser\Node\Expr\AssignRef;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
+use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\AddTaintsInterface;
+use Psalm\Plugin\EventHandler\AfterFileAnalysisInterface;
+use Psalm\Plugin\EventHandler\AfterFunctionLikeAnalysisInterface;
+use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
+use Psalm\Plugin\EventHandler\Event\AfterFileAnalysisEvent;
+use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
+use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
@@ -42,6 +53,13 @@ use Psalm\Type\Union;
  *            in principle, but the current `ValidatedInput` stub omits
  *            `array()` so Psalm never sees that call shape — stub gap, not
  *            handler gap.)
+ *
+ * 3. Add and remove taint for FormRequest magic property reads — `$this->email`,
+ *    `$req->email` — paired with the type narrowing in
+ *    {@see FormRequestPropertyHandler} (#1016). Unlike the method paths, there
+ *    is no stub @psalm-taint-source on `__get`, so the addTaints branch is
+ *    purely additive (without it, a sink consuming `$this->email` would never
+ *    see the input taint).
  *
  * Design assumption: when a typed FormRequest is injected into a controller,
  * Laravel runs validation before the controller method executes (via
@@ -78,8 +96,61 @@ use Psalm\Type\Union;
  * Performance: fires on every expression. The bail-out chain rejects non-matching
  * expressions fast (instanceof, then method name, then caller-class check).
  */
-final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsInterface
+final class ValidationTaintHandler implements
+    AddTaintsInterface,
+    RemoveTaintsInterface,
+    BeforeExpressionAnalysisInterface,
+    AfterFunctionLikeAnalysisInterface,
+    AfterFileAnalysisInterface
 {
+    /**
+     * Object IDs of PropertyFetch nodes appearing on the LHS of an
+     * assignment (`$req->email = $foo`). Populated by
+     * {@see beforeExpressionAnalysis} when an `Assign` / `AssignOp` /
+     * `AssignRef` expression with a `PropertyFetch` target is about to be
+     * analyzed, consulted by {@see resolvePropertyFetchRule} so the
+     * property-write dispatch in
+     * `\Psalm\Internal\Analyzer\Statements\Expression\Assignment\InstancePropertyAssignmentAnalyzer::analyzePropertyAssignment`
+     * (lines 523, 618) is skipped — that dispatch passes the LHS PropertyFetch
+     * as `AddRemoveTaintsEvent::getExpr()`, and applying the rule's escape
+     * mask there would strip taint from the value being written instead of
+     * the value being read.
+     *
+     * Cleared per function-like in {@see afterStatementAnalysis} to bound
+     * the memory footprint over a long-running analyzer run.
+     *
+     * @var array<int, true>
+     */
+    private static array $assignmentLhsPropertyFetchIds = [];
+
+    /**
+     * Object IDs of PropertyFetch nodes for which {@see addTaints} already
+     * emitted a taint source. Psalm dispatches `AddRemoveTaintsEvent` for
+     * the same expression from TWO sites when a property fetch is passed
+     * as a function-call argument:
+     *
+     *   1. `AtomicPropertyFetchAnalyzer::processTaints` (line 524) — the
+     *      property-read analysis pass.
+     *   2. `ArgumentAnalyzer::processTaintedness` (line 971 → 1761) — the
+     *      callee argument-binding pass.
+     *
+     * Both pass the same `PropertyFetch` node as `$event->getExpr()`. Without
+     * de-duplication, every `$req->email` reaching a sink (`echo`, `header`,
+     * `system`, …) ends up with TWO taint sources, producing 2x the expected
+     * report count per sink. Method calls do not have this problem because
+     * the two sites pass different expressions there (the method-call dispatch
+     * uses `$var_expr`, the argument dispatch uses the `MethodCall`).
+     *
+     * The dedupe is keyed by `spl_object_id($expr)` and is bounded per
+     * function-like analysis (see {@see afterStatementAnalysis}). It is
+     * cosmetic for the type system but semantically required for taint —
+     * a second `ALL_INPUT` source on the same node creates a redundant
+     * flow edge that surfaces as a duplicate sink report.
+     *
+     * @var array<int, true>
+     */
+    private static array $addTaintsSourcedPropertyFetchIds = [];
+
     /**
      * Accessor methods whose single-key form selects a rule-covered field.
      *
@@ -116,6 +187,30 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         // (see ValidatedTypeHandler::resolveValidatedInputMethod), so the
         // stub source is dropped there as well.
         if (self::isValidatedInputAccessor($event)) {
+            return TaintKind::ALL_INPUT;
+        }
+
+        // FormRequest magic property read narrowed by FormRequestPropertyHandler
+        // (#1016). Unlike the method paths above there is no stub source to drop,
+        // so this is purely additive — without it, `$this->email` reaches a sink
+        // as untainted even when the rule is present.
+        //
+        // Per-expr dedupe: Psalm dispatches `AddRemoveTaintsEvent` for the same
+        // PropertyFetch twice when the fetch is passed as a function-call
+        // argument — once from `AtomicPropertyFetchAnalyzer::processTaints` and
+        // once from `ArgumentAnalyzer::processTaintedness`. Returning
+        // `ALL_INPUT` from both calls creates two taint sources on the same
+        // graph node, surfacing as duplicate sink reports. The first dispatch
+        // emits the source; subsequent dispatches for the same expr return 0.
+        if (self::resolvePropertyFetchRule($event) instanceof ResolvedRule) {
+            $exprId = \spl_object_id($event->getExpr());
+
+            if (isset(self::$addTaintsSourcedPropertyFetchIds[$exprId])) {
+                return 0;
+            }
+
+            self::$addTaintsSourcedPropertyFetchIds[$exprId] = true;
+
             return TaintKind::ALL_INPUT;
         }
 
@@ -159,6 +254,16 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         // also be applied to the assignment edge for free.
         if ($expr instanceof Variable && \is_string($expr->name)) {
             return self::lookupInlineValidateVariableEscape($event, $expr->name);
+        }
+
+        // FormRequest magic property read (#1016): `$this->email`, `$req->email`.
+        // Same rule-escape semantics as the keyed accessors — the property name
+        // is the rule key. The shared resolver enforces the read-only / declared-
+        // property / presence-guarantee gates, so this branch needs no extra logic.
+        if ($expr instanceof PropertyFetch) {
+            $rule = self::resolvePropertyFetchRule($event);
+
+            return $rule instanceof ResolvedRule ? $rule->removedTaints : 0;
         }
 
         $accessor = self::matchKeyedAccessor($event);
@@ -506,5 +611,174 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
             $event->getCodebase(),
             $baseClass,
         );
+    }
+
+    /**
+     * Mark the LHS PropertyFetch of an assignment so the property-write
+     * taint dispatch (`InstancePropertyAssignmentAnalyzer` lines 523, 618)
+     * is skipped by {@see resolvePropertyFetchRule}.
+     *
+     * The dispatch site uses the same `AddRemoveTaintsEvent` shape as the
+     * property-READ dispatch in `AtomicPropertyFetchAnalyzer`, so without
+     * a side-channel marker the handler cannot tell them apart — and
+     * stripping the rule's escape from the write would silently launder
+     * tainted data on `$req->email = $userInput`.
+     *
+     * `Assign` covers `$x = $y`, `AssignOp` covers `$x += $y` / `$x .= $y`,
+     * `AssignRef` covers `$x =& $y`. PHP cannot magic-write through `__get`
+     * (no `__set` on Request), so these shapes only matter when the user
+     * declared `public $email` or the value lands in a dynamic property —
+     * but every false-positive avoided here is one a downstream user does
+     * not need to suppress.
+     *
+     * @inheritDoc
+     *
+     * @psalm-external-mutation-free
+     */
+    #[\Override]
+    public static function beforeExpressionAnalysis(BeforeExpressionAnalysisEvent $event): ?bool
+    {
+        $expr = $event->getExpr();
+
+        if (!($expr instanceof Assign || $expr instanceof AssignOp || $expr instanceof AssignRef)) {
+            return null;
+        }
+
+        if ($expr->var instanceof PropertyFetch) {
+            self::$assignmentLhsPropertyFetchIds[\spl_object_id($expr->var)] = true;
+        }
+
+        return null;
+    }
+
+    /**
+     * Drop assignment-LHS markers belonging to the function-like that just
+     * finished analysis. Bounds the cache footprint over a long worker
+     * lifetime — the cache holds entries only for in-flight functions.
+     *
+     * We do not have a per-function ID stamped on each entry, so the
+     * simplest correct strategy is to flush the entire cache: subsequent
+     * function analyses will re-populate. Same trade-off as
+     * {@see InlineValidateRulesCollector::afterStatementAnalysis} (which
+     * flushes its function-keyed cache at function-end).
+     *
+     * @inheritDoc
+     *
+     * @psalm-external-mutation-free
+     */
+    #[\Override]
+    public static function afterStatementAnalysis(AfterFunctionLikeAnalysisEvent $event): ?bool
+    {
+        if ($event->getStatementsSource() instanceof FunctionLikeAnalyzer) {
+            self::$assignmentLhsPropertyFetchIds = [];
+            self::$addTaintsSourcedPropertyFetchIds = [];
+        }
+
+        return null;
+    }
+
+    /**
+     * Backstop flush at file scope. The function-like flush misses two paths:
+     *
+     *   - Top-level script expressions (no enclosing function-like) accumulate
+     *     markers that the per-function flush never visits.
+     *   - PHP recycles `spl_object_id` values once the original object is
+     *     garbage-collected. ASTs become GC-eligible per file (Psalm's
+     *     `StatementsProvider` does not retain the parsed tree beyond
+     *     `FileAnalyzer::analyze`), so a stale marker from file A can collide
+     *     with a freshly-allocated PropertyFetch in file B — producing a
+     *     silent false negative on the legitimate READ-side fetch.
+     *
+     * Flushing at file scope bounds the marker set to in-flight AST objects
+     * and eliminates the id-reuse race entirely.
+     *
+     * @inheritDoc
+     *
+     * @psalm-external-mutation-free
+     */
+    #[\Override]
+    public static function afterAnalyzeFile(AfterFileAnalysisEvent $event): void
+    {
+        self::$assignmentLhsPropertyFetchIds = [];
+        self::$addTaintsSourcedPropertyFetchIds = [];
+    }
+
+    /**
+     * Single resolver for both addTaints (source re-emission for the
+     * type-narrowed read) and removeTaints (rule escape mask). Returns the
+     * {@see ResolvedRule} iff every gate agrees that the plugin owns this
+     * property fetch:
+     *
+     *   - The expression is a literal-name `PropertyFetch`.
+     *   - It is NOT the LHS of an assignment ({@see beforeExpressionAnalysis}
+     *     populates the marker set; we skip writes here).
+     *   - At least one FormRequest subclass appears in the caller type's
+     *     atomic union (cheap `isset` check against the set populated by
+     *     {@see FormRequestPropertyRegistrationHandler}).
+     *   - {@see FormRequestPropertyHandler::resolveRuleForProperty}
+     *     agrees that the field is narrow-eligible (no declared property,
+     *     no `@property`, rule guarantees presence). Sharing this resolver
+     *     between the type narrowing and the taint paths is what makes the
+     *     "do not create issues for declared fields" promise hold —
+     *     duplication here is the bug that surfaced in PR-1016 round-1
+     *     review.
+     *
+     * Returns the rule rather than the class so that the caller can read
+     * `->removedTaints` directly without re-doing the lookup. Both
+     * `addTaints` and `removeTaints` ask the same question on the same
+     * event in succession; the per-(class, property) cache inside
+     * `FormRequestPropertyHandler` absorbs that doubled call.
+     */
+    private static function resolvePropertyFetchRule(AddRemoveTaintsEvent $event): ?ResolvedRule
+    {
+        if (!FormRequestPropertyRegistrationHandler::hasAnyFormRequests()) {
+            return null;
+        }
+
+        $expr = $event->getExpr();
+
+        if (!$expr instanceof PropertyFetch || !$expr->name instanceof Identifier) {
+            return null;
+        }
+
+        if (isset(self::$assignmentLhsPropertyFetchIds[\spl_object_id($expr)])) {
+            return null;
+        }
+
+        $statementsAnalyzer = $event->getStatementsSource();
+
+        if (!$statementsAnalyzer instanceof StatementsAnalyzer) {
+            return null;
+        }
+
+        $callerType = $statementsAnalyzer->node_data->getType($expr->var);
+
+        if (!$callerType instanceof Union) {
+            return null;
+        }
+
+        $propertyName = $expr->name->name;
+
+        foreach ($callerType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                continue;
+            }
+
+            // Cheap exact-class check against the FormRequest registry.
+            // For callers typed as a non-FormRequest object (the common
+            // case under taint analysis), this short-circuits before the
+            // `resolveRuleForProperty` call walks classlike storage.
+            if (!FormRequestPropertyRegistrationHandler::isFormRequest($atomic->value)) {
+                continue;
+            }
+
+            $rule = FormRequestPropertyHandler::resolveRuleForProperty($atomic->value, $propertyName);
+
+            if ($rule instanceof ResolvedRule) {
+                return $rule;
+            }
+        }
+
+        return null;
     }
 }

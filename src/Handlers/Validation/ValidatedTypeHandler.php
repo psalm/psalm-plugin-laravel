@@ -176,15 +176,13 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
         $key = $firstArgType->getSingleStringLiteral()->value;
         $rule = $rules[$key] ?? null;
 
-        // Bail when the field has no rule, the rule does not guarantee
-        // presence, or `sometimes` overrides the presence guarantee.
-        //
-        // Laravel's `sometimes|required` means "if the field is present it
-        // must be valid", so the field can still be legitimately absent at
-        // the input() call site — same treatment {@see buildUnionFromTree}
+        // Bail when the field has no rule or the rule does not guarantee
+        // presence. Laravel's `sometimes|required` means "if the field is
+        // present it must be valid", so the field can still be legitimately
+        // absent at the input() call site — same treatment {@see buildUnionFromTree}
         // gives the validated() output (marks the field possibly_undefined
         // when `sometimes || !required`).
-        if ($rule === null || !$rule->required || $rule->sometimes) {
+        if ($rule === null || !$rule->guaranteesPresence()) {
             return null;
         }
 
