@@ -97,22 +97,34 @@ final class CastResolverTest extends TestCase
         $this->assertSame('string', (string) $union);
     }
 
-    #[Test]
-    public function it_recurses_through_encrypted_prefix(): void
+    /** @return iterable<string, array{0: string, 1: string}> */
+    public static function encryptedCastProvider(): iterable
     {
-        // `encrypted:int` — encryption is transparent at the type level.
-        $union = CastResolver::resolve($this->codebase, 'encrypted:int', nullable: false);
-
-        $this->assertSame('int', (string) $union);
+        // Laravel's HasAttributes::isEncryptedCastable accepts only these four suffixes.
+        yield 'encrypted:array' => ['encrypted:array', 'array<array-key, mixed>'];
+        yield 'encrypted:json' => ['encrypted:json', 'array<array-key, mixed>'];
+        yield 'encrypted:collection' => ['encrypted:collection', \Illuminate\Support\Collection::class];
+        yield 'encrypted:object' => ['encrypted:object', 'object{}'];
     }
 
     #[Test]
-    public function it_recurses_through_double_encrypted_prefix(): void
+    #[DataProvider('encryptedCastProvider')]
+    public function it_recurses_through_encrypted_prefix(string $cast, string $expected): void
     {
-        // Recursive recursion edge case: `encrypted:encrypted:string`.
-        $union = CastResolver::resolve($this->codebase, 'encrypted:encrypted:string', nullable: false);
+        $union = CastResolver::resolve($this->codebase, $cast, nullable: false);
 
-        $this->assertSame('string', (string) $union);
+        $this->assertSame($expected, (string) $union);
+    }
+
+    #[Test]
+    public function it_falls_back_to_mixed_for_unsupported_encrypted_suffix(): void
+    {
+        // Laravel does NOT support `encrypted:int`, `encrypted:string`, etc. — only the
+        // four JSON-castable suffixes above. Anything else is treated by Laravel as a
+        // (non-existent) custom class cast and falls through to a no-op.
+        $union = CastResolver::resolve($this->codebase, 'encrypted:int', nullable: false);
+
+        $this->assertSame('mixed', (string) $union);
     }
 
     #[Test]

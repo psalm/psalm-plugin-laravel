@@ -53,9 +53,18 @@ final class CastResolver
     ): Union {
         $baseCast = \strtolower($cast);
 
-        // `encrypted:X` — encryption is transparent at the type level, recurse on the inner cast.
+        // `encrypted:X` — Laravel only supports a fixed inner-cast set here. Anything outside
+        // {array, json, collection, object} is NOT recognised by HasAttributes::isEncryptedCastable
+        // and would be treated as a (non-existent) custom class cast; recursing for arbitrary
+        // suffixes would over-promise types Laravel never produces.
+        // See vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php::isEncryptedCastable.
         if (\str_starts_with($baseCast, 'encrypted:')) {
-            return self::resolve($codebase, \substr($cast, 10), $nullable, $originalType);
+            $inner = \substr($baseCast, 10);
+            if (\in_array($inner, ['array', 'json', 'collection', 'object'], true)) {
+                return self::resolve($codebase, \substr($cast, 10), $nullable, $originalType);
+            }
+
+            return self::makeNullable(Type::getMixed(), $nullable);
         }
 
         // `enum:App\Enums\Status` — typed enum casts (preserve original case for the class name).
@@ -97,7 +106,7 @@ final class CastResolver
             // object that is its own caster). Try Castable's `castUsing()` chase first; only fall
             // back to direct CastsAttributes reflection if the chase yields nothing.
             if (\is_a($castClass, Castable::class, true)) {
-                $type = self::resolveCastable($codebase, $castClass, $nullable);
+                $type = self::resolveCastable($codebase, $castClass, $nullable, $originalType);
                 if ($type instanceof Union) {
                     return $type;
                 }
@@ -204,14 +213,15 @@ final class CastResolver
 
     /**
      * Chase {@see Castable::castUsing}'s declared return type to find the underlying
-     * CastsAttributes implementation. We do NOT recurse Castable → Castable; in practice
-     * castUsing always returns the terminal caster, and a Castable chain would be
-     * pathological. Mirrors Larastan's single-hop behavior.
+     * CastsAttributes / CastsInboundAttributes implementation. We do NOT recurse
+     * Castable → Castable; in practice castUsing always returns the terminal caster,
+     * and a Castable chain would be pathological. Mirrors Larastan's single-hop behavior.
      */
     private static function resolveCastable(
         Codebase $codebase,
         string $castClass,
         bool $nullable,
+        ?Union $originalType,
     ): ?Union {
         $method = $castClass . '::castUsing';
         if (!$codebase->methodExists($method)) {
@@ -226,10 +236,10 @@ final class CastResolver
         foreach ($returnType->getAtomicTypes() as $atomic) {
             // `@return CastsAttributes<TGet, TSet>` — most common when castUsing returns an
             // anonymous class with explicit generics on the interface (e.g. AsCollection).
-            // Strict equality: a concrete subclass's `@template`s may not align with the
-            // interface's `TGet, TSet` ordering, so we only short-circuit on the interface
-            // itself. Concrete generic subclasses fall through to the TNamedObject branch
-            // below which reflects on `::get` (where Psalm has resolved the templates).
+            // Strict equality on the interface itself: a concrete subclass's `@template`s
+            // may not align with the interface's `TGet, TSet` ordering, so we only
+            // short-circuit on the interface. Concrete generic subclasses go through the
+            // TNamedObject branch below which reflects on `::get`.
             if (
                 $atomic instanceof TGenericObject
                 && $atomic->value === CastsAttributes::class
@@ -238,10 +248,15 @@ final class CastResolver
                 return self::makeNullable($atomic->type_params[0], $nullable);
             }
 
-            // `@return ConcreteCast` (or `return new ConcreteCast;`) — reflect on the concrete class.
+            // `@return ConcreteCast` / `@return ConcreteCast<X>` / `return new ConcreteCast;`
+            // — reflect on the concrete class's `get()` (which carries the user docblock or
+            // resolves the templates via `@implements CastsAttributes<X, Y>`).
+            //
+            // TGenericObject extends TNamedObject in Psalm, so this branch fires for both
+            // shapes; the TGenericObject===CastsAttributes early-return above already
+            // siphoned off the interface-itself case.
             if (
                 $atomic instanceof TNamedObject
-                && !$atomic instanceof TGenericObject
                 && \is_a($atomic->value, CastsAttributes::class, true)
             ) {
                 $resolved = self::resolveCastsAttributesGet($codebase, $atomic->value, $nullable);
@@ -250,15 +265,45 @@ final class CastResolver
                 }
             }
 
+            // Castable that ultimately returns a CastsInboundAttributes — the contract
+            // allows this (`@return class-string<CastsAttributes|CastsInboundAttributes>|...`).
+            // Reading a write-only cast is a passthrough of the column's raw type, same as
+            // the direct CastsInboundAttributes branch in resolve().
+            if (
+                $atomic instanceof TNamedObject
+                && \is_a($atomic->value, CastsInboundAttributes::class, true)
+                && !\is_a($atomic->value, CastsAttributes::class, true)
+            ) {
+                if ($originalType instanceof Union) {
+                    return self::makeNullable($originalType, $nullable);
+                }
+
+                return self::makeNullable(Type::getMixed(), $nullable);
+            }
+
             // `@return class-string<ConcreteCast>` (or `return ConcreteCast::class;`).
             if (
                 $atomic instanceof TClassString
                 && $atomic->as_type instanceof TNamedObject
-                && \is_a($atomic->as_type->value, CastsAttributes::class, true)
             ) {
-                $resolved = self::resolveCastsAttributesGet($codebase, $atomic->as_type->value, $nullable);
-                if ($resolved instanceof Union) {
-                    return $resolved;
+                $cls = $atomic->as_type->value;
+
+                if (\is_a($cls, CastsAttributes::class, true)) {
+                    $resolved = self::resolveCastsAttributesGet($codebase, $cls, $nullable);
+                    if ($resolved instanceof Union) {
+                        return $resolved;
+                    }
+                }
+
+                if (
+                    \is_a($cls, CastsInboundAttributes::class, true)
+                    && !\is_a($cls, CastsAttributes::class, true)
+                ) {
+                    if ($originalType instanceof Union) {
+                        return self::makeNullable($originalType, $nullable);
+                    }
+
+                    return self::makeNullable(Type::getMixed(), $nullable);
                 }
             }
         }
