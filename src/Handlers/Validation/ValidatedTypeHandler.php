@@ -163,6 +163,10 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        // `classExtends` succeeded above (no UnpopulatedClasslikeException), so
+        // Psalm has metadata for `$calledClass`. Narrow to `class-string` here
+        // since `getCalledFqClasslikeName()` is typed as plain `string`.
+        /** @var class-string $calledClass */
         $rules = ValidationRuleAnalyzer::getRulesForFormRequest($calledClass);
 
         if ($rules === null) {
