@@ -46,15 +46,19 @@ namespace Psalm\LaravelPlugin\Blade;
 final readonly class BladeTemplateAnalysis
 {
     /**
-     * @param list<non-empty-string>       $unsafeKeys    top-level data keys reaching raw output
-     * @param list<BladeUncertaintyReason> $uncertainties reasons the scanner could not model the template
-     * @param list<BladeIncludeEdge>       $includeEdges  resolvable `@include` edges observed in the template
+     * @param list<non-empty-string>       $unsafeKeys      top-level data keys reaching raw output
+     * @param list<BladeUncertaintyReason> $uncertainties   reasons the scanner could not model the template
+     * @param list<BladeIncludeEdge>       $includeEdges    resolvable `@include` edges observed in the template
+     * @param list<BladeComponentEdge>     $componentEdges  resolvable `<x-foo :bar="$expr" />` anonymous-component
+     *                                                     edges observed in the template; populated alongside a
+     *                                                     {@see BladeUncertaintyReason::ComponentResolved} marker
      */
     private function __construct(
         public BladeViewSafetyKind $kind,
         public array $unsafeKeys,
         public array $uncertainties,
         public array $includeEdges = [],
+        public array $componentEdges = [],
     ) {}
 
     /** @psalm-pure */
@@ -84,14 +88,19 @@ final readonly class BladeTemplateAnalysis
      * error). The factory still enforces non-empty at runtime; callers
      * passing `[]` get an `InvalidArgumentException`.
      *
-     * @param list<BladeUncertaintyReason> $uncertainties non-empty at runtime; see throw
-     * @param list<non-empty-string>       $unsafeKeys    keys observed before the uncertainty was hit
-     * @param list<BladeIncludeEdge>       $includeEdges  resolvable include edges captured during the scan
+     * @param list<BladeUncertaintyReason> $uncertainties  non-empty at runtime; see throw
+     * @param list<non-empty-string>       $unsafeKeys     keys observed before the uncertainty was hit
+     * @param list<BladeIncludeEdge>       $includeEdges   resolvable include edges captured during the scan
+     * @param list<BladeComponentEdge>     $componentEdges resolvable component edges captured during the scan
      *
      * @psalm-pure
      */
-    public static function unknown(array $uncertainties, array $unsafeKeys = [], array $includeEdges = []): self
-    {
+    public static function unknown(
+        array $uncertainties,
+        array $unsafeKeys = [],
+        array $includeEdges = [],
+        array $componentEdges = [],
+    ): self {
         // Enforce the documented non-empty contract at runtime: an UNKNOWN
         // with no uncertainty reasons would be indistinguishable from a
         // safe template at the handler layer and re-introduce the
@@ -102,7 +111,7 @@ final readonly class BladeTemplateAnalysis
             );
         }
 
-        return new self(BladeViewSafetyKind::Unknown, $unsafeKeys, $uncertainties, $includeEdges);
+        return new self(BladeViewSafetyKind::Unknown, $unsafeKeys, $uncertainties, $includeEdges, $componentEdges);
     }
 
 }

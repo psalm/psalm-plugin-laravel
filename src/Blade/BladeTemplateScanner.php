@@ -47,7 +47,7 @@ use PhpParser\ParserFactory;
  *
  * Purity: the scanner is *not* marked `@psalm-pure` or `@psalm-mutation-free`.
  * {@see PsalmBladeCompiler::compileBladeSource()} mutates the underlying
- * BladeCompiler instance (footers, raw blocks, sawComponentTag flag), and the
+ * BladeCompiler instance (footers, raw blocks, lastTagScanSource), and the
  * visitor maintains intermediate state. Each call to {@see analyze()} resets
  * compiler state and constructs a fresh visitor, so externally the scanner
  * behaves like a deterministic function from `$source` to `BladeTemplateAnalysis`.
@@ -181,9 +181,16 @@ final class BladeTemplateScanner
      *   3. {@see BladeAstAnalysisVisitor} walks the AST, collecting:
      *      - top-level variables raw-echoed (unsafe keys, after filtering
      *        scope-locals and framework locals);
-     *      - `$__env` method calls indicating layout/section/stack/include flow;
-     *      - the {@see PsalmBladeCompiler::sawComponentTag()} flag for `<x-...>`
-     *        and `@component` / `@slot` directives.
+     *      - `$__env` method calls indicating layout/section/stack/include flow.
+     *   3a. {@see BladeComponentTagParser} runs on the post-raw-block source
+     *       captured by {@see PsalmBladeCompiler::lastTagScanSource()}. It
+     *       partitions `<x-...>` tags into resolvable self-closing records
+     *       (mapped to {@see BladeComponentEdge}) and unresolvable shapes
+     *       (opening tags with bodies, namespaced anonymous components,
+     *       dynamic-component, `@component` / `@slot` directives, opaque
+     *       attribute syntax). Resolvable tags add
+     *       {@see BladeUncertaintyReason::ComponentResolved}; unresolvable
+     *       shapes add {@see BladeUncertaintyReason::ComponentTag}.
      *   4. Uncertainties dominate: any uncertainty produces UNKNOWN; otherwise
      *      a non-empty unsafe-key list produces UNSAFE_KEYS; otherwise SAFE.
      */
@@ -230,16 +237,33 @@ final class BladeTemplateScanner
 
         $uncertainties = $visitor->uncertainties;
 
-        if ($this->compiler->sawComponentTag()
-            && !\in_array(BladeUncertaintyReason::ComponentTag, $uncertainties, true)) {
-            $uncertainties[] = BladeUncertaintyReason::ComponentTag;
+        $tagScanSource = $this->compiler->lastTagScanSource();
+        $componentEdges = [];
+
+        if ($tagScanSource !== null) {
+            $tagResult = BladeComponentTagParser::parse($tagScanSource);
+
+            $componentEdges = $visitor->computeComponentEdges(
+                $tagResult->records,
+                self::FRAMEWORK_LOCALS,
+            );
+
+            if ($componentEdges !== []
+                && !\in_array(BladeUncertaintyReason::ComponentResolved, $uncertainties, true)) {
+                $uncertainties[] = BladeUncertaintyReason::ComponentResolved;
+            }
+
+            if ($tagResult->hasUnresolvable
+                && !\in_array(BladeUncertaintyReason::ComponentTag, $uncertainties, true)) {
+                $uncertainties[] = BladeUncertaintyReason::ComponentTag;
+            }
         }
 
         $unsafeKeys = $visitor->computeUnsafeKeys(self::FRAMEWORK_LOCALS);
         $includeEdges = $visitor->computeIncludeEdges(self::FRAMEWORK_LOCALS);
 
         if ($uncertainties !== []) {
-            return BladeTemplateAnalysis::unknown($uncertainties, $unsafeKeys, $includeEdges);
+            return BladeTemplateAnalysis::unknown($uncertainties, $unsafeKeys, $includeEdges, $componentEdges);
         }
 
         return BladeTemplateAnalysis::unsafeKeys($unsafeKeys);
@@ -1035,6 +1059,153 @@ final class BladeAstAnalysisVisitor extends NodeVisitorAbstract
         }
 
         return $edges;
+    }
+
+    /**
+     * Convert raw tag records produced by {@see BladeComponentTagParser} into
+     * filtered {@see BladeComponentEdge} objects.
+     *
+     * Filtering parallels {@see computeIncludeEdges()}: each bound
+     * attribute's parent variable list has scope-locals and framework-locals
+     * removed, because a `<x-foo :bar="$x" />` where `$x` was assigned
+     * earlier in the same template (`@php $x = 1; @endphp`) is bound to a
+     * literal value, not to the parent's view-data array.
+     *
+     * Static attributes are recorded in the bound map as empty
+     * `list<non-empty-string>` so component-edge propagation knows the key
+     * was bound to something (a static literal) and therefore should NOT
+     * fall through to "propagate verbatim". Components have no mergeData
+     * pass-through, so a child unsafe key not present in any explicit
+     * binding gets dropped — but a static binding still satisfies the
+     * "explicit binding" gate.
+     *
+     * View-name candidate generation mirrors Laravel's
+     * `ComponentTagCompiler::guessAnonymousComponentUsingPaths()`:
+     * `components.{name}`, `components.{name}.index`, and
+     * `components.{name}.{last-dot-segment}`. {@see BladeSafetyMap::build()}
+     * picks the first candidate that exists in the scanned roots; if none
+     * matches, the edge contributes "unknown child" to the parent's
+     * propagation.
+     *
+     * @param list<BladeComponentTagRecord> $records
+     * @param array<string, true>           $frameworkLocals
+     *
+     * @return list<BladeComponentEdge>
+     *
+     * @psalm-mutation-free
+     */
+    public function computeComponentEdges(array $records, array $frameworkLocals): array
+    {
+        $edges = [];
+
+        foreach ($records as $record) {
+            $candidateViewNames = $this->componentCandidateViewNames($record->name);
+
+            if ($candidateViewNames === []) {
+                continue;
+            }
+
+            /** @var array<non-empty-string, list<non-empty-string>> $explicitKeyMap */
+            $explicitKeyMap = [];
+
+            foreach ($record->attributes['bound'] as $keyName => $names) {
+                $filtered = [];
+
+                foreach ($names as $name) {
+                    if (isset($this->scopeLocals[$name])) {
+                        continue;
+                    }
+
+                    if (isset($frameworkLocals[$name])) {
+                        continue;
+                    }
+
+                    $filtered[] = $name;
+                }
+
+                $explicitKeyMap[$keyName] = $filtered;
+            }
+
+            foreach ($record->attributes['static'] as $staticName) {
+                // Static attributes carry no parent vars but still count as
+                // an explicit binding so the child's matching unsafe key is
+                // not propagated as a parent-scope variable.
+                //
+                // Soundness: if the same camelized name was already recorded
+                // as a bound attribute (e.g. `<x-foo bar="literal" :bar="$x" />`
+                // — a duplicate-attribute form Laravel resolves last-write-wins
+                // via `mapWithKeys()` in `ComponentTagCompiler::getAttributesFromAttributeString`),
+                // do NOT clobber the bound entry. {@see BladeComponentTagParser}'s
+                // partitioned output drops source order, so we cannot tell which
+                // form Laravel would bind at runtime. Erring toward the bound
+                // entry over-reports taint at worst, never under-reports.
+                if (isset($explicitKeyMap[$staticName])) {
+                    continue;
+                }
+
+                $explicitKeyMap[$staticName] = [];
+            }
+
+            $edges[] = new BladeComponentEdge($candidateViewNames, $explicitKeyMap);
+        }
+
+        return $edges;
+    }
+
+    /**
+     * Produce Laravel's three anonymous-component candidate view names for a
+     * dotted tag identifier. Returns `[]` if the identifier does not split
+     * into at least one segment (defensive — the parser already validates
+     * this).
+     *
+     * @return list<non-empty-string>
+     *
+     * @psalm-pure
+     */
+    private function componentCandidateViewNames(string $tagName): array
+    {
+        if ($tagName === '') {
+            return [];
+        }
+
+        // `<x-foo:bar>` is a colon-segment variant Laravel accepts as the
+        // same dotted identifier `foo.bar`. We normalize for candidate
+        // generation; the original tag name is no longer needed.
+        $normalized = \str_replace(':', '.', $tagName);
+
+        if ($normalized === '') {
+            return [];
+        }
+
+        $base = 'components.' . $normalized;
+
+        if ($base === 'components.') {
+            return [];
+        }
+
+        $segments = \explode('.', $normalized);
+        // `explode` on non-empty input is always a non-empty list, so
+        // `end()` returns a string (no `false` arm). It can still be `''`
+        // when `$normalized` ended with a `.` — defensive fallback.
+        $lastSegment = \end($segments);
+
+        if ($lastSegment === '') {
+            return [$base];
+        }
+
+        $candidates = [$base];
+        $candidates[] = $base . '.index';
+
+        // The third candidate (`components.{name}.{last-segment}`) only
+        // differs from `index` when the tag has a meaningful trailing
+        // segment; for a single-segment tag (`<x-foo>`) Laravel still emits
+        // it as `components.foo.foo` (e.g. a `card.blade.php` inside
+        // `components/card/`). Always include for parity with the upstream
+        // resolver.
+        $candidates[] = $base . '.' . $lastSegment;
+
+        /** @var list<non-empty-string> $candidates */
+        return $candidates;
     }
 
     /** @psalm-external-mutation-free */

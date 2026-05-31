@@ -91,11 +91,36 @@ enum BladeUncertaintyReason
     case IncludeCycle;
 
     /**
-     * Template contains `<x-foo>` / `<x:foo>` component tags, `@component`, or
-     * `@slot`. v1 does not resolve component attribute/slot data flow; v2 will
-     * add it.
+     * Template contains a Blade component construct the v1 scanner cannot
+     * resolve: an opening `<x-foo>` ... `</x-foo>` tag with a body (slot
+     * content), `<x-package::foo>` (namespaced anonymous component),
+     * `<x-dynamic-component>`, the `@component` / `@slot` directive forms,
+     * a class component (no anonymous template found on disk for the tag
+     * name), or a self-closing `<x-foo .../>` whose attribute string the
+     * scanner could not parse.
+     *
+     * Forces UNKNOWN regardless of any {@see ComponentResolved} edges
+     * recorded on the same template: a single unresolvable construct could
+     * route taint through paths the scanner did not model, so the
+     * conservative answer is opaque.
      */
     case ComponentTag;
+
+    /**
+     * Template's `<x-foo :bar="$expr" />` tags all resolved to anonymous
+     * component templates whose data flow {@see BladeTemplateScanner} could
+     * enumerate. Emitted alongside a list of {@see BladeComponentEdge}
+     * records so {@see BladeSafetyMap::build()} can run a fixed-point pass
+     * that propagates the child template's unsafe keys into the parent's
+     * safety record, mapped through the bound-attribute expressions.
+     *
+     * Mirrors {@see IncludeResolved}: once propagation runs the parent is
+     * flipped to SAFE or UNSAFE_KEYS, and this case only appears on
+     * intermediate {@see BladeTemplateAnalysis} values returned directly
+     * by the scanner. Callers consuming a fully built {@see BladeSafetyMap}
+     * never see this case — they see the post-propagation kind/keys instead.
+     */
+    case ComponentResolved;
 
     /**
      * `view($expr)` or `View::make($expr)` with a non-literal view name at the
@@ -137,4 +162,20 @@ enum BladeUncertaintyReason
      * SAFE would hide the file from the handler.
      */
     case FileUnreadable;
+
+    /**
+     * True for intermediate markers that are stripped before a built
+     * {@see BladeSafetyMap} is exposed to consumers. Single source of truth
+     * for the eligibility / stripping passes in {@see BladeSafetyMap}:
+     * adding a new intermediate marker (e.g. `ShareResolved` for `View::share()`
+     * propagation) only needs to extend this method, not the two map-side
+     * call sites.
+     *
+     * @psalm-mutation-free
+     */
+    public function isIntermediate(): bool
+    {
+        return $this === self::IncludeResolved
+            || $this === self::ComponentResolved;
+    }
 }

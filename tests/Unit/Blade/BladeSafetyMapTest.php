@@ -468,6 +468,425 @@ final class BladeSafetyMapTest extends TestCase
         }
     }
 
+    // ----- PR-6b: anonymous component propagation -----
+
+    public function test_component_edge_propagates_bound_var_to_parent(): void
+    {
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            '{!! $bio !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-card :bio="$post" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        // Child's unsafe key `bio` maps through the edge's `bio => [post]`
+        // binding. Parent's unsafe keys gain `post`.
+        $this->assertSame(['post'], $map->unsafeKeysFor('posts.show'));
+        $this->assertSame(['bio'], $map->unsafeKeysFor('components.card'));
+    }
+
+    public function test_component_edge_with_static_attribute_does_not_propagate(): void
+    {
+        // `<x-card bio="literal" />` binds `bio` to a non-parent value.
+        // Component edges have no mergeData pass-through, so the child's
+        // unsafe key `bio` must NOT propagate as parent `bio`.
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            '{!! $bio !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-card bio="literal" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertTrue($map->isKnownSafe('posts.show'));
+    }
+
+    public function test_component_child_unsafe_key_not_bound_by_parent_is_dropped(): void
+    {
+        // Child raw-echoes `$other`, but the parent does not bind `other`.
+        // Components have no mergeData fallthrough, so the parent does NOT
+        // gain `other` as an unsafe key.
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            '{!! $other !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-card :bio="$post" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertTrue($map->isKnownSafe('posts.show'));
+    }
+
+    public function test_component_kebab_case_attribute_maps_to_child_camel_name(): void
+    {
+        // `<x-card :user-name="$user" />` binds `$userName` in the child
+        // anonymous template. The child raw-echoes `$userName`, so the
+        // parent's contribution is `user`.
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            '{!! $userName !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-card :user-name="$user" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertSame(['user'], $map->unsafeKeysFor('posts.show'));
+    }
+
+    public function test_component_with_no_candidate_match_falls_back_to_unknown(): void
+    {
+        // No `components/missing*.blade.php` exists in any scan root, so
+        // the component edge's candidate list resolves to none of the
+        // scanned templates. Parent surfaces UNKNOWN(ComponentTag).
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-missing :bio="$post" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertTrue($map->isUnknown('posts.show'));
+        $this->assertContains(
+            BladeUncertaintyReason::ComponentTag,
+            $map->safetyFor('posts.show')?->analysis->uncertainties ?? [],
+        );
+    }
+
+    public function test_component_resolves_to_index_candidate_when_first_is_missing(): void
+    {
+        // Laravel's anonymous resolver tries `components.card`,
+        // `components.card.index`, then `components.card.card`. Only the
+        // `.index` variant exists in this fixture, so propagation should
+        // pick it.
+        \mkdir($this->root . '/components/card', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card/index.blade.php',
+            '{!! $bio !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-card :bio="$post" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertSame(['post'], $map->unsafeKeysFor('posts.show'));
+    }
+
+    public function test_self_referencing_component_is_marked_include_cycle(): void
+    {
+        // `components/loop.blade.php` includes itself via `<x-loop />`.
+        // Cycle detection (which now walks component edges) flags it.
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/loop.blade.php',
+            '<x-loop />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertTrue($map->isUnknown('components.loop'));
+        $this->assertContains(
+            BladeUncertaintyReason::IncludeCycle,
+            $map->safetyFor('components.loop')?->analysis->uncertainties ?? [],
+        );
+    }
+
+    public function test_intermediate_component_resolved_marker_never_leaks_to_consumers(): void
+    {
+        // A template with mixed uncertainties (ComponentResolved alongside
+        // a real LayoutSectionFlow) is non-eligible for propagation. The
+        // exposed safety record must NOT carry the intermediate
+        // ComponentResolved marker.
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            '{!! $bio !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            "@yield('content')\n<x-card :bio=\"\$post\" />",
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $uncertainties = $map->safetyFor('posts.show')?->analysis->uncertainties ?? [];
+
+        $this->assertContains(BladeUncertaintyReason::LayoutSectionFlow, $uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentResolved, $uncertainties);
+    }
+
+    public function test_component_edge_with_unknown_child_falls_back_to_unknown(): void
+    {
+        // Child anonymous component itself includes a dynamic-target
+        // `@include($x)`, so the child resolves to UNKNOWN(IncludeDirective).
+        // Parent's contribution from the component edge is opaque, so the
+        // parent surfaces UNKNOWN(ComponentTag).
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            '@include($child)',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-card :bio="$post" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertTrue($map->isUnknown('posts.show'));
+        $this->assertContains(
+            BladeUncertaintyReason::ComponentTag,
+            $map->safetyFor('posts.show')?->analysis->uncertainties ?? [],
+        );
+    }
+
+    public function test_cross_edge_type_cycle_is_detected(): void
+    {
+        // Parent `posts/show` does `@include('partials.row')`; the include
+        // target does `<x-show />` back to the parent. The unified cycle
+        // DFS walks both edge types, so the cycle is detected; splitting
+        // detection into two passes (an attractive refactor) would miss it.
+        \mkdir($this->root . '/components', 0777, true);
+        \mkdir($this->root . '/partials', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'partials/row.blade.php',
+            '<x-show />',
+        );
+
+        \mkdir($this->root . '/components/show', 0777, true);
+        $this->writeBlade(
+            $this->root,
+            'components/show.blade.php',
+            "@include('partials.row')",
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertContains(
+            BladeUncertaintyReason::IncludeCycle,
+            $map->safetyFor('components.show')?->analysis->uncertainties ?? [],
+        );
+        $this->assertContains(
+            BladeUncertaintyReason::IncludeCycle,
+            $map->safetyFor('partials.row')?->analysis->uncertainties ?? [],
+        );
+    }
+
+    public function test_first_candidate_wins_when_multiple_exist(): void
+    {
+        // Both `components/card.blade.php` AND `components/card/index.blade.php`
+        // exist on disk. Laravel's first-match resolver picks `components.card`.
+        // The plugin must match: a future ordering change in the candidate list
+        // would silently swap which template's unsafe keys flow.
+        \mkdir($this->root . '/components/card', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            '{!! $firstWin !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'components/card/index.blade.php',
+            '{!! $secondWin !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-card :first-win="$alpha" :second-win="$beta" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $keys = $map->unsafeKeysFor('posts.show');
+
+        $this->assertContains('alpha', $keys);
+        $this->assertNotContains('beta', $keys);
+    }
+
+    public function test_multi_hop_component_chain_propagates_through_resolvable_intermediates(): void
+    {
+        // Parent → outer → inner. Component edges chain across multiple
+        // hops. Component propagation differs enough from include
+        // propagation (no mergeData fallthrough) that breaking the
+        // transitive case would not be caught by single-hop tests.
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/inner.blade.php',
+            '{!! $payload !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'components/outer.blade.php',
+            '<x-inner :payload="$payload" />',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-outer :payload="$post" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertSame(['post'], $map->unsafeKeysFor('posts.show'));
+    }
+
+    public function test_attributes_bag_reads_propagate_every_bound_parent_var(): void
+    {
+        // Child anonymous component reads `$attributes->get('bio')`, which
+        // returns the parent's bound `:bio="$tainted"` WITHOUT escaping.
+        // The standard "child key must be in explicitKeyMap" propagation
+        // gate would drop the flow because `attributes` is a reserved
+        // scope-local, never a parent-bound attribute name. Special-cased
+        // in `propagateComponentChildKey` to union every parent var bound
+        // on the edge.
+        //
+        // Multiple bindings on the same edge MUST all union: the child's
+        // `$attributes->get('bio')` could resolve to either at runtime,
+        // and the bag API also supports `$attributes->only([...])` /
+        // `$attributes->whereStartsWith(...)` which can read any subset.
+        // Asserting both parent vars verifies the implementation's outer
+        // `foreach ($explicitKeyMap as $parentVars)` actually iterates
+        // every binding, not just the first.
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            "{!! \$attributes->get('bio') !!}",
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-card :bio="$alpha" :name="$beta" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $keys = $map->unsafeKeysFor('posts.show');
+
+        $this->assertContains('alpha', $keys);
+        $this->assertContains('beta', $keys);
+    }
+
+    public function test_bound_attribute_wins_over_duplicate_static_for_same_camelized_name(): void
+    {
+        // `<x-card bar="literal" :bar="$x" />` is a duplicate-attribute form
+        // Laravel resolves last-write-wins via `mapWithKeys()`. The parser
+        // emits both forms (source order is lost in partitioning); the
+        // scanner's static loop must NOT clobber the bound entry. Erring
+        // toward the bound form is sound (over-reports taint at worst).
+        \mkdir($this->root . '/components', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            '{!! $bar !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            '<x-card bar="literal" :bar="$tainted" />',
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $this->assertContains('tainted', $map->unsafeKeysFor('posts.show'));
+    }
+
+    public function test_parent_with_both_include_and_component_edges_propagates_both(): void
+    {
+        // Mixed parent: `@include('partials.foo', ['x' => $a])` AND
+        // `<x-card :bio="$post" />`. Eligibility allows
+        // {IncludeResolved, ComponentResolved}, so both edges propagate.
+        \mkdir($this->root . '/components', 0777, true);
+        \mkdir($this->root . '/partials', 0777, true);
+
+        $this->writeBlade(
+            $this->root,
+            'partials/foo.blade.php',
+            '{!! $x !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'components/card.blade.php',
+            '{!! $bio !!}',
+        );
+
+        $this->writeBlade(
+            $this->root,
+            'posts/show.blade.php',
+            "@include('partials.foo', ['x' => \$a])\n<x-card :bio=\"\$post\" />",
+        );
+
+        $map = BladeSafetyMap::build([$this->root]);
+
+        $keys = $map->unsafeKeysFor('posts.show');
+
+        $this->assertContains('a', $keys);
+        $this->assertContains('post', $keys);
+    }
+
     private function writeBlade(string $root, string $relativePath, string $contents): void
     {
         \file_put_contents($root . \DIRECTORY_SEPARATOR . $relativePath, $contents);

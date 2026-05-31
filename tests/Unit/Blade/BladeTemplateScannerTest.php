@@ -478,21 +478,30 @@ final class BladeTemplateScannerTest extends TestCase
         $this->assertContains(BladeUncertaintyReason::IncludeDirective, $analysis->uncertainties);
     }
 
-    public function test_dash_form_component_tag_marks_template_unknown(): void
+    public function test_dash_form_self_closing_component_tag_is_resolvable(): void
     {
+        // PR-6b: resolvable self-closing anonymous-component tags surface as
+        // ComponentResolved + a BladeComponentEdge. The analysis kind stays
+        // Unknown at the scanner layer because edge propagation happens in
+        // BladeSafetyMap::build(); a fully-built map flips it back to SAFE
+        // or UNSAFE_KEYS depending on the child template.
         $analysis = $this->scanner->analyze('<x-alert :message="$message" />');
 
         $this->assertSame(BladeViewSafetyKind::Unknown, $analysis->kind);
-        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertCount(1, $analysis->componentEdges);
     }
 
-    public function test_colon_form_component_tag_marks_template_unknown(): void
+    public function test_colon_form_self_closing_component_tag_is_resolvable(): void
     {
         // Laravel's ComponentTagCompiler accepts both `<x-foo>` and `<x:foo>`.
         $analysis = $this->scanner->analyze('<x:alert :message="$message" />');
 
         $this->assertSame(BladeViewSafetyKind::Unknown, $analysis->kind);
-        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertCount(1, $analysis->componentEdges);
     }
 
     public function test_namespaced_component_tag_marks_template_unknown(): void
@@ -852,6 +861,252 @@ final class BladeTemplateScannerTest extends TestCase
 
         $this->assertContains(BladeUncertaintyReason::LayoutSectionFlow, $uncertainties);
         $this->assertContains(BladeUncertaintyReason::IncludeDirective, $uncertainties);
-        $this->assertContains(BladeUncertaintyReason::ComponentTag, $uncertainties);
+        // PR-6b: self-closing `<x-button :label="$label" />` is resolvable;
+        // the dominant uncertainty is the @yield + dynamic @include, but the
+        // component edge is still recorded as ComponentResolved.
+        $this->assertContains(BladeUncertaintyReason::ComponentResolved, $uncertainties);
+    }
+
+    // ----- PR-6b: anonymous component edge extraction -----
+
+    public function test_component_edge_records_three_candidate_view_names(): void
+    {
+        // Laravel's ComponentTagCompiler probes three anonymous-component
+        // candidate view names: `components.<name>`, `components.<name>.index`,
+        // and `components.<name>.<last segment>`. We emit all three so the
+        // safety map can pick the first that exists on disk.
+        $analysis = $this->scanner->analyze('<x-foo />');
+
+        $this->assertCount(1, $analysis->componentEdges);
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(
+            ['components.foo', 'components.foo.index', 'components.foo.foo'],
+            $edge->candidateViewNames,
+        );
+    }
+
+    public function test_dotted_component_name_keeps_segments_in_candidates(): void
+    {
+        $analysis = $this->scanner->analyze('<x-foo.bar />');
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(
+            ['components.foo.bar', 'components.foo.bar.index', 'components.foo.bar.bar'],
+            $edge->candidateViewNames,
+        );
+    }
+
+    public function test_bound_attribute_extracts_parent_variable(): void
+    {
+        $analysis = $this->scanner->analyze('<x-foo :bar="$user" />');
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(['bar' => ['user']], $edge->explicitKeyMap);
+    }
+
+    public function test_bound_attribute_extracts_multiple_parent_variables(): void
+    {
+        $analysis = $this->scanner->analyze('<x-foo :greeting="$user . $message" />');
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(['greeting' => ['user', 'message']], $edge->explicitKeyMap);
+    }
+
+    public function test_static_attribute_recorded_with_empty_var_list(): void
+    {
+        // Static attribute carries no parent data flow but still counts as
+        // an explicit binding so component-edge propagation does NOT
+        // fall through to "propagate verbatim" (unlike include edges).
+        $analysis = $this->scanner->analyze('<x-foo bar="literal" />');
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(['bar' => []], $edge->explicitKeyMap);
+    }
+
+    public function test_kebab_attribute_name_is_camelized(): void
+    {
+        // Laravel exposes `:user-name="$x"` to the child template as `$userName`.
+        // The edge must store the post-camelization name so propagation lookups
+        // match the child's scanned unsafe-keys list.
+        $analysis = $this->scanner->analyze('<x-foo :user-name="$user" />');
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(['userName' => ['user']], $edge->explicitKeyMap);
+    }
+
+    public function test_snake_attribute_name_is_camelized(): void
+    {
+        $analysis = $this->scanner->analyze('<x-foo :user_name="$user" />');
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(['userName' => ['user']], $edge->explicitKeyMap);
+    }
+
+    public function test_colon_dollar_shorthand_binds_attribute_to_same_name_variable(): void
+    {
+        // `:$bar` is shorthand for `:bar="$bar"`.
+        $analysis = $this->scanner->analyze('<x-foo :$bar />');
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(['bar' => ['bar']], $edge->explicitKeyMap);
+    }
+
+    public function test_boolean_attribute_is_recorded_as_static(): void
+    {
+        $analysis = $this->scanner->analyze('<x-foo disabled />');
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(['disabled' => []], $edge->explicitKeyMap);
+    }
+
+    public function test_scope_local_variable_is_filtered_from_bound_expression(): void
+    {
+        // `$local` is assigned in the template before the component tag —
+        // it's a scope-local, not a parent-scope variable, so it MUST NOT
+        // appear in the edge's explicit-key map.
+        $source = <<<'BLADE'
+            @php $local = 1; @endphp
+            <x-foo :bar="$local" />
+            BLADE;
+
+        $analysis = $this->scanner->analyze($source);
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(['bar' => []], $edge->explicitKeyMap);
+    }
+
+    public function test_framework_local_loop_var_is_filtered_from_bound_expression(): void
+    {
+        // `$loop` is BladeCompiler's foreach-context variable, not a
+        // parent-scope view-data key. `$item` is the foreach value-var
+        // (a scope-local). Both must filter out so a canonical
+        // `<x-list-item :index="$loop->index" :value="$item" />` records
+        // empty parent-var lists; without filtering, the parent's
+        // unsafe-key set would gain spurious `loop` / `item` entries.
+        $source = <<<'BLADE'
+            @foreach ($items as $item)
+                <x-list-item :index="$loop->index" :value="$item" />
+            @endforeach
+            BLADE;
+
+        $analysis = $this->scanner->analyze($source);
+
+        $edge = $analysis->componentEdges[0];
+        $this->assertSame(
+            ['index' => [], 'value' => []],
+            $edge->explicitKeyMap,
+        );
+    }
+
+    public function test_opening_tag_with_body_marks_template_unknown(): void
+    {
+        // v1 does not propagate slot content; an opening tag (even with
+        // empty body) forces ComponentTag UNKNOWN.
+        $analysis = $this->scanner->analyze('<x-card>body</x-card>');
+
+        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+    }
+
+    public function test_self_closing_namespaced_component_tag_marks_template_unknown(): void
+    {
+        $analysis = $this->scanner->analyze('<x-mail::message />');
+
+        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+        $this->assertSame([], $analysis->componentEdges);
+    }
+
+    public function test_dynamic_component_tag_marks_template_unknown(): void
+    {
+        $analysis = $this->scanner->analyze('<x-dynamic-component :component="$name" />');
+
+        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+    }
+
+    public function test_component_directive_marks_template_unknown_with_no_edges(): void
+    {
+        // PR-6b defers the legacy `@component(...) ... @endcomponent`
+        // directive form. Any occurrence forces ComponentTag UNKNOWN.
+        $source = <<<'BLADE'
+            @component('foo', ['k' => $v])
+              body
+            @endcomponent
+            BLADE;
+
+        $analysis = $this->scanner->analyze($source);
+
+        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertSame([], $analysis->componentEdges);
+    }
+
+    public function test_variable_variable_in_bound_expression_marks_template_unknown(): void
+    {
+        $analysis = $this->scanner->analyze('<x-foo :bar="${\'x\'}" />');
+
+        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+    }
+
+    public function test_class_directive_in_attributes_marks_template_unknown(): void
+    {
+        $analysis = $this->scanner->analyze('<x-foo @class(["a" => true]) />');
+
+        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+    }
+
+    public function test_attributes_bag_echo_in_attributes_marks_template_unknown(): void
+    {
+        $analysis = $this->scanner->analyze('<x-foo {{ $attributes }} />');
+
+        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+    }
+
+    public function test_mixed_resolvable_and_unresolvable_tags_record_both_uncertainties(): void
+    {
+        // The two reasons can coexist; propagation will treat ComponentTag
+        // as dominant and treat the parent as UNKNOWN.
+        $source = '<x-foo :bar="$x" /><x-card>body</x-card>';
+        $analysis = $this->scanner->analyze($source);
+
+        $this->assertContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertCount(1, $analysis->componentEdges);
+    }
+
+    public function test_component_tag_inside_verbatim_block_is_ignored(): void
+    {
+        // `@verbatim` blocks are stored as raw placeholders before
+        // compileComponentTags runs, so the parser cannot see them.
+        $source = '@verbatim<x-foo :bar="$x" />@endverbatim';
+        $analysis = $this->scanner->analyze($source);
+
+        $this->assertSame([], $analysis->componentEdges);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+        $this->assertNotContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+    }
+
+    public function test_component_tag_inside_php_block_is_ignored(): void
+    {
+        // Same protection as @verbatim: storePhpBlocks runs before
+        // compileComponentTags, so component-tag literals inside @php are
+        // hidden behind a raw-block placeholder.
+        $source = "@php\necho '<x-foo :bar=\"\$x\" />';\n@endphp";
+        $analysis = $this->scanner->analyze($source);
+
+        $this->assertSame([], $analysis->componentEdges);
+    }
+
+    public function test_multiple_component_tags_produce_one_edge_per_tag(): void
+    {
+        $source = '<x-alpha :a="$a" /><x-beta :b="$b" />';
+        $analysis = $this->scanner->analyze($source);
+
+        $this->assertCount(2, $analysis->componentEdges);
+        $this->assertSame(['a' => ['a']], $analysis->componentEdges[0]->explicitKeyMap);
+        $this->assertSame(['b' => ['b']], $analysis->componentEdges[1]->explicitKeyMap);
     }
 }
