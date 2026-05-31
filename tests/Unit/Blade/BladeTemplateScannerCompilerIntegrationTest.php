@@ -105,15 +105,22 @@ final class BladeTemplateScannerCompilerIntegrationTest extends TestCase
          * normally throw an InvalidArgumentException / BindingResolutionException
          * when it tries to resolve the class. {@see PsalmBladeCompiler}
          * overrides {@see \Illuminate\View\Compilers\BladeCompiler::compileComponentTags()}
-         * to flip a flag and leave the markup unresolved, so the scanner can
-         * report UNKNOWN(COMPONENT_TAG) instead of crashing.
+         * to capture the post-raw-block source and leave the markup
+         * unresolved, so the scanner can record a {@see BladeComponentEdge}
+         * (PR-6b) or fall back to UNKNOWN(ComponentTag) for an unresolvable
+         * shape, instead of crashing.
+         *
+         * The self-closing form with one bound attribute is resolvable at
+         * the scanner layer; {@see BladeSafetyMap::build()} is responsible
+         * for picking a candidate view name from the scanned roots.
          */
         $source = '<x-some-unregistered-component :data="$data" />';
 
         $analysis = $this->scanner->analyze($source);
 
         $this->assertSame(BladeViewSafetyKind::Unknown, $analysis->kind);
-        $this->assertContains(BladeUncertaintyReason::ComponentTag, $analysis->uncertainties);
+        $this->assertContains(BladeUncertaintyReason::ComponentResolved, $analysis->uncertainties);
+        $this->assertCount(1, $analysis->componentEdges);
     }
 
     public function test_realistic_email_template_classifies_safe(): void

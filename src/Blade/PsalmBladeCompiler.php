@@ -19,11 +19,13 @@ use Illuminate\View\Compilers\BladeCompiler;
  *    component class. At analysis time the user's components are not
  *    bound in the container the plugin booted, so the call throws
  *    {@see \Illuminate\Contracts\Container\BindingResolutionException}.
- *    We do not want to resolve components — we want to detect them and
- *    surface {@see BladeUncertaintyReason::ComponentTag}. This subclass
- *    overrides the method to flip {@see $sawComponentTag} when a `<x-foo>`
- *    or `<x:foo>` tag is present, and leaves the markup untouched.
- *    The scanner reads the flag after `compileString()` returns.
+ *    We do not want to resolve components — we want to capture the
+ *    post-raw-block source as-is and let {@see BladeComponentTagParser}
+ *    decide which tags translate to {@see BladeComponentEdge} records
+ *    versus {@see BladeUncertaintyReason::ComponentTag}. This subclass
+ *    overrides the method to record {@see $lastTagScanSource} and leave
+ *    the markup untouched. The scanner reads the field after
+ *    `compileString()` returns.
  *
  * 2. {@see BladeCompiler::restoreRawContent()} fails to substitute the
  *    placeholder that {@see BladeCompiler::storePhpBlocks()} inserted for
@@ -51,7 +53,18 @@ use Illuminate\View\Compilers\BladeCompiler;
  */
 final class PsalmBladeCompiler extends BladeCompiler
 {
-    private bool $sawComponentTag = false;
+    /**
+     * Post-raw-block source captured by {@see compileComponentTags()}. Null
+     * until the first `compileBladeSource()` call; reset to null at the
+     * start of every run so a previous template's value can never leak.
+     *
+     * The value reflects the source AFTER `storePhpBlocks` /
+     * `storeVerbatimBlocks` have run, which means an `<x-foo>` written
+     * inside `@verbatim` or `@php` is replaced by a single-line raw-block
+     * placeholder before this field is set — that prevents false-positive
+     * component detection from intentionally-quoted markup.
+     */
+    private ?string $lastTagScanSource = null;
 
     public function __construct(?Filesystem $files = null, ?string $cachePath = null)
     {
@@ -79,8 +92,8 @@ final class PsalmBladeCompiler extends BladeCompiler
      * mutated by every `compileString` call. The parent constructor zeroes
      * `$footer` at entry but never resets `$rawBlocks`, so a previous run's
      * placeholders can collide on the next run. We reset both up front and
-     * additionally clear our own `sawComponentTag` flag so each scan starts
-     * with a clean slate.
+     * additionally clear our own `lastTagScanSource` so a previous template's
+     * tag scan source can never leak.
      *
      * Adds a single defensive preprocessing pass to insert whitespace between
      * `@endphp` / `@endverbatim` and an immediately following `{` (which
@@ -99,7 +112,7 @@ final class PsalmBladeCompiler extends BladeCompiler
      */
     public function compileBladeSource(string $value): string
     {
-        $this->sawComponentTag = false;
+        $this->lastTagScanSource = null;
         $this->resetRawBlocks();
 
         $value = \preg_replace(
@@ -111,26 +124,28 @@ final class PsalmBladeCompiler extends BladeCompiler
         return $this->compileString($value);
     }
 
-    public function sawComponentTag(): bool
+    /**
+     * Post-raw-block source captured during the most recent
+     * {@see compileBladeSource()} run, or null if no compile has happened.
+     *
+     * @internal
+     */
+    public function lastTagScanSource(): ?string
     {
-        return $this->sawComponentTag;
+        return $this->lastTagScanSource;
     }
 
     /**
-     * Detect component tags without trying to resolve their classes.
-     *
-     * Pattern matches both `<x-foo>` and `<x:foo>` plus the directive forms
-     * `@component` and `@slot`. Matches the Laravel parser's accepted
-     * surface (see {@see \Illuminate\View\Compilers\ComponentTagCompiler}).
+     * Capture the post-raw-block source for {@see BladeComponentTagParser}
+     * and leave the markup untouched. Detection of resolvable vs.
+     * unresolvable tag shapes is the scanner's job.
      *
      * @psalm-external-mutation-free
      */
     #[\Override]
     protected function compileComponentTags($value)
     {
-        if (\preg_match('/<x[-:][a-zA-Z][\w.:-]*|@(?:component|slot)\b/', $value) === 1) {
-            $this->sawComponentTag = true;
-        }
+        $this->lastTagScanSource = $value;
 
         return $value;
     }

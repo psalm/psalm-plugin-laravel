@@ -123,62 +123,73 @@ final readonly class BladeSafetyMap
             }
         }
 
-        return new self(self::propagateIncludeEdges($map));
+        return new self(self::propagateEdges($map));
     }
 
     /**
-     * Fixed-point pass that consumes every template's `@include` edges and
-     * folds child unsafe keys into the parent template's safety record.
+     * Fixed-point pass that consumes every template's `@include` and
+     * resolvable `<x-foo ... />` component edges and folds child unsafe keys
+     * into the parent template's safety record.
      *
      * Two passes:
      *
-     *  1. DFS to detect cycle members. A template is a cycle member iff a path
-     *     of `@include`-emitted edges starting at it returns to it. Cycle
-     *     members are tracked as a set and finalised as
-     *     UNKNOWN(IncludeCycle) regardless of any other propagation result.
+     *  1. Unified DFS over the combined include + component edge graph to
+     *     detect cycle members. A template is a cycle member iff a path of
+     *     edges (of either type) starting at it returns to it. Cycle members
+     *     are finalised as UNKNOWN(IncludeCycle) regardless of any other
+     *     propagation result. Including component edges in the cycle graph
+     *     is mandatory for soundness: `A` includes `B`, `B` includes
+     *     `<x-A />` is a real cycle that pure include-only detection would
+     *     miss.
      *
      *  2. Memoised topological resolution per template:
-     *     - Templates whose scanner uncertainty contains only
-     *       {@see BladeUncertaintyReason::IncludeResolved} are eligible. For
-     *       each include edge, we look up the child's *final* (post-propagation)
-     *       state and apply two propagation rules:
-     *       * if the parent's explicit data array binds the child's unsafe key
-     *         K (i.e. `@include('child', ['K' => $expr])`), every top-level
-     *         variable observed in `$expr` is added to the parent's unsafe
-     *         keys;
-     *       * otherwise, K is added to the parent's unsafe keys verbatim,
-     *         because Laravel's `compileInclude()` always forwards the parent
-     *         template's scope as the trailing mergeData argument to
-     *         `$__env->make()`.
-     *     - If any child resolves to UNKNOWN (other than via {@see
-     *       BladeUncertaintyReason::IncludeCycle}, which we treat identically),
-     *       or if a child's view name is not in the map at all, the parent's
-     *       contribution from that include is opaque and the parent stays
-     *       UNKNOWN(IncludeDirective). This matches the conservative pre-PR-4
-     *       behaviour for the unresolvable case.
-     *     - Templates with any uncertainty other than IncludeResolved
-     *       (LayoutSectionFlow, IncludeDirective, ComponentTag, UnparsablePhpBlock,
-     *       etc., possibly alongside IncludeResolved) are NOT eligible and
-     *       pass through unchanged: any other uncertainty already dominates
-     *       and propagation would be a no-op anyway.
+     *     - Templates whose scanner uncertainty is a subset of
+     *       `{IncludeResolved, ComponentResolved}` are eligible. For each
+     *       edge, we look up the child's *final* (post-propagation) state
+     *       and apply the edge-kind-specific rule:
+     *       * Include edges (mergeData pass-through): if the parent's
+     *         explicit data array binds the child's unsafe key K, every
+     *         top-level parent variable observed in the bound expression is
+     *         added to the parent's unsafe keys; otherwise K is added
+     *         verbatim because Laravel's `compileInclude()` forwards the
+     *         parent template's whole scope as `$mergeData`.
+     *       * Component edges (no mergeData pass-through): a child unsafe
+     *         key K contributes to the parent only when K appears in the
+     *         edge's explicit attribute map (camelized). Anonymous
+     *         components do not inherit parent scope, so any child unsafe
+     *         key the parent did not bind by name is dropped.
+     *     - If a component edge has no candidate view name matching a
+     *       scanned template, or if any child resolves to UNKNOWN (other
+     *       than via {@see BladeUncertaintyReason::IncludeCycle}, which we
+     *       treat identically), the parent's contribution from that edge
+     *       is opaque. The parent surfaces UNKNOWN with
+     *       {@see BladeUncertaintyReason::IncludeDirective} when the opaque
+     *       contribution came from an include, or
+     *       {@see BladeUncertaintyReason::ComponentTag} when it came from a
+     *       component. Both can be present.
+     *     - Templates with any uncertainty outside the
+     *       `{IncludeResolved, ComponentResolved}` set
+     *       (LayoutSectionFlow, IncludeDirective, ComponentTag,
+     *       UnparsablePhpBlock, etc., possibly alongside the intermediate
+     *       markers) are NOT eligible and pass through unchanged: any other
+     *       uncertainty already dominates.
      *
      * The pass is in-process, runs once per `build()` call, and is bounded by
-     * the include-graph size (each template visited at most twice: once in
-     * the cycle DFS, once during memoised finalisation).
+     * the combined edge-graph size.
      *
      * @param array<non-empty-string, BladeViewSafety> $map
      *
      * @return array<non-empty-string, BladeViewSafety>
      */
-    private static function propagateIncludeEdges(array $map): array
+    private static function propagateEdges(array $map): array
     {
-        $cycleMembers = self::detectIncludeCycles($map);
+        $cycleMembers = self::detectEdgeCycles($map);
 
         /** @var array<string, BladeViewSafety> $finalised */
         $finalised = [];
 
         foreach (\array_keys($map) as $viewName) {
-            $finalised = self::finaliseSafetyForView($viewName, $map, $cycleMembers, $finalised);
+            self::finaliseSafetyForView($viewName, $map, $cycleMembers, $finalised);
         }
 
         /** @var array<non-empty-string, BladeViewSafety> $result */
@@ -203,20 +214,25 @@ final readonly class BladeSafetyMap
     }
 
     /**
-     * DFS over the literal-include graph to record every template that
-     * participates in a cycle (template A includes B, B includes A;
-     * transitively; or a self-loop).
+     * Unified DFS over the combined include + resolvable-component edge
+     * graph to record every template that participates in a cycle (template
+     * A reaches itself through any path of `@include` edges and / or
+     * resolved `<x-foo ... />` edges; transitively; or a self-loop).
      *
      * The visit colouring (white → gray → black) is the classic three-colour
      * cycle detection: a back-edge to a gray node identifies a cycle, and the
      * set of stacked nodes from the back-edge target to the top of the stack
-     * are exactly the cycle members.
+     * are exactly the cycle members. Walking both edge types in one graph
+     * is required for soundness: a cycle that crosses edge types
+     * (`parent.blade.php` does `@include('child')` while `child.blade.php`
+     * does `<x-parent />`) is a real cycle that two separate DFS passes
+     * would miss.
      *
      * @param array<non-empty-string, BladeViewSafety> $map
      *
      * @return array<string, true>
      */
-    private static function detectIncludeCycles(array $map): array
+    private static function detectEdgeCycles(array $map): array
     {
         /** @var array<string, 'gray'|'black'> $visit */
         $visit = [];
@@ -258,24 +274,17 @@ final readonly class BladeSafetyMap
 
         if ($safety instanceof BladeViewSafety && self::isEligibleForPropagation($safety)) {
             foreach ($safety->analysis->includeEdges as $edge) {
-                $childName = $edge->childViewName;
-                $childState = $visit[$childName] ?? null;
+                self::dfsVisitChild($edge->childViewName, $map, $visit, $stack, $cycleMembers);
+            }
 
-                if ($childState === null) {
-                    self::dfsForCycles($childName, $map, $visit, $stack, $cycleMembers);
-                } elseif ($childState === 'gray') {
-                    // Back-edge: every node from the gray child up to the
-                    // current top of the stack participates in the cycle.
-                    $cycleStart = \array_search($childName, $stack, true);
+            foreach ($safety->analysis->componentEdges as $componentEdge) {
+                $resolved = self::resolveComponentChild($componentEdge, $map);
 
-                    if ($cycleStart !== false) {
-                        $stackSize = \count($stack);
-
-                        for ($i = $cycleStart; $i < $stackSize; ++$i) {
-                            $cycleMembers[$stack[$i]] = true;
-                        }
-                    }
+                if ($resolved === null) {
+                    continue;
                 }
+
+                self::dfsVisitChild($resolved, $map, $visit, $stack, $cycleMembers);
             }
         }
 
@@ -284,40 +293,100 @@ final readonly class BladeSafetyMap
     }
 
     /**
-     * Compute (memoised) the post-propagation safety record for `$viewName`
-     * and return an updated `$finalised` map. Non-eligible templates pass
-     * through unchanged; cycle members become UNKNOWN(IncludeCycle); eligible
-     * templates fold each child include's contribution per the rules
-     * documented on {@see propagateIncludeEdges()}.
+     * Shared cycle-detection step: visit a child template node from inside
+     * {@see dfsForCycles()}. Extracted so include and component edges share
+     * one back-edge / recursion handler.
      *
-     * Returns the new accumulator rather than mutating by reference: Psalm's
-     * by-reference param type tracking widens the array key type to plain
-     * `string` once any non-`array_keys` source contributes, which would
-     * break the narrow `non-empty-string` invariant of {@see $safetyByView}.
-     * Functional accumulator passes the inferred type back to the caller.
+     * @param array<non-empty-string, BladeViewSafety> $map
+     * @param array<string, 'gray'|'black'>            $visit
+     * @param list<string>                             $stack
+     * @param array<string, true>                      $cycleMembers
+     */
+    private static function dfsVisitChild(
+        string $childName,
+        array $map,
+        array &$visit,
+        array &$stack,
+        array &$cycleMembers,
+    ): void {
+        $childState = $visit[$childName] ?? null;
+
+        if ($childState === null) {
+            self::dfsForCycles($childName, $map, $visit, $stack, $cycleMembers);
+
+            return;
+        }
+
+        if ($childState === 'gray') {
+            // Back-edge: every node from the gray child up to the
+            // current top of the stack participates in the cycle.
+            $cycleStart = \array_search($childName, $stack, true);
+
+            if ($cycleStart !== false) {
+                $stackSize = \count($stack);
+
+                for ($i = $cycleStart; $i < $stackSize; ++$i) {
+                    $cycleMembers[$stack[$i]] = true;
+                }
+            }
+        }
+    }
+
+    /**
+     * Pick the first candidate view name the edge lists that is present in
+     * the scanned-templates map. Mirrors Laravel's
+     * `ComponentTagCompiler::guessAnonymousComponentUsingPaths()` first-match
+     * rule.
+     *
+     * @param array<non-empty-string, BladeViewSafety> $map
+     *
+     * @psalm-pure
+     */
+    private static function resolveComponentChild(BladeComponentEdge $edge, array $map): ?string
+    {
+        foreach ($edge->candidateViewNames as $candidate) {
+            if (isset($map[$candidate])) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Compute (memoised) the post-propagation safety record for `$viewName`
+     * and mutate `$finalised` in place. Non-eligible templates pass through
+     * unchanged; cycle members become UNKNOWN(IncludeCycle); eligible
+     * templates fold each child include's contribution per the rules
+     * documented on {@see propagateEdges()}.
+     *
+     * Mutates by reference rather than returning the accumulator: the public
+     * seam ({@see propagateEdges()}) already widens the key type to plain
+     * `string` and re-narrows on the way out, so the internal recursion has
+     * no remaining narrowing to preserve. Returning a fresh accumulator from
+     * every recursive call forced PHP to copy-on-write the array's bucket
+     * table per descent, which was O(depth * accumulator_size) hashtable
+     * allocations on real apps. Switching to by-reference keeps the same
+     * memoisation logic with O(1) per-descent overhead.
      *
      * @param array<non-empty-string, BladeViewSafety> $map
      * @param array<string, true>                      $cycleMembers
      * @param array<string, BladeViewSafety>           $finalised
-     *
-     * @return array<string, BladeViewSafety>
-     *
-     * @psalm-pure
      */
     private static function finaliseSafetyForView(
         string $viewName,
         array $map,
         array $cycleMembers,
-        array $finalised,
-    ): array {
+        array &$finalised,
+    ): void {
         if (isset($finalised[$viewName])) {
-            return $finalised;
+            return;
         }
 
         $safety = $map[$viewName] ?? null;
 
         if (!$safety instanceof BladeViewSafety) {
-            return $finalised;
+            return;
         }
 
         if (isset($cycleMembers[$viewName])) {
@@ -328,25 +397,28 @@ final readonly class BladeSafetyMap
 
             $finalised[$viewName] = new BladeViewSafety($safety->viewName, $safety->path, $newAnalysis);
 
-            return $finalised;
+            return;
         }
 
         if (!self::isEligibleForPropagation($safety)) {
-            // Template has uncertainties other than IncludeResolved (e.g.
-            // ComponentTag + IncludeResolved). The non-IncludeResolved
+            // Template has uncertainties outside the
+            // {IncludeResolved, ComponentResolved} eligibility set (e.g.
+            // a LayoutSectionFlow or a real IncludeDirective alongside one
+            // of the intermediate markers). The non-intermediate
             // uncertainty dominates; propagation would be a no-op anyway.
-            // Strip IncludeResolved before exposing the safety record: the
-            // enum's documented contract is that consumers of a built
-            // BladeSafetyMap never see IncludeResolved. Without the strip,
-            // mixed-uncertainty templates would leak the intermediate marker.
-            $finalised[$viewName] = self::stripIncludeResolved($safety);
+            // Strip the intermediate markers before exposing the safety
+            // record: the enum's documented contract is that consumers of
+            // a built BladeSafetyMap never see IncludeResolved or
+            // ComponentResolved.
+            $finalised[$viewName] = self::stripIntermediateMarkers($safety);
 
-            return $finalised;
+            return;
         }
 
         $combined = \array_fill_keys($safety->analysis->unsafeKeys, true);
 
-        $hasUnknownContribution = false;
+        $hasIncludeOpaqueContribution = false;
+        $hasComponentOpaqueContribution = false;
 
         foreach ($safety->analysis->includeEdges as $edge) {
             $childName = $edge->childViewName;
@@ -355,21 +427,21 @@ final readonly class BladeSafetyMap
                 // Include target not in the scanned roots: typo, package view,
                 // or out-of-scope path. Conservative fallback — the include's
                 // contribution is opaque.
-                $hasUnknownContribution = true;
+                $hasIncludeOpaqueContribution = true;
                 continue;
             }
 
-            $finalised = self::finaliseSafetyForView($childName, $map, $cycleMembers, $finalised);
+            self::finaliseSafetyForView($childName, $map, $cycleMembers, $finalised);
 
             $childSafety = $finalised[$childName] ?? null;
 
             if (!$childSafety instanceof BladeViewSafety) {
-                $hasUnknownContribution = true;
+                $hasIncludeOpaqueContribution = true;
                 continue;
             }
 
             if ($childSafety->analysis->kind === BladeViewSafetyKind::Unknown) {
-                $hasUnknownContribution = true;
+                $hasIncludeOpaqueContribution = true;
                 continue;
             }
 
@@ -378,9 +450,52 @@ final readonly class BladeSafetyMap
             }
         }
 
-        if ($hasUnknownContribution) {
+        foreach ($safety->analysis->componentEdges as $componentEdge) {
+            $resolvedChild = self::resolveComponentChild($componentEdge, $map);
+
+            if ($resolvedChild === null) {
+                // No anonymous candidate exists in the scanned roots. The
+                // component is likely a class component, a namespaced
+                // anonymous component the v1 scanner does not model, or a
+                // typo. Conservative fallback — the component's
+                // contribution is opaque.
+                $hasComponentOpaqueContribution = true;
+                continue;
+            }
+
+            self::finaliseSafetyForView($resolvedChild, $map, $cycleMembers, $finalised);
+
+            $childSafety = $finalised[$resolvedChild] ?? null;
+
+            if (!$childSafety instanceof BladeViewSafety) {
+                $hasComponentOpaqueContribution = true;
+                continue;
+            }
+
+            if ($childSafety->analysis->kind === BladeViewSafetyKind::Unknown) {
+                $hasComponentOpaqueContribution = true;
+                continue;
+            }
+
+            foreach ($childSafety->analysis->unsafeKeys as $childKey) {
+                $combined = self::propagateComponentChildKey($childKey, $componentEdge->explicitKeyMap, $combined);
+            }
+        }
+
+        if ($hasIncludeOpaqueContribution || $hasComponentOpaqueContribution) {
+            /** @var non-empty-list<BladeUncertaintyReason> $reasons */
+            $reasons = [];
+
+            if ($hasIncludeOpaqueContribution) {
+                $reasons[] = BladeUncertaintyReason::IncludeDirective;
+            }
+
+            if ($hasComponentOpaqueContribution) {
+                $reasons[] = BladeUncertaintyReason::ComponentTag;
+            }
+
             $newAnalysis = BladeTemplateAnalysis::unknown(
-                [BladeUncertaintyReason::IncludeDirective],
+                $reasons,
                 $safety->analysis->unsafeKeys,
             );
         } else {
@@ -392,8 +507,6 @@ final readonly class BladeSafetyMap
         }
 
         $finalised[$viewName] = new BladeViewSafety($safety->viewName, $safety->path, $newAnalysis);
-
-        return $finalised;
     }
 
     /**
@@ -439,40 +552,106 @@ final readonly class BladeSafetyMap
     }
 
     /**
-     * Project a non-eligible safety record onto its post-propagation form by
-     * removing the intermediate {@see BladeUncertaintyReason::IncludeResolved}
-     * marker. The remaining uncertainty list (LayoutSectionFlow, ComponentTag,
-     * IncludeDirective, etc.) already dominates the result, and the enum
-     * documents that IncludeResolved is never exposed to map consumers.
+     * Per-key propagation rule for resolvable component edges. Unlike
+     * include edges, anonymous components have no mergeData pass-through —
+     * the child template only sees data the parent explicitly bound as a
+     * named attribute. A child unsafe key K therefore contributes to the
+     * parent's unsafe keys ONLY when K is present in the edge's explicit
+     * attribute map.
      *
-     * Returns the original safety unchanged when no IncludeResolved marker is
-     * present — the common case for templates whose only uncertainty is
-     * something other than an include directive.
+     * Static attributes (`<x-foo bar="literal" />`) appear in the edge's
+     * explicit map with an empty parent-var list, so they count as
+     * "explicitly bound to a non-parent value" — propagation contributes
+     * nothing. Bound attributes (`<x-foo :bar="$user" />`) contribute the
+     * top-level parent variables present in the expression.
+     *
+     * @param array<non-empty-string, list<non-empty-string>> $explicitKeyMap
+     * @param array<non-empty-string, true>                   $combined
+     *
+     * @return array<non-empty-string, true>
      *
      * @psalm-pure
      */
-    private static function stripIncludeResolved(BladeViewSafety $safety): BladeViewSafety
+    private static function propagateComponentChildKey(
+        string $childKey,
+        array $explicitKeyMap,
+        array $combined,
+    ): array {
+        if ($childKey === 'attributes') {
+            // The `$attributes` scope-local in an anonymous-component template
+            // is a {@see \Illuminate\View\ComponentAttributeBag} that exposes
+            // every parent-bound attribute via reads like
+            // `$attributes->get('bio')`, `$attributes->only(['bio'])`, or
+            // `$attributes->whereStartsWith('bi')`. Those reads return the
+            // raw bound value WITHOUT HTML escaping (only `(string)$attributes`
+            // / `$attributes->merge(...)->__toString()` escapes). When the
+            // child template raw-echoes anything sourced from the bag, the
+            // scanner records `attributes` as a child unsafe key — but the
+            // parent never binds a literal `attributes` attribute (it's a
+            // reserved name), so the standard "key must be in explicitKeyMap"
+            // gate would drop the flow silently. Union every parent variable
+            // bound by any attribute on this edge: any of them could surface
+            // through the bag.
+            foreach ($explicitKeyMap as $parentVars) {
+                foreach ($parentVars as $parentVar) {
+                    $combined[$parentVar] = true;
+                }
+            }
+
+            return $combined;
+        }
+
+        if (!isset($explicitKeyMap[$childKey])) {
+            // No explicit binding — component never receives this key, so
+            // no contribution to the parent's unsafe keys.
+            return $combined;
+        }
+
+        foreach ($explicitKeyMap[$childKey] as $parentVar) {
+            $combined[$parentVar] = true;
+        }
+
+        return $combined;
+    }
+
+    /**
+     * Project a non-eligible safety record onto its post-propagation form by
+     * removing the intermediate {@see BladeUncertaintyReason::IncludeResolved}
+     * and {@see BladeUncertaintyReason::ComponentResolved} markers. The
+     * remaining uncertainty list (LayoutSectionFlow, ComponentTag,
+     * IncludeDirective, etc.) already dominates the result, and the enum
+     * documents that the intermediate markers are never exposed to map
+     * consumers.
+     *
+     * Returns the original safety unchanged when no intermediate marker is
+     * present — the common case for templates whose only uncertainty is
+     * something other than an include directive or a resolvable component
+     * tag.
+     *
+     * @psalm-pure
+     */
+    private static function stripIntermediateMarkers(BladeViewSafety $safety): BladeViewSafety
     {
         $uncertainties = $safety->analysis->uncertainties;
         $filtered = [];
-        $sawIncludeResolved = false;
+        $sawIntermediate = false;
 
         foreach ($uncertainties as $reason) {
-            if ($reason === BladeUncertaintyReason::IncludeResolved) {
-                $sawIncludeResolved = true;
+            if ($reason->isIntermediate()) {
+                $sawIntermediate = true;
                 continue;
             }
 
             $filtered[] = $reason;
         }
 
-        if (!$sawIncludeResolved) {
+        if (!$sawIntermediate) {
             return $safety;
         }
 
         if ($filtered === []) {
             // Defensive: a template flagged non-eligible MUST have at least
-            // one non-IncludeResolved uncertainty (that is what makes it
+            // one non-intermediate uncertainty (that is what makes it
             // non-eligible). Reaching here with $filtered === [] means the
             // eligibility check and this filter disagreed; restoring the
             // original record is the safest fallback (still wrong, but does
@@ -486,14 +665,16 @@ final readonly class BladeSafetyMap
     }
 
     /**
-     * True if a template is a candidate for include-edge propagation: its
-     * only uncertainty is {@see BladeUncertaintyReason::IncludeResolved}, and
-     * therefore the propagation pass can soundly fold child contributions
-     * back into a SAFE / UNSAFE_KEYS result.
+     * True if a template is a candidate for edge propagation: every
+     * uncertainty is one of the intermediate markers
+     * ({@see BladeUncertaintyReason::IncludeResolved},
+     * {@see BladeUncertaintyReason::ComponentResolved}), so the propagation
+     * pass can soundly fold child contributions back into a SAFE /
+     * UNSAFE_KEYS result.
      *
-     * Templates with any other uncertainty (LayoutSectionFlow, IncludeDirective,
-     * ComponentTag, etc.) stay UNKNOWN regardless, so propagation would be a
-     * no-op anyway.
+     * Templates with any other uncertainty (LayoutSectionFlow,
+     * IncludeDirective, ComponentTag, etc.) stay UNKNOWN regardless, so
+     * propagation would be a no-op anyway.
      *
      * @psalm-pure
      */
@@ -506,7 +687,7 @@ final readonly class BladeSafetyMap
         }
 
         foreach ($uncertainties as $uncertainty) {
-            if ($uncertainty !== BladeUncertaintyReason::IncludeResolved) {
+            if (!$uncertainty->isIntermediate()) {
                 return false;
             }
         }
