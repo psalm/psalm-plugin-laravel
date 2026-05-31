@@ -146,6 +146,23 @@ Document every workaround with a comment linking to the upstream issue.
 
 **Why:** Workarounds accumulate tech debt and can mask the root cause. They also break silently when the upstream behavior changes. But waiting indefinitely for upstream fixes blocks real users.
 
+### Closure-parameter typing in `Eloquent\Builder` where-family stubs
+
+**Decision:** The `\Closure(self<TModel>): mixed` arm on `Builder::where`, `firstWhere`, `whereNot`, `orWhereNot` is intentionally non-`static`. Users subclassing `Builder` and writing `$this->where(static fn (self $q) => ...)` should type the closure parameter as base `\Illuminate\Database\Eloquent\Builder`, not `self`.
+
+**Why:** Psalm 7 does not specialize `static` inside closure-parameter positions against the receiver's generic binding. Every alternative shape regresses some real call pattern.
+
+| Stub form | `Customer::query()->where(fn ($q) => ...)` | `$this->where(fn (self $q) => ...)` in subclass | `$sub->where(fn (Builder $q) => ...)` from outside |
+|---|---|---|---|
+| `self<TModel>` (current) | works | rejected (#815) | works |
+| `static<TModel>` | $q collapses to `mixed` (#776) | works | works |
+| `self<TModel> \| static<TModel>` | `UndefinedClass` from union arms | partial | partial |
+| `self<TModel> & static` | works | works | rejected on subclass receivers |
+
+`self<TModel>` is the only stub shape that satisfies the canonical Laravel-docs idiom on subclass instances. The base-`Builder` typing in user code is also semantically honest. `Builder::where` calls `$this->model->newQueryWithoutRelationships()`, which returns base `Builder` unless the model overrides `newEloquentBuilder()`.
+
+**See:** [#815](https://github.com/psalm/psalm-plugin-laravel/issues/815), [#776](https://github.com/psalm/psalm-plugin-laravel/issues/776), [PR #784](https://github.com/psalm/psalm-plugin-laravel/pull/784), `tests/Type/tests/Builder/WhereClosureSubclassCoercionTest.phpt`.
+
 ## Taint Analysis
 
 ### Taint annotations: high confidence only
