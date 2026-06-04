@@ -31,7 +31,7 @@ final class ThrowingConfigRepository implements ConfigRepository
 
     /** @psalm-pure */
     #[\Override]
-    public function get($key, $default = null): mixed
+    public function get($key, #[\SensitiveParameter] $default = null): mixed
     {
         throw new \LogicException(self::MESSAGE);
     }
@@ -48,21 +48,21 @@ final class ThrowingConfigRepository implements ConfigRepository
 
     /** @psalm-pure */
     #[\Override]
-    public function set($key, $value = null): void
+    public function set($key, #[\SensitiveParameter] $value = null): void
     {
         throw new \LogicException(self::MESSAGE);
     }
 
     /** @psalm-pure */
     #[\Override]
-    public function prepend($key, $value): void
+    public function prepend($key, #[\SensitiveParameter] $value): void
     {
         throw new \LogicException(self::MESSAGE);
     }
 
     /** @psalm-pure */
     #[\Override]
-    public function push($key, $value): void
+    public function push($key, #[\SensitiveParameter] $value): void
     {
         throw new \LogicException(self::MESSAGE);
     }

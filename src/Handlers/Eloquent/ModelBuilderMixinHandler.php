@@ -72,9 +72,7 @@ final class ModelBuilderMixinHandler implements MethodReturnTypeProviderInterfac
         }
 
         $stmt = $event->getStmt();
-        $callerType = $stmt instanceof MethodCall
-            ? $source->getNodeTypeProvider()->getType($stmt->var)
-            : null;
+        $callerType = $stmt instanceof MethodCall ? $source->getNodeTypeProvider()->getType($stmt->var) : null;
 
         if (self::callerIsEloquentBuilderContract($callerType)) {
             return new Union([
@@ -168,8 +166,8 @@ final class ModelBuilderMixinHandler implements MethodReturnTypeProviderInterfac
         }
 
         try {
-            return self::$modelClassCache[$classNameLower] = $codebase->classOrInterfaceExists($className)
-                && $codebase->classExtends($className, Model::class);
+            return self::$modelClassCache[$classNameLower] = ($codebase->classOrInterfaceExists($className)
+                && $codebase->classExtends($className, Model::class));
         } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
             return self::$modelClassCache[$classNameLower] = false;
         }

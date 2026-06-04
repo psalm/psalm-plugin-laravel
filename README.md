@@ -1,22 +1,20 @@
-# Psalm plugin for Laravel
+# Laravel Psalm Plugin 
 
 Laravel static analysis with built-in security scanning.
-
-[![Packagist version](https://img.shields.io/packagist/v/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-[![Packagist downloads](https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg)](https://packagist.org/packages/psalm/plugin-laravel)
-[![Type coverage](https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg)](https://shepherd.dev/github/psalm/psalm-plugin-laravel)
-[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml)
-[![Tests](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel-app.yml/badge.svg)](https://github.com/psalm/psalm-plugin-laravel/actions/workflows/test-laravel-app.yml)
-
+<p align="center">
+    <img src="https://raw.githubusercontent.com/psalm/psalm-plugin-laravel/master/docs/assets/screenshot.png" alt="Psalm Laravel Example" height="300">
+</p>
+<p align="center">
+<a href="https://packagist.org/packages/psalm/plugin-laravel"><img src="https://img.shields.io/packagist/v/psalm/plugin-laravel.svg" alt="Packagist version"></a>
+<a href="https://packagist.org/packages/psalm/plugin-laravel"><img src="https://img.shields.io/packagist/dt/psalm/plugin-laravel.svg" alt="Packagist downloads"></a>
+<a href="https://shepherd.dev/github/psalm/psalm-plugin-laravel"><img src="https://shepherd.dev/github/psalm/psalm-plugin-laravel/coverage.svg" alt="Type coverage"></a>
+<a href="https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml"><img src="https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+</p>
 The only free tool that combines deep Laravel type analysis with taint-based vulnerability detection.
 Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redirects, without running your code.
 
 > [!NOTE]
 > Already using Larastan? psalm-laravel **complements** it with security analysis that PHPStan cannot provide.
-
-
-![Screenshot](/docs/assets/screenshot.png)
-
 
 ## Security scanning
 
@@ -112,11 +110,11 @@ See [docs/issues/index.md](docs/issues/index.md) for the full catalog.
 
 Maintained versions:
 
-| Laravel Psalm Plugin                         | PHP  | Laravel    | Psalm  | Status |
-|----------------------------------------------|------|------------|--------|--------|
-| 4.x                                          | ^8.2 | 12, 13     | 7-beta | Stable |
-| 3.x ([upgrade to v4](docs/upgrade-v4.md)) | ^8.2 | 11, 12, 13 | 6      | Stable |
-| 2.12+                                        | ^8.0 | 9, 10, 11  | 5, 6   | Legacy |
+| Laravel Psalm Plugin                      | PHP  | Laravel    | Psalm  | Plugin Status |
+|-------------------------------------------|------|------------|--------|---------------|
+| 4.x                                       | ^8.2 | 12, 13     | 7-beta | Stable        |
+| 3.x ([upgrade to v4](UPGRADING.md))       | ^8.2 | 11, 12, 13 | 6      | Stable        |
+| 2.12+                                     | ^8.0 | 9, 10, 11  | 5, 6   | Legacy        |
 
 _(Older versions of Laravel, PHP, and Psalm were supported by version 1.x of the plugin, but they are no longer maintained)_
 

@@ -150,9 +150,7 @@ final readonly class PluginConfig
         $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
 
         if (!\in_array($value, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException(
-                "Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.",
-            );
+            throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
         }
 
         return $value === 'true';
@@ -184,9 +182,7 @@ final readonly class PluginConfig
         $value = (string) $element['value'];
 
         if (!\in_array($value, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException(
-                "Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.",
-            );
+            throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
         }
 
         return $value === 'true';
@@ -201,7 +197,7 @@ final readonly class PluginConfig
         if (\is_string($env) && $env !== '') {
             \trigger_error(
                 'PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
-                    . "The plugin now uses Psalm's cache directory automatically.",
+                . "The plugin now uses Psalm's cache directory automatically.",
                 \E_USER_DEPRECATED,
             );
             return \rtrim($env, \DIRECTORY_SEPARATOR);

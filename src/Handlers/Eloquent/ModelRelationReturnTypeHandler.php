@@ -202,8 +202,12 @@ final class ModelRelationReturnTypeHandler
      *
      * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string} $parsed
      */
-    private static function resolveRelatedModelType(array $parsed, Codebase $codebase, string $declaringClass, string $methodName): ?Union
-    {
+    private static function resolveRelatedModelType(
+        array $parsed,
+        Codebase $codebase,
+        string $declaringClass,
+        string $methodName,
+    ): ?Union {
         if ($parsed['relatedModel'] !== null) {
             return new Union([new TNamedObject($parsed['relatedModel'])]);
         }

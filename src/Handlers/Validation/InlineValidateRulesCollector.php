@@ -608,10 +608,7 @@ final class InlineValidateRulesCollector implements
         // (see FunctionLikeAnalyzer::analyze()), so its spl_object_id matches
         // the one used as the cache key in afterExpressionAnalysis.
         $functionId = \spl_object_id($event->getStatementsSource());
-        unset(
-            self::$rulesByFunction[$functionId],
-            self::$inputVariablesByFunction[$functionId],
-        );
+        unset(self::$rulesByFunction[$functionId], self::$inputVariablesByFunction[$functionId]);
 
         return null;
     }
@@ -793,16 +790,11 @@ final class InlineValidateRulesCollector implements
      * too — they carry their own `rules()` method but may additionally
      * have an inline `$this->validate([...])` call).
      */
-    private static function callerIsRequest(
-        MethodCall $expr,
-        StatementsSource $source,
-        Codebase $codebase,
-    ): bool {
-        return ValidationCallerResolver::resolveCallerClass(
-            $expr,
-            $source,
-            $codebase,
-            \Illuminate\Http\Request::class,
-        ) !== null;
+    private static function callerIsRequest(MethodCall $expr, StatementsSource $source, Codebase $codebase): bool
+    {
+        return (
+            ValidationCallerResolver::resolveCallerClass($expr, $source, $codebase, \Illuminate\Http\Request::class)
+            !== null
+        );
     }
 }

@@ -273,7 +273,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
     private static function classifyResolution(Node $node, ?string $containerParamName): ?array
     {
         // $app->make(...), $this->app->make(...), app()->make(...), etc.
-        if ($node instanceof MethodCall
+        if (
+            $node instanceof MethodCall
             && $node->name instanceof Identifier
             && isset(self::RESOLVER_METHODS[\strtolower($node->name->name)])
             && self::looksLikeContainer($node->var, $containerParamName)
@@ -288,9 +289,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         }
 
         // $app[X::class], $this->app['request']
-        if ($node instanceof ArrayDimFetch
-            && self::looksLikeContainer($node->var, $containerParamName)
-        ) {
+        if ($node instanceof ArrayDimFetch && self::looksLikeContainer($node->var, $containerParamName)) {
             $abstract = self::literalAbstractFrom($node->dim);
 
             if ($abstract !== null) {
@@ -301,7 +300,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         }
 
         // app(X::class), resolve(X::class)
-        if ($node instanceof FuncCall
+        if (
+            $node instanceof FuncCall
             && $node->name instanceof Name
             && \in_array($node->name->toLowerString(), ['app', 'resolve'], true)
         ) {
@@ -316,7 +316,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 
         // App::make(X::class). The facade resolves from the globally-bound container,
         // which in a typical application is the same instance we are binding into.
-        if ($node instanceof StaticCall
+        if (
+            $node instanceof StaticCall
             && $node->name instanceof Identifier
             && isset(self::RESOLVER_METHODS[\strtolower($node->name->name)])
             && $node->class instanceof Name
@@ -338,14 +339,12 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
      */
     private static function looksLikeContainer(Node $expr, ?string $containerParamName): bool
     {
-        if ($containerParamName !== null
-            && $expr instanceof Variable
-            && $expr->name === $containerParamName
-        ) {
+        if ($containerParamName !== null && $expr instanceof Variable && $expr->name === $containerParamName) {
             return true;
         }
 
-        if ($expr instanceof PropertyFetch
+        if (
+            $expr instanceof PropertyFetch
             && $expr->var instanceof Variable
             && $expr->var->name === 'this'
             && $expr->name instanceof Identifier
@@ -354,10 +353,12 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             return true;
         }
 
-        return $expr instanceof FuncCall
+        return (
+            $expr instanceof FuncCall
             && $expr->name instanceof Name
             && \in_array($expr->name->toLowerString(), ['app', 'resolve'], true)
-            && $expr->getArgs() === [];
+            && $expr->getArgs() === []
+        );
     }
 
     private static function isAppFacade(Name $class): bool
@@ -405,7 +406,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
      */
     private static function literalAbstractFrom(?Node $node): ?string
     {
-        if ($node instanceof ClassConstFetch
+        if (
+            $node instanceof ClassConstFetch
             && $node->class instanceof Name
             && $node->name instanceof Identifier
             && \strtolower($node->name->name) === 'class'
@@ -494,11 +496,13 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
      */
     private static function isScopeBoundary(mixed $node): bool
     {
-        return $node instanceof FunctionLike
+        return (
+            $node instanceof FunctionLike
             || $node instanceof Class_
             || $node instanceof Trait_
             || $node instanceof Interface_
-            || $node instanceof Enum_;
+            || $node instanceof Enum_
+        );
     }
 
     private static function emitIssue(

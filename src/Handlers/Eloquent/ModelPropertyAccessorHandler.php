@@ -116,8 +116,12 @@ final class ModelPropertyAccessorHandler
         // Fall back to legacy getXxxAttribute accessor
         if (self::legacyAccessorExists($codebase, $fq_classlike_name, $property_name)) {
             $attributeGetterName = 'get' . \str_replace('_', '', $property_name) . 'Attribute';
-            return $codebase->getMethodReturnType("{$fq_classlike_name}::{$attributeGetterName}", $fq_classlike_name)
-                ?: Type::getMixed();
+            return (
+                $codebase->getMethodReturnType(
+                    "{$fq_classlike_name}::{$attributeGetterName}",
+                    $fq_classlike_name,
+                ) ?: Type::getMixed()
+            );
         }
 
         return null;
@@ -138,15 +142,20 @@ final class ModelPropertyAccessorHandler
         return $result;
     }
 
-    private static function legacyAccessorExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
-    {
+    private static function legacyAccessorExists(
+        Codebase $codebase,
+        string $fq_classlike_name,
+        string $property_name,
+    ): bool {
         $key = $fq_classlike_name . '::' . $property_name;
 
         if (\array_key_exists($key, self::$legacyAccessorCache)) {
             return self::$legacyAccessorCache[$key];
         }
 
-        $result = $codebase->methodExists($fq_classlike_name . '::get' . \str_replace('_', '', $property_name) . 'Attribute');
+        $result = $codebase->methodExists(
+            $fq_classlike_name . '::get' . \str_replace('_', '', $property_name) . 'Attribute',
+        );
         self::$legacyAccessorCache[$key] = $result;
 
         return $result;
@@ -157,8 +166,11 @@ final class ModelPropertyAccessorHandler
      *
      * For property 'first_name', checks for method 'firstName()' returning Attribute<TGet, TSet>.
      */
-    private static function newStyleAccessorExists(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
-    {
+    private static function newStyleAccessorExists(
+        Codebase $codebase,
+        string $fq_classlike_name,
+        string $property_name,
+    ): bool {
         $key = $fq_classlike_name . '::' . $property_name;
 
         if (\array_key_exists($key, self::$newStyleAccessorCache)) {
@@ -188,8 +200,11 @@ final class ModelPropertyAccessorHandler
     /**
      * Extract TGet from the Attribute<TGet, TSet> return type of a new-style accessor.
      */
-    private static function getNewStyleAccessorType(Codebase $codebase, string $fq_classlike_name, string $property_name): Type\Union
-    {
+    private static function getNewStyleAccessorType(
+        Codebase $codebase,
+        string $fq_classlike_name,
+        string $property_name,
+    ): Type\Union {
         $key = $fq_classlike_name . '::' . $property_name;
 
         if (\array_key_exists($key, self::$accessorTypeCache)) {
@@ -208,7 +223,11 @@ final class ModelPropertyAccessorHandler
 
         foreach ($returnType->getAtomicTypes() as $type) {
             // TGet is the first template parameter
-            if ($type instanceof Type\Atomic\TGenericObject && \is_a($type->value, Attribute::class, true) && isset($type->type_params[0])) {
+            if (
+                $type instanceof Type\Atomic\TGenericObject
+                && \is_a($type->value, Attribute::class, true)
+                && isset($type->type_params[0])
+            ) {
                 self::$accessorTypeCache[$key] = $type->type_params[0];
                 return $type->type_params[0];
             }

@@ -71,7 +71,7 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         IssueBuffer::accepts(
             new ModelMakeDiscouraged(
                 "Use new {$shortName}(...) instead of {$shortName}::make(...). "
-                    . 'The constructor is clearer and avoids magic method indirection.',
+                . 'The constructor is clearer and avoids magic method indirection.',
                 new CodeLocation($event->getStatementsSource(), $expr),
             ),
             $event->getStatementsSource()->getSuppressedIssues(),

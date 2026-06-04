@@ -80,11 +80,15 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             // reflection works in property handlers (e.g. getTable(), getCasts())
             try {
                 if (!\class_exists($storage->name, true)) {
-                    $codebase->progress->warning("Laravel plugin: skipping model '{$storage->name}': class could not be loaded by autoloader");
+                    $codebase->progress->warning(
+                        "Laravel plugin: skipping model '{$storage->name}': class could not be loaded by autoloader",
+                    );
                     continue;
                 }
             } catch (\Error|\Exception $error) {
-                $codebase->progress->warning("Laravel plugin: skipping model '{$storage->name}': {$error->getMessage()}");
+                $codebase->progress->warning(
+                    "Laravel plugin: skipping model '{$storage->name}': {$error->getMessage()}",
+                );
                 continue;
             }
 
@@ -176,18 +180,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // Method existence, visibility, and return types for static __callStatic forwarding.
         // Registered per-model because Psalm's provider lookup uses exact class names —
         // a handler for Model::class is not consulted for App\Models\User.
-        $methods->existence_provider->registerClosure(
-            $className,
-            ModelMethodHandler::doesMethodExist(...),
-        );
-        $methods->visibility_provider->registerClosure(
-            $className,
-            ModelMethodHandler::isMethodVisible(...),
-        );
-        $methods->params_provider->registerClosure(
-            $className,
-            ModelMethodHandler::getMethodParams(...),
-        );
+        $methods->existence_provider->registerClosure($className, ModelMethodHandler::doesMethodExist(...));
+        $methods->visibility_provider->registerClosure($className, ModelMethodHandler::isMethodVisible(...));
+        $methods->params_provider->registerClosure($className, ModelMethodHandler::getMethodParams(...));
         $methods->return_type_provider->registerClosure(
             $className,
             ModelMethodHandler::getReturnTypeForForwardedMethod(...),
@@ -203,16 +198,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // already returned null for relation method names. The first non-null result
         // wins, so safe ordering — no return-type swap relative to the prior chain.
         // See https://github.com/psalm/psalm-plugin-laravel/issues/760
-        $methods->return_type_provider->registerClosure(
-            $className,
-            ModelRelationReturnTypeHandler::getReturnType(...),
-        );
+        $methods->return_type_provider->registerClosure($className, ModelRelationReturnTypeHandler::getReturnType(...));
         // Model::only() shape narrowing from literal keys.
         // See https://github.com/psalm/psalm-plugin-laravel/issues/931
-        $methods->return_type_provider->registerClosure(
-            $className,
-            ModelAttributeSubsetHandler::getReturnType(...),
-        );
+        $methods->return_type_provider->registerClosure($className, ModelAttributeSubsetHandler::getReturnType(...));
 
         // Registration order matters — the first non-null result wins.
 
@@ -351,7 +340,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         $codebase->progress->debug(
             "Laravel plugin: model '{$className}' declares custom builder '{$builderClass}' "
-            . "but it does not extend " . Builder::class . " — ignoring\n",
+            . 'but it does not extend '
+            . Builder::class
+            . " — ignoring\n",
         );
 
         return null;
@@ -421,8 +412,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      * @return array<lowercase-string, list<FunctionLikeParameter>>
      * @psalm-mutation-free
      */
-    private static function extractBuilderReturningMethods(ClassLikeStorage $storage, ?string $customBuilderClass = null): array
-    {
+    private static function extractBuilderReturningMethods(
+        ClassLikeStorage $storage,
+        ?string $customBuilderClass = null,
+    ): array {
         $builderClassLower = \strtolower(Builder::class);
         $customBuilderClassLower = $customBuilderClass !== null ? \strtolower($customBuilderClass) : null;
         $result = [];
@@ -443,7 +436,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                     break;
                 }
 
-                if ($customBuilderClassLower !== null && $type instanceof TNamedObject && \strtolower($type->value) === $customBuilderClassLower) {
+                if (
+                    $customBuilderClassLower !== null
+                    && $type instanceof TNamedObject
+                    && \strtolower($type->value) === $customBuilderClassLower
+                ) {
                     $result[$methodName] = $methodStorage->params;
                     break;
                 }
@@ -597,7 +594,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         $codebase->progress->debug(
             "Laravel plugin: model '{$className}' declares custom collection '{$collectionClass}' "
-            . "but it does not extend " . EloquentCollection::class . " — ignoring\n",
+            . 'but it does not extend '
+            . EloquentCollection::class
+            . " — ignoring\n",
         );
     }
 
@@ -771,7 +770,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             // Legacy mutator: setXxxAttribute → property xxx
-            if (\str_starts_with($methodName, 'set') && \str_ends_with($methodName, 'attribute') && $methodName !== 'setattribute') {
+            if (
+                \str_starts_with($methodName, 'set')
+                && \str_ends_with($methodName, 'attribute')
+                && $methodName !== 'setattribute'
+            ) {
                 $propertyName = self::studlyToSnakeCase(\substr($casedName, 3, -9));
                 if ($propertyName === '') {
                     continue;
@@ -803,7 +806,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                         break;
                     }
 
-                    $setType = $type instanceof TGenericObject ? ($type->type_params[1] ?? null) : null;
+                    $setType = $type instanceof TGenericObject ? $type->type_params[1] ?? null : null;
                     if ($setType instanceof Union && $setType->isNever()) {
                         break;
                     }
@@ -834,8 +837,10 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      */
     private static function hasUserDefinedPseudoProperty(ClassLikeStorage $storage, string $pseudoKey): bool
     {
-        return isset($storage->pseudo_property_set_types[$pseudoKey])
-            || isset($storage->pseudo_property_get_types[$pseudoKey]);
+        return (
+            isset($storage->pseudo_property_set_types[$pseudoKey])
+            || isset($storage->pseudo_property_get_types[$pseudoKey])
+        );
     }
 
     /** @psalm-mutation-free */

@@ -212,10 +212,8 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      *
      * @return list<string>
      */
-    private static function lookupInlineValidateVariableEscape(
-        AddRemoveTaintsEvent $event,
-        string $variableName,
-    ): array {
+    private static function lookupInlineValidateVariableEscape(AddRemoveTaintsEvent $event, string $variableName): array
+    {
         // Fast bail-out for the common case where no function in the
         // current worker has populated the cache. `removeTaints` fires
         // for every bare Variable expression under taint analysis, and
@@ -301,10 +299,8 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      *
      * @return class-string|null
      */
-    private static function resolveFormRequestForAccessor(
-        AddRemoveTaintsEvent $event,
-        string $methodName,
-    ): ?string {
+    private static function resolveFormRequestForAccessor(AddRemoveTaintsEvent $event, string $methodName): ?string
+    {
         // Direct FormRequest caller: $req->validated|input|string|str('key')
         $formRequestClass = self::resolveCallerClass($event, \Illuminate\Foundation\Http\FormRequest::class);
 
@@ -332,10 +328,8 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      *
      * @return array<string, ResolvedRule>|null
      */
-    private static function lookupInlineValidateRules(
-        AddRemoveTaintsEvent $event,
-        MethodCall $expr,
-    ): ?array {
+    private static function lookupInlineValidateRules(AddRemoveTaintsEvent $event, MethodCall $expr): ?array
+    {
         if (!$expr->var instanceof Variable || !\is_string($expr->var->name)) {
             return null;
         }
@@ -367,7 +361,9 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
     }
 
     /**
-     * Whether the expression is validated()/validate()/safe() on Request/FormRequest.
+     * Whether the expression is validated()/validate()/safe() on Request/FormRequest,
+     * or input() on a FormRequest subclass (which ValidatedTypeHandler also narrows
+     * for `$this->input(...)` reads inside the request itself — see #1015).
      */
     private static function isValidationMethodCall(AddRemoveTaintsEvent $event): bool
     {
@@ -381,14 +377,18 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
         // rationale as KEYED_ACCESSOR_METHODS.
         $methodName = $expr->name->name;
 
-        if (!\in_array($methodName, ['validated', 'validate', 'safe'], true)) {
+        if (!\in_array($methodName, ['validated', 'validate', 'safe', 'input'], true)) {
             return false;
         }
 
-        // validated() and safe() are FormRequest methods, validate() is on Request
-        $baseClass = ($methodName === 'validated' || $methodName === 'safe')
-            ? \Illuminate\Foundation\Http\FormRequest::class
-            : \Illuminate\Http\Request::class;
+        // validate() lives on Request; everything else (including the
+        // FormRequest-narrowed input(...) path) is gated on FormRequest so we
+        // do not re-source taint on a plain Request::input(...) call where
+        // ValidatedTypeHandler does not override the return type.
+        $baseClass
+            = $methodName === 'validate'
+                ? \Illuminate\Http\Request::class
+                : \Illuminate\Foundation\Http\FormRequest::class;
 
         return self::resolveCallerClass($event, $baseClass) !== null;
     }
@@ -470,7 +470,8 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
                 $className = $paramAtomic->value;
 
                 try {
-                    if ($className === \Illuminate\Foundation\Http\FormRequest::class
+                    if (
+                        $className === \Illuminate\Foundation\Http\FormRequest::class
                         || $codebase->classExtends($className, \Illuminate\Foundation\Http\FormRequest::class)
                     ) {
                         return $className;
@@ -493,10 +494,8 @@ final class ValidationTaintHandler implements AddTaintsInterface, RemoveTaintsIn
      * @param class-string $baseClass
      * @return class-string|null
      */
-    private static function resolveCallerClass(
-        AddRemoveTaintsEvent $event,
-        string $baseClass,
-    ): ?string {
+    private static function resolveCallerClass(AddRemoveTaintsEvent $event, string $baseClass): ?string
+    {
         $expr = $event->getExpr();
 
         if (!$expr instanceof MethodCall) {

@@ -48,9 +48,7 @@ use Psalm\Type\Union;
  * (e.g., $user->posts()->published()->get() where Post::scopePublished() exists).
  * Both legacy scope{Name}() methods and modern #[Scope] attribute methods are supported.
  */
-final class MethodForwardingHandler implements
-    MethodReturnTypeProviderInterface,
-    MethodParamsProviderInterface
+final class MethodForwardingHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
     private static ?ForwardingRule $rule = null;
 
@@ -170,15 +168,13 @@ final class MethodForwardingHandler implements
             return null;
         }
 
-        $templateParams = $event->getTemplateTypeParameters()
-            ?? self::extractTemplateParamsFromCaller($source, $event, $fqClassName);
-
-        $resolved = ReturnTypeResolver::resolve(
+        $templateParams = $event->getTemplateTypeParameters() ?? self::extractTemplateParamsFromCaller(
+            $source,
+            $event,
             $fqClassName,
-            $templateParams,
-            $codebase,
-            $methodName,
         );
+
+        $resolved = ReturnTypeResolver::resolve($fqClassName, $templateParams, $codebase, $methodName);
 
         if ($resolved instanceof \Psalm\Type\Union) {
             return $resolved;
@@ -194,7 +190,11 @@ final class MethodForwardingHandler implements
 
         // Dynamic where{Column} fallback for Path 2 (opt-in).
         // This handles the case where the method arrives via __call rather than @mixin.
-        if (DynamicWhereResolver::isEnabled() && $templateParams !== null && DynamicWhereResolver::isDynamicWhereMethod($methodName)) {
+        if (
+            DynamicWhereResolver::isEnabled()
+            && $templateParams !== null
+            && DynamicWhereResolver::isDynamicWhereMethod($methodName)
+        ) {
             return self::resolveDynamicWhereOnRelation($event, $codebase, $methodName, $fqClassName, $templateParams);
         }
 
@@ -274,8 +274,13 @@ final class MethodForwardingHandler implements
             // Use the scope's actual params when available; fall back to a permissive variadic
             // signature (same as the dynamic-where fallback) rather than returning [] (zero params),
             // which would emit misleading TooManyArguments for scopes that accept arguments.
-            return ModelMethodHandler::getScopeParams($codebase, self::$scopeParamsCache[$scopeKey], $methodName)
-                ?? DynamicWhereResolver::variadicMixedParams();
+            return (
+                ModelMethodHandler::getScopeParams(
+                    $codebase,
+                    self::$scopeParamsCache[$scopeKey],
+                    $methodName,
+                ) ?? DynamicWhereResolver::variadicMixedParams()
+            );
         }
 
         // Dynamic where{Column}: provide a variadic mixed signature so Psalm's magic-method
@@ -290,8 +295,12 @@ final class MethodForwardingHandler implements
             // on type mismatch. Everything else (multi-segment, unknown column, non-scalar
             // column, 0 or 2+ args) falls through to the permissive variadic-mixed
             // signature. {@see DynamicWhereResolver::consumeTypedParams} for the rationale.
-            return DynamicWhereResolver::consumeTypedParams($methodName, $event->getCallArgs())
-                ?? DynamicWhereResolver::variadicMixedParams();
+            return (
+                DynamicWhereResolver::consumeTypedParams(
+                    $methodName,
+                    $event->getCallArgs(),
+                ) ?? DynamicWhereResolver::variadicMixedParams()
+            );
         }
 
         return null;
@@ -319,9 +328,7 @@ final class MethodForwardingHandler implements
         }
 
         $stmt = $event->getStmt();
-        $callerType = $stmt instanceof MethodCall
-            ? $source->getNodeTypeProvider()->getType($stmt->var)
-            : null;
+        $callerType = $stmt instanceof MethodCall ? $source->getNodeTypeProvider()->getType($stmt->var) : null;
 
         if (!$stmt instanceof MethodCall) {
             return null;
@@ -431,10 +438,7 @@ final class MethodForwardingHandler implements
         $expectedLower = \strtolower($expectedClass);
 
         foreach ($varType->getAtomicTypes() as $atomic) {
-            if (
-                $atomic instanceof TGenericObject
-                && \strtolower($atomic->value) === $expectedLower
-            ) {
+            if ($atomic instanceof TGenericObject && \strtolower($atomic->value) === $expectedLower) {
                 return $atomic->type_params;
             }
         }
@@ -591,5 +595,4 @@ final class MethodForwardingHandler implements
             new TGenericObject($relationClass, $templateParams),
         ]);
     }
-
 }

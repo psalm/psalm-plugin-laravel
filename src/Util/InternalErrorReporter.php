@@ -41,7 +41,9 @@ final class InternalErrorReporter
         try {
             $url = IssueUrlGenerator::generate($throwable, $pluginConfig);
         } catch (\Throwable $urlGenerationFailure) {
-            $output->warning("Laravel plugin failed to build a detailed report URL: {$urlGenerationFailure->getMessage()}");
+            $output->warning(
+                "Laravel plugin failed to build a detailed report URL: {$urlGenerationFailure->getMessage()}",
+            );
             $url = 'https://github.com/psalm/psalm-plugin-laravel/issues';
         }
 
