@@ -282,7 +282,7 @@ final class ValidationRuleAnalyzer
                 $removedTaints = \array_values(\array_unique(\array_merge(
                     $removedTaints,
                     self::classRuleRemovedTaints(
-                        \substr($segment, \strlen(self::CLASS_SEGMENT_PREFIX))
+                        \substr($segment, \strlen(self::CLASS_SEGMENT_PREFIX)),
                     ),
                 )));
 
