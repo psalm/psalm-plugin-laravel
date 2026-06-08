@@ -172,10 +172,8 @@ final class DynamicWhereResolver
      *
      * @psalm-mutation-free
      */
-    public static function originalMethodName(
-        MethodCall|StaticCall $stmt,
-        string $lowercaseFallback,
-    ): string {
+    public static function originalMethodName(MethodCall|StaticCall $stmt, string $lowercaseFallback): string
+    {
         $name = $stmt->name;
 
         return $name instanceof Identifier ? $name->name : $lowercaseFallback;
@@ -205,11 +203,8 @@ final class DynamicWhereResolver
      * @param class-string<Model> $modelClass
      * @psalm-external-mutation-free
      */
-    public static function methodMatchesColumns(
-        Codebase $codebase,
-        string $modelClass,
-        string $methodNameLower,
-    ): bool {
+    public static function methodMatchesColumns(Codebase $codebase, string $modelClass, string $methodNameLower): bool
+    {
         if (!self::isDynamicWhereMethod($methodNameLower)) {
             return false;
         }
@@ -427,7 +422,7 @@ final class DynamicWhereResolver
                 foreach ($normalizedProps as $prop) {
                     $len = \strlen($prop);
 
-                    if ($len === 0 || $i + $len > $n) {
+                    if ($len === 0 || ($i + $len) > $n) {
                         continue;
                     }
 
@@ -438,11 +433,11 @@ final class DynamicWhereResolver
             }
 
             if (($state & 2) !== 0) {
-                if ($i + 3 <= $n && \substr_compare($suffix, 'and', $i, 3) === 0) {
+                if (($i + 3) <= $n && \substr_compare($suffix, 'and', $i, 3) === 0) {
                     $reachable[$i + 3] |= 1;
                 }
 
-                if ($i + 2 <= $n && \substr_compare($suffix, 'or', $i, 2) === 0) {
+                if (($i + 2) <= $n && \substr_compare($suffix, 'or', $i, 2) === 0) {
                     $reachable[$i + 2] |= 1;
                 }
             }

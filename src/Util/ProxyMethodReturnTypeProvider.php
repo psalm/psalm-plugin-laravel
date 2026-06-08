@@ -68,14 +68,7 @@ final class ProxyMethodReturnTypeProvider
         }
 
         try {
-            if (
-                MethodCallAnalyzer::analyze(
-                    $statements_analyzer,
-                    $fake_method_call,
-                    $context,
-                    false,
-                ) === false
-            ) {
+            if (MethodCallAnalyzer::analyze($statements_analyzer, $fake_method_call, $context, false) === false) {
                 // Don't cache — analysis failure is transient
                 return null;
             }

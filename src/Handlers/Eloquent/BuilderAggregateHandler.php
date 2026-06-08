@@ -89,11 +89,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $columnType = ModelPropertyHandler::resolveColumnType(
-            $source->getCodebase(),
-            $modelClass,
-            $columnName,
-        );
+        $columnType = ModelPropertyHandler::resolveColumnType($source->getCodebase(), $modelClass, $columnName);
         if (!$columnType instanceof Union) {
             return null;
         }

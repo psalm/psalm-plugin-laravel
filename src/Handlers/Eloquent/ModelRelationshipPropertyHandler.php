@@ -150,7 +150,9 @@ final class ModelRelationshipPropertyHandler
             try {
                 $methodReturnType = $codebase->getMethodReturnType($methodId, $selfClass);
             } catch (\InvalidArgumentException $e) {
-                $codebase->progress->debug("Laravel plugin: could not get return type for {$methodId}: {$e->getMessage()}\n");
+                $codebase->progress->debug(
+                    "Laravel plugin: could not get return type for {$methodId}: {$e->getMessage()}\n",
+                );
                 $methodReturnType = null;
             }
         }
@@ -186,10 +188,7 @@ final class ModelRelationshipPropertyHandler
                 }
             }
 
-            return self::buildPropertyType(
-                $parsed['relationClass'],
-                self::relatedModelType($parsed['relatedModel']),
-            );
+            return self::buildPropertyType($parsed['relationClass'], self::relatedModelType($parsed['relatedModel']));
         }
 
         // Tier 3: Fall back using the declared relation class with bounded type (?Model / Collection<int, Model>).
@@ -310,7 +309,7 @@ final class ModelRelationshipPropertyHandler
             // or when the Union has no concrete Model subclass (e.g. mixed).
             $modelClass = ModelPropertyResolver::extractModelFromUnion($modelType);
             $collectionClass = $modelClass !== null
-                ? (CustomCollectionHandler::getCollectionClassForModel($modelClass) ?? Collection::class)
+                ? CustomCollectionHandler::getCollectionClassForModel($modelClass) ?? Collection::class
                 : Collection::class;
 
             return new Union([
@@ -333,8 +332,11 @@ final class ModelRelationshipPropertyHandler
      *
      * @psalm-external-mutation-free
      */
-    private static function hasUserPseudoProperty(Codebase $codebase, string $fq_classlike_name, string $property_name): bool
-    {
+    private static function hasUserPseudoProperty(
+        Codebase $codebase,
+        string $fq_classlike_name,
+        string $property_name,
+    ): bool {
         $key = $fq_classlike_name . '::$' . $property_name;
 
         if (\array_key_exists($key, self::$pseudoPropertyCache)) {
@@ -369,7 +371,9 @@ final class ModelRelationshipPropertyHandler
             try {
                 $return_type = $codebase->getMethodReturnType($key, $selfClass);
             } catch (\InvalidArgumentException $e) {
-                $codebase->progress->debug("Laravel plugin: could not get return type for {$key}: {$e->getMessage()}\n");
+                $codebase->progress->debug(
+                    "Laravel plugin: could not get return type for {$key}: {$e->getMessage()}\n",
+                );
                 $return_type = null;
             }
 
@@ -392,7 +396,10 @@ final class ModelRelationshipPropertyHandler
 
             // No return type declared — check method body for relationship factory calls.
             // This handles cases like: public function image() { return $this->morphOne(...); }
-            if (!$return_type instanceof Union && RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name) !== null) {
+            if (
+                !$return_type instanceof Union
+                && RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name) !== null
+            ) {
                 self::$relationExistsCache[$key] = true;
                 return true;
             }

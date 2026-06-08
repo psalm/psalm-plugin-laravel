@@ -64,8 +64,10 @@ final class ContainerResolver
     /**
      * @param list<Arg> $call_args
      */
-    public static function resolvePsalmTypeFromApplicationContainerViaArgs(NodeTypeProvider $nodeTypeProvider, array $call_args): ?Union
-    {
+    public static function resolvePsalmTypeFromApplicationContainerViaArgs(
+        NodeTypeProvider $nodeTypeProvider,
+        array $call_args,
+    ): ?Union {
         if ($call_args === []) {
             return null;
         }

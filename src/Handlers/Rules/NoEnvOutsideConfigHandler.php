@@ -89,7 +89,9 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
         if ($directories !== [] && self::$configDirectories === [] && $progress instanceof \Psalm\Progress\Progress) {
             $progress->warning(
                 'Laravel plugin: NoEnvOutsideConfig has no resolvable config directories — '
-                    . "every env() call will be flagged. Inputs: '" . \implode("', '", $directories) . "'.",
+                . "every env() call will be flagged. Inputs: '"
+                . \implode("', '", $directories)
+                . "'.",
             );
         }
     }
@@ -119,7 +121,7 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
         IssueBuffer::accepts(
             new NoEnvOutsideConfig(
                 'env() called outside config directory. '
-                    . 'When config is cached, env() returns null. Use config() instead.',
+                . 'When config is cached, env() returns null. Use config() instead.',
                 $event->getCodeLocation(),
             ),
             $event->getStatementsSource()->getSuppressedIssues(),

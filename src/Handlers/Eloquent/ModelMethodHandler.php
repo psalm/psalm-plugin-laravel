@@ -137,8 +137,11 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * @internal Used by {@see CustomBuilderMethodHandler} for builder-instance return types
      * @psalm-mutation-free
      */
-    public static function builderType(string $builderClass, string $modelClass, Codebase $codebase): Type\Atomic\TNamedObject
-    {
+    public static function builderType(
+        string $builderClass,
+        string $modelClass,
+        Codebase $codebase,
+    ): Type\Atomic\TNamedObject {
         // Non-custom builders (base Builder) always have the TModel template param.
         if ($builderClass === Builder::class) {
             return new Type\Atomic\TGenericObject($builderClass, [
@@ -280,12 +283,13 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // provider resolved a scalar column (issue #928 hand-off), variadic mixed
         // otherwise so Psalm doesn't raise TooManyArguments on multi-segment forms
         // like whereFirstNameAndLastName($a, $b).
-        if (
-            DynamicWhereResolver::isEnabled()
-            && DynamicWhereResolver::isDynamicWhereMethod($methodName)
-        ) {
-            return DynamicWhereResolver::consumeTypedParams($methodName, $event->getCallArgs())
-                ?? DynamicWhereResolver::variadicMixedParams();
+        if (DynamicWhereResolver::isEnabled() && DynamicWhereResolver::isDynamicWhereMethod($methodName)) {
+            return (
+                DynamicWhereResolver::consumeTypedParams(
+                    $methodName,
+                    $event->getCallArgs(),
+                ) ?? DynamicWhereResolver::variadicMixedParams()
+            );
         }
 
         return null;
@@ -438,7 +442,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // Methods on a custom builder class (e.g., PostBuilder::wherePublished).
         // These are declared directly on the custom builder and forwarded via __callStatic.
         $builderClass = self::getBuilderClassForModel($modelClass);
-        if ($builderClass !== Builder::class && $codebase->methodExists(new MethodIdentifier($builderClass, $methodName))) {
+        if (
+            $builderClass !== Builder::class
+            && $codebase->methodExists(new MethodIdentifier($builderClass, $methodName))
+        ) {
             return self::$unresolvedCache[$key] = true;
         }
 
@@ -489,7 +496,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         $codebase = $source->getCodebase();
         $called_fq_classlike_name = $event->getCalledFqClasslikeName();
 
-        if (! \is_string($called_fq_classlike_name)) {
+        if (!\is_string($called_fq_classlike_name)) {
             return null;
         }
 
@@ -521,15 +528,16 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             $methodId = new MethodIdentifier($called_fq_classlike_name, $called_method_name_lowercase);
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
-            $fake_method_call = new MethodCall(
-                new Variable('builder'),
-                $methodId->method_name,
-                $event->getCallArgs(),
-            );
+            $fake_method_call = new MethodCall(new Variable('builder'), $methodId->method_name, $event->getCallArgs());
 
             $fakeProxy = self::builderType($builderClass, $called_fq_classlike_name, $codebase);
 
-            return ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $fakeProxy);
+            return ProxyMethodReturnTypeProvider::executeFakeCall(
+                $source,
+                $fake_method_call,
+                $event->getContext(),
+                $fakeProxy,
+            );
         }
 
         return null;
@@ -564,10 +572,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         $directMethod = $modelClass . '::' . $methodName;
         if ($codebase->methodExists($directMethod)) {
             /** @var lowercase-string $methodName */
-            return \array_slice(
-                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $methodName)),
-                1,
-            );
+            return \array_slice($codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $methodName)), 1);
         }
 
         return null;
@@ -602,10 +607,14 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             // Append a synthetic variadic rest param instead of marking the last formal param.
             // Marking the last param as variadic would relax arity — e.g., addSelect($column)
             // would accept zero args. Appending preserves the required params while allowing extras.
-            $params[] = new FunctionLikeParameter(name: 'args', by_ref: false, type: Type::getMixed(), is_variadic: true);
+            $params[] = new FunctionLikeParameter(
+                name: 'args',
+                by_ref: false,
+                type: Type::getMixed(),
+                is_variadic: true,
+            );
         }
 
         return $params;
     }
-
 }

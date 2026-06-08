@@ -37,7 +37,7 @@ final class CarbonStubProvider
 {
     public static function register(RegistrationInterface $registration, Progress $output): void
     {
-        if (! InstalledVersions::isInstalled('nesbot/carbon')) {
+        if (!InstalledVersions::isInstalled('nesbot/carbon')) {
             return;
         }
 
@@ -126,7 +126,7 @@ final class CarbonStubProvider
     private static function symfonyMessageFormatterFirstParamHasType(): bool
     {
         try {
-            if (! \interface_exists(\Symfony\Component\Translation\Formatter\MessageFormatterInterface::class)) {
+            if (!\interface_exists(\Symfony\Component\Translation\Formatter\MessageFormatterInterface::class)) {
                 return true;
             }
 

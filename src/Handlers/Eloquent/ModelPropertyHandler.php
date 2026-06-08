@@ -130,7 +130,12 @@ final class ModelPropertyHandler
         // Check if there's a cast override
         $casts = self::resolveCasts($codebase, $fqClasslikeName);
         if (isset($casts[$propertyName])) {
-            return CastResolver::resolve($casts[$propertyName], $column->nullable);
+            return CastResolver::resolve(
+                $codebase,
+                $casts[$propertyName],
+                $column->nullable,
+                self::mapColumnBaseType($column),
+            );
         }
 
         // Map schema column type to Psalm type
@@ -173,7 +178,12 @@ final class ModelPropertyHandler
 
         $casts = self::resolveCasts($codebase, $fqClasslikeName);
         if (isset($casts[$columnName])) {
-            return CastResolver::resolve($casts[$columnName], $column->nullable);
+            return CastResolver::resolve(
+                $codebase,
+                $casts[$columnName],
+                $column->nullable,
+                self::mapColumnBaseType($column),
+            );
         }
 
         return self::mapColumnType($column);
@@ -278,7 +288,24 @@ final class ModelPropertyHandler
 
     private static function mapColumnType(SchemaColumn $column): Union
     {
-        $type = match ($column->type) {
+        $type = self::mapColumnBaseType($column);
+
+        if ($column->nullable) {
+            $type = Type::combineUnionTypes($type, Type::getNull());
+        }
+
+        return $type;
+    }
+
+    /**
+     * Non-nullable base mapping for a schema column. Factored out so that {@see CastResolver}
+     * can receive the column's intrinsic Psalm type for {@see \Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes}
+     * casts (whose read path is a passthrough of the raw DB type) while still letting the cast
+     * resolver decide how to apply nullability on the final union.
+     */
+    private static function mapColumnBaseType(SchemaColumn $column): Union
+    {
+        return match ($column->type) {
             SchemaColumn::TYPE_INT => $column->unsigned
                 ? new Union([new Type\Atomic\TIntRange(0, null)])
                 : Type::getInt(),
@@ -296,12 +323,6 @@ final class ModelPropertyHandler
             )]),
             default => Type::getMixed(),
         };
-
-        if ($column->nullable) {
-            $type = Type::combineUnionTypes($type, Type::getNull());
-        }
-
-        return $type;
     }
 
     /**

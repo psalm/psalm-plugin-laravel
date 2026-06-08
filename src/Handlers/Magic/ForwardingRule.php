@@ -34,12 +34,11 @@ final class ForwardingRule
      */
     public function __construct(
         public readonly string $sourceClass,
-        public readonly array  $searchClasses,
-        public readonly array  $selfReturnIndicators = [],
-        public readonly array  $additionalSourceClasses = [],
-        public readonly bool   $interceptMixin = false,
+        public readonly array $searchClasses,
+        public readonly array $selfReturnIndicators = [],
+        public readonly array $additionalSourceClasses = [],
+        public readonly bool $interceptMixin = false,
     ) {}
-
 
     /** @return non-empty-list<class-string> */
     public function allSourceClasses(): array

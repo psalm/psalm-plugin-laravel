@@ -25,10 +25,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * `Command::FAILURE` when boot failed entirely. Soft warnings like the
  * Testbench fallback are surfaced in the report but do **not** fail.
  */
-#[AsCommand(
-    name: 'diagnose',
-    description: 'Print runtime introspection of the plugin (versions, boot mode).',
-)]
+#[AsCommand(name: 'diagnose', description: 'Print runtime introspection of the plugin (versions, boot mode).')]
 final class DiagnoseCommand extends Command
 {
     /** Presentation labels for boot modes — purely UI text, kept out of ApplicationProvider. */
@@ -66,9 +63,7 @@ final class DiagnoseCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $report = ($this->diagnostics ?? new Diagnostics())->collect();
-        $tips = (bool) $input->getOption('tips')
-            ? ($this->tipsProvider ?? new TipsProvider())->collect()
-            : [];
+        $tips = (bool) $input->getOption('tips') ? ($this->tipsProvider ?? new TipsProvider())->collect() : [];
         $io = new SymfonyStyle($input, $output);
 
         $this->renderReport($io, $report, $tips);

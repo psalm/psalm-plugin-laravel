@@ -24,10 +24,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  *     config?: array{'vendor-dir'?: string},
  * }
  */
-#[AsCommand(
-    name: 'init',
-    description: 'Generate a Laravel-tailored psalm.xml in the current directory.',
-)]
+#[AsCommand(name: 'init', description: 'Generate a Laravel-tailored psalm.xml in the current directory.')]
 final class InitCommand extends Command
 {
     private const DEFAULT_ERROR_LEVEL = '4';
@@ -145,7 +142,7 @@ final class InitCommand extends Command
         // rather than silently creating a second config file alongside the old one.
         $existingPath = $this->findExistingConfig($cwdNormalized);
         $targetPath = $existingPath ?? $cwdNormalized . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        if (! $this->shouldWrite($targetPath, $existingPath !== null, $input, $io)) {
+        if (!$this->shouldWrite($targetPath, $existingPath !== null, $input, $io)) {
             return Command::SUCCESS;
         }
 
@@ -159,7 +156,7 @@ final class InitCommand extends Command
             '{{PROJECT_FILES}}' => $this->buildProjectFiles($directories, $files, $ignores, $hasPhpunitPlugin),
         ]);
 
-        if (! $this->writeFile($targetPath, $contents, $io)) {
+        if (!$this->writeFile($targetPath, $contents, $io)) {
             return Command::FAILURE;
         }
 
@@ -204,16 +201,13 @@ final class InitCommand extends Command
     /** True when no Psalm config exists, --force is set, or the user confirms overwrite. */
     private function shouldWrite(string $targetPath, bool $exists, InputInterface $input, SymfonyStyle $io): bool
     {
-        if (! $exists || $input->getOption('force') === true) {
+        if (!$exists || $input->getOption('force') === true) {
             return true;
         }
 
         $filename = \basename($targetPath);
-        $overwrite = $io->confirm(
-            \sprintf('%s already exists at %s. Overwrite?', $filename, $targetPath),
-            false,
-        );
-        if (! $overwrite) {
+        $overwrite = $io->confirm(\sprintf('%s already exists at %s. Overwrite?', $filename, $targetPath), false);
+        if (!$overwrite) {
             $io->note(\sprintf('Left existing %s untouched.', $filename));
         }
 
@@ -256,9 +250,11 @@ final class InitCommand extends Command
 
         // Mirror inline XML hint when tests/ exists but isn't scanned,
         // usually because psalm/plugin-phpunit isn't installed.
-        if (! \in_array('tests', $directories, true) && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')) {
+        if (!\in_array('tests', $directories, true) && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')) {
             $io->writeln('');
-            $io->writeln('<comment>Note:</comment> tests/ dir skipped. To scan it: <info>composer require --dev psalm/plugin-phpunit</info> and add tests dir to <projectFiles>');
+            $io->writeln(
+                '<comment>Note:</comment> tests/ dir skipped. To scan it: <info>composer require --dev psalm/plugin-phpunit</info> and add tests dir to <projectFiles>',
+            );
         }
 
         $io->writeln('');
@@ -289,7 +285,7 @@ final class InitCommand extends Command
         // false positives, so opt in only when the plugin is already wired up.
         if ($hasPhpunitPlugin
             && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')
-            && ! \in_array('tests', $directories, true)
+            && !\in_array('tests', $directories, true)
         ) {
             $directories[] = 'tests';
         }
@@ -327,13 +323,13 @@ final class InitCommand extends Command
     {
         $directories = [];
         foreach ($this->extractComposerAutoloadDirs($composer) as $dir) {
-            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $dir) && ! \in_array($dir, $directories, true)) {
+            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $dir) && !\in_array($dir, $directories, true)) {
                 $directories[] = $dir;
             }
         }
 
         // Package configs commonly live in config/ even without an artisan entrypoint.
-        if (\is_dir($cwd . \DIRECTORY_SEPARATOR . 'config') && ! \in_array('config', $directories, true)) {
+        if (\is_dir($cwd . \DIRECTORY_SEPARATOR . 'config') && !\in_array('config', $directories, true)) {
             $directories[] = 'config';
         }
 
@@ -361,7 +357,7 @@ final class InitCommand extends Command
         foreach (self::IGNORE_DIRS as $dir) {
             // Swap the canonical 'vendor' token for the project-specific path; other entries pass through.
             $candidate = $dir === 'vendor' ? $vendorDir : $dir;
-            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $candidate) && ! \in_array($candidate, $present, true)) {
+            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $candidate) && !\in_array($candidate, $present, true)) {
                 $present[] = $candidate;
             }
         }
@@ -378,7 +374,7 @@ final class InitCommand extends Command
     private function readComposerJson(string $cwd): ?array
     {
         $path = $cwd . \DIRECTORY_SEPARATOR . 'composer.json';
-        if (! \is_file($path)) {
+        if (!\is_file($path)) {
             return null;
         }
 

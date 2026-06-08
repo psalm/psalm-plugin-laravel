@@ -156,9 +156,7 @@ final class CustomBuilderMethodHandler
         /** @var lowercase-string $methodName */
         $methodName = $event->getMethodNameLowercase();
 
-        return $modelClass !== null
-            ? (self::$traitBuilderMethods[$modelClass][$methodName] ?? null)
-            : null;
+        return $modelClass !== null ? self::$traitBuilderMethods[$modelClass][$methodName] ?? null : null;
     }
 
     /**
@@ -220,7 +218,11 @@ final class CustomBuilderMethodHandler
             return null;
         }
 
-        return self::hasScopeOnBuilder($source->getCodebase(), $event->getFqClasslikeName(), $event->getMethodNameLowercase())
+        return self::hasScopeOnBuilder(
+            $source->getCodebase(),
+            $event->getFqClasslikeName(),
+            $event->getMethodNameLowercase(),
+        )
             ? true
             : null;
     }
@@ -230,7 +232,11 @@ final class CustomBuilderMethodHandler
      */
     public static function isScopeMethodVisibleOnBuilder(MethodVisibilityProviderEvent $event): ?bool
     {
-        return self::hasScopeOnBuilder($event->getSource()->getCodebase(), $event->getFqClasslikeName(), $event->getMethodNameLowercase())
+        return self::hasScopeOnBuilder(
+            $event->getSource()->getCodebase(),
+            $event->getFqClasslikeName(),
+            $event->getMethodNameLowercase(),
+        )
             ? true
             : null;
     }
