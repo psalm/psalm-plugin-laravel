@@ -63,13 +63,12 @@ function test_static_legacy_scope(): void
 }
 
 /**
- * Modern #[Scope] attribute: calling via the builder instance returns mixed.
+ * Modern #[Scope] attribute: calling via the builder instance returns Builder<Customer>.
  *
- * Known limitation: #[Scope] and legacy scopeXxx() methods on base-Builder models
- * return mixed when called on builder instances. Psalm routes through Builder::__call,
- * and BuilderScopeHandler cannot safely provide a return type here without also providing
- * params (which require knowing the model class — unavailable in the params provider event).
- * Custom-builder models don't have this limitation (CustomBuilderMethodHandler handles them).
+ * BuilderScopeHandler recovers the model from the LHS Builder type and hands the
+ * scope's params (minus $query) to the params provider, so Psalm routes through
+ * Builder::__call without crashing in checkMethodArgs.
+ * See InstanceScopeCallTest.phpt for the dedicated coverage.
  *
  * Calling Customer::verified() statically triggers InvalidStaticInvocation because
  * it's a real instance method — see test_scope_attribute_static_is_invalid below.
@@ -173,7 +172,6 @@ function test_nonexistent_method(): void
 }
 ?>
 --EXPECTF--
-MixedReturnStatement on line %d: Could not infer a return type
 InvalidStaticInvocation on line %d: Method App\Models\Customer::verified is not static, but is called statically
 MixedReturnStatement on line %d: Could not infer a return type
 UndefinedMagicMethod on line %d: Magic method App\Builders\VehicleBuilder::withtrashed does not exist

@@ -275,7 +275,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             // signature (same as the dynamic-where fallback) rather than returning [] (zero params),
             // which would emit misleading TooManyArguments for scopes that accept arguments.
             return (
-                ModelMethodHandler::getScopeParams(
+                BuilderScopeHandler::getScopeParams(
                     $codebase,
                     self::$scopeParamsCache[$scopeKey],
                     $methodName,
