@@ -12,6 +12,7 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -252,10 +253,77 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         }
 
         // Methods::getMethodParams resolves the declaring class internally, so scopes
-        // declared on abstract parent models or in traits keep their signatures.
-        return self::$scopeParamsCache[$key] = \array_slice(
-            $codebase->methods->getMethodParams($scopeMethodId),
-            1,
+        // declared on abstract parent models or in traits keep their signatures. Drop the
+        // leading $query param; the caller passes everything after it.
+        $callerParams = \array_slice($codebase->methods->getMethodParams($scopeMethodId), 1);
+
+        // expandScopeParamSelfReferences() pins self/static to the model (see its docblock).
+        // Memoized, so it runs once per model+method.
+        return self::$scopeParamsCache[$key] = self::expandScopeParamSelfReferences($codebase, $modelClass, $callerParams);
+    }
+
+    /**
+     * Pin `self`/`static`/`$this` (and nested generics like `list<self>`) in scope
+     * parameter types to the model class.
+     *
+     * A scope declared in a trait keeps its `self`/`static` parameter typehints
+     * unresolved: Psalm expands them at argument-check time against whatever class the
+     * params provider is registered on. For a custom Eloquent builder
+     * (Post::query()->scopeMethod($x)) that class is the builder, so `self` wrongly
+     * expands to the builder and Psalm emits a false-positive InvalidArgument (issue
+     * #1031). Pre-expanding here pins `self`/`static`/`$this` to the model before the
+     * params are handed back, so the same concrete type is checked regardless of which
+     * class serves the params (a custom builder, the model itself, or a relation chain;
+     * all callers share this helper).
+     *
+     * `static`/`$this` are resolved to the plain model class (via TypeExpander's
+     * `final: true`), NOT the late-static-bound `Model&static` form. A scope parameter is
+     * an accept position and Laravel passes the model instance, so the `&static`
+     * intersection would wrongly reject a plain model argument (ArgumentTypeCoercion);
+     * a plain model param already accepts subclass instances by ordinary subtyping.
+     * Scopes declared directly on the model already resolve `self` to the model at scan
+     * time, so this is a no-op for them.
+     *
+     * Caveat: for a trait-hosted scope, `self`/`static` pin to the model being queried,
+     * not necessarily the class that declares the trait. Querying a subclass narrows the
+     * param to that subclass — strictly more precise than the pre-fix builder type, and
+     * correct for the common single-using-class case.
+     *
+     * @param class-string<Model> $modelClass
+     * @param list<FunctionLikeParameter> $params
+     * @return list<FunctionLikeParameter>
+     */
+    private static function expandScopeParamSelfReferences(
+        Codebase $codebase,
+        string $modelClass,
+        array $params,
+    ): array {
+        return \array_map(
+            static function (FunctionLikeParameter $param) use ($codebase, $modelClass): FunctionLikeParameter {
+                if (!$param->type instanceof \Psalm\Type\Union) {
+                    return $param;
+                }
+
+                // setType() clones (mutation-free): never mutate the shared method-storage
+                // parameter, which would corrupt the model's own scope signature.
+                return $param->setType(TypeExpander::expandUnion(
+                    $codebase,
+                    $param->type,
+                    $modelClass, // `self`
+                    $modelClass, // `static` / `$this`
+                    null, // `parent` — not meaningful for a scope parameter
+                    evaluate_class_constants: true,
+                    evaluate_conditional_types: false,
+                    // `final: true` resolves `static`/`$this` to the plain model class
+                    // instead of the late-static-bound `Model&static` form. A scope is a
+                    // parameter (accept) position, and Laravel passes the model instance,
+                    // so the intersection would wrongly reject a plain model argument
+                    // (ArgumentTypeCoercion) — normal contravariance already accepts
+                    // subclasses. `self` is unaffected (it never carries `&static`).
+                    final: true,
+                ));
+            },
+            $params,
         );
     }
 
