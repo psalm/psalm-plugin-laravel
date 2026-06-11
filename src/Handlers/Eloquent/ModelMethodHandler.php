@@ -10,7 +10,6 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
-use Psalm\Context;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Util\DynamicWhereResolver;
@@ -282,7 +281,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             // $query and need the stripped params. Detect the direct form by its explicit Builder
             // first argument and decline, so Psalm checks against the real method signature
             // instead of shifting every argument left by one. See issue #1034.
-            if (self::isDirectScopeCallPassingQuery($event, $codebase)) {
+            if (BuilderScopeHandler::isDirectScopeCall($codebase, $source, $event->getCallArgs(), $event->getContext(), $scopeParams)) {
                 return null;
             }
 
@@ -304,62 +303,6 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         return null;
-    }
-
-    /**
-     * Whether the call is a direct instance invocation of a scope that passes the query
-     * builder explicitly — e.g. `$this->otherScope($query, ...)` from inside the model —
-     * as opposed to a magic-forwarded call (`Model::scope()` / `$builder->scope()`) where
-     * Laravel injects $query.
-     *
-     * The params event carries no AST node and no instance-vs-static flag, and argument
-     * expression types are not yet inferred when the params provider runs, so the call form
-     * cannot be read from the inferred arg type. The discriminator is the leading argument:
-     * a forwarded call omits $query, while a direct call supplies it. In practice the explicit
-     * $query is a plain variable ($this->otherScope($query, ...)), whose type is already in
-     * scope, so resolve the first argument variable from the context and check whether it is
-     * an Eloquent Builder. Non-variable first arguments fall through to the stripped signature.
-     *
-     * @see https://github.com/psalm/psalm-plugin-laravel/issues/1034
-     * @psalm-external-mutation-free
-     */
-    private static function isDirectScopeCallPassingQuery(MethodParamsProviderEvent $event, Codebase $codebase): bool
-    {
-        $args = $event->getCallArgs();
-        $context = $event->getContext();
-
-        if ($args === null || $args === [] || !$context instanceof Context) {
-            return false;
-        }
-
-        $firstArg = $args[0]->value;
-        if (!$firstArg instanceof Variable || !\is_string($firstArg->name)) {
-            return false;
-        }
-
-        $firstArgType = $context->vars_in_scope['$' . $firstArg->name] ?? null;
-        if (!$firstArgType instanceof Union) {
-            return false;
-        }
-
-        // TGenericObject (Builder<Model>) extends TNamedObject, so both the bare and the
-        // templated builder types are covered. A custom builder (e.g. PostBuilder) counts
-        // too — its instances are what a custom-builder model's scopes receive as $query.
-        foreach ($firstArgType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof Type\Atomic\TNamedObject) {
-                continue;
-            }
-
-            $class = $atomic->value;
-            if (
-                \strtolower($class) === \strtolower(Builder::class)
-                || ($codebase->classExists($class) && $codebase->classExtends($class, Builder::class))
-            ) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -398,8 +341,18 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // Scope methods: return Builder<Model> directly.
         // Using executeFakeCall for scopes doesn't work reliably because the scope
         // is resolved via Builder's __call magic which may fail in a fake call context.
+        // A non-null getScopeParams() result implies the method is a real scope — no
+        // separate hasScopeMethod() guard needed (mirrors the params provider above).
         /** @var class-string<Model> $modelClass */
-        if (BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
+        $scopeParams = BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
+        if ($scopeParams !== null) {
+            // Direct calls to the underlying method ($this->someScope($query, ...))
+            // return whatever the method declares (often void), not Builder<Model> —
+            // decline and let Psalm use the real declared return type (issue #1034).
+            if (BuilderScopeHandler::isDirectScopeCall($codebase, $source, $event->getCallArgs(), $event->getContext(), $scopeParams)) {
+                return null;
+            }
+
             return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
         }
 

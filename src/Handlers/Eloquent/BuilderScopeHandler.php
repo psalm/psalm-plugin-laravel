@@ -10,8 +10,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
+use Psalm\Context;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -325,6 +329,96 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             },
             $params,
         );
+    }
+
+    /**
+     * Detect a direct call to a scope's underlying method that passes the $query builder explicitly.
+     *
+     * Scope-param stripping ({@see getScopeParams}: declared params minus the leading $query)
+     * models Laravel's *forwarded* scope calls — Model::someScope() via __callStatic and
+     * $builder->someScope() via __call — where Laravel injects $query at runtime. A direct call
+     * to the real method ($this->someScope($query, ...) from a sibling #[Scope] method) bypasses
+     * that forwarding: PHP invokes the method with its real, unstripped signature. Applying the
+     * stripped params there shifts every argument one position left and emits a false
+     * InvalidArgument (issue #1034). Legacy scopeXxx() methods are immune — their direct calls
+     * use the `scope`-prefixed name, which the strip logic (keyed on the bare scope name)
+     * never matches.
+     *
+     * The params/return-type provider events expose no instance-vs-forwarded flag, so the call
+     * form is inferred from the arguments: a direct call supplies the full unstripped arity with
+     * a Builder as the first argument, while forwarded calls never pass the builder themselves.
+     * When the first argument's type cannot be resolved we assume a forwarded call, preserving
+     * the established stripped-signature behavior.
+     *
+     * @param list<\PhpParser\Node\Arg>|null $callArgs
+     * @param list<FunctionLikeParameter> $scopeParams scope's declared params minus the leading $query
+     */
+    public static function isDirectScopeCall(
+        Codebase $codebase,
+        StatementsSource $source,
+        ?array $callArgs,
+        ?Context $context,
+        array $scopeParams,
+    ): bool {
+        if ($callArgs === null || $callArgs === []) {
+            return false;
+        }
+
+        $firstArg = $callArgs[0];
+
+        // Spread/named arguments defeat positional reasoning — treat as forwarded.
+        if ($firstArg->unpack || $firstArg->name !== null) {
+            return false;
+        }
+
+        // The params provider can fire before the call's argument nodes have a recorded
+        // type (verified: inside a registered model's own method body the node type is
+        // absent here), so fall back to the surrounding scope's variable types — this is
+        // the live path for the issue-#1034 shape `$this->scope($query, ...)`.
+        $argType = $source->getNodeTypeProvider()->getType($firstArg->value);
+        if (!$argType instanceof Union && $firstArg->value instanceof Variable && \is_string($firstArg->value->name)) {
+            $argType = $context?->vars_in_scope['$' . $firstArg->value->name] ?? null;
+        }
+
+        if ($argType === null || !$argType->isSingle()) {
+            return false;
+        }
+
+        $atomic = $argType->getSingleAtomic();
+        if (!$atomic instanceof TNamedObject) {
+            return false;
+        }
+
+        try {
+            $isBuilderArg = \strtolower($atomic->value) === \strtolower(Builder::class)
+                || ($codebase->classExists($atomic->value) && $codebase->classExtends($atomic->value, Builder::class));
+        } catch (UnpopulatedClasslikeException|\InvalidArgumentException) {
+            // classExists() doesn't guarantee populated storage, and classExtends() throws on
+            // unpopulated/aliased classes — unresolved first arg means "assume forwarded".
+            return false;
+        }
+
+        if (!$isBuilderArg) {
+            return false;
+        }
+
+        // A Builder first argument is decisive — unless the scope's own first param (after
+        // $query) would also accept it on a forwarded call, e.g. someScope(Builder $query,
+        // Builder $other) called as Model::someScope($otherBuilder), or an untyped/mixed
+        // param. Only that ambiguous case needs the arity tie-breaker: a direct call must
+        // satisfy the unstripped arity (the explicit $query plus every required scope param),
+        // while the forwarded form passes one argument less.
+        $firstScopeParamType = isset($scopeParams[0]) ? $scopeParams[0]->type : null;
+        if ($firstScopeParamType === null || UnionTypeComparator::isContainedBy($codebase, $argType, $firstScopeParamType)) {
+            $requiredScopeParamsCount = \count(\array_filter(
+                $scopeParams,
+                static fn(FunctionLikeParameter $param): bool => !$param->is_optional,
+            ));
+
+            return \count($callArgs) >= 1 + $requiredScopeParamsCount;
+        }
+
+        return true;
     }
 
     /**
