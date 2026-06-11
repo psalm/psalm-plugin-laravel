@@ -3,49 +3,105 @@
 
 use App\Models\Contract;
 use App\Models\Customer;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Instance scope calls on Builder (Customer::query()->active()) must resolve to
- * Builder<Model> instead of mixed, so downstream chained calls (sum, where, get)
- * keep their narrowed types.
+ * Instance scope calls on the base Builder (Customer::query()->active()) must
+ * resolve to Builder<Model> instead of mixed, with the scope's params (minus
+ * the leading $query) used for argument checking.
  *
- * @see https://github.com/psalm/psalm-plugin-laravel/issues/1004
+ * @see https://github.com/psalm/psalm-plugin-laravel/pull/1032
  */
 
-$legacy = Customer::query()->active();
-/** @psalm-trace $legacy */
+/** Legacy scopeActive() called on a builder instance. */
+function test_legacy_scope_on_builder(): void
+{
+    $_result = Customer::query()->active();
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
 
-$attribute = Customer::query()->verified();
-/** @psalm-trace $attribute */
+/** Modern #[Scope] attribute method called on a builder instance. */
+function test_scope_attribute_on_builder(): void
+{
+    $_result = Customer::query()->verified();
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
 
-$chained = Customer::query()->active()->verified();
-/** @psalm-trace $chained */
+/** Chained scopes keep the model template. */
+function test_chained_scopes(): void
+{
+    $_result = Customer::query()->active()->verified();
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
 
-$sum = Customer::query()->active()->sum('vehicles_count');
-/** @psalm-trace $sum */
+/** Downstream aggregate narrowing works through a scope chain. */
+function test_scope_chain_to_sum(): void
+{
+    $_result = Customer::query()->active()->sum('vehicles_count');
+    /** @psalm-check-type-exact $_result = int */
+}
 
-$withArg = Customer::query()->ofName('Ada');
-/** @psalm-trace $withArg */
+/** Scope with a parameter: the arg after $query is accepted. */
+function test_scope_with_arg(): void
+{
+    $_result = Customer::query()->ofName('Ada');
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
 
-// Args after $query are type-checked against the scope's declared params.
-$badArg = Customer::query()->ofName(123);
+/** Scope args are type-checked against the scope's declared params. */
+function test_scope_wrong_arg_type(): void
+{
+    $_result = Customer::query()->ofName(123);
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
 
-// Scope declared on an abstract parent model: params resolve from the declaring class.
-$inherited = Contract::query()->signedBetween(now(), now());
-/** @psalm-trace $inherited */
+/** Extra args beyond the scope's params are rejected. */
+function test_scope_too_many_args(): void
+{
+    $_result = Customer::query()->ofName('Ada', 'extra');
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
 
-// Scope hosted in a trait used by the model.
-$fromTrait = Contract::query()->flagged();
-/** @psalm-trace $fromTrait */
+/** Missing required scope args are rejected. */
+function test_scope_too_few_args(): void
+{
+    $_result = Customer::query()->ofName();
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
 
-echo $legacy::class, $attribute::class, $chained::class, $withArg::class, $badArg::class, $inherited::class, $fromTrait::class, $sum;
+/** Scope param with a default value: a zero-arg call is fine. */
+function test_scope_default_param(): void
+{
+    $_result = Customer::query()->ofStatus();
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
+}
+
+/** Scope declared on an abstract parent model resolves params from the declaring class. */
+function test_inherited_scope(): void
+{
+    $_result = Contract::query()->signedBetween(now(), now());
+    /** @psalm-check-type-exact $_result = Builder<Contract> */
+}
+
+/** Scope hosted in a trait used by the model. */
+function test_trait_scope(): void
+{
+    $_result = Contract::query()->flagged();
+    /** @psalm-check-type-exact $_result = Builder<Contract> */
+}
+
+/**
+ * Negative: a nonexistent method on a base Builder instance must not be typed by the
+ * widened provider. It still resolves to mixed via Builder::__call (Psalm doesn't
+ * report UndefinedMagicMethod here on master either).
+ */
+function test_nonexistent_method_on_builder(): void
+{
+    $_result = Customer::query()->completelyFakeMethod();
+    /** @psalm-check-type-exact $_result = mixed */
+}
 ?>
 --EXPECTF--
-Trace on line %d: $legacy: Illuminate\Database\Eloquent\Builder<App\Models\Customer>
-Trace on line %d: $attribute: Illuminate\Database\Eloquent\Builder<App\Models\Customer>
-Trace on line %d: $chained: Illuminate\Database\Eloquent\Builder<App\Models\Customer>
-Trace on line %d: $sum: int
-Trace on line %d: $withArg: Illuminate\Database\Eloquent\Builder<App\Models\Customer>
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::ofname expects string, but 123 provided
-Trace on line %d: $inherited: Illuminate\Database\Eloquent\Builder<App\Models\Contract>
-Trace on line %d: $fromTrait: Illuminate\Database\Eloquent\Builder<App\Models\Contract>
+TooManyArguments on line %d: Too many arguments for Illuminate\Database\Eloquent\Builder::ofname - expecting 1 but saw 2
+TooFewArguments on line %d: Too few arguments for Illuminate\Database\Eloquent\Builder::ofname - expecting name to be passed

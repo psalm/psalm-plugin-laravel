@@ -111,8 +111,8 @@ class Customer extends Authenticatable
     }
 
     /**
-     * Legacy scope with a parameter: exercises the instance-call params hand-off
-     * (the caller passes everything after $query).
+     * Legacy scope with a parameter: called as Customer::query()->ofName('Ada').
+     * Exercises the instance-call params hand-off (the caller passes everything after $query).
      *
      * @param  Builder<self>  $query
      * @return Builder<self>
@@ -120,6 +120,18 @@ class Customer extends Authenticatable
     public function scopeOfName($query, string $name)
     {
         return $query->where('name', $name);
+    }
+
+    /**
+     * Legacy scope with a defaulted parameter: called as Customer::query()->ofStatus().
+     * A zero-arg call must not emit TooFewArguments.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeOfStatus($query, string $status = 'active')
+    {
+        return $query->where('status', $status);
     }
 
     public function getFirstNameUsingLegacyAccessorAttribute(): string
