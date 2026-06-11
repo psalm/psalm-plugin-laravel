@@ -110,6 +110,18 @@ class Customer extends Authenticatable
         $query->whereNotNull('email_verified_at');
     }
 
+    /**
+     * Legacy scope with a parameter: exercises the instance-call params hand-off
+     * (the caller passes everything after $query).
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeOfName($query, string $name)
+    {
+        return $query->where('name', $name);
+    }
+
     public function getFirstNameUsingLegacyAccessorAttribute(): string
     {
         return $this->name;

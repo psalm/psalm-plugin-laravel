@@ -51,6 +51,20 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     private static array $traitBuilderCache = [];
 
     /**
+     * Scope params hand-off: lowercase scope name -> params (minus the leading $query).
+     *
+     * Populated by the return type provider when it resolves an instance scope call
+     * (Customer::query()->active()); consumed by {@see getMethodParams} when Psalm
+     * immediately follows up with checkMethodArgs for the same call. Keyed by method
+     * name only: the producer always runs right before the consumer within one
+     * analysis thread, so the latest entry matches the call being checked even when
+     * two models declare a scope with the same name.
+     *
+     * @var array<lowercase-string, list<FunctionLikeParameter>>
+     */
+    private static array $scopeParams = [];
+
+    /**
      * Registry of trait-declared builder methods for the base Builder class.
      *
      * Populated by {@see ModelRegistrationHandler} when processing base-Builder models
@@ -113,12 +127,12 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         // without forwarding the LHS type params. We recover them from the LHS expression.
         $templateTypeParameters = $event->getTemplateTypeParameters();
 
-        // For trait-declared builder methods (e.g., withTrashed), extract from LHS when
-        // template params are missing. Scope methods are skipped here: providing a return
-        // type for scope methods via this path would cause Psalm to call checkMethodArgs
-        // for Builder::scopeMethod, which has no method params and would crash.
-        // Scope instance calls (Customer::query()->active()) remain a known limitation.
-        if ($templateTypeParameters === null && isset(self::$baseBuilderTraitMethods[$methodName])) {
+        // For scope and trait-declared builder methods (e.g., active(), withTrashed()),
+        // extract from LHS when template params are missing. Builder::methodName has no
+        // real method storage, so when Psalm follows up with checkMethodArgs, the params
+        // provider below must answer for the method (scope params come from the
+        // scope-params hand-off populated in the scope branch).
+        if ($templateTypeParameters === null) {
             $templateTypeParameters = self::extractTemplateParamsFromCallStmt($event->getStmt(), $source);
         }
 
@@ -135,6 +149,12 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         ]);
 
         if (self::hasScopeMethod($codebase, $modelClass, $methodName)) {
+            // Hand the scope's declared params (minus the leading $query) to the params
+            // provider: Psalm follows this return type with checkMethodArgs for
+            // Builder::<scope>, which has no real method storage and would otherwise
+            // throw UnexpectedValueException in Codebase\Methods::getMethodParams.
+            self::$scopeParams[$methodName] = self::resolveScopeParams($codebase, $modelClass, $methodName);
+
             return $builderReturn;
         }
 
@@ -160,8 +180,8 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * doesn't exist as a real method, getMethodParams would throw UnexpectedValueException
      * unless we intercept it here with the params from the trait's @method static annotation.
      *
-     * Only covers $baseBuilderTraitMethods (e.g., SoftDeletes methods); scope methods are
-     * not in this registry so this provider returns null for them (Psalm skips arg checking).
+     * Covers $baseBuilderTraitMethods (e.g., SoftDeletes methods) and instance scope
+     * calls via the {@see $scopeParams} hand-off populated by the return type provider.
      *
      * @return list<FunctionLikeParameter>|null
      * @psalm-external-mutation-free
@@ -171,7 +191,42 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     {
         /** @var lowercase-string $methodName */
         $methodName = $event->getMethodNameLowercase();
-        return self::$baseBuilderTraitMethods[$methodName] ?? null;
+        return self::$baseBuilderTraitMethods[$methodName] ?? self::$scopeParams[$methodName] ?? null;
+    }
+
+    /**
+     * Resolve the params a caller passes to a scope: the scope method's declared
+     * params without the leading $query (Laravel injects it).
+     *
+     * Reads the legacy scopeXxx() method first (mirroring hasScopeMethod's order),
+     * then the #[Scope]-attributed method of the same name.
+     *
+     * @param class-string<Model> $modelClass
+     * @return list<FunctionLikeParameter>
+     */
+    private static function resolveScopeParams(Codebase $codebase, string $modelClass, string $methodName): array
+    {
+        foreach (['scope' . $methodName, $methodName] as $candidate) {
+            // Scopes are often declared on an abstract parent model; resolve the
+            // declaring class before fetching storage (getStorage alone throws for
+            // inherited methods).
+            $declaringId = $codebase->methods->getDeclaringMethodId(
+                new MethodIdentifier(\strtolower($modelClass), \strtolower($candidate)),
+            );
+            if ($declaringId === null) {
+                continue;
+            }
+
+            try {
+                $storage = $codebase->methods->getStorage($declaringId);
+            } catch (\InvalidArgumentException|\UnexpectedValueException) {
+                continue;
+            }
+
+            return \array_slice($storage->params, 1);
+        }
+
+        return [];
     }
 
     /**
