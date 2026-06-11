@@ -7,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Fixture for psalm/psalm-plugin-laravel#1034.
@@ -47,5 +48,11 @@ final class DirectScopeModel extends Model
     protected function active(Builder $query): void
     {
         $this->hasAnyName($query, ['a', 'b']);
+    }
+
+    /** @psalm-return HasMany<self, $this> */
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class);
     }
 }

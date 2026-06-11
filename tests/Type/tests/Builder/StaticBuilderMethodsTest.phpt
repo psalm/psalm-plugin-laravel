@@ -2,6 +2,7 @@
 <?php declare(strict_types=1);
 
 use App\Models\Customer;
+use App\Models\DirectScopeModel;
 use App\Models\Vehicle;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -71,7 +72,7 @@ function test_static_legacy_scope(): void
  * See InstanceScopeCallTest.phpt for the dedicated coverage.
  *
  * Calling Customer::verified() statically triggers InvalidStaticInvocation because
- * it's a real instance method — see test_scope_attribute_static_is_invalid below.
+ * it's a real instance method — see test_public_scope_attribute_static_is_invalid below.
  */
 /** @return Builder<Customer> */
 function test_scope_attribute_via_builder(): Builder
@@ -80,12 +81,36 @@ function test_scope_attribute_via_builder(): Builder
 }
 
 /**
- * Known limitation: #[Scope] methods work at runtime via __callStatic -> query() -> Builder,
- * but Psalm sees them as real instance methods and reports InvalidStaticInvocation.
+ * TRUE positive: a PUBLIC #[Scope] method called statically. PHP raises
+ * `Error: Non-static method ... cannot be called statically` for an ACCESSIBLE non-static
+ * method BEFORE __callStatic is consulted, so Customer::verified() is a runtime fatal, not a
+ * forwarded scope call. InvalidStaticInvocation is correct — suppressing it would hide the
+ * crash. (Contrast the protected #[Scope] static call below, where __callStatic IS reached and
+ * the same diagnostic becomes a false positive.)
  */
-function test_scope_attribute_static_is_invalid(): void
+function test_public_scope_attribute_static_is_invalid(): void
 {
     $_result = Customer::verified();
+}
+
+/**
+ * FALSE positive (documented limitation): a PROTECTED #[Scope] method called statically. PHP's
+ * static-call rule is accessibility-gated — a protected method is inaccessible from outside the
+ * class, so PHP routes to __callStatic, which Laravel implements as static::query()->scope().
+ * This is the runtime-valid form the Laravel 12 docs use. Psalm still emits
+ * InvalidStaticInvocation because MethodAnalyzer::checkStatic (MethodAnalyzer.php:132-163)
+ * decides purely on `!$storage->is_static`, with no accessibility/__callStatic consideration.
+ * Blocked on an upstream fix: https://github.com/vimeo/psalm/issues/11876
+ * (repro: https://psalm.dev/r/7589c15285).
+ *
+ * Only InvalidStaticInvocation fires here, not the InaccessibleMethod the raw (plugin-less)
+ * repro also shows: the plugin's per-model visibility provider
+ * (ModelMethodHandler::isMethodVisible) reports the scope method as visible, which suppresses
+ * the accessibility diagnostic but not the static-call one.
+ */
+function test_protected_scope_attribute_static_is_invalid(): void
+{
+    $_result = DirectScopeModel::active();
 }
 
 // -----------------------------------------------------------------------
@@ -173,6 +198,7 @@ function test_nonexistent_method(): void
 ?>
 --EXPECTF--
 InvalidStaticInvocation on line %d: Method App\Models\Customer::verified is not static, but is called statically
+InvalidStaticInvocation on line %d: Method App\Models\DirectScopeModel::active is not static, but is called statically
 MixedReturnStatement on line %d: Could not infer a return type
 UndefinedMagicMethod on line %d: Magic method App\Builders\VehicleBuilder::withtrashed does not exist
 UndefinedMagicMethod on line %d: Magic method App\Models\Customer::completelyfakemethod does not exist
