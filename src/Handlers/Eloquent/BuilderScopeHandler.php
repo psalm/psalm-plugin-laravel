@@ -213,7 +213,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             $declaringId = $codebase->methods->getDeclaringMethodId(
                 new MethodIdentifier(\strtolower($modelClass), \strtolower($candidate)),
             );
-            if ($declaringId === null) {
+            if (!$declaringId instanceof \Psalm\Internal\MethodIdentifier) {
                 continue;
             }
 
