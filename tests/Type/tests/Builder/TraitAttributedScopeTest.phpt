@@ -88,7 +88,8 @@ function test_static_model_call_custom_builder(): void
 /** Positive: trait-hosted #[Scope] resolves on a HasMany relation query. */
 function test_relation_chain(Customer $customer): void
 {
-    $customer->vehicles()->active();
+    $_result = $customer->vehicles()->active();
+    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\Vehicle> */
 }
 
 /* -- #[Scope] with self param: self-pin applies the same as for legacy scopes -------------- */

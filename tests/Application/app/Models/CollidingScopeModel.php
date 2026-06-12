@@ -80,6 +80,11 @@ final class CollidingScopeModel extends Model
      * passing an int is valid for the scope and invalid for Query\Builder::orderBy, and
      * passing a string is invalid for the scope and valid for Query\Builder::orderBy.
      *
+     * Scope-first precedence is fixed for STATIC model calls (Model::orderBy()). Builder-instance
+     * calls (Model::query()->orderBy()) still resolve through the Query\Builder mixin on
+     * Eloquent\Builder before BuilderScopeHandler fires, so Query\Builder params win there;
+     * tracked as a dedicated follow-up.
+     *
      * @param  Builder<self>  $query
      * @return Builder<self>
      */

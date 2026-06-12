@@ -32,7 +32,8 @@ use App\Models\CollidingScopeModel;
 /** Positive: scope int param accepts an int — the scope wins over Query\Builder::orderBy. */
 function test_scope_int_param_accepted(): void
 {
-    CollidingScopeModel::orderBy(5);
+    $_result = CollidingScopeModel::orderBy(5);
+    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\CollidingScopeModel> */
 }
 
 /** Negative: scope int param rejects a string — verified against the SCOPE signature. */
@@ -44,8 +45,22 @@ function test_scope_int_param_rejects_string(): void
 /** Control: passthru-aggregate scope (count) still resolves without regression. */
 function test_aggregate_scope_unaffected(): void
 {
-    CollidingScopeModel::count();
+    $_result = CollidingScopeModel::count();
+    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\CollidingScopeModel> */
+}
+
+/**
+ * Known limitation: the scope-first fix applies only to static model calls routed through
+ * ModelMethodHandler. Builder-instance calls (query()->orderBy()) reach Query\Builder::orderBy
+ * via Eloquent\Builder's @mixin QueryBuilder BEFORE BuilderScopeHandler fires, so the scope
+ * params are never consulted and an int arg still raises InvalidArgument against the
+ * Query\Builder string-column signature. Tracked as a dedicated follow-up fix.
+ */
+function test_instance_call_limitation(): void
+{
+    CollidingScopeModel::query()->orderBy(5);
 }
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of App\Models\CollidingScopeModel::orderby expects int, but 'column' provided
+InvalidArgument on line %d: %s
