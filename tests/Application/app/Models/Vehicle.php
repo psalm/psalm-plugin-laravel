@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Builders\VehicleBuilder;
+use App\Models\Concerns\HasFlaggedScope;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -17,12 +18,15 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
  * Car or truck belonging to a customer.
  *
  * Custom query builder via newEloquentBuilder() override (pre-Laravel 12 pattern).
+ * Uses HasFlaggedScope to provide trait-hosted #[Scope] methods for the custom-builder surface.
  *
  * @property string $make  Manufacturer (e.g. "Toyota")
  * @property string $model Vehicle model name (e.g. "Camry")
  */
 final class Vehicle extends Model
 {
+    use HasFlaggedScope;
+
     protected $table = 'vehicles';
 
     /**
