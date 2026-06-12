@@ -66,6 +66,11 @@ function test_scope_too_few_args_on_model_instance(Customer $customer): void
  * Contrast: a PUBLIC #[Scope] called on an instance is a real, accessible method, so PHP invokes
  * it directly (no __call forwarding) — Psalm checks the real signature and reports the missing
  * $query as TooFewArguments. True positive: at runtime this is an ArgumentCountError.
+ *
+ * The dispatch-truth classifier (replacing the old argument-shape heuristic) now classifies this
+ * accessible real method as a direct call and declines, so the real signature drives both the
+ * named "expecting query to be passed" diagnostic and the generic "saw 0" — sharpening the
+ * previous single "saw 0" line. Both are the same true positive.
  */
 function test_public_attribute_scope_on_instance_needs_query(Customer $customer): void
 {
@@ -76,4 +81,5 @@ function test_public_attribute_scope_on_instance_needs_query(Customer $customer)
 InvalidArgument on line %d: Argument 1 of App\Models\Customer::ofname expects string, but 123 provided
 TooManyArguments on line %d: Too many arguments for App\Models\Customer::ofname - expecting 1 but saw 2
 TooFewArguments on line %d: Too few arguments for App\Models\Customer::ofname - expecting name to be passed
+TooFewArguments on line %d: Too few arguments for App\Models\Customer::verified - expecting query to be passed
 TooFewArguments on line %d: Too few arguments for method App\Models\Customer::verified saw 0

@@ -9,10 +9,10 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * Regression test for psalm/psalm-plugin-laravel#1034.
  *
- * A direct instance call to a #[Scope] (or legacy scopeXxx()) method that passes the
- * $query builder explicitly — e.g. one scope calling another, $this->otherScope($query, ...) —
- * invokes the real method and must be type-checked against its full declared signature:
- * params (no left-shift of arguments) AND return type (no fabricated Builder<Model>).
+ * A direct call to a #[Scope] method that passes the $query builder explicitly — e.g. one
+ * scope calling another, $this->otherScope($query, ...), or any call to an accessible real
+ * scope method — invokes the real method and must be type-checked against its full declared
+ * signature: params (no left-shift of arguments) AND return type (no fabricated Builder<Model>).
  *
  * The plugin strips the leading $query parameter for the magic-forwarded forms
  * (DirectScopeModel::hasAnyName(...) via __callStatic, $builder->hasAnyName(...)), where
@@ -20,12 +20,13 @@ use Illuminate\Database\Eloquent\Builder;
  * argument left by one and produced a false-positive InvalidArgument (the explicit Builder
  * checked against the second declared parameter) plus a spurious TooManyArguments.
  *
- * The issue's in-model sibling form (DirectScopeModel::active()) resolves the first arg
- * through the Context::vars_in_scope fallback of BuilderScopeHandler::isDirectScopeCall(),
- * which no suite can exercise: snippet-defined models are never registered (class_exists
- * fails in ModelRegistrationHandler) and no suite analyzes the fixture models' bodies.
- * The calls below go through the same detection helper via the node-type path; the
- * sibling form itself was verified against the issue's reproduction.
+ * The dispatch-truth classifier ({@see BuilderScopeHandler::isDirectScopeCall}) decides direct
+ * vs forwarded from PHP dispatch semantics — the bare name is a real, accessible method — not
+ * from the argument shapes. So the calls below classify correctly regardless of whether the
+ * first argument is a plain Builder, a Builder subclass, a nullable ?Builder, or a non-variable
+ * expression. DirectScopeModel::hasAnyName is public, so an external call from these snippet
+ * functions is accessible and resolves as direct, exercising the same path as the issue's
+ * in-model sibling form $this->hasAnyName($query, ...).
  */
 
 /**
@@ -59,6 +60,19 @@ function test_direct_scope_call_wrong_second_arg(DirectScopeModel $model, Builde
     $model->hasAnyName($query, 'not-a-list');
 }
 
+/**
+ * A NULLABLE Builder first argument (two atomics) no longer flips the classification to
+ * forwarded — dispatch truth keeps it direct, so the real signature applies and the null is a
+ * PossiblyNullArgument against the real $query param, not a false InvalidArgument from the
+ * stripped signature. Regression for the fa3 shape.
+ *
+ * @param Builder<DirectScopeModel>|null $query
+ */
+function test_direct_scope_call_nullable_query_arg(DirectScopeModel $model, ?Builder $query): void
+{
+    $model->hasAnyName($query, ['a', 'b']);
+}
+
 /** Forwarded builder-instance call still uses the stripped (query-less) signature. */
 function test_forwarded_scope_call_still_strips_query(): void
 {
@@ -74,8 +88,9 @@ function test_forwarded_scope_call_wrong_arg(): void
 }
 
 /**
- * Custom-builder model: the explicitly-passed builder is a Builder subclass
- * (VehicleBuilder), exercising the classExtends arm of the direct-call detection.
+ * Custom-builder model: the explicitly-passed builder is a Builder subclass (VehicleBuilder),
+ * and electric() is a public #[Scope], so the call is accessible and classifies as direct —
+ * the real void return drives AssignmentToVoid.
  */
 function test_direct_scope_call_with_custom_builder(Vehicle $vehicle): void
 {
@@ -98,5 +113,6 @@ function test_direct_legacy_scope_call(Customer $customer): void
 --EXPECTF--
 AssignmentToVoid on line %d: Cannot assign $_result to type void
 InvalidArgument on line %d: Argument 2 of App\Models\DirectScopeModel::hasAnyName expects list<string>, but 'not-a-list' provided
+PossiblyNullArgument on line %d: Argument 1 of App\Models\DirectScopeModel::hasAnyName cannot be null, possibly null value provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::hasanyname expects list<string>, but 'not-a-list' provided
 AssignmentToVoid on line %d: Cannot assign $_result to type void
