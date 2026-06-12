@@ -189,11 +189,14 @@ function test_scope_attribute_on_custom_builder_via_query(): void
 }
 
 /**
- * Known limitation: #[Scope] methods work at runtime via __callStatic -> query() -> Builder,
- * but Psalm sees them as real instance methods and reports InvalidStaticInvocation.
- * Same behavior as Customer::verified() in StaticBuilderMethodsTest.
+ * TRUE positive: WorkOrder::completed() is a PUBLIC #[Scope] called statically. PHP raises
+ * `Error: Non-static method ... cannot be called statically` for an accessible non-static method
+ * BEFORE __callStatic is consulted, so this is a runtime fatal, not a forwarded scope call —
+ * InvalidStaticInvocation is correct. Same true-positive case as Customer::verified() in
+ * StaticBuilderMethodsTest::test_public_scope_attribute_static_is_invalid (the custom builder
+ * makes no difference: the static dispatch fatals before any builder is involved).
  */
-function test_scope_attribute_static_is_invalid_on_custom_builder(): void
+function test_public_scope_attribute_static_is_invalid_on_custom_builder(): void
 {
     $_result = WorkOrder::completed();
 }

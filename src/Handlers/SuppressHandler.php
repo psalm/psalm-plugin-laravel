@@ -501,6 +501,14 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     /** @psalm-mutation-free */
     private static function hasScopeAttribute(MethodStorage $methodStorage): bool
     {
+        // A private #[Scope] is not a usable scope on any supported Laravel — see the rationale
+        // on BuilderScopeHandler::hasScopeAttribute. Leave it reported as genuinely unused rather
+        // than silencing dead code. (suppressInternalDispatchMethod also gates private downstream;
+        // this keeps the helper itself honest.)
+        if ($methodStorage->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
+            return false;
+        }
+
         foreach ($methodStorage->attributes as $attribute) {
             if ($attribute->fq_class_name === Scope::class) {
                 return true;

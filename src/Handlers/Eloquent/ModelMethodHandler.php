@@ -273,8 +273,21 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
         // Scope method — params from the scope definition minus the first $query param.
         /** @var class-string<Model> $modelClass */
-        $scopeParams = self::getScopeParams($codebase, $modelClass, $methodName);
+        $scopeParams = BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
         if ($scopeParams !== null) {
+            // A direct call ($this->otherScope($query, ...) inside the model, or any call to an
+            // accessible real scope method) invokes the real method, so its full declared
+            // signature — including the leading $query — applies. Only the magic-forwarded forms
+            // (Model::scope() via __callStatic, $builder->scope()) inject $query and need the
+            // stripped params. The classifier decides from PHP dispatch semantics, not argument
+            // shapes, and declines for direct calls so Psalm checks the real signature instead of
+            // shifting every argument left by one. A null context (Psalm resolving this method's
+            // own declaration) also declines, keeping $query in scope for an overriding child.
+            // See issue #1034.
+            if (BuilderScopeHandler::isDirectScopeCall($codebase, $modelClass, $methodName, $event->getContext())) {
+                return null;
+            }
+
             return $scopeParams;
         }
 
@@ -331,8 +344,20 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // Scope methods: return Builder<Model> directly.
         // Using executeFakeCall for scopes doesn't work reliably because the scope
         // is resolved via Builder's __call magic which may fail in a fake call context.
+        // A non-null getScopeParams() result implies the method is a real scope — no
+        // separate hasScopeMethod() guard needed (mirrors the params provider above).
         /** @var class-string<Model> $modelClass */
-        if (BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
+        $scopeParams = BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
+        if ($scopeParams !== null) {
+            // Direct calls to the underlying method ($this->someScope($query, ...), or any call
+            // to an accessible real scope method) return whatever the method declares (often
+            // void), not Builder<Model> — decline and let Psalm use the real declared return
+            // type. The classifier shares the params provider's dispatch-truth verdict so the
+            // two decline together (issue #1034).
+            if (BuilderScopeHandler::isDirectScopeCall($codebase, $modelClass, $methodName, $event->getContext())) {
+                return null;
+            }
+
             return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
         }
 
@@ -538,41 +563,6 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
                 $event->getContext(),
                 $fakeProxy,
             );
-        }
-
-        return null;
-    }
-
-    /**
-     * Get params for a scope method on a model, minus the $query parameter.
-     *
-     * Handles both legacy scopeXxx() methods and modern #[Scope] attribute methods.
-     * Used by both the static model call handler ({@see getMethodParams}) and
-     * {@see CustomBuilderMethodHandler::getScopeMethodParamsOnBuilder}.
-     *
-     * @internal Used by {@see CustomBuilderMethodHandler}
-     * @param class-string<Model> $modelClass
-     * @return list<FunctionLikeParameter>|null
-     */
-    public static function getScopeParams(Codebase $codebase, string $modelClass, string $methodName): ?array
-    {
-        // Legacy: scopeActive(Builder $query, ...) → active(...)
-        $legacyScopeMethod = $modelClass . '::scope' . \ucfirst($methodName);
-        if ($codebase->methodExists($legacyScopeMethod)) {
-            /** @var lowercase-string $legacyScopeLower */
-            $legacyScopeLower = 'scope' . $methodName;
-
-            return \array_slice(
-                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $legacyScopeLower)),
-                1,
-            );
-        }
-
-        // Modern #[Scope]: active(Builder $query, ...) → active(...)
-        $directMethod = $modelClass . '::' . $methodName;
-        if ($codebase->methodExists($directMethod)) {
-            /** @var lowercase-string $methodName */
-            return \array_slice($codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $methodName)), 1);
         }
 
         return null;
