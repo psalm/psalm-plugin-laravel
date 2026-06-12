@@ -50,6 +50,20 @@ final class DirectScopeModel extends Model
         $this->hasAnyName($query, ['a', 'b']);
     }
 
+    /**
+     * Variadic #[Scope]: exercises the variadic flag on BOTH dispatch paths. A direct call
+     * ($model->ofAnyName($query, 'a')) invokes the full signature — the leading $query plus the
+     * `string ...$names` tail — while the magic-forwarded form
+     * (DirectScopeModel::query()->ofAnyName('a', 'b')) strips $query and keeps the variadic tail.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    public function ofAnyName(Builder $query, string ...$names): void
+    {
+        $query->whereIn('name', $names);
+    }
+
     /** @psalm-return HasMany<self, $this> */
     public function children(): HasMany
     {

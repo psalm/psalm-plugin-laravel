@@ -134,6 +134,22 @@ class Customer extends Authenticatable
         return $query->where('status', $status);
     }
 
+    /**
+     * Legacy variadic scope: called as Customer::query()->ofNames('Ada', 'Bo').
+     *
+     * Exercises variadic forwarding: the native variadic flag on `...$names` must survive the
+     * leading-$query slice in getScopeParams() so a zero-arg call is allowed (variadic =
+     * optional, no TooFewArguments) and extra args draw no TooManyArguments, while each forwarded
+     * value is still checked against the `string` element type.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeOfNames($query, string ...$names)
+    {
+        return $query->whereIn('name', $names);
+    }
+
     public function getFirstNameUsingLegacyAccessorAttribute(): string
     {
         return $this->name;
