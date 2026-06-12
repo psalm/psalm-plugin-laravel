@@ -3,19 +3,28 @@
 
 use App\Models\Contract;
 use App\Models\Mechanic;
+use App\Models\Receipt;
 use App\Models\WorkOrder;
 
 /**
- * Issue #1031: a scope declared in a trait with a `self`/`static`-typed non-query
- * parameter must resolve `self`/`static` to the model — not to the class the scope
- * params provider is registered on, and not to a stricter `Model&static` form that
- * would reject a plain model argument on the accept side.
+ * Issue #1031: a scope declared in a trait (or on an abstract parent) with a
+ * `self`/`static`-typed non-query parameter must resolve those references the way PHP does at
+ * runtime — not to the class the scope params provider happens to be registered on.
  *
- * Both archetypes use the ComparesRank trait, whose scopes declare self/static params:
- *  - WorkOrder has a custom builder (WorkOrderBuilder), so its params provider registers
- *    on the builder class. Before the fix `self` expanded to WorkOrderBuilder.
- *  - Contract has no custom builder, so its params provider registers on the base
- *    Illuminate Builder. The same misexpansion is possible there.
+ *  - `self` binds to the scope's *composing* class (the class that uses the trait, or the
+ *    parent that declares the scope), fixed at composition time. Querying a child subclass does
+ *    NOT narrow `self` to that child, so a *sibling* child is a valid argument.
+ *  - `static`/`$this` bind to the queried model (late static binding), so they DO narrow to the
+ *    subclass the scope is invoked on — and a sibling child is rejected.
+ *
+ * Archetypes:
+ *  - WorkOrder composes ComparesRank DIRECTLY and has a custom builder (WorkOrderBuilder), so its
+ *    params provider registers on the builder class and `self` == WorkOrder (composing ==
+ *    queried). This block is the directly-composed control: unaffected by the parent-hosted
+ *    resolution and byte-identical to the original fix.
+ *  - Contract has NO custom builder (params provider on the base Illuminate Builder) and inherits
+ *    ComparesRank from its abstract parent AbstractDocument, so `self` == the parent. Receipt is a
+ *    sibling child used to prove the sibling argument is accepted.
  *
  * The three callers that share getScopeParams() are all exercised: instance builder
  * (Model::query()->scope()), static model call (Model::scope()), and relation chain
@@ -24,7 +33,7 @@ use App\Models\WorkOrder;
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1031
  */
 
-/* -- Custom builder, instance call (WorkOrder::query()) ---------------------- */
+/* -- Custom builder, instance call (WorkOrder::query()) — directly-composed control --------- */
 
 /** Positive: native `self` param accepts the model; result keeps the custom builder type. */
 function test_self_param_accepts_model(WorkOrder $workOrder): void
@@ -93,19 +102,68 @@ function test_relation_chain_is_type_checked(Mechanic $mechanic): void
     $mechanic->workOrders()->rankedAbove('not a model');
 }
 
-/* -- Base builder (Contract, no custom builder) ----------------------------- */
+/* -- Base builder, trait composed on the PARENT (Contract : AbstractDocument) -------------- */
 
-/** Positive: on the base Builder the `self` param resolves to Contract. */
+/**
+ * Positive: `self` resolves to the composing parent (AbstractDocument), which the queried child
+ * Contract satisfies. Return type stays Builder<Contract> (keyed on the queried model).
+ */
 function test_base_builder_self_param_accepts_model(Contract $contract): void
 {
     $_result = Contract::query()->rankedAbove($contract);
     /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\Contract> */
 }
 
-/** Negative: the `self` param resolves to Contract, so a non-model arg is rejected. */
+/**
+ * Positive (the #1031 fix): a SIBLING child is accepted because the trait's `self` binds to the
+ * composing parent, not the queried child. Before the fix `self` pinned to Contract and this
+ * raised a false InvalidArgument.
+ */
+function test_base_builder_self_param_accepts_sibling(Receipt $receipt): void
+{
+    $_result = Contract::query()->rankedAbove($receipt);
+    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\Contract> */
+}
+
+/**
+ * Negative: the `self` param resolves to the composing parent, so a non-model arg is rejected.
+ * The expected class is AbstractDocument (the trait's composing class), NOT the queried Contract
+ * — this is the observable message change of the fix.
+ */
 function test_base_builder_self_param_is_type_checked(): void
 {
     Contract::query()->rankedAbove('not a model');
+}
+
+/**
+ * Static-arm control, positive: `static` binds to the queried model (Contract), which accepts a
+ * Contract instance.
+ */
+function test_base_builder_static_param_accepts_model(Contract $contract): void
+{
+    $_result = Contract::query()->rankedBelow($contract);
+    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\Contract> */
+}
+
+/**
+ * Static-arm control, negative (discriminator): `static` narrows to the queried Contract via late
+ * static binding, so a SIBLING child is REJECTED — proving `self` (parent) and `static` (queried
+ * model) now resolve differently.
+ */
+function test_base_builder_static_param_rejects_sibling(Receipt $receipt): void
+{
+    Contract::query()->rankedBelow($receipt);
+}
+
+/**
+ * Variant control: a `self`-typed param on a scope declared DIRECTLY on the abstract parent
+ * (scopeSupersedes, not via a trait) resolves `self` to AbstractDocument at scan time. The
+ * handler's re-expansion is idempotent, so the sibling child is accepted here too.
+ */
+function test_directly_declared_parent_self_accepts_sibling(Receipt $receipt): void
+{
+    $_result = Contract::query()->supersedes($receipt);
+    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\Contract> */
 }
 ?>
 --EXPECTF--
@@ -114,4 +172,5 @@ InvalidArgument on line %d: Argument 1 of App\Builders\WorkOrderBuilder::rankedb
 InvalidArgument on line %d: Argument 1 of App\Builders\WorkOrderBuilder::rankedamong expects list<App\Models\WorkOrder>, but list{'not a model'} provided
 InvalidArgument on line %d: Argument 1 of App\Models\WorkOrder::rankedabove expects App\Models\WorkOrder, but 'not a model' provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Relations\HasMany::rankedabove expects App\Models\WorkOrder, but 'not a model' provided
-InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::rankedabove expects App\Models\Contract, but 'not a model' provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::rankedabove expects App\Models\AbstractDocument, but 'not a model' provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::rankedbelow expects App\Models\Contract, but App\Models\Receipt provided

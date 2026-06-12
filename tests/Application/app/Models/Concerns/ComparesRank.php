@@ -12,8 +12,8 @@ use Illuminate\Database\Eloquent\Builder;
  * Reproduces issue #1031: when a model with a custom Eloquent builder uses these scopes,
  * the scope's params provider is registered on the *builder* class, so Psalm expands the
  * `self`/`static` parameter typehint against the builder instead of the model and reports
- * a false-positive InvalidArgument. The scope must resolve `self`/`static` to the using
- * model regardless of which class serves the params.
+ * a false-positive InvalidArgument. The scope must resolve `self` to the trait's composing
+ * class and `static`/`$this` to the queried model, regardless of which class serves the params.
  *
  * Scopes declared directly on a model class are unaffected because Psalm resolves their
  * `self` to the model at scan time; only trait-declared scopes keep `self`/`static`

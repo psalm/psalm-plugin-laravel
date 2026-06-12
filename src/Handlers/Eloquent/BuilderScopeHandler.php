@@ -332,49 +332,64 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         // leading $query param; the caller passes everything after it.
         $callerParams = \array_slice($codebase->methods->getMethodParams($scopeMethodId), 1);
 
-        // expandScopeParamSelfReferences() pins self/static to the model (see its docblock).
-        // Memoized, so it runs once per model+method.
-        return self::$scopeParamsCache[$key] = self::expandScopeParamSelfReferences($codebase, $modelClass, $callerParams);
+        // `self` in a trait- or parent-hosted scope follows PHP trait semantics: it binds to
+        // the class that *composes* the scope method (its appearing class), not the subclass
+        // being queried. Resolve it from the scope MethodIdentifier built above; fall back to
+        // the queried model when the appearing id is unavailable. `static`/`$this` stay pinned
+        // to the queried model inside expandScopeParamSelfReferences() (late static binding).
+        $selfClass = $codebase->methods->getAppearingMethodId($scopeMethodId)?->fq_class_name ?? $modelClass;
+
+        return self::$scopeParamsCache[$key] = self::expandScopeParamSelfReferences(
+            $codebase,
+            $selfClass,
+            $modelClass,
+            $callerParams,
+        );
     }
 
     /**
      * Pin `self`/`static`/`$this` (and nested generics like `list<self>`) in scope
-     * parameter types to the model class.
-     *
-     * A scope declared in a trait keeps its `self`/`static` parameter typehints
-     * unresolved: Psalm expands them at argument-check time against whatever class the
-     * params provider is registered on. For a custom Eloquent builder
-     * (Post::query()->scopeMethod($x)) that class is the builder, so `self` wrongly
-     * expands to the builder and Psalm emits a false-positive InvalidArgument (issue
-     * #1031). Pre-expanding here pins `self`/`static`/`$this` to the model before the
-     * params are handed back, so the same concrete type is checked regardless of which
+     * parameter types to concrete classes, so the same types are checked no matter which
      * class serves the params (a custom builder, the model itself, or a relation chain;
      * all callers share this helper).
      *
-     * `static`/`$this` are resolved to the plain model class (via TypeExpander's
-     * `final: true`), NOT the late-static-bound `Model&static` form. A scope parameter is
-     * an accept position and Laravel passes the model instance, so the `&static`
-     * intersection would wrongly reject a plain model argument (ArgumentTypeCoercion);
-     * a plain model param already accepts subclass instances by ordinary subtyping.
-     * Scopes declared directly on the model already resolve `self` to the model at scan
-     * time, so this is a no-op for them.
+     * A scope declared in a trait keeps its `self`/`static` parameter typehints unresolved:
+     * Psalm expands them at argument-check time against whatever class the params provider is
+     * registered on. For a custom Eloquent builder (Post::query()->scopeMethod($x)) that class
+     * is the builder, so `self` wrongly expands to the builder and Psalm emits a false-positive
+     * InvalidArgument (issue #1031). Pre-expanding here pins them before the params are handed back.
      *
-     * Caveat: for a trait-hosted scope, `self`/`static` pin to the model being queried,
-     * not necessarily the class that declares the trait. Querying a subclass narrows the
-     * param to that subclass — strictly more precise than the pre-fix builder type, and
-     * correct for the common single-using-class case.
+     * `self` resolves to `$selfClass` — the scope method's *composing* class (the class that
+     * uses the trait, or the parent that hosts the scope), NOT the queried subclass. This
+     * mirrors PHP: inside a trait method `self` is the class that uses the trait, fixed at
+     * composition time, so `Child::query()->traitScope($sibling)` is runtime-valid when both
+     * `Child` and the sibling extend the composing parent. Narrowing `self` to the queried
+     * subclass (as an earlier revision did) rejected those sibling args with a false positive.
+     * For a scope composed directly on the queried model, `$selfClass` *is* that model, so the
+     * behavior is unchanged there.
      *
-     * @param class-string<Model> $modelClass
+     * `static`/`$this` resolve to `$modelClass` — the queried model (late static binding) — as
+     * the plain model class, not the `Model&static` intersection. See the `final: true` argument
+     * below for why the intersection would over-reject on this accept-side position.
+     *
+     * A scope whose `self` is declared *directly* in a class body (not via a trait) — including
+     * on an abstract parent — already has `self` resolved to that class by Psalm at scan time.
+     * There `$selfClass` equals the declaring class, the param type holds a concrete class with no
+     * `self` token left, and the expansion is idempotent (it recomputes the same type).
+     *
+     * @param string $selfClass `self` → the scope's composing (appearing) class
+     * @param class-string<Model> $modelClass `static`/`$this` → the queried model
      * @param list<FunctionLikeParameter> $params
      * @return list<FunctionLikeParameter>
      */
     private static function expandScopeParamSelfReferences(
         Codebase $codebase,
+        string $selfClass,
         string $modelClass,
         array $params,
     ): array {
         return \array_map(
-            static function (FunctionLikeParameter $param) use ($codebase, $modelClass): FunctionLikeParameter {
+            static function (FunctionLikeParameter $param) use ($codebase, $selfClass, $modelClass): FunctionLikeParameter {
                 if (!$param->type instanceof \Psalm\Type\Union) {
                     return $param;
                 }
@@ -384,8 +399,8 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
                 return $param->setType(TypeExpander::expandUnion(
                     $codebase,
                     $param->type,
-                    $modelClass, // `self`
-                    $modelClass, // `static` / `$this`
+                    $selfClass, // `self` → composing class (PHP trait `self` semantics)
+                    $modelClass, // `static` / `$this` → queried model (late static binding)
                     null, // `parent` — not meaningful for a scope parameter
                     evaluate_class_constants: true,
                     evaluate_conditional_types: false,
