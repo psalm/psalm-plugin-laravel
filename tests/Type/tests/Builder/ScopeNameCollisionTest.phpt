@@ -13,46 +13,43 @@ use Illuminate\Database\Eloquent\Builder;
  * colliding name falls into:
  *
  *   A. Real Eloquent\Builder methods (find, latest): __call never fires, so the like-named
- *      scope is unreachable dead code. The runtime value is whatever the real method returns.
- *        - find() returns Model|null  -> the plugin's Builder<M> here is WRONG (see the BUG note).
- *        - latest() returns the builder -> the plugin's Builder<M> coincidentally matches.
+ *      scope is unreachable dead code. The producer skips these names (it tests PHP's runtime
+ *      method_exists on the real class), so Psalm uses the real method's return type:
+ *        - find() returns TModel|null  -> CollidingScopeModel|null (the real signature; #1039).
+ *        - latest() returns $this      -> Builder<M>&static.
  *
  *   B. Names a scope may legitimately shadow via __call (count is passthru-only on
  *      Eloquent\Builder; whereActive is a dynamic where): __call DOES fire and hasNamedScope
  *      wins, so the scope runs and returns the builder at runtime. The plugin's Builder<M> is
- *      CORRECT — this is the classic count()/sum()/exists() scope-shadowing footgun.
+ *      CORRECT — this is the classic count()/sum()/exists() scope-shadowing footgun. The producer
+ *      keeps these scope-eligible (method_exists is false for them on the real Eloquent\Builder).
  *
  * CollidingScopeModel is a dedicated archetype (never a shared model) so these pathological
  * scope names cannot perturb the many suites that import Customer/Vehicle/etc.
  *
- * KNOWN BUG (find return type, pinned-as-limitation below, tracked in #1039):
- * BuilderScopeHandler::getMethodReturnType lacks the isRealBuilderMethod() guard that
- * getMethodParams() carries, so for a scope name that collides with a REAL Eloquent\Builder
- * method it overrides the real return type with Builder<M>.
- * Argument checking is unaffected (the params path keeps the guard and falls back to the real
- * method's signature), which test_find_argument_checking_uses_real_builder_signature pins. The
- * assertion is deliberately pinned to today's wrong output so a future refactor that extends the
- * guard to the return path flips this test to the correct Model|null. Note this is find-SPECIFIC:
- * count is passthru-only (bucket B), so its Builder<M> is correct, not a bug.
+ * Resolves #1039: the producer now skips scope handling for names that are real Eloquent\Builder
+ * methods, so a scope can no longer mask find()'s real TModel|null return. The distinction is
+ * made with PHP's runtime method_exists (not Psalm's), because the stub declares the $passthru
+ * aggregates (count, sum) on Eloquent\Builder for typing while Laravel routes them through __call.
  */
 
 /**
- * BUG (pinned-as-limitation): find() is a real Eloquent\Builder method, so at runtime the scope
- * is dead code and CollidingScopeModel::query()->find(1) returns CollidingScopeModel|null. The
- * plugin currently infers Builder<CollidingScopeModel> because the return-type path lacks the
- * isRealBuilderMethod() guard. Pinned to the wrong output as a tripwire — see the file docblock.
+ * find() is a real Eloquent\Builder method, so at runtime the like-named scope is dead code and
+ * CollidingScopeModel::query()->find(1) returns CollidingScopeModel|null. The producer skips
+ * scope handling for real Eloquent\Builder methods, so Psalm uses the real find() signature
+ * instead of masking it with Builder<M> (resolves #1039).
  */
-function test_find_real_eloquent_method_return_type_is_shadowed(): void
+function test_find_real_eloquent_method_return_type_is_not_shadowed(): void
 {
     $_result = CollidingScopeModel::query()->find(1);
-    /** @psalm-check-type-exact $_result = Builder<CollidingScopeModel> */
+    /** @psalm-check-type-exact $_result = CollidingScopeModel|null */
 }
 
 /**
  * Argument checking for find() uses the REAL Builder::find signature ($id, $columns), not the
- * colliding scope's params — proof the params path keeps the isRealBuilderMethod guard even
- * though the return path does not. Both the surplus third argument and the wrong column type
- * are reported against the real method.
+ * colliding scope's params. The producer skips find (a real public Eloquent\Builder method), so
+ * no scope params are handed off and Psalm checks arguments against the real method. Both the
+ * surplus third argument and the wrong column type are reported against it.
  */
 function test_find_argument_checking_uses_real_builder_signature(): void
 {
@@ -71,13 +68,13 @@ function test_count_passthru_aggregate_is_shadowed_by_scope(): void
 }
 
 /**
- * latest() is a real Eloquent\Builder method whose own return value IS the builder, so even
- * though the like-named scope is dead code the inferred Builder<M> matches runtime.
+ * latest() is a real Eloquent\Builder method (@return $this), so the producer skips the like-named
+ * scope and Psalm uses the real signature: Builder<M>&static. The dead scope never participates.
  */
 function test_latest_real_eloquent_method_returns_builder(): void
 {
     $_result = CollidingScopeModel::query()->latest('created_at');
-    /** @psalm-check-type-exact $_result = Builder<CollidingScopeModel> */
+    /** @psalm-check-type-exact $_result = Builder<CollidingScopeModel>&static */
 }
 
 /**
