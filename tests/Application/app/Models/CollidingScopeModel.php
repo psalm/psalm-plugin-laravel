@@ -67,4 +67,24 @@ final class CollidingScopeModel extends Model
     {
         return $query->where('active', true);
     }
+
+    /**
+     * Collides with Query\Builder::orderBy(), a Query\Builder-ONLY method (forwarded via __call).
+     *
+     * Laravel's Builder::__call checks hasNamedScope() BEFORE forwardCallTo($this->query, ...),
+     * so this scope wins at runtime — `Model::orderBy($priority)` dispatches here, not to
+     * Query\Builder::orderBy($column, $direction). The params provider must mirror that order:
+     * scope params (int $priority) must be checked before Query\Builder params (string $column).
+     *
+     * Distinct param type (int vs string) makes the precedence observable in type tests:
+     * passing an int is valid for the scope and invalid for Query\Builder::orderBy, and
+     * passing a string is invalid for the scope and valid for Query\Builder::orderBy.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeOrderBy($query, int $priority)
+    {
+        return $query->orderByRaw('priority = ?', [$priority]);
+    }
 }

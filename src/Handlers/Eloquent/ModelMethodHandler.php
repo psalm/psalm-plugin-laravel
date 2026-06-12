@@ -283,14 +283,13 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return $traitParams;
         }
 
-        // Query\Builder method — use its actual params
-        /** @var lowercase-string $methodName */
-        $queryBuilderMethodId = new MethodIdentifier(QueryBuilder::class, $methodName);
-        if ($codebase->methodExists($queryBuilderMethodId)) {
-            return self::getParamsWithVariadicFlag($codebase, $queryBuilderMethodId);
-        }
-
-        // Scope method — params from the scope definition minus the first $query param.
+        // Scope method — checked BEFORE Query\Builder forwarded methods because Laravel's
+        // Builder::__call tests hasNamedScope() before forwardCallTo($this->query, ...).
+        // A model scope whose name matches a Query\Builder-only method (e.g. scopeOrderBy)
+        // shadows that method at runtime, so the scope's params must win here too.
+        // isUnresolvedBuilderMethod() has already excluded real Eloquent\Builder methods
+        // (those are invoked directly by PHP, not via __call), so every scope reaching
+        // this point is a legitimate shadow of a Query\Builder-forwarded name.
         /** @var class-string<Model> $modelClass */
         $scopeParams = BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
         if ($scopeParams !== null) {
@@ -308,6 +307,13 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             }
 
             return $scopeParams;
+        }
+
+        // Query\Builder method — use its actual params
+        /** @var lowercase-string $methodName */
+        $queryBuilderMethodId = new MethodIdentifier(QueryBuilder::class, $methodName);
+        if ($codebase->methodExists($queryBuilderMethodId)) {
+            return self::getParamsWithVariadicFlag($codebase, $queryBuilderMethodId);
         }
 
         // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
