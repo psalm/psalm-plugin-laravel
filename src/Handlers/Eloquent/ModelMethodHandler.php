@@ -616,7 +616,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // only protection against infinite recursion would be the null-source guard above.
         // Using getStorage() makes the independence from the provider explicit.
         $declaringMethodId = $codebase->methods->getDeclaringMethodId($methodId);
-        if ($declaringMethodId === null) {
+        if (!$declaringMethodId instanceof \Psalm\Internal\MethodIdentifier) {
             return self::$globalScopeParamsCache[$modelClass] = null;
         }
 
