@@ -1,10 +1,8 @@
 --FILE--
 <?php declare(strict_types=1);
 
-namespace Tests\Psalm\LaravelPlugin\Sandbox;
-
+use App\Models\Tool;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
 
 /**
@@ -18,41 +16,28 @@ use Illuminate\Database\Eloquent\Scope;
  * The plugin fixes this by re-expanding the formal params of addGlobalScope via
  * TypeExpander::expandUnion with final: true, pinning Builder<static> to Builder<ModelClass>
  * on the expected side so both sides resolve to the same concrete type.
+ *
+ * Uses the autoloadable Tool archetype so the per-model handler is registered and the fix
+ * actually applies (inline sandbox models are skipped by ModelRegistrationHandler).
  */
-class AddGlobalScopeTestModel extends Model {}
 
 /**
- * The exact repro from issue #1038: self::addGlobalScope called from booted() with a bare
- * `Builder $query` closure param. This is the failure mode — booted() runs in a non-final
- * model's static context, which is where Psalm produces the ModelClass&static intersection.
- */
-class BootedGlobalScopeModel extends Model
-{
-    protected static function booted(): void
-    {
-        self::addGlobalScope(static function (Builder $query): void {
-            $query->where('active', true);
-        });
-    }
-}
-
-/**
- * External static call with bare Builder hint — same fix, different call context.
+ * Bare `Builder $query` hint — the canonical issue form. Must produce no error.
  */
 function test_bare_builder_param_passes(): void
 {
-    AddGlobalScopeTestModel::addGlobalScope(static function (Builder $query): void {
+    Tool::addGlobalScope(static function (Builder $query): void {
         $query->where('active', true);
     });
 }
 
 /**
- * Explicit Builder<AddGlobalScopeTestModel> hint — works today; must not regress.
+ * Explicit Builder<Tool> hint — works today; must not regress.
  */
 function test_explicit_concrete_param_passes(): void
 {
-    AddGlobalScopeTestModel::addGlobalScope(
-        /** @param Builder<AddGlobalScopeTestModel> $query */
+    Tool::addGlobalScope(
+        /** @param Builder<Tool> $query */
         static function (Builder $query): void {
             $query->where('active', true);
         },
@@ -64,7 +49,9 @@ function test_explicit_concrete_param_passes(): void
  */
 function test_wrong_param_type_errors(): void
 {
-    AddGlobalScopeTestModel::addGlobalScope(static function (string $query): void {});
+    Tool::addGlobalScope(static function (string $query): void {
+        echo $query;
+    });
 }
 
 /**
@@ -72,7 +59,7 @@ function test_wrong_param_type_errors(): void
  */
 function test_scope_instance_passes(Scope $scope): void
 {
-    AddGlobalScopeTestModel::addGlobalScope($scope);
+    Tool::addGlobalScope($scope);
 }
 
 /**
@@ -80,10 +67,10 @@ function test_scope_instance_passes(Scope $scope): void
  */
 function test_named_string_form_passes(): void
 {
-    AddGlobalScopeTestModel::addGlobalScope('active', static function (Builder $query): void {
+    Tool::addGlobalScope('active', static function (Builder $query): void {
         $query->where('active', true);
     });
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of %s::addGlobalScope expects %s, but impure-Closure(string):void provided
+InvalidArgument on line %d: Argument 1 of App\Models\Tool::addGlobalScope expects %s, but impure-Closure(string):void provided
