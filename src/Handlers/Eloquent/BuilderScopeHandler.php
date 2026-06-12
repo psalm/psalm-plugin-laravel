@@ -10,12 +10,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
-use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
 use Psalm\Context;
 use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -332,93 +331,125 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     }
 
     /**
-     * Detect a direct call to a scope's underlying method that passes the $query builder explicitly.
+     * Whether a bare-name scope call dispatches to the model's real method (direct) rather
+     * than routing through Laravel's magic __call / __callStatic forwarding.
      *
-     * Scope-param stripping ({@see getScopeParams}: declared params minus the leading $query)
-     * models Laravel's *forwarded* scope calls — Model::someScope() via __callStatic and
-     * $builder->someScope() via __call — where Laravel injects $query at runtime. A direct call
-     * to the real method ($this->someScope($query, ...) from a sibling #[Scope] method) bypasses
-     * that forwarding: PHP invokes the method with its real, unstripped signature. Applying the
-     * stripped params there shifts every argument one position left and emits a false
-     * InvalidArgument (issue #1034). Legacy scopeXxx() methods are immune — their direct calls
-     * use the `scope`-prefixed name, which the strip logic (keyed on the bare scope name)
-     * never matches.
+     * PHP reaches __call / __callStatic ONLY when the named method does not exist under that
+     * name OR is inaccessible from the calling scope; an existing, accessible method is
+     * invoked directly with its real signature. This classifier mirrors that dispatch rule
+     * instead of guessing the call form from argument shapes:
      *
-     * The params/return-type provider events expose no instance-vs-forwarded flag, so the call
-     * form is inferred from the arguments: a direct call supplies the full unstripped arity with
-     * a Builder as the first argument, while forwarded calls never pass the builder themselves.
-     * When the first argument's type cannot be resolved we assume a forwarded call, preserving
-     * the established stripped-signature behavior.
+     *   direct  ⇔  the model really declares <methodName> (the BARE name, not scopeXxx)
+     *              AND that method is accessible from the caller ($context->self)
      *
-     * @param list<\PhpParser\Node\Arg>|null $callArgs
-     * @param list<FunctionLikeParameter> $scopeParams scope's declared params minus the leading $query
+     * Why it matters: scope-param stripping ({@see getScopeParams}: declared params minus the
+     * leading $query) models the *forwarded* forms, where Laravel injects $query at runtime.
+     * A direct call invokes the real method with its full, unstripped signature, so the two
+     * {@see ModelMethodHandler} providers (params + return type) must consult this together
+     * and decline for direct calls — applying the stripped signature there shifts every
+     * argument one position left (false InvalidArgument) and fabricates a Builder<TModel>
+     * return over the method's real one (issue #1034).
+     *
+     * Consequences, each a Laravel runtime truth (verified in Model::__call / Builder::__call
+     * and Model::callNamedScope, identical across 12/13):
+     *   - Legacy scopeXxx (bare name absent): the bare call has no real target, so Laravel
+     *     always forwards → not direct, stripped signature applies.
+     *   - public #[Scope]: accessible everywhere → always direct (PHP never reaches __call).
+     *   - protected/private #[Scope], caller inside the class hierarchy: accessible → direct
+     *     (the issue #1034 sibling form $this->scope($query, ...), now argument-shape
+     *     independent: non-variable args, nullable ?Builder, clone $query, variadic scopes
+     *     all classify correctly without special-casing).
+     *   - protected/private #[Scope], caller outside the hierarchy: inaccessible → forwarded.
+     *
+     * No caller context (Psalm resolving a method's OWN declaration passes a null context):
+     * the call cannot be proven to forward, so a real declared method is treated as direct.
+     * Declining there keeps the method's real signature for its body analysis instead of
+     * leaking the stripped (query-less) params into the declaration — which otherwise drops
+     * $query and raises UndefinedVariable inside a child overriding a parent #[Scope].
+     *
+     * @param class-string<Model> $modelClass
      */
     public static function isDirectScopeCall(
         Codebase $codebase,
-        StatementsSource $source,
-        ?array $callArgs,
+        string $modelClass,
+        string $methodName,
         ?Context $context,
-        array $scopeParams,
     ): bool {
-        if ($callArgs === null || $callArgs === []) {
+        $methodId = new MethodIdentifier($modelClass, \strtolower($methodName));
+
+        // Bare name is not a real method (legacy scopeXxx, or nothing): Laravel forwards.
+        if (!$codebase->methodExists($methodId)) {
             return false;
         }
 
-        $firstArg = $callArgs[0];
-
-        // Spread/named arguments defeat positional reasoning — treat as forwarded.
-        if ($firstArg->unpack || $firstArg->name !== null) {
-            return false;
+        // Real method, but no caller scope to test accessibility against (declaration
+        // analysis): cannot prove forwarding → treat as direct so the real signature wins.
+        if (!$context instanceof Context) {
+            return true;
         }
 
-        // The params provider can fire before the call's argument nodes have a recorded
-        // type (verified: inside a registered model's own method body the node type is
-        // absent here), so fall back to the surrounding scope's variable types — this is
-        // the live path for the issue-#1034 shape `$this->scope($query, ...)`.
-        $argType = $source->getNodeTypeProvider()->getType($firstArg->value);
-        if (!$argType instanceof Union && $firstArg->value instanceof Variable && \is_string($firstArg->value->name)) {
-            $argType = $context?->vars_in_scope['$' . $firstArg->value->name] ?? null;
-        }
+        return self::isMethodAccessibleFrom($codebase, $methodId, $context->self);
+    }
 
-        if ($argType === null || !$argType->isSingle()) {
-            return false;
-        }
-
-        $atomic = $argType->getSingleAtomic();
-        if (!$atomic instanceof TNamedObject) {
-            return false;
-        }
+    /**
+     * Whether $methodId is accessible from $callerClass under PHP's visibility rules.
+     *
+     * Public is reachable everywhere; from outside any class scope ($callerClass === null,
+     * e.g. a free function) only public is reachable. Protected is reachable from anywhere in
+     * the declaring class's inheritance chain (the declaring class, its subclasses, and its
+     * ancestors). Private is reachable only from the exact declaring class. Mirroring PHP's
+     * own dispatch lets an inaccessible method be classified as __call-forwarded.
+     *
+     * Visibility is read from the *declaring* class's storage, so an inherited or overridden
+     * scope is judged where it is actually declared.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isMethodAccessibleFrom(
+        Codebase $codebase,
+        MethodIdentifier $methodId,
+        ?string $callerClass,
+    ): bool {
+        $declaringMethodId = $codebase->methods->getDeclaringMethodId($methodId) ?? $methodId;
 
         try {
-            $isBuilderArg = \strtolower($atomic->value) === \strtolower(Builder::class)
-                || ($codebase->classExists($atomic->value) && $codebase->classExtends($atomic->value, Builder::class));
-        } catch (UnpopulatedClasslikeException|\InvalidArgumentException) {
-            // classExists() doesn't guarantee populated storage, and classExtends() throws on
-            // unpopulated/aliased classes — unresolved first arg means "assume forwarded".
+            $visibility = $codebase->methods->getStorage($declaringMethodId)->visibility;
+        } catch (\UnexpectedValueException) {
+            // No storage to inspect — assume accessible (real signature is the safe default).
+            return true;
+        }
+
+        if ($visibility === ClassLikeAnalyzer::VISIBILITY_PUBLIC) {
+            return true;
+        }
+
+        if ($callerClass === null) {
             return false;
         }
 
-        if (!$isBuilderArg) {
+        $callerClassLower = \strtolower($callerClass);
+        $declaringClassLower = \strtolower($declaringMethodId->fq_class_name);
+
+        if ($callerClassLower === $declaringClassLower) {
+            return true;
+        }
+
+        if ($visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
             return false;
         }
 
-        // A Builder first argument is decisive — unless the scope's own first param (after
-        // $query) would also accept it on a forwarded call, e.g. someScope(Builder $query,
-        // Builder $other) called as Model::someScope($otherBuilder), or an untyped/mixed
-        // param. Only that ambiguous case needs the arity tie-breaker: a direct call must
-        // satisfy the unstripped arity (the explicit $query plus every required scope param),
-        // while the forwarded form passes one argument less.
-        $firstScopeParamType = isset($scopeParams[0]) ? $scopeParams[0]->type : null;
-        if ($firstScopeParamType === null || UnionTypeComparator::isContainedBy($codebase, $argType, $firstScopeParamType)) {
-            $requiredScopeParamsCount = \count(\array_filter(
-                $scopeParams,
-                static fn(FunctionLikeParameter $param): bool => !$param->is_optional,
-            ));
-
-            return \count($callArgs) >= 1 + $requiredScopeParamsCount;
+        // Protected: accessible from anywhere in the declaring class's inheritance chain —
+        // a subclass calling an inherited scope, or a parent dispatching to a child override.
+        try {
+            return $codebase->classExtends($callerClassLower, $declaringClassLower)
+                || $codebase->classExtends($declaringClassLower, $callerClassLower);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            // classExtends (called with from_api: true) throws InvalidArgumentException on
+            // missing/aliased storage and UnpopulatedClasslikeException — a sibling
+            // LogicException, NOT an InvalidArgumentException — when storage exists but isn't
+            // populated yet. Both mean we can't prove the chain → treat as not in it (forwarded).
+            return false;
         }
-
-        return true;
     }
 
     /**
@@ -569,6 +600,16 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
                 new MethodIdentifier($modelClass, \strtolower($methodName)),
             );
         } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return false;
+        }
+
+        // A private #[Scope] is never a usable scope on any supported Laravel (12-13). Laravel
+        // 13.8+ rejects it outright in Model::isScopeMethodWithAttribute (`! isPrivate() && ...`);
+        // on 12.4–13.7 it is broken anyway — callNamedScope dispatches the scope from the base
+        // Model's $this, where the subclass's private method is unreachable, so it routes back
+        // through __call and recurses. Either way it can't dispatch, so a legacy scopeXxx twin
+        // (resolved separately) wins, or it is nothing.
+        if ($methodStorage->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
             return false;
         }
 

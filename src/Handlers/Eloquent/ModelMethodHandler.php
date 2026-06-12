@@ -275,13 +275,16 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         /** @var class-string<Model> $modelClass */
         $scopeParams = BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
         if ($scopeParams !== null) {
-            // A direct instance call ($this->otherScope($query, ...)) invokes the real method,
-            // so its full declared signature — including the leading $query — applies. Only the
-            // magic-forwarded forms (Model::scope() via __callStatic, $builder->scope()) inject
-            // $query and need the stripped params. Detect the direct form by its explicit Builder
-            // first argument and decline, so Psalm checks against the real method signature
-            // instead of shifting every argument left by one. See issue #1034.
-            if (BuilderScopeHandler::isDirectScopeCall($codebase, $source, $event->getCallArgs(), $event->getContext(), $scopeParams)) {
+            // A direct call ($this->otherScope($query, ...) inside the model, or any call to an
+            // accessible real scope method) invokes the real method, so its full declared
+            // signature — including the leading $query — applies. Only the magic-forwarded forms
+            // (Model::scope() via __callStatic, $builder->scope()) inject $query and need the
+            // stripped params. The classifier decides from PHP dispatch semantics, not argument
+            // shapes, and declines for direct calls so Psalm checks the real signature instead of
+            // shifting every argument left by one. A null context (Psalm resolving this method's
+            // own declaration) also declines, keeping $query in scope for an overriding child.
+            // See issue #1034.
+            if (BuilderScopeHandler::isDirectScopeCall($codebase, $modelClass, $methodName, $event->getContext())) {
                 return null;
             }
 
@@ -346,10 +349,12 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         /** @var class-string<Model> $modelClass */
         $scopeParams = BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
         if ($scopeParams !== null) {
-            // Direct calls to the underlying method ($this->someScope($query, ...))
-            // return whatever the method declares (often void), not Builder<Model> —
-            // decline and let Psalm use the real declared return type (issue #1034).
-            if (BuilderScopeHandler::isDirectScopeCall($codebase, $source, $event->getCallArgs(), $event->getContext(), $scopeParams)) {
+            // Direct calls to the underlying method ($this->someScope($query, ...), or any call
+            // to an accessible real scope method) return whatever the method declares (often
+            // void), not Builder<Model> — decline and let Psalm use the real declared return
+            // type. The classifier shares the params provider's dispatch-truth verdict so the
+            // two decline together (issue #1034).
+            if (BuilderScopeHandler::isDirectScopeCall($codebase, $modelClass, $methodName, $event->getContext())) {
                 return null;
             }
 

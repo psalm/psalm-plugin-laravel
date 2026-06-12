@@ -35,11 +35,11 @@ final class DirectScopeModel extends Model
     /**
      * The issue's exact shape: a sibling #[Scope] method called directly, passing $query.
      *
-     * Inside a registered model's own body the call's argument nodes have no recorded
-     * type yet when the params provider fires, so detection resolves $query through the
-     * Context::vars_in_scope fallback in BuilderScopeHandler::isDirectScopeCall().
-     * Note: no suite analyzes this method body today (test:app builds a fresh app without
-     * these fixtures; PHPT suites analyze only the snippet file), so this documents the
+     * hasAnyName is a real, accessible (public) method, so BuilderScopeHandler::isDirectScopeCall
+     * classifies this as a direct call from PHP dispatch alone — independent of argument shapes —
+     * and the params/return providers decline, leaving the real (Builder $query, list<string>)
+     * signature. Note: no suite analyzes this method body today (test:app builds a fresh app
+     * without these fixtures; PHPT suites analyze only the snippet file), so this documents the
      * pattern; it was verified against the issue's reproduction.
      *
      * @param  Builder<self>  $query
