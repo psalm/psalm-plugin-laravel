@@ -85,11 +85,15 @@ function test_static_model_call_custom_builder(): void
 
 /* -- Relation chain ($model->relation()->scope()) ------------------------------------------ */
 
-/** Positive: trait-hosted #[Scope] resolves on a HasMany relation query. */
+/**
+ * Positive: trait-hosted #[Scope] resolves on a HasMany relation query. The relation
+ * type is preserved (Relation::forwardDecoratedCallTo returns the relation for
+ * builder-returning forwards), matching runtime chaining semantics.
+ */
 function test_relation_chain(Customer $customer): void
 {
     $_result = $customer->vehicles()->active();
-    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\Vehicle> */
+    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer> */
 }
 
 /* -- #[Scope] with self param: self-pin applies the same as for legacy scopes -------------- */
