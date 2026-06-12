@@ -610,12 +610,23 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return self::$globalScopeParamsCache[$modelClass] = null;
         }
 
+        // Fetch raw params from the declaring method storage directly, bypassing the
+        // params provider. Going through getMethodParams() would re-enter this provider
+        // (Methods::getMethodParams consults it before falling through to storage); the
+        // only protection against infinite recursion would be the null-source guard above.
+        // Using getStorage() makes the independence from the provider explicit.
+        $declaringMethodId = $codebase->methods->getDeclaringMethodId($methodId);
+        if ($declaringMethodId === null) {
+            return self::$globalScopeParamsCache[$modelClass] = null;
+        }
+
         return self::$globalScopeParamsCache[$modelClass] = \array_map(
             static function (FunctionLikeParameter $param) use ($codebase, $modelClass): FunctionLikeParameter {
                 if (!$param->type instanceof Union) {
                     return $param;
                 }
 
+                // setType() clones — never mutates the shared method storage params.
                 return $param->setType(TypeExpander::expandUnion(
                     $codebase,
                     $param->type,
@@ -632,7 +643,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
                     final: true,
                 ));
             },
-            $codebase->methods->getMethodParams($methodId),
+            $codebase->methods->getStorage($declaringMethodId)->params,
         );
     }
 
