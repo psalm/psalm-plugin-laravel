@@ -7,7 +7,6 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use Psalm\Codebase;
@@ -43,33 +42,32 @@ use Psalm\Type\Union;
  */
 final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
-    /** @var array<string, bool> */
-    private static array $scopeCache = [];
-
     /**
      * Cache for isTraitBuilderMethod results.
      *
-     * Separate from $scopeCache to keep concerns distinct.
+     * Separate from {@see $scopeParamsCache} to keep concerns distinct.
      *
      * @var array<string, bool>
      */
     private static array $traitBuilderCache = [];
 
     /**
-     * Scope params hand-off: lowercase scope name -> params (minus the leading $query).
+     * Scope hand-off: lowercase scope name -> the model FQCN whose scope was resolved.
      *
      * Populated by the return type provider when it resolves an instance scope call
      * (Customer::query()->active()); consumed by {@see getMethodParams} when Psalm
-     * immediately follows up with checkMethodArgs for the same call. Keyed by method
-     * name only: the producer always runs right before the consumer within one
-     * analysis thread, so the latest entry matches the call being checked even when
-     * two models declare a scope with the same name. Entries persist across files,
-     * so the consumer rejects names that are real Builder methods (see
-     * {@see isRealBuilderMethod}) to avoid shadowing genuine calls analyzed later.
+     * immediately follows up with checkMethodArgs for the same call. Keyed by method name
+     * only: the producer always runs right before the consumer within one analysis thread
+     * (MissingMethodCallHandler -> checkMethodArgs is the lone follow-up), so the latest
+     * entry matches the call being checked even when two models declare a scope with the
+     * same name. The consumer {@see \unset()}s the entry immediately after reading it, so a
+     * stale entry can never shadow a later call — which is why this stores the model class
+     * and re-resolves params through the memoized {@see getScopeParams} rather than caching
+     * a param list (mirrors {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler}).
      *
-     * @var array<lowercase-string, list<FunctionLikeParameter>>
+     * @var array<lowercase-string, class-string<Model>>
      */
-    private static array $pendingScopeParams = [];
+    private static array $pendingScopeModel = [];
 
     /**
      * Memoization for {@see getScopeParams}: 'Model::method' -> params or null (not a scope).
@@ -108,6 +106,24 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     {
         // array_merge would re-index; += preserves keys and keeps the first registration.
         self::$baseBuilderTraitMethods += $methods;
+    }
+
+    /**
+     * Reset all mutable per-process state. Called once per Plugin::__construct so a re-bootstrap
+     * (a config flip across analysis runs, or a test fixture re-booting the plugin) starts from a
+     * clean slate instead of inheriting the previous run's caches and registrations.
+     *
+     * $pendingScopeModel in particular is a short-lived producer->consumer hand-off; clearing it
+     * here guarantees no entry survives into a fresh run even if a producer write went unconsumed.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function init(): void
+    {
+        self::$pendingScopeModel = [];
+        self::$scopeParamsCache = [];
+        self::$traitBuilderCache = [];
+        self::$baseBuilderTraitMethods = [];
     }
 
     /**
@@ -162,17 +178,31 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             ]),
         ]);
 
-        // A non-null result implies the model declares the scope (detection is strict,
-        // see getScopeParams). On failure to resolve we decline entirely — falling back
-        // to mixed is honest, while returning a type with a fabricated zero-param
+        // A non-null getScopeParams() implies the model declares the scope (detection is
+        // strict, see getScopeParams). On failure to resolve we decline entirely — falling
+        // back to mixed is honest, while returning a type with a fabricated zero-param
         // signature would emit TooManyArguments on every scope call with args.
-        $scopeParams = self::getScopeParams($codebase, $modelClass, $methodName);
-        if ($scopeParams !== null) {
-            // Hand the scope's params (minus the leading $query) to the params
-            // provider: Psalm follows this return type with checkMethodArgs for
-            // Builder::<scope>, which has no real method storage and would otherwise
-            // throw UnexpectedValueException in Codebase\Methods::getMethodParams.
-            self::$pendingScopeParams[$methodName] = $scopeParams;
+        //
+        // EXCEPT when the bare name is a real Eloquent\Builder method (find, latest): Psalm
+        // resolves those natively and Laravel's Builder::__call never fires for a declared
+        // name, so a like-named scope cannot shadow it at runtime. Returning the scope's
+        // Builder<TModel> here would wrongly mask the real return type (find -> TModel|null;
+        // issue #1039). Names that route through __call STAY scope-eligible: __call checks
+        // hasNamedScope before the $passthru aggregate forward (count, sum, exists) and before
+        // forwarding to Query\Builder, so the scope legitimately wins there (the classic
+        // scopeCount() footgun).
+        //
+        // (isRealPublicBuilderMethod classifies via PHP reflection, not Psalm storage — see its
+        // docblock for why the stub's $passthru aggregates force that distinction.)
+        if (
+            self::getScopeParams($codebase, $modelClass, $methodName) !== null
+            && !self::isRealPublicBuilderMethod($methodName)
+        ) {
+            // Hand the model to the params provider, consumed once (see $pendingScopeModel):
+            // Psalm follows this return type with checkMethodArgs for Builder::<scope>, which
+            // has no real method storage and would otherwise throw UnexpectedValueException in
+            // Codebase\Methods::getMethodParams.
+            self::$pendingScopeModel[$methodName] = $modelClass;
 
             return $builderReturn;
         }
@@ -199,7 +229,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * doesn't exist as a real method, getMethodParams would throw UnexpectedValueException
      * unless we intercept it here with the params from the trait's @method static annotation.
      *
-     * Covers instance scope calls via the {@see $pendingScopeParams} hand-off populated
+     * Covers instance scope calls via the {@see $pendingScopeModel} hand-off populated
      * by the return type provider, then $baseBuilderTraitMethods (e.g., SoftDeletes
      * methods) — mirroring the precedence in {@see getMethodReturnType} (scopes first).
      *
@@ -211,12 +241,52 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         /** @var lowercase-string $methodName */
         $methodName = $event->getMethodNameLowercase();
 
-        $scopeParams = self::$pendingScopeParams[$methodName] ?? null;
-        if ($scopeParams !== null && !self::isRealBuilderMethod($event, $methodName)) {
-            return $scopeParams;
+        // Instance scope hand-off (see $pendingScopeModel), consumed once: re-resolve the
+        // scope's params (minus the leading $query) through the memoized getScopeParams and
+        // unset the entry so a stale value can never shadow a later call. No isRealBuilderMethod
+        // guard is needed: the producer already excluded real Eloquent\Builder methods, and
+        // consume-once prevents cross-call leaks.
+        $modelClass = self::$pendingScopeModel[$methodName] ?? null;
+        if ($modelClass !== null) {
+            unset(self::$pendingScopeModel[$methodName]);
+
+            $source = $event->getStatementsSource();
+            if ($source instanceof StatementsSource) {
+                $scopeParams = self::getScopeParams($source->getCodebase(), $modelClass, $methodName);
+                if ($scopeParams !== null) {
+                    return $scopeParams;
+                }
+            }
         }
 
         return self::$baseBuilderTraitMethods[$methodName] ?? null;
+    }
+
+    /**
+     * Whether $methodName is a real PUBLIC method on the actual Eloquent\Builder class.
+     *
+     * Real public methods (find, latest, where, get, ...) are invoked directly by PHP, so
+     * Builder::__call never fires and a like-named scope is dead code — the producer skips them.
+     * The check uses runtime reflection on the loaded core Builder class rather than Psalm storage,
+     * because the stub declares the $passthru aggregates (count, sum) on Eloquent\Builder for
+     * typing while Laravel routes them through __call; only PHP's view tells them apart. It runs
+     * gated behind a confirmed scope, so only the rare scope-vs-real-method collision pays for it.
+     *
+     * The PUBLIC gate matters: Builder's protected helpers (callScope, forwardCallTo) are reachable
+     * from outside only via __call, so a like-named scope could legitimately shadow them — they
+     * must stay scope-eligible, not be skipped.
+     */
+    private static function isRealPublicBuilderMethod(string $methodName): bool
+    {
+        if (!\method_exists(Builder::class, $methodName)) {
+            return false;
+        }
+
+        try {
+            return (new \ReflectionMethod(Builder::class, $methodName))->isPublic();
+        } catch (\ReflectionException) {
+            return false;
+        }
     }
 
     /**
@@ -237,6 +307,11 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      */
     public static function getScopeParams(Codebase $codebase, string $modelClass, string $methodName): ?array
     {
+        // Normalize once: Psalm lowercases method names before invoking providers, but external
+        // callers (ModelMethodHandler, MethodForwardingHandler) may pass any casing. Lowercasing
+        // here de-fragments the cache key and lets the MethodIdentifier constructor accept it.
+        $methodName = \strtolower($methodName);
+
         $key = $modelClass . '::' . $methodName;
         if (\array_key_exists($key, self::$scopeParamsCache)) {
             return self::$scopeParamsCache[$key];
@@ -245,12 +320,9 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         if ($codebase->methodExists($modelClass . '::' . $methodName)
             && self::hasScopeAttribute($codebase, $modelClass, $methodName)
         ) {
-            /** @var lowercase-string $methodName */
             $scopeMethodId = new MethodIdentifier($modelClass, $methodName);
         } elseif ($codebase->methodExists($modelClass . '::scope' . \ucfirst($methodName))) {
-            /** @var lowercase-string $legacyScopeLower */
-            $legacyScopeLower = 'scope' . $methodName;
-            $scopeMethodId = new MethodIdentifier($modelClass, $legacyScopeLower);
+            $scopeMethodId = new MethodIdentifier($modelClass, 'scope' . $methodName);
         } else {
             return self::$scopeParamsCache[$key] = null;
         }
@@ -453,28 +525,12 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     }
 
     /**
-     * Whether the Builder (or the mixed-in Query\Builder) declares the method for real.
-     *
-     * Guards the scope hand-off in {@see getMethodParams}: $pendingScopeParams entries
-     * persist across files, so a model's scopeLatest() must not shadow a genuine
-     * Builder::latest() call on an unrelated model analyzed later — real methods keep
-     * their own storage-backed params.
-     */
-    private static function isRealBuilderMethod(MethodParamsProviderEvent $event, string $methodName): bool
-    {
-        $source = $event->getStatementsSource();
-        if (!$source instanceof StatementsSource) {
-            return false;
-        }
-
-        $codebase = $source->getCodebase();
-
-        return $codebase->methodExists(Builder::class . '::' . $methodName)
-            || $codebase->methodExists(QueryBuilder::class . '::' . $methodName);
-    }
-
-    /**
      * Check if the model has a scope for the given method name.
+     *
+     * Boolean-equivalent to {@see getScopeParams()} !== null — both detect a #[Scope]-attributed
+     * method (visibility-gated) or a legacy scopeXxx() twin — so this delegates instead of
+     * duplicating the detection and its cache. getScopeParams returns null cheaply for a
+     * non-scope (no param expansion) and memoizes the verdict.
      *
      * Public so ModelMethodHandler can reuse this for method existence checks
      * on static Model calls (e.g., User::active() → scopeActive).
@@ -483,30 +539,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      */
     public static function hasScopeMethod(Codebase $codebase, string $modelClass, string $methodName): bool
     {
-        $key = $modelClass . '::' . $methodName;
-
-        if (\array_key_exists($key, self::$scopeCache)) {
-            return self::$scopeCache[$key];
-        }
-
-        // Check legacy scope prefix: scopeActive → active
-        $legacyScopeMethod = $modelClass . '::scope' . \ucfirst($methodName);
-        if ($codebase->methodExists($legacyScopeMethod)) {
-            self::$scopeCache[$key] = true;
-            return true;
-        }
-
-        // Check #[Scope] attribute via Psalm's storage instead of runtime Reflection.
-        // This avoids loading the model class into PHP's runtime and constructing
-        // ReflectionMethod objects for every non-scope method on the model.
-        $directMethod = $modelClass . '::' . $methodName;
-        if ($codebase->methodExists($directMethod) && self::hasScopeAttribute($codebase, $modelClass, $methodName)) {
-            self::$scopeCache[$key] = true;
-            return true;
-        }
-
-        self::$scopeCache[$key] = false;
-        return false;
+        return self::getScopeParams($codebase, $modelClass, $methodName) !== null;
     }
 
     /**
@@ -563,6 +596,16 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * specifically when Psalm routes unknown method calls through MissingMethodCallHandler,
      * which invokes return type providers without forwarding the LHS object's type params.
      *
+     * A single Builder generic in the LHS is unambiguous. When the LHS is a union of 2+ Builder
+     * generics with DIFFERENT template params (e.g. `Builder<A>|Builder<B>` from a ternary),
+     * this declines to null: Psalm dispatches the method per-atomic, but the provider event only
+     * exposes the whole union, so picking one atomic would silently drop the others and check
+     * arguments against the wrong model. Declining yields honest mixed instead of a wrong type.
+     *
+     * TODO(upstream): MethodReturnTypeProviderEvent / MethodParamsProviderEvent expose no
+     * per-atomic context, which forces this union case to mixed. Worth filing a vimeo/psalm
+     * feature request so the provider can answer per dispatched atomic.
+     *
      * @return non-empty-list<Union>|null
      */
     private static function extractTemplateParamsFromCallStmt(
@@ -578,13 +621,36 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             return null;
         }
 
+        $firstParams = null;
+        $firstId = null;
         foreach ($lhsType->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TGenericObject && \strtolower($atomic->value) === \strtolower(Builder::class)) {
-                return $atomic->type_params;
+            if (!$atomic instanceof TGenericObject || \strtolower($atomic->value) !== \strtolower(Builder::class)) {
+                continue;
+            }
+
+            $id = self::templateParamsId($atomic->type_params);
+            if ($firstParams === null) {
+                $firstParams = $atomic->type_params;
+                $firstId = $id;
+            } elseif ($id !== $firstId) {
+                // 2+ distinct Builder generics in the union → can't resolve one honestly.
+                return null;
             }
         }
 
-        return null;
+        return $firstParams;
+    }
+
+    /**
+     * Stable identity for a Builder atomic's template params, so identical generics
+     * (Builder<A>|Builder<A>) collapse while distinct ones (Builder<A>|Builder<B>) compare unequal.
+     *
+     * @param list<Union> $params
+     * @psalm-mutation-free
+     */
+    private static function templateParamsId(array $params): string
+    {
+        return \implode(',', \array_map(static fn(Union $param): string => $param->getId(), $params));
     }
 
     /**
