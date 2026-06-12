@@ -37,10 +37,10 @@ function test_legacy_builder_instance_with_builder_first_arg(): void
 }
 
 /**
- * Legacy scope whose post-$query param is OPTIONAL (defaulted). The old heuristic's arity
- * tie-breaker (required-count 0) made a single Builder argument satisfy "direct" and produced
- * the false UndefinedMagicMethod; dispatch truth still forwards, so the Builder is checked
- * against the stripped `string $status`.
+ * Legacy scope whose post-$query param is OPTIONAL (defaulted). The old heuristic mis-classified
+ * this as a direct call (no required post-$query params), producing a false UndefinedMagicMethod.
+ * Dispatch truth still forwards — no bare-name method exists — so the Builder is checked against
+ * the stripped `string $status`.
  */
 function test_legacy_optional_param_with_builder_first_arg(): void
 {
