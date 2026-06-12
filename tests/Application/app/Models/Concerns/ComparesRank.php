@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Concerns;
 
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -19,10 +20,9 @@ use Illuminate\Database\Eloquent\Builder;
  * `self` to the model at scan time; only trait-declared scopes keep `self`/`static`
  * unresolved until argument-check time, which is why this archetype lives in a trait.
  *
- * Only the legacy `scopeXxx()` form is covered: trait-hosted `#[Scope]`-attributed scopes
- * are not detected on builder instances at all (a separate pre-existing gap — they surface
- * as UndefinedMagicMethod on a custom builder and as an unchecked call on the base builder),
- * so a `#[Scope]` scope here would not reach the self/static expansion under test.
+ * Both the legacy `scopeXxx()` form and the `#[Scope]`-attributed form are covered.
+ * The `#[Scope]` variant (`outranks`) verifies that declaring-class resolution correctly
+ * finds trait-hosted attributed scopes and that `self`-pinning applies equally to both forms.
  *
  * @psalm-require-extends \Illuminate\Database\Eloquent\Model
  */
@@ -66,5 +66,23 @@ trait ComparesRank
     public function scopeRankedAmong(Builder $query, array $models): void
     {
         $query->whereKeyNot(\array_map(static fn(self $model) => $model->getKey(), $models));
+    }
+
+    /**
+     * `#[Scope]`-attributed variant with a `self`-typed non-query parameter.
+     *
+     * Mirrors `scopeRankedAbove` for the attributed form, verifying that:
+     * 1. Declaring-class resolution finds the `#[Scope]` attribute on the TRAIT's
+     *    MethodStorage rather than the composing class's stub (issue #1046).
+     * 2. `self`-pinning (issue #1043) works the same way for attributed scopes as
+     *    for legacy ones: `self` binds to the composing class, so a sibling child
+     *    of that class is a valid argument.
+     *
+     * @param Builder<self> $query
+     */
+    #[Scope]
+    protected function outranks(Builder $query, self $model): void
+    {
+        $query->whereKey($model->getKey());
     }
 }

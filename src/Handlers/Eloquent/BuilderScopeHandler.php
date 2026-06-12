@@ -671,15 +671,21 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     /**
      * Check for #[Scope] attribute using Psalm's method storage rather than runtime Reflection.
      *
+     * Psalm stores attribute metadata on the *declaring* class's MethodStorage — the trait or
+     * parent that defines the method — not on the using/inheriting class. Resolving through
+     * getDeclaringMethodId first ensures that a #[Scope] attribute on a trait-declared method
+     * is found, even though the composing model's storage entry does not duplicate the attributes.
+     *
      * @param class-string<Model> $modelClass
      * @psalm-mutation-free
      */
     private static function hasScopeAttribute(Codebase $codebase, string $modelClass, string $methodName): bool
     {
+        $methodId = new MethodIdentifier($modelClass, \strtolower($methodName));
+        $declaringMethodId = $codebase->methods->getDeclaringMethodId($methodId) ?? $methodId;
+
         try {
-            $methodStorage = $codebase->methods->getStorage(
-                new MethodIdentifier($modelClass, \strtolower($methodName)),
-            );
+            $methodStorage = $codebase->methods->getStorage($declaringMethodId);
         } catch (\InvalidArgumentException|\UnexpectedValueException) {
             return false;
         }
