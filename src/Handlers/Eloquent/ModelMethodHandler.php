@@ -12,6 +12,7 @@ use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Util\DynamicWhereResolver;
 use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
@@ -79,6 +80,14 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
     private static array $customBuilderMap = [];
 
     /**
+     * Memoized result of {@see expandedGlobalScopeParams} keyed by model FQCN.
+     * Cleared by {@see init} on plugin re-bootstrap.
+     *
+     * @var array<string, list<FunctionLikeParameter>|null>
+     */
+    private static array $globalScopeParamsCache = [];
+
+    /**
      * Reset per-process caches. Called once per Plugin::__construct so a re-bootstrap
      * doesn't carry stale verdicts across analysis runs. In particular, the
      * dynamic-where branch of {@see isUnresolvedBuilderMethod} depends on the
@@ -91,6 +100,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
     {
         self::$unresolvedCache = [];
         self::$customBuilderMap = [];
+        self::$globalScopeParamsCache = [];
     }
 
     /**
@@ -243,6 +253,15 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         $codebase = $source->getCodebase();
         $modelClass = $event->getFqClasslikeName();
         $methodName = $event->getMethodNameLowercase();
+
+        // addGlobalScope: re-expand formal params with final: true so Builder<static> resolves
+        // to Builder<ModelClass> without the &static intersection Psalm adds for non-final classes.
+        // The intersection causes false InvalidArgument when a closure uses a bare `Builder $query`
+        // hint, because template inference gives Builder<static> on the provided side while the
+        // expected side carries Builder<User&static> — unification fails (issue #1038).
+        if ($methodName === 'addglobalscope') {
+            return self::expandedGlobalScopeParams($codebase, $modelClass);
+        }
 
         if (!self::isUnresolvedBuilderMethod($codebase, $modelClass, $methodName)) {
             return null;
@@ -566,6 +585,66 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         return null;
+    }
+
+    /**
+     * Return the formal params of Model::addGlobalScope with `static` pinned to the concrete
+     * model class via TypeExpander::expandUnion final: true.
+     *
+     * Laravel's docblock uses Builder<static> in the Closure param position. Psalm expands
+     * `static` to `ModelClass&static` for non-final classes, while the user's bare
+     * `Builder $query` hint gets Builder<static> via template inference — the `&static`
+     * intersection on the expected side causes the unification to fail (issue #1038).
+     * Pinning with final: true resolves to the plain model class on both sides.
+     *
+     * @return list<FunctionLikeParameter>|null
+     */
+    private static function expandedGlobalScopeParams(Codebase $codebase, string $modelClass): ?array
+    {
+        if (\array_key_exists($modelClass, self::$globalScopeParamsCache)) {
+            return self::$globalScopeParamsCache[$modelClass];
+        }
+
+        $methodId = new MethodIdentifier($modelClass, 'addglobalscope');
+        if (!$codebase->methodExists($methodId)) {
+            return self::$globalScopeParamsCache[$modelClass] = null;
+        }
+
+        // Fetch raw params from the declaring method storage directly, bypassing the
+        // params provider. Going through getMethodParams() would re-enter this provider
+        // (Methods::getMethodParams consults it before falling through to storage); the
+        // only protection against infinite recursion would be the null-source guard above.
+        // Using getStorage() makes the independence from the provider explicit.
+        $declaringMethodId = $codebase->methods->getDeclaringMethodId($methodId);
+        if (!$declaringMethodId instanceof \Psalm\Internal\MethodIdentifier) {
+            return self::$globalScopeParamsCache[$modelClass] = null;
+        }
+
+        return self::$globalScopeParamsCache[$modelClass] = \array_map(
+            static function (FunctionLikeParameter $param) use ($codebase, $modelClass): FunctionLikeParameter {
+                if (!$param->type instanceof Union) {
+                    return $param;
+                }
+
+                // setType() clones — never mutates the shared method storage params.
+                return $param->setType(TypeExpander::expandUnion(
+                    $codebase,
+                    $param->type,
+                    $modelClass,
+                    $modelClass,
+                    null,
+                    evaluate_class_constants: true,
+                    evaluate_conditional_types: false,
+                    // Resolves `static` to the plain model class instead of
+                    // the ModelClass&static intersection. In a closure param
+                    // (accept/contravariant position) the intersection over-rejects
+                    // because the provided Builder<static> cannot be proven to
+                    // contain Builder<ModelClass&static>. final: true prevents that.
+                    final: true,
+                ));
+            },
+            $codebase->methods->getStorage($declaringMethodId)->params,
+        );
     }
 
     /**
