@@ -490,7 +490,6 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * Visibility is read from the *declaring* class's storage, so an inherited or overridden
      * scope is judged where it is actually declared.
      *
-     * @psalm-mutation-free
      */
     private static function isMethodAccessibleFrom(
         Codebase $codebase,
