@@ -1,0 +1,53 @@
+<?php
+
+namespace Laravel\Ai\Prompts;
+
+use Illuminate\Support\Collection;
+use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\Providers\TextProvider;
+
+/**
+ * Underlying value object every Agent::prompt()/stream() call constructs.
+ * Catches the rare codepath where user code builds an AgentPrompt directly
+ * and hands it to a TextProvider, bypassing the Promptable trait sinks.
+ *
+ * Stub re-declares `extends Prompt` so the relationship survives the override.
+ */
+class AgentPrompt extends Prompt
+{
+    public readonly Agent $agent;
+
+    public readonly Collection $attachments;
+
+    public readonly ?int $timeout;
+
+    public readonly ?string $invocationId;
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function __construct(
+        Agent $agent,
+        string $prompt,
+        Collection|array $attachments,
+        TextProvider $provider,
+        string $model,
+        ?int $timeout = null,
+        ?string $invocationId = null,
+    ) {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function prepend(string $prompt): AgentPrompt {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function append(string $prompt): AgentPrompt {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function revise(string $prompt, Collection|array|null $attachments = null): AgentPrompt {}
+}

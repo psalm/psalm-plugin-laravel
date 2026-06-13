@@ -1,0 +1,27 @@
+<?php
+
+namespace Laravel\Ai\Files;
+
+/**
+ * Same redeclaration concern as `Document` — full factory set re-stated here
+ * so adding a taint sink on `fromBase64()` does not strip `fromPath()`,
+ * `fromUrl()`, `fromStorage()`, `fromUpload()`, and `fromId()` from the
+ * abstract.
+ */
+abstract class Image extends File
+{
+    /**
+     * @psalm-taint-sink llm_prompt $base64
+     */
+    public static function fromBase64(string $base64, ?string $mimeType = null): Base64Image {}
+
+    public static function fromId(string $id): ProviderImage {}
+
+    public static function fromPath(string $path, ?string $mimeType = null): LocalImage {}
+
+    public static function fromUrl(string $url): RemoteImage {}
+
+    public static function fromStorage(string $path, ?string $disk = null): StoredImage {}
+
+    public static function fromUpload(\Illuminate\Http\UploadedFile $file, ?string $mimeType = null): Base64Image {}
+}

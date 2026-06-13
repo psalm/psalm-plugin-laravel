@@ -11,7 +11,7 @@ Laravel static analysis with built-in security scanning.
 <a href="https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml"><img src="https://github.com/psalm/psalm-plugin-laravel/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
 </p>
 The only free tool that combines deep Laravel type analysis with taint-based vulnerability detection.
-Catches SQL injection, XSS, SSRF, shell injection, file traversal, and open redirects, without running your code.
+Catches SQL injection, XSS, SSRF, shell injection, file traversal, open redirects, and LLM prompt injection (`laravel/ai` agents), without running your code.
 
 > [!NOTE]
 > Already using Larastan? psalm-laravel **complements** it with security analysis that PHPStan cannot provide.

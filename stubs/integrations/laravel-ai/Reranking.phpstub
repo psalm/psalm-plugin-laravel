@@ -1,0 +1,20 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Illuminate\Support\Collection;
+use Laravel\Ai\PendingResponses\PendingReranking;
+
+class Reranking
+{
+    /**
+     * Documents are fed to the reranking model alongside the query —
+     * an attacker-controlled document can hijack the reranker the same way it
+     * hijacks the main LLM.
+     *
+     * @param  Collection<int, string>|array<int, string>  $documents
+     *
+     * @psalm-taint-sink llm_prompt $documents
+     */
+    public static function of(Collection|array $documents): PendingReranking {}
+}
