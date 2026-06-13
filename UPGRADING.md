@@ -39,6 +39,16 @@ Project minimums: PHP `^8.2`, Laravel 11/12/13, Psalm 6.
 
 Full diff: https://github.com/psalm/psalm-plugin-laravel/compare/v2.11.1...v3.0.0
 
+## Clear the cache after upgrading
+
+After bumping the plugin version, clear Psalm's cache so analysis runs against the new stubs and handlers:
+
+```bash
+vendor/bin/psalm --clear-cache
+```
+
+A cache carried over from the previous plugin version can surface false positives (most visibly `UndefinedMagicMethod` on Eloquent scopes and relations), because the cached per file results still reflect the old type data. This matters most when tracking `dev-master` or a release candidate, where the plugin changes between runs. Clearing the cache resolves these stale findings.
+
 ## Stuck?
 
 Open an issue: https://github.com/psalm/psalm-plugin-laravel/issues
