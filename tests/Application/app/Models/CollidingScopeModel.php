@@ -84,7 +84,8 @@ final class CollidingScopeModel extends Model
      * calls (Model::query()->orderBy()) resolve through the Query\Builder mixin on Eloquent\Builder,
      * which rewrites the call to Query\Builder::orderBy before BuilderScopeHandler can be consulted,
      * so Query\Builder params win there. That is an upstream Psalm limitation, not fixable at the
-     * plugin level (see test_instance_call_limitation in ScopeVsQueryBuilderParamsTest).
+     * plugin level (see test_instance_call_limitation in ScopeVsQueryBuilderParamsTest, and
+     * https://github.com/vimeo/psalm/issues/11880).
      *
      * @param  Builder<self>  $query
      * @return Builder<self>
