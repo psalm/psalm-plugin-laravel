@@ -15,5 +15,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [MissingTranslation](MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
 - [ModelMakeDiscouraged](ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
 - [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed)
+- [PublicModelScope](PublicModelScope.md) — `public` `#[Scope]` Eloquent query scope, whose static call is a runtime fatal (reported at error levels 1 to 4)
+- [PublicModelAccessor](PublicModelAccessor.md) — `public` legacy `scopeXxx()` scope or legacy `getXxxAttribute()` / `setXxxAttribute()` accessor, a pure convention nit (reported at error level 1)
 
 Each issue page explains what it detects, why it matters, and how to fix it.

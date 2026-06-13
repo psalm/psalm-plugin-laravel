@@ -290,6 +290,12 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
         }
+
+        // Flag `public` Eloquent scopes / legacy accessors (Laravel's convention is `protected` — they
+        // are dispatched indirectly, never called by name). Enabled by default; silence per project via
+        // the issueHandlers config (PublicModelScope / PublicModelAccessor).
+        require_once __DIR__ . '/Handlers/Rules/PublicScopeAccessorVisibilityHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\PublicScopeAccessorVisibilityHandler::class);
     }
 
     /**
