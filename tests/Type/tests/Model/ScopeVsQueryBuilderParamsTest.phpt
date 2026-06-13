@@ -63,6 +63,10 @@ function test_aggregate_scope_unaffected(): void
  * expose no receiver to distinguish a colliding-scope model from a plain Builder. (Forcing
  * interception via an existence provider only reverses the return-type/params hook order and makes
  * Psalm throw on the absent Builder::orderBy storage.) Keep this test until upstream changes.
+ *
+ * Tracked upstream: https://github.com/vimeo/psalm/issues/11880 (@mixin-host method providers not
+ * consulted for mixin-forwarded methods, a beta19 regression). When it is fixed this test starts
+ * failing and must be converted to assert the correct output.
  */
 function test_instance_call_limitation(): void
 {
