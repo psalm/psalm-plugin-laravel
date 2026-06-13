@@ -64,20 +64,12 @@ final class SuppressScopeUnusedCodeTest extends TestCase
         // reported, proving the suppressor narrows to real scopes rather than silencing every
         // unused method on the model. assertCount(1) also guarantees nothing else leaks — including
         // the private `secret` scope, which Psalm never emits for a __call class anyway.
-        self::assertCount(
-            1,
-            $unusedMethodFindings,
-            "Expected exactly one unused-method finding (the non-scope control), got:\n{$joined}",
-        );
-        self::assertStringContainsString('TraitScopeModel::helperNonScope', $messages[0]);
+        $this->assertCount(1, $unusedMethodFindings, "Expected exactly one unused-method finding (the non-scope control), got:\n{$joined}");
+        $this->assertStringContainsString('TraitScopeModel::helperNonScope', $messages[0]);
 
         // Every dispatched scope/accessor must be suppressed rather than reported as unused.
         foreach (self::SUPPRESSED_SCOPE_MARKERS as $marker) {
-            self::assertStringNotContainsString(
-                $marker,
-                $joined,
-                "Scope/accessor method {$marker} must be suppressed, not reported as unused.",
-            );
+            $this->assertStringNotContainsString($marker, $joined, "Scope/accessor method {$marker} must be suppressed, not reported as unused.");
         }
     }
 
@@ -90,7 +82,7 @@ final class SuppressScopeUnusedCodeTest extends TestCase
         $fixtureDir = __DIR__ . '/Fixtures/SuppressScopeUnusedCode';
         $psalmBinary = $projectRoot . '/vendor/bin/psalm';
 
-        self::assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
+        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
             [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
@@ -103,10 +95,7 @@ final class SuppressScopeUnusedCodeTest extends TestCase
         $stdout = $process->getOutput();
         $decoded = \json_decode($stdout, true);
 
-        self::assertIsArray(
-            $decoded,
-            "Psalm did not return a JSON array.\nstdout:\n{$stdout}\nstderr:\n{$process->getErrorOutput()}",
-        );
+        $this->assertIsArray($decoded, "Psalm did not return a JSON array.\nstdout:\n{$stdout}\nstderr:\n{$process->getErrorOutput()}");
 
         $unusedMethodFindings = [];
         foreach ($decoded as $finding) {
