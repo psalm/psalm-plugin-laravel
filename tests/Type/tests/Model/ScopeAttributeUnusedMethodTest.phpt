@@ -47,3 +47,4 @@ final class ScopeAttributeModel extends Model
 new ScopeAttributeModel();
 ?>
 --EXPECT--
+PublicModelScope on line 34: Eloquent query scope publicPublished() should be protected, not public. Scopes are dispatched through the query builder and never called by name, so public only widens the model API (and a public #[Scope] called statically is a runtime fatal).
