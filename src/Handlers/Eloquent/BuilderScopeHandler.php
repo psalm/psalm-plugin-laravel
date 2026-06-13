@@ -32,11 +32,17 @@ use Psalm\Type\Union;
  * When a method call on Builder doesn't match a real method, checks the model for:
  * 1. Legacy scopeXxx() methods (e.g., scopeActive → active())
  * 2. Methods with #[Scope] attribute (e.g., #[Scope] active() → active())
- * 3. Trait-declared builder methods (e.g., SoftDeletes::withTrashed → withTrashed())
+ * 3. Docblock-only scopes documented as a class-level `@method scopeXxx()` tag — no concrete
+ *    scopeXxx() body and no #[Scope] method. Resolved from the model's pseudo_static_methods/
+ *    pseudo_methods, after 1 and 2, by trusting the tag (Larastan parity; note the tag is NOT
+ *    runtime-dispatchable on its own). See #1054 and resolvePseudoScopeParams.
+ * 4. Trait-declared builder methods (e.g., SoftDeletes::withTrashed → withTrashed())
  *    These are registered as Builder macros at runtime via global scopes
  *    (e.g., SoftDeletingScope::extend), and declared via @method static returning
  *    Builder<static> on the model trait.
- * 4. @method PHPDoc scopes are handled natively by Psalm
+ * 5. Public-form `@method published()` scopes (the bare call name documented directly, not the
+ *    scope-prefixed form) are handled natively by Psalm — the call name matches the tag, so no
+ *    scope-prefix lookup or $query stripping applies.
  *
  * @internal
  */
@@ -295,10 +301,11 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * such scope.
      *
      * Dispatch mirrors Laravel's Model::callNamedScope: a #[Scope]-attributed
-     * method wins over a legacy scopeXxx() method of the same name. Detection is
-     * strict (bare methods require the attribute), so a non-null return implies
-     * the method is a real scope — callers don't need a separate hasScopeMethod()
-     * guard.
+     * method wins over a legacy scopeXxx() method of the same name. When the model
+     * has NEITHER, a class-level `@method scopeXxx()` PHPDoc tag is consulted as a
+     * final fallback (trusting the tag; see resolvePseudoScopeParams). Detection is
+     * strict (bare methods require the attribute), so a non-null return implies the
+     * method is a scope — callers don't need a separate hasScopeMethod() guard.
      *
      * Memoized: deterministic per model+method once the codebase is populated.
      *
@@ -324,7 +331,13 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         } elseif ($codebase->methodExists($modelClass . '::scope' . \ucfirst($methodName))) {
             $scopeMethodId = new MethodIdentifier($modelClass, 'scope' . $methodName);
         } else {
-            return self::$scopeParamsCache[$key] = null;
+            // Final fallback: a scope documented only as a class-level `@method scopeXxx()` tag,
+            // with no concrete scopeXxx() body and no #[Scope] method (see resolvePseudoScopeParams).
+            return self::$scopeParamsCache[$key] = self::resolvePseudoScopeParams(
+                $codebase,
+                $modelClass,
+                $methodName,
+            );
         }
 
         // Methods::getMethodParams resolves the declaring class internally, so scopes
@@ -345,6 +358,71 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             $modelClass,
             $callerParams,
         );
+    }
+
+    /**
+     * Resolve scope params from a class-level `@method scopeXxx()` pseudo-method — the final
+     * fallback when the model has NEITHER a concrete scopeXxx() body NOR a #[Scope] method.
+     *
+     * This trusts the `@method`-declared scopeXxx tag the way Psalm/PHPStan trust any `@method`, and
+     * mirrors Larastan's BuilderHelper (which shifts the first @method-scope param the same way):
+     * take the declared params, drop the leading $query a real scope receives, and let
+     * {@see getMethodReturnType} fabricate the Builder<TModel> return (the tag's own return type is
+     * ignored, exactly as a real scope's often-void return is). The plugin does NOT verify that a
+     * dispatchable scope actually exists. A `@method scopeXxx()` with no backing real scopeXxx()
+     * method or #[Scope] anywhere is NOT callable at runtime — Model::hasNamedScope() is
+     * method_exists-gated, so the bare `xxx()` call throws BadMethodCallException. That is the
+     * deliberate trade-off of supporting these tags (issue #1054, Larastan parity): the tag is a
+     * developer assertion that a scope exists, and a wrong assertion types runtime-fatal code as
+     * valid — the same caveat as any incorrect `@method`.
+     *
+     * Reads the model's LOCAL pseudo_static_methods / pseudo_methods. Psalm's Populator flattens
+     * BOTH trait-declared (populateDataFromTrait) AND (abstract-)parent-declared
+     * (populateDataFromParentClass) `@method` tags into a class's local maps whenever the class has
+     * no real same-named method, so a scope documented on a `use`d trait — the package/trait case
+     * the issue describes — or on a parent model resolves here too, not only tags written directly
+     * on the model.
+     *
+     * `self`/`static`/`$this` in such a param resolve to the queried model ($modelClass). That is
+     * correct for a tag written directly on the model and for one merged from a `use`d trait (PHP
+     * trait `self` is the using class — the model). It over-narrows for a `self`-typed param on a
+     * tag INHERITED from a parent: `self` there should be the declaring parent, so a sibling-typed
+     * argument is wrongly rejected. We cannot fix it cheaply — Psalm records no declaring class for
+     * a STATIC pseudo-method (declaring_pseudo_method_ids is instance-only, ClassLikeNodeScanner),
+     * and the real-scope path's getAppearingMethodId has no pseudo equivalent. Accepted as a niche
+     * limitation (issue #1054); the common direct/trait forms are exact. {@see expandScopeParamSelfReferences}.
+     *
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodName
+     * @return list<FunctionLikeParameter>|null
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/1054
+     */
+    private static function resolvePseudoScopeParams(
+        Codebase $codebase,
+        string $modelClass,
+        string $methodName,
+    ): ?array {
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($modelClass));
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
+
+        // Psalm lowercases pseudo-method keys. A scope is conventionally `@method static`, but
+        // accept the instance form too — both are valid ways to document a scope.
+        $pseudoName = 'scope' . $methodName;
+        $pseudoMethod = $storage->pseudo_static_methods[$pseudoName]
+            ?? $storage->pseudo_methods[$pseudoName]
+            ?? null;
+        if ($pseudoMethod === null) {
+            return null;
+        }
+
+        // Drop the leading $query a real scope receives (Laravel injects it at runtime); the caller
+        // passes the rest. array_slice on a zero-param tag is a no-op — `@method scopePublishedDoc()` yields [].
+        $callerParams = \array_slice($pseudoMethod->params, 1);
+
+        return self::expandScopeParamSelfReferences($codebase, $modelClass, $modelClass, $callerParams);
     }
 
     /**
@@ -543,9 +621,10 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * Check if the model has a scope for the given method name.
      *
      * Boolean-equivalent to {@see getScopeParams()} !== null — both detect a #[Scope]-attributed
-     * method (visibility-gated) or a legacy scopeXxx() twin — so this delegates instead of
-     * duplicating the detection and its cache. getScopeParams returns null cheaply for a
-     * non-scope (no param expansion) and memoizes the verdict.
+     * method (visibility-gated), a legacy scopeXxx() twin, or a docblock-only `@method scopeXxx()`
+     * pseudo-method (issue #1054) — so this delegates instead of duplicating the detection and its
+     * cache. getScopeParams returns null cheaply for a non-scope (no param expansion) and memoizes
+     * the verdict.
      *
      * Public so ModelMethodHandler can reuse this for method existence checks
      * on static Model calls (e.g., User::active() → scopeActive).
