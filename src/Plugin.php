@@ -200,6 +200,12 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
+        // FormRequest magic-property narrowing (#1016): `$this->email`, `$user->email`.
+        // Property providers are registered per-subclass at AfterCodebasePopulated
+        // because Psalm's property lookup is exact-class.
+        require_once __DIR__ . '/Handlers/Validation/FormRequestPropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Validation/FormRequestPropertyRegistrationHandler.php';
+        $registration->registerHooksFromClass(Handlers\Validation\FormRequestPropertyRegistrationHandler::class);
         // Collector populates its cache via AfterExpressionAnalysisEvent on
         // $request->validate([...]) and evicts it via AfterFunctionLikeAnalysisEvent.
         // ValidationTaintHandler::removeTaints consults the cache during
