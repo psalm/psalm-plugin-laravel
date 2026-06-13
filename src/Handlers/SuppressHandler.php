@@ -307,7 +307,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
                 continue;
             }
 
-            self::suppressByParentClass($classStorage);
+            self::suppressByParentClass($classStorage, $provider);
             self::suppressByUsedTraits($classStorage);
             self::suppressByInterface($classStorage);
         }
@@ -354,8 +354,10 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         $storage->initialized_properties[$propertyName] = true;
     }
 
-    private static function suppressByParentClass(ClassLikeStorage $classStorage): void
-    {
+    private static function suppressByParentClass(
+        ClassLikeStorage $classStorage,
+        ClassLikeStorageProvider $provider,
+    ): void {
         $parents = $classStorage->parent_classes;
 
         if ($parents === []) {
@@ -399,9 +401,9 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         }
 
         if (\in_array('Illuminate\Database\Eloquent\Model', $parents, true)) {
-            self::suppressEloquentAccessorMethods($classStorage);
-            self::suppressEloquentScopeMethods($classStorage);
-            self::suppressLegacyEloquentScopeMethods($classStorage);
+            self::suppressEloquentAccessorMethods($classStorage, $provider);
+            self::suppressEloquentScopeMethods($classStorage, $provider);
+            self::suppressLegacyEloquentScopeMethods($classStorage, $provider);
         }
 
         if (\in_array('Illuminate\Notifications\Notification', $parents, true)) {
@@ -446,6 +448,68 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     }
 
     /**
+     * Yield, for every method that *appears* on $classStorage, the MethodStorage of the class that
+     * actually declares it — the model itself, a trait it composes, or a parent model.
+     *
+     * Eloquent hosts scopes and accessors on traits at least as often as on the model body, and
+     * Psalm never copies a trait method's MethodStorage into the using class's `$storage->methods`
+     * (Populator::inheritMethodsFromParent only wires up appearing_method_ids / declaring_method_ids,
+     * never `methods`). It also reads a method's `suppressed_issues` — during the unused-method check
+     * in ClassLikes::checkMethodReferences() — off the DECLARING class's storage, not the using
+     * model's. So iterating `$classStorage->methods` both misses trait-hosted scopes entirely and,
+     * even where a model-local override existed, would mutate the wrong object. Resolving to the
+     * declaring storage mirrors markFrameworkInitializedProperties() (declaring_property_ids) and
+     * BuilderScopeHandler::hasScopeAttribute() (#1046).
+     *
+     * Only methods whose appearing class is $classStorage itself are visited, matching
+     * checkMethodReferences() which flags an unused method on the class where it appears. A scope
+     * inherited from a parent model appears — and is checked, and gets suppressed — when that parent
+     * is iterated separately in afterCodebasePopulated(), so the parent path is covered there rather
+     * than double-handled here.
+     *
+     * Caveat: the resolved MethodStorage is shared with every other class composing the same trait,
+     * so suppressing here also silences the scope on a non-Model class that happens to use the trait.
+     * That is harmless — a genuine Eloquent scope trait is only ever composed by models, and Psalm
+     * reads the same shared storage for all composers.
+     *
+     * Mutation-free: this only reads the storage graph and yields existing MethodStorage instances.
+     * The suppression mutation happens in the callers (suppress*Methods), on the yielded objects.
+     *
+     * Scope: only the three Eloquent suppressors (accessor / #[Scope] / legacy scopeXxx) route
+     * through here, because trait-hosted scopes and accessors are idiomatic. The notification /
+     * mailable hook suppressors below intentionally keep their direct `$classStorage->methods`
+     * lookup — trait-hosted toMail()/envelope()/viaQueues() are rare enough not to warrant the
+     * declaring-storage resolution. Use this helper for any future trait-hostable suppressor.
+     *
+     * @return \Generator<lowercase-string, MethodStorage>
+     *
+     * @psalm-mutation-free
+     */
+    private static function appearingMethods(
+        ClassLikeStorage $classStorage,
+        ClassLikeStorageProvider $provider,
+    ): \Generator {
+        foreach ($classStorage->appearing_method_ids as $methodName => $appearingMethodId) {
+            if ($appearingMethodId->fq_class_name !== $classStorage->name) {
+                continue;
+            }
+
+            $declaringMethodId = $classStorage->declaring_method_ids[$methodName] ?? $appearingMethodId;
+
+            if (!$provider->has($declaringMethodId->fq_class_name)) {
+                continue;
+            }
+
+            $declaringMethodStorage
+                = $provider->get($declaringMethodId->fq_class_name)->methods[$declaringMethodId->method_name] ?? null;
+
+            if ($declaringMethodStorage instanceof MethodStorage) {
+                yield $methodName => $declaringMethodStorage;
+            }
+        }
+    }
+
+    /**
      * Suppress PossiblyUnusedMethod for legacy Eloquent accessor/mutator methods.
      *
      * Methods matching getXxxAttribute() and setXxxAttribute() are invoked via
@@ -460,11 +524,17 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
      * `suppressInternalDispatchMethod()`, which keeps `private` accessors flagged as the
      * real bug they are.
      *
+     * Trait-hosted accessors (e.g. a `HasSlug` trait declaring getSlugAttribute()) hit the same
+     * dispatch path, so resolve through appearingMethods() to reach the declaring storage rather
+     * than iterating the model's own `methods` (which never holds trait copies).
+     *
      * Note: method names are stored lowercase in ClassLikeStorage.
      */
-    private static function suppressEloquentAccessorMethods(ClassLikeStorage $classStorage): void
-    {
-        foreach ($classStorage->methods as $methodName => $methodStorage) {
+    private static function suppressEloquentAccessorMethods(
+        ClassLikeStorage $classStorage,
+        ClassLikeStorageProvider $provider,
+    ): void {
+        foreach (self::appearingMethods($classStorage, $provider) as $methodName => $methodStorage) {
             if (\preg_match('/^get.+attribute$/', $methodName) || \preg_match('/^set.+attribute$/', $methodName)) {
                 self::suppressInternalDispatchMethod('PossiblyUnusedMethod', $methodStorage);
             }
@@ -486,9 +556,11 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
      * model instance from `Builder`'s foreign scope — a `private` scope is unreachable from that
      * dispatch site and would fatal, so leaving it reported surfaces the real bug.
      */
-    private static function suppressEloquentScopeMethods(ClassLikeStorage $classStorage): void
-    {
-        foreach ($classStorage->methods as $methodStorage) {
+    private static function suppressEloquentScopeMethods(
+        ClassLikeStorage $classStorage,
+        ClassLikeStorageProvider $provider,
+    ): void {
+        foreach (self::appearingMethods($classStorage, $provider) as $methodStorage) {
             if (!self::hasScopeAttribute($methodStorage)) {
                 continue;
             }
@@ -528,18 +600,23 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
      * Sibling of psalm/psalm-plugin-laravel#874, deferred there to keep the diff focused.
      *
      * Detection: lowercase method key starts with `scope` AND the original-cased name has an
-     * uppercase ASCII letter directly after `scope` (matches Laravel's `ucfirst()` resolution
-     * at `Model.php:1981`). The cased-name check prevents misclassifying methods like
-     * `scopeactive` (which Laravel cannot dispatch — `ucfirst()` produces `scopeActive`) or
-     * a literal `scope()` method.
+     * uppercase ASCII letter directly after `scope` — the `scope` + StudlyCase convention Laravel
+     * resolves via `'scope'.ucfirst($scope)` in `Model::callNamedScope()`. PHP method dispatch is
+     * case-insensitive, so a `scopeactive()` method *is* technically reachable as `active()`; we
+     * still require the uppercase letter because matching lowercase-after-`scope` would over-suppress
+     * ordinary methods that only share the prefix (`scoped()`, `scopes()`, `scopedQuery()`). A literal
+     * `scope()` is already excluded earlier by the length guard. The convention gate trades a
+     * near-zero-frequency miss for far fewer false suppressions.
      *
      * Visibility: same routing as the modern variant — `private` stays flagged because the
      * dispatch lives on `$this` in `Model::callNamedScope()` and a `private` override on a
      * subclass would not be resolvable from the parent scope (PHP private scoping).
      */
-    private static function suppressLegacyEloquentScopeMethods(ClassLikeStorage $classStorage): void
-    {
-        foreach ($classStorage->methods as $methodName => $methodStorage) {
+    private static function suppressLegacyEloquentScopeMethods(
+        ClassLikeStorage $classStorage,
+        ClassLikeStorageProvider $provider,
+    ): void {
+        foreach (self::appearingMethods($classStorage, $provider) as $methodName => $methodStorage) {
             if (!self::isLegacyScopeMethodName($methodName, $methodStorage->cased_name)) {
                 continue;
             }
@@ -561,7 +638,8 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         }
 
         // Laravel resolves $builder->active() via `scope` . ucfirst('active') => `scopeActive`.
-        // A `scopeactive()` method is dispatch-unreachable, so don't suppress it.
+        // PHP dispatch is case-insensitive so a `scopeactive()` would technically work, but we gate
+        // on the `scope` + StudlyCase convention to avoid over-suppressing methods like `scoped()`.
         $firstNameChar = $casedName[5];
 
         return $firstNameChar >= 'A' && $firstNameChar <= 'Z';
