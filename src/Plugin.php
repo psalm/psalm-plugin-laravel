@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\LaravelPlugin\Blade\BladeSafetyMap;
 use Psalm\LaravelPlugin\Providers\AliasStubProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
@@ -48,6 +49,8 @@ final class Plugin implements PluginEntryPointInterface
             if ($pluginConfig->findMissingViews) {
                 $this->initMissingViewHandler($output);
             }
+
+            $this->initBladeAwareViewTaintHandler($output);
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
@@ -290,6 +293,20 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
         }
+
+        // BladeAwareViewTaintHandler installs per-key html sinks on view()/Factory::make()
+        // call sites, refined by the per-template BladeSafetyMap built in
+        // initBladeAwareViewTaintHandler(). It is a no-op when the map is empty
+        // (taint analysis disabled or view roots unavailable), but the registration
+        // is unconditional so users get the refinement automatically once they
+        // enable --taint-analysis.
+        require_once __DIR__ . '/Handlers/Views/ViewBindingSinkSpec.php';
+        require_once __DIR__ . '/Handlers/Views/MakeLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/FirstLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/RenderEachLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/WithLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/BladeAwareViewTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Views\BladeAwareViewTaintHandler::class);
     }
 
     /**
@@ -410,6 +427,118 @@ final class Plugin implements PluginEntryPointInterface
         $extensions = $finder->getExtensions();
 
         Handlers\Views\MissingViewHandler::init($paths, $extensions);
+    }
+
+    /**
+     * Scan the booted app's view roots, build a {@see BladeSafetyMap}, and hand
+     * it to {@see Handlers\Views\BladeAwareViewTaintHandler}. The scan is the
+     * one piece of filesystem IO this handler needs at boot; once built, the
+     * map is queried in-memory for every `view()` / `Factory::make()` call
+     * Psalm analyses.
+     *
+     * Build is skipped when:
+     *  - taint analysis is off (no `taint_flow_graph` on the Codebase). Reading
+     *    every blade file under `resources/views/` would be pure waste when the
+     *    handler has nothing to plumb the result into.
+     *  - the view finder service is absent or non-standard. The plugin already
+     *    falls back gracefully in {@see initMissingViewHandler()}; the same
+     *    fall-back applies here.
+     *
+     * The handler stays registered either way — once registered it short-circuits
+     * on `!self::$enabled`, so a no-op init just means it never installs sinks.
+     */
+    private function initBladeAwareViewTaintHandler(\Psalm\Progress\Progress $output): void
+    {
+        $taintEnabled = false;
+
+        try {
+            $codebase = ProjectAnalyzer::getInstance()->getCodebase();
+            $taintEnabled = $codebase->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph;
+        } catch (\Error) {
+            // ProjectAnalyzer::$instance is a typed non-nullable property that
+            // throws \Error when accessed unset — the only realistic failure
+            // mode here. This happens in unit-test harnesses that boot the
+            // plugin without a full Psalm run.
+            //
+            // We catch \Error specifically, NOT \Throwable: a future Psalm
+            // API change (e.g. taint_flow_graph renamed) should bubble out to
+            // the outer __invoke() try/catch and route through
+            // InternalErrorReporter for visibility, rather than be silently
+            // swallowed here. Silent disable is appropriate only for the
+            // documented "ProjectAnalyzer not yet initialised" case.
+        }
+
+        if (!$taintEnabled) {
+            return;
+        }
+
+        $app = ApplicationProvider::getApp();
+
+        // Mirror initMissingViewHandler's resolution chain (view.finder first,
+        // fall back to the Factory's finder). Both code paths can disappear
+        // in a stripped Testbench setup, in which case there are no paths to
+        // scan and the handler stays disabled.
+        if ($app->bound('view.finder')) {
+            $finder = $app->make('view.finder');
+        } elseif ($app->bound('view')) {
+            $factory = $app->make('view');
+
+            if (!$factory instanceof \Illuminate\View\Factory) {
+                return;
+            }
+
+            $finder = $factory->getFinder();
+        } else {
+            return;
+        }
+
+        if (!$finder instanceof \Illuminate\View\FileViewFinder) {
+            return;
+        }
+
+        /** @var list<string> $paths */
+        $paths = $finder->getPaths();
+
+        // Empty paths is allowed: an empty BladeSafetyMap still drives the
+        // dynamic-view-name fallback. Skipping init in this case would let
+        // taint flow unfiltered through `view($name, $data)` where `$name`
+        // is non-literal, which is the most common XSS shape in real apps.
+
+        try {
+            $map = BladeSafetyMap::build($paths);
+        } catch (\Throwable $throwable) {
+            // The scanner is defensive (catches per-file IO failures internally),
+            // so reaching this branch means something unexpected — e.g. a
+            // RecursiveDirectoryIterator construction failure on a removed root.
+            // Log via the progress channel and leave the handler disabled rather
+            // than fatal-erroring the whole plugin.
+            $output->warning(
+                "Laravel plugin: failed to build BladeSafetyMap, view-data taint refinement disabled: {$throwable->getMessage()}",
+            );
+
+            return;
+        }
+
+        $factoryFacadeClasses = FacadeMapProvider::getFacadeClasses(\Illuminate\View\Factory::class);
+
+        // Pull the facade classes for both the concrete `Routing\ResponseFactory`
+        // and its contract. Laravel ships `\Illuminate\Support\Facades\Response`
+        // as the facade for the contract; user-registered aliases may map to
+        // either binding. Without this routing, calls through `\Response::view(...)`
+        // bypass the dispatch table (the resolved method id lives on the facade
+        // class, not on the contract).
+        $responseFactoryFacadeClasses = [
+            ...FacadeMapProvider::getFacadeClasses(\Illuminate\Routing\ResponseFactory::class),
+            ...FacadeMapProvider::getFacadeClasses(\Illuminate\Contracts\Routing\ResponseFactory::class),
+        ];
+
+        require_once __DIR__ . '/Handlers/Views/ViewBindingSinkSpec.php';
+        require_once __DIR__ . '/Handlers/Views/MakeLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/FirstLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/RenderEachLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/WithLikeMethodSpec.php';
+        require_once __DIR__ . '/Handlers/Views/BladeAwareViewTaintHandler.php';
+        Handlers\Views\BladeAwareViewTaintHandler::init($map, $factoryFacadeClasses, $responseFactoryFacadeClasses);
     }
 
     private function buildSchema(PluginConfig $pluginConfig): void
