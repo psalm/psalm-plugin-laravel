@@ -88,7 +88,7 @@ public function input($key = null, $default = null) {}
 
 ## Taint kinds
 
-All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https://github.com/vimeo/psalm/blob/master/src/Psalm/Type/TaintKind.php). These are the strings you use in annotations.
+Most taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https://github.com/vimeo/psalm/blob/master/src/Psalm/Type/TaintKind.php). Psalm's docblock parser also accepts arbitrary strings as taint kinds: anything not in that constant flows through `TaintedCustom` and reports as `Detected tainted <kind>`. The plugin uses this to model `html_url` (see [URL context vs HTML escaping](#url-context-vs-html-escaping-html_url)).
 
 ### Common kinds used in stubs
 
@@ -96,6 +96,7 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 |-----------------|-------------------------------------------|-----------------------------------------------|-----------------------------------------------|
 | `html`          | XSS via HTML injection                    | `echo`, `Response::make()`                    | `e()`, `htmlspecialchars()`                   |
 | `has_quotes`    | Attribute injection via unquoted strings  | `echo` inside HTML attributes                 | `e()`, `urlencode()`                          |
+| `html_url`      | XSS via URL-scheme injection in `<a href>` / `<img src>` (e.g. `javascript:`, `data:`) | `Notifications\Messages\MailMessage::action($url)` | App-defined URL allowlister (e.g. `Str::sanitizeUrl()`); NOT `e()` |
 | `sql`           | SQL injection                             | `Connection::unprepared()`                    | `Connection::escape()`, parameterized queries |
 | `shell`         | Command injection                         | `Process::run()`                              | `escapeshellarg()`                            |
 | `ssrf`          | Server-side request forgery               | `Http::get($url)`                             | N/A                                           |
@@ -128,6 +129,65 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 | `input`              | `ALL_INPUT`                | Alias: all input-related kinds combined (excludes secrets) |
 | `tainted`            | `ALL_INPUT`                | Alias: same as `input`                                     |
 | `input_except_sleep` | `ALL_INPUT & ~INPUT_SLEEP` | All input kinds except `sleep` (used by `filter_var()`)    |
+| `html_url`           | (custom, plugin-defined)   | URL emitted into an HTML attribute (`href`, `src`, …). Distinct from `html` because HTML-escaping (`e()`) blocks attribute breakout but NOT scheme injection (`javascript:`, `data:`). Distinct from `ssrf` because the threat is client-side XSS, not server-side request forgery. NOT a member of the `input` alias: must be sourced explicitly. |
+
+## URL context vs HTML escaping (`html_url`)
+
+`e()` (and `htmlspecialchars()`) escapes HTML special characters. That blocks attribute-breakout XSS like `"><script>alert(1)</script>`. It does NOT validate the URL scheme, so a value emitted into `<a href="{{ $url }}">` or `<img src="{{ $url }}">` can still execute as `javascript:alert(1)` or `data:text/html,...`. Filament shipped a stored-XSS fix for exactly this pattern (GHSA-3fc8-8hp6-6jr4), adding a separate `Str::sanitizeUrl()` helper that allowlists `http` / `https` / `mailto` / `tel` schemes and applying it across every URL-attribute renderer (`<a href>`, `<img src>`, and friends). Laravel's `MailMessage::action($url)` lands in the same `<a href="…">` shape via the notification email template, which is why the new sink targets it.
+
+`html_url` models this cleanser-context distinction:
+
+- `e()` escapes `html` and `has_quotes` only (see `stubs/common/Support/helpers.phpstub`). It does NOT escape `html_url`, so an `html_url`-tainted value that flows through `e()` is still flagged at an `html_url` sink.
+- `Notifications\Messages\MailMessage::action($url)` is annotated with both `@psalm-taint-sink html` and `@psalm-taint-sink html_url`. The first catches body-content XSS (the URL is concatenated into HTML); the second catches scheme-injection inside the `<a href="…">` attribute.
+
+### Detection gap: `html_url` is opt-in at the source
+
+`html_url` is NOT a member of `TaintKindGroup::ALL_INPUT`. That means generic Laravel input sources (`$request->input(…)`, `$request->query(…)`, model attributes) do NOT auto-flow as `html_url`. The canonical Filament flow (form input → DB → Blade `{{ $url }}` → `<img src>`) will NOT be caught out of the box. You must mark the value at a boundary you trust:
+
+```php
+final class StoreAvatarRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return ['avatar_url' => ['required', 'url']];
+    }
+
+    /**
+     * @psalm-taint-source html_url
+     */
+    public function avatarUrl(): string
+    {
+        return (string) $this->input('avatar_url');
+    }
+}
+```
+
+Anywhere this accessor is used and the value reaches an `html_url` sink without passing through an `html_url` escape, the plugin flags `TaintedCustom: Detected tainted html_url`.
+
+### Annotating an app-level URL sanitizer
+
+Laravel core ships `Str::isUrl($value, ['http', 'https'])` as a scheme-allowlisting *validator* (returns `bool`), but no first-party *sanitizer* that returns a cleaned string. To use `Str::isUrl()` as an `html_url` escape, wrap it in an app helper that returns the URL on `true` and a safe fallback (e.g. `'#'`) on `false`, then annotate the wrapper. If your app defines its own sanitizer (a `Str::macro('sanitizeUrl', …)`, an `HtmlUrl` value object, a dedicated helper), annotate that instead:
+
+```php
+/**
+ * Allowlists http/https/mailto/tel; returns '#' for anything else.
+ *
+ * @psalm-taint-escape html_url
+ * @psalm-flow ($url) -> return
+ */
+function safe_url(string $url): string
+{
+    return preg_match('#^(https?|mailto|tel):#i', $url) === 1 ? $url : '#';
+}
+```
+
+The `@psalm-flow` line is mandatory. Without it `@psalm-taint-escape` drops every taint kind on the return value, including `html`, so a value that was tainted for both kinds would silently appear clean (see [Critical rule: always pair `@psalm-taint-escape` with `@psalm-flow`](#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow)). The regression test `tests/Type/tests/TaintAnalysis/TaintedHtmlSanitizeUrlPreservesHtmlTaint.phpt` exercises this exact mutation.
+
+A value passed only through `e()` (which escapes `html` and `has_quotes`) is still tainted for `html_url`; a value passed only through `safe_url()` (which escapes `html_url`) is still tainted for `html` and `has_quotes`. The two cleansers are not interchangeable. Test coverage for this contract lives in `tests/Type/tests/TaintAnalysis/TaintedHtmlUrl*.phpt` and `SafeHtmlUrl*.phpt`.
+
+### Testing-time pitfall: Psalm's per-sink-node taint de-duplication
+
+When two PHPT tests in the same suite source the same taint kind into the **same stubbed sink** (e.g. both flow `html_url` into `MailMessage::action()`), only one of the two will emit `TaintedCustom`. `TaintFlowGraph::connectSinksAndSources()` keeps a `visited_source_ids[$sink_node][$taint_mask]` set and skips repeated visits, so the first `(sink, mask)` pair reached during BFS wins the report and any subsequent source path to that same pair is silently dropped. The Tainted case using `e()` (`TaintedHtmlUrlEDoesNotEscape.phpt`) therefore routes through a per-file local sink instead of `MailMessage::action()`. The Safe test is unaffected: the sanitizer drops `html_url`, so the taint mask reaching the shared sink is `0`, which is a distinct dedupe key from any concurrent Tainted test's `html_url` mask. Use a local `@psalm-taint-sink html_url $url` helper whenever you need a second Tainted test against an already-covered sink.
 
 ## Stub patterns by annotation type
 
