@@ -259,6 +259,14 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+
+        // Detects timing-unsafe comparisons of secret-tainted values (CWE-208).
+        // The hook is a no-op outside `--taint-analysis` runs (early-exits when
+        // taint_flow_graph is null), so per-expression overhead in normal analysis
+        // is negligible.
+        require_once __DIR__ . '/Handlers/Rules/TimingUnsafeComparisonHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\TimingUnsafeComparisonHandler::class);
+
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled
