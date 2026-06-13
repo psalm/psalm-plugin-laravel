@@ -30,11 +30,20 @@ use Psalm\Type\Union;
  *
  * This replaces directory-based model scanning: instead of pre-scanning directories
  * for model files, we wait until Psalm has populated its codebase with all project
- * classes, then register handlers for every concrete Model subclass found.
+ * classes, then register handlers for every Model subclass found.
  *
  * Registers per-model:
  * - Method existence, visibility, params, and return types ({@see ModelMethodHandler})
  * - Property existence, visibility, and types (relationships, accessors, columns)
+ *
+ * Abstract base models register the storage-based handlers (method forwarding, relationship/
+ * accessor/aggregate/factory properties, return-type providers) so a scope, forwarded builder
+ * method, or inherited virtual property resolves on an abstract-typed receiver (issue #901).
+ * Two groups stay concrete-only: the migration column/cast handler (reads getTable()/getCasts()
+ * off a model instance, which an abstract class cannot provide) and custom builder/collection
+ * detection (an abstract base falls back to the base Builder/Collection — detecting a custom
+ * builder there would strip the model's SoftDeletes pseudo-methods and regress base-Builder
+ * resolution; see registerHandlersForModel()).
  *
  * @internal
  */
@@ -55,13 +64,14 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         $modelFqcn = \strtolower(Model::class);
 
         foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
-            if ($storage->abstract) {
-                continue;
-            }
-
             if (!isset($storage->parent_classes[$modelFqcn])) {
                 continue;
             }
+
+            // Abstract bases are intentionally NOT skipped here (see the class docblock for the
+            // storage-vs-instance split). The pre-#901 wholesale `if ($storage->abstract) continue;`
+            // guard lived at this spot — removing it is what lets the storage-based handlers register
+            // for abstract bases. https://github.com/psalm/psalm-plugin-laravel/issues/901
 
             // Anonymous Model subclasses (e.g. `new class extends Model {}`) get a
             // synthetic FQCN from Psalm that no autoloader can resolve, so skip them
@@ -126,8 +136,18 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         // Detect custom builder class via attribute, method override, or $builder property.
         // Class is already loaded by autoloader above.
+        //
+        // Skipped for abstract bases — not because detection itself is unsafe (it only reflects on
+        // class metadata), but because a non-null result drives handleTraitBuilderMethods(), which
+        // STRIPS the SoftDeletes @method pseudo-methods (withTrashed/onlyTrashed) off the model's
+        // storage so they resolve through the custom builder instead. An abstract base is commonly
+        // queried through the base Builder<AbstractBase> (e.g. `/** @var Builder<Entity> $q */`);
+        // BuilderScopeHandler resolves `Builder<AbstractBase>->onlyTrashed()` by reading those model
+        // pseudo-methods, so stripping them regresses the call to mixed (issue #901). Concrete
+        // children detect their builder normally; an abstract base falls back to base Builder, a
+        // sound supertype. See AbstractModelCustomBuilderTest for the regression guard.
         /** @var class-string<Model> $className — verified by parent_classes check in caller */
-        $customBuilder = self::detectCustomBuilder($codebase, $className);
+        $customBuilder = $storage->abstract ? null : self::detectCustomBuilder($codebase, $className);
 
         // For models with custom builders: handle @method static annotations from traits
         // (e.g., SoftDeletes::withTrashed) that return Builder<static>. These are builder
@@ -173,13 +193,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
         }
 
-        // Detect custom collection class via #[CollectedBy] attribute or newCollection() override.
-        // Class is already loaded by autoloader above, so runtime reflection works.
-        self::detectCustomCollection($codebase, $className);
-
         // Method existence, visibility, and return types for static __callStatic forwarding.
         // Registered per-model because Psalm's provider lookup uses exact class names —
-        // a handler for Model::class is not consulted for App\Models\User.
+        // a handler for Model::class is not consulted for App\Models\User. Storage-based (reads
+        // method/class storage, never instantiates), so it registers for abstract bases too — this
+        // is what lets a scope or forwarded Query\Builder method resolve on an abstract-typed
+        // receiver (issue #901).
         $methods->existence_provider->registerClosure($className, ModelMethodHandler::doesMethodExist(...));
         $methods->visibility_provider->registerClosure($className, ModelMethodHandler::isMethodVisible(...));
         $methods->params_provider->registerClosure($className, ModelMethodHandler::getMethodParams(...));
@@ -187,6 +206,15 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             $className,
             ModelMethodHandler::getReturnTypeForForwardedMethod(...),
         );
+
+        // Detect custom collection class via #[CollectedBy] attribute or newCollection() override.
+        // Class is already loaded by autoloader above. Skipped for abstract bases (mirroring the
+        // custom builder above): an abstract base falls back to the base Eloquent collection,
+        // matching its base-Builder fallback. Concrete children detect their collection normally.
+        if (!$storage->abstract) {
+            self::detectCustomCollection($codebase, $className);
+        }
+
         // Custom collection: narrows Model::all() return type for models using
         // #[CollectedBy] or overriding newCollection() with a concrete subclass.
         $methods->return_type_provider->registerClosure(
@@ -253,8 +281,14 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             ModelPropertyAccessorHandler::getPropertyType(...),
         );
 
-        // 5. Column properties from migrations (e.g. $user->email)
-        if (self::$useMigrations) {
+        // 5. Column properties from migrations (e.g. $user->email).
+        // Concrete-only — this is the ONE handler that instantiates: ModelPropertyHandler reflects
+        // on a model INSTANCE (newInstanceWithoutConstructor() → getTable()/getCasts()) to map
+        // columns and casts. An abstract base cannot be instantiated and has no table, so it is
+        // gated out here (issue #901). Every handler above is storage-based and registers for
+        // abstract bases too. The resolveTableName()/resolveCasts() abstract guards are therefore
+        // pure defense-in-depth — unreachable through this gated registration.
+        if (!$storage->abstract && self::$useMigrations) {
             $properties->property_existence_provider->registerClosure(
                 $className,
                 ModelPropertyHandler::doesPropertyExist(...),
