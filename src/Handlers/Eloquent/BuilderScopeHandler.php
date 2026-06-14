@@ -321,7 +321,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         }
 
         $scopeMethodId = self::resolveScopeMethodId($codebase, $modelClass, $methodName);
-        if ($scopeMethodId === null) {
+        if (!$scopeMethodId instanceof \Psalm\Internal\MethodIdentifier) {
             return self::$scopeParamsCache[$key] = null;
         }
 
@@ -412,7 +412,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         Union $fallback,
     ): Union {
         $scopeMethodId = self::resolveScopeMethodId($codebase, $modelClass, $methodName);
-        if ($scopeMethodId === null) {
+        if (!$scopeMethodId instanceof \Psalm\Internal\MethodIdentifier) {
             return $fallback;
         }
 
@@ -428,7 +428,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
 
         // No declared return, or `void`/`never`: the scope surfaces nothing, so `?? $this`
         // always falls back to the builder/relation — the long-standing behavior.
-        if ($declared === null || $declared->isVoid() || $declared->isNever()) {
+        if (!$declared instanceof \Psalm\Type\Union || $declared->isVoid() || $declared->isNever()) {
             return $fallback;
         }
 
