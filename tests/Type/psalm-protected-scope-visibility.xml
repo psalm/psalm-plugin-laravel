@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    runTaintAnalysis="false"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config ../../vendor/vimeo/psalm/config.xsd"
+>
+    <!--
+        Lenient config for the always-on PublicModelScope / PublicModelAccessor rule (#695). The rule is
+        enabled by default, so it fires here without any opt-in; this config exists only to ISOLATE the
+        rich multi-case fixture from the strict toggles the shared configs carry
+        (findUnusedVariablesAndParams, sealAllMethods, reportMixedIssues), which would otherwise fire
+        unrelated issues on the scope/accessor fixtures. The default-config firing is proven separately by
+        PublicScopeAccessorDefaultOnTest.phpt (which uses no config override).
+    -->
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <failOnInternalError value="true" />
+        </pluginClass>
+    </plugins>
+    <issueHandlers>
+        <MissingPureAnnotation errorLevel="info" />
+        <PluginIssue name="NoEnvOutsideConfig" errorLevel="info" />
+    </issueHandlers>
+</psalm>

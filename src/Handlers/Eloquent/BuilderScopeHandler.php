@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
-use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
@@ -15,6 +14,7 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
+use Psalm\LaravelPlugin\Util\EloquentModelMethods;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -690,22 +690,8 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             return false;
         }
 
-        // A private #[Scope] is never a usable scope on any supported Laravel (12-13). Laravel
-        // 13.8+ rejects it outright in Model::isScopeMethodWithAttribute (`! isPrivate() && ...`);
-        // on 12.4–13.7 it is broken anyway — callNamedScope dispatches the scope from the base
-        // Model's $this, where the subclass's private method is unreachable, so it routes back
-        // through __call and recurses. Either way it can't dispatch, so a legacy scopeXxx twin
-        // (resolved separately) wins, or it is nothing.
-        if ($methodStorage->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
-            return false;
-        }
-
-        foreach ($methodStorage->attributes as $attribute) {
-            if ($attribute->fq_class_name === Scope::class) {
-                return true;
-            }
-        }
-
-        return false;
+        // Shared with SuppressHandler (#874) and PublicScopeAccessorVisibilityHandler (#695): the
+        // attribute check plus the private-#[Scope] gate live in EloquentModelMethods::hasScopeAttribute.
+        return EloquentModelMethods::hasScopeAttribute($methodStorage);
     }
 }
