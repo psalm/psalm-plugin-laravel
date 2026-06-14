@@ -61,6 +61,34 @@ abstract class AbstractDocument extends Model
     }
 
     /**
+     * Value-returning scope declared on the abstract PARENT: `->first()` returns `?self`, and
+     * `self` binds to the composing class (AbstractDocument), not the queried child. A forwarded
+     * child call (Contract::query()->firstSigned()) is therefore `AbstractDocument|Builder<Contract>`
+     * — the return's `self` pins to the parent while the `?? $this` fallback stays the child's
+     * builder. Locks the self-expansion path of forwardedScopeReturnType (issue #1053; mirrors the
+     * param `self` pinning of #1031).
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeFirstSigned(Builder $query): ?self
+    {
+        return $query->whereNotNull('signed_at')->first();
+    }
+
+    /**
+     * Value-returning scope whose declared return is `?static` (late static binding). A forwarded
+     * child call (Contract::query()->firstSignedStatic()) pins `static` to the queried child as the
+     * PLAIN class — `Contract|Builder<Contract>`, not `Contract&static` — which is exactly what the
+     * `final: true` argument to TypeExpander buys on the return position (issue #1053).
+     *
+     * @param  Builder<static>  $query
+     */
+    public function scopeFirstSignedStatic(Builder $query): ?static
+    {
+        return $query->whereNotNull('signed_at')->first();
+    }
+
+    /**
      * Control for a `self`-typed scope param declared DIRECTLY on the abstract parent
      * (not via a trait). Psalm resolves this `self` to AbstractDocument at scan time, so the
      * handler's re-expansion is idempotent — the directly-declared and trait-hosted paths

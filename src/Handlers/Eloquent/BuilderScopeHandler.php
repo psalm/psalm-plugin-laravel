@@ -22,6 +22,7 @@ use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Storage\FunctionLikeParameter;
+use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -204,7 +205,9 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             // Codebase\Methods::getMethodParams.
             self::$pendingScopeModel[$methodName] = $modelClass;
 
-            return $builderReturn;
+            // A value-returning scope surfaces its declared return via Laravel's `?? $this`
+            // coalesce; a plain void/fluent scope keeps $builderReturn unchanged (issue #1053).
+            return self::forwardedScopeReturnType($codebase, $modelClass, $methodName, $builderReturn);
         }
 
         // Trait-declared builder methods (e.g., SoftDeletes::withTrashed) are registered
@@ -317,13 +320,8 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             return self::$scopeParamsCache[$key];
         }
 
-        if ($codebase->methodExists($modelClass . '::' . $methodName)
-            && self::hasScopeAttribute($codebase, $modelClass, $methodName)
-        ) {
-            $scopeMethodId = new MethodIdentifier($modelClass, $methodName);
-        } elseif ($codebase->methodExists($modelClass . '::scope' . \ucfirst($methodName))) {
-            $scopeMethodId = new MethodIdentifier($modelClass, 'scope' . $methodName);
-        } else {
+        $scopeMethodId = self::resolveScopeMethodId($codebase, $modelClass, $methodName);
+        if ($scopeMethodId === null) {
             return self::$scopeParamsCache[$key] = null;
         }
 
@@ -345,6 +343,187 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             $modelClass,
             $callerParams,
         );
+    }
+
+    /**
+     * Resolve the {@see MethodIdentifier} a scope name dispatches to, or null when the model
+     * declares no such scope.
+     *
+     * Mirrors Laravel's Model::callNamedScope precedence: a #[Scope]-attributed method wins
+     * over a legacy scopeXxx() twin of the same name. Shared by {@see getScopeParams} (params)
+     * and {@see forwardedScopeReturnType} (return type) so both consult one dispatch rule.
+     *
+     * @param class-string<Model> $modelClass
+     */
+    private static function resolveScopeMethodId(
+        Codebase $codebase,
+        string $modelClass,
+        string $methodName,
+    ): ?MethodIdentifier {
+        $methodName = \strtolower($methodName);
+
+        if ($codebase->methodExists($modelClass . '::' . $methodName)
+            && self::hasScopeAttribute($codebase, $modelClass, $methodName)
+        ) {
+            return new MethodIdentifier($modelClass, $methodName);
+        }
+
+        if ($codebase->methodExists($modelClass . '::scope' . \ucfirst($methodName))) {
+            return new MethodIdentifier($modelClass, 'scope' . $methodName);
+        }
+
+        return null;
+    }
+
+    /**
+     * Apply Laravel's `$scope(...) ?? $this` coalesce (Builder::callScope) to a FORWARDED
+     * scope call's return type.
+     *
+     * A local scope is NOT required to return the builder. callScope evaluates
+     * `$result = $scope(...) ?? $this` and returns `$result`, so a scope whose body returns a
+     * value (e.g. `->first()`, a count, a collection) propagates that value to the caller,
+     * while a null/void/builder-returning scope falls back to `$this`. That `$this` is the
+     * builder for the instance and static call forms, and the Relation for a relation chain
+     * (Relation::__call returns `$this` only when the forwarded result IS the wrapped query) —
+     * the caller passes it as $fallback. This is forwarded-only: a DIRECT call ($this->scope($q))
+     * never runs callScope, so its callers decline before reaching here (see isDirectScopeCall).
+     *
+     * Modeled exactly as PHP's `??`:
+     *   - no explicit declared return, or `void`/`never`, or a non-null part that is entirely a
+     *     Builder subtype  → $fallback unchanged. This is the overwhelmingly common void/fluent
+     *     scope and preserves the pre-#1053 behavior.
+     *   - non-null value scope (e.g. `int`)  → the declared type alone; the `?? $this` branch is
+     *     dead because the value is never null.
+     *   - nullable value scope (e.g. `?Post`)  → `(declared − null) | $fallback`; the null result
+     *     is the branch that falls back to $this, so the inferred type never contains null (a
+     *     downstream `=== null` check is then correctly redundant, matching the runtime).
+     *
+     * `self`/`static`/`$this` in the declared return are pinned first — `self` to the scope's
+     * composing class, `static`/`$this` to the queried model — so `?self` becomes `?Post` before
+     * the null is dropped (mirrors {@see expandScopeParamSelfReferences} for parameters).
+     *
+     * @see https://github.com/psalm/psalm-plugin-laravel/issues/1053
+     * @param class-string<Model> $modelClass
+     */
+    public static function forwardedScopeReturnType(
+        Codebase $codebase,
+        string $modelClass,
+        string $methodName,
+        Union $fallback,
+    ): Union {
+        $scopeMethodId = self::resolveScopeMethodId($codebase, $modelClass, $methodName);
+        if ($scopeMethodId === null) {
+            return $fallback;
+        }
+
+        $declaringMethodId = $codebase->methods->getDeclaringMethodId($scopeMethodId) ?? $scopeMethodId;
+
+        try {
+            $storage = $codebase->methods->getStorage($declaringMethodId);
+        } catch (\UnexpectedValueException) {
+            return $fallback;
+        }
+
+        $declared = $storage->return_type ?? $storage->signature_return_type;
+
+        // No declared return, or `void`/`never`: the scope surfaces nothing, so `?? $this`
+        // always falls back to the builder/relation — the long-standing behavior.
+        if ($declared === null || $declared->isVoid() || $declared->isNever()) {
+            return $fallback;
+        }
+
+        // Fast path for the common typed-fluent scope (`: Builder`, `: Builder<static>`,
+        // `: CustomBuilder`): a non-null builder-only return surfaces no value, so short-circuit
+        // to $fallback before the expandUnion + Union-clone work below that would only be
+        // discarded at the post-strip builder check. Sound on the RAW type because an atom's
+        // builder classification is invariant under expansion — expandUnion only rewrites
+        // self/static/$this and class constants (and an alias canonicalizes to the SAME class),
+        // never turning a non-builder into a builder or vice versa. It deliberately does NOT fire
+        // for `: self`/`: static` (their raw atoms aren't a Builder subtype) nor for a nullable
+        // return (the `null` atom fails the all-Builder test) — both still need the expansion
+        // below to resolve `?self` → `?Post`.
+        if (self::isEntirelyEloquentBuilder($codebase, $declared)) {
+            return $fallback;
+        }
+
+        // Pin `self` → composing class, `static`/`$this` → queried model, so `?self` resolves to
+        // `?Post` before the null is dropped below. `final: true` keeps `static` as the plain
+        // model (not `Model&static`): a returned value is checked against the plain class at the
+        // call site, exactly as a parameter is (see expandScopeParamSelfReferences).
+        $selfClass = $codebase->methods->getAppearingMethodId($scopeMethodId)?->fq_class_name ?? $modelClass;
+        $declared = TypeExpander::expandUnion(
+            $codebase,
+            $declared,
+            $selfClass,
+            $modelClass,
+            null,
+            evaluate_class_constants: true,
+            evaluate_conditional_types: false,
+            final: true,
+        );
+
+        $isNullable = $declared->isNullable();
+
+        $nonNull = $declared->getBuilder();
+        $nonNull->removeType('null');
+
+        // Declared `null`-only (nothing left after dropping null): always falls back to $this.
+        if ($nonNull->getAtomicTypes() === []) {
+            return $fallback;
+        }
+
+        $nonNullType = $nonNull->freeze();
+
+        // A builder-returning scope (the fluent common case): its declared Builder carries no
+        // surfaced value and is normalized to the caller-correct $fallback (Builder<Model> or the
+        // Relation), so return $fallback rather than the scope's own (possibly bare) `Builder`.
+        if (self::isEntirelyEloquentBuilder($codebase, $nonNullType)) {
+            return $fallback;
+        }
+
+        // Value-returning scope. A nullable declaration means the null branch falls back to
+        // $this; a non-null one can never trigger `?? $this`, so the value stands alone.
+        return $isNullable
+            ? Type::combineUnionTypes($nonNullType, $fallback, $codebase)
+            : $nonNullType;
+    }
+
+    /**
+     * Whether every atomic in $type is the Eloquent Builder or a subclass of it.
+     *
+     * A scope declared `: Builder`, `: Builder<static>`, or `: SomeCustomBuilder` is the ordinary
+     * fluent scope; its caller normalizes the type to the correct Builder<Model> / Relation
+     * fallback rather than surfacing the scope's own builder atom. Query\Builder is intentionally
+     * NOT matched: a scope returns the Eloquent builder, never the underlying query builder.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isEntirelyEloquentBuilder(Codebase $codebase, Union $type): bool
+    {
+        $builderLower = \strtolower(Builder::class);
+
+        foreach ($type->getAtomicTypes() as $atomic) {
+            // TGenericObject extends TNamedObject, so `Builder<static>` is covered here too.
+            if (!$atomic instanceof TNamedObject) {
+                return false;
+            }
+
+            $classLower = \strtolower($atomic->value);
+            if ($classLower === $builderLower) {
+                continue;
+            }
+
+            try {
+                if (!$codebase->classExtends($classLower, $builderLower)) {
+                    return false;
+                }
+            } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+                // Unknown/unpopulated class: can't prove it's a builder → treat it as a value.
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

@@ -111,6 +111,30 @@ class Customer extends Authenticatable
     }
 
     /**
+     * Value-returning scope: ->first() returns ?self. Laravel's Builder::callScope evaluates
+     * `$scope(...) ?? $this`, so the null result is swapped for the builder and a forwarded
+     * call (Customer::query()->firstActive(), Customer::firstActive()) is `self | Builder<self>`,
+     * never null. Exercises issue #1053.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeFirstActive($query): ?self
+    {
+        return $query->where('active', 1)->first();
+    }
+
+    /**
+     * Non-null scalar value-returning scope: count() never returns null, so the `?? $this`
+     * fallback is dead and a forwarded call is a plain int, with no Builder union (issue #1053).
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeActiveCount($query): int
+    {
+        return $query->where('active', 1)->count();
+    }
+
+    /**
      * Legacy scope with a parameter: called as Customer::query()->ofName('Ada').
      * Exercises the instance-call params hand-off (the caller passes everything after $query).
      *
