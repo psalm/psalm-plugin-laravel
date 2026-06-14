@@ -383,7 +383,11 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
                 return null;
             }
 
-            return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+            // A value-returning scope surfaces its declared return via Laravel's `?? $this`
+            // coalesce; a plain void/fluent scope keeps the builder type (issue #1053).
+            $scopeFallback = new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+
+            return BuilderScopeHandler::forwardedScopeReturnType($codebase, $modelClass, $methodName, $scopeFallback);
         }
 
         // Trait-declared builder methods (e.g., SoftDeletes::withTrashed): return custom builder type.
