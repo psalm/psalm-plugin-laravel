@@ -44,3 +44,4 @@ final class LegacyScopeModel extends Model
 new LegacyScopeModel();
 ?>
 --EXPECT--
+PublicModelAccessor on line 29: Eloquent query scope scopeActive() should be protected, not public; it is dispatched through the query builder, never by name.
