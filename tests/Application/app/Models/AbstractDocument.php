@@ -19,10 +19,38 @@ use Illuminate\Database\Eloquent\Model;
  * child subclass runs the query. So `Contract::query()->rankedAbove($receipt)` is
  * runtime-valid (Contract and Receipt are sibling children of AbstractDocument) and the
  * plugin must accept it (issue #1031).
+ *
+ * Also carries a cast and an accessor declaration (issue #901). The accessor handler is
+ * storage-based, so it registers for the abstract base too and `reference_code` resolves on both
+ * an abstract-typed receiver and a concrete child. The cast feeds the migration column/cast
+ * handler — the one handler that reads getCasts() off a model INSTANCE — which is therefore
+ * concrete-only; registration must skip it for the (non-instantiable) abstract base without
+ * throwing. A concrete child (Contract) inherits both declarations.
  */
 abstract class AbstractDocument extends Model
 {
     use ComparesRank;
+
+    /**
+     * Cast declaration on the abstract base (see class docblock for why it is concrete-only).
+     * Inert in the type suite (no migration provides the column); present so the fixture exercises
+     * an abstract base that declares a cast — the concrete-only migration handler must skip it (#901).
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return ['signed_at' => 'immutable_datetime'];
+    }
+
+    /**
+     * Legacy accessor on the abstract base — `reference_code` resolves on an abstract-typed receiver
+     * and on a concrete child that inherits it (#901; see class docblock for the storage-based split).
+     */
+    public function getReferenceCodeAttribute(): string
+    {
+        return 'REF';
+    }
 
     /**
      * @param  Builder<self>  $query
