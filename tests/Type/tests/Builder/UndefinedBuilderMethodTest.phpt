@@ -48,6 +48,31 @@ function allows_builder_macro(string $fqcn): void
 }
 
 /**
+ * Wrong-cased dynamic where: Laravel's `str_starts_with($method, 'where')` is case-sensitive,
+ * so `WhereFoo` does NOT route to dynamicWhere and throws BadMethodCallException at runtime.
+ * Must be flagged (regression guard for lowercasing before the dynamic-where check).
+ *
+ * @param class-string<Model> $fqcn
+ */
+function flags_wrong_cased_dynamic_where(string $fqcn): void
+{
+    $fqcn::query()->WhereFoo('x');
+}
+
+/**
+ * Wrong-cased macro: Psalm resolves macros case-insensitively via the lowercased pseudo-method,
+ * so `TestBuilderMacro` (macro is `testBuilderMacro`) is treated as the macro and NOT flagged —
+ * matching Psalm's own resolution and avoiding a contradictory double-signal. (At runtime Laravel's
+ * case-sensitive hasMacro would throw, but that divergence is Psalm's, not this rule's, to make.)
+ *
+ * @param class-string<Model> $fqcn
+ */
+function allows_wrong_cased_macro(string $fqcn): void
+{
+    $fqcn::query()->TestBuilderMacro();
+}
+
+/**
  * A bare `Builder<Model>` variable receiver (idiomatic in filters/pipelines and
  * `whereHas(..., fn (Builder $q) => ...)` closures) is type-identical to the dynamic-model
  * case but usually backs a concrete model at runtime — must NOT be flagged (provenance gate).
@@ -84,3 +109,4 @@ function allows_undefined_on_concrete_model_builder(string $fqcn): void
 ?>
 --EXPECTF--
 UndefinedMagicMethod on line %d: Magic method Illuminate\Database\Eloquent\Builder::thisscopedoesnotexist does not exist
+UndefinedMagicMethod on line %d: Magic method Illuminate\Database\Eloquent\Builder::wherefoo does not exist

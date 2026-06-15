@@ -76,6 +76,13 @@ final class UndefinedBuilderMethodHandler implements AfterExpressionAnalysisInte
             return null;
         }
 
+        // Respect Psalm's own gating: the core method-call analyzer only emits Undefined(Magic)Method
+        // when $context->check_methods is set. Mirror that so this rule stays silent in contexts where
+        // method checks are intentionally disabled (e.g. inside isset()/unevaluated operands).
+        if (!$event->getContext()->check_methods) {
+            return null;
+        }
+
         // Provenance gate: only report on `$class::query()->method()`. A plain-variable
         // receiver (bare `Builder $q` param, whereHas closure) is type-identical to
         // Builder<Model> but typically backs a concrete model at runtime, so reporting there
@@ -99,7 +106,7 @@ final class UndefinedBuilderMethodHandler implements AfterExpressionAnalysisInte
         /** @var lowercase-string $methodNameLc */
         $methodNameLc = \strtolower($methodName);
 
-        if (self::isResolvableOnBaseBuilder($event->getCodebase(), $methodNameLc)) {
+        if (self::isResolvableOnBaseBuilder($event->getCodebase(), $methodName, $methodNameLc)) {
             return null;
         }
 
@@ -163,22 +170,29 @@ final class UndefinedBuilderMethodHandler implements AfterExpressionAnalysisInte
      * to `$this->query` (Query\Builder), never to the Model, so Model-only methods such as
      * `save()` / `getAttribute()` genuinely fatal on a builder and must be reported.
      *
+     * Casing matters and differs per check: PHP method dispatch is case-insensitive (use the
+     * lowercased name for `methodExists`), but Laravel's `Query\Builder::__call` does a
+     * case-sensitive `str_starts_with($method, 'where')` for dynamic where, so that check uses
+     * the ORIGINAL casing — `WhereFoo()` is not dynamic-where and throws at runtime.
+     *
      * @param lowercase-string $methodNameLc
      */
-    private static function isResolvableOnBaseBuilder(Codebase $codebase, string $methodNameLc): bool
+    private static function isResolvableOnBaseBuilder(Codebase $codebase, string $methodName, string $methodNameLc): bool
     {
         // Real methods reachable on Builder<Model>: Eloquent\Builder's own and Query\Builder's
-        // (the latter via the stub's @mixin / runtime forwardCallTo). is_used: false keeps this
-        // an existence probe, not a usage mark, so unused-code analysis is unaffected.
+        // (the latter via the stub's @mixin / runtime forwardCallTo). PHP resolves these
+        // case-insensitively, so the lowercased name is correct. is_used: false keeps this an
+        // existence probe, not a usage mark, so unused-code analysis is unaffected.
         foreach ([Builder::class, QueryBuilder::class] as $class) {
             if ($codebase->methodExists(new MethodIdentifier($class, $methodNameLc), is_used: false)) {
                 return true;
             }
         }
 
-        // Dynamic where{Column}: Laravel routes any `where*` name through dynamicWhere(), which
-        // builds a clause instead of throwing — so it is never an undefined-method fatal.
-        if (DynamicWhereResolver::isDynamicWhereMethod($methodNameLc)) {
+        // Dynamic where{Column}: routed through dynamicWhere() (builds a clause, never throws) ONLY
+        // when the name starts with a lowercase `where` — Laravel's check is case-sensitive, so the
+        // original casing is required here (`WhereFoo`/`OrWhereFoo` fall through and throw).
+        if (DynamicWhereResolver::isDynamicWhereMethod($methodName)) {
             return true;
         }
 
