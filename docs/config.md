@@ -158,7 +158,7 @@ See [MissingView](issues/MissingView.md) for details.
 
 **default**: `false`
 
-When enabled, the plugin flags query builder and local scope methods called directly on an Eloquent model (forwarded by Laravel through `__callStatic` / `__call`) and asks for the explicit `Model::query()->...` form instead. It reports query builder methods (`where`, `find`, `orderBy`, ...), custom builder and trait builder methods, and local scopes (legacy `scopeXxx()` and modern `#[Scope]`). Real model methods and genuinely undefined methods are left alone.
+When enabled, the plugin flags query builder and local scope methods called directly on an Eloquent model (forwarded by Laravel through `__callStatic` / `__call`) and asks for the explicit `Model::query()->...` form instead. It reports query builder methods (`where`, `find`, `orderBy`, ...), custom builder methods, and local scopes (legacy `scopeXxx()` and modern `#[Scope]`). Real model methods (including a method whose name collides with a builder method) and genuinely undefined methods are left alone.
 
 See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
 

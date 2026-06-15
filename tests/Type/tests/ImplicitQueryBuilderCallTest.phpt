@@ -10,6 +10,7 @@ use App\Models\DirectScopeModel;
 use App\Models\Invoice;
 use App\Models\Vehicle;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
 /**
@@ -18,6 +19,26 @@ use Illuminate\Support\Collection;
  * and asks for the explicit Model::query()->... form instead. Only registered under the opt-in
  * config used by this test (see --ARGS-- above).
  */
+
+/**
+ * A model declaring real methods whose names collide with query builder methods. These are real
+ * methods, not magic forwarding, and must not be flagged.
+ */
+class ShadowingModel extends Model
+{
+    public static function find(int $id): ?self
+    {
+        return $id > 0 ? new self() : null;
+    }
+
+    public function orderBy(string $column): bool
+    {
+        return $column !== '';
+    }
+}
+
+/** Inherits the shadowing methods, so the inherited real method is also not flagged. */
+class ChildShadowingModel extends ShadowingModel {}
 
 /** Eloquent\Builder methods, a Query\Builder method, and a forwarded helper are all flagged. */
 function static_builder_calls_are_flagged(): void
@@ -91,6 +112,26 @@ function real_framework_methods_are_not_flagged(Customer $customer): void
 function non_model_calls_are_not_flagged(): void
 {
     Collection::make([1, 2, 3]);
+}
+
+/**
+ * A real method declared on (or inherited by) the model is not flagged, even when its name
+ * collides with a query builder method — it is a real method, not magic forwarding.
+ */
+function real_colliding_methods_are_not_flagged(ShadowingModel $model, ChildShadowingModel $child): void
+{
+    ShadowingModel::find(1);
+    $model->orderBy('name');
+    $child->orderBy('name');
+}
+
+/**
+ * An ambiguous union receiver (two distinct models here) gives no single class to name and may
+ * already be a builder, so it is not flagged.
+ */
+function ambiguous_union_receiver_is_not_flagged(Customer|Vehicle $model): void
+{
+    $model->where('active', 1);
 }
 
 /**

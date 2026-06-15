@@ -172,9 +172,11 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
 
     /**
      * Resolve the model FQCN of an instance call's receiver, or null when the receiver type is
-     * not a single Eloquent model. A receiver typed as a Builder, Relation, or Collection is
-     * intentionally skipped — `User::query()->where()` chains the builder, not the model, and
-     * is exactly the explicit form the rule wants.
+     * not unambiguously a single Eloquent model. The receiver must resolve to exactly one model
+     * class: every atomic of the type has to be that same model. A union that mixes the model
+     * with a Builder/Relation/Collection (the call may already be on a builder — the explicit
+     * form), with `null`, or with a different model (an arbitrary class-specific suggestion) is
+     * skipped to avoid a false positive.
      *
      * @return class-string<Model>|null
      */
@@ -186,13 +188,24 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
             return null;
         }
 
+        $modelClass = null;
+
         foreach ($receiverType->getAtomicTypes() as $atomicType) {
-            if ($atomicType instanceof TNamedObject && self::isModelSubclass($atomicType->value, $codebase)) {
-                return $atomicType->value;
+            // Any non-model atomic (a Builder/Relation/Collection object, null, a scalar) makes
+            // the receiver ambiguous — bail rather than guess.
+            if (!$atomicType instanceof TNamedObject || !self::isModelSubclass($atomicType->value, $codebase)) {
+                return null;
+            }
+
+            if ($modelClass === null) {
+                $modelClass = $atomicType->value;
+            } elseif ($modelClass !== $atomicType->value) {
+                // A union of distinct models gives no single class to name in the suggestion.
+                return null;
             }
         }
 
-        return null;
+        return $modelClass;
     }
 
     /**
@@ -242,11 +255,41 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
             return !BuilderScopeHandler::isDirectScopeCall($codebase, $modelClass, $methodNameLower, $event->getContext());
         }
 
+        // A method genuinely declared on the model (or inherited from a non-Model ancestor or
+        // trait) is a real method, not magic forwarding — even when its name collides with a
+        // builder method (a user `public function where()` / `orderBy()`). Scopes were already
+        // handled above, so this does not swallow them. declaring_method_ids holds real declared
+        // methods only; the plugin's forwarded methods are virtual and never recorded there.
+        if (self::modelDeclaresMethod($modelClass, $methodNameLower, $codebase)) {
+            return false;
+        }
+
         // Query builder methods reached only through forwarding — Eloquent\Builder via the
-        // @mixin, Query\Builder via Builder::__call, a custom builder, a trait builder method, or
-        // a resolvable dynamic where. A typo matches none of these and is left to
-        // UndefinedMagicMethod.
+        // @mixin, Query\Builder via Builder::__call, a custom builder, or a resolvable dynamic
+        // where. A typo matches none of these and is left to UndefinedMagicMethod.
         return ModelMethodHandler::forwardsToQueryBuilder($codebase, $modelClass, $methodNameLower);
+    }
+
+    /**
+     * Whether $modelClass really declares (or inherits) a method named $methodNameLower, as
+     * opposed to resolving it through Laravel's magic forwarding. Reads `declaring_method_ids`,
+     * which Psalm populates only from genuinely declared methods — the plugin's forwarded methods
+     * are answered virtually by a method-existence provider and never recorded there.
+     *
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodNameLower
+     *
+     * @psalm-mutation-free
+     */
+    private static function modelDeclaresMethod(string $modelClass, string $methodNameLower, Codebase $codebase): bool
+    {
+        try {
+            $classStorage = $codebase->classlike_storage_provider->get(\strtolower($modelClass));
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        return isset($classStorage->declaring_method_ids[$methodNameLower]);
     }
 
     /** @psalm-pure */
