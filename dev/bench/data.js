@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781556269453,
+  "lastUpdate": 1781563409972,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6115,6 +6115,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.77,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1103,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f6eea482e56213ca569b4651881e9a500e2f12ca",
+          "message": "Report undefined methods on base `Builder<Model>` from `$class::query()` (#1073)\n\n* feat(eloquent): flag undefined method on base Builder<Model> #1070\n\n$class::query() for a class-string<Model> holder resolves to the base\nBuilder<Model>, whose stub @mixin Query\\Builder + __call silently\naccepted any method name. A renamed or mistyped scope therefore passed\nanalysis and fataled at runtime (BadMethodCallException). PHPStan/Larastan\nalready catch this; Psalm did not.\n\nAdd an always-on AfterExpressionAnalysis rule that reports Psalm's\nbuilt-in UndefinedMagicMethod (the same issue Psalm already raises for the\nconcrete custom-builder case, WorkOrder::query()->fake()) for such calls.\n\nReporting is restricted to a direct $class::query() receiver: a bare\nBuilder $q (filters, pipelines, whereHas closures) is type-identical to\nBuilder<Model> but usually backs a concrete model at runtime, so flagging\nit would be a false positive. A method counts as valid when it is a real\nEloquent/Query builder method, a registered macro, or a dynamic\nwhere{Column} form.\n\n* fix(eloquent): respect method-name case and check_methods #1070\n\nTwo correctness fixes from review of the UndefinedBuilderMethod rule:\n\n- Dynamic-where detection now uses the ORIGINAL method casing. Laravel's\n  Query\\Builder::__call does a case-sensitive str_starts_with($method,\n  'where'), so WhereFoo()/OrWhereFoo() do NOT route to dynamicWhere and\n  throw BadMethodCallException at runtime. The previous lowercase check\n  treated them as valid (false negative); they are now flagged.\n  methodExists/pseudo-method lookups stay lowercase (PHP dispatch and\n  Psalm storage are case-insensitive).\n\n- Skip emission when $context->check_methods is false, mirroring Psalm's\n  core method-call analyzer so the rule stays silent in contexts where\n  method checks are intentionally disabled.\n\nTests: add WhereFoo() (flagged) and a wrong-cased macro (not flagged —\nPsalm resolves macros case-insensitively via the lowercased pseudo-method,\nso flagging would contradict its own resolution).",
+          "timestamp": "2026-06-16T00:40:04+02:00",
+          "tree_id": "eca26812c8eefd256098ec36f3d74d113787a9aa",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f6eea482e56213ca569b4651881e9a500e2f12ca"
+        },
+        "date": 1781563408819,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.2,
+            "range": "± 0.92",
             "unit": "s"
           },
           {
