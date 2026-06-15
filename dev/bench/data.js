@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781507467219,
+  "lastUpdate": 1781510687796,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6045,6 +6045,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.07,
             "range": "± 0.63",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1103,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f4077aad1dc83265287f4835afc5d8fd8d6ed323",
+          "message": "feat(eloquent): resolve higher-order builder where proxies #1062 (#1066)\n\n`$builder->orWhere->scope()` (also `whereNot`, `orWhereNot`) collapsed to\nmixed: the proxy carried no model binding, so the chained scope lost TModel\nand fell to mixed.\n\nRe-declare HigherOrderBuilderProxy as generic (`@template-covariant TModel`)\nwith `__call(): Builder<TModel>`, and type the three proxy properties as\n`HigherOrderBuilderProxy<TModel>` directly on Builder. Psalm threads TModel\nthrough the property read into the proxy and back out of __call — pure stub,\nno handler. The proxy always returns the builder fluently, so one uniform\n`@return Builder<TModel>` covers every proxied scope.\n\nCovariance is required (not invariant): TModel is output-only, so a proxied\ncall inside a non-final model method typed `Builder<self>` must accept the\ninferred `Builder<Model&static>` — locked by Customer::activeOrVerified().\n\nLarastan's `@property-read static` form does not port: Psalm 7 collapses\n`static`/`$this` in a property-read to `Builder&static` and drops TModel.\n\nLenient: any proxied call yields Builder<TModel>; scope-name validation is\ndeferred to the Model Metadata Registry (would need a handler — see stub @todo).\n\nCloses #1062",
+          "timestamp": "2026-06-15T10:01:27+02:00",
+          "tree_id": "47b1695baec2b7e3d5472c3ee8a134e4a204c036",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f4077aad1dc83265287f4835afc5d8fd8d6ed323"
+        },
+        "date": 1781510687129,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.79,
+            "range": "± 0.11",
             "unit": "s"
           },
           {
