@@ -135,6 +135,17 @@ function ambiguous_union_receiver_is_not_flagged(Customer|Vehicle $model): void
 }
 
 /**
+ * A model-or-builder union: the receiver may already be an explicit builder, so the call is not
+ * flagged (the Builder atomic makes the receiver ambiguous).
+ *
+ * @param Customer|Builder<Customer> $receiver
+ */
+function model_or_builder_receiver_is_not_flagged(Customer|Builder $receiver): void
+{
+    $receiver->where('active', 1);
+}
+
+/**
  * A trait builder macro on a plain base-Builder model (SoftDeletes::withTrashed on Customer) is
  * a runtime macro the plugin does not resolve as forwarded, so it is not flagged (and not a typo).
  */
