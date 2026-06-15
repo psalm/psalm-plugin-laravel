@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781510687796,
+  "lastUpdate": 1781556269453,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6080,6 +6080,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.79,
             "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1103,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3f7d0f49b90b0ed42084064c08cb1886cc311ee0",
+          "message": "feat(facades): narrow App::make() class-string returns (#1072)\n\nThe `Illuminate\\Support\\Facades\\App` facade declares make()/makeWith()/get()\nas `object|mixed`, which collapses to `mixed` and pollutes any list or return\nbuilt from `App::make(SomeAction::class)` (e.g. a Nova resource's\n`actions(): list<Action>`).\n\nAdd a handler that narrows a class-string argument to the resolved class,\nmirroring the container's conditional return and the existing app()/resolve()\nbehaviour. It reads the class off the AST because the magic-static return-type\nprovider fires before arguments are analysed, and supplies parameter storage\nto avoid the \"Cannot get method params\" crash on the magic method. Covers\nmake/makeWith/get and the global `\\App` alias; class-string variables and\nplain-string aliases stay `mixed`.",
+          "timestamp": "2026-06-15T22:41:20+02:00",
+          "tree_id": "5039b34e4c7af4ed0959c635a150ccb9119b3302",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3f7d0f49b90b0ed42084064c08cb1886cc311ee0"
+        },
+        "date": 1781556268345,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.77,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
