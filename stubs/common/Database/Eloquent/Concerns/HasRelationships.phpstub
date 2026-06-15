@@ -61,6 +61,12 @@ trait HasRelationships
      * The related model type cannot be determined statically for polymorphic relations,
      * so TRelatedModel defaults to Model.
      *
+     * @todo #913: narrow TRelatedModel to the registered morph-map union
+     *       (Relation::$morphMap / Relation::requireMorphMap) so an app
+     *       `@return MorphTo<Concrete|..., self>` stops raising MoreSpecificReturnType.
+     *       Out of scope of the pivot-template-defaults work; the inherent-limitation
+     *       assertions stay pinned in tests/Type/tests/Relation/RelationStubKnownLimitationsTest.phpt.
+     *
      * @return \Illuminate\Database\Eloquent\Relations\MorphTo<\Illuminate\Database\Eloquent\Model, static>
      */
     public function morphTo($name = null, $type = null, $id = null, $ownerKey = null) {}
