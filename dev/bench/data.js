@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779616871207,
+  "lastUpdate": 1781507214216,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -5982,6 +5982,39 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1101,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Alies Lapatsin",
+            "username": "alies-dev",
+            "email": "5278175+alies-dev@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "Alies Lapatsin",
+            "username": "alies-dev",
+            "email": "5278175+alies-dev@users.noreply.github.com"
+          },
+          "id": "859e45f46df090dfd52af82b4192af75fa3fcdc2",
+          "message": "ci(benchmark): keep Monica beta.5, bump malware-flagged dep instead of downgrading\n\nThe earlier downgrade to Monica v5.0.0-beta.4 (#1064) traded one failure for\nanother: beta.4 ships Laravel 11, but the plugin requires illuminate ^12 || ^13,\nso 'composer update psalm/plugin-laravel' could not resolve.\n\nbeta.5 is the lowest Monica tag on Laravel 12. Its lock pins the dev dependency\nlaravel-lang/http-statuses 3.10.3, which Packagist flags as malware. Rather than\nchase Monica tags, bump that single package to a clean release (constraint ^3.8,\nresolves to 3.13.2) before any other composer command runs. The bump is\nunconditional because the vendor cache excludes composer.lock, so the flagged\nlock returns from the fresh clone on every cache hit and must be rewritten so the\ncorrected lock is what 'cp -a' copies into the base/pr projects. Cache keys bumped\nto v2 to drop any stale flagged vendor.",
+          "timestamp": "2026-06-15T07:02:31Z",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/859e45f46df090dfd52af82b4192af75fa3fcdc2"
+        },
+        "date": 1781507213485,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.72,
+            "range": "± 0.44",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
             "unit": "MB"
           }
         ]
