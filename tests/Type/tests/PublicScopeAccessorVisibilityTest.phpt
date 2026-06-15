@@ -18,12 +18,6 @@ class PublicScopesModel extends Model
         return $query;
     }
 
-    // Reported as PublicModelAccessor: a public legacy scopeXxx().
-    public function scopePublished(Builder $query): Builder
-    {
-        return $query;
-    }
-
     // Reported as PublicModelAccessor: a public legacy accessor.
     public function getTitleAttribute(): string
     {
@@ -34,6 +28,12 @@ class PublicScopesModel extends Model
     public function setTitleAttribute(string $value): void
     {
         $this->attributes['title'] = $value;
+    }
+
+    // Clean: a public legacy scopeXxx() is Laravel's documented idiom and is deliberately NOT reported.
+    public function scopePublished(Builder $query): Builder
+    {
+        return $query;
     }
 
     // Clean: a protected #[Scope] (the correct convention).
@@ -54,47 +54,47 @@ class PublicScopesModel extends Model
     {
     }
 
-    // Clean: a public method that only shares the `scope` prefix.
-    public function scoped(): void
+    // Clean: a public method that only shares the `get` prefix.
+    public function getter(): void
     {
     }
 }
 
-// Clean: a private scope is a separate dead-code concern, not a visibility convention one.
-class PrivateScopeFixtureModel extends Model
+// Clean: a private accessor is a separate dead-code concern, not a visibility convention one.
+class PrivateAccessorFixtureModel extends Model
 {
-    private function scopeSecret(Builder $query): Builder
+    private function getSecretAttribute(): string
     {
-        return $query;
+        return 'secret';
     }
 }
 
-// A public legacy scope on a trait is reported once (PublicModelAccessor), at the trait's own declaration.
-trait HasArchivedScope
+// A public legacy accessor on a trait is reported once (PublicModelAccessor), at the trait's own declaration.
+trait HasArchivedNameAccessor
 {
-    public function scopeArchived(Builder $query): Builder
+    public function getArchivedNameAttribute(): string
     {
-        return $query;
+        return 'archived';
     }
 }
 
-class TraitScopeModel extends Model
+class TraitAccessorModel extends Model
 {
-    use HasArchivedScope;
+    use HasArchivedNameAccessor;
 }
 
 // A second model composing the same trait does NOT add a second report (deduped on the shared storage).
-class SecondTraitScopeModel extends Model
+class SecondTraitAccessorModel extends Model
 {
-    use HasArchivedScope;
+    use HasArchivedNameAccessor;
 }
 
-// A public legacy scope on an ABSTRACT base is reported at the base's own declaration...
+// A public legacy accessor on an ABSTRACT base is reported at the base's own declaration...
 abstract class AbstractBaseModel extends Model
 {
-    public function scopeOnBase(Builder $query): Builder
+    public function getOnBaseAttribute(): string
     {
-        return $query;
+        return 'base';
     }
 }
 
@@ -109,30 +109,30 @@ class ConcreteChildModel extends AbstractBaseModel
 // the same but is omitted because the strict test config trips unrelated MissingAbstractPureAnnotation
 // noise on the interface declaration).
 
-// An override of a public parent scope.
+// An override of a public parent accessor.
 class OverridingChildModel extends PublicScopesModel
 {
     #[\Override]
-    public function scopePublished(Builder $query): Builder
+    public function getTitleAttribute(): string
     {
-        return $query;
+        return 'overridden';
     }
 }
 
-// A scope required by an abstract trait method.
-trait RequiresPublishedScope
+// An accessor required by an abstract trait method.
+trait RequiresDisplayNameAccessor
 {
-    abstract public function scopeRequiredPublished(Builder $query): Builder;
+    abstract public function getDisplayNameAttribute(): string;
 }
 
 class AbstractTraitRequiredModel extends Model
 {
-    use RequiresPublishedScope;
+    use RequiresDisplayNameAccessor;
 
     #[\Override]
-    public function scopeRequiredPublished(Builder $query): Builder
+    public function getDisplayNameAttribute(): string
     {
-        return $query;
+        return 'name';
     }
 }
 
@@ -151,8 +151,7 @@ class NotAModel
 ?>
 --EXPECTF--
 PublicModelScope on line %d: Eloquent #[Scope] method active() should be protected, not public: called statically (Model::active()) it is a runtime fatal.
-PublicModelAccessor on line %d: Eloquent query scope scopePublished() should be protected, not public; it is dispatched through the query builder, never by name.
 PublicModelAccessor on line %d: Eloquent accessor/mutator getTitleAttribute() should be protected, not public; it is dispatched via __get()/__set(), never by name.
 PublicModelAccessor on line %d: Eloquent accessor/mutator setTitleAttribute() should be protected, not public; it is dispatched via __get()/__set(), never by name.
-PublicModelAccessor on line %d: Eloquent query scope scopeArchived() should be protected, not public; it is dispatched through the query builder, never by name.
-PublicModelAccessor on line %d: Eloquent query scope scopeOnBase() should be protected, not public; it is dispatched through the query builder, never by name.
+PublicModelAccessor on line %d: Eloquent accessor/mutator getArchivedNameAttribute() should be protected, not public; it is dispatched via __get()/__set(), never by name.
+PublicModelAccessor on line %d: Eloquent accessor/mutator getOnBaseAttribute() should be protected, not public; it is dispatched via __get()/__set(), never by name.
