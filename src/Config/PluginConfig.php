@@ -26,9 +26,9 @@ final readonly class PluginConfig
         public array $configDirectories,
         public bool $resolveDynamicWhereClauses,
         public bool $resolveConfigReturnTypes,
+        public bool $reportImplicitQueryBuilderCalls,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
-        public bool $reportImplicitQueryBuilderCalls,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
          *
@@ -71,9 +71,9 @@ final readonly class PluginConfig
             configDirectories: $configDirectories,
             resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             resolveConfigReturnTypes: $resolveConfigReturnTypes,
+            reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
-            reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),
             failOnInternalError: $failOnInternalError,
