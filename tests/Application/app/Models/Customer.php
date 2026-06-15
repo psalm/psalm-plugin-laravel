@@ -111,6 +111,20 @@ class Customer extends Authenticatable
     }
 
     /**
+     * Variance lock for the higher-order where proxy: calling `->orWhere->scope()` inside a
+     * non-final model method whose return is typed `Builder<self>` must NOT raise
+     * InvalidReturnStatement. The proxy carries `@template-covariant TModel`, so the inferred
+     * `Builder<Customer>` (Model&static collapses to Customer) satisfies `Builder<self>`.
+     * See HigherOrderBuilderProxy.phpstub and issue #1062.
+     *
+     * @return Builder<self>
+     */
+    public function activeOrVerified(): Builder
+    {
+        return static::query()->orWhere->verified();
+    }
+
+    /**
      * Value-returning scope: ->first() returns ?self. Laravel's Builder::callScope evaluates
      * `$scope(...) ?? $this`, so the null result is swapped for the builder and a forwarded
      * call (Customer::query()->firstActive(), Customer::firstActive()) is `self | Builder<self>`,
