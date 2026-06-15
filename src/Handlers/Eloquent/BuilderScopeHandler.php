@@ -495,8 +495,6 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * fluent scope; its caller normalizes the type to the correct Builder<Model> / Relation
      * fallback rather than surfacing the scope's own builder atom. Query\Builder is intentionally
      * NOT matched: a scope returns the Eloquent builder, never the underlying query builder.
-     *
-     * @psalm-mutation-free
      */
     private static function isEntirelyEloquentBuilder(Codebase $codebase, Union $type): bool
     {
