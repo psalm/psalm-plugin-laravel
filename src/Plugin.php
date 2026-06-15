@@ -257,8 +257,15 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
 
+        // `App::make()`/`makeWith()`/`get()` class-string narrowing. Its getClassLikeNames() reads
+        // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
+        require_once __DIR__ . '/Handlers/Facades/AppFacadeMakeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\AppFacadeMakeHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+        require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled
@@ -290,6 +297,12 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
         }
+
+        // Flag `public` Eloquent scopes / legacy accessors (Laravel's convention is `protected` — they
+        // are dispatched indirectly, never called by name). Enabled by default; silence per project via
+        // the issueHandlers config (PublicModelScope / PublicModelAccessor).
+        require_once __DIR__ . '/Handlers/Rules/PublicScopeAccessorVisibilityHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\PublicScopeAccessorVisibilityHandler::class);
     }
 
     /**

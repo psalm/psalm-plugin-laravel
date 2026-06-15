@@ -294,7 +294,16 @@ final class CustomBuilderMethodHandler
             return null;
         }
 
-        return new Union([ModelMethodHandler::builderType($builderClass, $modelClass, $codebase)]);
+        // A value-returning scope surfaces its declared return via Laravel's `?? $this` coalesce;
+        // a plain void/fluent scope keeps the custom builder type, CustomBuilder<Model> (issue #1053).
+        $scopeFallback = new Union([ModelMethodHandler::builderType($builderClass, $modelClass, $codebase)]);
+
+        return BuilderScopeHandler::forwardedScopeReturnType(
+            $codebase,
+            $modelClass,
+            $event->getMethodNameLowercase(),
+            $scopeFallback,
+        );
     }
 
     /**

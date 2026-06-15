@@ -94,6 +94,19 @@ final class Vehicle extends Model
         $query->where('fuel_type', 'electric');
     }
 
+    /**
+     * Value-returning scope on a relation's related model. On a relation chain Laravel's
+     * callScope returns the wrapped query for a null result, which Relation::__call maps back
+     * to the Relation, so a forwarded call ($customer->vehicles()->firstElectric()) is
+     * `self | <Relation>`, never null. Exercises issue #1053 on the relation-chain path.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeFirstElectric($query): ?self
+    {
+        return $query->where('fuel_type', 'electric')->first();
+    }
+
     public function newEloquentBuilder($query): VehicleBuilder
     {
         return new VehicleBuilder($query);

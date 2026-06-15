@@ -111,6 +111,44 @@ class Customer extends Authenticatable
     }
 
     /**
+     * Variance lock for the higher-order where proxy: calling `->orWhere->scope()` inside a
+     * non-final model method whose return is typed `Builder<self>` must NOT raise
+     * InvalidReturnStatement. The proxy carries `@template-covariant TModel`, so the inferred
+     * `Builder<Customer>` (Model&static collapses to Customer) satisfies `Builder<self>`.
+     * See HigherOrderBuilderProxy.phpstub and issue #1062.
+     *
+     * @return Builder<self>
+     */
+    public function activeOrVerified(): Builder
+    {
+        return static::query()->orWhere->verified();
+    }
+
+    /**
+     * Value-returning scope: ->first() returns ?self. Laravel's Builder::callScope evaluates
+     * `$scope(...) ?? $this`, so the null result is swapped for the builder and a forwarded
+     * call (Customer::query()->firstActive(), Customer::firstActive()) is `self | Builder<self>`,
+     * never null. Exercises issue #1053.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeFirstActive($query): ?self
+    {
+        return $query->where('active', 1)->first();
+    }
+
+    /**
+     * Non-null scalar value-returning scope: count() never returns null, so the `?? $this`
+     * fallback is dead and a forwarded call is a plain int, with no Builder union (issue #1053).
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeActiveCount($query): int
+    {
+        return $query->where('active', 1)->count();
+    }
+
+    /**
      * Legacy scope with a parameter: called as Customer::query()->ofName('Ada').
      * Exercises the instance-call params hand-off (the caller passes everything after $query).
      *

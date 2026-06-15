@@ -267,11 +267,20 @@ final class ModelPropertyHandler
         if (\is_a($fqClasslikeName, Model::class, true)) {
             try {
                 $reflection = new \ReflectionClass($fqClasslikeName);
-                $instance = $reflection->newInstanceWithoutConstructor();
 
-                /** @var array<string, string> $instanceCasts */
-                $instanceCasts = $instance->getCasts();
-                $casts = \array_merge($casts, $instanceCasts);
+                // Mirror resolveTableName(): an abstract base cannot be instantiated. Guard the
+                // instance read explicitly — newInstanceWithoutConstructor() on an abstract class
+                // throws \Error ("Cannot instantiate abstract class"), which the \ReflectionException
+                // catch below does NOT catch, so a reachable abstract FQCN would surface an uncaught
+                // error without this guard. The migration column/cast handler is not registered for
+                // abstract models (see ModelRegistrationHandler), so this is defense-in-depth.
+                if (!$reflection->isAbstract()) {
+                    $instance = $reflection->newInstanceWithoutConstructor();
+
+                    /** @var array<string, string> $instanceCasts */
+                    $instanceCasts = $instance->getCasts();
+                    $casts = \array_merge($casts, $instanceCasts);
+                }
             } catch (\ReflectionException) {
                 // Can't instantiate model — skip instance casts
             }
