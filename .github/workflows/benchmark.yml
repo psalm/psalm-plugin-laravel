@@ -28,11 +28,13 @@ permissions:
 env:
   # Pinned Monica release for reproducible benchmarks.
   # Monica is a real-world Laravel app (~700 PHP files, Laravel 12) https://github.com/monicahq/monica.
-  # Pinned to beta.4 (not the newer beta.5) because beta.5 locks the dev dependency
-  # laravel-lang/http-statuses 3.10.3, which Packagist flags as malware, so `composer install`
-  # aborts. beta.4 locks 3.8.2, which is not flagged. Revisit when a clean Monica tag ships.
+  # beta.5 is the lowest tag on Laravel 12 (the plugin requires illuminate ^12 || ^13;
+  # beta.4 and earlier ship Laravel 11). Its lock pins the dev dependency
+  # laravel-lang/http-statuses 3.10.3, which Packagist flags as malware, so a plain
+  # `composer install` aborts. The Prime step below bumps that one package to a clean
+  # release before installing (see there).
   MONICA_REPO: monicahq/monica
-  MONICA_REF: "v5.0.0-beta.4"
+  MONICA_REF: "v5.0.0-beta.5"
   PHP_VERSION: "8.3"
   HYPERFINE_RUNS: 3
 
@@ -123,14 +125,19 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: /tmp/monica-source/vendor
-          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
+          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v2
 
       - name: Prime Monica vendor
         run: |
-          if [ ! -d /tmp/monica-source/vendor ]; then
-            cd /tmp/monica-source
-            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
-          fi
+          cd /tmp/monica-source
+          # Monica's lock pins the dev dependency laravel-lang/http-statuses at a version
+          # Packagist flags as malware, so a plain `composer install` aborts. Bumping just
+          # that one package to a clean release (the constraint is ^3.8) rewrites the lock and
+          # installs the full set. Run unconditionally — not behind a `[ ! -d vendor ]` guard —
+          # because the vendor cache does not include composer.lock, so on a cache hit the lock
+          # is restored from the fresh git clone at the flagged version; the rewrite must run
+          # every time so the corrected lock is what `cp -a` copies into the base/pr projects.
+          COMPOSER_MEMORY_LIMIT=-1 composer update laravel-lang/http-statuses --no-interaction --no-progress
 
       - name: Setup benchmark projects
         run: |
@@ -238,14 +245,16 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: /tmp/monica/vendor
-          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
+          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v2
 
       - name: Setup benchmark project
         run: |
           cd /tmp/monica
-          if [ ! -d vendor ]; then
-            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
-          fi
+          # Bump Monica's malware-flagged dev dependency laravel-lang/http-statuses to a clean
+          # release (see the pr-benchmark "Prime Monica vendor" step for the full rationale).
+          # Unconditional: the vendor cache excludes composer.lock, so the flagged lock returns
+          # on every cache hit and must be rewritten before any other composer command runs.
+          COMPOSER_MEMORY_LIMIT=-1 composer update laravel-lang/http-statuses --no-interaction --no-progress
           composer config repositories.plugin \
             '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true}}'
           composer config minimum-stability dev
