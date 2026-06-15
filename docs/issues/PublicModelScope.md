@@ -41,4 +41,4 @@ Change `public` to `protected`. Call sites are unaffected.
 </issueHandlers>
 ```
 
-`private` is intentionally not flagged; a private `#[Scope]` is rejected by Laravel and surfaces elsewhere. The sibling check for legacy accessors and mutators is [PublicModelAccessor](PublicModelAccessor.md).
+`private` is intentionally not flagged; a private `#[Scope]` is rejected by Laravel and surfaces elsewhere.
