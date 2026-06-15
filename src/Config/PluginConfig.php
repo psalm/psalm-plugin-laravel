@@ -28,12 +28,6 @@ final readonly class PluginConfig
         public bool $resolveConfigReturnTypes,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
-        /**
-         * Opt-in: when true, registers the ImplicitQueryBuilderCall rule, which flags query
-         * builder / local scope methods called directly on a model (e.g. `User::where(...)`,
-         * `User::active()`, `$user->where(...)`) and requires the explicit `Model::query()->...`
-         * form instead. Default false — the magic forwarding is idiomatic Laravel.
-         */
         public bool $reportImplicitQueryBuilderCalls,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
