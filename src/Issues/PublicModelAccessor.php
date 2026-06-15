@@ -7,18 +7,16 @@ namespace Psalm\LaravelPlugin\Issues;
 use Psalm\Issue\PluginIssue;
 
 /**
- * Reported when an Eloquent model exposes a `public` legacy convention method that Laravel dispatches
- * indirectly and the convention wants `protected`:
+ * Reported when an Eloquent model exposes a `public` legacy attribute accessor / mutator
+ * `getXxxAttribute()` / `setXxxAttribute()`, which Laravel dispatches indirectly through `__get()` /
+ * `__set()` magic and the convention wants `protected`.
  *
- *  - a legacy `scopeXxx()` query scope (dispatched through the query builder), or
- *  - a legacy attribute accessor / mutator `getXxxAttribute()` / `setXxxAttribute()` (dispatched through
- *    `__get()` / `__set()` magic).
- *
- * These are never called by their declared name, so `public` only widens the model's API surface. Unlike a
- * `public` `#[Scope]`, whose idiomatic static call fatals (see {@see PublicModelScope}), these break nothing
- * on the path anyone writes, so each is a pure convention nit on otherwise-correct code. Only `public` is
+ * It is never called by its declared name, so `public` only widens the model's API surface. Unlike a
+ * `public` `#[Scope]`, whose idiomatic static call fatals (see {@see PublicModelScope}), it breaks nothing
+ * on the path anyone writes, so it is a pure convention nit on otherwise-correct code. Only `public` is
  * reported; `private` is a separate dead-code question. The modern `firstName(): Attribute` accessor form is
- * out of scope.
+ * out of scope. Legacy `scopeXxx()` query scopes are NOT reported: `public` is Laravel's documented idiom
+ * for them (see {@see \Psalm\LaravelPlugin\Handlers\Rules\PublicScopeAccessorVisibilityHandler}).
  *
  * Enabled by default. Silence per project via
  * `<PluginIssue name="PublicModelAccessor" errorLevel="suppress" />` in psalm.xml's issueHandlers.
