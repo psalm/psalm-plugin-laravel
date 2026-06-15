@@ -28,8 +28,11 @@ permissions:
 env:
   # Pinned Monica release for reproducible benchmarks.
   # Monica is a real-world Laravel app (~700 PHP files, Laravel 12) https://github.com/monicahq/monica.
+  # Pinned to beta.4 (not the newer beta.5) because beta.5 locks the dev dependency
+  # laravel-lang/http-statuses 3.10.3, which Packagist flags as malware, so `composer install`
+  # aborts. beta.4 locks 3.8.2, which is not flagged. Revisit when a clean Monica tag ships.
   MONICA_REPO: monicahq/monica
-  MONICA_REF: "v5.0.0-beta.5"
+  MONICA_REF: "v5.0.0-beta.4"
   PHP_VERSION: "8.3"
   HYPERFINE_RUNS: 3
 
