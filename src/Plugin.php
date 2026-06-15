@@ -264,6 +264,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+        require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled
