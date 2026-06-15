@@ -20,6 +20,7 @@
             <findMissingViews value="true" />
             <findMissingTranslations value="true" />
             <findOctaneIncompatibleBinding value="true" />
+            <reportImplicitQueryBuilderCalls value="true" />
         </pluginClass>
     </plugins>
     <issueHandlers>

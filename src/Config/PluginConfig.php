@@ -29,6 +29,13 @@ final readonly class PluginConfig
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         /**
+         * Opt-in: when true, registers the ImplicitQueryBuilderCall rule, which flags query
+         * builder / local scope methods called directly on a model (e.g. `User::where(...)`,
+         * `User::active()`, `$user->where(...)`) and requires the explicit `Model::query()->...`
+         * form instead. Default false — the magic forwarding is idiomatic Laravel.
+         */
+        public bool $reportImplicitQueryBuilderCalls,
+        /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
          *
          *  - null  → auto-detect (rule registers when laravel/octane is installed)
@@ -59,6 +66,7 @@ final readonly class PluginConfig
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
@@ -71,6 +79,7 @@ final readonly class PluginConfig
             resolveConfigReturnTypes: $resolveConfigReturnTypes,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
+            reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),
             failOnInternalError: $failOnInternalError,

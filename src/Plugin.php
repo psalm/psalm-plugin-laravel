@@ -276,6 +276,14 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
 
+        // Opt-in: forbid Laravel's __callStatic/__call magic forwarding on models and require
+        // the explicit Model::query()->... entry point. Off by default — the forwarding is
+        // idiomatic Laravel, so this only registers when the user asks for it.
+        if ($pluginConfig->reportImplicitQueryBuilderCalls) {
+            require_once __DIR__ . '/Handlers/Rules/ImplicitQueryBuilderCallHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\ImplicitQueryBuilderCallHandler::class);
+        }
+
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled

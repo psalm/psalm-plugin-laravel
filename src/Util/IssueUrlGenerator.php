@@ -86,6 +86,7 @@ final class IssueUrlGenerator
             "- modelPropertiesColumnFallback: {$pluginConfig->modelPropertiesColumnFallback->value}",
             '- resolveDynamicWhereClauses: ' . self::formatBool($pluginConfig->resolveDynamicWhereClauses),
             '- resolveConfigReturnTypes: ' . self::formatBool($pluginConfig->resolveConfigReturnTypes),
+            '- reportImplicitQueryBuilderCalls: ' . self::formatBool($pluginConfig->reportImplicitQueryBuilderCalls),
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),

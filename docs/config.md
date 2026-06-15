@@ -25,6 +25,7 @@ Full config example:
         <resolveConfigReturnTypes value="false" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
+        <reportImplicitQueryBuilderCalls value="true" />
         <findOctaneIncompatibleBinding value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
@@ -151,6 +152,20 @@ See [MissingView](issues/MissingView.md) for details.
 
 ```xml
 <findMissingViews value="true" />
+```
+
+## `reportImplicitQueryBuilderCalls`
+
+**default**: `false`
+
+When enabled, the plugin flags query builder and local scope methods called directly on an Eloquent model (forwarded by Laravel through `__callStatic` / `__call`) and asks for the explicit `Model::query()->...` form instead. It reports query builder methods (`where`, `find`, `orderBy`, ...), custom builder and trait builder methods, and local scopes (legacy `scopeXxx()` and modern `#[Scope]`). Real model methods and genuinely undefined methods are left alone.
+
+See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
+
+### Example
+
+```xml
+<reportImplicitQueryBuilderCalls value="true" />
 ```
 
 ## `findOctaneIncompatibleBinding`
