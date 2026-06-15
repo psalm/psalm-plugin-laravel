@@ -257,6 +257,11 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
 
+        // `App::make()`/`makeWith()`/`get()` class-string narrowing. Its getClassLikeNames() reads
+        // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
+        require_once __DIR__ . '/Handlers/Facades/AppFacadeMakeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\AppFacadeMakeHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
         // Tri-state gate for the OctaneIncompatibleBinding rule:
