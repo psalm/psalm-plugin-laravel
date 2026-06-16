@@ -67,9 +67,38 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
         ];
     }
 
+    /**
+     * Container methods carrying the `class-string<T> -> T` resolution contract: their return
+     * IS the resolved instance, so narrowing it to the first `Foo::class` argument is correct.
+     *
+     * The gate matters because this provider is registered per-class (see getClassLikeNames),
+     * so Psalm offers it EVERY method on the container — not just the resolving ones. Without
+     * the name check the resolver rewrote the return of any container method whose first
+     * argument is a class-string: `$app->when(Foo::class)` (a contextual-binding builder),
+     * `$app->bound(Foo::class)` (a bool), `$app->instance(Foo::class, $x)` (the instance), etc.
+     * all collapsed to `Foo`, and chains like `$app->when(Foo::class)->needs(...)` then reported
+     * a false-positive `UndefinedMethod` (`Foo::needs`). Regression from #1075, which added the
+     * container contracts to getClassLikeNames so make() narrows on `$this->app` too — widening
+     * the set of receivers this un-gated provider fired for.
+     *
+     * Mirrors {@see \Psalm\LaravelPlugin\Handlers\Facades\AppFacadeMakeHandler::HANDLED_METHODS}
+     * (the `App` facade analogue) — keep the two lists in sync.
+     *
+     * @var array<lowercase-string, true>
+     */
+    private const RESOLUTION_METHODS = [
+        'make' => true,
+        'makewith' => true,
+        'get' => true,
+    ];
+
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
+        if (!isset(self::RESOLUTION_METHODS[$event->getMethodNameLowercase()])) {
+            return null;
+        }
+
         return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($event->getSource()->getNodeTypeProvider(), $event->getCallArgs());
     }
 

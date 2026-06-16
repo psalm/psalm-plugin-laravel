@@ -55,6 +55,11 @@ final class AppFacadeMakeHandler implements MethodReturnTypeProviderInterface, M
     /**
      * Container-resolution methods carrying the `class-string<T> -> T` contract; all narrow alike.
      *
+     * Mirrors {@see \Psalm\LaravelPlugin\Handlers\Application\ContainerHandler::RESOLUTION_METHODS}
+     * (the container-instance analogue, e.g. `$this->app->make()`) — keep the two lists in sync.
+     * Note {@see \Psalm\LaravelPlugin\Handlers\Rules\OctaneIncompatibleBindingHandler} keeps an
+     * intentionally different set (it also tracks `resolve`), so it is deliberately NOT unified here.
+     *
      * @var array<lowercase-string, true>
      */
     private const HANDLED_METHODS = [
