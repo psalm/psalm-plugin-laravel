@@ -55,7 +55,16 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [ApplicationProvider::getAppFullyQualifiedClassName()];
+        return [
+            ApplicationProvider::getAppFullyQualifiedClassName(),
+            // Container contracts: callers idiomatically type on the interface
+            // (e.g. `$this->app` is the Application contract), so the make()
+            // return must be narrowed for these receivers too — otherwise the
+            // `@return mixed` on the contract stub (which hosts the CWE-470
+            // taint sink) would surface as mixed at every `->make()` call site.
+            \Illuminate\Contracts\Container\Container::class,
+            \Illuminate\Contracts\Foundation\Application::class,
+        ];
     }
 
     #[\Override]
