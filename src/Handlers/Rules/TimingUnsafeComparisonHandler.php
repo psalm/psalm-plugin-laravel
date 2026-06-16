@@ -33,6 +33,14 @@ use Psalm\Type\Union;
  * The handler adds taint sinks at those operators/functions; a secret-tainted operand
  * flowing in makes Psalm emit TaintedUserSecret/TaintedSystemSecret.
  *
+ * Per-kind emission is expected, not a bug: the sink matches USER_SECRET | SYSTEM_SECRET,
+ * and Psalm's taint engine reports once per matching kind. A value carrying both taints
+ * (e.g. a decrypt() result, whose stub unescapes both) therefore raises BOTH issues at the
+ * same site. We cannot collapse them here: at AfterExpressionAnalysis the taint is not yet
+ * resolved (that happens later in connectSinksAndSources), so we don't know which kind — if
+ * any — will reach the sink. Emitting a single combined finding would mean abandoning the
+ * taint-sink design and losing the data-flow trace, so the duplicate-kind reports are kept.
+ *
  * Upstream limitation: Psalm 7 hardcodes the per-kind message in
  * TaintFlowGraph::connectSinksAndSources(), so until vimeo/psalm#11762 lands the text
  * is the default "Detected tainted user secret leaking" rather than CWE-208-specific.
