@@ -11,8 +11,9 @@ use Psalm\LaravelPlugin\Util\EloquentModelMethods;
 
 /**
  * Direct coverage for the pure name classifiers. They were promoted from private SuppressHandler helpers
- * to a shared util now consumed by three handlers, so the subtle StudlyCase gate and the `.+` accessor
- * guard get a dedicated truth table here rather than being exercised only through the full Psalm pipeline.
+ * to a shared util now consumed by three handlers, so the subtle StudlyCase gate, the `.+` accessor
+ * guard, and the trait-boot static gate get a dedicated truth table here rather than being exercised
+ * only through the full Psalm pipeline.
  */
 #[CoversClass(EloquentModelMethods::class)]
 final class EloquentModelMethodsTest extends TestCase
@@ -67,5 +68,43 @@ final class EloquentModelMethodsTest extends TestCase
         $this->assertFalse(EloquentModelMethods::isLegacyAccessorMethodName('getroutekeyname'));
         $this->assertFalse(EloquentModelMethods::isLegacyAccessorMethodName('getmorphclass'));
         $this->assertFalse(EloquentModelMethods::isLegacyAccessorMethodName('title'));
+    }
+
+    #[Test]
+    public function isTraitBootHook_recognises_conventional_hooks(): void
+    {
+        // Static `boot{Trait}` dispatched by Model::bootTraits().
+        $this->assertTrue(EloquentModelMethods::isTraitBootHook('bootHasUuid', 'App\Concerns\HasUuid', true));
+        // Instance `initialize{Trait}` dispatched by Model::initializeTraits() via `$this->{$method}()`.
+        $this->assertTrue(EloquentModelMethods::isTraitBootHook('initializeHasUuid', 'App\Concerns\HasUuid', false));
+        // initializeTraits() collects the hook regardless of the static modifier, so a static
+        // `initialize{Trait}` is matched too (unlike the boot prefix, which is static-only).
+        $this->assertTrue(EloquentModelMethods::isTraitBootHook('initializeHasUuid', 'App\Concerns\HasUuid', true));
+        // Basename is the last namespace segment; an unqualified trait name resolves to itself.
+        $this->assertTrue(EloquentModelMethods::isTraitBootHook('bootHasUuid', 'HasUuid', true));
+    }
+
+    #[Test]
+    public function isTraitBootHook_rejects_non_hooks(): void
+    {
+        // The static gate: Model::bootTraits() only invokes a `boot{Trait}` when it is static, so a
+        // non-static one is never dispatched and must stay flagged as the mis-declaration it is.
+        $this->assertFalse(EloquentModelMethods::isTraitBootHook('bootHasUuid', 'App\Concerns\HasUuid', false));
+        // Case-sensitive, mirroring Laravel's case-sensitive `in_array($method->getName(), $set)`
+        // collection: a mis-cased `boothasuuid()` is never booted by Laravel (genuinely dead), so it
+        // must stay flagged rather than be silently suppressed.
+        $this->assertFalse(EloquentModelMethods::isTraitBootHook('boothasuuid', 'App\Concerns\HasUuid', true));
+        $this->assertFalse(EloquentModelMethods::isTraitBootHook('initializehasuuid', 'App\Concerns\HasUuid', false));
+        // Precision: a boot/initialize method whose suffix is not the declaring trait's basename is
+        // never derived by Laravel from that trait, so it is genuinely dead code.
+        $this->assertFalse(EloquentModelMethods::isTraitBootHook('bootSomethingElse', 'App\Concerns\HasUuid', true));
+        $this->assertFalse(EloquentModelMethods::isTraitBootHook('initializeSomethingElse', 'App\Concerns\HasUuid', false));
+        // Bare prefixes never match — no trait has an empty basename.
+        $this->assertFalse(EloquentModelMethods::isTraitBootHook('boot', 'App\Concerns\HasUuid', true));
+        $this->assertFalse(EloquentModelMethods::isTraitBootHook('initialize', 'App\Concerns\HasUuid', false));
+        // Unrelated method.
+        $this->assertFalse(EloquentModelMethods::isTraitBootHook('handle', 'App\Concerns\HasUuid', true));
+        // Null cased name (no source spelling to match) is never treated as a hook.
+        $this->assertFalse(EloquentModelMethods::isTraitBootHook(null, 'App\Concerns\HasUuid', true));
     }
 }
