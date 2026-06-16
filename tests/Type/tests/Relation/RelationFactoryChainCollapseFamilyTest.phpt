@@ -16,20 +16,18 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 /**
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/913
  *
- * Companion to BelongsToChainSelfTemplateCollapseTest, widening the pinned coverage from
- * belongsTo() to the WHOLE relation-factory family. The #913 collapse is not specific to
- * belongsTo()/withoutGlobalScopes(): every factory stub returns Relation<..., $this>
- * (stubs/common/Database/Eloquent/Concerns/HasRelationships.phpstub), and Psalm 7 does not
- * substitute the `$this` template argument when the returned relation is chained, so chaining
- * ANY Builder/Relation method directly off the raw factory call collapses the receiver to
- * `mixed` (MixedMethodCall + MixedReturnStatement).
+ * Companion to BelongsToChainSelfTemplateCollapseTest, widening regression coverage from
+ * belongsTo() to the WHOLE relation-factory family. The #913 fix is live on this branch
+ * (`$this` -> `static` in the HasRelationships factory returns + covariant TDeclaringModel),
+ * so chaining a Builder/Relation method directly off a raw factory call no longer collapses to
+ * `mixed`. Every non-pivot factory below resolves cleanly (zero output).
  *
- * Each method below pins the CURRENT (broken) behavior; ideally every one of these flips to
- * zero output once the stub fix (`$this` -> `static` + covariant TDeclaringModel) lands.
- *
- * Contrast: chaining off a relation FIRST bound to a typed local works today
- * (tests/Type/tests/Relation/ForwardingHandlerTest.phpt) — the collapse is unique to the raw
- * stub call.
+ * Two relations still emit one diagnostic each: the pivot factories belongsToMany() and
+ * morphToMany() resolve to the stub's 2-arg BelongsToMany/MorphToMany, but those classes declare
+ * 4 templates with the last two (TPivotModel/TAccessor) defaulted, and Psalm 7 does not honor
+ * @template defaults for a partial generic -> MissingTemplateParam. This is the documented pivot
+ * limitation (tracked upstream: vimeo/psalm#5407 and PR vimeo/psalm#11790); it is intentionally
+ * reported rather than silently completed, since pinning the accessor would break ->as() overrides.
  */
 class Tag extends Model
 {
@@ -100,21 +98,5 @@ class Garage extends Model
 
 ?>
 --EXPECTF--
-MixedReturnStatement on line %d: Could not infer a return type
-MixedMethodCall on line %d: Cannot determine the type of the object on the left hand side of this expression
-MixedReturnStatement on line %d: Could not infer a return type
-MixedMethodCall on line %d: Cannot determine the type of the object on the left hand side of this expression
-MixedReturnStatement on line %d: Could not infer a return type
-MixedMethodCall on line %d: Cannot determine the type of the object on the left hand side of this expression
-MixedReturnStatement on line %d: Could not infer a return type
-MixedMethodCall on line %d: Cannot determine the type of the object on the left hand side of this expression
-MixedReturnStatement on line %d: Could not infer a return type
-MixedMethodCall on line %d: Cannot determine the type of the object on the left hand side of this expression
-MixedReturnStatement on line %d: Could not infer a return type
-MixedMethodCall on line %d: Cannot determine the type of the object on the left hand side of this expression
 MissingTemplateParam on line %d: Illuminate\Database\Eloquent\Relations\BelongsToMany has missing template params, expecting 4
-MixedReturnStatement on line %d: Could not infer a return type
-MixedMethodCall on line %d: Cannot determine the type of the object on the left hand side of this expression
 MissingTemplateParam on line %d: Illuminate\Database\Eloquent\Relations\MorphToMany has missing template params, expecting 4
-MixedReturnStatement on line %d: Could not infer a return type
-MixedMethodCall on line %d: Cannot determine the type of the object on the left hand side of this expression
