@@ -8,9 +8,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\ColumnFallback;
+use Psalm\LaravelPlugin\Config\ColumnFallback;
+use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Plugin;
-use Psalm\LaravelPlugin\PluginConfig;
 
 #[CoversClass(PluginConfig::class)]
 #[CoversClass(ColumnFallback::class)]

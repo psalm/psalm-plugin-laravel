@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin;
+namespace Psalm\LaravelPlugin\Config;
 
 use Psalm\Config;
 
