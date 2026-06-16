@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781639888921,
+  "lastUpdate": 1781645367966,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6365,6 +6365,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1103,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8f5b2da15b5f8aba66aa3a6337520f7704b66c3c",
+          "message": "feat(taint): model html_url cleanser distinct from html escape #0 (#1014)\n\nAdds `html_url` as a custom taint kind that survives `e()` /\n`htmlspecialchars()` because those cleansers neutralise HTML special\ncharacters but do not validate the URL scheme. A `javascript:` /\n`data:` URL flows through `e()` unchanged and still executes when\nemitted inside an `<a href=\"…\">` or `<img src=\"…\">` attribute.\n\nMotivated by Filament GHSA-3fc8-8hp6-6jr4 (stored XSS via image URL\nrendered through Blade `{{ }}`), whose fix added a separate\n`Str::sanitizeUrl()` allowlister. Laravel core ships `Str::isUrl()`\nas a validator but no first-party sanitizer, so the docs guide\napp-level wrappers carrying `@psalm-taint-escape html_url` +\n`@psalm-flow ($url) -> return`.\n\nScope: single Laravel-builtin sink (`MailMessage::action($url)`),\nsince its URL is concatenated into the notification email\n`<x-mail::button :url>` template. The `html_url` kind is opt-in at\nthe source (not a member of `TaintKindGroup::ALL_INPUT`) so generic\n`$request->input(...)` does not auto-flow it; documented as a known\ndetection gap.\n\nTests cover the cleanser-contract asymmetry:\n- tainted URL -> MailMessage::action() flags TaintedCustom\n- tainted URL -> app sanitizer -> action() is clean\n- tainted URL -> e() only -> still flagged at an html_url sink\n- dual-source (html + html_url) -> sanitizer -> html taint survives\n  (catches a missing `@psalm-flow` mutation on the sanitizer stub)",
+          "timestamp": "2026-06-16T23:26:22+02:00",
+          "tree_id": "ae8dd6a4a912672b1296d966d0af5111c2aa2718",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8f5b2da15b5f8aba66aa3a6337520f7704b66c3c"
+        },
+        "date": 1781645366832,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.87,
+            "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
             "unit": "MB"
           }
         ]
