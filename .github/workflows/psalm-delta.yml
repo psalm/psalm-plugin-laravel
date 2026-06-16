@@ -1,7 +1,7 @@
 name: Psalm delta
 
 # Comment-triggered, opt-in PR check: runs the plugin on a curated set of
-# real-world Laravel apps (bin/ci/test-apps.json) for the PR base AND head, then
+# real-world Laravel apps (bin/ci/test-apps.yml) for the PR base AND head, then
 # posts a single sticky comment with the per-app issue delta + which issue types
 # moved. Informational only — it never fails the PR (a delta is often intended:
 # fixing false positives REMOVES issues; new narrowing ADDS some).
@@ -15,6 +15,15 @@ name: Psalm delta
 # The per-app runner (bin/ci/delta-app.sh) and comparator (bin/ci/delta-report.php)
 # are the SAME scripts bin/ci/delta.sh runs locally, so contributors can
 # reproduce any row with `bash bin/ci/delta.sh <pr-branch>`.
+#
+# Security posture: the `delta` job runs the PR's plugin code on the runner
+# (Testbench boots, stubs generate). It is contained by (1) the fork-PR guard in
+# `prepare` that refuses any head from a different repository, (2) the
+# MEMBER/OWNER/COLLABORATOR author check on the trigger, and (3) `contents: read`
+# only + `persist-credentials: false` on that job — no token write scope and no
+# git credentials are exposed to the executed code. The privileged `report` job
+# (pull-requests: write) never runs PR code: it checks out the trusted base and
+# processes the per-app JSON as data.
 
 on:
   issue_comment:
@@ -25,12 +34,13 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: read  # default for all jobs; each job narrows/extends explicitly below
 
 jobs:
 
   # ── Resolve refs + emit the app matrix ───────────────────────────────
   prepare:
+    name: Prepare (refs + matrix)
     if: >-
       github.event.issue.pull_request
       && startsWith(github.event.comment.body, '/psalm-delta')
@@ -38,9 +48,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: read
-      pull-requests: read
-      issues: write  # comment reaction
+      contents: read         # checkout the base ref to read the app registry
+      pull-requests: read    # github-script reads the PR's base/head SHAs
+      issues: write          # add the :rocket: reaction to the trigger comment
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       base_sha: ${{ steps.refs.outputs.base_sha }}
@@ -57,9 +67,10 @@ jobs:
       - name: React to comment
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           COMMENT_ID: ${{ github.event.comment.id }}
         run: |
-          gh api repos/${{ github.repository }}/issues/comments/"$COMMENT_ID"/reactions \
+          gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
             -f content=rocket --silent
 
       - name: Resolve PR refs (+ fork-PR security guard)
@@ -89,25 +100,31 @@ jobs:
             core.setOutput('head_label', `pr-${headSha.substring(0, 8)}`);
             core.setOutput('pr_number', String(pr.number));
 
+      # Trusted ref: base of a same-repo PR (the fork guard above already ran).
       - name: Checkout base (for the registry)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.refs.outputs.base_sha }}
+          persist-credentials: false
 
       - name: Build app matrix from registry
         id: matrix
         run: |
           # yq (mikefarah v4, preinstalled on ubuntu-latest) emits the apps list
-          # as a GitHub matrix `include` array straight from the YAML registry.
-          echo "matrix=$(yq -o=json -I=0 '{\"include\": .apps}' bin/ci/test-apps.yml)" >> "$GITHUB_OUTPUT"
+          # as a GitHub matrix `include` array straight from the committed YAML
+          # registry. The value is derived only from a repo-tracked file (no
+          # workflow context / PR-author input), so it is not an injection sink.
+          matrix=$(yq -o=json -I=0 '{"include": .apps}' bin/ci/test-apps.yml)
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
 
   # ── One job per app: install, run base + head, upload JSON ───────────
   delta:
+    name: Delta (${{ matrix.name }})
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 12
     permissions:
-      contents: read
+      contents: read  # only checks out source + reads the public app repos; no token write scope
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -120,17 +137,23 @@ jobs:
       # Two plugin checkouts give base and head fully isolated source trees.
       # delta-app.sh installs each as a symlinked path repo, so the plugin's own
       # requires resolve into the per-app vendor — these checkouts need no vendor.
+      # persist-credentials: false — the executed PR code never gets git creds.
       - name: Checkout base plugin
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: plugin-base
+          persist-credentials: false
 
+      # Untrusted ref (PR head). Safe only because: same-repo guard passed in
+      # prepare, this job has contents:read and no credentials, and the head
+      # code's only effect is producing issue JSON consumed as data downstream.
       - name: Checkout head plugin
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ needs.prepare.outputs.head_sha }}
           path: plugin-pr
+          persist-credentials: false
 
       - name: Setup PHP
         uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
@@ -153,7 +176,7 @@ jobs:
       - name: Run delta for ${{ matrix.name }}
         # All interpolated values go through env (not inline ${{ }} in run) so a
         # workflow linter can confirm no template-injection sink. Registry values
-        # are trusted (committed, read from the base checkout) but env- izing keeps
+        # are trusted (committed, read from the base checkout) but env-izing keeps
         # the pattern uniform.
         env:
           NAME: ${{ matrix.name }}
@@ -193,23 +216,27 @@ jobs:
 
   # ── Aggregate + sticky comment ───────────────────────────────────────
   report:
+    name: Report (aggregate + comment)
     needs: [prepare, delta]
     if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
-      pull-requests: write
+      contents: read         # checkout the trusted base for the comparator + registry
+      pull-requests: write   # post / update the sticky delta comment
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
+      # Trusted ref: base of a same-repo PR. This job runs only base code
+      # (delta-report.php) over the per-app JSON, never the PR's plugin code.
       - name: Checkout base (for the comparator + registry)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ needs.prepare.outputs.base_sha }}
+          persist-credentials: false
 
       - name: Setup PHP
         uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
@@ -225,44 +252,40 @@ jobs:
           merge-multiple: true  # reconstructs out/<app>/... from every artifact
           path: out
 
-      - name: Build delta report
-        id: build
+      # Build the markdown to a FILE and post it with `gh api -F body=@file`, so
+      # the (app-derived) report text never transits a shell variable, GITHUB_OUTPUT,
+      # or a heredoc — no command-injection / output-injection surface.
+      - name: Build + post sticky comment
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
           BASE_LABEL: ${{ needs.prepare.outputs.base_label }}
           HEAD_LABEL: ${{ needs.prepare.outputs.head_label }}
           BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
           HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
         run: |
-          APPS=$(yq '.apps[].name' bin/ci/test-apps.yml | paste -sd, -)
-          REPORT=$(php bin/ci/delta-report.php out \
-            "$BASE_LABEL" "$HEAD_LABEL" \
-            --apps="$APPS" \
-            --base-sha="$BASE_SHA" \
-            --head-sha="$HEAD_SHA" \
-            --date-marker=cache)
-          {
-            echo "report<<REPORT_EOF"
-            echo "$REPORT"
-            echo ""
-            echo "<sub>Informational only — never fails the PR. Reproduce locally: \`bash bin/ci/delta.sh <pr-branch>\`.</sub>"
-            echo "REPORT_EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Post or update sticky comment
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
-          REPORT: ${{ steps.build.outputs.report }}
-        run: |
           MARKER='<!-- psalm-delta-report -->'
-          BODY="${MARKER}"$'\n'"${REPORT:-Delta failed to produce a report. Check the workflow logs.}"
-          # Find an existing delta comment (sticky) and edit it; else create one.
-          EXISTING=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" --paginate \
+          APPS=$(yq '.apps[].name' bin/ci/test-apps.yml | paste -sd, -)
+
+          {
+            printf '%s\n' "$MARKER"
+            php bin/ci/delta-report.php out "$BASE_LABEL" "$HEAD_LABEL" \
+              --apps="$APPS" --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
+              --date-marker=cache \
+              || echo "Delta failed to produce a report. Check the workflow logs."
+          } > comment.md
+          # Quoted heredoc: literal backticks for the inline code span, no expansion.
+          cat >> comment.md <<'FOOTER'
+
+          <sub>Informational only — never fails the PR. Reproduce locally: `bash bin/ci/delta.sh <pr-branch>`.</sub>
+          FOOTER
+
+          # Sticky: edit the existing delta comment if present, else create one.
+          EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
             --jq "map(select(.body | startswith(\"$MARKER\"))) | .[0].id // empty")
           if [ -n "$EXISTING" ]; then
-            gh api "repos/${{ github.repository }}/issues/comments/${EXISTING}" \
-              -X PATCH -f body="$BODY" --silent
+            gh api "repos/$REPO/issues/comments/$EXISTING" -X PATCH -F body=@comment.md --silent
           else
-            gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-              -f body="$BODY" --silent
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@comment.md --silent
           fi
