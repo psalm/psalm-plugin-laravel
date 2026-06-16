@@ -201,6 +201,11 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
+        // FormRequest magic-property narrowing (#1016): `$this->email`, `$user->email`.
+        // Registers its property providers per-subclass at AfterCodebasePopulated
+        // because Psalm's property lookup is exact-class.
+        require_once __DIR__ . '/Handlers/Validation/FormRequestPropertyHandler.php';
+        $registration->registerHooksFromClass(Handlers\Validation\FormRequestPropertyHandler::class);
         // Collector populates its cache via AfterExpressionAnalysisEvent on
         // $request->validate([...]) and evicts it via AfterFunctionLikeAnalysisEvent.
         // ValidationTaintHandler::removeTaints consults the cache during
@@ -210,6 +215,13 @@ final class Plugin implements PluginEntryPointInterface
         // here to keep the feed/consume relationship obvious to readers.
         require_once __DIR__ . '/Handlers/Validation/InlineValidateRulesCollector.php';
         $registration->registerHooksFromClass(Handlers\Validation\InlineValidateRulesCollector::class);
+        // ValidatedFieldReadResolver interprets every validated-read syntax
+        // (keyed accessor, ValidatedInput accessor, magic property, tracked
+        // variable) into one answer; ValidationTaintHandler applies it. The
+        // resolver and its value object are plain collaborators (no hooks), so
+        // they are require_once'd but not registered.
+        require_once __DIR__ . '/Handlers/Validation/ValidatedFieldRead.php';
+        require_once __DIR__ . '/Handlers/Validation/ValidatedFieldReadResolver.php';
         require_once __DIR__ . '/Handlers/Validation/ValidationTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidationTaintHandler::class);
 
