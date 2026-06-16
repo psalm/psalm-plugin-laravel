@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781615889768,
+  "lastUpdate": 1781618775290,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6220,6 +6220,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.74,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6838f4e861141df65e62d8490cb61b120c826032",
+          "message": "Add opt-in `ImplicitQueryBuilderCall` rule for direct model query and scope calls (#1068)\n\n* feat(rules): add opt-in ImplicitQueryBuilderCall rule #1067\n\nFlags query builder and local scope methods invoked directly on an\nEloquent model (forwarded via __callStatic/__call) instead of through\nan explicit query() entry point, for teams that want to minimise\nLaravel magic. Off by default; enable with\n<reportImplicitQueryBuilderCalls value=\"true\" />.\n\nReuses the plugin's own forwarding resolution\n(ModelMethodHandler::forwardsToQueryBuilder plus BuilderScopeHandler\nscope checks) so it flags exactly what the plugin treats as forwarded:\nbuilder methods, custom-builder and dynamic-where, and legacy + modern\nscopes. make() defers to ModelMakeHandler; genuinely undefined methods\nare left to UndefinedMagicMethod.\n\n* docs(rules): drop redundant config-field comment #1067\n\n* style(config): reorder reportImplicitQueryBuilderCalls field #1067\n\n* fix(rules): avoid ImplicitQueryBuilderCall false positives #1067\n\nAddress PR review:\n\n- Skip a call when the model genuinely declares (or inherits) the\n  method, so a real user-defined where()/orderBy() that collides with a\n  builder method name is no longer mislabelled as magic forwarding.\n- Treat an instance receiver as a model only when every union atomic is\n  the same model. A Customer|Builder<Customer> union (possibly already a\n  builder) or a multi-model union no longer produces a false or\n  arbitrary report.\n- Drop the trait-builder coverage claim from config.md: base-Builder\n  trait macros (e.g. SoftDeletes::withTrashed) are not flagged, matching\n  the issue doc and handler docblock.\n\n* test(rules): cover model-or-builder union receiver #1067\n\n* refactor(rules): align ImplicitQueryBuilderCall message with Psalm tone #1067\n\nLead with the problem and end with a terse fix hint, matching Psalm's native messages and sibling rules (ModelMakeDiscouraged, OctaneIncompatibleBinding). Replaces the wordy \"Avoid calling ... directly\" opener with: \"<Model>::<method>() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use <Model>::query()->...() instead.\"\n\n* docs(config): order reportImplicitQueryBuilderCalls per PluginConfig #1067\n\nPlace the field, section, and example consistently after resolveConfigReturnTypes, matching the constructor order in PluginConfig.",
+          "timestamp": "2026-06-16T16:03:08+02:00",
+          "tree_id": "31b30f6206c0071d09dd7fe6a6d7498854f1cf39",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6838f4e861141df65e62d8490cb61b120c826032"
+        },
+        "date": 1781618774446,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.42,
+            "range": "± 0.63",
             "unit": "s"
           },
           {
