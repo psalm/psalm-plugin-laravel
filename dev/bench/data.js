@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781563409972,
+  "lastUpdate": 1781601303434,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6150,6 +6150,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 34.2,
             "range": "± 0.92",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1103,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "ae8707bf0dd5ecdbe1937e6226bd93511d91d97c",
+          "message": "chore: create Config namespace dir",
+          "timestamp": "2026-06-16T11:10:14+02:00",
+          "tree_id": "79605d55902f7b0a5e4e6d2876b37438cbfb614f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ae8707bf0dd5ecdbe1937e6226bd93511d91d97c"
+        },
+        "date": 1781601302948,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.24,
+            "range": "± 0.42",
             "unit": "s"
           },
           {
