@@ -185,18 +185,18 @@ function undefined_method_is_not_mislabelled(Customer $customer): void
 }
 ?>
 --EXPECTF--
-ImplicitQueryBuilderCall on line %d: Avoid calling where() directly on the Customer model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Customer::query()->where(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling find() directly on the Customer model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Customer::query()->find(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling create() directly on the Customer model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Customer::query()->create(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling first() directly on the Customer model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Customer::query()->first(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling whereIn() directly on the Customer model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Customer::query()->whereIn(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling active() directly on the Customer model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Customer::query()->active(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling active() directly on the DirectScopeModel model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. DirectScopeModel::query()->active(...).
+ImplicitQueryBuilderCall on line %d: Customer::where() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->where(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::find() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->find(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::create() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->create(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::first() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->first(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::whereIn() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->whereIn(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::active() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->active(...) instead.
+ImplicitQueryBuilderCall on line %d: DirectScopeModel::active() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use DirectScopeModel::query()->active(...) instead.
 InvalidStaticInvocation on line %d: Method App\Models\DirectScopeModel::active is not static, but is called statically
-ImplicitQueryBuilderCall on line %d: Avoid calling whereElectric() directly on the Vehicle model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Vehicle::query()->whereElectric(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling wherePaid() directly on the Invoice model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Invoice::query()->wherePaid(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling whereId() directly on the Customer model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Customer::query()->whereId(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling where() directly on the Customer model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Customer::query()->where(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling find() directly on the Customer model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Customer::query()->find(...).
-ImplicitQueryBuilderCall on line %d: Avoid calling whereByMake() directly on the Vehicle model: the call is forwarded through Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point instead, e.g. Vehicle::query()->whereByMake(...).
+ImplicitQueryBuilderCall on line %d: Vehicle::whereElectric() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Vehicle::query()->whereElectric(...) instead.
+ImplicitQueryBuilderCall on line %d: Invoice::wherePaid() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Invoice::query()->wherePaid(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::whereId() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->whereId(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::where() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->where(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::find() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->find(...) instead.
+ImplicitQueryBuilderCall on line %d: Vehicle::whereByMake() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Vehicle::query()->whereByMake(...) instead.
 UndefinedMagicMethod on line %d: Magic method App\Models\Customer::undefinedbuildermethod does not exist

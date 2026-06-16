@@ -136,9 +136,8 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
 
         IssueBuffer::accepts(
             new ImplicitQueryBuilderCall(
-                "Avoid calling {$methodName}() directly on the {$shortName} model: the call is forwarded through "
-                . "Laravel's __callStatic/__call magic to the query builder. Use an explicit query entry point "
-                . "instead, e.g. {$shortName}::query()->{$methodName}(...).",
+                "{$shortName}::{$methodName}() is forwarded to the query builder through Laravel's "
+                . "__callStatic/__call magic. Use {$shortName}::query()->{$methodName}(...) instead.",
                 new CodeLocation($event->getStatementsSource(), $expr),
             ),
             $event->getStatementsSource()->getSuppressedIssues(),
