@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781639015104,
+  "lastUpdate": 1781639888921,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6330,6 +6330,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3710541e98c8afae953ac4cf5b2027abe9f711eb",
+          "message": "Narrow `FormRequest` magic property reads (`$request->field` calls) (#1022)\n\n* feat(validation): narrow FormRequest magic property reads #1016\n\nMirrors #1015's `$this->input('field')` narrowing for the magic property\naccess shape: `$this->email` and `$req->email` on a FormRequest subclass\nnarrow to the rule's type when the field is presence-guaranteed\n(required / present / accepted / declined, sans `sometimes`).\n\nUser-declared properties (`public string $email`) and `@property` /\n`@property-read` PHPDoc opt out of the narrowing — both type and taint\npaths defer through the same shared resolver\n(`FormRequestPropertyHandler::resolveRuleForProperty`) so they cannot\ndrift.\n\nTaint flow:\n- `addTaints` re-sources `ALL_INPUT` for narrowed reads (no stub source\n  exists on `Request::__get`), de-duped per PropertyFetch to avoid\n  double-emission from the dual dispatch in\n  `AtomicPropertyFetchAnalyzer` + `ArgumentAnalyzer`.\n- `removeTaints` applies the rule's escape mask via the same resolver.\n- Assignment-LHS PropertyFetches are tracked by `spl_object_id` and\n  skipped to keep the rule's escape from being applied to writes\n  (`InstancePropertyAssignmentAnalyzer` shares the read-side event\n  shape).\n- Marker sets flush per function-like and per file to bound the\n  footprint and avoid `spl_object_id` reuse across files.\n\nRegistration: per-subclass closures via\n`FormRequestPropertyRegistrationHandler` (`AfterCodebasePopulated`),\nbecause Psalm's property provider lookup is exact-class.\n\nAlso extracts a shared `ResolvedRule::guaranteesPresence()` helper so\nthe type narrowing (`ValidatedTypeHandler::resolveSelfInput`,\n`FormRequestPropertyHandler`) and taint paths share a single source of\ntruth for the presence-gate predicate.\n\nTests:\n- Type: rule narrowing, declared-property defer, `@property` /\n  `@property-read` defer, inherited declared, inherited rules, external\n  controller access.\n- Taint: rule escape on header sink, no-phantom-taint on declared\n  properties.\n\n* refactor(validation): unify validated-field reads behind one resolver #1016\n\nAddresses PR #1022 review: the magic-property feature was implemented as\na parallel subsystem instead of another spelling of an existing\n\"validated field read\".\n\n- Extract ValidatedFieldReadResolver + ValidatedFieldRead value object as\n  the single place that answers \"is this expression a validated field\n  read, and which rule governs it?\" for every syntax: keyed accessor\n  methods, ValidatedInput accessors, magic property fetches, and tracked\n  inline-validate variables. addTaints/removeTaints each ask once and read\n  one facet (source vs escape); the per-syntax branches are gone.\n- ValidationTaintHandler shrinks to pure taint-graph mechanism (source\n  re-emission, per-node dedupe, cleanup), 785 -> 206 lines.\n- Drop the assignment-LHS tracking machinery (BeforeExpressionAnalysis\n  hook + marker set). A declared property opts out of narrowing, and an\n  undeclared magic property cannot be written (Request has no __set, so\n  the write is already UndefinedPropertyAssignment); the guard defended an\n  unreachable state, and a missed write is a false negative that aligns\n  with \"silence over false positives\". Verified: the full taint suite is\n  unchanged with it removed.\n\nRe-sourcing stays required (not replaceable by a __get stub source):\nprovider-supplied property types bypass the magic method, so a\n@psalm-taint-source on __get does not fire for $req->email (confirmed\nempirically). Dedupe stays required: the read pass and argument-binding\npass dispatch the same node twice.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* refactor(validation): trim docs, parse method calls once, merge registrar #1016\n\nRound-2 review follow-up. Behaviour unchanged (483 type + 792 unit pass);\nnet -328 lines.\n\n- ValidatedFieldReadResolver::fromMethodCall now resolves the caller class\n  once and splits into methodSourcesInput + methodEscape, replacing the\n  isValidationMethodCall / isValidatedInputAccessor / matchKeyedAccessor /\n  resolveFormRequestForAccessor passes that each re-walked the same call.\n- Fold FormRequestPropertyRegistrationHandler into FormRequestPropertyHandler:\n  the handler now implements AfterCodebasePopulatedInterface and owns its own\n  per-subclass registration + the FormRequest class set. One fewer file and\n  Plugin.php block.\n- Tighten docblocks across the validation taint files and the property type\n  test; keep the invariants, drop the prose.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-06-16T21:55:16+02:00",
+          "tree_id": "f7c0c1bc38073b9f4bdf7c6957ed8be01d218dcb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3710541e98c8afae953ac4cf5b2027abe9f711eb"
+        },
+        "date": 1781639888437,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.44,
+            "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1103,
             "unit": "MB"
           }
         ]
