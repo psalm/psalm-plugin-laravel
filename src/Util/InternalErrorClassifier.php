@@ -65,37 +65,46 @@ final class InternalErrorClassifier
         }
 
         if (\str_contains($normalized, '/vendor/orchestra/testbench')) {
-            return 'The failure originated inside Orchestra Testbench. The plugin falls back to Testbench when '
+            return (
+                'The failure originated inside Orchestra Testbench. The plugin falls back to Testbench when '
                 . 'ApplicationProvider cannot boot your application directly. Check that your project exposes a '
-                . 'runnable bootstrap/app.php or that your Laravel version is supported by the Testbench pin.';
+                . 'runnable bootstrap/app.php or that your Laravel version is supported by the Testbench pin.'
+            );
         }
 
         if (
-            \str_contains($normalized, '/vendor/laravel/framework')
-            || \str_contains($normalized, '/vendor/illuminate/')
+            \str_contains($normalized, '/vendor/laravel/framework') || \str_contains($normalized, '/vendor/illuminate/')
         ) {
-            return 'The failure originated inside Laravel framework code. Try reproducing it with a plain '
-                . '`php artisan` command. If it fails there too, the bug is upstream rather than in the plugin.';
+            return (
+                'The failure originated inside Laravel framework code. Try reproducing it with a plain '
+                . '`php artisan` command. If it fails there too, the bug is upstream rather than in the plugin.'
+            );
         }
 
         if (
             \str_contains($normalized, '/psalm-plugin-laravel/src/')
             || \str_contains($normalized, '/vendor/psalm/plugin-laravel/src/')
         ) {
-            return 'The failure originated inside the Laravel plugin itself. This is likely a plugin bug. '
-                . 'Please attach the full stack trace to the report linked below.';
+            return (
+                'The failure originated inside the Laravel plugin itself. This is likely a plugin bug. '
+                . 'Please attach the full stack trace to the report linked below.'
+            );
         }
 
         if (\str_contains($normalized, '/vendor/')) {
-            return "The failure originated inside a third-party package ({$file}). Check whether the package "
-                . 'supports the Laravel and PHP versions you are running.';
+            return (
+                "The failure originated inside a third-party package ({$file}). Check whether the package "
+                . 'supports the Laravel and PHP versions you are running.'
+            );
         }
 
         // Anything else is presumed to be user application code (bootstrap/app.php,
         // app/Providers/*, custom bindings, etc.). The plugin boots the user's real
         // Laravel kernel, so service-provider crashes surface here.
-        return "The failure originated inside your application code ({$file}). The plugin boots your real "
-            . 'Laravel kernel, so service-provider or bootstrap errors surface during plugin initialisation.';
+        return (
+            "The failure originated inside your application code ({$file}). The plugin boots your real "
+            . 'Laravel kernel, so service-provider or bootstrap errors surface during plugin initialisation.'
+        );
     }
 
     /**

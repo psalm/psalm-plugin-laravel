@@ -32,7 +32,7 @@ use Psalm\Type\Union;
  * live on Laravel's `HasAttributes` trait, hence the "AttributeSubset" name — `except()`
  * can be added here once a complete attribute enumeration becomes available; for now
  * `except()` cannot be soundly narrowed from `@property` declarations alone (the
- * @property set is usually a strict subset of the actual database attributes).
+ * `@property` set is usually a strict subset of the actual database attributes).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/931
  * @internal
@@ -173,7 +173,7 @@ final class ModelAttributeSubsetHandler
 
     /**
      * Build a TKeyedArray with each key's value type pulled from the model's
-     * @property declaration; missing keys fall back to mixed.
+     * pseudo-property type map; missing keys fall back to mixed.
      *
      * @param non-empty-list<string> $keys
      * @psalm-mutation-free

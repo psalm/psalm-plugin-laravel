@@ -19,6 +19,11 @@ use Illuminate\Database\Eloquent\Model;
  *  - Lock-in under findUnusedCode is deferred to #869 (default type-test config has it off).
  *  - Private negative case is structurally unflaggable in Psalm 7: ClassLikes.php:1994 skips
  *    unused-method emission on private methods of classes with __call, and Model declares __call.
+ *
+ * Under the default config (findUnusedCode off) this fixture emits NOTHING: PossiblyUnusedMethod is
+ * suppressed by SuppressHandler, and the public `scopeActive()` is no longer flagged either, because
+ * legacy `scopeXxx()` scopes are Laravel's documented `public` idiom and PublicScopeAccessorVisibilityHandler
+ * deliberately ignores them.
  */
 final class LegacyScopeModel extends Model
 {

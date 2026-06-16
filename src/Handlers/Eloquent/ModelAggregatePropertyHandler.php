@@ -84,7 +84,7 @@ final class ModelAggregatePropertyHandler
 
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
-        if (! $event->isReadMode()) {
+        if (!$event->isReadMode()) {
             return null;
         }
 
@@ -92,12 +92,12 @@ final class ModelAggregatePropertyHandler
 
         // Fast pre-check: bail before any codebase calls for the vast majority of
         // property accesses that can't possibly match an aggregate pattern.
-        if (! self::couldBeAggregate($propertyName)) {
+        if (!self::couldBeAggregate($propertyName)) {
             return null;
         }
 
         $source = $event->getSource();
-        if (! $source instanceof StatementsSource) {
+        if (!$source instanceof StatementsSource) {
             return null;
         }
 
@@ -118,7 +118,7 @@ final class ModelAggregatePropertyHandler
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
     {
         // PropertyVisibilityProviderEvent::getSource() is non-nullable, unlike the other events.
-        if (! $event->isReadMode()) {
+        if (!$event->isReadMode()) {
             return null;
         }
 
@@ -131,7 +131,7 @@ final class ModelAggregatePropertyHandler
             return self::$suffixCache[$cacheKey] !== null ? true : null;
         }
 
-        if (! self::couldBeAggregate($propertyName)) {
+        if (!self::couldBeAggregate($propertyName)) {
             return null;
         }
 
@@ -150,7 +150,7 @@ final class ModelAggregatePropertyHandler
 
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
     {
-        if (! $event->isReadMode()) {
+        if (!$event->isReadMode()) {
             return null;
         }
 
@@ -164,12 +164,12 @@ final class ModelAggregatePropertyHandler
             return $suffix !== null ? self::buildTypeForSuffix($suffix) : null;
         }
 
-        if (! self::couldBeAggregate($propertyName)) {
+        if (!self::couldBeAggregate($propertyName)) {
             return null;
         }
 
         $source = $event->getSource();
-        if (! $source instanceof StatementsSource) {
+        if (!$source instanceof StatementsSource) {
             return null;
         }
 
@@ -217,8 +217,11 @@ final class ModelAggregatePropertyHandler
      * Returns the matched suffix (e.g. 'count', 'sum'), or null if the property
      * does not correspond to an aggregate accessor on this model.
      */
-    private static function parseAggregateProperty(Codebase $codebase, string $fqClasslikeName, string $propertyName): ?string
-    {
+    private static function parseAggregateProperty(
+        Codebase $codebase,
+        string $fqClasslikeName,
+        string $propertyName,
+    ): ?string {
         $cacheKey = $fqClasslikeName . '::' . $propertyName;
 
         if (\array_key_exists($cacheKey, self::$suffixCache)) {
@@ -245,11 +248,14 @@ final class ModelAggregatePropertyHandler
      *    is found (handles relation names that themselves contain the suffix word, and
      *    column names containing underscores, e.g. `contacts_min_unit_price`).
      */
-    private static function doParseAggregateProperty(Codebase $codebase, string $fqClasslikeName, string $propertyName): ?string
-    {
+    private static function doParseAggregateProperty(
+        Codebase $codebase,
+        string $fqClasslikeName,
+        string $propertyName,
+    ): ?string {
         // Strategy 1: withCount/withExists — alias is {relation}_{suffix}, no column in name.
         foreach (self::EXACT_SUFFIXES as $suffix) {
-            if (! \str_ends_with($propertyName, '_' . $suffix)) {
+            if (!\str_ends_with($propertyName, '_' . $suffix)) {
                 continue;
             }
 
@@ -314,7 +320,7 @@ final class ModelAggregatePropertyHandler
             return self::$relationMethodCache[$key];
         }
 
-        if (! $codebase->methodExists($key)) {
+        if (!$codebase->methodExists($key)) {
             return self::$relationMethodCache[$key] = false;
         }
 
@@ -358,11 +364,11 @@ final class ModelAggregatePropertyHandler
         }
 
         $type = match ($suffix) {
-            'count'      => new Union([new TInt()]),
-            'exists'     => new Union([new TBool()]),
+            'count' => new Union([new TInt()]),
+            'exists' => new Union([new TBool()]),
             'min', 'max' => new Union([new TString(), new TNull()]),
             'sum', 'avg' => new Union([new TNumericString(), new TNull()]),
-            default      => throw new \LogicException("Unexpected aggregate suffix: {$suffix}"),
+            default => throw new \LogicException("Unexpected aggregate suffix: {$suffix}"),
         };
 
         return self::$typeCache[$suffix] = $type;
@@ -386,15 +392,18 @@ final class ModelAggregatePropertyHandler
      *
      * @psalm-external-mutation-free
      */
-    private static function hasUserPseudoProperty(Codebase $codebase, string $fqClasslikeName, string $propertyName): bool
-    {
+    private static function hasUserPseudoProperty(
+        Codebase $codebase,
+        string $fqClasslikeName,
+        string $propertyName,
+    ): bool {
         $key = $fqClasslikeName . '::$' . $propertyName;
 
         if (\array_key_exists($key, self::$pseudoPropertyCache)) {
             return self::$pseudoPropertyCache[$key];
         }
 
-        if (! $codebase->classlike_storage_provider->has($fqClasslikeName)) {
+        if (!$codebase->classlike_storage_provider->has($fqClasslikeName)) {
             return self::$pseudoPropertyCache[$key] = false;
         }
 

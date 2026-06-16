@@ -50,10 +50,10 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
      */
     public static function init(array $viewPaths, array $extensions = ['blade.php', 'php']): void
     {
-        self::$viewPaths = \array_map(
-            static fn(string $path): string => \rtrim($path, \DIRECTORY_SEPARATOR),
-            $viewPaths,
-        );
+        self::$viewPaths = \array_map(static fn(string $path): string => \rtrim(
+            $path,
+            \DIRECTORY_SEPARATOR,
+        ), $viewPaths);
         self::$extensions = $extensions;
         self::$enabled = true;
         self::$resolvedViews = [];
@@ -127,11 +127,7 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
             return null;
         }
 
-        self::checkViewExists(
-            $viewName,
-            $event->getCodeLocation(),
-            $event->getSource()->getSuppressedIssues(),
-        );
+        self::checkViewExists($viewName, $event->getCodeLocation(), $event->getSource()->getSuppressedIssues());
 
         return null;
     }
@@ -184,10 +180,7 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
         }
 
         IssueBuffer::accepts(
-            new MissingView(
-                "View '{$viewName}' not found in any of the registered view paths",
-                $codeLocation,
-            ),
+            new MissingView("View '{$viewName}' not found in any of the registered view paths", $codeLocation),
             $suppressedIssues,
         );
     }

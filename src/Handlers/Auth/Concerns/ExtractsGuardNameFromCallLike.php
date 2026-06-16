@@ -25,8 +25,7 @@ trait ExtractsGuardNameFromCallLike
 
         // A literal null argument is equivalent to no argument — both resolve the default guard.
         // e.g. guard(null) behaves identically to guard() at runtime.
-        if ($first_arg_type_expr instanceof ConstFetch
-            && $first_arg_type_expr->name->toLowerString() === 'null') {
+        if ($first_arg_type_expr instanceof ConstFetch && $first_arg_type_expr->name->toLowerString() === 'null') {
             return $default_guard;
         }
 

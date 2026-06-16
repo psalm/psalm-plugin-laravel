@@ -58,8 +58,11 @@ final class Plugin implements PluginEntryPointInterface
         }
     }
 
-    private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
-    {
+    private function registerStubs(
+        RegistrationInterface $registration,
+        PluginConfig $pluginConfig,
+        \Psalm\Progress\Progress $output,
+    ): void {
         $stubsRoot = \dirname(__DIR__) . '/stubs';
 
         $stubs = \array_merge(
@@ -173,6 +176,7 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelMethodHandler::class);
         require_once __DIR__ . '/Util/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
+        Handlers\Eloquent\BuilderScopeHandler::init();
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderScopeHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/BuilderPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderPluckHandler::class);
@@ -253,6 +257,11 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
 
+        // `App::make()`/`makeWith()`/`get()` class-string narrowing. Its getClassLikeNames() reads
+        // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
+        require_once __DIR__ . '/Handlers/Facades/AppFacadeMakeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\AppFacadeMakeHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
 
@@ -262,6 +271,9 @@ final class Plugin implements PluginEntryPointInterface
         // is negligible.
         require_once __DIR__ . '/Handlers/Rules/TimingUnsafeComparisonHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\TimingUnsafeComparisonHandler::class);
+
+        require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
 
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
@@ -294,6 +306,12 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
         }
+
+        // Flag `public` Eloquent scopes / legacy accessors (Laravel's convention is `protected` — they
+        // are dispatched indirectly, never called by name). Enabled by default; silence per project via
+        // the issueHandlers config (PublicModelScope / PublicModelAccessor).
+        require_once __DIR__ . '/Handlers/Rules/PublicScopeAccessorVisibilityHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\PublicScopeAccessorVisibilityHandler::class);
     }
 
     /**

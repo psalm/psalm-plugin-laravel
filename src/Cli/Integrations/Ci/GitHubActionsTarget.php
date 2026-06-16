@@ -93,10 +93,7 @@ final class GitHubActionsTarget implements CiTargetInterface
         }
 
         if ($contents === '') {
-            throw new \RuntimeException(\sprintf(
-                'Bundled GitHub Actions template at %s is empty',
-                $templatePath,
-            ));
+            throw new \RuntimeException(\sprintf('Bundled GitHub Actions template at %s is empty', $templatePath));
         }
 
         $destination = $this->joinPath($projectRoot, self::WORKFLOW_RELATIVE_PATH);
@@ -117,20 +114,24 @@ final class GitHubActionsTarget implements CiTargetInterface
         // four dirname() steps reach the plugin root regardless of whether the
         // plugin is installed via Composer (vendor/psalm/plugin-laravel/) or
         // symlinked from a local clone.
-        return \dirname(__DIR__, 4) . \DIRECTORY_SEPARATOR
-            . \str_replace('/', \DIRECTORY_SEPARATOR, self::TEMPLATE_RELATIVE_PATH);
+        return (
+            \dirname(__DIR__, 4)
+            . \DIRECTORY_SEPARATOR
+            . \str_replace('/', \DIRECTORY_SEPARATOR, self::TEMPLATE_RELATIVE_PATH)
+        );
     }
 
     /**
      * @param non-empty-string $relative
-     *
      * @return non-empty-string
-     *
      * @psalm-pure
      */
     private function joinPath(string $root, string $relative): string
     {
-        return \rtrim($root, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR
-            . \str_replace('/', \DIRECTORY_SEPARATOR, $relative);
+        return (
+            \rtrim($root, \DIRECTORY_SEPARATOR)
+            . \DIRECTORY_SEPARATOR
+            . \str_replace('/', \DIRECTORY_SEPARATOR, $relative)
+        );
     }
 }

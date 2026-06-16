@@ -130,7 +130,12 @@ final class ModelPropertyHandler
         // Check if there's a cast override
         $casts = self::resolveCasts($codebase, $fqClasslikeName);
         if (isset($casts[$propertyName])) {
-            return CastResolver::resolve($casts[$propertyName], $column->nullable);
+            return CastResolver::resolve(
+                $codebase,
+                $casts[$propertyName],
+                $column->nullable,
+                self::mapColumnBaseType($column),
+            );
         }
 
         // Map schema column type to Psalm type
@@ -173,7 +178,12 @@ final class ModelPropertyHandler
 
         $casts = self::resolveCasts($codebase, $fqClasslikeName);
         if (isset($casts[$columnName])) {
-            return CastResolver::resolve($casts[$columnName], $column->nullable);
+            return CastResolver::resolve(
+                $codebase,
+                $casts[$columnName],
+                $column->nullable,
+                self::mapColumnBaseType($column),
+            );
         }
 
         return self::mapColumnType($column);
@@ -257,11 +267,20 @@ final class ModelPropertyHandler
         if (\is_a($fqClasslikeName, Model::class, true)) {
             try {
                 $reflection = new \ReflectionClass($fqClasslikeName);
-                $instance = $reflection->newInstanceWithoutConstructor();
 
-                /** @var array<string, string> $instanceCasts */
-                $instanceCasts = $instance->getCasts();
-                $casts = \array_merge($casts, $instanceCasts);
+                // Mirror resolveTableName(): an abstract base cannot be instantiated. Guard the
+                // instance read explicitly — newInstanceWithoutConstructor() on an abstract class
+                // throws \Error ("Cannot instantiate abstract class"), which the \ReflectionException
+                // catch below does NOT catch, so a reachable abstract FQCN would surface an uncaught
+                // error without this guard. The migration column/cast handler is not registered for
+                // abstract models (see ModelRegistrationHandler), so this is defense-in-depth.
+                if (!$reflection->isAbstract()) {
+                    $instance = $reflection->newInstanceWithoutConstructor();
+
+                    /** @var array<string, string> $instanceCasts */
+                    $instanceCasts = $instance->getCasts();
+                    $casts = \array_merge($casts, $instanceCasts);
+                }
             } catch (\ReflectionException) {
                 // Can't instantiate model — skip instance casts
             }
@@ -278,7 +297,24 @@ final class ModelPropertyHandler
 
     private static function mapColumnType(SchemaColumn $column): Union
     {
-        $type = match ($column->type) {
+        $type = self::mapColumnBaseType($column);
+
+        if ($column->nullable) {
+            $type = Type::combineUnionTypes($type, Type::getNull());
+        }
+
+        return $type;
+    }
+
+    /**
+     * Non-nullable base mapping for a schema column. Factored out so that {@see CastResolver}
+     * can receive the column's intrinsic Psalm type for {@see \Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes}
+     * casts (whose read path is a passthrough of the raw DB type) while still letting the cast
+     * resolver decide how to apply nullability on the final union.
+     */
+    private static function mapColumnBaseType(SchemaColumn $column): Union
+    {
+        return match ($column->type) {
             SchemaColumn::TYPE_INT => $column->unsigned
                 ? new Union([new Type\Atomic\TIntRange(0, null)])
                 : Type::getInt(),
@@ -296,12 +332,6 @@ final class ModelPropertyHandler
             )]),
             default => Type::getMixed(),
         };
-
-        if ($column->nullable) {
-            $type = Type::combineUnionTypes($type, Type::getNull());
-        }
-
-        return $type;
     }
 
     /**
