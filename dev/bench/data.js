@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781618775290,
+  "lastUpdate": 1781630545689,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6260,6 +6260,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c5fcb30df4a8d13313ea3eea20661d2dba2896d9",
+          "message": "feat(taint): flag user-controlled container resolution (CWE-470) #572 (#1075)\n\nMark app(), resolve(), and Container::make()/makeWith() $abstract as\n`callable` taint sinks. A user-controlled class name resolved through\nthe container lets an attacker instantiate arbitrary classes\n(constructor side effects, gadget chains).\n\nThe sink lives on the Container contract too, not just the concrete\nclass, so the idiomatic interface-typed `$this->app->make(...)` path is\ncovered. ContainerHandler now narrows make() returns for the contracts\nas well, so the `@return mixed` hosting the sink does not surface as\nmixed at call sites.\n\nThe bare `new $var()`, `$callback()`, and `call_user_func()` forms in\nthe issue are already caught by Psalm core's `callable` sink plus the\nplugin's Request taint sources, so no stub is added for those.",
+          "timestamp": "2026-06-16T19:19:06+02:00",
+          "tree_id": "57dca7dd6b317a25bbe762efc109a3ffcce94192",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c5fcb30df4a8d13313ea3eea20661d2dba2896d9"
+        },
+        "date": 1781630545148,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.24,
+            "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1103,
             "unit": "MB"
           }
         ]
