@@ -16,11 +16,11 @@
 >
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <failOnInternalError value="true" />
-            <findMissingViews value="true" />
-            <findMissingTranslations value="true" />
-            <findOctaneIncompatibleBinding value="true" />
             <reportImplicitQueryBuilderCalls value="true" />
+            <findMissingTranslations value="true" />
+            <findMissingViews value="true" />
+            <findOctaneIncompatibleBinding value="true" />
+            <failOnInternalError value="true" />
         </pluginClass>
     </plugins>
     <issueHandlers>

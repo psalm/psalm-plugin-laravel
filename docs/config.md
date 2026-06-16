@@ -23,9 +23,9 @@ Full config example:
         <modelProperties columnFallback="none" />
         <resolveDynamicWhereClauses value="false" />
         <resolveConfigReturnTypes value="false" />
+        <reportImplicitQueryBuilderCalls value="true" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
-        <reportImplicitQueryBuilderCalls value="true" />
         <findOctaneIncompatibleBinding value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
@@ -94,6 +94,20 @@ When you always use `Config::ineteger()`, `Config::string()` and other typed cal
 <resolveConfigReturnTypes value="false" />
 ```
 
+## `reportImplicitQueryBuilderCalls`
+
+**default**: `false`
+
+When enabled, the plugin flags query builder and local scope methods called directly on an Eloquent model (forwarded by Laravel through `__callStatic` / `__call`) and asks for the explicit `Model::query()->...` form instead. It reports query builder methods (`where`, `find`, `orderBy`, ...), custom builder methods, and local scopes (legacy `scopeXxx()` and modern `#[Scope]`). Real model methods (including a method whose name collides with a builder method) and genuinely undefined methods are left alone.
+
+See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
+
+### Example
+
+```xml
+<reportImplicitQueryBuilderCalls value="true" />
+```
+
 ## `configDirectory`
 
 **default**: the booted Laravel app's `config_path()`
@@ -152,20 +166,6 @@ See [MissingView](issues/MissingView.md) for details.
 
 ```xml
 <findMissingViews value="true" />
-```
-
-## `reportImplicitQueryBuilderCalls`
-
-**default**: `false`
-
-When enabled, the plugin flags query builder and local scope methods called directly on an Eloquent model (forwarded by Laravel through `__callStatic` / `__call`) and asks for the explicit `Model::query()->...` form instead. It reports query builder methods (`where`, `find`, `orderBy`, ...), custom builder methods, and local scopes (legacy `scopeXxx()` and modern `#[Scope]`). Real model methods (including a method whose name collides with a builder method) and genuinely undefined methods are left alone.
-
-See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
-
-### Example
-
-```xml
-<reportImplicitQueryBuilderCalls value="true" />
 ```
 
 ## `findOctaneIncompatibleBinding`
