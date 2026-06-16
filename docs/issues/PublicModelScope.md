@@ -14,7 +14,7 @@ A `public` `#[Scope]` is a runtime hazard, not just a convention slip. A static 
 
 Reported as an error at project error levels 1 to 4, the range most analysis-serious codebases use; downgraded at looser levels (5 to 8). A scope whose visibility is forced by a contract (an interface method, a parent override, or an abstract trait method) is not reported, since it cannot be narrowed.
 
-Legacy `scopeXxx()` scopes go to [PublicModelAccessor](PublicModelAccessor.md) instead: their idiomatic call (`Post::active()`) is unaffected by visibility, so they are treated as a pure convention nit.
+Legacy `scopeXxx()` scopes are not reported at all: `public` is Laravel's documented idiom for them, and their `$builder->active()` dispatch is unaffected by visibility, so there is nothing to flag. Only the `#[Scope]` form, whose static call is a genuine runtime fatal, is checked.
 
 ## Example
 
@@ -41,4 +41,4 @@ Change `public` to `protected`. Call sites are unaffected.
 </issueHandlers>
 ```
 
-`private` is intentionally not flagged; a private `#[Scope]` is rejected by Laravel and surfaces elsewhere. The sibling check for legacy scopes and accessors is [PublicModelAccessor](PublicModelAccessor.md).
+`private` is intentionally not flagged; a private `#[Scope]` is rejected by Laravel and surfaces elsewhere.

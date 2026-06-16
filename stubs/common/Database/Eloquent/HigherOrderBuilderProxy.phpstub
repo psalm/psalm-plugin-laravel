@@ -1,0 +1,44 @@
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+/**
+ * Higher-order where proxy: `$builder->orWhere->active()` builds a where-clause on the
+ * underlying builder and returns it.
+ *
+ * Laravel's real class is NOT generic. We re-declare it WITH a `@template TModel` so the
+ * model binding survives the chain: `Builder<TModel>` threads `TModel` into this proxy via
+ * `@property-read HigherOrderBuilderProxy<TModel> $orWhere` (declared directly on Builder),
+ * and `__call` returns `Builder<TModel>`. The proxied method is itself a scope, dispatched
+ * through `__call`; type-wise every proxied call yields the same builder, so a single
+ * `@return Builder<TModel>` covers it — no handler needed.
+ *
+ * `@template-covariant` (not invariant): `TModel` appears only in output position
+ * (`__call`'s return), so when the receiver is `Builder<Model&static>` on a non-final
+ * model, the inferred `Builder<Model&static>` must satisfy a call-site `Builder<self>` —
+ * covariance accepts it, invariance would reject. Mirrors Builder's own variance and the
+ * relation-stub rule in CLAUDE.md.
+ *
+ * Do NOT drop the `@template` and type the property as `@property-read static`/`$this`
+ * (Larastan's form): Psalm 7 collapses both to `Builder&static` in a property-read and
+ * loses `TModel`, so the chained scope falls to mixed. Verified empirically.
+ *
+ * Lenient by design: any proxied call yields `Builder<TModel>`, with no check that the
+ * name is a real scope (matches Laravel's runtime and the collection proxy).
+ * @todo Validate the proxied method is a real scope and flag unknown names. A stub
+ *       cannot express this, so it means reintroducing a handler (MethodReturnType /
+ *       AfterMethodCallAnalysis) once the Model Metadata Registry owns the per-model
+ *       scope list. Deferred — see issue #1062.
+ *
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1062
+ *
+ * @template-covariant TModel of \Illuminate\Database\Eloquent\Model
+ */
+class HigherOrderBuilderProxy
+{
+    /**
+     * @param array<array-key, mixed> $parameters
+     * @return Builder<TModel>
+     */
+    public function __call(string $method, array $parameters): mixed {}
+}

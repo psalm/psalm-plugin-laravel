@@ -16,12 +16,18 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\MethodStorage;
 
 /**
- * Flags `public` Eloquent scopes and legacy attribute accessors/mutators, which Laravel's convention wants
- * `protected` (they are dispatched indirectly and never called by name). Routes by the method's danger:
- * a `public` `#[Scope]` (the only one with a static-call runtime footgun) emits {@see PublicModelScope};
- * a legacy `scopeXxx()` scope or a legacy `getXxxAttribute()` / `setXxxAttribute()` accessor (pure
- * convention) emits {@see PublicModelAccessor}. Those issue classes carry the full rationale, their error
- * levels, and the public-only decision.
+ * Flags `public` Eloquent `#[Scope]` methods and legacy attribute accessors/mutators, which Laravel's
+ * convention wants `protected` (they are dispatched indirectly and never called by name). Routes by the
+ * method's danger: a `public` `#[Scope]` (the only one with a static-call runtime footgun) emits
+ * {@see PublicModelScope}; a legacy `getXxxAttribute()` / `setXxxAttribute()` accessor (pure convention)
+ * emits {@see PublicModelAccessor}. Those issue classes carry the full rationale, their error levels, and
+ * the public-only decision.
+ *
+ * Legacy `scopeXxx()` methods are deliberately NOT flagged: Laravel's own documentation writes local
+ * scopes as `public function scopeActive()`, so `public` is the framework's documented idiom there, not a
+ * smell. Visibility is irrelevant to their `$builder->active()` dispatch, and reporting them lit up the
+ * normal style across whole codebases (see the v4.13.2 benchmark). Only the `#[Scope]` form, whose static
+ * call is a genuine runtime fatal, is worth flagging.
  *
  * Enabled by default: registered unconditionally (see Plugin::registerHandlers()), like ModelMakeHandler.
  * Silence per project through the issueHandlers config.
@@ -105,10 +111,9 @@ final class PublicScopeAccessorVisibilityHandler implements AfterCodebasePopulat
                 // the method (not the model), so a trait method shared by several models dedupes to one
                 // diagnostic at the trait declaration: same type, location, message.
                 //  - #[Scope] is the only static-call footgun -> PublicModelScope (error at levels 1-4).
-                //  - legacy scopeXxx() and legacy accessors are pure convention -> PublicModelAccessor (level 1).
+                //  - legacy accessors are pure convention -> PublicModelAccessor (level 1).
                 $issue = match ($kind) {
                     'scope-attribute' => new PublicModelScope(self::scopeAttributeMessage($casedName), $location),
-                    'scope-legacy' => new PublicModelAccessor(self::legacyScopeMessage($casedName), $location),
                     'accessor' => new PublicModelAccessor(self::accessorMessage($casedName), $location),
                 };
 
@@ -118,11 +123,11 @@ final class PublicScopeAccessorVisibilityHandler implements AfterCodebasePopulat
     }
 
     /**
-     * Classify a public model method by the convention it breaks, or null if it is neither a scope nor a
-     * legacy accessor. `#[Scope]` is checked first so an attributed method routes to the danger issue even
-     * when its name also matches the legacy `scopeXxx` convention.
+     * Classify a public model method by the convention it breaks, or null if it is neither a `#[Scope]`
+     * method nor a legacy accessor. Legacy `scopeXxx()` methods are intentionally ignored (see the class
+     * docblock): `public` is Laravel's documented idiom for them, so they are not a convention violation.
      *
-     * @return 'scope-attribute'|'scope-legacy'|'accessor'|null
+     * @return 'scope-attribute'|'accessor'|null
      *
      * @psalm-mutation-free
      */
@@ -130,10 +135,6 @@ final class PublicScopeAccessorVisibilityHandler implements AfterCodebasePopulat
     {
         if (EloquentModelMethods::hasScopeAttribute($methodStorage)) {
             return 'scope-attribute';
-        }
-
-        if (EloquentModelMethods::isLegacyScopeMethodName($methodName, $methodStorage->cased_name)) {
-            return 'scope-legacy';
         }
 
         if (EloquentModelMethods::isLegacyAccessorMethodName($methodName)) {
@@ -148,13 +149,6 @@ final class PublicScopeAccessorVisibilityHandler implements AfterCodebasePopulat
     {
         return "Eloquent #[Scope] method {$methodName}() should be protected, not public: called statically "
             . "(Model::{$methodName}()) it is a runtime fatal.";
-    }
-
-    /** @psalm-pure */
-    private static function legacyScopeMessage(string $methodName): string
-    {
-        return "Eloquent query scope {$methodName}() should be protected, not public; it is dispatched "
-            . 'through the query builder, never by name.';
     }
 
     /** @psalm-pure */

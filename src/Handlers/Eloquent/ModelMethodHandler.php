@@ -383,7 +383,11 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
                 return null;
             }
 
-            return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+            // A value-returning scope surfaces its declared return via Laravel's `?? $this`
+            // coalesce; a plain void/fluent scope keeps the builder type (issue #1053).
+            $scopeFallback = new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+
+            return BuilderScopeHandler::forwardedScopeReturnType($codebase, $modelClass, $methodName, $scopeFallback);
         }
 
         // Trait-declared builder methods (e.g., SoftDeletes::withTrashed): return custom builder type.
@@ -531,6 +535,32 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         return self::$unresolvedCache[$key] = false;
+    }
+
+    /**
+     * Whether a bare method name on $modelClass forwards to its query builder (default or custom):
+     * an Eloquent\Builder method reachable via the @mixin (`where`, `find`, `first`, `get`), a
+     * Query\Builder method (`orderBy`, `whereIn`), a custom builder or trait builder method, or a
+     * resolvable dynamic `where{Column}()` clause. Real methods declared on the model itself are
+     * excluded. Scopes may also report true here (the shared {@see isUnresolvedBuilderMethod}
+     * logic includes them), so a caller that must treat scopes specially should consult
+     * {@see BuilderScopeHandler::hasScopeMethod()} first.
+     *
+     * @internal Used by {@see \Psalm\LaravelPlugin\Handlers\Rules\ImplicitQueryBuilderCallHandler}
+     * to decide whether a direct model call is magic forwarding without duplicating the resolution.
+     *
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodNameLower
+     */
+    public static function forwardsToQueryBuilder(Codebase $codebase, string $modelClass, string $methodNameLower): bool
+    {
+        // Eloquent\Builder methods (where/find/create/first/get) resolve via Model's @mixin, so
+        // isUnresolvedBuilderMethod reports them as already-resolved (false); check them here.
+        if ($codebase->methodExists(new MethodIdentifier(Builder::class, $methodNameLower))) {
+            return true;
+        }
+
+        return self::isUnresolvedBuilderMethod($codebase, $modelClass, $methodNameLower);
     }
 
     /** @inheritDoc */
