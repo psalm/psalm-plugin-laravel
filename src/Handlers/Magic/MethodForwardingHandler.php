@@ -275,7 +275,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             // signature (same as the dynamic-where fallback) rather than returning [] (zero params),
             // which would emit misleading TooManyArguments for scopes that accept arguments.
             return (
-                ModelMethodHandler::getScopeParams(
+                BuilderScopeHandler::getScopeParams(
                     $codebase,
                     self::$scopeParamsCache[$scopeKey],
                     $methodName,
@@ -590,9 +590,15 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         $cacheKey = \strtolower($relationClass) . '::' . $methodName;
         self::$scopeParamsCache[$cacheKey] = $modelClass;
 
-        // Scope exists on the related model → method is fluent, return the full Relation type.
-        return new Union([
+        // Scope exists on the related model → method is fluent: the Relation type is the
+        // `?? $this` fallback. On a relation chain Laravel's callScope returns the wrapped
+        // query for a null result, and Relation::__call maps that back to $this (the Relation),
+        // so a value-returning scope surfaces `declared | Relation` while a void/fluent scope
+        // keeps the full Relation type (issue #1053).
+        $relationFallback = new Union([
             new TGenericObject($relationClass, $templateParams),
         ]);
+
+        return BuilderScopeHandler::forwardedScopeReturnType($codebase, $modelClass, $methodName, $relationFallback);
     }
 }

@@ -263,14 +263,10 @@ final class CustomBuilderMethodHandler
         $codebase = $source->getCodebase();
         $methodName = $event->getMethodNameLowercase();
 
-        // Guard required: getScopeParams matches any model method in its #[Scope] branch
-        // (it checks methodExists but not the attribute). Without this, non-scope model methods
-        // like __construct would be matched, causing TooManyArguments on custom builder constructors.
-        if (!BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
-            return null;
-        }
-
-        return ModelMethodHandler::getScopeParams($codebase, $modelClass, $methodName);
+        // getScopeParams detection is strict (bare methods require the #[Scope] attribute),
+        // so non-scope model methods like __construct return null and custom builder
+        // constructors keep their own params.
+        return BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
     }
 
     /**
@@ -298,7 +294,16 @@ final class CustomBuilderMethodHandler
             return null;
         }
 
-        return new Union([ModelMethodHandler::builderType($builderClass, $modelClass, $codebase)]);
+        // A value-returning scope surfaces its declared return via Laravel's `?? $this` coalesce;
+        // a plain void/fluent scope keeps the custom builder type, CustomBuilder<Model> (issue #1053).
+        $scopeFallback = new Union([ModelMethodHandler::builderType($builderClass, $modelClass, $codebase)]);
+
+        return BuilderScopeHandler::forwardedScopeReturnType(
+            $codebase,
+            $modelClass,
+            $event->getMethodNameLowercase(),
+            $scopeFallback,
+        );
     }
 
     /**

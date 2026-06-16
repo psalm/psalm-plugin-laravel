@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Util;
 
 use Composer\InstalledVersions;
-use Psalm\LaravelPlugin\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginConfig;
 
 /** @internal */
 final class IssueUrlGenerator
@@ -86,6 +86,7 @@ final class IssueUrlGenerator
             "- modelPropertiesColumnFallback: {$pluginConfig->modelPropertiesColumnFallback->value}",
             '- resolveDynamicWhereClauses: ' . self::formatBool($pluginConfig->resolveDynamicWhereClauses),
             '- resolveConfigReturnTypes: ' . self::formatBool($pluginConfig->resolveConfigReturnTypes),
+            '- reportImplicitQueryBuilderCalls: ' . self::formatBool($pluginConfig->reportImplicitQueryBuilderCalls),
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),

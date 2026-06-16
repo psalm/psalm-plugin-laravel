@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Providers;
 
 use Composer\InstalledVersions;
+use Composer\Semver\VersionParser;
 use Psalm\LaravelPlugin\Util\StubFileFinder;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\Progress\Progress;
@@ -88,10 +89,55 @@ final class CarbonStubProvider
         // projects can pin different Carbon majors. Loading is gated on the
         // `nesbot/carbon` install check above so the plugin does not register stubs for
         // a package the consumer does not actually use.
+        //
+        // The directory is split by load condition:
+        //   - shared/   — version-independent stubs (the CarbonPeriod lazy-collect helper
+        //                 and the Constants/* interfaces). Always registered.
+        //   - pre-3.12/ — conditional-return narrowings for Carbon's dual-purpose
+        //                 getter/setter methods. Registered ONLY for nesbot/carbon < 3.12
+        //                 (see the version gate below).
         $integrationStubsDir = \dirname(__DIR__, 2) . '/stubs/integrations/carbon';
 
-        foreach (StubFileFinder::findIn($integrationStubsDir, $output) as $stub) {
+        foreach (StubFileFinder::findIn($integrationStubsDir . '/shared', $output) as $stub) {
             $registration->addStubFile($stub);
+        }
+
+        // Carbon 3.12.0 gave four dual-purpose getter/setter methods an inline *param*
+        // conditional `@return ($value is null ? <scalar> : static)`: isoWeekday(), weekday(),
+        // utcOffset() (which carried no narrowing docblock before 3.12) and dayOfYear() (which
+        // already narrowed, but via a *template* form `@psalm-return (T is int ? static : int)`).
+        // Our pre-3.12/ stubs redeclare them with a *narrower* param conditional (`int<1, 7>` etc.).
+        //
+        // On Carbon 3.12+ both our stub and the reflected source then carry an inline param
+        // conditional `@return` on the same method, and Psalm 7 (7.0.0-beta19) does not let our
+        // narrower stub cleanly supersede the reflected one. Empirically the setter form
+        // `isoWeekday(1)` resolves to the getter branch (`int<1, 7>`) instead of `static` (issue
+        // #1059); the getter form is unaffected. The exact internal cause is an upstream Psalm
+        // conditional merge/precedence defect, not something the stub can express around, so this
+        // gate is the plugin-level workaround: for Carbon 3.12+ we skip our redeclarations and let
+        // Carbon's own conditional drive inference (getter -> int, setter -> static, correct and
+        // only marginally wider than our `int<1, 7>` getter). On Carbon < 3.12 the source carries
+        // no inline param conditional that collides with ours (dayOfYear's template form does not
+        // trigger the collapse), so our redeclaration sets the setter to `static` correctly
+        // (verified on 3.11.4) and stays load-bearing there.
+        //
+        // Two methods in pre-3.12/ are NOT fully resolved by this gate. They are pre-existing,
+        // out of #1059's scope, and documented here rather than silently shipped:
+        //   - tz() has carried Carbon's conditional since 3.10.0 (not 3.12.0), so on Carbon
+        //     3.10-3.11 our redeclaration still double-conditions it and the setter `tz('UTC')`
+        //     collapses to `string`. The gate skips it correctly on 3.12+; a complete fix would
+        //     gate tz() at `< 3.10` (or drop the redeclaration). Note that a `< 3.10` gate cannot
+        //     be a sibling directory: tz() shares Date.phpstub / CarbonInterface.phpstub with the
+        //     `< 3.12` methods, so a second boundary would need tz() split into its own stub file.
+        //   - locale() resolves to the union `static|string` (setter not narrowed to `static`)
+        //     even in pure Carbon 3.12.2 with our stub gated off, because Carbon declares the
+        //     conditional on BOTH the Localization trait and CarbonInterface (plus a variadic
+        //     tail param). That is an upstream Carbon/Psalm interaction the plugin cannot fix by
+        //     gating.
+        if (InstalledVersions::satisfies(new VersionParser(), 'nesbot/carbon', '<3.12')) {
+            foreach (StubFileFinder::findIn($integrationStubsDir . '/pre-3.12', $output) as $stub) {
+                $registration->addStubFile($stub);
+            }
         }
     }
 

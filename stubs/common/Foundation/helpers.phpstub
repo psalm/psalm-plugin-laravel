@@ -48,7 +48,23 @@ function abort_unless($boolean, $code, $message = '', array $headers = []) {}
  */
 function action($name, $parameters = [], $absolute = true) {}
 
-// app: processed by Psalm handlers
+/**
+ * Get the available container instance, or resolve the given abstract.
+ *
+ * The return type is provided by {@see \Psalm\LaravelPlugin\Handlers\Application\ContainerHandler};
+ * this stub exists only to mark $abstract as an unsafe-reflection taint sink (CWE-470).
+ * A user-controlled class name flowing into the container lets an attacker instantiate
+ * arbitrary classes (constructor side effects, gadget chains). Reuses the built-in
+ * `callable` taint kind, which Psalm also applies to `new $var()` / dynamic invocation.
+ *
+ * @param  string|null  $abstract
+ * @param  array  $parameters
+ * @return mixed
+ *
+ * @psalm-taint-sink callable $abstract
+ */
+function app($abstract = null, array $parameters = []) {}
+
 // app_path: processed by Psalm handlers
 // asset: nothing to stub
 // auth: processed by Psalm handlers
@@ -259,6 +275,21 @@ function redirect($to = null, $status = 302, $headers = [], $secure = null) {}
  * @psalm-taint-source input
  */
 function request($key = null, $default = null) {}
+
+/**
+ * Resolve a service from the container.
+ *
+ * The return type is provided by {@see \Psalm\LaravelPlugin\Handlers\Application\ContainerHandler};
+ * this stub exists only to mark $name as an unsafe-reflection taint sink (CWE-470),
+ * mirroring app(). Reuses the built-in `callable` taint kind.
+ *
+ * @param  string  $name
+ * @param  array  $parameters
+ * @return mixed
+ *
+ * @psalm-taint-sink callable $name
+ */
+function resolve($name, array $parameters = []) {}
 
 /**
  * Catch a potential exception and return a default value.
