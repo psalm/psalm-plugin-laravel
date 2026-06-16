@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781630545689,
+  "lastUpdate": 1781639015104,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6295,6 +6295,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1103,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "756e09fd4645d3fcaf9288d632cda7d6456a6701",
+          "message": "fix(container): gate return narrowing to resolution methods #1075 (#1077)\n\nContainerHandler's MethodReturnTypeProvider is registered per-class, so\nPsalm offers it every method on the container / Application contracts,\nnot only the resolving ones. getMethodReturnType() fed the first\n`Foo::class` argument to ContainerResolver unconditionally, so the\nreturn of any container method was rewritten to that class:\n`$app->when(Foo::class)` (a contextual-binding builder), `bound()` (a\nbool), `instance()`, `bind()`, `singleton()`, etc. all collapsed to\n`Foo`. Chains like `$app->when(Foo::class)->needs(...)` then reported a\nfalse-positive UndefinedMethod (`Foo::needs does not exist`).\n\nGate the provider to the methods that actually carry the\n`class-string<T> -> T` contract (make / makeWith / get), mirroring the\nsibling App-facade handler; every other container method keeps its real\nreturn type. The regression surfaced once #1075 added the container\ncontracts to getClassLikeNames(), widening the set of receivers the\nun-gated provider fired for (e.g. the idiomatic `$this->app`).\n\nVerified end-to-end on a large real-world Laravel app: the false\npositive reproduces with the base plugin and is gone with the gate, and\nmake()/makeWith()/get() narrowing is preserved.",
+          "timestamp": "2026-06-16T21:40:50+02:00",
+          "tree_id": "b9d81c628e2af0833b2e3a45f08b18e8ef0374c0",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/756e09fd4645d3fcaf9288d632cda7d6456a6701"
+        },
+        "date": 1781639014403,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.31,
+            "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
             "unit": "MB"
           }
         ]
