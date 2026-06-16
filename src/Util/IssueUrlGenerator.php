@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Util;
 
 use Composer\InstalledVersions;
-use Psalm\LaravelPlugin\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginConfig;
 
 /** @internal */
 final class IssueUrlGenerator
