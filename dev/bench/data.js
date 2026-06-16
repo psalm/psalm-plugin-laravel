@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781601303434,
+  "lastUpdate": 1781615889768,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6190,6 +6190,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1103,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed7833e51c996d47d7b3b7182e28526316908c6a",
+          "message": "Detect timing-unsafe comparisons of secrets (CWE-208) (#1013)\n\n* feat(rules): detect timing-unsafe comparisons of secrets #570\n\nAdds TimingUnsafeComparisonHandler that registers USER_SECRET |\nSYSTEM_SECRET taint sinks at:\n\n- ===, ==, !==, != BinaryOp expressions\n- strcmp, strcasecmp, strncmp, strncasecmp, substr_compare calls\n\nWhen a value carrying user_secret or system_secret taint flows into\none of these sinks, Psalm reports TaintedUserSecret /\nTaintedSystemSecret. Use hash_equals() for constant-time comparison\n(CWE-208).\n\nComparisons against a literal scalar (null, '', 'sentinel', 42,\nfalse, magic constants, unary +/- over a literal, literal-only\nconcatenation) are skipped to avoid false positives on idiomatic\ndefensive checks. The carve-out matches by AST shape; class\nconstants and enum cases remain unexempt because runtime\nindirection could resolve them to attacker-controlled values.\n\nThe handler hooks AfterExpressionAnalysisInterface and exits\nimmediately when taint_flow_graph is null, so the per-expression\ncost outside --taint-analysis runs is one instanceof.\n\nKnown gaps documented in taint-analysis.md: switch/match on\nsecrets, partial-leak operations (str_starts_with, preg_match,\nin_array $strict=false, Str::of(...)->is(...)).\n\nIssue-message text is hardcoded by Psalm 7 per taint kind\n(vimeo/psalm#11762); the data-flow trace still pinpoints the\ntiming-unsafe site, so the report is actionable today.\n\nCloses #570\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* feat(security): flag <=> timing comparison; document CWE-208; expand tests\n\nAdd the spaceship operator to TimingUnsafeComparisonHandler: it compares\nbyte-by-byte and its -1/0/1 result leaks secret ordering like strcmp().\n\nDocument the rule for users in docs/security.md (what triggers it, the\nhash_equals() fix, and why the message is the generic 'Detected tainted\nuser secret leaking' pending vimeo/psalm#11762).\n\nCover previously untested branches:\n- substr_compare() and strncasecmp() (declared in TIMING_UNSAFE_FUNCTIONS\n  but had no fixture)\n- system_secret through the operator path (=== ), not only strcasecmp()\n- the new <=> operator\n\n* feat(rules): flag relational and named-arg secret comparisons #1013\n\nTimingUnsafeComparisonHandler missed two timing-unsafe shapes that leak a\nsecret's lexicographic ordering exactly like the already-covered <=> and\nstrcmp():\n\n- Relational operators <, <=, >, >= compare strings byte-by-byte. Added the\n  four BinaryOp classes alongside the equality/spaceship set.\n- Named arguments can push the secret comparand past args[0]/args[1] (e.g.\n  strncmp(length: 8, string1: $a, string2: $secret) puts it at args[2]). The\n  function branch now resolves each watched comparand by parameter name, then\n  by positional index, via a name+position operand map. Unpacked args abort\n  resolution since their position is not statically known.\n\nAdds PHPT coverage for all four relational operators and for named-argument\nstrncmp()/substr_compare() with the secret in a later position.\n\n* docs(rules): note expected per-kind emission on timing sinks #1013\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-06-16T15:15:08+02:00",
+          "tree_id": "cfbcdf76676f6b64e72bff8011f11e6fce5335d6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ed7833e51c996d47d7b3b7182e28526316908c6a"
+        },
+        "date": 1781615889289,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.74,
+            "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
             "unit": "MB"
           }
         ]
