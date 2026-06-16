@@ -26,8 +26,8 @@ use Psalm\Type\Union;
  * Detects timing-unsafe string comparisons involving secrets (CWE-208).
  *
  * When secrets (values tainted with user_secret or system_secret) are compared
- * using ===, ==, !==, !=, strcmp(), strcasecmp(), strncmp(), strncasecmp(), or
- * substr_compare(), an attacker can determine the correct value
+ * using ===, ==, !==, !=, <=>, strcmp(), strcasecmp(), strncmp(), strncasecmp(),
+ * or substr_compare(), an attacker can determine the correct value
  * character-by-character by measuring response time differences. Use
  * hash_equals() for constant-time comparison instead.
  *
@@ -79,13 +79,16 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
 
         // Short-circuit on BinaryOp first: every analyzed expression hits this method, but
         // only BinaryOp and FuncCall expressions are relevant. The `instanceof BinaryOp`
-        // gate skips the FuncCall branch for the BinaryOp majority and skips four
+        // gate skips the FuncCall branch for the BinaryOp majority and skips five
         // narrower instanceof checks for everything else (vars, calls, literals, etc.).
+        // `<=>` is included: it compares byte-by-byte and its -1/0/1 result leaks
+        // ordering of the secret just as `strcmp()` does.
         if ($expr instanceof BinaryOp) {
             if ($expr instanceof BinaryOp\Identical
                 || $expr instanceof BinaryOp\Equal
                 || $expr instanceof BinaryOp\NotIdentical
                 || $expr instanceof BinaryOp\NotEqual
+                || $expr instanceof BinaryOp\Spaceship
             ) {
                 self::addSinksForOperands(
                     $source,
