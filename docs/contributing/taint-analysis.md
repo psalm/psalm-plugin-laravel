@@ -163,6 +163,34 @@ Multiple parameters can be sinks:
 public function jsonp($callback, $data = []) {}
 ```
 
+#### Unsafe reflection (CWE-470) — container resolution
+
+A user-controlled class name resolved through the container lets an attacker
+instantiate arbitrary classes (constructor side effects, gadget chains). The
+container entry points reuse the built-in `callable` kind, the same kind Psalm
+applies to `new $var()` and dynamic invocation:
+
+- `app($abstract)` / `resolve($name)` — `stubs/common/Foundation/helpers.phpstub`
+- `Container::make($abstract)` / `Container::makeWith($abstract)` — `stubs/common/Container/Container.phpstub`
+
+```php
+/**
+ * @psalm-taint-sink callable $abstract
+ */
+public function make($abstract, array $parameters = []) {}
+```
+
+The helper stubs (`app`, `resolve`) carry the sink only; their return type is
+still produced by `ContainerHandler`. The bare `new $var()`, `$callback()`, and
+`call_user_func()` forms in the issue are already caught by Psalm core's
+`callable` sink combined with the plugin's `Request` taint sources, so no stub
+is needed for those.
+
+The `App::make(...)` facade form does **not** propagate taint — see
+[Known limitation: Facade static calls](#known-limitation-facade-static-calls).
+Use the `app()` / `resolve()` helpers or an instance typed as
+`Illuminate\Container\Container` for analyzable code.
+
 ### Escape stubs (with flow)
 
 Mark functions that sanitize specific taint kinds. **Always pair with `@psalm-flow`**:
