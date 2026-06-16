@@ -117,7 +117,7 @@ final class ValidationTaintHandler implements
     {
         $read = ValidatedFieldReadResolver::resolve($event);
 
-        if ($read === null || $read->sourceTaints === 0) {
+        if (!$read instanceof \Psalm\LaravelPlugin\Handlers\Validation\ValidatedFieldRead || $read->sourceTaints === 0) {
             return 0;
         }
 
