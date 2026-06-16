@@ -11,6 +11,7 @@ use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\UnaryMinus;
 use PhpParser\Node\Expr\UnaryPlus;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar;
 use Psalm\CodeLocation;
@@ -25,21 +26,17 @@ use Psalm\Type\Union;
 /**
  * Detects timing-unsafe string comparisons involving secrets (CWE-208).
  *
- * When secrets (values tainted with user_secret or system_secret) are compared
- * using ===, ==, !==, !=, <=>, strcmp(), strcasecmp(), strncmp(), strncasecmp(),
- * or substr_compare(), an attacker can determine the correct value
- * character-by-character by measuring response time differences. Use
- * hash_equals() for constant-time comparison instead.
+ * Comparing a secret (user_secret/system_secret taint) with ===, ==, !==, !=, <, <=, >,
+ * >=, <=>, strcmp(), strcasecmp(), strncmp(), strncasecmp(), or substr_compare() leaks the
+ * value character-by-character via response-time differences. Use hash_equals().
  *
- * This handler adds taint sinks at comparison operators and timing-unsafe
- * functions. When a secret-tainted value flows into these sinks, Psalm emits
- * TaintedUserSecret or TaintedSystemSecret.
+ * The handler adds taint sinks at those operators/functions; a secret-tainted operand
+ * flowing in makes Psalm emit TaintedUserSecret/TaintedSystemSecret.
  *
- * Upstream limitation: Psalm 7 hardcodes the issue message per taint kind in
- * TaintFlowGraph::connectSinksAndSources(). Until vimeo/psalm#11762 lands,
- * the emitted message is the default "Detected tainted user secret leaking"
- * rather than a CWE-208-specific one. The taint flow itself, however, still
- * correctly pinpoints the timing-unsafe comparison site.
+ * Upstream limitation: Psalm 7 hardcodes the per-kind message in
+ * TaintFlowGraph::connectSinksAndSources(), so until vimeo/psalm#11762 lands the text
+ * is the default "Detected tainted user secret leaking" rather than CWE-208-specific.
+ * The flow still pinpoints the comparison site correctly.
  *
  * @see https://cwe.mitre.org/data/definitions/208.html
  * @see https://github.com/vimeo/psalm/issues/11762
@@ -49,13 +46,20 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
     /** Taint mask for secrets that require constant-time comparison */
     private const SECRET_TAINTS = TaintKind::USER_SECRET | TaintKind::SYSTEM_SECRET;
 
-    /** Functions that compare strings in a timing-unsafe manner (all C-level byte-by-byte). */
+    /**
+     * Timing-unsafe string-comparison functions (all C-level byte-by-byte), mapped to the two
+     * string comparands as `[paramName, canonicalPosition]`. Resolving by name AND position lets
+     * us find the secret operand even when the call uses named arguments in any order (e.g.
+     * `strncmp(length: 8, string1: $a, string2: $secret)` puts the secret at syntactic args[2]).
+     *
+     * @var array<string, array{array{string, int}, array{string, int}}>
+     */
     private const TIMING_UNSAFE_FUNCTIONS = [
-        'strcmp',
-        'strcasecmp',
-        'strncmp',
-        'strncasecmp',
-        'substr_compare',
+        'strcmp' => [['string1', 0], ['string2', 1]],
+        'strcasecmp' => [['string1', 0], ['string2', 1]],
+        'strncmp' => [['string1', 0], ['string2', 1]],
+        'strncasecmp' => [['string1', 0], ['string2', 1]],
+        'substr_compare' => [['haystack', 0], ['needle', 1]],
     ];
 
     /** @inheritDoc */
@@ -71,24 +75,25 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
 
         $taintFlowGraph = $source->taint_flow_graph;
 
-        // TaintFlowGraph is only present during --taint-analysis runs.
-        // Without it, the handler exits immediately to keep normal-analysis overhead near zero.
+        // TaintFlowGraph exists only under --taint-analysis; bail early so normal runs pay ~zero.
         if (!$taintFlowGraph instanceof TaintFlowGraph) {
             return null;
         }
 
-        // Short-circuit on BinaryOp first: every analyzed expression hits this method, but
-        // only BinaryOp and FuncCall expressions are relevant. The `instanceof BinaryOp`
-        // gate skips the FuncCall branch for the BinaryOp majority and skips five
-        // narrower instanceof checks for everything else (vars, calls, literals, etc.).
-        // `<=>` is included: it compares byte-by-byte and its -1/0/1 result leaks
-        // ordering of the secret just as `strcmp()` does.
+        // BinaryOp gate first: this method runs for every expression, so the cheap check
+        // skips the FuncCall branch for the BinaryOp majority and the narrower instanceofs
+        // for everything else. `<=>` and the relational operators (<, <=, >, >=) count too —
+        // each leaks the secret's lexicographic ordering byte-by-byte just like strcmp().
         if ($expr instanceof BinaryOp) {
             if ($expr instanceof BinaryOp\Identical
                 || $expr instanceof BinaryOp\Equal
                 || $expr instanceof BinaryOp\NotIdentical
                 || $expr instanceof BinaryOp\NotEqual
                 || $expr instanceof BinaryOp\Spaceship
+                || $expr instanceof BinaryOp\Smaller
+                || $expr instanceof BinaryOp\SmallerOrEqual
+                || $expr instanceof BinaryOp\Greater
+                || $expr instanceof BinaryOp\GreaterOrEqual
             ) {
                 self::addSinksForOperands(
                     $source,
@@ -104,43 +109,86 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
             return null;
         }
 
-        // strcmp() and variants are also timing-unsafe — they compare character-by-character
-        // and the return value reveals partial ordering even when the caller only checks `=== 0`.
-        // `\count(args) >= 2` runs before `toLowerString()` so unrelated nullary/unary calls
-        // (microtime(), count(), etc.) don't pay for the lowercase allocation.
+        // strcmp() and variants leak partial ordering even when the caller only checks `=== 0`.
+        // `count(args) >= 2` precedes `toLowerString()` so unrelated calls skip the lowercasing.
         if ($expr instanceof FuncCall
             && \count($expr->args) >= 2
             && $expr->name instanceof Name
-            && \in_array($expr->name->toLowerString(), self::TIMING_UNSAFE_FUNCTIONS, true)
-            && $expr->args[0] instanceof Arg
-            && $expr->args[1] instanceof Arg
         ) {
-            self::addSinksForOperands(
-                $source,
-                $taintFlowGraph,
-                $expr,
-                $expr->args[0]->value,
-                $expr->args[1]->value,
-                $source->getNodeTypeProvider()->getType($expr->args[0]->value),
-                $source->getNodeTypeProvider()->getType($expr->args[1]->value),
-            );
+            $operandSpecs = self::TIMING_UNSAFE_FUNCTIONS[$expr->name->toLowerString()] ?? null;
+
+            if ($operandSpecs !== null) {
+                [$leftSpec, $rightSpec] = $operandSpecs;
+                $leftExpr = self::resolveArgument($expr->args, $leftSpec[0], $leftSpec[1]);
+                $rightExpr = self::resolveArgument($expr->args, $rightSpec[0], $rightSpec[1]);
+
+                if ($leftExpr instanceof Expr && $rightExpr instanceof Expr) {
+                    self::addSinksForOperands(
+                        $source,
+                        $taintFlowGraph,
+                        $expr,
+                        $leftExpr,
+                        $rightExpr,
+                        $source->getNodeTypeProvider()->getType($leftExpr),
+                        $source->getNodeTypeProvider()->getType($rightExpr),
+                    );
+                }
+            }
         }
 
         return null;
     }
 
     /**
-     * Add taint sinks for both operands of a timing-unsafe comparison.
+     * Resolve a function argument by parameter name first, then by positional index, so a watched
+     * comparand is found regardless of whether the call passes it positionally or as a named
+     * argument. Returns null when the argument is absent or unpacked (`...$args`), where the
+     * position can no longer be determined statically.
      *
-     * Each operand's data flow parent nodes are connected to a new sink node
-     * that matches user_secret and system_secret taints. If either operand
-     * carries secret taint, Psalm's taint resolution will report the issue.
+     * @param array<Arg|\PhpParser\Node\VariadicPlaceholder> $args
      *
-     * Operands that are literal scalars / null / true / false carry no
-     * attacker-derived content. Comparing a secret to a known literal never
-     * leaks information bit-by-bit (the literal IS the known half of the
-     * comparison), so we skip those defensive shapes (e.g. `$secret === null`,
-     * `$secret === ''`) to avoid false positives on idiomatic checks.
+     * @psalm-mutation-free
+     */
+    private static function resolveArgument(array $args, string $name, int $position): ?Expr
+    {
+        // A named argument matching the parameter wins outright (it may appear in any order).
+        foreach ($args as $arg) {
+            if ($arg instanceof Arg && $arg->name instanceof Identifier && $arg->name->name === $name) {
+                return $arg->value;
+            }
+        }
+
+        // Otherwise count only positional (unnamed) arguments in source order. PHP requires
+        // positional args before named ones, so the n-th unnamed arg is at parameter position n.
+        $index = 0;
+        foreach ($args as $arg) {
+            if (!$arg instanceof Arg || $arg->name instanceof \PhpParser\Node\Identifier) {
+                continue;
+            }
+
+            // An unpacked argument shifts every later position by an unknown amount — give up.
+            if ($arg->unpack) {
+                return null;
+            }
+
+            if ($index === $position) {
+                return $arg->value;
+            }
+
+            $index++;
+        }
+
+        return null;
+    }
+
+    /**
+     * Add taint sinks for both operands of a timing-unsafe comparison: each operand's data
+     * flow parents connect to a sink matching user_secret|system_secret, so a secret-tainted
+     * operand gets reported.
+     *
+     * A literal operand (scalar / null / true / false) is the known half of the comparison and
+     * leaks nothing, so shapes like `$secret === null` or `$secret === ''` are skipped to avoid
+     * false positives on idiomatic checks.
      */
     private static function addSinksForOperands(
         StatementsAnalyzer $source,
@@ -165,27 +213,16 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
     }
 
     /**
-     * Whether the operand is a constant the developer wrote directly (no
-     * runtime data flow). Accepted shapes:
+     * Whether the operand is a developer-written constant with no runtime data flow. Accepted:
+     * int/float/interpolation-free string scalars (heredoc/nowdoc without `{$x}` included), magic
+     * constants, `null`/`true`/`false`, unary `+`/`-` on a literal, and concat of literals on both
+     * sides.
      *
-     *  - Integer / float / interpolation-free string scalars
-     *    (heredoc/nowdoc without `{$x}` parses as `Scalar\String_`, covered)
-     *  - Magic constants (`__FILE__`, `__LINE__`, `__CLASS__`, ...)
-     *  - `null` / `true` / `false`
-     *  - Unary `+` / `-` applied to a literal (e.g. `=== -1`)
-     *  - String concat of literals on both sides (e.g. `'sentinel-' . self::SUFFIX`
-     *    only matches when SUFFIX is also a literal; class constants are NOT
-     *    treated as literals on purpose — see note below)
+     * Class constants (`Foo::BAR`) and enum cases are NOT exempted: an attacker-controlled
+     * indirection could resolve to the same constant, so err on a rare FP over disarming the rule.
      *
-     * Class constants (`Foo::BAR`) and enum cases (`Status::Active`) are
-     * intentionally NOT exempted: an attacker-controlled indirection could
-     * resolve to the same constant at runtime, and the rule should err on
-     * flagging a rare FP rather than silently disarming for an entire common
-     * pattern.
-     *
-     * Matching by AST shape (not by inferred type) keeps the check robust
-     * against Psalm narrowing `string $x` to `''` after a prior check — those
-     * still carry real data flow and must be flagged.
+     * Matching by AST shape (not inferred type) stays robust against Psalm narrowing `string $x`
+     * to `''` after a prior check — those still carry real data flow and must be flagged.
      */
     private static function isLiteralOperand(Expr $expr): bool
     {
@@ -215,12 +252,9 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
     }
 
     /**
-     * Create a single taint sink for an operand and connect all its data flow
-     * parent nodes to it. One sink per operand side avoids duplicate reports
-     * and keeps the taint graph compact.
-     *
-     * The sink matches USER_SECRET | SYSTEM_SECRET, so only secret-tainted
-     * data triggers an issue — ordinary input taint is not affected.
+     * Create one sink per operand side (avoids duplicate reports, keeps the graph compact) and
+     * connect all the operand's data flow parents to it. The sink matches USER_SECRET|SYSTEM_SECRET,
+     * so only secret-tainted data triggers an issue — ordinary input taint is unaffected.
      *
      * @psalm-external-mutation-free
      */
