@@ -85,14 +85,27 @@ final class HigherOrderCollectionProxyHandler implements
      * are not modelled here to avoid false-negative type narrowing.
      */
     private const PASSTHROUGH_METHODS = [
-        'each', 'filter', 'reject',
-        'skipuntil', 'skipwhile', 'sortby', 'sortbydesc',
-        'takeuntil', 'takewhile', 'unique', 'until',
+        'each',
+        'filter',
+        'reject',
+        'skipuntil',
+        'skipwhile',
+        'sortby',
+        'sortbydesc',
+        'takeuntil',
+        'takewhile',
+        'unique',
+        'until',
     ];
 
     /** Proxy properties that return a boolean result. */
     private const BOOLEAN_METHODS = [
-        'contains', 'doesntcontain', 'every', 'hasmany', 'hassole', 'some',
+        'contains',
+        'doesntcontain',
+        'every',
+        'hasmany',
+        'hassole',
+        'some',
     ];
 
     // -------------------------------------------------------------------------
@@ -116,9 +129,7 @@ final class HigherOrderCollectionProxyHandler implements
         }
 
         foreach ($calleeType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TGenericObject
-                || \strtolower($atomic->value) !== self::PROXY_CLASS_LOWER
-            ) {
+            if (!$atomic instanceof TGenericObject || \strtolower($atomic->value) !== self::PROXY_CLASS_LOWER) {
                 continue;
             }
 
@@ -300,7 +311,11 @@ final class HigherOrderCollectionProxyHandler implements
         // for empty collections (common with empty query results). The method return type is included
         // to preserve precision (e.g. getPrice(): int → int|null instead of mixed|null).
         if ($proxyMethod === 'max' || $proxyMethod === 'min') {
-            $methodReturnType = self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase) ?? Type::getMixed();
+            $methodReturnType = self::resolveMethodReturnTypeOnValue(
+                $tValue,
+                $calledMethod,
+                $codebase,
+            ) ?? Type::getMixed();
             return Type::combineUnionTypes($methodReturnType, Type::getNull());
         }
 
@@ -325,7 +340,9 @@ final class HigherOrderCollectionProxyHandler implements
         // flatMap — inner structure is unpacked; static return type preserves LazyCollection.
         // EloquentCollection falls back to base Collection; key widened to array-key.
         if ($proxyMethod === 'flatmap') {
-            $flatMapClass = \is_a($collectionClass, EloquentCollection::class, true) ? Collection::class : $collectionClass;
+            $flatMapClass = \is_a($collectionClass, EloquentCollection::class, true)
+                ? Collection::class
+                : $collectionClass;
             return new Union([
                 new TGenericObject($flatMapClass, [Type::getArrayKey(), Type::getMixed()]),
             ]);
@@ -348,7 +365,9 @@ final class HigherOrderCollectionProxyHandler implements
         // bucket a base Collection regardless of the receiver.
         if ($proxyMethod === 'partition') {
             $innerCollection = new TGenericObject($collectionClass, [$tKey, $tValue]);
-            $outerClass = \is_a($collectionClass, EloquentCollection::class, true) ? Collection::class : $collectionClass;
+            $outerClass = \is_a($collectionClass, EloquentCollection::class, true)
+                ? Collection::class
+                : $collectionClass;
 
             return new Union([
                 new TGenericObject($outerClass, [
@@ -382,10 +401,8 @@ final class HigherOrderCollectionProxyHandler implements
      *
      * @return array{Union, Union, string}|null [TKey, TValue, collectionClassName]
      */
-    private static function extractCollectionInfoFromExpr(
-        MethodCall $expr,
-        \Psalm\StatementsSource $source,
-    ): ?array {
+    private static function extractCollectionInfoFromExpr(MethodCall $expr, \Psalm\StatementsSource $source): ?array
+    {
         // $expr->var is the proxy expression (e.g., $collection->each)
         $proxyExpr = $expr->var;
 

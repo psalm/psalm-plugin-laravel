@@ -245,9 +245,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
                 ? new Union([new TNonEmptyArray([Type::getArrayKey(), Type::getMixed()])])
                 : Type::getArray();
         } else {
-            $type = $value !== ''
-                ? Type::getNonEmptyString()
-                : Type::getString();
+            $type = $value !== '' ? Type::getNonEmptyString() : Type::getString();
         }
 
         self::$resolvedKeys[$translationKey] = $type;

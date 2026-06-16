@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin;
+namespace Psalm\LaravelPlugin\Config;
 
 use Psalm\Config;
 
@@ -26,6 +26,7 @@ final readonly class PluginConfig
         public array $configDirectories,
         public bool $resolveDynamicWhereClauses,
         public bool $resolveConfigReturnTypes,
+        public bool $reportImplicitQueryBuilderCalls,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         /**
@@ -59,6 +60,7 @@ final readonly class PluginConfig
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
@@ -69,6 +71,7 @@ final readonly class PluginConfig
             configDirectories: $configDirectories,
             resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             resolveConfigReturnTypes: $resolveConfigReturnTypes,
+            reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
@@ -150,9 +153,7 @@ final readonly class PluginConfig
         $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
 
         if (!\in_array($value, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException(
-                "Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.",
-            );
+            throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
         }
 
         return $value === 'true';
@@ -184,9 +185,7 @@ final readonly class PluginConfig
         $value = (string) $element['value'];
 
         if (!\in_array($value, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException(
-                "Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.",
-            );
+            throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
         }
 
         return $value === 'true';
@@ -201,7 +200,7 @@ final readonly class PluginConfig
         if (\is_string($env) && $env !== '') {
             \trigger_error(
                 'PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
-                    . "The plugin now uses Psalm's cache directory automatically.",
+                . "The plugin now uses Psalm's cache directory automatically.",
                 \E_USER_DEPRECATED,
             );
             return \rtrim($env, \DIRECTORY_SEPARATOR);

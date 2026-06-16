@@ -60,11 +60,11 @@ final class CollectionValuesAllHandler implements MethodReturnTypeProviderInterf
         }
 
         $stmt = $event->getStmt();
-        if (! $stmt instanceof MethodCall) {
+        if (!$stmt instanceof MethodCall) {
             return null;
         }
 
-        if (! self::isImmediateChainFromValues($stmt)) {
+        if (!self::isImmediateChainFromValues($stmt)) {
             return null;
         }
 
@@ -88,11 +88,11 @@ final class CollectionValuesAllHandler implements MethodReturnTypeProviderInterf
     private static function isImmediateChainFromValues(MethodCall $stmt): bool
     {
         $receiver = $stmt->var;
-        if (! $receiver instanceof MethodCall) {
+        if (!$receiver instanceof MethodCall) {
             return false;
         }
 
-        if (! $receiver->name instanceof Identifier) {
+        if (!$receiver->name instanceof Identifier) {
             return false;
         }
 

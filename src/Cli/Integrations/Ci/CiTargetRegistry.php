@@ -105,8 +105,7 @@ final class CiTargetRegistry
             return $this->autoDetect($projectRoot);
         }
 
-        return $this->targetsById[$name]
-            ?? throw new UnknownCiTargetException($name, $this->ids());
+        return $this->targetsById[$name] ?? throw new UnknownCiTargetException($name, $this->ids());
     }
 
     /**

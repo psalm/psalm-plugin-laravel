@@ -101,8 +101,8 @@ Most taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https
 | `shell`         | Command injection                         | `Process::run()`                              | `escapeshellarg()`                            |
 | `ssrf`          | Server-side request forgery               | `Http::get($url)`                             | N/A                                           |
 | `file`          | Path traversal                            | `Filesystem::get()`, `response()->download()` | N/A                                           |
-| `user_secret`   | Password/token exposure in logs or output | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
-| `system_secret` | Internal secret exposure                  | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
+| `user_secret`   | Password/token exposure in logs or output | `echo`, log sinks, `md5()`, `sha1()`          | `Hash::make()`, `Encrypter::encrypt()`        |
+| `system_secret` | Internal secret exposure                  | `echo`, log sinks, `md5()`, `sha1()`          | `Hash::make()`, `Encrypter::encrypt()`        |
 
 ### All available kinds
 
@@ -222,6 +222,34 @@ Multiple parameters can be sinks:
  */
 public function jsonp($callback, $data = []) {}
 ```
+
+#### Unsafe reflection (CWE-470) — container resolution
+
+A user-controlled class name resolved through the container lets an attacker
+instantiate arbitrary classes (constructor side effects, gadget chains). The
+container entry points reuse the built-in `callable` kind, the same kind Psalm
+applies to `new $var()` and dynamic invocation:
+
+- `app($abstract)` / `resolve($name)` — `stubs/common/Foundation/helpers.phpstub`
+- `Container::make($abstract)` / `Container::makeWith($abstract)` — `stubs/common/Container/Container.phpstub`
+
+```php
+/**
+ * @psalm-taint-sink callable $abstract
+ */
+public function make($abstract, array $parameters = []) {}
+```
+
+The helper stubs (`app`, `resolve`) carry the sink only; their return type is
+still produced by `ContainerHandler`. The bare `new $var()`, `$callback()`, and
+`call_user_func()` forms in the issue are already caught by Psalm core's
+`callable` sink combined with the plugin's `Request` taint sources, so no stub
+is needed for those.
+
+The `App::make(...)` facade form does **not** propagate taint — see
+[Known limitation: Facade static calls](#known-limitation-facade-static-calls).
+Use the `app()` / `resolve()` helpers or an instance typed as
+`Illuminate\Container\Container` for analyzable code.
 
 ### Escape stubs (with flow)
 
@@ -424,6 +452,50 @@ final class EmailWithDnsRule implements ValidationRule
 **No `@psalm-flow` needed.** Unlike function-level escapes, the class-level annotation does not live on a return value: it applies to the Rule's contribution to a single validated field. The "always pair with `@psalm-flow`" rule does not apply here.
 
 **Trust model.** The plugin trusts the developer's assertion, just like any `@psalm-taint-escape`. A mis-annotated rule becomes a **false negative**: the escape removes taint kinds the value still actually carries. Only annotate kinds the rule genuinely prevents, and prefer narrow escapes (such as `header`, `cookie`) over the broad `input` alias unless the rule truly constrains the value to a digit-like or date-like form.
+
+## Plugin-emitted taint sinks (handler-driven)
+
+Some taint sinks are not expressible as `@psalm-taint-sink` docblocks because they target language constructs (comparison operators) or call shapes that the stub parser cannot annotate. These sinks are registered programmatically by handlers in `src/Handlers/Rules/`.
+
+### `TimingUnsafeComparisonHandler` — CWE-208
+
+Detects timing-unsafe comparisons of secret-tainted values. The handler registers a taint sink (matching `USER_SECRET | SYSTEM_SECRET`) at every:
+
+- Strict and loose equality / inequality operator: `===`, `==`, `!==`, `!=`
+- The spaceship operator `<=>` (compares byte-by-byte; its `-1`/`0`/`1` result leaks ordering like `strcmp()`)
+- Variable-time string-compare function: `strcmp()`, `strcasecmp()`, `strncmp()`, `strncasecmp()`, `substr_compare()`
+
+Comparisons against a literal scalar (`null`, `''`, `'sentinel'`, `42`, `false`) are skipped: the literal IS the known half of the comparison, so no character-by-character information about the secret leaks. Idiomatic defensive checks (`if ($token === null)`, `if ($apiKey === '')`) do not trigger the handler.
+
+The literal carve-out matches by **AST shape**, not by Psalm's inferred type. Integer/float/string scalars, magic constants (`__FILE__`, `__LINE__`, ...), `null`/`true`/`false`, unary `+`/`-` over a literal, and concatenation of two literals all count. Class constants (`Foo::BAR`) and enum cases (`Status::Active`) are **not** exempt — an attacker-controlled indirection could resolve to one at runtime, so the handler errs on flagging.
+
+When a value carrying `user_secret` or `system_secret` taint flows into one of these sinks, Psalm emits `TaintedUserSecret` or `TaintedSystemSecret`. The fix is to use `hash_equals()` for constant-time comparison.
+
+```php
+// Triggers TaintedUserSecret
+function check(\Illuminate\Foundation\Auth\User $user, string $given): bool {
+    return $user->getAuthPassword() === $given;
+}
+
+// Safe — hash_equals() is not watched as a sink
+function checkSafe(\Illuminate\Foundation\Auth\User $user, string $given): bool {
+    return hash_equals($user->getAuthPassword(), $given);
+}
+```
+
+**Runtime cost.** The handler hooks `AfterExpressionAnalysisInterface`, which fires per expression. It exits immediately when `taint_flow_graph` is null (i.e. when `--taint-analysis` is not enabled), so the only cost in regular analysis is an `instanceof` check against the event's expression. Sink registration only happens during taint analysis runs.
+
+**Issue-message limitation.** Psalm 7 hardcodes the issue message per taint kind in `TaintFlowGraph::connectSinksAndSources()`, so the emitted text is the generic `"Detected tainted user secret leaking"` rather than something CWE-208-specific. Tracked upstream as [vimeo/psalm#11762](https://github.com/vimeo/psalm/issues/11762); the handler will switch to a CWE-tagged message once a custom-message API lands. The data-flow trace itself still pinpoints the timing-unsafe comparison site, so the report is actionable today.
+
+**Scope.** Only secret-tainted operands are flagged. Plain `===` on user input (e.g. `$request->input('name') === 'admin'`) is not reported, because the sink does not match `INPUT_*` taint kinds.
+
+**Known gaps.** These shapes are NOT currently watched, even when one operand carries secret taint:
+
+- `switch ($secret) { case $candidate: }` — `switch`/`case` uses `==` semantics but lives in `Stmt\Switch_`/`Stmt\Case_`, not a `BinaryOp` node, so it bypasses the operator branch.
+- `match ($secret) { 'literal' => ... }` — same reason. Note: `match` against a literal arm would be exempt by the literal carve-out anyway, but `match` against a variable arm would slip through.
+- Partial-leak operations: `str_starts_with`, `str_ends_with`, `str_contains` on a secret; `preg_match` with an attacker-controlled pattern; `in_array($secret, $list, false)` / `array_search($secret, $list, false)`; fluent chains like `Str::of($secret)->is($candidate)`.
+
+These are tracked as follow-ups. Until they are covered, treat the handler as a high-signal first-line check rather than a complete CWE-208 audit.
 
 ## Stub authoring checklist
 

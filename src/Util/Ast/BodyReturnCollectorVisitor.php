@@ -79,7 +79,8 @@ final class BodyReturnCollectorVisitor extends NodeVisitorAbstract
     #[\Override]
     public function enterNode(Node $node): ?int
     {
-        if ($node instanceof Node\Expr\Closure
+        if (
+            $node instanceof Node\Expr\Closure
             || $node instanceof Node\Expr\ArrowFunction
             || $node instanceof Node\Stmt\Function_
             || $node instanceof Node\Stmt\ClassMethod

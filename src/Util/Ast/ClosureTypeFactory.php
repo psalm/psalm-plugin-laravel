@@ -239,10 +239,7 @@ final class ClosureTypeFactory
 
         $returnType = $docblock['return'] ?? $nativeReturn ?? $bodyReturn ?? Type::getMixed();
 
-        return new TClosure(
-            params: $params,
-            return_type: $returnType,
-        );
+        return new TClosure(params: $params, return_type: $returnType);
     }
 
     /**
@@ -402,12 +399,14 @@ final class ClosureTypeFactory
      */
     private static function isArithmeticBinaryOp(Node\Expr\BinaryOp $expr): bool
     {
-        return $expr instanceof Node\Expr\BinaryOp\Plus
+        return (
+            $expr instanceof Node\Expr\BinaryOp\Plus
             || $expr instanceof Node\Expr\BinaryOp\Minus
             || $expr instanceof Node\Expr\BinaryOp\Mul
             || $expr instanceof Node\Expr\BinaryOp\Div
             || $expr instanceof Node\Expr\BinaryOp\Mod
-            || $expr instanceof Node\Expr\BinaryOp\Pow;
+            || $expr instanceof Node\Expr\BinaryOp\Pow
+        );
     }
 
     /**
@@ -428,7 +427,9 @@ final class ClosureTypeFactory
             return null;
         }
 
-        return self::literalStringUnion($left->getSingleStringLiteral()->value . $right->getSingleStringLiteral()->value);
+        return self::literalStringUnion(
+            $left->getSingleStringLiteral()->value . $right->getSingleStringLiteral()->value,
+        );
     }
 
     /**
@@ -599,8 +600,10 @@ final class ClosureTypeFactory
      * validate the closure body's argument uses), while `type` carries the
      * docblock-narrowed Union when present.
      */
-    private static function buildClosureParameter(\ReflectionParameter $reflParam, ?Union $docblockType): FunctionLikeParameter
-    {
+    private static function buildClosureParameter(
+        \ReflectionParameter $reflParam,
+        ?Union $docblockType,
+    ): FunctionLikeParameter {
         $reflType = $reflParam->getType();
         $signatureType = self::reflectionTypeToUnion($reflType);
 

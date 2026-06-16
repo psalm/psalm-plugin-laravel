@@ -64,8 +64,10 @@ final class ContainerResolver
     /**
      * @param list<Arg> $call_args
      */
-    public static function resolvePsalmTypeFromApplicationContainerViaArgs(NodeTypeProvider $nodeTypeProvider, array $call_args): ?Union
-    {
+    public static function resolvePsalmTypeFromApplicationContainerViaArgs(
+        NodeTypeProvider $nodeTypeProvider,
+        array $call_args,
+    ): ?Union {
         if ($call_args === []) {
             return null;
         }
@@ -96,6 +98,33 @@ final class ContainerResolver
         $concrete = self::resolveFromApplicationContainer($abstract);
 
         if ($concrete === null) {
+            // Container resolution failed: either the abstract is unbound, or the
+            // plugin's booted app (Orchestra Testbench, when analysing a Laravel
+            // *package* rather than an app) lacks the provider that would register
+            // the binding, and the concrete class is not auto-wireable via reflection
+            // (protected/private constructor or provider-supplied dependencies).
+            // See #757 / umbrella #766.
+            //
+            // If the abstract is itself a loadable class name, mirror Laravel's
+            // runtime: in a real app the owning provider IS loaded, so
+            // `app(Foo::class)` returns a `Foo`. Returning the named object here is
+            // symmetrical with resolveFromClassString() (#750), which already returns
+            // a TNamedObject for `class-string<Foo>` without touching the container.
+            //
+            // `class_exists()` is both safe and sufficient as the guard: the typical
+            // failure (Container::build throwing "not instantiable" / "unresolvable
+            // dependency") only happens AFTER `new ReflectionClass($abstract)` has
+            // already succeeded, so the class is loaded and `class_exists()` is true.
+            // It also correctly excludes interfaces (returns false → mixed) — we never
+            // claim an unresolvable contract resolves to itself. We only ever return
+            // the abstract itself, a supertype of whatever the runtime would build, so
+            // this cannot introduce a false-positive on a member that genuinely exists.
+            if (\class_exists($abstract)) {
+                return new Union([
+                    new TNamedObject($abstract),
+                ]);
+            }
+
             return null;
         }
 

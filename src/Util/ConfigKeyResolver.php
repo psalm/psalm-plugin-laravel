@@ -45,7 +45,9 @@ final class ConfigKeyResolver
     private array $cache = [];
 
     /** @psalm-mutation-free */
-    public function __construct(private readonly ConfigRepository $config) {}
+    public function __construct(
+        private readonly ConfigRepository $config,
+    ) {}
 
     /**
      * Swallows `ConfigRepositoryProvider::get()` failures with a
@@ -117,10 +119,7 @@ final class ConfigKeyResolver
             return null;
         }
 
-        return self::instance()->resolveCallReturnType(
-            $key,
-            self::readDefaultTypeAt($call_args, 1, $nodeTypeProvider),
-        );
+        return self::instance()->resolveCallReturnType($key, self::readDefaultTypeAt($call_args, 1, $nodeTypeProvider));
     }
 
     /**
@@ -135,8 +134,10 @@ final class ConfigKeyResolver
      *
      * @param list<\PhpParser\Node\Arg> $call_args
      */
-    private static function extractLiteralKey(array $call_args, \Psalm\NodeTypeProvider $nodeTypeProvider): string|false|null
-    {
+    private static function extractLiteralKey(
+        array $call_args,
+        \Psalm\NodeTypeProvider $nodeTypeProvider,
+    ): string|false|null {
         if ($call_args === []) {
             return null;
         }
@@ -180,8 +181,11 @@ final class ConfigKeyResolver
      *
      * @param list<\PhpParser\Node\Arg> $call_args
      */
-    private static function readDefaultTypeAt(array $call_args, int $index, \Psalm\NodeTypeProvider $nodeTypeProvider): Union
-    {
+    private static function readDefaultTypeAt(
+        array $call_args,
+        int $index,
+        \Psalm\NodeTypeProvider $nodeTypeProvider,
+    ): Union {
         if (!isset($call_args[$index])) {
             return Type::getNull();
         }

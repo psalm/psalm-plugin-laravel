@@ -117,7 +117,7 @@ final class ApplicationProvider
      */
     private function doGetApp(): LaravelApplication
     {
-        if (! \defined('LARAVEL_START')) {
+        if (!\defined('LARAVEL_START')) {
             \define('LARAVEL_START', \microtime(true));
         }
 
@@ -125,9 +125,10 @@ final class ApplicationProvider
         //   1. cwd-relative bootstrap/app.php — Applications and local dev (Psalm run from project root).
         //   2. vendor-parent-relative bootstrap/app.php — plugin installed into a project's vendor/.
         //   3. Orchestra Testbench skeleton — Laravel packages with no host app (e.g. test:type).
-        $app = $this->bootFromBootstrapFile((\getcwd() ?: '.') . '/bootstrap/app.php')
-            ?? $this->bootFromBootstrapFile(\dirname(__DIR__, 5) . '/bootstrap/app.php')
-            ?? $this->bootFromTestbench();
+        $app
+            = $this->bootFromBootstrapFile((\getcwd() ?: '.') . '/bootstrap/app.php') ?? $this->bootFromBootstrapFile(
+                \dirname(__DIR__, 5) . '/bootstrap/app.php',
+            ) ?? $this->bootFromTestbench();
 
         self::$app = $app;
 
@@ -145,7 +146,10 @@ final class ApplicationProvider
             $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
             /** @var \Illuminate\Contracts\Events\Dispatcher $events */
             $events = $app['events'];
-            $app->singleton('view', fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events));
+            $app->singleton(
+                'view',
+                fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events),
+            );
         }
 
         // Branch 3 only: register Composer-discovered vendor providers that Testbench's
@@ -239,7 +243,10 @@ final class ApplicationProvider
 
         /** @psalm-suppress MixedAssignment */
         $app = require $path;
-        assert($app instanceof LaravelApplication, 'bootstrap/app.php did not return an Application instance: ' . $path);
+        assert(
+            $app instanceof LaravelApplication,
+            'bootstrap/app.php did not return an Application instance: ' . $path,
+        );
 
         self::$bootMode = 'bootstrap';
         self::$bootPath = $path;
@@ -330,7 +337,6 @@ final class ApplicationProvider
         if ($projectRoot === null) {
             return;
         }
-
 
         // `PackageManifest::build()` writes the discovered configuration to disk; once
         // `providers()` returns, the file is no longer needed — unlink synchronously in
@@ -431,8 +437,7 @@ final class ApplicationProvider
      */
     private function resolveProjectRoot(): ?string
     {
-        $envOverride = $this->readEnvOverride('APP_BASE_PATH')
-            ?? $this->readEnvOverride('TESTBENCH_APP_BASE_PATH');
+        $envOverride = $this->readEnvOverride('APP_BASE_PATH') ?? $this->readEnvOverride('TESTBENCH_APP_BASE_PATH');
 
         if ($envOverride !== null) {
             return $envOverride;
