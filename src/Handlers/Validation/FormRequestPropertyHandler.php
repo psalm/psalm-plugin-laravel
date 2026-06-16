@@ -106,7 +106,7 @@ final class FormRequestPropertyHandler
      * PHPDoc, when no rule covers the field, or when the rule does not
      * guarantee presence. The same dispatch site that drives the type
      * narrowing — both `FormRequestPropertyHandler` (this class) and
-     * {@see ValidationTaintHandler::resolvePropertyFetchRule} — share this
+     * {@see ValidatedFieldReadResolver::fromPropertyFetch} — share this
      * resolver so the type and taint paths agree on which fetches the
      * plugin owns. Drift between them produces either false-positive taint
      * on user-declared properties (taint fires while type defers) or missed

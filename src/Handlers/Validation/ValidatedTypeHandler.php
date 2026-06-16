@@ -111,7 +111,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
      * contract it models.
      *
      * The taint flow for the narrowed expression is restored in
-     * {@see ValidationTaintHandler::isValidationMethodCall} — Psalm drops
+     * {@see ValidatedFieldReadResolver} — Psalm drops
      * the stub's @psalm-taint-source when a return-type override fires,
      * so the taint handler explicitly re-emits ALL_INPUT for `input()` on
      * a FormRequest caller.

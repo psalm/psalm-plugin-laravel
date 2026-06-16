@@ -23,7 +23,7 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  * never need a runtime class instance.
  *
  * Side outputs (lowercase-FQCN set in {@see $formRequestClasses}) feed the
- * fast-bail in {@see ValidationTaintHandler::resolvePropertyFetchRule}.
+ * fast-bail in {@see ValidatedFieldReadResolver::fromPropertyFetch}.
  * The taint handler fires on every expression under taint analysis, so a
  * cheap `isset` lookup against this set lets the common "caller is not a
  * FormRequest" case skip the `classExtends` storage walk entirely.
@@ -92,7 +92,7 @@ final class FormRequestPropertyRegistrationHandler implements AfterCodebasePopul
     /**
      * Fast bail-out probe for taint-mode hot paths — `false` short-circuits
      * the per-expression PropertyFetch resolution work in
-     * {@see ValidationTaintHandler::resolvePropertyFetchRule} for projects
+     * {@see ValidatedFieldReadResolver::fromPropertyFetch} for projects
      * with zero FormRequest subclasses. Same pattern as
      * {@see InlineValidateRulesCollector::hasAnyVariableBindings}.
      *
@@ -109,7 +109,7 @@ final class FormRequestPropertyRegistrationHandler implements AfterCodebasePopul
 
     /**
      * Whether the given FQCN was registered as a FormRequest subclass.
-     * Lets {@see ValidationTaintHandler::resolvePropertyFetchRule} skip the
+     * Lets {@see ValidatedFieldReadResolver::fromPropertyFetch} skip the
      * `classExtends` storage walk for callers whose class is not in the set
      * (which is the overwhelming majority of property reads under taint
      * analysis on any non-trivial project).
