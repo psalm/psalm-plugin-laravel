@@ -15,65 +15,32 @@ use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
 use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
 
 /**
- * Applies taint to validated request data — the *mechanism* side of the
- * feature. The *interpretation* side ("is this expression a validated field
- * read, and which rule governs it?") lives in {@see ValidatedFieldReadResolver};
- * this handler only translates that single answer into Psalm's add/remove
- * taint events. Both directions ask the resolver exactly once, so a keyed
- * accessor (`$req->input('email')`), a `ValidatedInput` accessor
- * (`$req->safe()->input('email')`), a magic property (`$req->email`, #1016),
- * and a tracked inline-validate variable all flow through the same path —
- * there is no longer a parallel branch per syntax.
+ * Applies taint to validated request data — the *mechanism* side. The
+ * interpretation ("is this a validated field read, which rule governs it?")
+ * lives in {@see ValidatedFieldReadResolver}; this handler asks it once per
+ * direction and translates the answer into Psalm taint events. Every syntax
+ * (keyed accessor, `ValidatedInput` accessor, magic property #1016, tracked
+ * inline-validate variable) flows through that one path — no per-syntax branch.
  *
- * 1. Add taint where the validated value originates user input but the stub's
- *    `@psalm-taint-source` was dropped. A return-type override
- *    ({@see ValidatedTypeHandler}) or a property-type override
- *    ({@see FormRequestPropertyHandler}) makes Psalm skip the stub source, so
- *    we re-introduce it. For `$req->email` there is no stub source on
- *    `Request::__get` at all, and a provider-supplied property type bypasses
- *    `__get` entirely, so the re-source is the only thing tainting the read
- *    (empirically confirmed: a `@psalm-taint-source` on a `__get` stub does
- *    not fire for provider-typed reads).
+ *   1. addTaints re-introduces the source dropped by a type override
+ *      ({@see ValidatedTypeHandler} / {@see FormRequestPropertyHandler}). For
+ *      `$req->email` no `Request::__get` stub source exists and a provider type
+ *      bypasses `__get`, so the re-source is the only thing tainting the read.
+ *   2. removeTaints applies the rule's per-field escape (e.g. `email` → safe
+ *      for header/cookie).
  *
- * 2. Remove taint per field when the declared validation rule constrains the
- *    value in a way that makes it safe for a specific sink family (e.g. an
- *    'email' rule → safe for 'header' and 'cookie').
+ * Escape soundness assumes validation ran against the same data pool the
+ * accessor reads (true for an injected FormRequest via ValidatesWhenResolvedTrait).
+ * It can be unsound when a subclass merges raw content / overrides validationData(),
+ * when the read precedes validation (prepareForValidation/rules/authorize), or
+ * under precognition. Prefer validated()/safe()->input() in security paths.
  *
- * Design assumption: when a typed FormRequest is injected into a controller,
- * Laravel runs validation before the controller method executes (via
- * ValidatesWhenResolvedTrait). So any keyed accessor read from that
- * FormRequest carries a value that already passed rules() — the rule's taint
- * escape applies even when the caller uses input() instead of validated().
+ * Not handled (deliberate): transport-specific reads (query/post/json/cookie/
+ * server/header/file) — a rule key need not describe them; and cast accessors
+ * (integer/float/…) — not taint sources.
  *
- * Caveat: the escape on the keyed accessors assumes validation has run
- * against the same data pool these accessors read. That assumption can break
- * in a few (rare) scenarios:
- *   - a subclass's passedValidation() calls $this->merge(...) with raw content
- *     on a rule-covered key;
- *   - a subclass overrides validationData() to validate a different source
- *     (e.g. $this->json()->all()) than input() reads;
- *   - input() is called before validation runs (e.g. inside prepareForValidation,
- *     rules(), or authorize()) — the static analyzer cannot see call ordering;
- *   - precognition mode strips rules from the live validator while the static
- *     rules() still parses the full set.
- * In all of these, validated() and safe()->input() still reflect the validated
- * snapshot. Prefer them in security-sensitive paths.
- *
- * NOT handled here (deliberate):
- *   - query(), post(), json(), cookie(), server(), header(), file():
- *     these read from a specific transport rather than the validated merge,
- *     so a rule on 'team_email' does not necessarily describe $req->query('team_email').
- *   - integer/float/boolean/date/enum:
- *     cast methods are not taint sources (see InteractsWithData.phpstub).
- *
- * Upstream workaround for Psalm dropping the stub source on override:
- *   https://github.com/vimeo/psalm/issues/11765
- *
+ * Upstream: stub source dropped on override — https://github.com/vimeo/psalm/issues/11765.
  * Architecture follows {@see \Psalm\Internal\Provider\AddRemoveTaints\HtmlFunctionTainter}.
- *
- * Performance: fires on every expression. {@see ValidatedFieldReadResolver::resolve}
- * rejects non-matching expressions with a leading `instanceof` dispatch before
- * any rule lookup.
  */
 final class ValidationTaintHandler implements
     AddTaintsInterface,
@@ -82,27 +49,12 @@ final class ValidationTaintHandler implements
     AfterFileAnalysisInterface
 {
     /**
-     * Object IDs of PropertyFetch nodes for which {@see addTaints} already
-     * emitted a taint source. Psalm dispatches `AddRemoveTaintsEvent` for the
-     * same expression from TWO sites when a property fetch is passed as a
-     * function-call argument:
-     *
-     *   1. `AtomicPropertyFetchAnalyzer::processTaints` — the property-read pass.
-     *   2. `ArgumentAnalyzer::processTaintedness` — the argument-binding pass.
-     *
-     * Both pass the same `PropertyFetch` node as `$event->getExpr()`. Without
-     * de-duplication, every `$req->email` reaching a sink ends up with TWO
-     * taint sources, producing 2x the expected report count per sink. Method
-     * calls do not have this problem because the two sites pass different
-     * expressions there (the method-call dispatch uses `$var_expr`, the
-     * argument dispatch uses the `MethodCall`).
-     *
-     * This is mechanism, not parallel logic: the resolver still answers the
-     * "is this a validated read?" question once; the dedupe only prevents the
-     * resulting source from being emitted twice onto the same graph node.
-     *
-     * Keyed by `spl_object_id($expr)` and bounded per file/function-like
-     * (see {@see afterStatementAnalysis}, {@see afterAnalyzeFile}).
+     * PropertyFetch node IDs already sourced by {@see addTaints}. A fetch passed
+     * as a call argument is dispatched twice (property-read pass in
+     * `AtomicPropertyFetchAnalyzer` + argument-binding pass in `ArgumentAnalyzer`)
+     * with the same node; emitting the source on both doubles the sink reports.
+     * Method calls don't hit this (the two sites pass different exprs). Keyed by
+     * `spl_object_id`, bounded per file/function-like (see the flush hooks).
      *
      * @var array<int, true>
      */
@@ -150,11 +102,8 @@ final class ValidationTaintHandler implements
     }
 
     /**
-     * Drop per-node source markers belonging to the function-like that just
-     * finished analysis. Bounds the cache footprint over a long worker
-     * lifetime — the cache holds entries only for in-flight functions. We do
-     * not stamp a per-function ID on each entry, so the simplest correct
-     * strategy is to flush the whole set; subsequent functions re-populate.
+     * Flush the source markers at function-like end to bound the footprint.
+     * Entries aren't function-stamped, so flush all; later functions re-populate.
      *
      * @inheritDoc
      *
@@ -171,19 +120,10 @@ final class ValidationTaintHandler implements
     }
 
     /**
-     * Backstop flush at file scope. The function-like flush misses two paths:
-     *
-     *   - Top-level script expressions (no enclosing function-like) accumulate
-     *     markers that the per-function flush never visits.
-     *   - PHP recycles `spl_object_id` values once the original object is
-     *     garbage-collected. ASTs become GC-eligible per file (Psalm's
-     *     `StatementsProvider` does not retain the parsed tree beyond
-     *     `FileAnalyzer::analyze`), so a stale marker from file A can collide
-     *     with a freshly-allocated PropertyFetch in file B — producing a
-     *     silent false negative on the legitimate READ-side fetch.
-     *
-     * Flushing at file scope bounds the marker set to in-flight AST objects
-     * and eliminates the id-reuse race entirely.
+     * Backstop flush at file scope. Catches top-level markers the per-function
+     * flush never visits, and prevents `spl_object_id` reuse across files (ASTs
+     * are GC'd per file) from colliding a stale marker with a fresh PropertyFetch
+     * — which would silently drop the source on a legitimate read.
      *
      * @inheritDoc
      *

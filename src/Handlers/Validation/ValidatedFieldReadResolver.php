@@ -16,33 +16,22 @@ use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
- * Resolves "is this expression a read of a validated request field, and if so
- * which rule governs it?" — the single question {@see ValidationTaintHandler}
- * asks for both the source (addTaints) and the escape (removeTaints) sides.
+ * Resolves "is this expression a validated-field read, and which rule governs
+ * it?" — the single question {@see ValidationTaintHandler} asks for both the
+ * source (addTaints) and escape (removeTaints) sides, so the type narrowing and
+ * taint behaviour cannot drift apart.
  *
- * Before this class existed, the taint handler answered the question twice: a
- * keyed-method branch (`$req->input('email')`, `$safe->input('email')`) and a
- * separate magic-property branch (`$req->email`), each re-deriving the caller
- * class, the rule lookup, and the gates. Funnelling every syntax through one
- * {@see resolve} keeps the "magic property is just another spelling of a
- * validated field read" invariant in one place — the type narrowing in
- * {@see ValidatedTypeHandler} / {@see FormRequestPropertyHandler} and the taint
- * behaviour can no longer drift apart.
+ * Three front doors feed {@see resolve}:
+ *   - keyed accessor — `validated|input|string|str|array|collect('key')` on a
+ *     FormRequest, `ValidatedInput<FormRequest>`, or a Request that ran inline
+ *     `validate([...])` in the same function;
+ *   - magic property — `$req->email`, gated by
+ *     {@see FormRequestPropertyHandler::resolveRuleForProperty};
+ *   - inline-validate variable — a local bound to one of the above, cached by
+ *     {@see InlineValidateRulesCollector} (#834 / #840).
  *
- * The three front doors:
- *
- *   - keyed accessor method — `validated|input|string|str|array|collect('key')`
- *     on a FormRequest, on `ValidatedInput<FormRequest>`, or on a plain Request
- *     that already ran an inline `validate([...])` in the same function;
- *   - magic property fetch — `$req->email`, gated by
- *     {@see FormRequestPropertyHandler::resolveRuleForProperty} so the type and
- *     taint paths share one "does the plugin own this fetch?" decision;
- *   - inline-validate variable — a local previously bound to one of the above
- *     and cached by {@see InlineValidateRulesCollector} (issues #834 / #840).
- *
- * Whole-bag method sources (`validated()` / `validate([...])` / `safe()` with
- * no single key) resolve to a {@see ValidatedFieldRead} with only a source mask
- * and no escape — the bag is tainted input, but no single rule constrains it.
+ * Whole-bag sources (`validated()` / `validate([...])` / `safe()` with no key)
+ * resolve to source-only, no escape.
  *
  * @internal
  */
@@ -50,29 +39,25 @@ final class ValidatedFieldReadResolver
 {
     /**
      * Accessor methods whose single-key form selects a rule-covered field.
-     *
-     * Listed explicitly (not derived) so reviewers can audit the set. Names
-     * are in canonical Laravel casing; both this resolver and the sibling
-     * {@see InlineValidateRulesCollector} reject non-canonical casing
-     * deliberately. PHP resolves method names case-insensitively at runtime,
-     * but Laravel code uses canonical camelCase without exception, and the
-     * canonical-only check avoids a per-expression `strtolower()` allocation.
-     *
-     * `public` so {@see InlineValidateRulesCollector} can reuse the list
-     * without risking drift — the variable-binding cache is the same data
-     * flow with one extra hop, and both sites must stay in sync.
+     * Canonical Laravel casing only — the camelCase convention is universal in
+     * practice, and skipping `strtolower()` keeps this off the per-expression
+     * allocation path. `public` so {@see InlineValidateRulesCollector} shares
+     * one definition (same flow, one extra hop).
      *
      * @internal shared only with {@see InlineValidateRulesCollector}.
      */
     public const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str', 'array', 'collect'];
 
     /**
-     * Recognise the expression behind a taint event as a validated field read.
-     *
-     * Returns null for the overwhelming majority of expressions (the
-     * `instanceof` dispatch below bails before any rule lookup). A non-null
-     * result tells the caller both what to source and what to escape; the
-     * caller reads whichever facet its direction needs.
+     * Every method name relevant to a validated read — the source names
+     * (validated/validate/safe/input) unioned with {@see KEYED_ACCESSOR_METHODS}.
+     * Lets {@see fromMethodCall} bail on name before resolving the caller type.
+     */
+    private const ACCESSOR_METHODS = ['validated', 'validate', 'safe', 'input', 'string', 'str', 'array', 'collect'];
+
+    /**
+     * Recognise the taint event's expression as a validated read. Null for the
+     * vast majority (the `instanceof` dispatch bails before any rule lookup).
      */
     public static function resolve(AddRemoveTaintsEvent $event): ?ValidatedFieldRead
     {
@@ -87,45 +72,158 @@ final class ValidatedFieldReadResolver
         }
 
         if ($expr instanceof MethodCall && $expr->name instanceof Identifier) {
-            return self::fromMethodCall($event);
+            return self::fromMethodCall($event, $expr, $expr->name->name);
         }
 
         return null;
     }
 
     /**
-     * Method-call front door. A single call can be both a source (its return
-     * type was narrowed, dropping the stub `@psalm-taint-source`) and an
-     * escape (its literal key selects a rule). Both facets are computed here
-     * so the two used to live as separate handler branches now collapse to one.
+     * Method-call front door. One call may be both a source (narrowed return
+     * type dropped the stub source) and an escape (literal key selects a rule).
+     * The caller class is resolved once and shared by both facets.
      */
-    private static function fromMethodCall(AddRemoveTaintsEvent $event): ?ValidatedFieldRead
+    private static function fromMethodCall(AddRemoveTaintsEvent $event, MethodCall $expr, string $method): ?ValidatedFieldRead
     {
-        $sourceTaints = self::isValidationMethodCall($event) || self::isValidatedInputAccessor($event)
-            ? TaintKind::ALL_INPUT
-            : 0;
-
-        $removedTaints = self::resolveKeyedAccessorEscape($event);
-
-        if ($sourceTaints === 0 && $removedTaints === 0) {
+        if (!\in_array($method, self::ACCESSOR_METHODS, true)) {
             return null;
         }
 
-        return new ValidatedFieldRead($sourceTaints, $removedTaints);
+        $formRequest = self::resolveCallerClass($event, \Illuminate\Foundation\Http\FormRequest::class);
+        $validatedInput = $formRequest === null ? self::extractFormRequestFromValidatedInput($event) : null;
+
+        $source = self::methodSourcesInput($event, $expr, $method, $formRequest, $validatedInput)
+            ? TaintKind::ALL_INPUT
+            : 0;
+        $escape = self::methodEscape($event, $expr, $method, $formRequest, $validatedInput);
+
+        if ($source === 0 && $escape === 0) {
+            return null;
+        }
+
+        return new ValidatedFieldRead($source, $escape);
     }
 
     /**
-     * Magic-property front door (#1016): `$req->email`, `$this->email`. The
-     * shared resolver enforces the read-only / declared-property / presence
-     * gates, so the type narrowing and this taint read agree on ownership.
+     * Source side: the read carries user input whose stub source was dropped by
+     * a type override. validate() lives on Request; validated/safe/input narrow
+     * on a FormRequest; input() also narrows on ValidatedInput<FormRequest>.
      *
-     * `Request::__get` has no stub source and the property type comes from a
-     * provider (which bypasses `__get` entirely), so the read is always a
-     * source as well as carrying the rule's escape mask.
+     * @param class-string|null $formRequest
+     * @param class-string|null $validatedInput
+     */
+    private static function methodSourcesInput(
+        AddRemoveTaintsEvent $event,
+        MethodCall $expr,
+        string $method,
+        ?string $formRequest,
+        ?string $validatedInput,
+    ): bool {
+        if ($method === 'validate') {
+            return self::resolveCallerClass($event, \Illuminate\Http\Request::class) !== null;
+        }
+
+        if ($formRequest !== null && \in_array($method, ['validated', 'safe', 'input'], true)) {
+            return true;
+        }
+
+        return $method === 'input' && $validatedInput !== null && $expr->getArgs() !== [];
+    }
+
+    /**
+     * Escape side: a keyed accessor with a literal key. FormRequest rules() and
+     * an inline validate([...]) on the same variable OR their escape bits.
+     *
+     * @param class-string|null $formRequest
+     * @param class-string|null $validatedInput
+     */
+    private static function methodEscape(
+        AddRemoveTaintsEvent $event,
+        MethodCall $expr,
+        string $method,
+        ?string $formRequest,
+        ?string $validatedInput,
+    ): int {
+        if (!\in_array($method, self::KEYED_ACCESSOR_METHODS, true)) {
+            return 0;
+        }
+
+        $key = self::literalKey($event, $expr);
+
+        if ($key === null) {
+            return 0;
+        }
+
+        $removed = 0;
+
+        // validated() does not exist on ValidatedInput, so fall back to the
+        // ValidatedInput<FormRequest> class only for the other accessors.
+        $accessorClass = $formRequest ?? ($method !== 'validated' ? $validatedInput : null);
+
+        if ($accessorClass !== null) {
+            $removed |= self::ruleEscape(ValidationRuleAnalyzer::getRulesForFormRequest($accessorClass), $key);
+        }
+
+        $removed |= self::ruleEscape(self::lookupInlineValidateRules($event, $expr), $key);
+
+        return $removed;
+    }
+
+    /**
+     * Escape mask of the rule keyed by `$key` in `$rules`, or 0.
+     *
+     * @param array<string, ResolvedRule>|null $rules
+     *
+     * @psalm-pure
+     */
+    private static function ruleEscape(?array $rules, string $key): int
+    {
+        if ($rules === null) {
+            return 0;
+        }
+
+        $rule = ValidationRuleAnalyzer::lookupRuleByKey($rules, $key);
+
+        return $rule instanceof ResolvedRule ? $rule->removedTaints : 0;
+    }
+
+    /**
+     * Single literal-string key of a keyed accessor call, or null. A default
+     * arg (input('k', $default)) bails: the default can carry its own taint
+     * that the rule's escape must not strip.
+     */
+    private static function literalKey(AddRemoveTaintsEvent $event, MethodCall $expr): ?string
+    {
+        $args = $expr->getArgs();
+
+        if ($args === [] || isset($args[1])) {
+            return null;
+        }
+
+        $analyzer = $event->getStatementsSource();
+
+        if (!$analyzer instanceof StatementsAnalyzer) {
+            return null;
+        }
+
+        $type = $analyzer->node_data->getType($args[0]->value);
+
+        if (!$type instanceof Union || !$type->isSingleStringLiteral()) {
+            return null;
+        }
+
+        return $type->getSingleStringLiteral()->value;
+    }
+
+    /**
+     * Magic-property front door (#1016): `$req->email`. Always a source — the
+     * provider-supplied type bypasses `__get`, so no stub source fires (#11765)
+     * — plus the rule's escape. Ownership gated by
+     * {@see FormRequestPropertyHandler::resolveRuleForProperty}.
      */
     private static function fromPropertyFetch(AddRemoveTaintsEvent $event, PropertyFetch $expr): ?ValidatedFieldRead
     {
-        if (!FormRequestPropertyRegistrationHandler::hasAnyFormRequests()) {
+        if (!FormRequestPropertyHandler::hasAnyFormRequests()) {
             return null;
         }
 
@@ -155,7 +253,7 @@ final class ValidatedFieldReadResolver
             // Cheap exact-class check against the FormRequest registry. For a
             // non-FormRequest caller (the common case under taint analysis)
             // this short-circuits before `resolveRuleForProperty` walks storage.
-            if (!FormRequestPropertyRegistrationHandler::isFormRequest($atomic->value)) {
+            if (!FormRequestPropertyHandler::isFormRequest($atomic->value)) {
                 continue;
             }
 
@@ -170,18 +268,13 @@ final class ValidatedFieldReadResolver
     }
 
     /**
-     * Inline-validate variable front door (issues #834 / #840): a local bound
-     * to a tracked accessor read on a validated Request. Escape-only — the
-     * underlying accessor already sourced the value; here we just carry the
-     * rule's escape across the assignment edge.
+     * Inline-validate variable front door (#834 / #840): a local bound to a
+     * tracked accessor read. Escape-only — the accessor already sourced it.
      */
     private static function fromInlineVariable(AddRemoveTaintsEvent $event, string $variableName): ?ValidatedFieldRead
     {
-        // Fast bail-out for the common case where no function in the current
-        // worker has populated the cache. `removeTaints` fires for every bare
-        // Variable expression under taint analysis, and most projects have far
-        // more variable reads than cached inline-validate bindings — so this
-        // check is taken very often and cheaply avoids the lookup walk.
+        // Fires for every bare Variable under taint analysis; most projects
+        // have far more variable reads than cached bindings, so bail cheap.
         if (!InlineValidateRulesCollector::hasAnyVariableBindings()) {
             return null;
         }
@@ -202,136 +295,6 @@ final class ValidatedFieldReadResolver
     }
 
     /**
-     * Escape mask for a keyed accessor call. The FormRequest-rules path and
-     * the inline-`validate([...])` path OR their bits: a field constrained by
-     * both is safe for every kind either rule escapes.
-     */
-    private static function resolveKeyedAccessorEscape(AddRemoveTaintsEvent $event): int
-    {
-        $accessor = self::matchKeyedAccessor($event);
-
-        if ($accessor === null) {
-            return 0;
-        }
-
-        $removed = 0;
-
-        // FormRequest::rules() path — covers both direct FormRequest callers
-        // and ValidatedInput<FormRequest> callers.
-        $formRequestClass = self::resolveFormRequestForAccessor($event, $accessor['method']);
-
-        if ($formRequestClass !== null) {
-            $rules = ValidationRuleAnalyzer::getRulesForFormRequest($formRequestClass);
-
-            if ($rules !== null) {
-                $rule = ValidationRuleAnalyzer::lookupRuleByKey($rules, $accessor['key']);
-
-                if ($rule instanceof ResolvedRule) {
-                    $removed |= $rule->removedTaints;
-                }
-            }
-        }
-
-        // Inline `$request->validate([...])` path — applies to any caller
-        // variable typed as Illuminate\Http\Request (which includes every
-        // FormRequest subclass, so a FormRequest with both `rules()` AND an
-        // inline validate gets escape bits from both sources).
-        $inlineRules = self::lookupInlineValidateRules($event, $accessor['expr']);
-
-        if ($inlineRules !== null) {
-            $rule = ValidationRuleAnalyzer::lookupRuleByKey($inlineRules, $accessor['key']);
-
-            if ($rule instanceof ResolvedRule) {
-                $removed |= $rule->removedTaints;
-            }
-        }
-
-        return $removed;
-    }
-
-    /**
-     * Common bail-out chain for every keyed accessor lookup:
-     *   - expression is a MethodCall in {@see KEYED_ACCESSOR_METHODS},
-     *   - a single first argument that resolves to a literal string,
-     *   - no second (default) argument that could carry independent taint.
-     *
-     * @return array{method: string, key: string, expr: MethodCall}|null
-     */
-    private static function matchKeyedAccessor(AddRemoveTaintsEvent $event): ?array
-    {
-        $expr = $event->getExpr();
-
-        if (!$expr instanceof MethodCall || !$expr->name instanceof Identifier) {
-            return null;
-        }
-
-        // Direct raw-name compare. See KEYED_ACCESSOR_METHODS docblock for
-        // why canonical casing is required.
-        $methodName = $expr->name->name;
-
-        if (!\in_array($methodName, self::KEYED_ACCESSOR_METHODS, true)) {
-            return null;
-        }
-
-        $args = $expr->getArgs();
-
-        if ($args === []) {
-            return null;
-        }
-
-        // A default argument (input('key', $default)) can carry its own taint.
-        // The rule for 'key' describes the validated value, not the default,
-        // so applying the rule's escape would wrongly clean taint that comes
-        // from the default expression. Bail out — taint is preserved.
-        if (isset($args[1])) {
-            return null;
-        }
-
-        $statementsAnalyzer = $event->getStatementsSource();
-
-        if (!$statementsAnalyzer instanceof StatementsAnalyzer) {
-            return null;
-        }
-
-        $firstArgType = $statementsAnalyzer->node_data->getType($args[0]->value);
-
-        if (!$firstArgType instanceof Union || !$firstArgType->isSingleStringLiteral()) {
-            return null;
-        }
-
-        return [
-            'method' => $methodName,
-            'key' => $firstArgType->getSingleStringLiteral()->value,
-            'expr' => $expr,
-        ];
-    }
-
-    /**
-     * Resolve the FormRequest class backing an accessor call, either directly
-     * on the FormRequest or on a ValidatedInput<FormRequest>.
-     *
-     * @return class-string|null
-     */
-    private static function resolveFormRequestForAccessor(AddRemoveTaintsEvent $event, string $methodName): ?string
-    {
-        // Direct FormRequest caller: $req->validated|input|string|str('key')
-        $formRequestClass = self::resolveCallerClass($event, \Illuminate\Foundation\Http\FormRequest::class);
-
-        if ($formRequestClass !== null) {
-            return $formRequestClass;
-        }
-
-        // ValidatedInput<FormRequest> caller: $req->safe()->input|string|str('key').
-        // validated() does not exist on ValidatedInput, so this branch applies
-        // only to input/string/str.
-        if ($methodName !== 'validated') {
-            return self::extractFormRequestFromValidatedInput($event);
-        }
-
-        return null;
-    }
-
-    /**
      * Look up inline-validate rules populated by
      * {@see InlineValidateRulesCollector} for this accessor call site.
      *
@@ -343,9 +306,8 @@ final class ValidatedFieldReadResolver
             return null;
         }
 
-        // Cheap checks first. For the 99% of accessor calls in functions
-        // that never ran validate(), the cache lookup returns null and we
-        // skip the expensive classExtends walk entirely.
+        // Cache lookup first — null for accessor calls in functions that never
+        // ran validate(), skipping the classExtends walk below.
         $functionId = InlineValidateRulesCollector::getFunctionLikeId($event->getStatementsSource());
 
         if ($functionId === null) {
@@ -358,10 +320,8 @@ final class ValidatedFieldReadResolver
             return null;
         }
 
-        // Cache hit — now pay for the defence-in-depth type check. The
-        // collector filters on populate; this second check guards against
-        // an unrelated scope reusing the same variable name with an
-        // entirely different type (a rare pathological case).
+        // Defence-in-depth on a cache hit: guard against an unrelated scope
+        // reusing the same variable name with a non-Request type.
         if (self::resolveCallerClass($event, \Illuminate\Http\Request::class) === null) {
             return null;
         }
@@ -370,68 +330,8 @@ final class ValidatedFieldReadResolver
     }
 
     /**
-     * Whether the expression is validated()/validate()/safe() on Request/FormRequest,
-     * or input() on a FormRequest subclass (which ValidatedTypeHandler also narrows
-     * for `$this->input(...)` reads inside the request itself — see #1015).
-     */
-    private static function isValidationMethodCall(AddRemoveTaintsEvent $event): bool
-    {
-        $expr = $event->getExpr();
-
-        if (!$expr instanceof MethodCall || !$expr->name instanceof Identifier) {
-            return false;
-        }
-
-        // Raw-name compare. Non-canonical casing is rejected on the same
-        // rationale as KEYED_ACCESSOR_METHODS.
-        $methodName = $expr->name->name;
-
-        if (!\in_array($methodName, ['validated', 'validate', 'safe', 'input'], true)) {
-            return false;
-        }
-
-        // validate() lives on Request; everything else (including the
-        // FormRequest-narrowed input(...) path) is gated on FormRequest so we
-        // do not re-source taint on a plain Request::input(...) call where
-        // ValidatedTypeHandler does not override the return type.
-        $baseClass = $methodName === 'validate'
-            ? \Illuminate\Http\Request::class
-            : \Illuminate\Foundation\Http\FormRequest::class;
-
-        return self::resolveCallerClass($event, $baseClass) !== null;
-    }
-
-    /**
-     * Check for ValidatedInput::input(…) — any first argument, literal or not.
-     *
-     * The source side compensates for the type-provider override; the per-field
-     * rule lookup in {@see resolveKeyedAccessorEscape} additionally requires a
-     * literal key.
-     */
-    private static function isValidatedInputAccessor(AddRemoveTaintsEvent $event): bool
-    {
-        $expr = $event->getExpr();
-
-        if (!$expr instanceof MethodCall || !$expr->name instanceof Identifier) {
-            return false;
-        }
-
-        if ($expr->name->name !== 'input') {
-            return false;
-        }
-
-        if ($expr->getArgs() === []) {
-            return false;
-        }
-
-        return self::extractFormRequestFromValidatedInput($event) !== null;
-    }
-
-    /**
-     * Extract the FormRequest class from a ValidatedInput<FormRequest> caller type.
-     *
-     * The template parameter is populated when FormRequest::safe() returns
-     * ValidatedInput<static> — so every safe() on a typed FormRequest is resolvable.
+     * FormRequest class from a `ValidatedInput<FormRequest>` caller, populated
+     * when `safe()` returns `ValidatedInput<static>`.
      *
      * @return class-string|null
      */

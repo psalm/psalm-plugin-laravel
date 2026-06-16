@@ -6,23 +6,11 @@ namespace App\Http\Requests\PropertyNarrowing;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Type narrowing for `$this->field` / `$request->field` magic property reads
- * on a FormRequest subclass — the property access mirror of #1015's
- * `$this->input('field')` handling.
- *
- * `Request::__get($key)` reads from the input bag at runtime, so the same
- * rule-driven narrowing applies. Soundness gate identical to
- * `ValidatedTypeHandler::resolveSelfInput`: only presence-guaranteed fields
- * (required / present / accepted / declined, sans `sometimes`) narrow.
- *
- * Resolution priority (the first match wins, the rest are deferred to):
- *   1. real declared property on the subclass (`public string $email`)
- *   2. `@property` / `@property-read` PHPDoc on the subclass
- *      (inherited from a parent counts the same — Psalm merges
- *      `pseudo_property_get_types` during population)
- *   3. rule with unconditional presence guarantee
- *
- * See issue #1016.
+ * Type narrowing for `$this->field` / `$request->field` magic reads on a
+ * FormRequest (#1016) — property mirror of #1015's `input('field')`. Same gate
+ * as `ValidatedTypeHandler::resolveSelfInput`: only presence-guaranteed fields
+ * (required/present/accepted/declined, sans `sometimes`) narrow. Defers to a
+ * real declaration or `@property`/`@property-read` PHPDoc first.
  */
 class SelfEmailPropertyRequest extends FormRequest
 {
@@ -68,13 +56,9 @@ class SelfEmailPropertyRequest extends FormRequest
         $_no_marketing = $this->no_marketing;
         /** @psalm-check-type-exact $_no_marketing = '0'|'false'|'no'|'off'|0|false */
 
-        // sometimes alone — not presence-guaranteed: defer to default analysis.
-        // Without a presence guarantee, the handler returns null from every
-        // provider, so Psalm falls back to its usual UndefinedThisPropertyFetch.
-        // We can't assert "no narrowing" via @psalm-check-type-exact alone
-        // (an undefined property has no inferred type to compare against), so
-        // we suppress the expected issue and assert the post-suppression type
-        // remains mixed.
+        // Not presence-guaranteed: no narrowing, so Psalm emits its usual
+        // UndefinedThisPropertyFetch. Suppress it and assert the type stays mixed
+        // (an undefined property has no inferred type to compare otherwise).
         /** @psalm-suppress UndefinedThisPropertyFetch */
         $_nickname = $this->nickname;
         /** @psalm-check-type-exact $_nickname = mixed */
@@ -94,11 +78,8 @@ class SelfEmailPropertyRequest extends FormRequest
 }
 
 /**
- * Real declared property wins: the rule's `string` type must NOT override
- * the user's explicit `public ?int $email` declaration. This is the
- * "ensure it doesn't create issues for declared fields" half of the issue —
- * a FormRequest that opts a field out of magic-read narrowing keeps the
- * declared type intact.
+ * Real declared property wins: the rule's `string` must not override the
+ * user's `public ?int $email`. The declared-field opt-out half of #1016.
  */
 class DeclaredPropertyRequest extends FormRequest
 {
@@ -117,10 +98,9 @@ class DeclaredPropertyRequest extends FormRequest
 }
 
 /**
- * Inherited declared property: a child whose rules() covers `email` must
- * still defer to the parent's `public ?int $email` declaration. Locks in
- * that `hasDeclaredProperty()` consults the merged storage (parent +
- * child) rather than the child's own declared set.
+ * Inherited declared property: a child whose rules() covers `email` defers to
+ * the parent's `public ?int $email` — `hasDeclaredProperty()` reads merged
+ * storage, not just the child's own declarations.
  */
 class ParentWithDeclaredProperty extends FormRequest
 {
@@ -148,10 +128,8 @@ class ChildInheritsDeclaredProperty extends ParentWithDeclaredProperty
 }
 
 /**
- * `@property` PHPDoc wins: same opt-out semantics as a real declaration.
- * Uses a deliberately-different type (int|null) so the assertion proves
- * the @property branch fired rather than coincidentally matching the
- * rule's string type.
+ * `@property` PHPDoc opts out. Deliberately `int|null` (not the rule's string)
+ * so the assertion proves the @property branch fired.
  *
  * @property int|null $email
  */
@@ -170,8 +148,7 @@ class AtPropertyRequest extends FormRequest
 }
 
 /**
- * `@property-read` is the read-only PHPDoc variant — also populates
- * `pseudo_property_get_types`, so the same opt-out applies.
+ * `@property-read` also populates `pseudo_property_get_types` — same opt-out.
  *
  * @property-read int|null $email
  */
@@ -190,10 +167,8 @@ class AtPropertyReadRequest extends FormRequest
 }
 
 /**
- * Inherited rules() — a child subclass with no own rules() picks up the
- * parent's rule set via `ValidationRuleAnalyzer::extractRulesFromClass()`,
- * which walks `parent_class`. Pairs with the existing `ChildEmailRequest`
- * coverage in FormRequestSelfInputTest.phpt.
+ * Inherited rules() — a child with no own rules() picks up the parent's set
+ * (ValidationRuleAnalyzer walks `parent_class`).
  */
 class ChildPropertyRequest extends SelfEmailPropertyRequest
 {
