@@ -49,8 +49,12 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read         # checkout the base ref to read the app registry
-      pull-requests: read    # github-script reads the PR's base/head SHAs
-      issues: write          # add the :rocket: reaction to the trigger comment
+      # The trigger comment lives on a PR, so the reactions API authorises
+      # against pull-requests (not issues); write is required to add the
+      # :rocket:. This job still checks out only the trusted base and never runs
+      # PR code, matching benchmark.yml's pull-requests:write + issues:write.
+      pull-requests: write   # react to the trigger comment + read PR base/head SHAs
+      issues: write          # reactions API also consults issues scope
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       base_sha: ${{ steps.refs.outputs.base_sha }}
@@ -70,8 +74,9 @@ jobs:
           REPO: ${{ github.repository }}
           COMMENT_ID: ${{ github.event.comment.id }}
         run: |
+          # Cosmetic acknowledgement only; never let it abort the pipeline.
           gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
-            -f content=rocket --silent
+            -f content=rocket --silent || echo "reaction failed (non-fatal)"
 
       - name: Resolve PR refs (+ fork-PR security guard)
         id: refs
