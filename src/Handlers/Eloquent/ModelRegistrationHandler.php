@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
@@ -103,6 +104,16 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             self::registerHandlersForModel($codebase, $storage);
+
+            // Warm the metadata registry in the SAME pass (idempotent, never throws). Runs for
+            // abstract bases too — warmUp() populates storage/reflection-derived fields and leaves
+            // the instance-derived ones empty (see ModelMetadataRegistryBuilder). Gated on
+            // migrations because the only Phase-1 consumer, ModelPropertyHandler, is itself
+            // migration-gated (the `!$storage->abstract && self::$useMigrations` registration
+            // below); a future non-migration consumer (scope/accessor metadata) relaxes this.
+            if (self::$useMigrations) {
+                ModelMetadataRegistryBuilder::warmUp($codebase, $storage->name);
+            }
         }
     }
 
@@ -327,6 +338,31 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      */
     private static function detectCustomBuilder(Codebase $codebase, string $className): ?string
     {
+        $builderClass = self::resolveCustomBuilderClass($codebase, $className);
+        if ($builderClass !== null) {
+            ModelMethodHandler::registerCustomBuilder($className, $builderClass);
+        }
+
+        return $builderClass;
+    }
+
+    /**
+     * Pure detection of a model's custom Eloquent builder — same resolution priority as
+     * {@see detectCustomBuilder} but WITHOUT the `ModelMethodHandler::registerCustomBuilder()`
+     * side effect. Split out so {@see \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder}
+     * can record the builder class (for abstract bases too — this is reflection-only, no
+     * instantiation) without double-registering the per-model hooks. The detect*() wrapper
+     * owns registration; this owns detection.
+     *
+     * @param class-string<Model> $className
+     * @return class-string<Builder>|null
+     * @internal called by ModelMetadataRegistryBuilder and detectCustomBuilder. The builder
+     *   call site is a Phase-1 cross-namespace seam (Provider → Handler); once the remaining
+     *   handlers migrate onto the registry, this detection can relocate into the registry
+     *   namespace and the dependency inverts to Handler → Provider.
+     */
+    public static function resolveCustomBuilderClass(Codebase $codebase, string $className): ?string
+    {
         try {
             $reflection = new \ReflectionClass($className);
         } catch (\ReflectionException $reflectionException) {
@@ -367,8 +403,6 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         if ($isValid) {
             /** @var class-string<Builder> $builderClass */
-            ModelMethodHandler::registerCustomBuilder($className, $builderClass);
-
             return $builderClass;
         }
 
@@ -580,6 +614,26 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      */
     private static function detectCustomCollection(Codebase $codebase, string $className): void
     {
+        $collectionClass = self::resolveCustomCollectionClass($codebase, $className);
+        if ($collectionClass !== null) {
+            CustomCollectionHandler::registerCustomCollection($className, $collectionClass);
+        }
+    }
+
+    /**
+     * Pure detection of a model's custom Eloquent collection — same resolution priority as
+     * {@see detectCustomCollection} but WITHOUT the `CustomCollectionHandler::registerCustomCollection()`
+     * side effect. Split out so {@see \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder}
+     * can record the collection class (reflection-only; abstract bases included) without
+     * double-registering. The detect*() wrapper owns registration; this owns detection.
+     *
+     * @param class-string<Model> $className
+     * @return class-string<EloquentCollection>|null
+     * @internal called by ModelMetadataRegistryBuilder and detectCustomCollection. Same Phase-1
+     *   cross-namespace seam as {@see resolveCustomBuilderClass} — a Phase-2 relocation candidate.
+     */
+    public static function resolveCustomCollectionClass(Codebase $codebase, string $className): ?string
+    {
         try {
             $reflection = new \ReflectionClass($className);
         } catch (\ReflectionException $reflectionException) {
@@ -587,7 +641,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 "Laravel plugin: could not reflect model '{$className}' for custom collection detection: {$reflectionException->getMessage()}\n",
             );
 
-            return;
+            return null;
         }
 
         // 1. newCollection() override — bypasses attribute and property when present.
@@ -604,7 +658,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
 
         if ($collectionClass === null) {
-            return;
+            return null;
         }
 
         // Validate that the class is a Collection subclass.
@@ -616,14 +670,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 "Laravel plugin: model '{$className}' collection '{$collectionClass}' failed autoloading: {$error->getMessage()}\n",
             );
 
-            return;
+            return null;
         }
 
         if ($isValid) {
             /** @var class-string<EloquentCollection> $collectionClass */
-            CustomCollectionHandler::registerCustomCollection($className, $collectionClass);
-
-            return;
+            return $collectionClass;
         }
 
         $codebase->progress->debug(
@@ -632,6 +684,8 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             . EloquentCollection::class
             . " — ignoring\n",
         );
+
+        return null;
     }
 
     /**

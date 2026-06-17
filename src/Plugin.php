@@ -11,6 +11,8 @@ use Psalm\LaravelPlugin\Providers\AliasStubProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
+use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\InternalErrorReporter;
 use Psalm\LaravelPlugin\Util\StubFileFinder;
@@ -41,6 +43,14 @@ final class Plugin implements PluginEntryPointInterface
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
             FacadeMapProvider::init($output);
+
+            // Reset + arm the model-metadata registry. reset() clears any stale cache entries and
+            // builder statics left from a previous bootstrap in the same process (mirrors the
+            // ModelMethodHandler::init / MethodForwardingHandler::init reset convention); init()
+            // captures the Progress handle for deferred warm-up warnings. The actual per-model
+            // warm-up runs later, in ModelRegistrationHandler's AfterCodebasePopulated pass.
+            ModelMetadataRegistryBuilder::reset();
+            ModelMetadataRegistry::init($output);
 
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled
