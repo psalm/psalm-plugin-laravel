@@ -149,4 +149,33 @@ final class EloquentModelMethods
         return \preg_match('/^get.+attribute$/', $lowercaseName) === 1
             || \preg_match('/^set.+attribute$/', $lowercaseName) === 1;
     }
+
+    /**
+     * Whether a method is a trait boot/initialize hook Laravel dispatches by reflection in
+     * Model::bootTraits()/initializeTraits(), which findUnusedCode wrongly flags (#1069).
+     *
+     * Matches the cased name against `boot`/`initialize` + the declaring trait's basename.
+     * Case-sensitive on purpose: bootTraits() collects via `in_array($method->getName(), [...])`, so a
+     * mis-cased hook is never booted. The `boot` prefix is static-only; `initialize` is not. Caller must
+     * confirm $definingTraitFqcn is a trait.
+     *
+     * @psalm-pure
+     */
+    public static function isTraitBootHook(?string $casedName, string $definingTraitFqcn, bool $isStatic): bool
+    {
+        if ($casedName === null) {
+            return false;
+        }
+
+        $separatorPosition = \strrpos($definingTraitFqcn, '\\');
+        $traitBasename = $separatorPosition === false
+            ? $definingTraitFqcn
+            : \substr($definingTraitFqcn, $separatorPosition + 1);
+
+        if ($casedName === 'boot' . $traitBasename) {
+            return $isStatic;
+        }
+
+        return $casedName === 'initialize' . $traitBasename;
+    }
 }
