@@ -239,7 +239,15 @@ fi
 
 run_side() {
     local label="$1" plugin_dir="$2" relink="$3"
-    local app_dir="${OUT}/${APP}/work-${label}"
+    # Both sides use the SAME absolute work-dir path (not work-<label>). Psalm
+    # bakes the analysis path into the report in ways that survive any post-hoc
+    # normalisation — notably literal-string TYPES that Psalm then TRUNCATES
+    # ('/.../work-ba…' vs '/.../work-pr…'), leaving no full token to rewrite. A
+    # per-side path therefore manufactures false +N/-N churn for every such
+    # issue. Reusing one path makes the baked path byte-identical on both sides,
+    # so only real changes differ. Safe because base and head run sequentially
+    # for an app (one matrix job), each starting with rm -rf below.
+    local app_dir="${OUT}/${APP}/work"
     local issues_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--issues.json"
     local perf_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--perf.json"
     local crash_log="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--crash.log"
@@ -250,7 +258,7 @@ run_side() {
         return 0
     fi
 
-    # Fresh working copy off the source so base and head never interfere.
+    # Fresh working copy off the source (the shared work dir is rebuilt per side).
     rm -rf "$app_dir"
     fast_copy "$APP_SRC" "$app_dir"
 
@@ -306,12 +314,10 @@ run_side() {
         return 0
     fi
 
-    # Normalise file_path to be relative to the working copy. Both sides run in
-    # different temp dirs (work-base-* vs work-pr-*), so Psalm's absolute
-    # file_path would differ for EVERY issue and the identity tuple
-    # (file_path, line_from, line_to, type, message) would never match across
-    # sides — making every issue look both added and removed (+N/-N, ΔNet 0).
-    # Stripping the work-dir prefix yields a stable path shared by both sides.
+    # Make file_path relative to the (now side-independent) work dir, so stored
+    # identities are readable. Because both sides share the work-dir path, every
+    # other place Psalm embeds it (messages, anon-class names, literal types) is
+    # already byte-identical across sides and needs no normalisation.
     # Use the canonical (symlink-resolved) dir — Psalm reports realpath'd paths,
     # so on macOS the report says /private/tmp/... while $app_dir is /tmp/...
     local app_dir_real
