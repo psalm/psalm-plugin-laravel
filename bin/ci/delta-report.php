@@ -143,6 +143,52 @@ $loadJson = static function (?string $path): ?array {
 };
 
 /**
+ * First meaningful error line from an app's crash log (either side), or null
+ * when the app left no crash log (it never reached the analysis step — e.g. a
+ * Composer install failure — or simply did not run).
+ *
+ * delta-app.sh writes "<app>-<label>-<marker>--crash.log" as:
+ *   === <app>/<label> exit N after Ms ===
+ *   --- stderr ---
+ *   <the Psalm/Composer error>          <- this line
+ *   --- stdout ---
+ * The trailing " in /path:line" is dropped so the message stays readable.
+ */
+$crashExcerpt = static function (string $app) use ($latest, $outputDir, $baseLabel, $headLabel, $dateMarker): ?string {
+    foreach ([$baseLabel, $headLabel] as $label) {
+        $path = $latest($outputDir, $app, $label, 'crash.log', $dateMarker);
+        if ($path === null || !is_file($path)) {
+            continue;
+        }
+        $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines === false) {
+            continue;
+        }
+        $inStderr = false;
+        foreach ($lines as $line) {
+            $text = trim($line);
+            if ($text === '--- stderr ---') {
+                $inStderr = true;
+                continue;
+            }
+            if ($text === '--- stdout ---') {
+                break;
+            }
+            if ($inStderr && $text !== '') {
+                $cut = strpos($text, ' in /');
+                if ($cut !== false) {
+                    $text = substr($text, 0, $cut);
+                }
+
+                return mb_strimwidth(str_replace('`', "'", $text), 0, 300, '…');
+            }
+        }
+    }
+
+    return null;
+};
+
+/**
  * Stable identity for an issue. NUL-joined so it is a safe array key.
  *
  * @param array<string, mixed> $i
@@ -286,9 +332,49 @@ if ($changed === []) {
     }
 }
 
-if ($missing !== []) {
+// Apps that ran cleanly on both sides but produced no delta — kept separate
+// from crashes so "nothing changed" is never confused with "nothing ran".
+$noChange = array_values(array_filter(
+    $rows,
+    static fn(array $r): bool => $r['total'] === 0,
+));
+if ($noChange !== []) {
+    $names = array_map(static fn(array $r): string => $r['app'], $noChange);
     $out[] = '';
-    $out[] = '> No data (crashed or not run): ' . implode(', ', $missing) . '.';
+    $out[] = '> No change (ran clean, zero delta): ' . implode(', ', $names) . '.';
+}
+
+// Split "no issues.json" apps into genuine crashes (a crash log exists, shown
+// with its error) vs apps that never ran / left no artifact.
+if ($missing !== []) {
+    /** @var array<string, string> $crashed */
+    $crashed = [];
+    /** @var list<string> $notRun */
+    $notRun = [];
+    foreach ($missing as $app) {
+        $excerpt = $crashExcerpt($app);
+        if ($excerpt !== null) {
+            $crashed[$app] = $excerpt;
+        } else {
+            $notRun[] = $app;
+        }
+    }
+
+    if ($crashed !== []) {
+        $out[] = '';
+        $out[] = '## Crashed';
+        $out[] = '';
+        $out[] = 'No usable report — Psalm crashed or analysis aborted. A crash on BOTH sides is not caused by this PR.';
+        $out[] = '';
+        foreach ($crashed as $app => $excerpt) {
+            $out[] = "- **{$app}**: `{$excerpt}`";
+        }
+    }
+
+    if ($notRun !== []) {
+        $out[] = '';
+        $out[] = '> Not run (install failed or no artifact): ' . implode(', ', $notRun) . '.';
+    }
 }
 
 echo implode("\n", $out) . "\n";
