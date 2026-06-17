@@ -21,9 +21,11 @@ name: Psalm delta
 # `prepare` that refuses any head from a different repository, (2) the
 # MEMBER/OWNER/COLLABORATOR author check on the trigger, and (3) `contents: read`
 # only + `persist-credentials: false` on that job — no token write scope and no
-# git credentials are exposed to the executed code. The privileged `report` job
-# (pull-requests: write) never runs PR code: it checks out the trusted base and
-# processes the per-app JSON as data.
+# git credentials are exposed to the executed code. The measurement harness
+# (runner, registry, comparator) always comes from the default branch, so
+# base_sha/head_sha are only the two plugin versions measured and the PR cannot
+# alter how it is measured. The privileged `report` job (pull-requests: write)
+# never runs PR code: it runs the default-branch comparator over the JSON.
 
 on:
   issue_comment:
@@ -48,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: read         # checkout the base ref to read the app registry
+      contents: read         # checkout the default branch to read the app registry
       # The trigger comment lives on a PR, so the reactions API authorises
       # against pull-requests (not issues); write is required to add the
       # :rocket:. This job still checks out only the trusted base and never runs
@@ -105,11 +107,15 @@ jobs:
             core.setOutput('head_label', `pr-${headSha.substring(0, 8)}`);
             core.setOutput('pr_number', String(pr.number));
 
-      # Trusted ref: base of a same-repo PR (the fork guard above already ran).
-      - name: Checkout base (for the registry)
+      # The HARNESS (registry, runner, comparator) comes from the default branch
+      # — the merged, trusted code — NOT from base_sha/head_sha. base_sha/head_sha
+      # are only the two plugin versions being MEASURED; sourcing the tooling from
+      # them would freeze it at whatever the PR branched off, so fixes to the
+      # harness would never reach an in-flight PR. issue_comment runs from the
+      # default branch, so a ref-less checkout is master HEAD.
+      - name: Checkout harness (default branch, for the registry)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ steps.refs.outputs.base_sha }}
           persist-credentials: false
 
       - name: Build app matrix from registry
@@ -160,6 +166,14 @@ jobs:
           path: plugin-pr
           persist-credentials: false
 
+      # The measurement harness: default branch (master HEAD), not base/head. The
+      # PR head cannot alter it, and harness fixes reach in-flight PRs immediately.
+      - name: Checkout harness (default branch)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: harness
+          persist-credentials: false
+
       - name: Setup PHP
         uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
         with:
@@ -206,8 +220,8 @@ jobs:
           )
           [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
           [ -n "$PRIME" ] && args+=(--prime "$PRIME")
-          # The base checkout owns the harness so the PR cannot alter measurement.
-          bash "$GITHUB_WORKSPACE/plugin-base/bin/ci/delta-app.sh" "${args[@]}"
+          # The harness (default branch) owns measurement so the PR cannot alter it.
+          bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
 
       - name: Upload per-app JSON
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -227,7 +241,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read         # checkout the trusted base for the comparator + registry
+      contents: read         # checkout the default branch for the comparator + registry
       pull-requests: write   # post / update the sticky delta comment
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -235,12 +249,11 @@ jobs:
         with:
           egress-policy: audit
 
-      # Trusted ref: base of a same-repo PR. This job runs only base code
-      # (delta-report.php) over the per-app JSON, never the PR's plugin code.
-      - name: Checkout base (for the comparator + registry)
+      # Harness from the default branch (master HEAD): this job runs only trusted
+      # code (delta-report.php) over the per-app JSON, never the PR's plugin code.
+      - name: Checkout harness (default branch, for the comparator + registry)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ needs.prepare.outputs.base_sha }}
           persist-credentials: false
 
       - name: Setup PHP
