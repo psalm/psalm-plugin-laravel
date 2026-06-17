@@ -47,6 +47,18 @@ trait HasInlineScopes
     }
 
     /**
+     * Trait boot hook: Model::bootTraits() invokes `boot` . basename(self) statically by reflection,
+     * so it has no visible caller and must be suppressed rather than reported. See #1069.
+     */
+    protected static function bootHasInlineScopes(): void {}
+
+    /**
+     * Trait initialize hook: Model::initializeTraits() invokes `initialize` . basename(self) on the
+     * instance by reflection. Same suppression requirement as the boot hook above. See #1069.
+     */
+    public function initializeHasInlineScopes(): void {}
+
+    /**
      * Private #[Scope]: never a usable scope (Eloquent cannot dispatch it), so the handler does
      * NOT suppress it. It produces no output here regardless — Psalm only emits UnusedMethod for a
      * private method when the class has no __call, and every Model declares __call. Present to

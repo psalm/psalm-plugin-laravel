@@ -1,0 +1,309 @@
+name: Psalm delta
+
+# Comment-triggered, opt-in PR check: runs the plugin on a curated set of
+# real-world Laravel apps (bin/ci/test-apps.yml) for the PR base AND head, then
+# posts a single sticky comment with the per-app issue delta + which issue types
+# moved. Informational only — it never fails the PR (a delta is often intended:
+# fixing false positives REMOVES issues; new narrowing ADDS some).
+#
+# Architecture (see .alies/docs/ci-psalm-delta-design.md for the full rationale):
+#   prepare  — resolve refs, fork-PR security guard, emit the app matrix
+#   delta    — ONE job per app (parallel): install app, run base + head, upload
+#              per-app issue/perf JSON. Wall time = slowest single app, not sum.
+#   report   — download all artifacts, run bin/ci/delta-report.php, sticky comment
+#
+# The per-app runner (bin/ci/delta-app.sh) and comparator (bin/ci/delta-report.php)
+# are the SAME scripts bin/ci/delta.sh runs locally, so contributors can
+# reproduce any row with `bash bin/ci/delta.sh <pr-branch>`.
+#
+# Security posture: the `delta` job runs the PR's plugin code on the runner
+# (Testbench boots, stubs generate). It is contained by (1) the fork-PR guard in
+# `prepare` that refuses any head from a different repository, (2) the
+# MEMBER/OWNER/COLLABORATOR author check on the trigger, and (3) `contents: read`
+# only + `persist-credentials: false` on that job — no token write scope and no
+# git credentials are exposed to the executed code. The measurement harness
+# (runner, registry, comparator) always comes from the default branch, so
+# base_sha/head_sha are only the two plugin versions measured and the PR cannot
+# alter how it is measured. The privileged `report` job (pull-requests: write)
+# never runs PR code: it runs the default-branch comparator over the JSON.
+
+on:
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: psalm-delta-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read  # default for all jobs; each job narrows/extends explicitly below
+
+jobs:
+
+  # ── Resolve refs + emit the app matrix ───────────────────────────────
+  prepare:
+    name: Prepare (refs + matrix)
+    if: >-
+      github.event.issue.pull_request
+      && startsWith(github.event.comment.body, '/psalm-delta')
+      && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read         # checkout the default branch to read the app registry
+      # The trigger comment lives on a PR, so the reactions API authorises
+      # against pull-requests (not issues); write is required to add the
+      # :rocket:. This job still checks out only the trusted base and never runs
+      # PR code, matching benchmark.yml's pull-requests:write + issues:write.
+      pull-requests: write   # react to the trigger comment + read PR base/head SHAs
+      issues: write          # reactions API also consults issues scope
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      base_sha: ${{ steps.refs.outputs.base_sha }}
+      head_sha: ${{ steps.refs.outputs.head_sha }}
+      base_label: ${{ steps.refs.outputs.base_label }}
+      head_label: ${{ steps.refs.outputs.head_label }}
+      pr_number: ${{ steps.refs.outputs.pr_number }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: React to comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          # Cosmetic acknowledgement only; never let it abort the pipeline.
+          gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
+            -f content=rocket --silent || echo "reaction failed (non-fatal)"
+
+      - name: Resolve PR refs (+ fork-PR security guard)
+        id: refs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            // The delta runs the PR's plugin code on the runner (Testbench boots,
+            // stubs generate). Refuse PRs from a fork so untrusted code cannot
+            // execute with this workflow's token. Same guard as benchmark.yml.
+            const expectedRepo = `${context.repo.owner}/${context.repo.repo}`;
+            const headRepo = pr.head.repo ? pr.head.repo.full_name : null;
+            if (headRepo !== expectedRepo) {
+              core.setFailed(`Refusing to run delta on a PR from a different repository (head: ${headRepo}, expected: ${expectedRepo})`);
+              return;
+            }
+            const baseSha = pr.base.sha;
+            const headSha = pr.head.sha;
+            core.setOutput('base_sha', baseSha);
+            core.setOutput('head_sha', headSha);
+            core.setOutput('base_label', `base-${baseSha.substring(0, 8)}`);
+            core.setOutput('head_label', `pr-${headSha.substring(0, 8)}`);
+            core.setOutput('pr_number', String(pr.number));
+
+      # The HARNESS (registry, runner, comparator) comes from the default branch
+      # — the merged, trusted code — NOT from base_sha/head_sha. base_sha/head_sha
+      # are only the two plugin versions being MEASURED; sourcing the tooling from
+      # them would freeze it at whatever the PR branched off, so fixes to the
+      # harness would never reach an in-flight PR. issue_comment runs from the
+      # default branch, so a ref-less checkout is master HEAD.
+      - name: Checkout harness (default branch, for the registry)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Build app matrix from registry
+        id: matrix
+        run: |
+          # yq (mikefarah v4, preinstalled on ubuntu-latest) emits the apps list
+          # as a GitHub matrix `include` array straight from the committed YAML
+          # registry. The value is derived only from a repo-tracked file (no
+          # workflow context / PR-author input), so it is not an injection sink.
+          matrix=$(yq -o=json -I=0 '{"include": .apps}' bin/ci/test-apps.yml)
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+
+  # ── One job per app: install, run base + head, upload JSON ───────────
+  delta:
+    name: Delta (${{ matrix.name }})
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read  # only checks out source + reads the public app repos; no token write scope
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      # Two plugin checkouts give base and head fully isolated source trees.
+      # delta-app.sh installs each as a symlinked path repo, so the plugin's own
+      # requires resolve into the per-app vendor — these checkouts need no vendor.
+      # persist-credentials: false — the executed PR code never gets git creds.
+      - name: Checkout base plugin
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          path: plugin-base
+          persist-credentials: false
+
+      # Untrusted ref (PR head). Safe only because: same-repo guard passed in
+      # prepare, this job has contents:read and no credentials, and the head
+      # code's only effect is producing issue JSON consumed as data downstream.
+      - name: Checkout head plugin
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.prepare.outputs.head_sha }}
+          path: plugin-pr
+          persist-credentials: false
+
+      # The measurement harness: default branch (master HEAD), not base/head. The
+      # PR head cannot alter it, and harness fixes reach in-flight PRs immediately.
+      - name: Checkout harness (default branch)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: harness
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
+        with:
+          php-version: ${{ matrix.php }}
+          ini-values: memory_limit=-1
+          coverage: none
+          tools: composer:v2
+
+      # Cache the installed app source (clone + vendor) keyed on the IMMUTABLE
+      # ref, so steady-state runs skip the cold composer install (the dominant
+      # cost). The runner workspace path is stable across runs, so the plugin
+      # path-repo symlink inside vendor stays valid.
+      - name: Cache app source
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/app-cache/${{ matrix.name }}
+          key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-v1
+
+      - name: Run delta for ${{ matrix.name }}
+        # All interpolated values go through env (not inline ${{ }} in run) so a
+        # workflow linter can confirm no template-injection sink. Registry values
+        # are trusted (committed, read from the base checkout) but env-izing keeps
+        # the pattern uniform.
+        env:
+          NAME: ${{ matrix.name }}
+          REPO: ${{ matrix.repo }}
+          REF: ${{ matrix.ref }}
+          PHP: ${{ matrix.php }}
+          PROJECT_DIR: ${{ matrix.project_dir }}
+          PRIME: ${{ matrix.prime }}
+          BASE_LABEL: ${{ needs.prepare.outputs.base_label }}
+          HEAD_LABEL: ${{ needs.prepare.outputs.head_label }}
+        run: |
+          mkdir -p out
+          args=(
+            --app "$NAME" --repo "$REPO" --ref "$REF" --php "$PHP"
+            --plugin-base "$GITHUB_WORKSPACE/plugin-base"
+            --plugin-head "$GITHUB_WORKSPACE/plugin-pr"
+            --out "$GITHUB_WORKSPACE/out"
+            --base-label "$BASE_LABEL"
+            --head-label "$HEAD_LABEL"
+            --app-src "$HOME/app-cache/$NAME"
+            --date-marker cache
+          )
+          [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
+          [ -n "$PRIME" ] && args+=(--prime "$PRIME")
+          # The harness (default branch) owns measurement so the PR cannot alter it.
+          bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
+
+      - name: Upload per-app JSON
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: delta-${{ matrix.name }}
+          # out/ holds only <app>/<app>-<label>-cache--{issues,perf}.json
+          # (the working copies + cached source live elsewhere).
+          path: out/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ── Aggregate + sticky comment ───────────────────────────────────────
+  report:
+    name: Report (aggregate + comment)
+    needs: [prepare, delta]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read         # checkout the default branch for the comparator + registry
+      pull-requests: write   # post / update the sticky delta comment
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      # Harness from the default branch (master HEAD): this job runs only trusted
+      # code (delta-report.php) over the per-app JSON, never the PR's plugin code.
+      - name: Checkout harness (default branch, for the comparator + registry)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
+        with:
+          php-version: "8.3"
+          ini-values: memory_limit=-1
+          coverage: none
+
+      - name: Download all per-app JSON
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: delta-*
+          merge-multiple: true  # reconstructs out/<app>/... from every artifact
+          path: out
+
+      # Build the markdown to a FILE and post it with `gh api -F body=@file`, so
+      # the (app-derived) report text never transits a shell variable, GITHUB_OUTPUT,
+      # or a heredoc — no command-injection / output-injection surface.
+      - name: Build + post sticky comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          BASE_LABEL: ${{ needs.prepare.outputs.base_label }}
+          HEAD_LABEL: ${{ needs.prepare.outputs.head_label }}
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
+        run: |
+          MARKER='<!-- psalm-delta-report -->'
+          APPS=$(yq '.apps[].name' bin/ci/test-apps.yml | paste -sd, -)
+
+          {
+            printf '%s\n' "$MARKER"
+            php bin/ci/delta-report.php out "$BASE_LABEL" "$HEAD_LABEL" \
+              --apps="$APPS" --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
+              --date-marker=cache \
+              || echo "Delta failed to produce a report. Check the workflow logs."
+          } > comment.md
+          # Quoted heredoc: literal backticks for the inline code span, no expansion.
+          cat >> comment.md <<'FOOTER'
+
+          <sub>Informational only — never fails the PR. Reproduce locally: `bash bin/ci/delta.sh <pr-branch>`.</sub>
+          FOOTER
+
+          # Sticky: edit the existing delta comment if present, else create one.
+          EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq "map(select(.body | startswith(\"$MARKER\"))) | .[0].id // empty")
+          if [ -n "$EXISTING" ]; then
+            gh api "repos/$REPO/issues/comments/$EXISTING" -X PATCH -F body=@comment.md --silent
+          else
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@comment.md --silent
+          fi

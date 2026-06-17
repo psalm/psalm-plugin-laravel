@@ -11,7 +11,8 @@ use Psalm\LaravelPlugin\Handlers\SuppressHandler;
 use Symfony\Component\Process\Process;
 
 /**
- * End-to-end guard for SuppressHandler's Eloquent scope/accessor suppression under findUnusedCode.
+ * End-to-end guard for SuppressHandler's suppression of indirectly-dispatched Eloquent methods
+ * (scopes, accessors, and trait boot/initialize hooks) under findUnusedCode.
  *
  * Why a real Psalm subprocess instead of a phpt: psalm-tester always passes the snippet as an
  * explicit file argument, and Psalm only runs whole-program dead-code detection
@@ -21,10 +22,10 @@ use Symfony\Component\Process\Process;
  * project (tests/Unit/Handlers/Fixtures/SuppressScopeUnusedCode) with findUnusedCode enabled, the
  * way real applications run it, and asserts the suppression actually takes effect.
  *
- * The fixture hosts all four scope shapes (trait/direct x modern #[Scope]/legacy scopeXxx) and a
- * trait + direct legacy accessor, plus one non-scope control method. Without the trait-aware fix
- * the trait-hosted scope and accessor leak as PossiblyUnusedMethod; with it, only the control
- * remains.
+ * The fixture hosts all four scope shapes (trait/direct x modern #[Scope]/legacy scopeXxx), a
+ * trait + direct legacy accessor, and a trait boot/initialize hook pair (#1069), plus one plain
+ * control method. Without the suppressors each indirectly-dispatched method leaks as
+ * PossiblyUnusedMethod; with them, only the control remains.
  *
  * Placement note: this is the suite's only test that forks a real `vendor/bin/psalm` subprocess
  * (it boots Laravel via the plugin, ~6s), because whole-program dead-code detection cannot be
@@ -40,17 +41,19 @@ final class SuppressScopeUnusedCodeTest extends TestCase
      * no-regression controls). `secret` is deliberately NOT here: a private #[Scope] is structurally
      * unflaggable on a Model (see runtime note below), so asserting its absence would prove nothing.
      */
-    private const SUPPRESSED_SCOPE_MARKERS = [
+    private const SUPPRESSED_MARKERS = [
         '::active',               // trait #[Scope]
         '::scopeFlagged',         // trait legacy
         '::getComputedAttribute', // trait legacy accessor
+        '::bootHasInlineScopes',       // trait boot hook (#1069)
+        '::initializeHasInlineScopes', // trait initialize hook (#1069)
         '::published',            // direct #[Scope]
         '::scopeArchived',        // direct legacy
         '::getDisplayNameAttribute', // direct legacy accessor
     ];
 
     #[Test]
-    public function it_suppresses_trait_and_direct_eloquent_scopes_but_not_a_plain_unused_method(): void
+    public function it_suppresses_indirectly_dispatched_eloquent_methods_but_not_a_plain_unused_method(): void
     {
         $unusedMethodFindings = $this->runPsalmAndCollectUnusedMethodFindings();
 
@@ -60,16 +63,16 @@ final class SuppressScopeUnusedCodeTest extends TestCase
         );
         $joined = \implode("\n", $messages);
 
-        // Surgical control: the one non-scope method that is genuinely never called must stay
-        // reported, proving the suppressor narrows to real scopes rather than silencing every
+        // Surgical control: the one plain method that is genuinely never called must stay reported,
+        // proving the suppressor narrows to indirectly-dispatched methods rather than silencing every
         // unused method on the model. assertCount(1) also guarantees nothing else leaks — including
         // the private `secret` scope, which Psalm never emits for a __call class anyway.
-        $this->assertCount(1, $unusedMethodFindings, "Expected exactly one unused-method finding (the non-scope control), got:\n{$joined}");
+        $this->assertCount(1, $unusedMethodFindings, "Expected exactly one unused-method finding (the plain control), got:\n{$joined}");
         $this->assertStringContainsString('TraitScopeModel::helperNonScope', $messages[0]);
 
-        // Every dispatched scope/accessor must be suppressed rather than reported as unused.
-        foreach (self::SUPPRESSED_SCOPE_MARKERS as $marker) {
-            $this->assertStringNotContainsString($marker, $joined, "Scope/accessor method {$marker} must be suppressed, not reported as unused.");
+        // Every indirectly-dispatched method must be suppressed rather than reported as unused.
+        foreach (self::SUPPRESSED_MARKERS as $marker) {
+            $this->assertStringNotContainsString($marker, $joined, "Indirectly-dispatched method {$marker} must be suppressed, not reported as unused.");
         }
     }
 
