@@ -40,9 +40,9 @@ final readonly class ModelMetadata
      * @param list<non-empty-string>                        $fillable
      * @param list<non-empty-string>                        $guarded
      * @param list<non-empty-string>                        $appends
-     * @param list<non-empty-string>                        $hidden
      * @param list<string>                                  $with      Eager-load relation names from `$with`.
      * @param list<string>                                  $withCount Eager-load-count relation names from `$withCount`.
+     * @param list<non-empty-string>                        $hidden
      * @param class-string<Builder>|null                    $customBuilder    Detected via #[UseEloquentBuilder] / newEloquentBuilder() / $builder; non-templated because detection cannot recover the model type param.
      * @param class-string<EloquentCollection>|null         $customCollection Detected via #[CollectedBy] / newCollection() / $collectionClass.
      * @param array<non-empty-string, CastInfo>             $castsData Pre-computed cast map (column → CastInfo).

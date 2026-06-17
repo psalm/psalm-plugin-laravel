@@ -250,6 +250,25 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
+    public function concrete_model_without_guards_inherits_framework_defaults(): void
+    {
+        // Concrete path (computeForInstance -> getFillable()/getGuarded()). A model that declares
+        // neither $fillable nor $guarded inherits Eloquent's defaults: guarded ['*'], fillable [].
+        // The abstract path's ['*'] is pinned separately (computeForAbstract reads
+        // getDefaultProperties()); the two derive the default through different code, so each path
+        // needs its own guard against regression.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(UuidModel::class, [HasUuids::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, UuidModel::class);
+
+        $metadata = ModelMetadataRegistry::for(UuidModel::class);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertSame(['*'], $metadata->guarded);
+        $this->assertSame([], $metadata->fillable);
+    }
+
+    #[Test]
     public function soft_deletes_honors_deleted_at_class_constant_override(): void
     {
         $codebase = $this->makeCodebase();
