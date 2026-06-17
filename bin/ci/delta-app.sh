@@ -223,6 +223,12 @@ if [[ ! -f "$APP_SRC/vendor/bin/psalm" ]]; then
     )
     configure_plugin_repo "$APP_SRC" "$PLUGIN_BASE" 1
     write_psalm_xml
+    # Don't let Composer's security-advisory policy block the solve. Some apps
+    # pin a transitive (e.g. symfony/http-foundation) to an advisory-flagged
+    # version; we only type-analyse the code, never run it, so the advisory is
+    # irrelevant here and would otherwise fail the whole install. The setting is
+    # written into composer.json, so the per-side COW copies inherit it.
+    (cd "$APP_SRC" && composer config --no-interaction policy.advisories.block false 2>/dev/null || true)
     (cd "$APP_SRC" && composer update "${COMPOSER_FLAGS[@]}" --quiet)
 else
     echo "[$APP] reusing installed vendor" >&2
