@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781645367966,
+  "lastUpdate": 1781654786596,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6395,6 +6395,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.87,
             "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "009247e2924e592f28fb56d3c63baf92d5b4dfd8",
+          "message": "fix(eloquent): suppress unused trait boot/initialize hooks #1069 (#1080)\n\nLaravel dispatches `boot{Trait}` and `initialize{Trait}` hooks by\nreflection in Model::bootTraits()/initializeTraits(), so with\nfindUnusedCode enabled Psalm reports them as PossiblyUnusedMethod\n(no statically visible caller exists).\n\nSuppressHandler now silences these on Eloquent models. Each candidate\nis validated against its declaring trait's basename, mirroring Laravel\nexactly: the match is case-sensitive (Laravel collects hooks via a\ncase-sensitive in_array on the source-cased name), and the boot prefix\nrequires a static method — a non-static boot{Trait} is never dispatched\nand stays correctly reported.\n\nThe newer #[Boot]/#[Initialize] attributes (Laravel 12.x+) for\narbitrarily named hooks are deferred to an attribute-driven follow-up.\n\nCloses #1069",
+          "timestamp": "2026-06-17T02:03:14+02:00",
+          "tree_id": "6acf506cc55703bb064b4a95feb018140d27908a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/009247e2924e592f28fb56d3c63baf92d5b4dfd8"
+        },
+        "date": 1781654786117,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.7,
+            "range": "± 0.64",
             "unit": "s"
           },
           {
