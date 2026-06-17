@@ -241,10 +241,10 @@ run_side() {
     local label="$1" plugin_dir="$2" relink="$3"
     # Both sides use the SAME absolute work-dir path (not work-<label>). Psalm
     # bakes the analysis path into the report in ways that survive any post-hoc
-    # normalisation — notably literal-string TYPES that Psalm then TRUNCATES
-    # ('/.../work-ba…' vs '/.../work-pr…'), leaving no full token to rewrite. A
-    # per-side path therefore manufactures false +N/-N churn for every such
-    # issue. Reusing one path makes the baked path byte-identical on both sides,
+    # normalisation — notably literal-string TYPES that Psalm then TRUNCATES, so
+    # only a side-dependent prefix of the path survives with no full token left to
+    # rewrite. A per-side path therefore manufactures false +N/-N churn for every
+    # such issue. Reusing one path makes the baked path byte-identical on both sides,
     # so only real changes differ. Safe because base and head run sequentially
     # for an app (one matrix job), each starting with rm -rf below.
     local app_dir="${OUT}/${APP}/work"
