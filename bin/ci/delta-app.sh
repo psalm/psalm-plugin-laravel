@@ -77,6 +77,33 @@ APP_SRC="${APP_SRC:-${OUT}/${APP}/src}"
 COMPOSER_FLAGS=(--no-interaction --no-progress --ignore-platform-reqs)
 export COMPOSER_MEMORY_LIMIT=-1
 
+# Copy a tree using a copy-on-write clone where the filesystem supports it
+# (APFS clonefile on macOS, btrfs/xfs reflinks on Linux): instant and low-disk,
+# yet safe — writes to the copy never touch the source, unlike `cp -al`
+# hardlinks which would write through composer.json edits into APP_SRC. Falls
+# back to a deep copy everywhere else. The first two forms exit non-zero on
+# coreutils variants that lack the flag, so the chain degrades cleanly.
+fast_copy() {
+    local src="$1" dst="$2"
+    cp -c -a "$src" "$dst" 2>/dev/null && return 0             # BSD/macOS clonefile
+    cp --reflink=auto -a "$src" "$dst" 2>/dev/null && return 0 # GNU coreutils reflink
+    cp -a "$src" "$dst"
+}
+
+# md5 of the plugin's dependency-affecting composer.json sections. Only `require`
+# and `autoload` change what gets installed into the app's vendor; if they match
+# between base and head, the head side can reuse the base install and re-point a
+# symlink instead of re-running Composer. require-dev / autoload-dev are never
+# installed, so excluding them is safe (a stray match only skips a no-op solve).
+plugin_dep_sig() {
+    php -r '
+        $d = json_decode(file_get_contents($argv[1] . "/composer.json"), true, 512, JSON_THROW_ON_ERROR);
+        $sig = ["require" => $d["require"] ?? [], "autoload" => $d["autoload"] ?? []];
+        foreach ($sig as &$s) { if (is_array($s)) { ksort($s); } }
+        echo md5(json_encode($sig));
+    ' "$1"
+}
+
 # --- 1. Clone app at the frozen commit (cache-friendly) ----------------------
 #
 # The ref is an immutable commit, so a populated APP_SRC is reusable across runs
@@ -205,7 +232,7 @@ fi
 # --- 3. Run one side: relink plugin, run Psalm, emit JSON --------------------
 
 run_side() {
-    local label="$1" plugin_dir="$2"
+    local label="$1" plugin_dir="$2" relink="$3"
     local app_dir="${OUT}/${APP}/work-${label}"
     local issues_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--issues.json"
     local perf_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--perf.json"
@@ -219,10 +246,37 @@ run_side() {
 
     # Fresh working copy off the source so base and head never interfere.
     rm -rf "$app_dir"
-    cp -a "$APP_SRC" "$app_dir"
-    configure_plugin_repo "$app_dir" "$plugin_dir"
-    (cd "$app_dir" && composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}" --with-all-dependencies --quiet) \
-        || { echo "[$APP/$label] composer relink failed" >&2; rm -rf "$app_dir"; return 0; }
+    fast_copy "$APP_SRC" "$app_dir"
+
+    # Point this copy's plugin at $plugin_dir. The source install already linked
+    # vendor/psalm/plugin-laravel at PLUGIN_BASE (symlink path repo), and the
+    # PSR-4 map resolves through that symlink, so the cheapest relink is a symlink
+    # swap — no Composer solve. Only fall back to Composer when head changed the
+    # plugin's installed dependency shape (see plugin_dep_sig).
+    #
+    # Critical: `composer update psalm/plugin-laravel` does NOT re-point the path
+    # symlink when the package version string is unchanged (both checkouts carry
+    # the same dev version), so Composer alone would leave the copy linked to
+    # PLUGIN_BASE and silently analyse head with the base plugin. Every branch
+    # therefore sets the symlink explicitly; Composer runs only to pull head's
+    # new dependencies into vendor.
+    local link="$app_dir/vendor/psalm/plugin-laravel"
+    case "$relink" in
+        none)
+            : # base side: the copied vendor already symlinks to PLUGIN_BASE
+            ;;
+        symlink)
+            rm -rf "$link"
+            ln -s "$plugin_dir" "$link"
+            ;;
+        composer)
+            configure_plugin_repo "$app_dir" "$plugin_dir"
+            (cd "$app_dir" && composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}" --with-all-dependencies --quiet) \
+                || { echo "[$APP/$label] composer relink failed" >&2; rm -rf "$app_dir"; return 0; }
+            rm -rf "$link"
+            ln -s "$plugin_dir" "$link"
+            ;;
+    esac
 
     local out_txt err_txt t0 exit_code wall coverage count
     out_txt=$(mktemp); err_txt=$(mktemp)
@@ -285,7 +339,16 @@ run_side() {
     rm -rf "$app_dir" "$out_txt" "$err_txt"
 }
 
-run_side "$BASE_LABEL" "$PLUGIN_BASE"
-run_side "$HEAD_LABEL" "$PLUGIN_HEAD"
+# Base reuses the source install verbatim (its vendor already links PLUGIN_BASE).
+# Head re-points a symlink when the plugin's dependency shape is unchanged
+# (the common case), and only re-solves with Composer when it differs.
+if [[ "$(plugin_dep_sig "$PLUGIN_BASE")" == "$(plugin_dep_sig "$PLUGIN_HEAD")" ]]; then
+    HEAD_RELINK=symlink
+else
+    HEAD_RELINK=composer
+fi
+
+run_side "$BASE_LABEL" "$PLUGIN_BASE" none
+run_side "$HEAD_LABEL" "$PLUGIN_HEAD" "$HEAD_RELINK"
 
 echo "[$APP] done" >&2

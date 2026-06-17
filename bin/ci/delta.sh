@@ -26,6 +26,33 @@ command -v git >/dev/null || { echo "ERROR: git is required" >&2; exit 2; }
 command -v php >/dev/null || { echo "ERROR: php is required (for delta-report.php)" >&2; exit 2; }
 command -v yq  >/dev/null || { echo "ERROR: yq (mikefarah v4) is required to read $REGISTRY" >&2; exit 2; }
 
+# --- Read registry + validate optional APPS= subset (before any heavy work) ---
+
+# Optional APPS=a,b,c subset filter.
+SUBSET="${APPS:-}"
+# read loop (not mapfile) for bash 3.2 compatibility (macOS default shell).
+APP_NAMES=()
+while IFS= read -r line; do
+    [[ -n "$line" ]] && APP_NAMES+=("$line")
+done < <(yq '.apps[].name' "$REGISTRY")
+
+# Validate an APPS= subset up front: an unknown name otherwise silently yields
+# an empty RUN_APPS and surfaces only later as delta-report.php's "--apps is
+# required" — after the worktrees and clones are already built. List the valid
+# names instead so the typo is obvious.
+if [[ -n "$SUBSET" ]]; then
+    valid=",$(IFS=,; echo "${APP_NAMES[*]}"),"
+    IFS=',' read -ra REQUESTED <<< "$SUBSET"
+    for req in "${REQUESTED[@]}"; do
+        [[ -z "$req" ]] && continue
+        if [[ "$valid" != *",$req,"* ]]; then
+            echo "ERROR: unknown app '$req' in APPS=. Valid apps:" >&2
+            printf '  %s\n' "${APP_NAMES[@]}" >&2
+            exit 2
+        fi
+    done
+fi
+
 # --- Resolve base / head refs ------------------------------------------------
 
 if [[ $# -eq 1 ]]; then
@@ -73,14 +100,6 @@ trap cleanup EXIT
 
 # --- Loop apps ---------------------------------------------------------------
 
-# Optional APPS=a,b,c subset filter.
-SUBSET="${APPS:-}"
-# read loop (not mapfile) for bash 3.2 compatibility (macOS default shell).
-APP_NAMES=()
-while IFS= read -r line; do
-    [[ -n "$line" ]] && APP_NAMES+=("$line")
-done < <(yq '.apps[].name' "$REGISTRY")
-
 RUN_APPS=()
 for app in "${APP_NAMES[@]}"; do
     if [[ -n "$SUBSET" && ",$SUBSET," != *",$app,"* ]]; then
@@ -88,6 +107,11 @@ for app in "${APP_NAMES[@]}"; do
     fi
     RUN_APPS+=("$app")
 done
+
+# Local PHP major.minor, for the registry-mismatch warning below. --php is the
+# caller's concern locally (delta-app.sh ignores it), so a registry app pinned to
+# a different minor than the system php can fail Composer in confusing ways.
+LOCAL_PHP=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')
 
 for app in "${RUN_APPS[@]}"; do
     # $app comes from the registry itself (trusted, filename-safe), so embedding
@@ -97,6 +121,12 @@ for app in "${RUN_APPS[@]}"; do
     php_ver=$(yq ".apps[] | select(.name == \"$app\") | .php // \"8.3\"" "$REGISTRY")
     pdir=$(yq ".apps[] | select(.name == \"$app\") | .project_dir // \"\"" "$REGISTRY")
     prime=$(yq ".apps[] | select(.name == \"$app\") | .prime // \"\"" "$REGISTRY")
+
+    # Warn (don't block) when the system php differs from the app's pinned minor:
+    # Composer installs under the local binary, so a mismatch can fail oddly.
+    if [[ "$php_ver" != "$LOCAL_PHP" ]]; then
+        echo "WARN: $app pins php $php_ver but local php is $LOCAL_PHP; install may differ from CI." >&2
+    fi
 
     args=(
         --app "$app" --repo "$repo" --ref "$ref" --php "$php_ver"

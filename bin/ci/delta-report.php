@@ -38,7 +38,25 @@ declare(strict_types=1);
 // to >100 MB — well past the default 128 MB CLI limit. This is a throwaway
 // reporting tool (one process, exits immediately); a generous floor is safe.
 // Honour a higher pre-set limit / unlimited (-1); only raise a too-low one.
-$currentLimit = (int) ini_get('memory_limit');
+//
+// memory_limit is a shorthand byte string ("256M", "2G", "-1"), so a naive
+// (int) cast reads "2G" as 2 and would *lower* a 2 GB limit to 1 GB. Parse the
+// K/M/G unit before comparing.
+$parseBytes = static function (string $value): int {
+    $value = trim($value);
+    if ($value === '' || $value === '-1') {
+        return -1;
+    }
+    $unit = strtolower($value[strlen($value) - 1]);
+    $number = (int) $value;
+    return match ($unit) {
+        'g' => $number * 1024 * 1024 * 1024,
+        'm' => $number * 1024 * 1024,
+        'k' => $number * 1024,
+        default => (int) $value,
+    };
+};
+$currentLimit = $parseBytes((string) ini_get('memory_limit'));
 if ($currentLimit !== -1 && $currentLimit < 1024 * 1024 * 1024) {
     ini_set('memory_limit', '1G');
 }
