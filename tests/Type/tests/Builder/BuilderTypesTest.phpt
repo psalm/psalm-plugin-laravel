@@ -203,6 +203,19 @@ function test_scopes_on_builder_contract_preserves_concrete_builder_surface(Buil
     /** @psalm-check-type-exact $_result = Builder<Model>&static */
     return $_result;
 }
+
+/**
+ * paginate() accepts a Closure $perPage and the fifth $total argument (Laravel v13).
+ * These named-argument forms must type-check without TooManyArguments / InvalidArgument.
+ */
+function test_paginate_accepts_total_and_closure(): void
+{
+    $_total = Customer::query()->paginate(total: fn (): int => 100);
+    /** @psalm-check-type-exact $_total = LengthAwarePaginator<int, Customer> */
+
+    $_closure = Customer::query()->paginate(perPage: fn (int $total): int => $total, total: 100);
+    /** @psalm-check-type-exact $_closure = LengthAwarePaginator<int, Customer> */
+}
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 3 of Illuminate\Database\Eloquent\Builder::whereDate expects DateTimeInterface|null|string, but 1 provided

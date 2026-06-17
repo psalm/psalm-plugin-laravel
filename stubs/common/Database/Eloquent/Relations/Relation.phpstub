@@ -95,15 +95,21 @@ abstract class Relation implements BuilderContract
      * Subclasses that narrow the value (BelongsToMany's pivot variant, the Through
      * relations) override these.
      *
-     * @param  int|null  $perPage
+     * The signature mirrors Eloquent\Builder::paginate (the __call forwarding target),
+     * including the Closure $perPage and the fifth $total argument. BelongsToMany and
+     * HasOneOrManyThrough declare their OWN narrower paginate() in Laravel (no $total),
+     * so they keep the four-argument override — passing $total there errors at runtime.
+     *
+     * @param  int|null|\Closure  $perPage
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
+     * @param  \Closure|int|null  $total
      * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel>
      *
      * @throws \InvalidArgumentException
      */
-    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null, $total = null) {}
 
     /**
      * @param  int|null  $perPage

@@ -92,5 +92,19 @@ function has_one_through_paginate_keeps_template(Mechanic $mechanic): void
     $_cursor = $mechanic->vehicleOwner()->cursorPaginate();
     /** @psalm-check-type-exact $_cursor = CursorPaginator<int, Customer> */
 }
+
+/**
+ * The base Relation forwards to Eloquent\Builder::paginate via __call, so its paginate()
+ * carries the Closure $perPage and the fifth $total argument. These named-argument calls
+ * must type-check (no TooManyArguments / InvalidArgument) and keep the template.
+ */
+function relation_paginate_accepts_total_and_closure(Customer $customer): void
+{
+    $_total = $customer->vehicles()->paginate(total: 100);
+    /** @psalm-check-type-exact $_total = LengthAwarePaginator<int, Vehicle> */
+
+    $_closure = $customer->vehicles()->paginate(perPage: fn (int $total): int => $total, total: fn (): int => 100);
+    /** @psalm-check-type-exact $_closure = LengthAwarePaginator<int, Vehicle> */
+}
 ?>
 --EXPECTF--
