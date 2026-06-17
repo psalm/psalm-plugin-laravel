@@ -24,6 +24,7 @@ return (new Config())
         (new Finder())
             ->in(__DIR__ . '/src')
             ->in(__DIR__ . '/tests')
+            ->in(__DIR__ . '/bin/ci')
             ->append([
                 __FILE__,
             ]),

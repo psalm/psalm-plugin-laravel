@@ -1,0 +1,80 @@
+# Real-world Laravel apps benchmarked by the CI psalm-delta workflow and the
+# local bin/ci/delta.sh orchestrator. Shared, committed source of truth.
+#
+# Each app is pinned to an IMMUTABLE commit so:
+#   * the vendor install is reproducible, and
+#   * CI can cache vendor keyed on (name, ref, php) safely.
+#
+# This is the curated v1 set: apps that composer-install cleanly from a frozen
+# commit against Packagist Psalm (no local fork). Add an entry to grow; delete
+# one to drop a flaky app. The private codebase used by the local /psalm-delta
+# skill is intentionally absent — this file is committed (public).
+#
+# Read with mikefarah yq v4 (preinstalled on ubuntu-latest, `brew install yq`
+# locally). The CI matrix is `yq -o=json '{"include": .apps}'`.
+#
+# Fields:
+#   name         display + on-disk key (filename-safe)
+#   repo         public https clone URL
+#   ref          immutable commit SHA (the cache key; never a moving branch)
+#   php          PHP version the runner sets up for install/analysis
+#   kind         app | lib  (informational; project layout is auto-detected)
+#   project_dir  optional explicit Psalm projectFiles root (else auto-detected:
+#                app/ for Laravel apps, packages/*/src for monorepos, src/ for libs)
+#   prime        optional shell run in the app dir before `composer update`
+#                (one-off install quirks, e.g. bumping a flagged dependency)
+
+apps:
+  - name: monica
+    repo: https://github.com/monicahq/monica.git
+    ref: e08e917
+    php: "8.3"
+    kind: app
+    # Monica's lock pins laravel-lang/http-statuses at a version Packagist flags
+    # as malware; bump that one package (constraint ^3.8) before install.
+    prime: composer update laravel-lang/http-statuses --no-interaction --no-progress --ignore-platform-reqs
+
+  - name: pixelfed
+    repo: https://github.com/pixelfed/pixelfed.git
+    ref: 67606eb
+    php: "8.3"
+    kind: app
+
+  - name: coolify
+    repo: https://github.com/coollabsio/coolify.git
+    ref: ffd69c1
+    php: "8.3"
+    kind: app
+
+  - name: bookstack
+    repo: https://source.bookstackapp.com/bookstack.git
+    ref: 82ef735
+    php: "8.3"
+    kind: app
+
+  - name: solidtime
+    repo: https://github.com/solidtime-io/solidtime.git
+    ref: 797fddf
+    php: "8.3"
+    kind: app
+
+  - name: laravel-socialite
+    repo: https://github.com/laravel/socialite.git
+    ref: 40e0757
+    php: "8.3"
+    kind: lib
+    project_dir: src
+
+  - name: laravel-permission
+    repo: https://github.com/spatie/laravel-permission.git
+    ref: ef42ecb
+    php: "8.3"
+    kind: lib
+    project_dir: src
+
+  - name: laravel-excel
+    repo: https://github.com/SpartnerNL/Laravel-Excel.git
+    ref: 1854739
+    php: "8.3"
+    kind: lib
+    project_dir: src
