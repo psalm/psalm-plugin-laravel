@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781790573994,
+  "lastUpdate": 1781810592310,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6610,6 +6610,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "680de730701abe5a4af616df2e4e944d1fd34624",
+          "message": "fix(filesystem): narrow Storage::disk() to FilesystemAdapter #802 (#1093)\n\nStorage::disk()/drive() is declared to return the Filesystem contract,\nbut every shipped driver resolves to a FilesystemAdapter at runtime.\nAdapter-only methods (temporaryUrl, temporaryUploadUrl) and Cloud's\nurl() were unreachable, and disk('public')->url() — public uses\ndriver=local — was a false positive.\n\nNarrow disk()/drive() unconditionally to the concrete FilesystemAdapter\n(facade + DI FilesystemManager/Factory), reversing the s3->Cloud\nnarrowing from #982. This also routes the call through the adapter's\n@psalm-taint-sink methods, so path traversal via the Storage facade is\nnow caught (guarded by a new TaintAnalysis pair).\n\nDrop FilesystemConfigAnalyzer; its only consumer was this handler.\n\nCloses #802\n\nClaude-Session: https://claude.ai/code/session_01UFEL4quJwU8JTYBc5CYoyZ",
+          "timestamp": "2026-06-18T21:19:17+02:00",
+          "tree_id": "1b8eefc6377dd756b9372d4275f2d180bb64dda8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/680de730701abe5a4af616df2e4e944d1fd34624"
+        },
+        "date": 1781810591228,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.54,
+            "range": "± 0.03",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
             "unit": "MB"
           }
         ]
