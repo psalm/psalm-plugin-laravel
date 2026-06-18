@@ -17,6 +17,7 @@
 #     --out /path/output-dir --base-label base-AAAA --head-label pr-BBBB \
 #     [--php 8.3] [--project-dir app] [--date-marker cache] \
 #     [--prime 'composer update foo --no-interaction'] \
+#     [--psalm-args '--php-version=8.0'] \
 #     [--app-src /cache/monica-src] [--mem 4G]
 #
 # Output (per side, <label> in {base-label, head-label}):
@@ -34,7 +35,7 @@ set -euo pipefail
 
 APP="" REPO="" REF="" PLUGIN_BASE="" PLUGIN_HEAD="" OUT=""
 BASE_LABEL="" HEAD_LABEL="" PROJECT_DIR=""
-DATE_MARKER="cache" PRIME="" APP_SRC="" MEM="4G"
+DATE_MARKER="cache" PRIME="" APP_SRC="" MEM="4G" PSALM_ARGS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -52,6 +53,7 @@ while [[ $# -gt 0 ]]; do
         --project-dir) PROJECT_DIR="$2"; shift 2 ;;
         --date-marker) DATE_MARKER="$2"; shift 2 ;;
         --prime) PRIME="$2"; shift 2 ;;
+        --psalm-args) PSALM_ARGS="$2"; shift 2 ;;
         --app-src) APP_SRC="$2"; shift 2 ;;
         --mem) MEM="$2"; shift 2 ;;
         *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
@@ -76,6 +78,13 @@ APP_SRC="${APP_SRC:-${OUT}/${APP}/src}"
 
 COMPOSER_FLAGS=(--no-interaction --no-progress --ignore-platform-reqs)
 export COMPOSER_MEMORY_LIMIT=-1
+
+# Optional extra Psalm CLI args (e.g. --php-version=8.0), split on whitespace
+# into an array so each token is passed as a separate argument. `=` is not in
+# IFS, so --php-version=8.0 stays one token. `read -ra` returns 0 even on empty
+# input (set -e safe); the array is expanded with the bash-3.2-safe
+# ${arr[@]+...} guard at the call site to avoid an unbound-variable error.
+read -ra PSALM_EXTRA <<< "$PSALM_ARGS"
 
 # Copy a tree using a copy-on-write clone where the filesystem supports it
 # (APFS clonefile on macOS, btrfs/xfs reflinks on Linux): instant and low-disk,
@@ -300,6 +309,7 @@ run_side() {
         cd "$app_dir"
         php -d memory_limit="$MEM" vendor/bin/psalm -c psalm.xml \
             --no-cache --no-diff --no-progress --no-suggestions --monochrome \
+            ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
             --report="${issues_file}" >"$out_txt" 2>"$err_txt"
     ) || exit_code=$?
     wall=$(( $(date +%s) - t0 ))
