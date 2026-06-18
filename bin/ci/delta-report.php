@@ -8,9 +8,10 @@ declare(strict_types=1);
  * Reads issues.json + perf.json files produced by delta-app.sh out of an
  * OUTPUT_DIR, matches base/head pairs per app, and prints a delta-only report:
  *
- *   * per-app deltas (issues added/removed, net, type coverage %, wall seconds)
- *   * top issue-type movements (added/removed by type) across all apps
- *   * newly introduced / removed issue types
+ *   * a per-app table of changed apps (total touched, +added, -removed, net Δ)
+ *   * per changed app, the issue-type breakdown (base -> head, +added/-removed)
+ *   * apps that ran clean with zero delta, and apps that crashed (with the
+ *     crash's first error line) — kept in separate buckets
  *
  * PHP port of the local /psalm-delta skill's compare.py — same file layout,
  * same identity tuple, same report shape — so CI and the local harness produce
@@ -210,7 +211,7 @@ $issueKey = static function (array $i): string {
  *     added: int,
  *     removed: int,
  *     net: int,
- *     movements: list<array{type: string, base: int, head: int, delta: int}>,
+ *     movements: list<array{type: string, base: int, head: int, added: int, removed: int, delta: int}>,
  * }> $rows
  */
 $rows = [];
@@ -247,26 +248,49 @@ foreach ($apps as $app) {
     $removed = count(array_diff_key($baseByKey, $headByKey));
     $net = count($headByKey) - count($baseByKey);
 
-    // Per-type counts (deduped) for this app, base vs head, for the movement list.
+    // Per-type base/head totals (deduped) for the "base -> head" display.
     $baseTypeCount = array_count_values(array_values($baseByKey));
     $headTypeCount = array_count_values(array_values($headByKey));
 
+    // Per-type ADDED / REMOVED identity counts. Counting net totals alone hides
+    // churn: a type with the same count on both sides but different identities
+    // (a fixed issue replaced by a new one of the same type) nets to zero yet is
+    // a real movement. Diffing identities surfaces it as +x/-y.
+    $addedByType = [];
+    foreach (array_diff_key($headByKey, $baseByKey) as $type) {
+        $addedByType[$type] = ($addedByType[$type] ?? 0) + 1;
+    }
+    $removedByType = [];
+    foreach (array_diff_key($baseByKey, $headByKey) as $type) {
+        $removedByType[$type] = ($removedByType[$type] ?? 0) + 1;
+    }
+
     $movements = [];
     foreach (array_keys($baseTypeCount + $headTypeCount) as $type) {
-        $b = $baseTypeCount[$type] ?? 0;
-        $h = $headTypeCount[$type] ?? 0;
-        if ($b !== $h) {
-            $movements[] = ['type' => $type, 'base' => $b, 'head' => $h, 'delta' => $h - $b];
+        $a = $addedByType[$type] ?? 0;
+        $r = $removedByType[$type] ?? 0;
+        if ($a === 0 && $r === 0) {
+            continue; // identical identities on both sides — nothing moved
         }
+        $movements[] = [
+            'type' => $type,
+            'base' => $baseTypeCount[$type] ?? 0,
+            'head' => $headTypeCount[$type] ?? 0,
+            'added' => $a,
+            'removed' => $r,
+            'delta' => ($headTypeCount[$type] ?? 0) - ($baseTypeCount[$type] ?? 0),
+        ];
     }
-    // Signed delta ascending: biggest reductions first, regressions last.
+    // Signed net delta ascending (biggest reductions first, regressions last);
+    // tie-break by churn volume so pure churn sorts by size, then by type name.
     usort(
         $movements,
         /**
-         * @param array{type: string, base: int, head: int, delta: int} $x
-         * @param array{type: string, base: int, head: int, delta: int} $y
+         * @param array{type: string, base: int, head: int, added: int, removed: int, delta: int} $x
+         * @param array{type: string, base: int, head: int, added: int, removed: int, delta: int} $y
          */
-        static fn(array $x, array $y): int => [$x['delta'], $x['type']] <=> [$y['delta'], $y['type']],
+        static fn(array $x, array $y): int => [$x['delta'], -($x['added'] + $x['removed']), $x['type']]
+            <=> [$y['delta'], -($y['added'] + $y['removed']), $y['type']],
     );
 
     $rows[] = [
@@ -281,17 +305,37 @@ foreach ($apps as $app) {
 
 // --- Header ------------------------------------------------------------------
 
-$baseDesc = $baseRef !== '' ? $baseRef : $baseLabel;
-$headDesc = $headRef !== '' ? $headRef : $headLabel;
-if ($baseSha !== '') {
-    $baseDesc = "{$baseDesc} ({$baseSha})";
-}
-if ($headSha !== '') {
-    $headDesc = "{$headDesc} ({$headSha})";
-}
+/**
+ * Build a heading description like "Base (7fb82df7)" for one side.
+ *
+ * The artifact label is "<prefix>-<shortsha>" (e.g. "base-7fb82df7"), kept
+ * verbatim for file matching — so reusing it as the heading would print the
+ * embedded short sha *and* the separate --*-sha, e.g. "base-7fb82df7
+ * (7fb82df70a30…)". Prefer an explicit ref; otherwise strip the trailing
+ * "-<sha>" off the label to recover the prefix word, tidy its casing, and
+ * append a single short sha (skipped when the word already carries it).
+ */
+$describe = static function (string $ref, string $label, string $sha): string {
+    $word = $ref !== '' ? $ref : (preg_replace('/-[0-9a-f]{7,40}$/', '', $label) ?? $label);
+    $word = match (strtolower($word)) {
+        'base' => 'Base',
+        'pr' => 'PR',
+        default => $word,
+    };
+    if ($sha !== '') {
+        $short = substr($sha, 0, 8);
+        if (!str_contains($word, $short)) {
+            $word .= " ({$short})";
+        }
+    }
+
+    return $word;
+};
+$baseDesc = $describe($baseRef, $baseLabel, $baseSha);
+$headDesc = $describe($headRef, $headLabel, $headSha);
 
 $out = [];
-$out[] = "# PR delta: {$baseDesc} -> {$headDesc}";
+$out[] = "## PR delta: {$baseDesc} -> {$headDesc}";
 $out[] = '';
 
 // --- Per-app delta table (changed apps only) --------------------------------
@@ -301,7 +345,7 @@ $out[] = '';
 
 $changed = array_values(array_filter($rows, static fn(array $r): bool => $r['total'] > 0));
 
-$out[] = '## Per-app delta';
+$out[] = '### Per-app delta';
 $out[] = '';
 if ($changed === []) {
     $out[] = 'No issue changes across the benchmarked apps.';
@@ -321,13 +365,21 @@ if ($changed === []) {
     }
     $out[] = sprintf('| **Total** | **%d** | **%d** | **%d** | **%+d** |', $tTotal, $tAdded, $tRemoved, $tNet);
 
-    // Per-app issue-type movements: every type whose count changed, base -> head.
+    // Per-app issue-type movements: base -> head count, with the +added/-removed
+    // identity churn that a net-count diff alone would hide.
     foreach ($changed as $r) {
         $out[] = '';
-        $out[] = '### ' . $r['app'];
+        $out[] = '#### ' . $r['app'];
         $out[] = '';
         foreach ($r['movements'] as $m) {
-            $out[] = sprintf('- %s: %d -> %d (%+d)', $m['type'], $m['base'], $m['head'], $m['delta']);
+            $out[] = sprintf(
+                '- %s: %d -> %d (+%d/-%d)',
+                $m['type'],
+                $m['base'],
+                $m['head'],
+                $m['added'],
+                $m['removed'],
+            );
         }
     }
 }
@@ -362,7 +414,7 @@ if ($missing !== []) {
 
     if ($crashed !== []) {
         $out[] = '';
-        $out[] = '## Crashed';
+        $out[] = '### Crashed';
         $out[] = '';
         $out[] = 'No usable report — Psalm crashed or analysis aborted. A crash on BOTH sides is not caused by this PR.';
         $out[] = '';

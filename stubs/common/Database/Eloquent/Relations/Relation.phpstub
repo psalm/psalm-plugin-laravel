@@ -100,6 +100,53 @@ abstract class Relation implements BuilderContract
     }
 
     /**
+     * Paginate the query (forwarded to the related model's Builder).
+     *
+     * Declared here (not just on Builder) for the same reason as get()/first():
+     * Psalm's templated @mixin Builder<TRelatedModel> resolution fails to substitute
+     * TRelatedModel into a *nested* generic on a non-fluent return, so the inferred
+     * value collapses to the `Model` bound (LengthAwarePaginator<int, TRelatedModel as Model>).
+     * MethodForwardingHandler skips these via isInDeclaringMethodIds, so this stub type
+     * is used directly. The concrete Illuminate\Pagination class is returned (see Builder
+     * stub) so the concrete-only surface (getCollection(), …) resolves on the result.
+     * Subclasses that narrow the value (BelongsToMany's pivot variant, the Through
+     * relations) override these.
+     *
+     * The signature mirrors Eloquent\Builder::paginate (the __call forwarding target),
+     * including the Closure $perPage and the fifth $total argument. BelongsToMany and
+     * HasOneOrManyThrough declare their OWN narrower paginate() in Laravel (no $total),
+     * so they keep the four-argument override — passing $total there errors at runtime.
+     *
+     * @param  int|null|(\Closure(int): int)  $perPage
+     * @param  list<non-empty-string>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @param  (\Closure(): int)|int|null  $total
+     * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel>
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null, $total = null) {}
+
+    /**
+     * @param  int|null  $perPage
+     * @param  list<non-empty-string>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @return \Illuminate\Pagination\Paginator<int, TRelatedModel>
+     */
+    public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+
+    /**
+     * @param  int|null  $perPage
+     * @param  list<non-empty-string>  $columns
+     * @param  string  $cursorName
+     * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
+     * @return \Illuminate\Pagination\CursorPaginator<int, TRelatedModel>
+     */
+    public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
+
+    /**
      * Set the columns to be selected.
      *
      * Declared here because @psalm-variadic on Query\Builder::select does not

@@ -25,5 +25,5 @@ function dynamic_relation_call_remains_mixed(string $name): void
 
 ?>
 --EXPECTF--
-MixedAssignment on line 22: Unable to determine the type that $record is being assigned to
-MixedMethodCall on line 23: Cannot determine the type of $record when calling method getRelated
+MixedAssignment on line %d: Unable to determine the type that $record is being assigned to
+MixedMethodCall on line %d: Cannot determine the type of $record when calling method getRelated
