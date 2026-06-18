@@ -28,8 +28,9 @@ permissions:
 env:
   # Pinned Monica release for reproducible benchmarks.
   # Monica is a real-world Laravel app (~700 PHP files, Laravel 12) https://github.com/monicahq/monica.
-  # beta.5 is the lowest tag on Laravel 12 (the plugin requires illuminate ^12 || ^13;
-  # beta.4 and earlier ship Laravel 11). Its lock pins the dev dependency
+  # beta.5 is the lowest tag on Laravel 12 (the plugin requires illuminate ^12.4 || ^13;
+  # beta.4 and earlier ship Laravel 11). Requiring the plugin bumps Monica's Laravel
+  # to >=12.4 during `composer update`. Its lock pins the dev dependency
   # laravel-lang/http-statuses 3.10.3, which Packagist flags as malware, so a plain
   # `composer install` aborts. The Prime step below bumps that one package to a clean
   # release before installing (see there).
