@@ -311,6 +311,9 @@ final class CustomBuilderMethodHandler
      *
      * Looks up the model associated with the builder, then delegates to
      * BuilderScopeHandler for scope detection.
+     *
+     * @psalm-external-mutation-free Scope detection is now a registry-membership read (no cache
+     * writes), so this is a pure lookup; Psalm infers and requires the annotation.
      */
     private static function hasScopeOnBuilder(\Psalm\Codebase $codebase, string $builderClass, string $methodName): bool
     {

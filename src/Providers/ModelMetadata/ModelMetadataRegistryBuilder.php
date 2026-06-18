@@ -18,6 +18,7 @@ use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\EloquentModelMethods;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
@@ -246,7 +247,7 @@ final class ModelMetadataRegistryBuilder
 
         // Method-derived metadata is STORAGE-based (no instance needed), so it is computed the same
         // way for concrete and abstract models — see computeForAbstract.
-        [$accessors, $mutators] = self::computeAccessorsAndMutators($storage, $codebase->classlike_storage_provider);
+        [$accessors, $mutators, $scopes] = self::computeMethodMetadata($storage, $codebase->classlike_storage_provider);
 
         return new ModelMetadata(
             fqcn: $modelFqcn,
@@ -273,6 +274,7 @@ final class ModelMetadataRegistryBuilder
             castsData: self::computeCasts($codebase, $modelFqcn, $instance, $traits, $tableSchema),
             accessorsData: $accessors,
             mutatorsData: $mutators,
+            scopesData: $scopes,
         );
     }
 
@@ -301,10 +303,10 @@ final class ModelMetadataRegistryBuilder
         /** @var array<string, mixed> $defaults */
         $defaults = $reflection->getDefaultProperties();
 
-        // Method-derived metadata is storage-based, so an abstract base populates accessors/mutators
-        // identically to a concrete model (no instantiation). This is what lets the migrated accessor
-        // handler resolve an inherited accessor on an abstract-typed receiver (#901).
-        [$accessors, $mutators] = self::computeAccessorsAndMutators($storage, $provider);
+        // Method-derived metadata is storage-based, so an abstract base populates accessors/mutators/
+        // scopes identically to a concrete model (no instantiation). This is what lets the migrated
+        // handlers resolve an inherited accessor/scope on an abstract-typed receiver (#901).
+        [$accessors, $mutators, $scopes] = self::computeMethodMetadata($storage, $provider);
 
         return new ModelMetadata(
             fqcn: $modelFqcn,
@@ -327,14 +329,16 @@ final class ModelMetadataRegistryBuilder
             castsData: [],
             accessorsData: $accessors,
             mutatorsData: $mutators,
+            scopesData: $scopes,
         );
     }
 
     /**
-     * Compute the full-callable accessor + mutator maps for a model.
+     * Compute the full-callable accessor + mutator + scope maps for a model.
      *
      * "Full-callable" means self + traits + every method inherited from a USER ancestor — the same
-     * set {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler} resolves through
+     * set {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler} (accessors) and
+     * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler} (scopes) resolve through
      * `Codebase::methodExists()` (which is inheritance-aware). We reach it by replaying the ONE
      * canonical declaring-storage traversal, {@see EloquentModelMethods::appearingMethods()}, over the
      * class itself and each ancestor: `appearingMethods()` deliberately yields only methods *appearing
@@ -343,23 +347,28 @@ final class ModelMetadataRegistryBuilder
      * collapse the trait double-yields, and iterating self-before-ancestors makes the most-derived
      * declaration win.
      *
+     * Accessors and scopes share this single pass — every classifier reads only the same yielded
+     * MethodStorage, so adding scope classification costs no extra traversal.
+     *
      * Storage-only (no instantiation, no `getMethodReturnType()`), so it runs identically for concrete
      * models and abstract bases (#901/#1058) and is safe at warm-up time.
      *
-     * @return array{0: array<non-empty-lowercase-string, AccessorInfo>, 1: array<non-empty-lowercase-string, MutatorInfo>}
+     * @return array{0: array<non-empty-lowercase-string, AccessorInfo>, 1: array<non-empty-lowercase-string, MutatorInfo>, 2: array<non-empty-lowercase-string, ScopeInfo>}
      */
-    private static function computeAccessorsAndMutators(
+    private static function computeMethodMetadata(
         ClassLikeStorage $storage,
         ClassLikeStorageProvider $provider,
     ): array {
         $accessors = [];
         $mutators = [];
+        $scopes = [];
 
         foreach (self::callableMethodStorages($storage, $provider) as $methodStorage) {
             self::classifyAccessorMethod($methodStorage, $accessors, $mutators);
+            self::classifyScopeMethod($methodStorage, $scopes);
         }
 
-        return [$accessors, $mutators];
+        return [$accessors, $mutators, $scopes];
     }
 
     /**
@@ -530,6 +539,93 @@ final class ModelMetadataRegistryBuilder
         $existing = $mutators[$info->propertyName] ?? null;
         if ($existing === null || ($existing instanceof LegacyMutatorInfo && $info instanceof AttributeMutatorInfo)) {
             $mutators[$info->propertyName] = $info;
+        }
+    }
+
+    /**
+     * Classify one method into the scope map. A method can produce BOTH a legacy and an attribute
+     * entry — a `#[Scope]` on a `scopeXxx`-named method is callable both as `->scopeXxx()` (the
+     * attribute key) and `->xxx()` (the legacy key), as the pre-registry
+     * BuilderScopeHandler::resolveScopeMethodId resolved each form independently.
+     *
+     * One deliberate divergence from that call-driven predecessor: legacy detection goes through
+     * {@see EloquentModelMethods::isLegacyScopeMethodName}, which requires the StudlyCase capital
+     * after `scope` (so `scoped()`/`scopes()` are not mis-keyed as scopes `d`/`s`). An
+     * all-lowercase `scopepublished()` is therefore NOT classified, whereas the old
+     * `methodExists('scope'.ucfirst($name))` was case-insensitive and matched it. This is
+     * vanishingly rare (it violates the universal `scopeStudly` convention) and aligns scope
+     * detection with the emit-consumers (SuppressHandler / PublicScopeAccessorVisibilityHandler),
+     * which already key off the same predicate. Verified zero-movement on the acceptance delta.
+     *
+     * Identity only: the {@see ScopeInfo} carries the declaring MethodStorage and the caller-facing
+     * params (declared minus the leading `Builder $query`). `self`/`static` pinning is call-site
+     * work the handler keeps (Correction 4 of the Phase-2 plan); the builder does NOT expand them.
+     *
+     * @param array<non-empty-lowercase-string, ScopeInfo> $scopes
+     * @param-out array<non-empty-lowercase-string, ScopeInfo> $scopes
+     */
+    private static function classifyScopeMethod(MethodStorage $methodStorage, array &$scopes): void
+    {
+        $casedName = $methodStorage->cased_name;
+        if ($casedName === null) {
+            return;
+        }
+
+        // Framework methods are never user scopes; the `defining_fqcln` guard mirrors the
+        // `Illuminate\` skip in classifyAccessorMethod() (and callableMethodStorages()).
+        if ($methodStorage->defining_fqcln === null || \str_starts_with($methodStorage->defining_fqcln, 'Illuminate\\')) {
+            return;
+        }
+
+        $lowercaseName = \strtolower($casedName);
+
+        // Modern `#[Scope] public function published()` — keyed by the bare method name. The
+        // visibility-gated attribute predicate lives in EloquentModelMethods so it cannot drift from
+        // the SuppressHandler / visibility handler that share it (a private #[Scope] is rejected).
+        if (EloquentModelMethods::hasScopeAttribute($methodStorage)) {
+            $key = EloquentModelMethods::scopeKey($casedName);
+            if ($key !== null) {
+                self::insertScope($scopes, new AttributeScopeInfo($key, self::scopeCallerParams($methodStorage), $methodStorage));
+            }
+        }
+
+        // Legacy `scopePublished()` — keyed by the name after the `scope` prefix is stripped.
+        if (EloquentModelMethods::isLegacyScopeMethodName($lowercaseName, $casedName)) {
+            $key = EloquentModelMethods::scopeKey(\substr($casedName, 5));
+            if ($key !== null) {
+                self::insertScope($scopes, new LegacyScopeInfo($key, self::scopeCallerParams($methodStorage), $methodStorage));
+            }
+        }
+    }
+
+    /**
+     * Caller-facing scope params: the declared params minus the leading `Builder $query` that
+     * Laravel injects via `Model::callNamedScope`. Mirrors the pre-registry
+     * `array_slice($codebase->methods->getMethodParams($scopeMethodId), 1)` — equal for a scope,
+     * whose declaring storage holds the same param list `getMethodParams` returns.
+     *
+     * @return list<FunctionLikeParameter>
+     * @psalm-mutation-free
+     */
+    private static function scopeCallerParams(MethodStorage $methodStorage): array
+    {
+        return \array_slice($methodStorage->params, 1);
+    }
+
+    /**
+     * Insert a scope under its normalized key, mirroring Laravel's `Model::callNamedScope`
+     * precedence: an attribute-style scope wins over a legacy `scopeXxx` twin of the same name.
+     * Among same-kind entries the first seen (most-derived, since the model is walked before its
+     * ancestors) stays. Mirrors {@see insertAccessor}.
+     *
+     * @param array<non-empty-lowercase-string, ScopeInfo> $scopes
+     * @param-out array<non-empty-lowercase-string, ScopeInfo> $scopes
+     */
+    private static function insertScope(array &$scopes, ScopeInfo $info): void
+    {
+        $existing = $scopes[$info->name] ?? null;
+        if ($existing === null || ($existing instanceof LegacyScopeInfo && $info instanceof AttributeScopeInfo)) {
+            $scopes[$info->name] = $info;
         }
     }
 

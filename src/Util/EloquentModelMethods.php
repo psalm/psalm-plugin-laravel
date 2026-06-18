@@ -135,6 +135,35 @@ final class EloquentModelMethods
     }
 
     /**
+     * Normalize a query-scope method name to the key callers dispatch by.
+     *
+     * Unlike accessors, scopes are METHOD calls (`$builder->published()`), so there is NO
+     * `Str::studly`/`Str::camel` separator-collapse of the call — the key is a plain lowercase of
+     * the post-`scope`-strip name. The caller strips the `scope` prefix for a legacy `scopeXxx`
+     * (`substr($casedName, 5)`) and passes the bare method name for a `#[Scope]`-attributed method;
+     * both then lowercase here. `scopePublished` → `published`, `#[Scope] publishedPosts` →
+     * `publishedposts`. PHP dispatch is case-insensitive, so the lowercase key matches every casing
+     * Laravel accepts. Returns null when the value collapses to empty (a bare `scope()` would, but
+     * {@see isLegacyScopeMethodName}'s length guard already excludes it).
+     *
+     * @return non-empty-lowercase-string|null
+     * @psalm-pure
+     */
+    public static function scopeKey(string $normalizedName): ?string
+    {
+        $key = \strtolower($normalizedName);
+        if ($key === '') {
+            return null;
+        }
+
+        // strtolower() guarantees a lowercase result at runtime, but Psalm 7's stub does not refine
+        // its output to `lowercase-string` — assert the guarantee it cannot infer (mirrors
+        // {@see accessorPropertyKey}).
+        /** @psalm-var non-empty-lowercase-string $key */
+        return $key;
+    }
+
+    /**
      * Whether a method is a legacy attribute accessor (`getXxxAttribute()`) or mutator
      * (`setXxxAttribute()`), dispatched via Eloquent's `__get()` / `__set()` magic.
      *

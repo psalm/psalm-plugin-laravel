@@ -12,11 +12,11 @@ use Illuminate\Database\Eloquent\Model;
  * Immutable metadata snapshot for a single Eloquent model.
  *
  * {@see \Psalm\LaravelPlugin\Providers\ModelMetadataRegistry} populates all
- * public-readonly fields plus the `schema()`, `casts()`, `accessors()`, and `mutators()`
- * accessors. All return pre-computed data; lazy memoization was not required because the
- * compute cost per model is small.
+ * public-readonly fields plus the `schema()`, `casts()`, `accessors()`, `mutators()`, and
+ * `scopes()` accessors. All return pre-computed data; lazy memoization was not required because
+ * the compute cost per model is small.
  *
- * The remaining accessors (relations/scopes/knownProperties) are part of the stable API
+ * The remaining accessors (relations/knownProperties) are part of the stable API
  * shape so later handler migrations don't change the contract, but throw
  * {@see \LogicException} until their producing phase lands.
  *
@@ -48,6 +48,7 @@ final readonly class ModelMetadata
      * @param array<non-empty-string, CastInfo>             $castsData Pre-computed cast map (column → CastInfo).
      * @param array<non-empty-lowercase-string, AccessorInfo> $accessorsData Pre-computed accessor map, keyed by snake_case property name; full-callable (self + traits + inherited user ancestors).
      * @param array<non-empty-lowercase-string, MutatorInfo>  $mutatorsData  Pre-computed mutator map, keyed by snake_case property name; the write side of accessors (legacy `setXxxAttribute` may exist write-only).
+     * @param array<non-empty-lowercase-string, ScopeInfo>    $scopesData    Pre-computed scope map, keyed by the normalized scope name (`scopePublished`/`#[Scope] published` → `published`); full-callable. Identity only — call-site `self`/`static` pinning stays in {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler}.
      */
     public function __construct(
         public string $fqcn,
@@ -67,6 +68,7 @@ final readonly class ModelMetadata
         private array $castsData,
         private array $accessorsData,
         private array $mutatorsData,
+        private array $scopesData,
     ) {}
 
     public function schema(): TableSchema
@@ -118,15 +120,20 @@ final readonly class ModelMetadata
     }
 
     /**
+     * Scope map keyed by the normalized scope name — legacy `scopePublished()` and
+     * `#[Scope] public function published()` both key as `published`. Full-callable (self +
+     * traits + inherited user ancestors), so a scope inherited from an abstract base resolves on
+     * the concrete child. Attribute-style wins over a legacy twin of the same name (Laravel's
+     * `Model::callNamedScope` precedence). Each {@see ScopeInfo} carries identity only — the
+     * declaring {@see \Psalm\Storage\MethodStorage} and the caller-facing params (declared params
+     * minus the leading `Builder $query`); call-site `self`/`static` pinning happens in
+     * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler}.
+     *
      * @return array<non-empty-lowercase-string, ScopeInfo>
-     * @psalm-pure
-     * @throws \LogicException until Phase 2 lands.
      */
     public function scopes(): array
     {
-        throw new \LogicException(
-            'ModelMetadata::scopes() is not yet implemented — scheduled for Phase 2 of the registry migration.',
-        );
+        return $this->scopesData;
     }
 
     /**

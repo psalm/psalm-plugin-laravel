@@ -14,6 +14,8 @@ use App\Models\SpecializationPivot;
 use App\Models\UlidModel;
 use App\Models\UuidModel;
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -33,10 +35,12 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeAccessorInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeMutatorInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeScopeInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\CastShape;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\LegacyAccessorInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\LegacyMutatorInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\LegacyScopeInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyInfo;
@@ -46,10 +50,13 @@ use Psalm\LaravelPlugin\Providers\ModelMetadata\TraitFlags;
 use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\Progress\VoidProgress;
+use Psalm\Storage\AttributeStorage;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
@@ -698,14 +705,170 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame(WorkOrderCollection::class, $metadata->customCollection);
     }
 
-    #[Test]
-    public function scopes_getter_throws_until_implemented(): void
-    {
-        // accessors()/mutators() are implemented now; scopes() (2b) and relations() (2c) still throw.
-        $metadata = $this->makeStubMetadata(WorkOrder::class);
+    // ---------------------------------------------------------------------
+    // Scopes (storage-derived, full-callable; identity only)
+    // ---------------------------------------------------------------------
 
-        $this->expectException(\LogicException::class);
-        $metadata->scopes();
+    #[Test]
+    public function legacy_scope_keys_by_stripped_name_and_drops_query_param(): void
+    {
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        // scopePublished(Builder $query) → key 'published', params [] (the $query is sliced off).
+        $this->defineAppearingMethod(
+            $storage,
+            'scopePublished',
+            new Union([new TNamedObject(Builder::class)]),
+            params: [$this->queryParam()],
+        );
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $scope = $this->metadataFor(Customer::class)->scopes()['published'] ?? null;
+        $this->assertInstanceOf(LegacyScopeInfo::class, $scope);
+        $this->assertSame([], $scope->parameters, 'the leading Builder $query is excluded');
+    }
+
+    #[Test]
+    public function attribute_scope_keys_by_bare_name_and_keeps_extra_params(): void
+    {
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        // #[Scope] published(Builder $query, int $minViews) → key 'published', params [int $minViews].
+        $this->defineAppearingMethod(
+            $storage,
+            'published',
+            new Union([new TNamedObject(Builder::class)]),
+            params: [$this->queryParam(), new FunctionLikeParameter('minViews', false, Type::getInt())],
+            scopeAttribute: true,
+        );
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $scope = $this->metadataFor(Customer::class)->scopes()['published'] ?? null;
+        $this->assertInstanceOf(AttributeScopeInfo::class, $scope);
+        $this->assertCount(1, $scope->parameters);
+        $this->assertSame('minViews', $scope->parameters[0]->name);
+    }
+
+    #[Test]
+    public function attribute_scope_beats_legacy_twin_of_the_same_name(): void
+    {
+        // Laravel's Model::callNamedScope checks #[Scope] methods before legacy scopeXxx, so an
+        // attribute scope must win when both spell the same key. Mirrors insertAccessor precedence.
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        $this->defineAppearingMethod($storage, 'scopeActive', new Union([new TNamedObject(Builder::class)]), params: [$this->queryParam()]);
+        $this->defineAppearingMethod($storage, 'active', new Union([new TNamedObject(Builder::class)]), params: [$this->queryParam()], scopeAttribute: true);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $this->assertInstanceOf(AttributeScopeInfo::class, $this->metadataFor(Customer::class)->scopes()['active'] ?? null);
+    }
+
+    #[Test]
+    public function scope_attribute_on_a_legacy_named_method_produces_both_entries(): void
+    {
+        // `#[Scope] scopePublished()` is dispatchable both as ->scopePublished() (the attribute,
+        // keyed by the bare name) and ->published() (the legacy strip) — Laravel's callNamedScope
+        // resolves each form independently, so the registry keeps both entries.
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        $this->defineAppearingMethod(
+            $storage,
+            'scopePublished',
+            new Union([new TNamedObject(Builder::class)]),
+            params: [$this->queryParam()],
+            scopeAttribute: true,
+        );
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+        $scopes = $this->metadataFor(Customer::class)->scopes();
+
+        $this->assertInstanceOf(AttributeScopeInfo::class, $scopes['scopepublished'] ?? null);
+        $this->assertInstanceOf(LegacyScopeInfo::class, $scopes['published'] ?? null);
+    }
+
+    #[Test]
+    public function private_attribute_scope_is_not_registered(): void
+    {
+        // A private #[Scope] cannot dispatch on any supported Laravel (EloquentModelMethods::hasScopeAttribute
+        // rejects it), so it must not appear in the scope map.
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        $this->defineAppearingMethod(
+            $storage,
+            'secret',
+            new Union([new TNamedObject(Builder::class)]),
+            visibility: ClassLikeAnalyzer::VISIBILITY_PRIVATE,
+            params: [$this->queryParam()],
+            scopeAttribute: true,
+        );
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $this->assertArrayNotHasKey('secret', $this->metadataFor(Customer::class)->scopes());
+    }
+
+    #[Test]
+    public function trait_hosted_scope_is_reached(): void
+    {
+        // A scope whose declaring_fqcln is a trait (not the model body) must still classify — the
+        // full-callable walk yields it from the carrier's appearing_method_ids.
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        $this->defineAppearingMethod(
+            $storage,
+            'scopeArchived',
+            new Union([new TNamedObject(Builder::class)]),
+            declaringFqcn: 'App\\Concerns\\Archivable',
+            params: [$this->queryParam()],
+        );
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $this->assertInstanceOf(LegacyScopeInfo::class, $this->metadataFor(Customer::class)->scopes()['archived'] ?? null);
+    }
+
+    #[Test]
+    public function inherited_scope_from_abstract_base_resolves_on_child(): void
+    {
+        // The scope is declared on the abstract parent; the full-callable walk over parent_classes
+        // surfaces it on the concrete child (mirrors BuilderScopeHandler's methodExists resolution).
+        $codebase = $this->makeCodebase();
+        $child = $this->registerStorage(Contract::class);
+        $child->parent_classes[\strtolower(AbstractDocument::class)] = AbstractDocument::class;
+        $parent = $this->registerStorage(AbstractDocument::class);
+        $this->defineAppearingMethod($parent, 'scopeDraft', new Union([new TNamedObject(Builder::class)]), params: [$this->queryParam()]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Contract::class);
+
+        $this->assertInstanceOf(LegacyScopeInfo::class, $this->metadataFor(Contract::class)->scopes()['draft'] ?? null);
+    }
+
+    #[Test]
+    public function abstract_base_populates_scopes_without_instantiation(): void
+    {
+        // computeForAbstract never instantiates, yet the storage-derived scope map still populates
+        // (so a scope resolves on a Builder<AbstractBase> receiver — #901).
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(AbstractDocument::class);
+        $this->defineAppearingMethod($storage, 'scopeDraft', new Union([new TNamedObject(Builder::class)]), params: [$this->queryParam()]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AbstractDocument::class);
+
+        $this->assertInstanceOf(LegacyScopeInfo::class, $this->metadataFor(AbstractDocument::class)->scopes()['draft'] ?? null);
+    }
+
+    #[Test]
+    public function model_without_scopes_has_empty_scope_map(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(Customer::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $this->assertSame([], $this->metadataFor(Customer::class)->scopes());
     }
 
     #[Test]
@@ -798,7 +961,12 @@ final class ModelMetadataRegistryTest extends TestCase
      * declaring class's storage — mirroring how Psalm stores trait/inherited methods — because
      * registerStorage() alone produces an empty method graph.
      *
-     * @param class-string|null $declaringFqcn
+     * Pass $params (e.g. a leading `Builder $query` plus extra args) to exercise scope param
+     * slicing, and $scopeAttribute to attach a `#[Scope]` so the method classifies as an
+     * attribute-style scope.
+     *
+     * @param class-string|null            $declaringFqcn
+     * @param list<FunctionLikeParameter>  $params
      */
     private function defineAppearingMethod(
         ClassLikeStorage $carrier,
@@ -806,6 +974,8 @@ final class ModelMetadataRegistryTest extends TestCase
         Union $returnType,
         ?string $declaringFqcn = null,
         int $visibility = ClassLikeAnalyzer::VISIBILITY_PUBLIC,
+        array $params = [],
+        bool $scopeAttribute = false,
     ): void {
         $declaringFqcn ??= $carrier->name;
         $lower = \strtolower($casedName);
@@ -815,6 +985,10 @@ final class ModelMetadataRegistryTest extends TestCase
         $methodStorage->defining_fqcln = $declaringFqcn;
         $methodStorage->visibility = $visibility;
         $methodStorage->return_type = $returnType;
+        $methodStorage->params = $params;
+        if ($scopeAttribute) {
+            $methodStorage->attributes = [$this->scopeAttributeStorage()];
+        }
 
         $declaringStorage = $this->classLikeStorageProvider->has($declaringFqcn)
             ? $this->classLikeStorageProvider->get($declaringFqcn)
@@ -823,6 +997,29 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $carrier->appearing_method_ids[$lower] = new MethodIdentifier($carrier->name, $lower);
         $carrier->declaring_method_ids[$lower] = new MethodIdentifier($declaringFqcn, $lower);
+    }
+
+    /**
+     * Build a scope query parameter (`Builder $query`) — the leading param Laravel injects and the
+     * registry slices off. {@see scopeAttributeStorage} for the `#[Scope]` marker.
+     */
+    private function queryParam(): FunctionLikeParameter
+    {
+        return new FunctionLikeParameter('query', false, new Union([new TNamedObject(Builder::class)]));
+    }
+
+    /**
+     * An {@see AttributeStorage} carrying only the `#[Scope]` FQCN — enough for
+     * {@see \Psalm\LaravelPlugin\Util\EloquentModelMethods::hasScopeAttribute}, which reads only
+     * `fq_class_name`. Built via reflection because AttributeStorage's constructor demands a
+     * CodeLocation that a storage-only unit fixture has no source node to produce.
+     */
+    private function scopeAttributeStorage(): AttributeStorage
+    {
+        $attribute = (new \ReflectionClass(AttributeStorage::class))->newInstanceWithoutConstructor();
+        (new \ReflectionProperty(AttributeStorage::class, 'fq_class_name'))->setValue($attribute, Scope::class);
+
+        return $attribute;
     }
 
     /**
@@ -858,6 +1055,7 @@ final class ModelMetadataRegistryTest extends TestCase
             castsData: [],
             accessorsData: [],
             mutatorsData: [],
+            scopesData: [],
         );
     }
 }
