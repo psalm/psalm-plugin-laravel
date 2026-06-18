@@ -196,6 +196,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Collections/HigherOrderCollectionProxyHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\HigherOrderCollectionProxyHandler::class);
 
+        require_once __DIR__ . '/Handlers/Support/ConditionableWhenHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ConditionableWhenHandler::class);
+
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
 

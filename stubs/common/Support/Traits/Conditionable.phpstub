@@ -6,9 +6,9 @@ namespace Illuminate\Support\Traits;
  * Simplify return types for Conditionable methods.
  *
  * Laravel's PHPDoc uses `@return $this|TWhenReturnType` with template inference,
- * but Psalm 7 resolves callable return types to `mixed`, breaking fluent chains.
- * Stubbing as `@return $this` makes ->when() and ->unless() chainable on
- * Builder, Collection, Stringable, and any other class using this trait.
+ * but Psalm 7 resolves the callable return type to `mixed`, breaking fluent chains.
+ * We stub as `@return $this` to keep the chain. A callback returning a different type
+ * is narrowed by {@see \Psalm\LaravelPlugin\Handlers\Support\ConditionableWhenHandler}.
  */
 trait Conditionable
 {
