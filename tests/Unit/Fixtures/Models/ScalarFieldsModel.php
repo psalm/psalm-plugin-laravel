@@ -23,6 +23,13 @@ final class ScalarFieldsModel extends Model
 
     protected $hidden = ['Password'];
 
+    // Non-empty $visible is Eloquent's serialization allow-list, applied BEFORE $hidden:
+    // getArrayableItems() intersects on $visible, then subtracts $hidden, so for a key in BOTH lists
+    // $hidden still wins. The registry captures the raw declared list verbatim; resolving
+    // visible-vs-hidden is the serialization-shape consumer's job (#923), so the case is preserved
+    // like the other lists.
+    protected $visible = ['Name', 'EMAIL'];
+
     protected $appends = ['FullName'];
 
     // Mixed-case cast key locks the case-preservation invariant on the cast map.

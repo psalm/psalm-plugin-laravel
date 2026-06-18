@@ -47,6 +47,7 @@ use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyType;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\PropertyOrigin;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\RelationInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\TableSchema;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\TraitFlags;
@@ -373,6 +374,11 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, AbstractDocument::class);
 
         $this->assertArrayHasKey('referencecode', $this->metadataFor(AbstractDocument::class)->accessors());
+        // The abstract path feeds the same storage-derived accessor into knownProperties() — no
+        // instance required — so an abstract base exposes a populated, origin-tagged property set too.
+        $this->assertTrue(
+            $this->metadataFor(AbstractDocument::class)->knownProperties()['referencecode']->has(PropertyOrigin::Accessor),
+        );
     }
 
     #[Test]
@@ -648,6 +654,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame(['Name', 'EMAIL'], $metadata->fillable);
         $this->assertSame(['Id'], $metadata->guarded);
         $this->assertSame(['Password'], $metadata->hidden);
+        $this->assertSame(['Name', 'EMAIL'], $metadata->visible);
         $this->assertSame(['FullName'], $metadata->appends);
         $this->assertSame(['primaryAuthor'], $metadata->with);
         $this->assertSame(['approvedComments'], $metadata->withCount);
@@ -937,12 +944,57 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function phase_3_known_properties_throws_logic_exception(): void
+    public function known_properties_merge_and_collapse_origins_across_sources(): void
     {
-        $metadata = $this->makeStubMetadata(WorkOrder::class);
+        // `full_name` is named three independent ways — a schema column, a legacy accessor, and a
+        // $appends entry — and accessorPropertyKey() collapses every spelling to the same `fullname`
+        // key, so the three origins must land on ONE entry rather than fragmenting into
+        // full_name / fullname / FullName. The remaining sources (cast, write-only mutator) each
+        // contribute their own key + origin.
+        $this->seedSchema('scalar_fields_models', [
+            new SchemaColumn('id', SchemaColumn::TYPE_INT),
+            new SchemaColumn('full_name', SchemaColumn::TYPE_STRING),
+        ]);
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(ScalarFieldsModel::class);
+        $this->defineAppearingMethod($storage, 'getFullNameAttribute', Type::getString());
+        $this->defineAppearingMethod($storage, 'setNicknameAttribute', Type::getVoid());
 
-        $this->expectException(\LogicException::class);
-        $metadata->knownProperties();
+        ModelMetadataRegistryBuilder::warmUp($codebase, ScalarFieldsModel::class);
+        $known = $this->metadataFor(ScalarFieldsModel::class)->knownProperties();
+
+        // Triple merge onto one collapsed key — no fragmentation into the un-collapsed spelling.
+        $this->assertArrayHasKey('fullname', $known);
+        $this->assertTrue($known['fullname']->has(PropertyOrigin::SchemaColumn));
+        $this->assertTrue($known['fullname']->has(PropertyOrigin::Accessor));
+        $this->assertTrue($known['fullname']->has(PropertyOrigin::Appended));
+        $this->assertArrayNotHasKey('full_name', $known);
+
+        // Each remaining source contributes its own origin.
+        $this->assertArrayHasKey('id', $known);
+        $this->assertTrue($known['id']->has(PropertyOrigin::SchemaColumn));
+        $this->assertArrayHasKey('createdat', $known);            // from $casts ['CreatedAt' => ...]
+        $this->assertTrue($known['createdat']->has(PropertyOrigin::Cast));
+        $this->assertArrayHasKey('nickname', $known);             // write-only setNicknameAttribute()
+        $this->assertTrue($known['nickname']->has(PropertyOrigin::Mutator));
+    }
+
+    #[Test]
+    public function known_properties_excludes_fillable_only_names(): void
+    {
+        // No schema seeded and no accessor/relation wired: only $casts (CreatedAt) and $appends
+        // (FullName) supply names. $fillable (Name / EMAIL) is a guard-list over columns, not an
+        // independent name source, so its entries must NOT surface as known properties.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(ScalarFieldsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ScalarFieldsModel::class);
+        $known = $this->metadataFor(ScalarFieldsModel::class)->knownProperties();
+
+        $this->assertArrayHasKey('createdat', $known);
+        $this->assertArrayHasKey('fullname', $known);
+        $this->assertArrayNotHasKey('name', $known);
+        $this->assertArrayNotHasKey('email', $known);
     }
 
     // ---------------------------------------------------------------------
@@ -1104,6 +1156,7 @@ final class ModelMetadataRegistryTest extends TestCase
             with: [],
             withCount: [],
             hidden: [],
+            visible: [],
             connection: null,
             morphAlias: null,
             customBuilder: null,
@@ -1114,6 +1167,7 @@ final class ModelMetadataRegistryTest extends TestCase
             mutatorsData: [],
             scopesData: [],
             relationsData: $relations,
+            knownPropertiesData: [],
         );
     }
 }
