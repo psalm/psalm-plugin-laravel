@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781780827115,
+  "lastUpdate": 1781782531567,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6500,6 +6500,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.29,
             "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f9d4e23cd9bb5848d6f33dd4facf16da478069ba",
+          "message": "Fix `mixed` collapse when chaining off relation methods (replace `$this` by `static` in generic templates, use `@template-covariant` for relationships) (#1055)\n\n* fix(eloquent): resolve mixed collapse on chained relation calls\n\nChaining a Builder/Relation method directly off a relation factory\n(e.g. $this->belongsTo(Customer::class)->withoutGlobalScopes() inside a\nrelation method) collapsed the receiver to `mixed` and raised\nMixedMethodCall. The relation return docblocks templated the declaring\nmodel as `$this`, which Psalm 7 does not late-static-substitute when the\nreturned relation is chained.\n\nThe fix is two coupled halves; doing only the first regresses:\n\n- HasRelationships now returns Relation<TRelated, static> from the 11\n  relation factories. Unlike `$this`, Psalm substitutes `static` when\n  the relation is chained.\n- TDeclaringModel is made @template-covariant across the 14 relation\n  classes. On a non-final model the factory infers\n  Relation<TRelated, Order&static>, which only satisfies a call-site\n  @return Relation<TRelated, self> under covariance (Order&static <:\n  Order). With the previous invariant template this failed with\n  InvalidReturnStatement.\n\nCovariance is sound here: TDeclaringModel is never consumed through a\nnon-constructor parameter in our stubs (it appears only in output\npositions plus the variance-exempt HasOneOrManyThrough constructor), so\nit cannot mask a real argument-type error. The `static` return param and\nthe covariant template are a deliberate Psalm-7 divergence from Laravel\nsource, documented in Relation.phpstub and the stub-authoring rules.\n\nCloses #913\n\n* test(eloquent): pin known Psalm-7 relation stub limitations\n\nOnce the #913 fix stops relation chains collapsing to `mixed`, two pre-existing\nPsalm 7 limitations surface on strict codebases (neither is a plugin bug). Pin\nthe current output so it flips loudly when upstream lands:\n\n- Pivot relations (belongsToMany/morphToMany/morphedByMany) raise\n  MissingTemplateParam on chained calls: the 4-template classes have the last\n  two args defaulted, and Psalm 7 does not honor @template defaults for partial\n  generics. Laravel ships under-filled returns that pass under PHPStan/Larastan.\n  Not \"completed\" to 4 args (pinning TAccessor='pivot' false-positives ->as()\n  overrides; @psalm-this-out generic narrowing is inert). Upstream: vimeo/psalm#5407, PR vimeo/psalm#11790.\n- morphTo() with a narrowed related type raises MoreSpecificReturnType: the\n  morph target is resolved at runtime, so the stub can only return\n  MorphTo<Model, static>. Inherent to polymorphic relations; app-side.\n\nRefs #913\n\n* docs(eloquent): @todo for morph-map-aware morphTo narrowing #913\n\n* test(eloquent): align #913 family/morphTo pins with the fixed branch\n\nThe two pins (ef860151) encoded master's pre-fix mixed-collapse, but this\nbranch already carries the #913 fix (static + covariant TDeclaringModel), so\nthe actual output is the fixed behavior: the non-pivot relation family resolves\ncleanly, the pivot factories (belongsToMany/morphToMany) emit the documented\nMissingTemplateParam (Psalm ignores @template defaults; vimeo/psalm#5407 / #11790),\nand a narrowed morphTo emits MoreSpecificReturnType/LessSpecificReturnStatement\n(runtime morph-map target; tracked by the morphTo @todo). EXPECTF + docblocks\nupdated to match; they are now regression tests for the fix.\n\nRefs #913",
+          "timestamp": "2026-06-18T13:32:39+02:00",
+          "tree_id": "86fd27adf65d81f89379f938ff4b9e8028c05b9d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f9d4e23cd9bb5848d6f33dd4facf16da478069ba"
+        },
+        "date": 1781782531015,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.58,
+            "range": "± 0.1",
             "unit": "s"
           },
           {
