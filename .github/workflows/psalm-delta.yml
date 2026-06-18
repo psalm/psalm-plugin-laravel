@@ -70,15 +70,16 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: React to comment
+      - name: React to comment (processing)
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           COMMENT_ID: ${{ github.event.comment.id }}
         run: |
-          # Cosmetic acknowledgement only; never let it abort the pipeline.
+          # :eyes: signals "seen, processing". The report job swaps it for
+          # :rocket: once the delta finishes. Cosmetic only; never abort.
           gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
-            -f content=rocket --silent || echo "reaction failed (non-fatal)"
+            -f content=eyes --silent || echo "reaction failed (non-fatal)"
 
       - name: Resolve PR refs (+ fork-PR security guard)
         id: refs
@@ -308,4 +309,27 @@ jobs:
             gh api "repos/$REPO/issues/comments/$EXISTING" -X PATCH -F body=@comment.md --silent
           else
             gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@comment.md --silent
+          fi
+
+      # Flip the trigger comment from :eyes: (processing, set in prepare) to
+      # :rocket: (done). Runs even if the report failed, so the comment never
+      # stays stuck on :eyes:. Cosmetic only; never abort the job.
+      - name: React to comment (done)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          # Add :rocket: first so a reaction is always present during the swap.
+          gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
+            -f content=rocket --silent || echo "rocket reaction failed (non-fatal)"
+          # Remove the :eyes: this workflow's token added in prepare. Match on the
+          # actor login so we never delete a human's :eyes:.
+          EYES_ID=$(gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
+            --jq '.[] | select(.content == "eyes" and .user.login == "github-actions[bot]") | .id' \
+            | head -1)
+          if [ -n "$EYES_ID" ]; then
+            gh api -X DELETE "repos/$REPO/issues/comments/$COMMENT_ID/reactions/$EYES_ID" --silent \
+              || echo "eyes removal failed (non-fatal)"
           fi
