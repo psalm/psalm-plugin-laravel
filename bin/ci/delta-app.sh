@@ -17,6 +17,7 @@
 #     --out /path/output-dir --base-label base-AAAA --head-label pr-BBBB \
 #     [--php 8.3] [--project-dir app] [--date-marker cache] \
 #     [--prime 'composer update foo --no-interaction'] \
+#     [--psalm-args '--php-version=8.0'] \
 #     [--app-src /cache/monica-src] [--mem 4G]
 #
 # Output (per side, <label> in {base-label, head-label}):
@@ -34,7 +35,7 @@ set -euo pipefail
 
 APP="" REPO="" REF="" PLUGIN_BASE="" PLUGIN_HEAD="" OUT=""
 BASE_LABEL="" HEAD_LABEL="" PROJECT_DIR=""
-DATE_MARKER="cache" PRIME="" APP_SRC="" MEM="4G"
+DATE_MARKER="cache" PRIME="" APP_SRC="" MEM="4G" PSALM_ARGS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -52,6 +53,7 @@ while [[ $# -gt 0 ]]; do
         --project-dir) PROJECT_DIR="$2"; shift 2 ;;
         --date-marker) DATE_MARKER="$2"; shift 2 ;;
         --prime) PRIME="$2"; shift 2 ;;
+        --psalm-args) PSALM_ARGS="$2"; shift 2 ;;
         --app-src) APP_SRC="$2"; shift 2 ;;
         --mem) MEM="$2"; shift 2 ;;
         *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
@@ -76,6 +78,13 @@ APP_SRC="${APP_SRC:-${OUT}/${APP}/src}"
 
 COMPOSER_FLAGS=(--no-interaction --no-progress --ignore-platform-reqs)
 export COMPOSER_MEMORY_LIMIT=-1
+
+# Optional extra Psalm CLI args (e.g. --php-version=8.0), split on whitespace
+# into an array so each token is passed as a separate argument. `=` is not in
+# IFS, so --php-version=8.0 stays one token. `read -ra` returns 0 even on empty
+# input (set -e safe); the array is expanded with the bash-3.2-safe
+# ${arr[@]+...} guard at the call site to avoid an unbound-variable error.
+read -ra PSALM_EXTRA <<< "$PSALM_ARGS"
 
 # Copy a tree using a copy-on-write clone where the filesystem supports it
 # (APFS clonefile on macOS, btrfs/xfs reflinks on Linux): instant and low-disk,
@@ -239,7 +248,15 @@ fi
 
 run_side() {
     local label="$1" plugin_dir="$2" relink="$3"
-    local app_dir="${OUT}/${APP}/work-${label}"
+    # Both sides use the SAME absolute work-dir path (not work-<label>). Psalm
+    # bakes the analysis path into the report in ways that survive any post-hoc
+    # normalisation — notably literal-string TYPES that Psalm then TRUNCATES, so
+    # only a side-dependent prefix of the path survives with no full token left to
+    # rewrite. A per-side path therefore manufactures false +N/-N churn for every
+    # such issue. Reusing one path makes the baked path byte-identical on both sides,
+    # so only real changes differ. Safe because base and head run sequentially
+    # for an app (one matrix job), each starting with rm -rf below.
+    local app_dir="${OUT}/${APP}/work"
     local issues_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--issues.json"
     local perf_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--perf.json"
     local crash_log="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--crash.log"
@@ -250,7 +267,7 @@ run_side() {
         return 0
     fi
 
-    # Fresh working copy off the source so base and head never interfere.
+    # Fresh working copy off the source (the shared work dir is rebuilt per side).
     rm -rf "$app_dir"
     fast_copy "$APP_SRC" "$app_dir"
 
@@ -292,6 +309,7 @@ run_side() {
         cd "$app_dir"
         php -d memory_limit="$MEM" vendor/bin/psalm -c psalm.xml \
             --no-cache --no-diff --no-progress --no-suggestions --monochrome \
+            ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
             --report="${issues_file}" >"$out_txt" 2>"$err_txt"
     ) || exit_code=$?
     wall=$(( $(date +%s) - t0 ))
@@ -306,12 +324,10 @@ run_side() {
         return 0
     fi
 
-    # Normalise file_path to be relative to the working copy. Both sides run in
-    # different temp dirs (work-base-* vs work-pr-*), so Psalm's absolute
-    # file_path would differ for EVERY issue and the identity tuple
-    # (file_path, line_from, line_to, type, message) would never match across
-    # sides — making every issue look both added and removed (+N/-N, ΔNet 0).
-    # Stripping the work-dir prefix yields a stable path shared by both sides.
+    # Make file_path relative to the (now side-independent) work dir, so stored
+    # identities are readable. Because both sides share the work-dir path, every
+    # other place Psalm embeds it (messages, anon-class names, literal types) is
+    # already byte-identical across sides and needs no normalisation.
     # Use the canonical (symlink-resolved) dir — Psalm reports realpath'd paths,
     # so on macOS the report says /private/tmp/... while $app_dir is /tmp/...
     local app_dir_real

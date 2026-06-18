@@ -204,6 +204,7 @@ jobs:
           PHP: ${{ matrix.php }}
           PROJECT_DIR: ${{ matrix.project_dir }}
           PRIME: ${{ matrix.prime }}
+          PSALM_ARGS: ${{ matrix.psalm_args }}
           BASE_LABEL: ${{ needs.prepare.outputs.base_label }}
           HEAD_LABEL: ${{ needs.prepare.outputs.head_label }}
         run: |
@@ -220,6 +221,7 @@ jobs:
           )
           [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
           [ -n "$PRIME" ] && args+=(--prime "$PRIME")
+          [ -n "$PSALM_ARGS" ] && args+=(--psalm-args "$PSALM_ARGS")
           # The harness (default branch) owns measurement so the PR cannot alter it.
           bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
 

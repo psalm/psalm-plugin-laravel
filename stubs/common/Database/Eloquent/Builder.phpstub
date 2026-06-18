@@ -522,22 +522,30 @@ class Builder implements BuilderContract
     public function pluck($column, $key = null) {}
 
     /**
-     * @param  int  $perPage
+     * Returns the concrete Illuminate\Pagination class, not the contract. Laravel's
+     * own Eloquent\Builder docblock and runtime both produce the concrete paginator
+     * (`new LengthAwarePaginator(...)`); typing the concrete class lets callers reach
+     * its concrete-only surface (getCollection(), through(), withQueryString(), …)
+     * without an UndefinedInterfaceMethod. The concrete implements the contract, so
+     * code typed on the contract still accepts the result.
+     *
+     * @param  int|null|(\Closure(int): int)  $perPage
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, TModel>
+     * @param  (\Closure(): int)|int|null  $total
+     * @return \Illuminate\Pagination\LengthAwarePaginator<int, TModel>
      *
      * @throws \InvalidArgumentException
      */
-    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null, $total = null) {}
 
     /**
      * @param  int|null  $perPage
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\Paginator<int, TModel>
+     * @return \Illuminate\Pagination\Paginator<int, TModel>
      */
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
