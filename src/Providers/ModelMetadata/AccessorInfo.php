@@ -21,7 +21,9 @@ use Psalm\Type\Union;
 abstract readonly class AccessorInfo
 {
     /**
-     * @param non-empty-lowercase-string $propertyName Normalized property name (e.g. `full_name`).
+     * @param non-empty-lowercase-string $propertyName Canonical accessor key — separators stripped and
+     *        lowercased, matching Laravel's spelling-independent resolution (`fullName()` → `fullname`).
+     *        See {@see \Psalm\LaravelPlugin\Util\EloquentModelMethods::accessorPropertyKey()}.
      */
     public function __construct(
         public string $propertyName,

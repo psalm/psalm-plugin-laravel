@@ -139,15 +139,71 @@ final class EloquentModelMethods
      * (`setXxxAttribute()`), dispatched via Eloquent's `__get()` / `__set()` magic.
      *
      * Matches the lowercase method key — `$classStorage->methods` and appearing_method_ids are keyed
-     * lowercase. The `.+` requires at least one character between the prefix and `attribute`, so the
-     * framework's own bare `getAttribute()` / `setAttribute()` are not matched.
+     * lowercase. The framework's own bare `getAttribute()` / `setAttribute()` are not matched
+     * (there must be at least one character between the prefix and `attribute`).
      *
      * @psalm-pure
      */
     public static function isLegacyAccessorMethodName(string $lowercaseName): bool
     {
-        return \preg_match('/^get.+attribute$/', $lowercaseName) === 1
-            || \preg_match('/^set.+attribute$/', $lowercaseName) === 1;
+        return self::legacyAccessorKind($lowercaseName) !== null;
+    }
+
+    /**
+     * Classify a legacy accessor/mutator method name into its kind, or null when it is neither.
+     * `getXxxAttribute` → `'get'` (read accessor), `setXxxAttribute` → `'set'` (write mutator).
+     *
+     * Single source of truth for the get/set + StudlyCase convention so the registry builder and
+     * {@see isLegacyAccessorMethodName} cannot drift apart. The bare framework `getAttribute()` /
+     * `setAttribute()` are excluded — they have no character between the prefix and `attribute`.
+     *
+     * @return 'get'|'set'|null
+     * @psalm-pure
+     */
+    public static function legacyAccessorKind(string $lowercaseName): ?string
+    {
+        if (!\str_ends_with($lowercaseName, 'attribute')) {
+            return null;
+        }
+
+        if (\str_starts_with($lowercaseName, 'get') && $lowercaseName !== 'getattribute') {
+            return 'get';
+        }
+
+        if (\str_starts_with($lowercaseName, 'set') && $lowercaseName !== 'setattribute') {
+            return 'set';
+        }
+
+        return null;
+    }
+
+    /**
+     * Derive the canonical lookup key identifying an accessor property — the spelling-independent
+     * identity Laravel resolves by.
+     *
+     * Eloquent dispatches `$model->prop` by checking `method_exists('get'.Str::studly($prop).'Attribute')`
+     * and `method_exists(Str::camel($prop))`; `Str::studly`/`Str::camel` strip `_`/`-`/space and
+     * `method_exists` is case-insensitive. So `fullName()`, `$model->full_name`, `$model->fullName`,
+     * `$model->fullname`, and an acronym like `apiURL()` accessed as `$model->api_url` all resolve to one
+     * accessor. We reproduce that equivalence class exactly — strip separators, lowercase — so the
+     * builder (which keys accessors by this) and the read handler (which looks them up by this) agree for
+     * every spelling Laravel accepts. This mirrors the pre-registry handler's own `str_replace('_', '')`
+     * + case-insensitive `methodExists` matching. Returns null when the value collapses to empty.
+     *
+     * @return non-empty-lowercase-string|null
+     * @psalm-pure
+     */
+    public static function accessorPropertyKey(string $value): ?string
+    {
+        $key = \strtolower(\str_replace(['_', '-', ' '], '', $value));
+        if ($key === '') {
+            return null;
+        }
+
+        // strtolower() guarantees a lowercase result at runtime, but Psalm 7's stub does not refine
+        // str_replace's output to `lowercase-string` — assert the guarantee it cannot infer.
+        /** @psalm-var non-empty-lowercase-string $key */
+        return $key;
     }
 
     /**

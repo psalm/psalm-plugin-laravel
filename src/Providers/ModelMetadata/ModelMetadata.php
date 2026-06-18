@@ -11,14 +11,14 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Immutable metadata snapshot for a single Eloquent model.
  *
- * Phase 1 ({@see \Psalm\LaravelPlugin\Providers\ModelMetadataRegistry}) populates
- * all public-readonly fields plus the `schema()` and `casts()` accessors consumed
- * by the migrated `ModelPropertyHandler`. Both accessors return pre-computed data;
- * lazy memoization was not required because the compute cost per model is small.
+ * {@see \Psalm\LaravelPlugin\Providers\ModelMetadataRegistry} populates all
+ * public-readonly fields plus the `schema()`, `casts()`, `accessors()`, and `mutators()`
+ * accessors. All return pre-computed data; lazy memoization was not required because the
+ * compute cost per model is small.
  *
- * The remaining accessors (accessors/mutators/relations/scopes/knownProperties) are
- * part of the stable API shape so Phase-2/3 handler migrations don't change the
- * contract, but throw {@see \LogicException} until their producing phase lands.
+ * The remaining accessors (relations/scopes/knownProperties) are part of the stable API
+ * shape so later handler migrations don't change the contract, but throw
+ * {@see \LogicException} until their producing phase lands.
  *
  * Immutability: every field is `readonly` and the class exposes no setters; the
  * object is fully populated by the builder at construction.
@@ -46,6 +46,8 @@ final readonly class ModelMetadata
      * @param class-string<Builder>|null                    $customBuilder    Detected via #[UseEloquentBuilder] / newEloquentBuilder() / $builder; non-templated because detection cannot recover the model type param.
      * @param class-string<EloquentCollection>|null         $customCollection Detected via #[CollectedBy] / newCollection() / $collectionClass.
      * @param array<non-empty-string, CastInfo>             $castsData Pre-computed cast map (column → CastInfo).
+     * @param array<non-empty-lowercase-string, AccessorInfo> $accessorsData Pre-computed accessor map, keyed by snake_case property name; full-callable (self + traits + inherited user ancestors).
+     * @param array<non-empty-lowercase-string, MutatorInfo>  $mutatorsData  Pre-computed mutator map, keyed by snake_case property name; the write side of accessors (legacy `setXxxAttribute` may exist write-only).
      */
     public function __construct(
         public string $fqcn,
@@ -63,6 +65,8 @@ final readonly class ModelMetadata
         public ?string $customCollection,
         private TableSchema $schemaData,
         private array $castsData,
+        private array $accessorsData,
+        private array $mutatorsData,
     ) {}
 
     public function schema(): TableSchema
@@ -79,27 +83,26 @@ final readonly class ModelMetadata
     }
 
     /**
+     * Accessor map keyed by snake_case property name. Includes legacy `getXxxAttribute()` and
+     * `Attribute::make()`-style accessors declared on the model, its traits, or any inherited
+     * user ancestor (full-callable; matches `Codebase::methodExists()` resolution).
+     *
      * @return array<non-empty-lowercase-string, AccessorInfo>
-     * @psalm-pure
-     * @throws \LogicException until Phase 2 lands — see the ModelMetadataRegistry design doc §7.
      */
     public function accessors(): array
     {
-        throw new \LogicException(
-            'ModelMetadata::accessors() is not yet implemented — scheduled for Phase 2 of the registry migration.',
-        );
+        return $this->accessorsData;
     }
 
     /**
+     * Mutator map keyed by snake_case property name — the write side of {@see accessors()}.
+     * A legacy `setXxxAttribute()` may exist without a matching accessor (write-only).
+     *
      * @return array<non-empty-lowercase-string, MutatorInfo>
-     * @psalm-pure
-     * @throws \LogicException until Phase 2 lands.
      */
     public function mutators(): array
     {
-        throw new \LogicException(
-            'ModelMetadata::mutators() is not yet implemented — scheduled for Phase 2 of the registry migration.',
-        );
+        return $this->mutatorsData;
     }
 
     /**

@@ -105,15 +105,17 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
             self::registerHandlersForModel($codebase, $storage);
 
-            // Warm the metadata registry in the SAME pass (idempotent, never throws). Runs for
-            // abstract bases too — warmUp() populates storage/reflection-derived fields and leaves
-            // the instance-derived ones empty (see ModelMetadataRegistryBuilder). Gated on
-            // migrations because the only Phase-1 consumer, ModelPropertyHandler, is itself
-            // migration-gated (the `!$storage->abstract && self::$useMigrations` registration
-            // below); a future non-migration consumer (scope/accessor metadata) relaxes this.
-            if (self::$useMigrations) {
-                ModelMetadataRegistryBuilder::warmUp($codebase, $storage->name);
-            }
+            // Warm the metadata registry in the SAME pass (idempotent, never throws). Runs for every
+            // registered model — concrete and abstract bases alike (#1058) — and is NOT gated on
+            // migrations: ModelPropertyAccessorHandler reads accessors()/mutators() unconditionally
+            // (registered below without a migration gate, abstract bases included), so the registry
+            // must be warm even when migrations are disabled. warmUp() populates the storage- and
+            // reflection-derived fields (accessors, mutators, traits, primary key, custom
+            // builder/collection) plus casts() (from getCasts()). Only schema() depends on migrations
+            // (no SchemaAggregator → empty). casts() is computed either way but is consumed only via a
+            // schema-column match, so with migrations off it is inert — its sole consumer,
+            // ModelPropertyHandler, is itself migration-gated below.
+            ModelMetadataRegistryBuilder::warmUp($codebase, $storage->name);
         }
     }
 

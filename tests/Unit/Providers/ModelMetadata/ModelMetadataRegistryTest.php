@@ -7,12 +7,14 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Providers\ModelMetadata;
 use App\Builders\WorkOrderBuilder;
 use App\Collections\WorkOrderCollection;
 use App\Models\AbstractDocument;
+use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\CustomPkUuidModel;
 use App\Models\SpecializationPivot;
 use App\Models\UlidModel;
 use App\Models\UuidModel;
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -23,12 +25,18 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeAccessorInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeMutatorInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\CastShape;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\LegacyAccessorInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\LegacyMutatorInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyInfo;
@@ -39,6 +47,10 @@ use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\Progress\VoidProgress;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\MethodStorage;
+use Psalm\Type;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
@@ -204,6 +216,170 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $first);
         $this->assertSame($first, $second);
+    }
+
+    // ---------------------------------------------------------------------
+    // Accessors / mutators (storage-derived, full-callable)
+    // ---------------------------------------------------------------------
+
+    #[Test]
+    public function legacy_accessor_populates_accessor_map(): void
+    {
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        $this->defineAppearingMethod($storage, 'getFullNameAttribute', Type::getString());
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+        $metadata = $this->metadataFor(Customer::class);
+
+        // Keyed by the separator-collapsed lowercase identity ('fullname', not 'full_name') — the
+        // spelling-independent form Laravel resolves regardless of access spelling.
+        $accessor = $metadata->accessors()['fullname'] ?? null;
+        $this->assertInstanceOf(LegacyAccessorInfo::class, $accessor);
+        $this->assertTrue($accessor->returnType->hasString());
+        // A read-only legacy accessor produces no mutator entry.
+        $this->assertArrayNotHasKey('fullname', $metadata->mutators());
+    }
+
+    #[Test]
+    public function legacy_setter_is_a_write_only_mutator(): void
+    {
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        $this->defineAppearingMethod($storage, 'setNicknameAttribute', Type::getVoid());
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+        $metadata = $this->metadataFor(Customer::class);
+
+        // setXxxAttribute with no matching getXxxAttribute: a write-only mutator, no accessor.
+        $this->assertInstanceOf(LegacyMutatorInfo::class, $metadata->mutators()['nickname'] ?? null);
+        $this->assertArrayNotHasKey('nickname', $metadata->accessors());
+    }
+
+    #[Test]
+    public function attribute_accessor_with_setter_flags_mutator(): void
+    {
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        // Attribute<string, string>: a get+set attribute → accessor with hasMutator + paired mutator.
+        $this->defineAppearingMethod($storage, 'firstName', $this->attributeReturn(Type::getString(), Type::getString()));
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+        $metadata = $this->metadataFor(Customer::class);
+
+        $accessor = $metadata->accessors()['firstname'] ?? null;
+        $this->assertInstanceOf(AttributeAccessorInfo::class, $accessor);
+        $this->assertTrue($accessor->hasMutator);
+        $this->assertTrue($accessor->returnType->hasString(), 'returnType is TGet');
+
+        $mutator = $metadata->mutators()['firstname'] ?? null;
+        $this->assertInstanceOf(AttributeMutatorInfo::class, $mutator);
+        $this->assertSame('firstname', $mutator->accessorPropertyName);
+    }
+
+    #[Test]
+    public function read_only_attribute_accessor_has_no_mutator(): void
+    {
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        // Attribute<string, never>: TSet=never means read-only — no mutator entry, hasMutator=false.
+        $this->defineAppearingMethod($storage, 'displayName', $this->attributeReturn(Type::getString(), Type::getNever()));
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+        $metadata = $this->metadataFor(Customer::class);
+
+        $accessor = $metadata->accessors()['displayname'] ?? null;
+        $this->assertInstanceOf(AttributeAccessorInfo::class, $accessor);
+        $this->assertFalse($accessor->hasMutator);
+        $this->assertArrayNotHasKey('displayname', $metadata->mutators());
+    }
+
+    #[Test]
+    public function acronym_accessor_collapses_to_laravel_resolution_key(): void
+    {
+        // getApiURLAttribute() must key as 'apiurl' (separators stripped, lowercased) so it resolves via
+        // $model->api_url / $model->apiUrl — Laravel's Str::studly equivalence. A snake-INSERTING
+        // normalizer would key it 'api_u_r_l' and miss every real access spelling.
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        $this->defineAppearingMethod($storage, 'getApiURLAttribute', Type::getString());
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $this->assertArrayHasKey('apiurl', $this->metadataFor(Customer::class)->accessors());
+    }
+
+    #[Test]
+    public function inherited_accessor_is_reached_through_the_ancestor_walk(): void
+    {
+        // The accessor is declared on the PARENT's storage, not the child's, so a naive
+        // $storage->methods walk on the child would miss it. computeAccessorsAndMutators replays
+        // appearingMethods() over parent_classes, mirroring methodExists()'s inheritance resolution.
+        $codebase = $this->makeCodebase();
+        $child = $this->registerStorage(Contract::class);
+        // parent_classes: lowercase key → ORIGINAL-CASE value, exactly as Psalm's Populator stores it
+        // (a lowercase value would let the builder's framework-skip misfire and hide regressions).
+        $child->parent_classes[\strtolower(AbstractDocument::class)] = AbstractDocument::class;
+        $parent = $this->registerStorage(AbstractDocument::class);
+        $this->defineAppearingMethod($parent, 'getReferenceCodeAttribute', Type::getString());
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Contract::class);
+
+        $this->assertInstanceOf(
+            LegacyAccessorInfo::class,
+            $this->metadataFor(Contract::class)->accessors()['referencecode'] ?? null,
+        );
+    }
+
+    #[Test]
+    public function abstract_base_populates_accessors_without_instantiation(): void
+    {
+        // computeForAbstract never instantiates, yet the storage-derived accessor map still populates.
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(AbstractDocument::class);
+        $this->defineAppearingMethod($storage, 'getReferenceCodeAttribute', Type::getString());
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AbstractDocument::class);
+
+        $this->assertArrayHasKey('referencecode', $this->metadataFor(AbstractDocument::class)->accessors());
+    }
+
+    #[Test]
+    public function attribute_accessor_wins_over_legacy_for_same_property(): void
+    {
+        // A property declared BOTH as legacy getFooAttribute and attribute-style foo(): Attribute —
+        // the read handler resolved new-style first, so the map must keep the AttributeAccessorInfo.
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        $this->defineAppearingMethod($storage, 'getFooAttribute', Type::getString());
+        $this->defineAppearingMethod($storage, 'foo', $this->attributeReturn(Type::getInt(), Type::getNever()));
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $this->assertInstanceOf(
+            AttributeAccessorInfo::class,
+            $this->metadataFor(Customer::class)->accessors()['foo'] ?? null,
+        );
+    }
+
+    #[Test]
+    public function most_derived_accessor_wins_over_inherited(): void
+    {
+        // Child and parent both declare getFooAttribute; the child's (most-derived) declaration wins,
+        // because callableMethodStorages walks self before ancestors and insertAccessor keeps the first.
+        $codebase = $this->makeCodebase();
+        $child = $this->registerStorage(Customer::class);
+        $child->parent_classes[\strtolower(AbstractDocument::class)] = AbstractDocument::class;
+        $parent = $this->registerStorage(AbstractDocument::class);
+        $this->defineAppearingMethod($child, 'getFooAttribute', Type::getString());
+        $this->defineAppearingMethod($parent, 'getFooAttribute', Type::getInt());
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $accessor = $this->metadataFor(Customer::class)->accessors()['foo'] ?? null;
+        $this->assertInstanceOf(LegacyAccessorInfo::class, $accessor);
+        $this->assertTrue($accessor->returnType->hasString(), 'child (most-derived) returnType wins');
+        $this->assertFalse($accessor->returnType->hasInt());
     }
 
     // ---------------------------------------------------------------------
@@ -523,12 +699,22 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function phase_2_getters_throw_logic_exception(): void
+    public function scopes_getter_throws_until_implemented(): void
+    {
+        // accessors()/mutators() are implemented now; scopes() (2b) and relations() (2c) still throw.
+        $metadata = $this->makeStubMetadata(WorkOrder::class);
+
+        $this->expectException(\LogicException::class);
+        $metadata->scopes();
+    }
+
+    #[Test]
+    public function relations_getter_throws_until_implemented(): void
     {
         $metadata = $this->makeStubMetadata(WorkOrder::class);
 
         $this->expectException(\LogicException::class);
-        $metadata->accessors();
+        $metadata->relations();
     }
 
     #[Test]
@@ -591,6 +777,58 @@ final class ModelMetadataRegistryTest extends TestCase
      * @param class-string<Model> $fqcn
      * @return ModelMetadata<Model>
      */
+    private function metadataFor(string $fqcn): ModelMetadata
+    {
+        $metadata = ModelMetadataRegistry::for($fqcn);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+
+        return $metadata;
+    }
+
+    /** Build an `Attribute<TGet, TSet>` return type for an attribute-style accessor fixture. */
+    private function attributeReturn(Union $get, Union $set): Union
+    {
+        return new Union([new TGenericObject(Attribute::class, [$get, $set])]);
+    }
+
+    /**
+     * Wire a method into the storage graph so {@see EloquentModelMethods::appearingMethods()} yields
+     * it for $carrier: the method APPEARS on $carrier but is DECLARED on $declaringFqcn (pass a trait
+     * FQCN for a trait-hosted method; defaults to the carrier itself). The MethodStorage lives on the
+     * declaring class's storage — mirroring how Psalm stores trait/inherited methods — because
+     * registerStorage() alone produces an empty method graph.
+     *
+     * @param class-string|null $declaringFqcn
+     */
+    private function defineAppearingMethod(
+        ClassLikeStorage $carrier,
+        string $casedName,
+        Union $returnType,
+        ?string $declaringFqcn = null,
+        int $visibility = ClassLikeAnalyzer::VISIBILITY_PUBLIC,
+    ): void {
+        $declaringFqcn ??= $carrier->name;
+        $lower = \strtolower($casedName);
+
+        $methodStorage = new MethodStorage();
+        $methodStorage->cased_name = $casedName;
+        $methodStorage->defining_fqcln = $declaringFqcn;
+        $methodStorage->visibility = $visibility;
+        $methodStorage->return_type = $returnType;
+
+        $declaringStorage = $this->classLikeStorageProvider->has($declaringFqcn)
+            ? $this->classLikeStorageProvider->get($declaringFqcn)
+            : $this->classLikeStorageProvider->create($declaringFqcn);
+        $declaringStorage->methods[$lower] = $methodStorage;
+
+        $carrier->appearing_method_ids[$lower] = new MethodIdentifier($carrier->name, $lower);
+        $carrier->declaring_method_ids[$lower] = new MethodIdentifier($declaringFqcn, $lower);
+    }
+
+    /**
+     * @param class-string<Model> $fqcn
+     * @return ModelMetadata<Model>
+     */
     private function makeStubMetadata(string $fqcn): ModelMetadata
     {
         return new ModelMetadata(
@@ -618,6 +856,8 @@ final class ModelMetadataRegistryTest extends TestCase
             customCollection: null,
             schemaData: new TableSchema([]),
             castsData: [],
+            accessorsData: [],
+            mutatorsData: [],
         );
     }
 }

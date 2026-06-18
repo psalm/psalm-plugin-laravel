@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Model;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
@@ -263,76 +264,20 @@ final class ModelPropertyHandler
     }
 
     /**
-     * Map a column to its Psalm read type, applying nullability. The base mapping is shared
-     * with {@see mapColumnBaseType} so the cast warm-up (which bakes the CastsInboundAttributes
-     * passthrough type) and the schema read path agree on the column's intrinsic type.
+     * Map a column to its Psalm read type, applying nullability. The non-nullable base mapping
+     * lives on {@see ColumnTypeMapper} so the cast warm-up (which bakes the CastsInboundAttributes
+     * passthrough type) and this schema read path agree on the column's intrinsic type — and so the
+     * builder reads the mapping from the Schema namespace rather than reaching back into this handler.
      */
     private static function mapColumnType(ColumnInfo $column): Union
     {
-        $type = self::mapColumnBaseType($column);
+        $type = ColumnTypeMapper::mapBaseType($column);
 
         if ($column->nullable) {
             $type = Type::combineUnionTypes($type, Type::getNull());
         }
 
         return $type;
-    }
-
-    /**
-     * Non-nullable base mapping for a schema column. Factored out so the registry builder can
-     * obtain the column's intrinsic Psalm type for {@see \Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes}
-     * casts (whose read path is a passthrough of the raw DB type) while still letting the cast
-     * resolver decide how to apply nullability on the final union.
-     *
-     * @internal called by {@see \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder}
-     */
-    public static function mapColumnBaseType(ColumnInfo $column): Union
-    {
-        return match ($column->sqlType) {
-            SchemaColumn::TYPE_INT => $column->unsigned
-                ? new Union([new Type\Atomic\TIntRange(0, null)])
-                : Type::getInt(),
-            SchemaColumn::TYPE_STRING => Type::getString(),
-            SchemaColumn::TYPE_FLOAT => Type::getFloat(),
-            SchemaColumn::TYPE_BOOL => Type::getBool(),
-            // MySQL SET is comma-separated at runtime (e.g. 'draft,published'), so the
-            // literal-union here is an over-narrowing approximation — strictly better than
-            // `mixed` for the common `in_array($model->status, [...])` check. Matches Larastan.
-            SchemaColumn::TYPE_ENUM, SchemaColumn::TYPE_SET => self::mapLiteralUnionFromOptions($column),
-            SchemaColumn::TYPE_ARRAY => new Union([Type\Atomic\TKeyedArray::make(
-                [Type::getFloat()],
-                fallback_params: [Type::getInt(), Type::getFloat()],
-                is_list: true,
-            )]),
-            default => Type::getMixed(),
-        };
-    }
-
-    /**
-     * Build a literal-string union from a column's options list. Shared by ENUM and SET
-     * because both store their option set the same way in {@see ColumnInfo::$options}
-     * and benefit from the same narrowing (with the SET caveat documented at the caller).
-     */
-    private static function mapLiteralUnionFromOptions(ColumnInfo $column): Union
-    {
-        if ($column->options === []) {
-            return Type::getString();
-        }
-
-        try {
-            $literals = [];
-            foreach ($column->options as $option) {
-                $literals[] = Type\Atomic\TLiteralString::make($option);
-            }
-
-            return new Union($literals);
-        } catch (\UnexpectedValueException|\InvalidArgumentException) {
-            // TLiteralString::make() throws InvalidArgumentException when an option
-            // exceeds Config::max_string_length, and UnexpectedValueException when
-            // called outside an initialized Psalm Config (e.g. unit tests). Mirrors
-            // {@see \Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer::inRuleToLiteralUnion}.
-            return Type::getString();
-        }
     }
 
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */

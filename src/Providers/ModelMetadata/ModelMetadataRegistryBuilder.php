@@ -4,17 +4,24 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Providers\ModelMetadata;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastsMethodParser;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
+use Psalm\LaravelPlugin\Util\EloquentModelMethods;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\MethodStorage;
+use Psalm\Type;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
@@ -174,7 +181,14 @@ final class ModelMetadataRegistryBuilder
         // throws \Error, not \ReflectionException). Its instance-derived fields (schema, casts,
         // table, connection) stay empty; the rest come from storage + declared property defaults.
         if ($reflection->isAbstract()) {
-            return self::computeForAbstract($modelFqcn, $storage, $reflection, $customBuilder, $customCollection);
+            return self::computeForAbstract(
+                $modelFqcn,
+                $storage,
+                $reflection,
+                $customBuilder,
+                $customCollection,
+                $storageProvider,
+            );
         }
 
         try {
@@ -230,6 +244,10 @@ final class ModelMetadataRegistryBuilder
 
         $tableSchema = self::computeSchema($instance);
 
+        // Method-derived metadata is STORAGE-based (no instance needed), so it is computed the same
+        // way for concrete and abstract models — see computeForAbstract.
+        [$accessors, $mutators] = self::computeAccessorsAndMutators($storage, $codebase->classlike_storage_provider);
+
         return new ModelMetadata(
             fqcn: $modelFqcn,
             primaryKey: self::computePrimaryKey($instance, $traits),
@@ -253,6 +271,8 @@ final class ModelMetadataRegistryBuilder
             customCollection: $customCollection,
             schemaData: $tableSchema,
             castsData: self::computeCasts($codebase, $modelFqcn, $instance, $traits, $tableSchema),
+            accessorsData: $accessors,
+            mutatorsData: $mutators,
         );
     }
 
@@ -276,9 +296,15 @@ final class ModelMetadataRegistryBuilder
         \ReflectionClass $reflection,
         ?string $customBuilder,
         ?string $customCollection,
+        ClassLikeStorageProvider $provider,
     ): ModelMetadata {
         /** @var array<string, mixed> $defaults */
         $defaults = $reflection->getDefaultProperties();
+
+        // Method-derived metadata is storage-based, so an abstract base populates accessors/mutators
+        // identically to a concrete model (no instantiation). This is what lets the migrated accessor
+        // handler resolve an inherited accessor on an abstract-typed receiver (#901).
+        [$accessors, $mutators] = self::computeAccessorsAndMutators($storage, $provider);
 
         return new ModelMetadata(
             fqcn: $modelFqcn,
@@ -299,7 +325,212 @@ final class ModelMetadataRegistryBuilder
             customCollection: $customCollection,
             schemaData: new TableSchema([]),
             castsData: [],
+            accessorsData: $accessors,
+            mutatorsData: $mutators,
         );
+    }
+
+    /**
+     * Compute the full-callable accessor + mutator maps for a model.
+     *
+     * "Full-callable" means self + traits + every method inherited from a USER ancestor — the same
+     * set {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyAccessorHandler} resolves through
+     * `Codebase::methodExists()` (which is inheritance-aware). We reach it by replaying the ONE
+     * canonical declaring-storage traversal, {@see EloquentModelMethods::appearingMethods()}, over the
+     * class itself and each ancestor: `appearingMethods()` deliberately yields only methods *appearing
+     * on* the iterated class (self-body + trait-hosted, never parent-inherited), so walking the chain
+     * re-assembles the inherited set without a second, parallel method walk. The name-keyed maps
+     * collapse the trait double-yields, and iterating self-before-ancestors makes the most-derived
+     * declaration win.
+     *
+     * Storage-only (no instantiation, no `getMethodReturnType()`), so it runs identically for concrete
+     * models and abstract bases (#901/#1058) and is safe at warm-up time.
+     *
+     * @return array{0: array<non-empty-lowercase-string, AccessorInfo>, 1: array<non-empty-lowercase-string, MutatorInfo>}
+     */
+    private static function computeAccessorsAndMutators(
+        ClassLikeStorage $storage,
+        ClassLikeStorageProvider $provider,
+    ): array {
+        $accessors = [];
+        $mutators = [];
+
+        foreach (self::callableMethodStorages($storage, $provider) as $methodStorage) {
+            self::classifyAccessorMethod($methodStorage, $accessors, $mutators);
+        }
+
+        return [$accessors, $mutators];
+    }
+
+    /**
+     * Yield the declaring MethodStorage of every method callable on $storage, walking the class and
+     * its user ancestors via {@see EloquentModelMethods::appearingMethods()}. Framework ancestors are
+     * skipped: a base like Model declares no user accessors, and its own `getAttribute()` etc. are
+     * rejected by the classifier anyway, so skipping them merely bounds the walk. Mirrors the
+     * `Illuminate\` skip in ModelRegistrationHandler's write-type pass.
+     *
+     * @return \Generator<lowercase-string, MethodStorage>
+     */
+    private static function callableMethodStorages(
+        ClassLikeStorage $storage,
+        ClassLikeStorageProvider $provider,
+    ): \Generator {
+        yield from EloquentModelMethods::appearingMethods($storage, $provider);
+
+        // $storage->parent_classes is keyed by the lowercase FQCN with the original-case FQCN as the
+        // value — so the framework skip must test the lowercase KEY (the value is e.g.
+        // `Illuminate\Database\Eloquent\Model`). Skipping framework ancestors keeps the walk bounded to
+        // user classes; their methods would be rejected by classifyAccessorMethod's defining_fqcln
+        // guard anyway, so this is purely to avoid iterating Model's hundreds of methods per model.
+        foreach ($storage->parent_classes as $parentNameLc => $parentName) {
+            if (\str_starts_with($parentNameLc, 'illuminate\\')) {
+                continue;
+            }
+
+            if (!$provider->has($parentName)) {
+                continue;
+            }
+
+            yield from EloquentModelMethods::appearingMethods($provider->get($parentName), $provider);
+        }
+    }
+
+    /**
+     * Classify one method into the accessor and/or mutator maps, preserving the read handler's
+     * resolution: attribute-style (`Attribute::make()`) beats legacy (`getXxxAttribute`) for the same
+     * property, and the first declaration seen (most-derived, since the model is walked before its
+     * ancestors) wins among same-kind methods.
+     *
+     * @param array<non-empty-lowercase-string, AccessorInfo> $accessors
+     * @param array<non-empty-lowercase-string, MutatorInfo>  $mutators
+     * @param-out array<non-empty-lowercase-string, AccessorInfo> $accessors
+     * @param-out array<non-empty-lowercase-string, MutatorInfo>  $mutators
+     */
+    private static function classifyAccessorMethod(
+        MethodStorage $methodStorage,
+        array &$accessors,
+        array &$mutators,
+    ): void {
+        $casedName = $methodStorage->cased_name;
+        if ($casedName === null) {
+            return;
+        }
+
+        // Framework methods are never user accessors; the `defining_fqcln` guard mirrors the
+        // `Illuminate\` skip in ModelRegistrationHandler::registerWriteTypesForMethods().
+        if ($methodStorage->defining_fqcln === null || \str_starts_with($methodStorage->defining_fqcln, 'Illuminate\\')) {
+            return;
+        }
+
+        $lowercaseName = \strtolower($casedName);
+
+        // Legacy accessor (getXxxAttribute) / mutator (setXxxAttribute), keyed by the SAME snake_case
+        // normalizer the read handler looks up by. The kind detection and the bare
+        // getAttribute()/setAttribute() exclusion live in EloquentModelMethods so they cannot drift
+        // from the suppressor / visibility handler that share the convention.
+        $legacyKind = EloquentModelMethods::legacyAccessorKind($lowercaseName);
+        if ($legacyKind !== null) {
+            $property = EloquentModelMethods::accessorPropertyKey(\substr($casedName, 3, -9));
+            if ($property === null) {
+                return;
+            }
+
+            if ($legacyKind === 'get') {
+                $returnType = $methodStorage->return_type ?? $methodStorage->signature_return_type ?? Type::getMixed();
+                self::insertAccessor($accessors, new LegacyAccessorInfo($property, $returnType, $methodStorage));
+            } else {
+                // setXxxAttribute may be write-only (no matching accessor).
+                self::insertMutator($mutators, new LegacyMutatorInfo($property, $methodStorage));
+            }
+
+            return;
+        }
+
+        // Attribute-style: a method returning Illuminate\…\Casts\Attribute.
+        $attribute = self::resolveAttributeReturn($methodStorage);
+        if ($attribute === null) {
+            return;
+        }
+
+        $property = EloquentModelMethods::accessorPropertyKey($casedName);
+        if ($property === null) {
+            return;
+        }
+
+        [$getType, $hasMutator] = $attribute;
+        self::insertAccessor($accessors, new AttributeAccessorInfo($property, $getType, $methodStorage, $hasMutator));
+
+        if ($hasMutator) {
+            self::insertMutator($mutators, new AttributeMutatorInfo($property, $methodStorage, $property));
+        }
+    }
+
+    /**
+     * Inspect a method's DECLARED return type for an `Attribute<TGet, TSet>` (or bare `Attribute`).
+     * Returns `[TGet, hasMutator]`, or null when the method does not return an Attribute. Reads the
+     * declared type only (no `getMethodReturnType()`): an attribute-style accessor must declare
+     * `: Attribute` to work at runtime, so the signal is always on storage and the read is safe at
+     * warm-up. `hasMutator` follows Laravel's write rule — a `never` TSet means read-only.
+     *
+     * @return array{0: Union, 1: bool}|null
+     * @psalm-mutation-free
+     */
+    private static function resolveAttributeReturn(MethodStorage $methodStorage): ?array
+    {
+        $returnType = $methodStorage->return_type ?? $methodStorage->signature_return_type;
+        if (!$returnType instanceof Union) {
+            return null;
+        }
+
+        foreach ($returnType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject || !\is_a($atomic->value, Attribute::class, true)) {
+                continue;
+            }
+
+            if (!$atomic instanceof TGenericObject) {
+                // Bare `Attribute` (no generics): TGet is unknown (mixed) and the attribute is writable
+                // with a mixed setter — mirrors the write-type pass treating a non-generic Attribute as
+                // a mixed mutator.
+                return [Type::getMixed(), true];
+            }
+
+            $getType = $atomic->type_params[0] ?? Type::getMixed();
+            $setType = $atomic->type_params[1] ?? null;
+            $hasMutator = !($setType instanceof Union && $setType->isNever());
+
+            return [$getType, $hasMutator];
+        }
+
+        return null;
+    }
+
+    /**
+     * Insert an accessor under its property key, applying the read handler's precedence:
+     * attribute-style wins over legacy; otherwise the first (most-derived) entry stays.
+     *
+     * @param array<non-empty-lowercase-string, AccessorInfo> $accessors
+     * @param-out array<non-empty-lowercase-string, AccessorInfo> $accessors
+     */
+    private static function insertAccessor(array &$accessors, AccessorInfo $info): void
+    {
+        $existing = $accessors[$info->propertyName] ?? null;
+        if ($existing === null || ($existing instanceof LegacyAccessorInfo && $info instanceof AttributeAccessorInfo)) {
+            $accessors[$info->propertyName] = $info;
+        }
+    }
+
+    /**
+     * Insert a mutator under its property key, mirroring {@see insertAccessor}'s precedence.
+     *
+     * @param array<non-empty-lowercase-string, MutatorInfo> $mutators
+     * @param-out array<non-empty-lowercase-string, MutatorInfo> $mutators
+     */
+    private static function insertMutator(array &$mutators, MutatorInfo $info): void
+    {
+        $existing = $mutators[$info->propertyName] ?? null;
+        if ($existing === null || ($existing instanceof LegacyMutatorInfo && $info instanceof AttributeMutatorInfo)) {
+            $mutators[$info->propertyName] = $info;
+        }
     }
 
     /** @psalm-mutation-free */
@@ -505,11 +736,11 @@ final class ModelMetadataRegistryBuilder
             $column = $schema->column($columnName);
             $nullable = $column instanceof ColumnInfo && $column->nullable;
             // CastsInboundAttributes casts read back as a passthrough of the column's intrinsic
-            // type, so CastResolver needs that base type as `$originalType`. Reproduce exactly
-            // what ModelPropertyHandler::getPropertyType passed pre-registry (the column's
-            // non-nullable mapped type); null when no migration column backs the cast.
+            // type, so CastResolver needs that base type as `$originalType`. The mapping lives on
+            // ColumnTypeMapper (Schema namespace) so the builder reads it directly instead of
+            // reaching back into the property handler; null when no migration column backs the cast.
             $originalType = $column instanceof ColumnInfo
-                ? ModelPropertyHandler::mapColumnBaseType($column)
+                ? ColumnTypeMapper::mapBaseType($column)
                 : null;
             // Preserve original-case column keys to match Eloquent's case-sensitive
             // attribute semantics (callers pass the property name as written).
