@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Util;
 
-use Psalm\LaravelPlugin\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\Progress\Progress;
 
 /**

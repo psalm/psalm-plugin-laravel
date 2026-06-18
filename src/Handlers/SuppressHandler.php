@@ -404,6 +404,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             self::suppressEloquentAccessorMethods($classStorage, $provider);
             self::suppressEloquentScopeMethods($classStorage, $provider);
             self::suppressLegacyEloquentScopeMethods($classStorage, $provider);
+            self::suppressEloquentTraitBootMethods($classStorage, $provider);
         }
 
         if (\in_array('Illuminate\Notifications\Notification', $parents, true)) {
@@ -536,6 +537,41 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     ): void {
         foreach (EloquentModelMethods::appearingMethods($classStorage, $provider) as $methodName => $methodStorage) {
             if (!EloquentModelMethods::isLegacyScopeMethodName($methodName, $methodStorage->cased_name)) {
+                continue;
+            }
+
+            self::suppressInternalDispatchMethod('PossiblyUnusedMethod', $methodStorage);
+            self::suppressInternalDispatchMethod('UnusedMethod', $methodStorage);
+        }
+    }
+
+    /**
+     * Suppress PossiblyUnusedMethod / UnusedMethod for trait boot/initialize hooks.
+     *
+     * Model::bootTraits()/initializeTraits() invoke `boot{Trait}`/`initialize{Trait}` by reflection, so
+     * findUnusedCode reports them as unused (#1069). Classification (incl. the static-only boot rule)
+     * lives in {@see EloquentModelMethods::isTraitBootHook()}. Routed through suppressInternalDispatchMethod()
+     * so public/protected are silenced (Laravel's convention is `protected static`) and private stays
+     * flagged. The `#[Boot]`/`#[Initialize]` attributes (Laravel 12.x+) are a deferred follow-up.
+     */
+    private static function suppressEloquentTraitBootMethods(
+        ClassLikeStorage $classStorage,
+        ClassLikeStorageProvider $provider,
+    ): void {
+        foreach (EloquentModelMethods::appearingMethods($classStorage, $provider) as $methodStorage) {
+            // defining_fqcln is original-cased for scanned classes, so isTraitBootHook()'s case-sensitive
+            // match holds (MacroHandler lowercases it, but only for synthesized macros).
+            $definingFqcln = $methodStorage->defining_fqcln;
+
+            if ($definingFqcln === null || !$provider->has($definingFqcln)) {
+                continue;
+            }
+
+            if (!$provider->get($definingFqcln)->is_trait) {
+                continue;
+            }
+
+            if (!EloquentModelMethods::isTraitBootHook($methodStorage->cased_name, $definingFqcln, $methodStorage->is_static)) {
                 continue;
             }
 
