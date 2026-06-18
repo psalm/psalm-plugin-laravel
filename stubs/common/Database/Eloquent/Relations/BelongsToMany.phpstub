@@ -18,17 +18,27 @@ class BelongsToMany extends Relation
     /**
      * Specify the custom pivot model to use for the relationship.
      *
-     * The @psalm-this-out annotation is intended to narrow TPivotModel on the
-     * returned instance. Full generic-param narrowing via @psalm-this-out is
-     * a known Psalm 7 limitation; the annotation is included for forward
-     * compatibility as Psalm's support matures.
+     * `@return static<...>` re-parameterizes TPivotModel so `->using(X::class)` narrows the
+     * pivot slot through a chain (#1088); an `@psalm-this-out` here did not thread through
+     * chained calls in Psalm 7.
      *
      * @template TNewPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot
      * @param  class-string<TNewPivotModel>  $class
-     * @psalm-this-out static<TRelatedModel, TDeclaringModel, TNewPivotModel, TAccessor>
-     * @return $this
+     * @return static<TRelatedModel, TDeclaringModel, TNewPivotModel, TAccessor>
      */
     public function using($class) {}
+
+    /**
+     * Specify the custom pivot accessor to use for the relationship.
+     *
+     * `@return static<...>` re-parameterizes TAccessor so `->as('name')` narrows the
+     * accessor slot through a chain (#1088).
+     *
+     * @template TNewAccessor of string
+     * @param  TNewAccessor  $accessor
+     * @return static<TRelatedModel, TDeclaringModel, TPivotModel, TNewAccessor>
+     */
+    public function as($accessor) {}
 
     /**
      * @template T
