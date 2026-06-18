@@ -13,11 +13,6 @@ declare(strict_types=1);
  *   * apps that ran clean with zero delta, and apps that crashed (with the
  *     crash's first error line) — kept in separate buckets
  *
- * PHP port of the local /psalm-delta skill's compare.py — same file layout,
- * same identity tuple, same report shape — so CI and the local harness produce
- * byte-comparable output. Mirrors tests/Benchmark/compare.php conventions
- * (getopt, JSON_THROW_ON_ERROR, markdown to stdout). No Python on CI.
- *
  * File layout (written by delta-app.sh, identical to bench.sh):
  *   <output_dir>/<app>/<app>-<label>-<date-marker>--issues.json
  *   <output_dir>/<app>/<app>-<label>-<date-marker>--perf.json
@@ -303,19 +298,62 @@ foreach ($apps as $app) {
     ];
 }
 
+// Per-app wall-time + type coverage, collected for EVERY app (not only changed
+// ones): a PR can shift analysis time or coverage without moving any issue.
+// Both come from each side's perf.json; a side that crashed left no perf.json,
+// so its value is null and renders "—".
+$perfNum = static function (?array $perf, string $key): ?float {
+    return is_array($perf) && isset($perf[$key]) && is_numeric($perf[$key])
+        ? (float) $perf[$key]
+        : null;
+};
+/** @var list<array{app: string, baseWall: float|null, headWall: float|null, baseCov: float|null, headCov: float|null}> $perfRows */
+$perfRows = [];
+foreach ($apps as $app) {
+    $basePerf = $loadJson($latest($outputDir, $app, $baseLabel, 'perf.json', $dateMarker));
+    $headPerf = $loadJson($latest($outputDir, $app, $headLabel, 'perf.json', $dateMarker));
+    $perfRows[] = [
+        'app' => $app,
+        'baseWall' => $perfNum($basePerf, 'wall_seconds'),
+        'headWall' => $perfNum($headPerf, 'wall_seconds'),
+        'baseCov' => $perfNum($basePerf, 'type_coverage_pct'),
+        'headCov' => $perfNum($headPerf, 'type_coverage_pct'),
+    ];
+}
+
 // --- Header ------------------------------------------------------------------
 
-$baseDesc = $baseRef !== '' ? $baseRef : $baseLabel;
-$headDesc = $headRef !== '' ? $headRef : $headLabel;
-if ($baseSha !== '') {
-    $baseDesc = "{$baseDesc} ({$baseSha})";
-}
-if ($headSha !== '') {
-    $headDesc = "{$headDesc} ({$headSha})";
-}
+/**
+ * Build a heading description like "Base (7fb82df7)" for one side.
+ *
+ * The artifact label is "<prefix>-<shortsha>" (e.g. "base-7fb82df7"), kept
+ * verbatim for file matching — so reusing it as the heading would print the
+ * embedded short sha *and* the separate --*-sha, e.g. "base-7fb82df7
+ * (7fb82df70a30…)". Prefer an explicit ref; otherwise strip the trailing
+ * "-<sha>" off the label to recover the prefix word, tidy its casing, and
+ * append a single short sha (skipped when the word already carries it).
+ */
+$describe = static function (string $ref, string $label, string $sha): string {
+    $word = $ref !== '' ? $ref : (preg_replace('/-[0-9a-f]{7,40}$/', '', $label) ?? $label);
+    $word = match (strtolower($word)) {
+        'base' => 'Base',
+        'pr' => 'PR',
+        default => $word,
+    };
+    if ($sha !== '') {
+        $short = substr($sha, 0, 8);
+        if (!str_contains($word, $short)) {
+            $word .= " ({$short})";
+        }
+    }
+
+    return $word;
+};
+$baseDesc = $describe($baseRef, $baseLabel, $baseSha);
+$headDesc = $describe($headRef, $headLabel, $headSha);
 
 $out = [];
-$out[] = "# PR delta: {$baseDesc} -> {$headDesc}";
+$out[] = "## PR delta: {$baseDesc} -> {$headDesc}";
 $out[] = '';
 
 // --- Per-app delta table (changed apps only) --------------------------------
@@ -325,7 +363,7 @@ $out[] = '';
 
 $changed = array_values(array_filter($rows, static fn(array $r): bool => $r['total'] > 0));
 
-$out[] = '## Per-app delta';
+$out[] = '### Per-app delta — Issues';
 $out[] = '';
 if ($changed === []) {
     $out[] = 'No issue changes across the benchmarked apps.';
@@ -345,11 +383,15 @@ if ($changed === []) {
     }
     $out[] = sprintf('| **Total** | **%d** | **%d** | **%d** | **%+d** |', $tTotal, $tAdded, $tRemoved, $tNet);
 
-    // Per-app issue-type movements: base -> head count, with the +added/-removed
-    // identity churn that a net-count diff alone would hide.
+    // Per-app issue-type movements, all under ONE collapsible block so the
+    // comment stays compact regardless of how many apps changed: per app, the
+    // base -> head count with the +added/-removed identity churn a net-count
+    // diff alone would hide.
+    $out[] = '';
+    $out[] = '<details><summary>Per-app issue-type breakdown</summary>';
     foreach ($changed as $r) {
         $out[] = '';
-        $out[] = '### ' . $r['app'];
+        $out[] = sprintf('#### %s (+%d/-%d)', $r['app'], $r['added'], $r['removed']);
         $out[] = '';
         foreach ($r['movements'] as $m) {
             $out[] = sprintf(
@@ -362,10 +404,13 @@ if ($changed === []) {
             );
         }
     }
+    $out[] = '';
+    $out[] = '</details>';
 }
 
-// Apps that ran cleanly on both sides but produced no delta — kept separate
-// from crashes so "nothing changed" is never confused with "nothing ran".
+// Apps that ran cleanly on both sides but produced no delta — listed here under
+// Issues (with the issue results) rather than down by the perf tables, and kept
+// separate from crashes so "nothing changed" is never read as "nothing ran".
 $noChange = array_values(array_filter(
     $rows,
     static fn(array $r): bool => $r['total'] === 0,
@@ -374,6 +419,99 @@ if ($noChange !== []) {
     $names = array_map(static fn(array $r): string => $r['app'], $noChange);
     $out[] = '';
     $out[] = '> No change (ran clean, zero delta): ' . implode(', ', $names) . '.';
+}
+
+// --- Per-app time table (apps with a non-noise time move) -------------------
+//
+// Wall time on shared CI runners is noisy (process scheduling, IO): identical
+// runs vary by a second or two, so a raw Δ is mostly jitter, not PR impact.
+// Show only apps whose |Δ| clears TIME_NOISE_FLOOR; skip non-comparable sides
+// (crash / not run — already in their own buckets). Empty -> a one-liner.
+$timeNoiseFloor = 3.0; // seconds; below this a Δ is treated as runner jitter
+$timeLines = [];
+foreach ($perfRows as $p) {
+    if ($p['baseWall'] === null || $p['headWall'] === null) {
+        continue;
+    }
+    $timeDelta = $p['headWall'] - $p['baseWall'];
+    if (abs($timeDelta) < $timeNoiseFloor) {
+        continue;
+    }
+    $timeLines[] = sprintf('| %s | %.2f | %.2f | %+.2f |', $p['app'], $p['baseWall'], $p['headWall'], $timeDelta);
+}
+
+$out[] = '';
+$out[] = '### Per-app delta — Time (seconds)';
+$out[] = '';
+if ($timeLines === []) {
+    $out[] = 'No significant time change (all deltas within runner jitter).';
+} else {
+    $out[] = '| App | base | PR | Δ |';
+    $out[] = '|-----|-----:|----:|-----:|';
+    foreach ($timeLines as $timeLine) {
+        $out[] = $timeLine;
+    }
+    $out[] = '';
+    $out[] = sprintf(
+        '_Wall time on shared CI runners is noisy (±1–2s run-to-run); deltas under ±%.0fs are hidden as jitter, not PR impact._',
+        $timeNoiseFloor,
+    );
+}
+
+// --- Per-app type-coverage table (apps whose coverage moved) ----------------
+//
+// Psalm's inferred-type coverage %, base vs head (Δ = head − base). A PR can
+// move coverage without moving any issue (e.g. adding annotations). Only apps
+// whose coverage actually moved are listed: unchanged rows (Δ rounds to 0.00)
+// are hidden, and a side with no perf.json (crash / not run) is skipped here
+// since it already appears in the Crashed / Not-run buckets.
+
+$covLines = [];
+foreach ($perfRows as $p) {
+    if ($p['baseCov'] === null || $p['headCov'] === null) {
+        continue; // not comparable — surfaced in its own bucket, not here
+    }
+    $delta = sprintf('%+.2f', $p['headCov'] - $p['baseCov']);
+    if ($delta === '+0.00' || $delta === '-0.00') {
+        continue; // coverage unchanged
+    }
+    $covLines[] = sprintf('| %s | %.2f | %.2f | %s |', $p['app'], $p['baseCov'], $p['headCov'], $delta);
+}
+
+$out[] = '';
+$out[] = '### Per-app delta — Type coverage (%)';
+$out[] = '';
+if ($covLines === []) {
+    $out[] = 'No type-coverage changes.';
+} else {
+    $out[] = '| App | base | PR | Δ |';
+    $out[] = '|-----|-----:|----:|-----:|';
+    foreach ($covLines as $covLine) {
+        $out[] = $covLine;
+    }
+}
+
+// Weighted ΔCov: one headline coverage move across all apps. A plain mean of
+// the per-app Δ would weight a one-file lib equal to a 5k-file app, so each
+// app's Δ is weighted by its base wall_seconds (analysis time — a cheap proxy
+// for codebase size; perf.json carries no file count). Only apps with coverage
+// on both sides and a positive base wall contribute; the total can therefore
+// differ from a naive sum of the Δ column.
+$weightNum = 0.0;
+$weightDen = 0.0;
+foreach ($perfRows as $p) {
+    if ($p['baseCov'] === null || $p['headCov'] === null || $p['baseWall'] === null || $p['baseWall'] <= 0) {
+        continue;
+    }
+    $weightNum += ($p['headCov'] - $p['baseCov']) * (float) $p['baseWall'];
+    $weightDen += (float) $p['baseWall'];
+}
+// Only as a footer row of the coverage table, and only when something moved —
+// otherwise it would dangle as a header-less table row under "No changes".
+if ($covLines !== [] && $weightDen > 0.0) {
+    $out[] = sprintf('| **Weighted Δ** | — | — | **%+.2f** |', $weightNum / $weightDen);
+    $out[] = '';
+    $out[] = '_Weighted Δ is weighted by base `wall_seconds` (proxy for codebase size)._';
 }
 
 // Split "no issues.json" apps into genuine crashes (a crash log exists, shown
@@ -394,7 +532,7 @@ if ($missing !== []) {
 
     if ($crashed !== []) {
         $out[] = '';
-        $out[] = '## Crashed';
+        $out[] = '### Crashed';
         $out[] = '';
         $out[] = 'No usable report — Psalm crashed or analysis aborted. A crash on BOTH sides is not caused by this PR.';
         $out[] = '';
