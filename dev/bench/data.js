@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781654786596,
+  "lastUpdate": 1781766387087,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6430,6 +6430,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.7,
             "range": "± 0.64",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e18a1dbdfd607d15e5972c1fb89d3f1bbd7202f3",
+          "message": "Return the concrete paginator from `paginate()` and preserve the related-model template through relations (#1082)\n\n* fix(eloquent): concrete paginator, keep relation template #1052\n\nBuilder::paginate()/simplePaginate() (and HasOneOrManyThrough's) were\ntyped to the Illuminate\\Contracts\\Pagination interfaces, but Laravel\nconstructs the concrete Illuminate\\Pagination classes at runtime. Typing\nthe concrete class unlocks its concrete-only surface (getCollection(),\nthrough(), withQueryString(), …) without an UndefinedInterfaceMethod, and\nsubsumes #978. The concrete implements the contract, so callers typed on\nthe contract still accept the result.\n\npaginate() forwarded through a relation also dropped the related-model\ntemplate (LengthAwarePaginator<int, Model> instead of <int, Vehicle>):\n@mixin Builder<TRelatedModel> can't substitute the template into a nested\ngeneric on a non-fluent return. Declaring paginate()/simplePaginate()/\ncursorPaginate() directly on the base Relation stub — the same pattern as\nget()/first()/sole() — resolves the template (the forwarding handler skips\nmethods in declaring_method_ids).\n\nCloses #1051\nCloses #1052\n\n* fix(eloquent): paginate accepts Closure perPage and the total arg #1052\n\nEloquent\\Builder::paginate() takes int|null|\\Closure $perPage and a fifth\n\\Closure|int|null $total (Laravel 12/13); the stub modeled only the first\nfour int args, so valid calls — paginate(total: fn () => 100) or\npaginate(perPage: fn (int $total) => ...) — were false positives.\n\nThe base Relation::paginate forwards to that Builder method via __call, so\nit mirrors the full signature. BelongsToMany and HasOneOrManyThrough keep\ntheir own four-argument paginate() (Laravel declares no $total there, and\npassing it errors at runtime), so those stubs are left unchanged.\n\n* refactor(eloquent): narrow paginate Closure param types #1052\n\nType the paginate() Closure params by their actual contract instead of a\nbare \\Closure: $perPage receives the resolved total and returns the page\nsize (\\Closure(int): int), $total takes no args and returns the count\n(\\Closure(): int). Laravel casts the result to int in limit()/forPage()\nand the paginator constructor, so int is the intended return; the bare\n\\Closure hid that. Applies to Builder and the base Relation forwarder.",
+          "timestamp": "2026-06-18T09:03:17+02:00",
+          "tree_id": "df1155db422875d3dd7b891da6bb7c5258c7f894",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e18a1dbdfd607d15e5972c1fb89d3f1bbd7202f3"
+        },
+        "date": 1781766385984,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.58,
+            "range": "± 0.41",
             "unit": "s"
           },
           {
