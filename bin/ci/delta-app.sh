@@ -303,7 +303,10 @@ run_side() {
 
     local out_txt err_txt t0 exit_code wall coverage count
     out_txt=$(mktemp); err_txt=$(mktemp)
-    t0=$(date +%s)
+    # Sub-second wall time via PHP microtime — portable (macOS `date` lacks %N)
+    # and finer than whole-second `date +%s`. Still threshold-filtered downstream
+    # because CI runner jitter dominates small deltas.
+    t0=$(php -r 'echo microtime(true);')
     exit_code=0
     (
         cd "$app_dir"
@@ -312,7 +315,7 @@ run_side() {
             ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
             --report="${issues_file}" >"$out_txt" 2>"$err_txt"
     ) || exit_code=$?
-    wall=$(( $(date +%s) - t0 ))
+    wall=$(php -r 'printf("%.3f", microtime(true) - (float) $argv[1]);' "$t0")
 
     # Psalm exits non-zero whenever issues are found, so a non-empty report is
     # the real success signal; treat a missing/empty report as a crash.
@@ -350,7 +353,7 @@ run_side() {
         $cov = $argv[6];
         file_put_contents($argv[1], json_encode([
             "app" => $argv[2], "version" => $argv[3], "date" => $argv[4],
-            "wall_seconds" => (int) $argv[5],
+            "wall_seconds" => (float) $argv[5],
             "type_coverage_pct" => $cov === "" ? null : (float) $cov,
             "total_issues" => (int) $argv[7], "exit_code" => (int) $argv[8],
         ], JSON_PRETTY_PRINT));
