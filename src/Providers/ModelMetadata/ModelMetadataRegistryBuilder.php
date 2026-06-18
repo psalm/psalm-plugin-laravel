@@ -265,7 +265,10 @@ final class ModelMetadataRegistryBuilder
             // Preserve case — Laravel's isFillable / isGuarded / getHidden do exact-string
             // comparisons, so lowercasing would diverge from runtime semantics.
             fillable: self::filterStringList($instance->getFillable()),
-            guarded: self::filterStringList($instance->getGuarded()),
+            // asArray() guards Laravel's `$guarded = false` ("guard nothing") idiom — getGuarded()
+            // then returns a bool, not an array, and would TypeError filterStringList()'s array param,
+            // crashing warm-up for the whole model (e.g. laravel/passport's models). #591.
+            guarded: self::filterStringList(self::asArray($instance->getGuarded())),
             appends: self::filterStringList($instance->getAppends()),
             with: self::readStringList($instance, 'with'),
             withCount: self::readStringList($instance, 'withCount'),

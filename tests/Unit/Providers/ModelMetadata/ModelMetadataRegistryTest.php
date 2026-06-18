@@ -12,6 +12,7 @@ use App\Models\Customer;
 use App\Models\CustomPkUuidModel;
 use App\Models\SpecializationPivot;
 use App\Models\UlidModel;
+use App\Models\UnguardedModel;
 use App\Models\UuidModel;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -143,6 +144,24 @@ final class ModelMetadataRegistryTest extends TestCase
         // discriminating here — its asBool() fallback is also `true`, so it can't fail this case.
         $this->assertSame(['*'], $metadata->guarded);
         $this->assertTrue($metadata->traits->usesTimestamps);
+    }
+
+    #[Test]
+    public function guarded_false_idiom_does_not_crash_warm_up(): void
+    {
+        // Laravel's `$guarded = false` ("guard nothing", used by laravel/passport's models) makes
+        // getGuarded() return a bool, not an array. Before #591's filterStringList(mixed) fix this
+        // TypeError-ed and warmUp()'s catch swallowed it, leaving NO registry entry — so the migrated
+        // ModelPropertyHandler saw no schema and every column read became UndefinedMagicPropertyFetch.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(UnguardedModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, UnguardedModel::class);
+
+        $metadata = ModelMetadataRegistry::for(UnguardedModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata, 'warm-up must not fail on $guarded = false');
+        // `$guarded = false` means guard nothing → empty list (not the base default ['*']).
+        $this->assertSame([], $metadata->guarded);
     }
 
     #[Test]
