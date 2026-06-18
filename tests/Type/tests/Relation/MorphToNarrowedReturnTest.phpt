@@ -9,20 +9,18 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 /**
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/913
  *
- * morphTo() sub-case of #913. Two distinct gaps stack here:
+ * morphTo() sub-case of #913. Two distinct gaps stacked here:
  *
- *   1. CURRENT (master, pinned below): morphTo() is stubbed MorphTo<Model, $this>, and the `$this`
- *      template arg collapses the whole return to `mixed` even WITHOUT a chained method call — a
- *      bare `return $this->morphTo();` already raises MixedReturnStatement. (The rest of the family
- *      needs a chained call to collapse; morphTo degrades on the bare return because its sole stub
- *      type param is `$this`.)
- *   2. AFTER the `$this` -> `static` stub fix (open in #1055): the collapse clears, but a method
- *      narrowing the related type (MorphTo<Image|Video, self>) then raises MoreSpecificReturnType,
- *      because the stub can only honestly return MorphTo<Model, static> — the concrete target is
- *      resolved at runtime via the morph map. Inherent to polymorphic relations; resolvable
- *      app-side (widen the annotation) or by a future morph-map-aware resolver.
- *
- * Pins gap 1 (the current output) so it flips when the stub fix lands; gap 2 is pinned in #1055.
+ *   1. (FIXED on this branch) morphTo() used to be stubbed MorphTo<Model, $this>, and the `$this`
+ *      template arg collapsed the whole return to `mixed` even on a bare `return $this->morphTo();`.
+ *      The `$this` -> `static` stub fix clears that collapse.
+ *   2. (PINNED below) with the collapse gone, a method narrowing the related type
+ *      (MorphTo<Image|Video, self>) raises MoreSpecificReturnType / LessSpecificReturnStatement,
+ *      because the stub can only honestly return MorphTo<Model, static> — the concrete morph target
+ *      is resolved at runtime via the morph map. Inherent to polymorphic relations; resolvable
+ *      app-side (widen the annotation) or by a future morph-map-aware resolver. Tracked by the
+ *      @todo on HasRelationships::morphTo(). This pins the current diagnostic so it flips when that
+ *      resolver lands.
  */
 class Image extends Model
 {
@@ -43,4 +41,5 @@ class Comment extends Model
 
 ?>
 --EXPECTF--
-MixedReturnStatement on line %d: Could not infer a return type
+MoreSpecificReturnType on line %d: The declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\Image|Tests\Psalm\LaravelPlugin\Sandbox\Video, Tests\Psalm\LaravelPlugin\Sandbox\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\Comment::commentable is more specific than the inferred return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\Comment&static>'
+LessSpecificReturnStatement on line %d: The type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\Comment&static>' is more general than the declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\Image|Tests\Psalm\LaravelPlugin\Sandbox\Video, Tests\Psalm\LaravelPlugin\Sandbox\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\Comment::commentable
