@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781782531567,
+  "lastUpdate": 1781784797238,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6535,6 +6535,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.58,
             "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "370efa6b8db37b8c76b4421ea91962957c701b9f",
+          "message": "chore: raise minimum Laravel to ^12.4 (#1089)\n\nThe relation stubs declare BelongsToMany and MorphToMany with four\ntemplates (TPivotModel, TAccessor). Laravel only declares those on the\nclass from v12.4.0. Below 12.4 the framework class has two or three\ntemplates while the stub assumes four, so the plugin was stricter than\nthe installed framework. Pinning the floor at 12.4 aligns them.\n\nAlso raises the lowest CI matrix entry to ^12.4 so the floor is\nactually exercised, and corrects a stale constraint note in the\nbenchmark workflow.\n\nBREAKING CHANGE: minimum supported Laravel raised from 12.0 to 12.4\n(drops 12.0 through 12.3); 13.x unaffected.",
+          "timestamp": "2026-06-18T14:10:28+02:00",
+          "tree_id": "e98b6ed89efa9f2e7ed11ec0a82448372623f009",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/370efa6b8db37b8c76b4421ea91962957c701b9f"
+        },
+        "date": 1781784796684,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.4,
+            "range": "± 0.05",
             "unit": "s"
           },
           {
