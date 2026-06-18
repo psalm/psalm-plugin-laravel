@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Filesystem;
 
-use PhpParser\Node\Arg;
-use PhpParser\Node\Expr\ConstFetch;
-use PhpParser\Node\Scalar\String_;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -16,31 +13,70 @@ use Psalm\Type;
 
 /**
  * Narrows `Storage::disk($name)` / `Storage::drive($name)` (and the same calls on a
- * DI-injected `FilesystemManager` / `Factory` contract) to
- * {@see \Illuminate\Contracts\Filesystem\Cloud} when the disk's configured driver
- * is a built-in Laravel cloud driver. Otherwise returns null to fall through to
- * the declared `Filesystem` return type from Laravel's `@method` catalogue on
- * the {@see \Illuminate\Support\Facades\Storage} facade.
+ * DI-injected `FilesystemManager` / `Factory` contract) to the concrete
+ * {@see \Illuminate\Filesystem\FilesystemAdapter}.
  *
- * Why a handler instead of a stub
- * --------------------------------
- * Larastan's fix vector (and the one suggested in issue #973) is to stub
- * `Storage::disk()` to return the concrete `\Illuminate\Filesystem\FilesystemAdapter`
- * for every call. That conflates the Cloud and Filesystem contracts: it makes
- * `Storage::disk('local')->url('foo.png')` type-check even though the `local`
- * driver does not provide `url()` on the Filesystem contract (Laravel only
- * declares `url()` on `Cloud extends Filesystem`). At runtime `LocalFilesystemAdapter`
- * happens to support `url()` because every shipped adapter extends
- * `FilesystemAdapter`, but the contract distinction is intentional — projects
- * that swap a `local` disk for a custom file-only adapter would silently break.
+ * Why narrow to the concrete adapter
+ * ----------------------------------
+ * Laravel declares `disk()` as returning the bare
+ * {@see \Illuminate\Contracts\Filesystem\Filesystem} contract, but **every**
+ * driver Laravel ships resolves to a `FilesystemAdapter` (or a subclass) at
+ * runtime: `local`/`ftp`/`sftp` build a `FilesystemAdapter`, `s3` builds an
+ * `AwsS3V3Adapter extends FilesystemAdapter`, and `scoped` delegates (via
+ * `build()`) to the wrapped disk's adapter. The contract is a deliberately
+ * conservative *declared* type, not the *runtime* type.
  *
- * The correct layer is here: read `filesystems.disks.<name>.driver` from the
- * user's config and narrow to `Cloud` only for the cloud drivers Laravel ships
- * (currently just `'s3'`, the only built-in `createXDriver()` typed `@return Cloud`).
- * Disks backed by `local`/`ftp`/`sftp`/`scoped` keep the contract-correct
- * `Filesystem` return type, and `disk('local')->url(...)` remains a (correctly
- * reported) `UndefinedInterfaceMethod`.
+ * Two tiers of method are unreachable through the declared `Filesystem` return:
+ *   - `url()` is declared on the `Cloud extends Filesystem` sub-contract, not on
+ *     the base `Filesystem`. So `Storage::disk('public')->url(...)` — `public`
+ *     uses `driver=local`, a file-only disk — was a false positive under the
+ *     contract-faithful predecessor, despite being one of the most common
+ *     `Storage` calls in Laravel.
+ *   - `temporaryUrl()`, `temporaryUploadUrl()`, and `providesTemporaryUrls()` are
+ *     declared on **no** contract at all — only on `FilesystemAdapter`. Reaching
+ *     `Storage::disk('s3')->temporaryUrl(...)` (issue #802) therefore *requires*
+ *     the concrete class; there is no interface we could narrow to instead.
  *
+ * (The stream and visibility methods — `readStream()`, `writeStream()`, `put()`,
+ * `setVisibility()` — are already on the `Filesystem` contract and were never the
+ * problem.) This mirrors Larastan, which also types `disk()` as `FilesystemAdapter`.
+ *
+ * Tradeoff we accept
+ * ------------------
+ * A predecessor of this handler (#973/#982) narrowed only `s3` to the `Cloud`
+ * contract to keep `disk('local')->url(...)` a (contract-faithful) error. We
+ * reverse that: the `Cloud` boundary modelled nothing real (it gated `url()` yet
+ * still hid `temporaryUrl()`, an equally standard cloud operation) and it
+ * produced a false positive on the single most common URL call in Laravel —
+ * `Storage::disk('public')->url(...)`, whose `public` disk uses `driver=local`.
+ * Narrowing to the adapter trades that contract signal away: `url()` /
+ * `temporaryUrl()` on a disk whose backend has them unconfigured now type-checks
+ * (it throws `RuntimeException` at runtime rather than being caught statically).
+ * That guarantee was always weak — those methods throw-if-unconfigured even on a
+ * disk that "supports" them — so favouring the no-false-positive runtime view is
+ * the better bet for real codebases. See #802 and the issue #977 cluster
+ * (augmenting the `Filesystem` contract stub for DI-injected call sites a
+ * return-narrowing fix cannot touch).
+ *
+ * A narrower unsoundness we also accept: a custom driver registered via
+ * `Storage::extend(...)` / `set(...)` may return a bare `Filesystem` that is
+ * *not* a `FilesystemAdapter`. Its factory closure is opaque to static analysis,
+ * so we narrow it anyway and `->temporaryUrl()` on such a disk type-checks but
+ * fatals at runtime. Stock drivers are the overwhelmingly common case; Larastan
+ * makes the same tradeoff.
+ *
+ * Scope: only `disk()` / `drive()`. `cloud()` (declared `@return Cloud`) and
+ * `build()` also resolve to a `FilesystemAdapter` at runtime but are left on
+ * their declared types, so `Storage::cloud()->temporaryUrl()` remains a rare
+ * residual gap rather than expanding this handler's surface.
+ *
+ * Note on `put($path, fopen(...))`: under the adapter return type, `put()`'s
+ * `$contents` is typed `…|resource` (no `false`), so `put($p, fopen($p, 'r'))`
+ * surfaces `PossiblyFalseArgument`. That is a *correct* finding, not a regression
+ * — an unchecked `fopen()` can return `false`, which `put()` would silently
+ * coerce to an empty-file write. Callers should guard the `fopen()` result.
+ *
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/802
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/973
  */
 final class StorageHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
@@ -49,28 +85,18 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
     private const DISK_METHODS = ['disk' => true, 'drive' => true];
 
     /**
-     * Built-in Laravel driver names whose `createXDriver()` returns
-     * {@see \Illuminate\Contracts\Filesystem\Cloud}. Per
-     * `Illuminate\Filesystem\FilesystemManager`, only `createS3Driver` declares a
-     * Cloud return type; `local`, `ftp`, `sftp`, and `scoped` all return the base
-     * `Filesystem` contract. Custom drivers registered via `Storage::extend(...)`
-     * are opaque to static analysis and never narrowed.
+     * Cached `FilesystemAdapter` return type. The narrowed type has no per-call
+     * variation, so a single immutable Union is reused for every successful
+     * narrow. Avoids allocating a fresh Union+Atomic pair on every
+     * `Storage::disk(...)` call site (an app with hundreds of references would
+     * otherwise pay that cost inside the worker fork).
      */
-    private const CLOUD_DRIVERS = ['s3' => true];
-
-    /**
-     * Cached `Cloud` return type. The narrowed type has no per-call variation, so
-     * a single immutable Union is reused for every successful narrow. Avoids
-     * allocating a fresh Union+Atomic pair on every `Storage::disk('s3')` call
-     * site (an app with hundreds of S3 references would otherwise pay that cost
-     * inside the worker fork).
-     */
-    private static ?Type\Union $cloud_return_type = null;
+    private static ?Type\Union $adapter_return_type = null;
 
     /**
      * Cached parameter list for the facade-only params override (see
      * {@see self::getMethodParams()}). Same allocation-avoidance rationale as
-     * `$cloud_return_type`.
+     * `$adapter_return_type`.
      *
      * @var list<Param>|null
      */
@@ -95,7 +121,16 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
         ];
     }
 
-    /** @inheritDoc */
+    /**
+     * Narrow `disk()` / `drive()` to `FilesystemAdapter` unconditionally — the
+     * runtime class is the same regardless of the disk name, so we do not read
+     * the configured driver and a dynamic `disk($name)` narrows just as a literal
+     * `disk('s3')` does.
+     *
+     * @inheritDoc
+     *
+     * @psalm-external-mutation-free
+     */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
     {
@@ -103,55 +138,9 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
             return null;
         }
 
-        $analyzer = FilesystemConfigAnalyzer::instance();
-
-        $disk_name = self::resolveDiskName($event->getCallArgs(), $analyzer);
-        if ($disk_name === null) {
-            return null;
-        }
-
-        $driver = $analyzer->getDriverForDisk($disk_name);
-        if ($driver === null || !isset(self::CLOUD_DRIVERS[$driver])) {
-            return null;
-        }
-
-        return self::$cloud_return_type ??= new Type\Union([
-            new Type\Atomic\TNamedObject(\Illuminate\Contracts\Filesystem\Cloud::class),
+        return self::$adapter_return_type ??= new Type\Union([
+            new Type\Atomic\TNamedObject(\Illuminate\Filesystem\FilesystemAdapter::class),
         ]);
-    }
-
-    /**
-     * Extract the disk name argument as a literal string. Returns null when the
-     * call has a dynamic argument we cannot resolve at analysis time.
-     *
-     * `disk()` with no argument or `disk(null)` both fall back to the configured
-     * default disk (`filesystems.default`), mirroring `FilesystemManager::disk()`'s
-     * `$name = enum_value($name) ?: $this->getDefaultDriver()`.
-     *
-     * `UnitEnum` literal cases (`Storage::disk(MyDisk::S3)`) are intentionally not
-     * resolved today — Psalm would need a `ClassConstFetch` walk against the
-     * scanner's enum case storage. Falls through to `null` (no narrowing), which
-     * stays sound at the cost of a missed opportunity.
-     *
-     * @param list<Arg> $args
-     */
-    private static function resolveDiskName(array $args, FilesystemConfigAnalyzer $analyzer): ?string
-    {
-        if ($args === []) {
-            return $analyzer->getDefaultDisk();
-        }
-
-        $first = $args[0]->value;
-
-        if ($first instanceof String_) {
-            return $first->value;
-        }
-
-        if ($first instanceof ConstFetch && $first->name->toLowerString() === 'null') {
-            return $analyzer->getDefaultDisk();
-        }
-
-        return null;
     }
 
     /**
