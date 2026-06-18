@@ -100,11 +100,11 @@ abstract class Relation implements BuilderContract
      * HasOneOrManyThrough declare their OWN narrower paginate() in Laravel (no $total),
      * so they keep the four-argument override — passing $total there errors at runtime.
      *
-     * @param  int|null|\Closure  $perPage
+     * @param  int|null|(\Closure(int): int)  $perPage
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @param  \Closure|int|null  $total
+     * @param  (\Closure(): int)|int|null  $total
      * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel>
      *
      * @throws \InvalidArgumentException

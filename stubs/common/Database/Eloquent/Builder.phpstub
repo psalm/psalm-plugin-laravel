@@ -529,11 +529,11 @@ class Builder implements BuilderContract
      * without an UndefinedInterfaceMethod. The concrete implements the contract, so
      * code typed on the contract still accepts the result.
      *
-     * @param  int|null|\Closure  $perPage
+     * @param  int|null|(\Closure(int): int)  $perPage
      * @param  list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @param  \Closure|int|null  $total
+     * @param  (\Closure(): int)|int|null  $total
      * @return \Illuminate\Pagination\LengthAwarePaginator<int, TModel>
      *
      * @throws \InvalidArgumentException
