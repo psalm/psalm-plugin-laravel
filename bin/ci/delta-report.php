@@ -307,17 +307,15 @@ $perfNum = static function (?array $perf, string $key): ?float {
         ? (float) $perf[$key]
         : null;
 };
-/** @var list<array{app: string, baseWall: int|null, headWall: int|null, baseCov: float|null, headCov: float|null}> $perfRows */
+/** @var list<array{app: string, baseWall: float|null, headWall: float|null, baseCov: float|null, headCov: float|null}> $perfRows */
 $perfRows = [];
 foreach ($apps as $app) {
     $basePerf = $loadJson($latest($outputDir, $app, $baseLabel, 'perf.json', $dateMarker));
     $headPerf = $loadJson($latest($outputDir, $app, $headLabel, 'perf.json', $dateMarker));
-    $baseWall = $perfNum($basePerf, 'wall_seconds');
-    $headWall = $perfNum($headPerf, 'wall_seconds');
     $perfRows[] = [
         'app' => $app,
-        'baseWall' => $baseWall === null ? null : (int) $baseWall,
-        'headWall' => $headWall === null ? null : (int) $headWall,
+        'baseWall' => $perfNum($basePerf, 'wall_seconds'),
+        'headWall' => $perfNum($headPerf, 'wall_seconds'),
         'baseCov' => $perfNum($basePerf, 'type_coverage_pct'),
         'headCov' => $perfNum($headPerf, 'type_coverage_pct'),
     ];
@@ -385,11 +383,12 @@ if ($changed === []) {
     }
     $out[] = sprintf('| **Total** | **%d** | **%d** | **%d** | **%+d** |', $tTotal, $tAdded, $tRemoved, $tNet);
 
-    // Per-app issue-type movements: base -> head count, with the +added/-removed
-    // identity churn that a net-count diff alone would hide.
+    // Per-app issue-type movements, each collapsed in a <details> so a PR that
+    // touches many apps stays scannable: base -> head count, with the
+    // +added/-removed identity churn a net-count diff alone would hide.
     foreach ($changed as $r) {
         $out[] = '';
-        $out[] = '#### ' . $r['app'];
+        $out[] = sprintf('<details><summary>%s (+%d/-%d)</summary>', $r['app'], $r['added'], $r['removed']);
         $out[] = '';
         foreach ($r['movements'] as $m) {
             $out[] = sprintf(
@@ -401,6 +400,8 @@ if ($changed === []) {
                 $m['removed'],
             );
         }
+        $out[] = '';
+        $out[] = '</details>';
     }
 }
 
@@ -417,23 +418,41 @@ if ($noChange !== []) {
     $out[] = '> No change (ran clean, zero delta): ' . implode(', ', $names) . '.';
 }
 
-// --- Per-app time table (all apps) ------------------------------------------
+// --- Per-app time table (apps with a non-noise time move) -------------------
 //
-// Columns: base wall-seconds, head (PR) wall-seconds, Δ (head − base). Every
-// requested app is listed; a side that left no perf.json (crash / not run)
-// shows "—" and suppresses the Δ.
+// Wall time on shared CI runners is noisy (process scheduling, IO): identical
+// runs vary by a second or two, so a raw Δ is mostly jitter, not PR impact.
+// Show only apps whose |Δ| clears TIME_NOISE_FLOOR; skip non-comparable sides
+// (crash / not run — already in their own buckets). Empty -> a one-liner.
+$timeNoiseFloor = 3.0; // seconds; below this a Δ is treated as runner jitter
+$timeLines = [];
+foreach ($perfRows as $p) {
+    if ($p['baseWall'] === null || $p['headWall'] === null) {
+        continue;
+    }
+    $timeDelta = $p['headWall'] - $p['baseWall'];
+    if (abs($timeDelta) < $timeNoiseFloor) {
+        continue;
+    }
+    $timeLines[] = sprintf('| %s | %.2f | %.2f | %+.2f |', $p['app'], $p['baseWall'], $p['headWall'], $timeDelta);
+}
 
 $out[] = '';
 $out[] = '### Per-app delta — Time (seconds)';
 $out[] = '';
-$out[] = '| App | base | PR | Δ |';
-$out[] = '|-----|-----:|----:|-----:|';
-$secCell = static fn(?int $v): string => $v === null ? '—' : sprintf('%.2f', (float) $v);
-foreach ($perfRows as $p) {
-    $delta = ($p['baseWall'] !== null && $p['headWall'] !== null)
-        ? sprintf('%+.2f', (float) ($p['headWall'] - $p['baseWall']))
-        : '—';
-    $out[] = sprintf('| %s | %s | %s | %s |', $p['app'], $secCell($p['baseWall']), $secCell($p['headWall']), $delta);
+if ($timeLines === []) {
+    $out[] = 'No significant time change (all deltas within runner jitter).';
+} else {
+    $out[] = '| App | base | PR | Δ |';
+    $out[] = '|-----|-----:|----:|-----:|';
+    foreach ($timeLines as $timeLine) {
+        $out[] = $timeLine;
+    }
+    $out[] = '';
+    $out[] = sprintf(
+        '_Wall time on shared CI runners is noisy (±1–2s run-to-run); deltas under ±%.0fs are hidden as jitter, not PR impact._',
+        $timeNoiseFloor,
+    );
 }
 
 // --- Per-app type-coverage table (apps whose coverage moved) ----------------
