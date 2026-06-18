@@ -26,6 +26,10 @@
 #                app/ for Laravel apps, packages/*/src for monorepos, src/ for libs)
 #   prime        optional shell run in the app dir before `composer update`
 #                (one-off install quirks, e.g. bumping a flagged dependency)
+#   psalm_args   optional extra CLI args appended to the Psalm invocation, split
+#                on whitespace (e.g. "--php-version=8.0" to pin the ANALYSIS php
+#                version when the app's composer.json declares a wrong/too-low
+#                minimum). Analysis-time only; does not affect install or caching.
 
 apps:
   - name: monica
@@ -81,3 +85,6 @@ apps:
     php: "8.4"
     kind: lib
     project_dir: src
+    # composer.json declares a too-low PHP minimum, so Psalm would otherwise
+    # analyse against that floor; pin the analysis target explicitly.
+    psalm_args: "--php-version=8.0"
