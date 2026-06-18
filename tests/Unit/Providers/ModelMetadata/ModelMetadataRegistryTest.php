@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -45,6 +46,7 @@ use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyType;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\RelationInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\TableSchema;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\TraitFlags;
 use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
@@ -871,13 +873,45 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame([], $this->metadataFor(Customer::class)->scopes());
     }
 
-    #[Test]
-    public function relations_getter_throws_until_implemented(): void
-    {
-        $metadata = $this->makeStubMetadata(WorkOrder::class);
+    // ---------------------------------------------------------------------
+    // Relations (AST-parsed, OWN-CLASS). The end-to-end parse + handler path needs a real Codebase,
+    // so it is gated by the tests/Type/ relation corpus; here we pin the getter, the value object,
+    // and the compute guard.
+    // ---------------------------------------------------------------------
 
-        $this->expectException(\LogicException::class);
-        $metadata->relations();
+    #[Test]
+    public function relations_getter_returns_the_stored_map(): void
+    {
+        $relation = new RelationInfo(
+            name: 'posts',
+            relationClass: HasMany::class,
+            relatedModel: 'App\\Models\\Post',
+            generics: [],
+        );
+
+        ModelMetadataRegistryBuilder::overrideForTesting(
+            Customer::class,
+            $this->makeStubMetadata(Customer::class, ['posts' => $relation]),
+        );
+
+        $relations = $this->metadataFor(Customer::class)->relations();
+        $this->assertSame($relation, $relations['posts'] ?? null);
+        $this->assertSame('App\\Models\\Post', $relations['posts']->relatedModel);
+    }
+
+    #[Test]
+    public function relations_are_empty_without_a_populated_codebase(): void
+    {
+        // computeRelations short-circuits when Codebase::$methods is uninitialized (a unit-test
+        // Codebase built via newInstanceWithoutConstructor), because RelationMethodParser reads
+        // parsed file statements. So warmUp() yields an empty relation map here — the real parse is
+        // exercised by the tests/Type/ corpus. Pin the guard so dropping it surfaces loudly.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(Customer::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+
+        $this->assertSame([], $this->metadataFor(Customer::class)->relations());
     }
 
     #[Test]
@@ -1024,9 +1058,10 @@ final class ModelMetadataRegistryTest extends TestCase
 
     /**
      * @param class-string<Model> $fqcn
+     * @param array<non-empty-lowercase-string, RelationInfo> $relations
      * @return ModelMetadata<Model>
      */
-    private function makeStubMetadata(string $fqcn): ModelMetadata
+    private function makeStubMetadata(string $fqcn, array $relations = []): ModelMetadata
     {
         return new ModelMetadata(
             fqcn: $fqcn,
@@ -1056,6 +1091,7 @@ final class ModelMetadataRegistryTest extends TestCase
             accessorsData: [],
             mutatorsData: [],
             scopesData: [],
+            relationsData: $relations,
         );
     }
 }

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastsMethodParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
@@ -183,6 +184,7 @@ final class ModelMetadataRegistryBuilder
         // table, connection) stay empty; the rest come from storage + declared property defaults.
         if ($reflection->isAbstract()) {
             return self::computeForAbstract(
+                $codebase,
                 $modelFqcn,
                 $storage,
                 $reflection,
@@ -249,6 +251,10 @@ final class ModelMetadataRegistryBuilder
         // way for concrete and abstract models — see computeForAbstract.
         [$accessors, $mutators, $scopes] = self::computeMethodMetadata($storage, $codebase->classlike_storage_provider);
 
+        // Relations need the Codebase (the AST parser reads parsed file statements), unlike the
+        // storage-only method metadata above — so they are computed separately, not in the walk.
+        $relations = self::computeRelations($codebase, $modelFqcn, $storage);
+
         return new ModelMetadata(
             fqcn: $modelFqcn,
             primaryKey: self::computePrimaryKey($instance, $traits),
@@ -275,6 +281,7 @@ final class ModelMetadataRegistryBuilder
             accessorsData: $accessors,
             mutatorsData: $mutators,
             scopesData: $scopes,
+            relationsData: $relations,
         );
     }
 
@@ -293,6 +300,7 @@ final class ModelMetadataRegistryBuilder
      * @return ModelMetadata<Model>
      */
     private static function computeForAbstract(
+        Codebase $codebase,
         string $modelFqcn,
         ClassLikeStorage $storage,
         \ReflectionClass $reflection,
@@ -307,6 +315,10 @@ final class ModelMetadataRegistryBuilder
         // scopes identically to a concrete model (no instantiation). This is what lets the migrated
         // handlers resolve an inherited accessor/scope on an abstract-typed receiver (#901).
         [$accessors, $mutators, $scopes] = self::computeMethodMetadata($storage, $provider);
+
+        // Concrete relation methods declared in the abstract base's own body parse the same way as on
+        // a concrete model (AST + storage, no instantiation).
+        $relations = self::computeRelations($codebase, $modelFqcn, $storage);
 
         return new ModelMetadata(
             fqcn: $modelFqcn,
@@ -330,6 +342,7 @@ final class ModelMetadataRegistryBuilder
             accessorsData: $accessors,
             mutatorsData: $mutators,
             scopesData: $scopes,
+            relationsData: $relations,
         );
     }
 
@@ -627,6 +640,100 @@ final class ModelMetadataRegistryBuilder
         if ($existing === null || ($existing instanceof LegacyScopeInfo && $info instanceof AttributeScopeInfo)) {
             $scopes[$info->name] = $info;
         }
+    }
+
+    /**
+     * Compute the OWN-CLASS relation map: for each method declared in the model's own body, run the
+     * AST relation parser and record the relation factory it returns.
+     *
+     * OWN-CLASS only because {@see RelationMethodParser::parse()} resolves a factory call only inside
+     * a class literally named $modelFqcn (it searches the declaring file for that class name) — which
+     * is exactly how the relation handlers call it, with the receiver FQCN. So `relations()[$name]`
+     * equals `parse($receiver, $name)` for every name; inherited / trait-hosted relations are null in
+     * both, and the handlers keep serving those through their `getMethodReturnType` tiers (this map
+     * replaces only their AST-parse tier). NOT the full-callable ancestor walk used for
+     * scopes/accessors — those are dispatched by name across the hierarchy, relations are body-parsed
+     * per declaring class.
+     *
+     * Gated to relation CANDIDATES — own-body methods with no declared return type, or a
+     * Relation-subclass return type. This reproduces the handlers' OWN gate exactly: both
+     * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler::relationExists()}
+     * and {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelAggregatePropertyHandler}'s
+     * `isRelationMethod()` reach their parse tier only for a method that is untyped or Relation-typed
+     * (a declared non-Relation return type makes them classify by that type and decline before
+     * parsing). So skipping non-Relation-typed methods here leaves the resolved set identical to the
+     * pre-registry parse calls, while bounding the warm-up cost.
+     *
+     * parse() reads parsed file statements through the Codebase, so a unit-test Codebase built with
+     * newInstanceWithoutConstructor() (no $methods, no file provider) yields an empty map — the same
+     * guard {@see computeCasts} applies to its AST cast walk.
+     *
+     * @param class-string<Model> $modelFqcn
+     * @return array<non-empty-lowercase-string, RelationInfo>
+     */
+    private static function computeRelations(Codebase $codebase, string $modelFqcn, ClassLikeStorage $storage): array
+    {
+        if (!self::codebaseMethodsInitialized($codebase)) {
+            return [];
+        }
+
+        $relations = [];
+        foreach ($storage->methods as $methodStorage) {
+            $casedName = $methodStorage->cased_name;
+            if ($casedName === null) {
+                continue;
+            }
+
+            // A declared non-Relation return type means the handlers classify the method by that type
+            // and never reach their parse tier — so skip it here too (keeps the set identical, and
+            // avoids parsing every ordinary method body at warm-up).
+            $returnType = $methodStorage->return_type ?? $methodStorage->signature_return_type;
+            if ($returnType instanceof Union && !self::hasRelationAtomic($returnType)) {
+                continue;
+            }
+
+            $parsed = RelationMethodParser::parse($codebase, $modelFqcn, $casedName);
+            if ($parsed === null) {
+                continue;
+            }
+
+            $key = \strtolower($casedName);
+            if ($key === '') {
+                continue;
+            }
+
+            // strtolower() yields a lowercase string at runtime; the non-empty guard above makes it
+            // non-empty. Psalm 7 does not refine strtolower's output — assert what it cannot infer.
+            /** @psalm-var non-empty-lowercase-string $key */
+            $relations[$key] = new RelationInfo(
+                name: $key,
+                relationClass: $parsed['relationClass'],
+                relatedModel: $parsed['relatedModel'],
+                generics: [],
+                intermediateModel: $parsed['intermediateModel'],
+                pivotClass: $parsed['pivotModel'],
+                pivotAccessor: $parsed['accessor'],
+            );
+        }
+
+        return $relations;
+    }
+
+    /**
+     * Whether any atomic in $type is a Relation subclass — the same signal the relation handlers use
+     * to recognize a relation method by its declared return type.
+     *
+     * @psalm-mutation-free
+     */
+    private static function hasRelationAtomic(Union $type): bool
+    {
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNamedObject && \is_a($atomic->value, Relation::class, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @psalm-mutation-free */

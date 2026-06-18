@@ -12,13 +12,12 @@ use Illuminate\Database\Eloquent\Model;
  * Immutable metadata snapshot for a single Eloquent model.
  *
  * {@see \Psalm\LaravelPlugin\Providers\ModelMetadataRegistry} populates all
- * public-readonly fields plus the `schema()`, `casts()`, `accessors()`, `mutators()`, and
- * `scopes()` accessors. All return pre-computed data; lazy memoization was not required because
- * the compute cost per model is small.
+ * public-readonly fields plus the `schema()`, `casts()`, `accessors()`, `mutators()`,
+ * `scopes()`, and `relations()` accessors. All return pre-computed data; lazy memoization was not
+ * required because the compute cost per model is small.
  *
- * The remaining accessors (relations/knownProperties) are part of the stable API
- * shape so later handler migrations don't change the contract, but throw
- * {@see \LogicException} until their producing phase lands.
+ * `knownProperties()` is part of the stable API shape so later handler migrations don't change
+ * the contract, but throws {@see \LogicException} until Phase 3 lands.
  *
  * Immutability: every field is `readonly` and the class exposes no setters; the
  * object is fully populated by the builder at construction.
@@ -49,6 +48,7 @@ final readonly class ModelMetadata
      * @param array<non-empty-lowercase-string, AccessorInfo> $accessorsData Pre-computed accessor map, keyed by snake_case property name; full-callable (self + traits + inherited user ancestors).
      * @param array<non-empty-lowercase-string, MutatorInfo>  $mutatorsData  Pre-computed mutator map, keyed by snake_case property name; the write side of accessors (legacy `setXxxAttribute` may exist write-only).
      * @param array<non-empty-lowercase-string, ScopeInfo>    $scopesData    Pre-computed scope map, keyed by the normalized scope name (`scopePublished`/`#[Scope] published` → `published`); full-callable. Identity only — call-site `self`/`static` pinning stays in {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler}.
+     * @param array<non-empty-lowercase-string, RelationInfo> $relationsData Pre-computed relation map, keyed by the lowercased relation method name. OWN-CLASS only (the AST parser resolves a relation factory call only in the receiver's own body), mirroring how the relation handlers call the parser; inherited/trait relations are served by those handlers' `getMethodReturnType` tiers.
      */
     public function __construct(
         public string $fqcn,
@@ -69,6 +69,7 @@ final readonly class ModelMetadata
         private array $accessorsData,
         private array $mutatorsData,
         private array $scopesData,
+        private array $relationsData,
     ) {}
 
     public function schema(): TableSchema
@@ -108,15 +109,18 @@ final readonly class ModelMetadata
     }
 
     /**
+     * Relation map keyed by the lowercased relation method name. Carries the AST-parsed identity
+     * (relation class, related model, through-relation intermediate, pivot class/accessor) for every
+     * relation factory call found in the model's OWN body. Inherited / trait-hosted relations are not
+     * here — the AST parser only resolves the receiver's own body, so the relation handlers keep
+     * serving those through their `getMethodReturnType` tiers (this map replaces only their AST-parse
+     * tier). `$relatedModel` is null for MorphTo and dynamically-resolved relations (#550).
+     *
      * @return array<non-empty-lowercase-string, RelationInfo>
-     * @psalm-pure
-     * @throws \LogicException until Phase 2 lands.
      */
     public function relations(): array
     {
-        throw new \LogicException(
-            'ModelMetadata::relations() is not yet implemented — scheduled for Phase 2 of the registry migration.',
-        );
+        return $this->relationsData;
     }
 
     /**
