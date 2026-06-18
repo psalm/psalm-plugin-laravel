@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781810592310,
+  "lastUpdate": 1781821217633,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6645,6 +6645,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ef330313c98c931cca37b93072a6a748b81549ef",
+          "message": "fix(filesystem): narrow disk listing methods to list<string> #802 (#1094)\n\nStorage::disk() now resolves to the concrete FilesystemAdapter (#802),\nwhose files()/allFiles()/directories()/allDirectories() Laravel declares\nas bare @return array. Psalm expands that to array<array-key, mixed>, so\n`foreach (Storage::disk(...)->files() as $f)` leaks mixed and floods real\napps with MixedAssignment/MixedArgument (e.g. coolify gained 6 such on\nthe #802 bump).\n\nAll four methods build their result as\nlistContents(...)->filter(...)->map(fn (StorageAttributes $a) =>\n$a->path())->toArray(): path() returns string and Flysystem's\nDirectoryListing::toArray() is iterator_to_array(..., false), so the\nvalue is provably list<string>. No subclass overrides them\n(AwsS3V3Adapter, LocalFilesystemAdapter inherit), and Larastan does not\nnarrow these at all, so this is strictly more precise than both Laravel's\nown docblock and Larastan.",
+          "timestamp": "2026-06-19T00:13:06+02:00",
+          "tree_id": "01634a9c9983d0fe93f1fbc29f379c6564c5c60c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ef330313c98c931cca37b93072a6a748b81549ef"
+        },
+        "date": 1781821216927,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.76,
+            "range": "± 1.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
             "unit": "MB"
           }
         ]
