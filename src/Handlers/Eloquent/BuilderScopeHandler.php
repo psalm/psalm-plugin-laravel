@@ -187,12 +187,8 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         //
         // (isRealPublicBuilderMethod classifies via PHP reflection, not Psalm storage — see its
         // docblock for why the stub's $passthru aggregates force that distinction.)
-        //
-        // hasScopeMethod, not getScopeParams: this branch only needs existence — the params are
-        // produced lazily by the params provider via the $pendingScopeModel hand-off below — so the
-        // membership check avoids expanding a param list that would be discarded here.
         if (
-            self::hasScopeMethod($codebase, $modelClass, $methodName)
+            self::getScopeParams($codebase, $modelClass, $methodName) !== null
             && !self::isRealPublicBuilderMethod($methodName)
         ) {
             // Hand the model to the params provider, consumed once (see $pendingScopeModel):
@@ -704,23 +700,20 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     /**
      * Check if the model has a scope for the given method name.
      *
-     * Registry-membership only: the scope map already encodes the #[Scope] (visibility-gated) /
-     * legacy scopeXxx() detection, so existence needs no param expansion — and it is
-     * boolean-equivalent to {@see getScopeParams()} !== null (getScopeParams returns null for
-     * exactly the keys absent from the map; present keys always yield an array). Existence-only
-     * callers route here rather than through getScopeParams so they never build a param list only
-     * to discard it.
+     * Boolean-equivalent to {@see getScopeParams()} !== null — both resolve the same registry scope
+     * map (a #[Scope]-attributed method, visibility-gated, or a legacy scopeXxx() twin) — so this
+     * delegates rather than duplicating the lookup. getScopeParams returns null only for a key absent
+     * from the map (a present key always yields an array), so membership and a non-null result
+     * coincide.
      *
      * Public so ModelMethodHandler can reuse this for method existence checks
-     * on static Model calls (e.g., User::active() → scopeActive). $codebase is retained for
-     * signature stability across the existing callers (and parity with the other scope helpers).
+     * on static Model calls (e.g., User::active() → scopeActive).
      *
      * @param class-string<\Illuminate\Database\Eloquent\Model> $modelClass
-     * @psalm-external-mutation-free
      */
     public static function hasScopeMethod(Codebase $codebase, string $modelClass, string $methodName): bool
     {
-        return (ModelMetadataRegistry::for($modelClass)?->scopes()[\strtolower($methodName)] ?? null) instanceof ScopeInfo;
+        return self::getScopeParams($codebase, $modelClass, $methodName) !== null;
     }
 
     /**
