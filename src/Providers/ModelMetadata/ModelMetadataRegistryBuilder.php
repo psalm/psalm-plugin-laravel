@@ -253,6 +253,11 @@ final class ModelMetadataRegistryBuilder
         // storage-only method metadata above — so they are computed separately, not in the walk.
         $relations = self::computeRelations($codebase, $modelFqcn, $storage);
 
+        // Casts and appends are each needed twice — as their own field AND as a knownProperties()
+        // source — so compute each once into a local rather than re-deriving for the second use.
+        $casts = self::computeCasts($codebase, $modelFqcn, $instance, $traits, $tableSchema);
+        $appends = self::filterStringList($instance->getAppends());
+
         return new ModelMetadata(
             fqcn: $modelFqcn,
             primaryKey: self::computePrimaryKey($instance, $traits),
@@ -262,27 +267,31 @@ final class ModelMetadataRegistryBuilder
             // initializeModelAttributes(), so these getters reflect property declarations only. A future
             // phase that wires a consumer for these fields must run those initializers first.
             //
-            // Preserve case — Laravel's isFillable / isGuarded / getHidden do exact-string
+            // Preserve case — Laravel's isFillable / isGuarded / getHidden / getVisible do exact-string
             // comparisons, so lowercasing would diverge from runtime semantics.
             fillable: self::filterStringList($instance->getFillable()),
             // asArray() guards Laravel's `$guarded = false` ("guard nothing") idiom — getGuarded()
             // then returns a bool, not an array, and would TypeError filterStringList()'s array param,
             // crashing warm-up for the whole model (e.g. laravel/passport's models). #591.
             guarded: self::filterStringList(self::asArray($instance->getGuarded())),
-            appends: self::filterStringList($instance->getAppends()),
+            appends: $appends,
             with: self::readStringList($instance, 'with'),
             withCount: self::readStringList($instance, 'withCount'),
             hidden: self::filterStringList($instance->getHidden()),
+            // getVisible() always returns an array (no `$visible = false` idiom, unlike $guarded), so
+            // it needs no asArray() guard. Non-empty $visible is Eloquent's serialization allow-list.
+            visible: self::filterStringList($instance->getVisible()),
             connection: $instance->getConnectionName(),
             morphAlias: self::computeMorphAlias($modelFqcn),
             customBuilder: $customBuilder,
             customCollection: $customCollection,
             schemaData: $tableSchema,
-            castsData: self::computeCasts($codebase, $modelFqcn, $instance, $traits, $tableSchema),
+            castsData: $casts,
             accessorsData: $accessors,
             mutatorsData: $mutators,
             scopesData: $scopes,
             relationsData: $relations,
+            knownPropertiesData: self::computeKnownProperties($tableSchema, $casts, $accessors, $mutators, $relations, $appends),
         );
     }
 
@@ -321,6 +330,13 @@ final class ModelMetadataRegistryBuilder
         // a concrete model (AST + storage, no instantiation).
         $relations = self::computeRelations($codebase, $modelFqcn, $storage);
 
+        // Schema and casts are instance-derived — empty for an abstract base (no instance, no table).
+        // Hoist the empty schema + the declared $appends so both the fields AND knownProperties()
+        // read the same values (knownProperties is still meaningful here: accessors/relations/appends
+        // declared on the abstract base populate it).
+        $schema = new TableSchema([]);
+        $appends = self::stringListDefault($defaults, 'appends');
+
         return new ModelMetadata(
             fqcn: $modelFqcn,
             primaryKey: self::computePrimaryKeyFromDefaults($defaults),
@@ -329,21 +345,23 @@ final class ModelMetadataRegistryBuilder
             // Laravel's base Model defaults $guarded to ['*'] (guard-all); the default-property
             // read returns exactly that, so no special-casing is needed here.
             guarded: self::stringListDefault($defaults, 'guarded'),
-            appends: self::stringListDefault($defaults, 'appends'),
+            appends: $appends,
             with: self::stringListDefault($defaults, 'with'),
             withCount: self::stringListDefault($defaults, 'withCount'),
             hidden: self::stringListDefault($defaults, 'hidden'),
+            visible: self::stringListDefault($defaults, 'visible'),
             // Instance-derived — empty for an abstract base (no instance, no table).
             connection: null,
             morphAlias: self::computeMorphAlias($modelFqcn),
             customBuilder: $customBuilder,
             customCollection: $customCollection,
-            schemaData: new TableSchema([]),
+            schemaData: $schema,
             castsData: [],
             accessorsData: $accessors,
             mutatorsData: $mutators,
             scopesData: $scopes,
             relationsData: $relations,
+            knownPropertiesData: self::computeKnownProperties($schema, [], $accessors, $mutators, $relations, $appends),
         );
     }
 
@@ -739,6 +757,76 @@ final class ModelMetadataRegistryBuilder
         }
 
         return false;
+    }
+
+    /**
+     * Build the origin-tagged union of known property names. See {@see ModelMetadata::knownProperties()}
+     * for the contract (key normalization, the source list, and the `$fillable`/`$guarded`/`@property`
+     * exclusions). The schema, casts, accessors, mutators, and relations passed here are the very maps
+     * stored on the same {@see ModelMetadata}, so this is a pure fold over already-derived data — no
+     * reflection or Codebase access.
+     *
+     * @param array<non-empty-string, CastInfo>               $casts
+     * @param array<non-empty-lowercase-string, AccessorInfo> $accessors
+     * @param array<non-empty-lowercase-string, MutatorInfo>  $mutators
+     * @param array<non-empty-lowercase-string, RelationInfo> $relations
+     * @param list<non-empty-string>                          $appends
+     * @return array<non-empty-lowercase-string, PropertyOrigins>
+     */
+    private static function computeKnownProperties(
+        TableSchema $schema,
+        array $casts,
+        array $accessors,
+        array $mutators,
+        array $relations,
+        array $appends,
+    ): array {
+        /** @var array<non-empty-lowercase-string, PropertyOrigins> $known */
+        $known = [];
+
+        foreach (\array_keys($schema->all()) as $column) {
+            self::tagKnownProperty($known, $column, PropertyOrigin::SchemaColumn);
+        }
+
+        foreach (\array_keys($casts) as $column) {
+            self::tagKnownProperty($known, $column, PropertyOrigin::Cast);
+        }
+
+        foreach (\array_keys($accessors) as $property) {
+            self::tagKnownProperty($known, $property, PropertyOrigin::Accessor);
+        }
+
+        foreach (\array_keys($mutators) as $property) {
+            self::tagKnownProperty($known, $property, PropertyOrigin::Mutator);
+        }
+
+        foreach (\array_keys($relations) as $relation) {
+            self::tagKnownProperty($known, $relation, PropertyOrigin::Relation);
+        }
+
+        foreach ($appends as $appended) {
+            self::tagKnownProperty($known, $appended, PropertyOrigin::Appended);
+        }
+
+        return $known;
+    }
+
+    /**
+     * Merge one raw property name into the known-property accumulator under its normalized key,
+     * adding $origin to the (possibly new) {@see PropertyOrigins} set. A name that normalizes to the
+     * empty string is dropped. Mirrors {@see insertAccessor}'s by-ref accumulator convention.
+     *
+     * @param array<non-empty-lowercase-string, PropertyOrigins> $known
+     * @param-out array<non-empty-lowercase-string, PropertyOrigins> $known
+     */
+    private static function tagKnownProperty(array &$known, string $rawName, PropertyOrigin $origin): void
+    {
+        $key = EloquentModelMethods::accessorPropertyKey($rawName);
+        if ($key === null) {
+            return;
+        }
+
+        $known[$key] = ($known[$key] ?? new PropertyOrigins([]))->with($origin);
     }
 
     /** @psalm-mutation-free */

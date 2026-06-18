@@ -13,11 +13,8 @@ use Illuminate\Database\Eloquent\Model;
  *
  * {@see \Psalm\LaravelPlugin\Providers\ModelMetadataRegistry} populates all
  * public-readonly fields plus the `schema()`, `casts()`, `accessors()`, `mutators()`,
- * `scopes()`, and `relations()` accessors. All return pre-computed data; lazy memoization was not
- * required because the compute cost per model is small.
- *
- * `knownProperties()` is part of the stable API shape so later handler migrations don't change
- * the contract, but throws {@see \LogicException} until Phase 3 lands.
+ * `scopes()`, `relations()`, and `knownProperties()` accessors. All return pre-computed data; lazy
+ * memoization was not required because the compute cost per model is small.
  *
  * Immutability: every field is `readonly` and the class exposes no setters; the
  * object is fully populated by the builder at construction.
@@ -30,8 +27,8 @@ use Illuminate\Database\Eloquent\Model;
 final readonly class ModelMetadata
 {
     /**
-     * Attribute-name fields (`fillable` / `guarded` / `appends` / `hidden`) preserve the
-     * exact case the user declared — Eloquent's `isFillable` / `isGuarded` / `getHidden`
+     * Attribute-name fields (`fillable` / `guarded` / `appends` / `hidden` / `visible`) preserve the
+     * exact case the user declared — Eloquent's `isFillable` / `isGuarded` / `getHidden` / `getVisible`
      * do case-sensitive string comparisons, and lowercasing would diverge from runtime.
      * Same reason the `castsData` map is keyed by original-case column name.
      *
@@ -42,6 +39,7 @@ final readonly class ModelMetadata
      * @param list<string>                                  $with      Eager-load relation names from `$with`.
      * @param list<string>                                  $withCount Eager-load-count relation names from `$withCount`.
      * @param list<non-empty-string>                        $hidden
+     * @param list<non-empty-string>                        $visible   Serialization allow-list from `$visible`; when non-empty it limits `toArray()`/`toJson()` to these keys (consumed by #923).
      * @param class-string<Builder>|null                    $customBuilder    Detected via #[UseEloquentBuilder] / newEloquentBuilder() / $builder; non-templated because detection cannot recover the model type param.
      * @param class-string<EloquentCollection>|null         $customCollection Detected via #[CollectedBy] / newCollection() / $collectionClass.
      * @param array<non-empty-string, CastInfo>             $castsData Pre-computed cast map (column → CastInfo).
@@ -49,6 +47,7 @@ final readonly class ModelMetadata
      * @param array<non-empty-lowercase-string, MutatorInfo>  $mutatorsData  Pre-computed mutator map, keyed by snake_case property name; the write side of accessors (legacy `setXxxAttribute` may exist write-only).
      * @param array<non-empty-lowercase-string, ScopeInfo>    $scopesData    Pre-computed scope map, keyed by the normalized scope name (`scopePublished`/`#[Scope] published` → `published`); full-callable. Identity only — call-site `self`/`static` pinning stays in {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler}.
      * @param array<non-empty-lowercase-string, RelationInfo> $relationsData Pre-computed relation map, keyed by the lowercased relation method name. OWN-CLASS only (the AST parser resolves a relation factory call only in the receiver's own body), mirroring how the relation handlers call the parser; inherited/trait relations are served by those handlers' `getMethodReturnType` tiers.
+     * @param array<non-empty-lowercase-string, PropertyOrigins> $knownPropertiesData Pre-computed union of known property names tagged by origin; see {@see knownProperties()}.
      */
     public function __construct(
         public string $fqcn,
@@ -60,6 +59,7 @@ final readonly class ModelMetadata
         public array $with,
         public array $withCount,
         public array $hidden,
+        public array $visible,
         public ?string $connection,
         public ?string $morphAlias,
         public ?string $customBuilder,
@@ -70,6 +70,7 @@ final readonly class ModelMetadata
         private array $mutatorsData,
         private array $scopesData,
         private array $relationsData,
+        private array $knownPropertiesData,
     ) {}
 
     public function schema(): TableSchema
@@ -141,17 +142,30 @@ final readonly class ModelMetadata
     }
 
     /**
-     * Union of all "known" property names the model exposes, each tagged with
-     * its origin(s). Consumed by the #699 unknown-key detector.
+     * Union of the "known" property names the model exposes, each tagged with its origin(s) so a
+     * consumer decides per context which origins count (the #699 unknown-key detector is the first).
+     *
+     * Keys are normalized through {@see \Psalm\LaravelPlugin\Util\EloquentModelMethods::accessorPropertyKey()}
+     * (separators stripped, lowercased), so a `full_name` column and a `fullName()` accessor merge into
+     * one `fullname` entry carrying both {@see PropertyOrigin::SchemaColumn} and {@see PropertyOrigin::Accessor}.
+     * Sources: schema columns, casts, accessors, mutators (incl. write-only), relations, and `$appends`.
+     * `$fillable` / `$guarded` are deliberately NOT sources — they are a guard-list over columns, not an
+     * independent supply of attribute names — and docblock `@property` names are not parsed yet.
+     *
+     * The set is not exhaustive in two known ways, so a consumer must not treat a single model's set as
+     * complete: (1) with migrations disabled
+     * ({@see \Psalm\LaravelPlugin\Providers\SchemaStateProvider::getSchema()} is null) the schema-column
+     * origins are absent, so an unknown-key check must not treat the column set as authoritative in that
+     * mode (it would flag valid column keys as unknown); (2) the `relations` source is OWN-CLASS only
+     * (see {@see relations()}), so a relation inherited from a parent or trait is absent here even though
+     * it is a readable property — unlike the accessor / mutator / scope sources, which are full-callable.
+     * A consumer needing inherited relations must supplement via the relation handlers' inheritance-aware
+     * `getMethodReturnType` tiers.
      *
      * @return array<non-empty-lowercase-string, PropertyOrigins>
-     * @psalm-pure
-     * @throws \LogicException until Phase 3 lands — see the ModelMetadataRegistry design doc §7.
      */
     public function knownProperties(): array
     {
-        throw new \LogicException(
-            'ModelMetadata::knownProperties() is not yet implemented — deferred to Phase 3 of the registry migration.',
-        );
+        return $this->knownPropertiesData;
     }
 }
