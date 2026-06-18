@@ -404,6 +404,19 @@ if ($changed === []) {
     }
 }
 
+// Apps that ran cleanly on both sides but produced no delta — listed here under
+// Issues (with the issue results) rather than down by the perf tables, and kept
+// separate from crashes so "nothing changed" is never read as "nothing ran".
+$noChange = array_values(array_filter(
+    $rows,
+    static fn(array $r): bool => $r['total'] === 0,
+));
+if ($noChange !== []) {
+    $names = array_map(static fn(array $r): string => $r['app'], $noChange);
+    $out[] = '';
+    $out[] = '> No change (ran clean, zero delta): ' . implode(', ', $names) . '.';
+}
+
 // --- Per-app time table (all apps) ------------------------------------------
 //
 // Columns: base wall-seconds, head (PR) wall-seconds, Δ (head − base). Every
@@ -415,31 +428,45 @@ $out[] = '### Per-app delta — Time (seconds)';
 $out[] = '';
 $out[] = '| App | base | PR | Δ |';
 $out[] = '|-----|-----:|----:|-----:|';
-$intCell = static fn(?int $v): string => $v === null ? '—' : (string) $v;
+$secCell = static fn(?int $v): string => $v === null ? '—' : sprintf('%.2f', (float) $v);
 foreach ($perfRows as $p) {
     $delta = ($p['baseWall'] !== null && $p['headWall'] !== null)
-        ? sprintf('%+d', $p['headWall'] - $p['baseWall'])
+        ? sprintf('%+.2f', (float) ($p['headWall'] - $p['baseWall']))
         : '—';
-    $out[] = sprintf('| %s | %s | %s | %s |', $p['app'], $intCell($p['baseWall']), $intCell($p['headWall']), $delta);
+    $out[] = sprintf('| %s | %s | %s | %s |', $p['app'], $secCell($p['baseWall']), $secCell($p['headWall']), $delta);
 }
 
-// --- Per-app type-coverage table (all apps) ---------------------------------
+// --- Per-app type-coverage table (apps whose coverage moved) ----------------
 //
 // Psalm's inferred-type coverage %, base vs head (Δ = head − base). A PR can
-// move coverage without moving any issue (e.g. adding annotations), so every
-// app is listed; a side with no perf.json shows "—".
+// move coverage without moving any issue (e.g. adding annotations). Only apps
+// whose coverage actually moved are listed: unchanged rows (Δ rounds to 0.00)
+// are hidden, and a side with no perf.json (crash / not run) is skipped here
+// since it already appears in the Crashed / Not-run buckets.
+
+$covLines = [];
+foreach ($perfRows as $p) {
+    if ($p['baseCov'] === null || $p['headCov'] === null) {
+        continue; // not comparable — surfaced in its own bucket, not here
+    }
+    $delta = sprintf('%+.2f', $p['headCov'] - $p['baseCov']);
+    if ($delta === '+0.00' || $delta === '-0.00') {
+        continue; // coverage unchanged
+    }
+    $covLines[] = sprintf('| %s | %.2f | %.2f | %s |', $p['app'], $p['baseCov'], $p['headCov'], $delta);
+}
 
 $out[] = '';
 $out[] = '### Per-app delta — Type coverage (%)';
 $out[] = '';
-$out[] = '| App | base | PR | Δ |';
-$out[] = '|-----|-----:|----:|-----:|';
-$covCell = static fn(?float $v): string => $v === null ? '—' : sprintf('%.2f', $v);
-foreach ($perfRows as $p) {
-    $delta = ($p['baseCov'] !== null && $p['headCov'] !== null)
-        ? sprintf('%+.2f', $p['headCov'] - $p['baseCov'])
-        : '—';
-    $out[] = sprintf('| %s | %s | %s | %s |', $p['app'], $covCell($p['baseCov']), $covCell($p['headCov']), $delta);
+if ($covLines === []) {
+    $out[] = 'No type-coverage changes.';
+} else {
+    $out[] = '| App | base | PR | Δ |';
+    $out[] = '|-----|-----:|----:|-----:|';
+    foreach ($covLines as $covLine) {
+        $out[] = $covLine;
+    }
 }
 
 // Weighted ΔCov: one headline coverage move across all apps. A plain mean of
@@ -457,22 +484,12 @@ foreach ($perfRows as $p) {
     $weightNum += ($p['headCov'] - $p['baseCov']) * (float) $p['baseWall'];
     $weightDen += (float) $p['baseWall'];
 }
-if ($weightDen > 0.0) {
+// Only as a footer row of the coverage table, and only when something moved —
+// otherwise it would dangle as a header-less table row under "No changes".
+if ($covLines !== [] && $weightDen > 0.0) {
     $out[] = sprintf('| **Weighted Δ** | — | — | **%+.2f** |', $weightNum / $weightDen);
     $out[] = '';
     $out[] = '_Weighted Δ is weighted by base `wall_seconds` (proxy for codebase size)._';
-}
-
-// Apps that ran cleanly on both sides but produced no delta — kept separate
-// from crashes so "nothing changed" is never confused with "nothing ran".
-$noChange = array_values(array_filter(
-    $rows,
-    static fn(array $r): bool => $r['total'] === 0,
-));
-if ($noChange !== []) {
-    $names = array_map(static fn(array $r): string => $r['app'], $noChange);
-    $out[] = '';
-    $out[] = '> No change (ran clean, zero delta): ' . implode(', ', $names) . '.';
 }
 
 // Split "no issues.json" apps into genuine crashes (a crash log exists, shown
