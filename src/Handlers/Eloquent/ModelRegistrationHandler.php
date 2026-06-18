@@ -105,26 +105,19 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 continue;
             }
 
-            self::registerHandlersForModel($codebase, $storage);
-
-            // Warm the metadata registry in the SAME pass (idempotent, never throws). Runs for every
-            // registered model — concrete and abstract bases alike (#1058) — and is NOT gated on
-            // migrations: ModelPropertyAccessorHandler reads accessors()/mutators() unconditionally
-            // (registered below without a migration gate, abstract bases included), so the registry
-            // must be warm even when migrations are disabled. warmUp() populates the storage- and
-            // reflection-derived fields (accessors, mutators, traits, primary key, custom
-            // builder/collection) plus casts() (from getCasts()). Only schema() depends on migrations
-            // (no SchemaAggregator → empty). casts() is computed either way but is consumed only via a
-            // schema-column match, so with migrations off it is inert — its sole consumer,
-            // ModelPropertyHandler, is itself migration-gated below.
+            // Warm the registry FIRST (idempotent, never throws) for every model — concrete and
+            // abstract bases alike (#1058), not migration-gated (ModelPropertyAccessorHandler reads
+            // accessors()/mutators() unconditionally). Must precede registerHandlersForModel so the
+            // latter reads the resolved customBuilder/customCollection off the registry instead of
+            // reflecting a SECOND time (Gotcha 8). Safe reorder: compute() reads only real-method +
+            // reflection state, never the pseudo_* maps registerHandlersForModel mutates.
             ModelMetadataRegistryBuilder::warmUp($codebase, $storage->name);
 
-            // Write types for accessor (mutator) + relationship properties run AFTER warmUp: the
-            // mutator branch reads the registry's mutators() (populated by warmUp), while the
-            // relation-write branch keeps its own declared-return-type detection. Same per-model
-            // sequence as before (this used to be the last step of registerHandlersForModel), just
-            // moved past warm-up so the registry is available; registerWriteTypesForColumns stays in
-            // registerHandlersForModel and still runs first.
+            self::registerHandlersForModel($codebase, $storage);
+
+            // Mutator + relation write-types run after warmUp + registration: the mutator branch reads
+            // mutators() (populated by warmUp); relation-write keeps its own declared-return-type
+            // detection. registerWriteTypesForColumns ran earlier, inside registerHandlersForModel.
             self::registerWriteTypesForMethods($codebase, $storage);
         }
     }
@@ -157,25 +150,31 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
         }
 
-        // Detect custom builder class via attribute, method override, or $builder property.
-        // Class is already loaded by autoloader above.
-        //
-        // Skipped for abstract bases — not because detection itself is unsafe (it only reflects on
-        // class metadata), but because a non-null result drives handleTraitBuilderMethods(), which
-        // STRIPS the SoftDeletes @method pseudo-methods (withTrashed/onlyTrashed) off the model's
-        // storage so they resolve through the custom builder instead. An abstract base is commonly
-        // queried through the base Builder<AbstractBase> (e.g. `/** @var Builder<Entity> $q */`);
-        // BuilderScopeHandler resolves `Builder<AbstractBase>->onlyTrashed()` by reading those model
-        // pseudo-methods, so stripping them regresses the call to mixed (issue #901). Concrete
-        // children detect their builder normally; an abstract base falls back to base Builder, a
-        // sound supertype. See AbstractModelCustomBuilderTest for the regression guard.
+        // Custom builder/collection come from the warmed registry — no reflection here (Gotcha 8:
+        // kills the second per-model reflection the old detectCustom*() wrappers did). On the rare
+        // warm-up failure (logged by warmUp()) the entry is absent, so re-resolve them below from
+        // reflection (the only reflection-derived fields; the rest of the entry stays missing).
         /** @var class-string<Model> $className — verified by parent_classes check in caller */
-        $customBuilder = $storage->abstract ? null : self::detectCustomBuilder($codebase, $className);
+        $metadata = ModelMetadataRegistry::for($className);
 
-        // For models with custom builders: handle @method static annotations from traits
-        // (e.g., SoftDeletes::withTrashed) that return Builder<static>. These are builder
-        // macros at runtime — remap them to return the custom builder type.
+        // Abstract bases skip the custom builder: a non-null result drives handleTraitBuilderMethods(),
+        // which STRIPS the SoftDeletes @method pseudo-methods (withTrashed/onlyTrashed) so they resolve
+        // through the custom builder — but an abstract base is queried through base Builder<AbstractBase>,
+        // where BuilderScopeHandler reads those pseudo-methods, so stripping regresses to mixed (#901).
+        // Concrete children use their detected builder; abstract bases fall back to base Builder, a sound
+        // supertype. See AbstractModelCustomBuilderTest.
+        if ($storage->abstract) {
+            $customBuilder = null;
+        } else {
+            $customBuilder = $metadata instanceof ModelMetadata
+                ? $metadata->customBuilder
+                : self::resolveCustomBuilderClass($codebase, $className);
+        }
+
+        // Custom-builder models: register the model→builder map and remap trait @method static macros
+        // (e.g. SoftDeletes::withTrashed returning Builder<static>) to the custom builder type.
         if ($customBuilder !== null) {
+            ModelMethodHandler::registerCustomBuilder($className, $customBuilder);
             self::handleTraitBuilderMethods($codebase, $storage, $className, $customBuilder);
 
             // Register scope handlers for the custom builder class so that builder
@@ -230,12 +229,16 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             ModelMethodHandler::getReturnTypeForForwardedMethod(...),
         );
 
-        // Detect custom collection class via #[CollectedBy] attribute or newCollection() override.
-        // Class is already loaded by autoloader above. Skipped for abstract bases (mirroring the
-        // custom builder above): an abstract base falls back to the base Eloquent collection,
-        // matching its base-Builder fallback. Concrete children detect their collection normally.
+        // Custom collection: same registry read + warm-up-failure fallback as the builder above
+        // (Gotcha 8). Abstract bases fall back to the base Eloquent collection, mirroring the builder.
         if (!$storage->abstract) {
-            self::detectCustomCollection($codebase, $className);
+            $customCollection = $metadata instanceof ModelMetadata
+                ? $metadata->customCollection
+                : self::resolveCustomCollectionClass($codebase, $className);
+
+            if ($customCollection !== null) {
+                CustomCollectionHandler::registerCustomCollection($className, $customCollection);
+            }
         }
 
         // Custom collection: narrows Model::all() return type for models using
@@ -338,41 +341,21 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     }
 
     /**
-     * Detect a custom Eloquent builder for a model and register it.
-     *
-     * Matches Laravel's own resolution priority in Model::newEloquentBuilder():
-     * 1. newEloquentBuilder() override — if the model overrides this method, it bypasses
-     *    the attribute and property checks entirely (Laravel calls the override directly)
+     * Pure detection of a model's custom Eloquent builder, matching Laravel's resolution priority in
+     * Model::newEloquentBuilder():
+     * 1. newEloquentBuilder() override — if the model overrides this method, it bypasses the attribute
+     *    and property checks entirely (Laravel calls the override directly)
      * 2. #[UseEloquentBuilder] attribute — checked first inside the base newEloquentBuilder()
      * 3. protected static string $builder property — fallback in the base newEloquentBuilder()
      *
-     * @param class-string<Model> $className
-     * @return class-string<Builder>|null The custom builder class, or null if using base Builder.
-     */
-    private static function detectCustomBuilder(Codebase $codebase, string $className): ?string
-    {
-        $builderClass = self::resolveCustomBuilderClass($codebase, $className);
-        if ($builderClass !== null) {
-            ModelMethodHandler::registerCustomBuilder($className, $builderClass);
-        }
-
-        return $builderClass;
-    }
-
-    /**
-     * Pure detection of a model's custom Eloquent builder — same resolution priority as
-     * {@see detectCustomBuilder} but WITHOUT the `ModelMethodHandler::registerCustomBuilder()`
-     * side effect. Split out so {@see \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder}
-     * can record the builder class (for abstract bases too — this is reflection-only, no
-     * instantiation) without double-registering the per-model hooks. The detect*() wrapper
-     * owns registration; this owns detection.
+     * Reflection-only (abstract bases included). Single detection path: warmUp() calls it to populate
+     * ModelMetadata::$customBuilder; registerHandlersForModel() reads that value and owns the
+     * registerCustomBuilder() side effect (the old detectCustomBuilder() wrapper is gone — Gotcha 8).
      *
      * @param class-string<Model> $className
-     * @return class-string<Builder>|null
-     * @internal called by ModelMetadataRegistryBuilder and detectCustomBuilder. The builder
-     *   call site is a Phase-1 cross-namespace seam (Provider → Handler); once the remaining
-     *   handlers migrate onto the registry, this detection can relocate into the registry
-     *   namespace and the dependency inverts to Handler → Provider.
+     * @return class-string<Builder>|null The custom builder class, or null if using base Builder.
+     * @internal called by ModelMetadataRegistryBuilder (warm-up) and the warm-up-failure fallback in
+     *   registerHandlersForModel(). Phase-1 cross-namespace seam (Provider → Handler).
      */
     public static function resolveCustomBuilderClass(Codebase $codebase, string $className): ?string
     {
@@ -612,38 +595,21 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     }
 
     /**
-     * Detect a custom Eloquent collection for a model and register it.
-     *
-     * Matches Laravel's own resolution priority in HasCollection::newCollection():
-     * 1. newCollection() override — if the model overrides this method, it bypasses
-     *    the attribute and property checks entirely (Laravel calls the override directly)
+     * Pure detection of a model's custom Eloquent collection, matching Laravel's resolution priority
+     * in HasCollection::newCollection():
+     * 1. newCollection() override — if the model overrides this method, it bypasses the attribute and
+     *    property checks entirely (Laravel calls the override directly)
      * 2. #[CollectedBy] attribute — checked first inside the base newCollection()
      * 3. protected static string $collectionClass property — fallback in the base newCollection()
      *
-     * Uses runtime reflection (consistent with custom builder detection) since the model
-     * class is already loaded by the autoloader in the caller.
-     *
-     * @param class-string<Model> $className
-     */
-    private static function detectCustomCollection(Codebase $codebase, string $className): void
-    {
-        $collectionClass = self::resolveCustomCollectionClass($codebase, $className);
-        if ($collectionClass !== null) {
-            CustomCollectionHandler::registerCustomCollection($className, $collectionClass);
-        }
-    }
-
-    /**
-     * Pure detection of a model's custom Eloquent collection — same resolution priority as
-     * {@see detectCustomCollection} but WITHOUT the `CustomCollectionHandler::registerCustomCollection()`
-     * side effect. Split out so {@see \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder}
-     * can record the collection class (reflection-only; abstract bases included) without
-     * double-registering. The detect*() wrapper owns registration; this owns detection.
+     * Reflection-only (abstract bases included). Single detection path, mirroring
+     * {@see resolveCustomBuilderClass}: warmUp() populates ModelMetadata::$customCollection;
+     * registerHandlersForModel() reads it and owns the registerCustomCollection() side effect (the old
+     * detectCustomCollection() wrapper is gone — Gotcha 8).
      *
      * @param class-string<Model> $className
      * @return class-string<EloquentCollection>|null
-     * @internal called by ModelMetadataRegistryBuilder and detectCustomCollection. Same Phase-1
-     *   cross-namespace seam as {@see resolveCustomBuilderClass} — a Phase-2 relocation candidate.
+     * @internal called by ModelMetadataRegistryBuilder (warm-up) and the warm-up-failure fallback.
      */
     public static function resolveCustomCollectionClass(Codebase $codebase, string $className): ?string
     {

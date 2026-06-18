@@ -171,11 +171,9 @@ final class ModelMetadataRegistryBuilder
             return null;
         }
 
-        // Custom builder / collection detection is reflection-based (no instantiation), so it runs
-        // for abstract bases too. Reuses the registration handler's resolver so there is one
-        // canonical detection path — the side-effectful detect*() wrappers there register the
-        // per-model hooks; this pure resolver just reports the class. Mirrors #1058's split:
-        // storage/reflection-derived fields populate even when the instance-derived ones cannot.
+        // Custom builder / collection detection is reflection-based (abstract bases included). Warm-up
+        // is the SINGLE detection pass: registerHandlersForModel() (run AFTER warmUp) reads these off
+        // ModelMetadata and owns hook registration — no second reflection per model (Gotcha 8).
         $customBuilder = ModelRegistrationHandler::resolveCustomBuilderClass($codebase, $modelFqcn);
         $customCollection = ModelRegistrationHandler::resolveCustomCollectionClass($codebase, $modelFqcn);
 
