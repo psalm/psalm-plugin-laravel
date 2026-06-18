@@ -121,6 +121,7 @@ for app in "${RUN_APPS[@]}"; do
     php_ver=$(yq ".apps[] | select(.name == \"$app\") | .php // \"8.3\"" "$REGISTRY")
     pdir=$(yq ".apps[] | select(.name == \"$app\") | .project_dir // \"\"" "$REGISTRY")
     prime=$(yq ".apps[] | select(.name == \"$app\") | .prime // \"\"" "$REGISTRY")
+    psalm_args=$(yq ".apps[] | select(.name == \"$app\") | .psalm_args // \"\"" "$REGISTRY")
 
     # Warn (don't block) when the system php differs from the app's pinned minor:
     # Composer installs under the local binary, so a mismatch can fail oddly.
@@ -135,6 +136,7 @@ for app in "${RUN_APPS[@]}"; do
     )
     [[ -n "$pdir"  ]] && args+=(--project-dir "$pdir")
     [[ -n "$prime" ]] && args+=(--prime "$prime")
+    [[ -n "$psalm_args" ]] && args+=(--psalm-args "$psalm_args")
 
     echo "=== $app ===" >&2
     bash "${PLUGIN_DIR}/bin/ci/delta-app.sh" "${args[@]}" || echo "WARN: $app runner failed" >&2
