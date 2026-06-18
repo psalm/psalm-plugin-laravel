@@ -210,7 +210,9 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
     /**
      * @psalm-assert-if-true class-string<Model> $className
      *
-     * @psalm-external-mutation-free
+     * Not marked mutation-free: Psalm 6's {@see Codebase::classExists()} and
+     * {@see Codebase::classExtends()} are not annotated mutation-free (they are
+     * in Psalm 7), so claiming purity here trips ImpureMethodCall on this run.
      */
     private static function isModelSubclass(string $className, Codebase $codebase): bool
     {

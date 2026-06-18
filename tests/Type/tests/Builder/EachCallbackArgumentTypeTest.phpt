@@ -19,7 +19,7 @@ use App\Models\WorkOrder;
  * bind to the Builder's `TModel`, so it resolved to the trait default `Model`, and a
  * `callable(Customer)` is narrower than the expected `callable(Model, int)`.
  *
- * On the currently supported toolchain (Laravel 13, Psalm 7) `TValue` binds to `TModel`
+ * On the currently supported toolchain (Laravel 13, Psalm 6) `TValue` binds to `TModel`
  * and Psalm accepts a callback with fewer params (PHP discards extra runtime args), so
  * none of these patterns error. The genuine true-positive (wrong model type) must still
  * be reported.
@@ -66,4 +66,4 @@ function test_each_wrong_model_type_still_errors(): void
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::each expects impure-callable(App\Models\Customer, int):mixed, but impure-Closure(App\Models\Vehicle):void provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::each expects callable(App\Models\Customer, int):mixed, but impure-Closure(App\Models\Vehicle):void provided

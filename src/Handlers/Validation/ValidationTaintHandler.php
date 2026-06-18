@@ -65,12 +65,12 @@ final class ValidationTaintHandler implements
      * dropped by a type override (or never existed, as on `Request::__get`).
      */
     #[\Override]
-    public static function addTaints(AddRemoveTaintsEvent $event): int
+    public static function addTaints(AddRemoveTaintsEvent $event): array
     {
         $read = ValidatedFieldReadResolver::resolve($event);
 
-        if (!$read instanceof \Psalm\LaravelPlugin\Handlers\Validation\ValidatedFieldRead || $read->sourceTaints === 0) {
-            return 0;
+        if (!$read instanceof \Psalm\LaravelPlugin\Handlers\Validation\ValidatedFieldRead || $read->sourceTaints === []) {
+            return [];
         }
 
         // Property fetches double-dispatch the same node (read pass + argument
@@ -82,7 +82,7 @@ final class ValidationTaintHandler implements
             $exprId = \spl_object_id($expr);
 
             if (isset(self::$addTaintsSourcedPropertyFetchIds[$exprId])) {
-                return 0;
+                return [];
             }
 
             self::$addTaintsSourcedPropertyFetchIds[$exprId] = true;
@@ -96,9 +96,9 @@ final class ValidationTaintHandler implements
      * present in the value.
      */
     #[\Override]
-    public static function removeTaints(AddRemoveTaintsEvent $event): int
+    public static function removeTaints(AddRemoveTaintsEvent $event): array
     {
-        return ValidatedFieldReadResolver::resolve($event)?->removedTaints ?? 0;
+        return ValidatedFieldReadResolver::resolve($event)?->removedTaints ?? [];
     }
 
     /**

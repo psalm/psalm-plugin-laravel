@@ -53,12 +53,10 @@ final class FormRequestPropertyHandler implements AfterCodebasePopulatedInterfac
     /**
      * @inheritDoc
      *
-     * `@psalm-external-mutation-free` is a slight overclaim (the registered
-     * closures mutate Psalm's provider tables) but Psalm 7's `MissingPureAnnotation`
-     * demands it for taint analysis, and project policy forbids baseline entries.
-     * Same disclaimer as {@see InlineValidateRulesCollector::afterStatementAnalysis}.
-     *
-     * @psalm-external-mutation-free
+     * Not marked mutation-free: this registers closures on Psalm's provider
+     * tables (an external mutation) and Psalm 6's {@see PropertyExistenceProvider::registerClosure()}
+     * etc. are not annotated mutation-free, so claiming purity trips ImpureMethodCall.
+     * (Psalm 7's `MissingPureAnnotation` wanted the annotation; Psalm 6 rejects it.)
      */
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void

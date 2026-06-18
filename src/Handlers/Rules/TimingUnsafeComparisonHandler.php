@@ -17,7 +17,7 @@ use PhpParser\Node\Scalar;
 use Psalm\CodeLocation;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\Codebase\TaintFlowGraph;
-use Psalm\Internal\DataFlow\DataFlowNode;
+use Psalm\Internal\DataFlow\TaintSink;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Type\TaintKind;
@@ -51,8 +51,15 @@ use Psalm\Type\Union;
  */
 final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInterface
 {
-    /** Taint mask for secrets that require constant-time comparison */
-    private const SECRET_TAINTS = TaintKind::USER_SECRET | TaintKind::SYSTEM_SECRET;
+    /**
+     * Taint kinds for secrets that require constant-time comparison.
+     *
+     * Psalm 6 represents taints as a `list<string>` of kind names (not the
+     * Psalm 7 int bitmask), so this is an array, not a bitwise OR.
+     *
+     * @var list<string>
+     */
+    private const SECRET_TAINTS = [TaintKind::USER_SECRET, TaintKind::SYSTEM_SECRET];
 
     /**
      * Timing-unsafe string-comparison functions (all C-level byte-by-byte), mapped to the two
@@ -81,9 +88,12 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
             return null;
         }
 
-        $taintFlowGraph = $source->taint_flow_graph;
+        // Psalm 6 exposes the graph as $data_flow_graph (a ?DataFlowGraph that is a
+        // TaintFlowGraph only under --taint-analysis, else a VariableUseGraph); there is
+        // no $taint_flow_graph property as in Psalm 7. The instanceof below bails on the
+        // VariableUseGraph case, so normal runs pay ~zero.
+        $taintFlowGraph = $source->data_flow_graph;
 
-        // TaintFlowGraph exists only under --taint-analysis; bail early so normal runs pay ~zero.
         if (!$taintFlowGraph instanceof TaintFlowGraph) {
             return null;
         }
@@ -264,7 +274,9 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
      * connect all the operand's data flow parents to it. The sink matches USER_SECRET|SYSTEM_SECRET,
      * so only secret-tainted data triggers an issue — ordinary input taint is unaffected.
      *
-     * @psalm-external-mutation-free
+     * Not mutation-free: Psalm 6's {@see TaintFlowGraph::addSink()} / addPath() mutate the graph
+     * and are not annotated mutation-free (they are in Psalm 7), so claiming purity trips
+     * ImpureMethodCall on this run.
      */
     private static function addSinkForType(
         TaintFlowGraph $graph,
@@ -279,7 +291,10 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
 
         $sinkId = $sinkLabel . '-' . $locationId;
 
-        $sink = DataFlowNode::make(
+        // Psalm 6 has no DataFlowNode::make() factory and addSink() requires a TaintSink, so
+        // build one directly. TaintSink extends DataFlowNode; the constructor arg order
+        // (id, label, code_location, specialization_key, taints) matches Psalm 7's make().
+        $sink = new TaintSink(
             $sinkId,
             $sinkLabel,
             $codeLocation,

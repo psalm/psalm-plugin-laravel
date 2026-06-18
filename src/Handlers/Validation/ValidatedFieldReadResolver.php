@@ -12,7 +12,6 @@ use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
@@ -93,11 +92,11 @@ final class ValidatedFieldReadResolver
         $validatedInput = $formRequest === null ? self::extractFormRequestFromValidatedInput($event) : null;
 
         $source = self::methodSourcesInput($event, $expr, $method, $formRequest, $validatedInput)
-            ? TaintKind::ALL_INPUT
-            : 0;
+            ? ValidationRuleAnalyzer::allInputTaints()
+            : [];
         $escape = self::methodEscape($event, $expr, $method, $formRequest, $validatedInput);
 
-        if ($source === 0 && $escape === 0) {
+        if ($source === [] && $escape === []) {
             return null;
         }
 
@@ -136,6 +135,8 @@ final class ValidatedFieldReadResolver
      *
      * @param class-string|null $formRequest
      * @param class-string|null $validatedInput
+     *
+     * @return list<string>
      */
     private static function methodEscape(
         AddRemoveTaintsEvent $event,
@@ -143,48 +144,63 @@ final class ValidatedFieldReadResolver
         string $method,
         ?string $formRequest,
         ?string $validatedInput,
-    ): int {
+    ): array {
         if (!\in_array($method, self::KEYED_ACCESSOR_METHODS, true)) {
-            return 0;
+            return [];
         }
 
         $key = self::literalKey($event, $expr);
 
         if ($key === null) {
-            return 0;
+            return [];
         }
 
-        $removed = 0;
+        $removed = [];
 
         // validated() does not exist on ValidatedInput, so fall back to the
         // ValidatedInput<FormRequest> class only for the other accessors.
         $accessorClass = $formRequest ?? ($method !== 'validated' ? $validatedInput : null);
 
+        // Psalm 6 taints are list<string>, so OR the FormRequest-rules and
+        // inline-validate escapes by merging+deduping rather than a bitwise `|`.
         if ($accessorClass !== null) {
-            $removed |= self::ruleEscape(ValidationRuleAnalyzer::getRulesForFormRequest($accessorClass), $key);
+            $removed = self::mergeTaints($removed, self::ruleEscape(ValidationRuleAnalyzer::getRulesForFormRequest($accessorClass), $key));
         }
 
-        $removed |= self::ruleEscape(self::lookupInlineValidateRules($event, $expr), $key);
-
-        return $removed;
+        return self::mergeTaints($removed, self::ruleEscape(self::lookupInlineValidateRules($event, $expr), $key));
     }
 
     /**
-     * Escape mask of the rule keyed by `$key` in `$rules`, or 0.
+     * Union two taint lists, deduped and re-indexed.
      *
-     * @param array<string, ResolvedRule>|null $rules
+     * @param list<string> $a
+     * @param list<string> $b
+     * @return list<string>
      *
      * @psalm-pure
      */
-    private static function ruleEscape(?array $rules, string $key): int
+    private static function mergeTaints(array $a, array $b): array
+    {
+        return \array_values(\array_unique(\array_merge($a, $b)));
+    }
+
+    /**
+     * Escape kinds of the rule keyed by `$key` in `$rules`, or [].
+     *
+     * @param array<string, ResolvedRule>|null $rules
+     * @return list<string>
+     *
+     * @psalm-pure
+     */
+    private static function ruleEscape(?array $rules, string $key): array
     {
         if ($rules === null) {
-            return 0;
+            return [];
         }
 
         $rule = ValidationRuleAnalyzer::lookupRuleByKey($rules, $key);
 
-        return $rule instanceof ResolvedRule ? $rule->removedTaints : 0;
+        return $rule instanceof ResolvedRule ? $rule->removedTaints : [];
     }
 
     /**
@@ -260,7 +276,7 @@ final class ValidatedFieldReadResolver
             $rule = FormRequestPropertyHandler::resolveRuleForProperty($atomic->value, $propertyName);
 
             if ($rule instanceof ResolvedRule) {
-                return new ValidatedFieldRead(TaintKind::ALL_INPUT, $rule->removedTaints);
+                return new ValidatedFieldRead(ValidationRuleAnalyzer::allInputTaints(), $rule->removedTaints);
             }
         }
 
@@ -285,13 +301,13 @@ final class ValidatedFieldReadResolver
             return null;
         }
 
-        $removed = InlineValidateRulesCollector::getEscapeForVariable($functionId, $variableName) ?? 0;
+        $removed = InlineValidateRulesCollector::getEscapeForVariable($functionId, $variableName) ?? [];
 
-        if ($removed === 0) {
+        if ($removed === []) {
             return null;
         }
 
-        return new ValidatedFieldRead(0, $removed);
+        return new ValidatedFieldRead([], $removed);
     }
 
     /**
