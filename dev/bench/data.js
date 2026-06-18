@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781784797238,
+  "lastUpdate": 1781790573994,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6570,6 +6570,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.4,
             "range": "± 0.05",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "84bf4dd605279c8535821b9831f51cd324ec5e04",
+          "message": "fix(eloquent): complete pivot relation factory templates #1088 (#1090)\n\nbelongsToMany()/morphToMany()/morphedByMany() chains inside a relation\nmethod body tripped MissingTemplateParam on the return statement even\nwhen the method's own @return was already a complete 4-param type. The\nfactory stubs returned a 2-of-4 BelongsToMany/MorphToMany and Psalm 7\ndoes not honor @template defaults for a partial generic (vimeo/psalm#5407),\nso the inferred in-body expression was flagged - unfixable by annotating.\n\nFill all four template params in the factory returns (Pivot / MorphPivot\ndefault + 'pivot'), and re-narrow TPivotModel / TAccessor via\n@return static<...> on using()/as() so custom-pivot/accessor chains stay\nsound (no InvalidReturnStatement). Pure-stub fix, no handler.\n\nFollow-up to #913 / #1055.",
+          "timestamp": "2026-06-18T15:46:22+02:00",
+          "tree_id": "dd6f331aa78fcc7e542f02a74a4fd9b2ecb9ac90",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/84bf4dd605279c8535821b9831f51cd324ec5e04"
+        },
+        "date": 1781790572884,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.85,
+            "range": "± 0.24",
             "unit": "s"
           },
           {
