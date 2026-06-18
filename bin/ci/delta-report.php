@@ -13,11 +13,6 @@ declare(strict_types=1);
  *   * apps that ran clean with zero delta, and apps that crashed (with the
  *     crash's first error line) — kept in separate buckets
  *
- * PHP port of the local /psalm-delta skill's compare.py — same file layout,
- * same identity tuple, same report shape — so CI and the local harness produce
- * byte-comparable output. Mirrors tests/Benchmark/compare.php conventions
- * (getopt, JSON_THROW_ON_ERROR, markdown to stdout). No Python on CI.
- *
  * File layout (written by delta-app.sh, identical to bench.sh):
  *   <output_dir>/<app>/<app>-<label>-<date-marker>--issues.json
  *   <output_dir>/<app>/<app>-<label>-<date-marker>--perf.json
@@ -303,6 +298,31 @@ foreach ($apps as $app) {
     ];
 }
 
+// Per-app wall-time + type coverage, collected for EVERY app (not only changed
+// ones): a PR can shift analysis time or coverage without moving any issue.
+// Both come from each side's perf.json; a side that crashed left no perf.json,
+// so its value is null and renders "—".
+$perfNum = static function (?array $perf, string $key): ?float {
+    return is_array($perf) && isset($perf[$key]) && is_numeric($perf[$key])
+        ? (float) $perf[$key]
+        : null;
+};
+/** @var list<array{app: string, baseWall: int|null, headWall: int|null, baseCov: float|null, headCov: float|null}> $perfRows */
+$perfRows = [];
+foreach ($apps as $app) {
+    $basePerf = $loadJson($latest($outputDir, $app, $baseLabel, 'perf.json', $dateMarker));
+    $headPerf = $loadJson($latest($outputDir, $app, $headLabel, 'perf.json', $dateMarker));
+    $baseWall = $perfNum($basePerf, 'wall_seconds');
+    $headWall = $perfNum($headPerf, 'wall_seconds');
+    $perfRows[] = [
+        'app' => $app,
+        'baseWall' => $baseWall === null ? null : (int) $baseWall,
+        'headWall' => $headWall === null ? null : (int) $headWall,
+        'baseCov' => $perfNum($basePerf, 'type_coverage_pct'),
+        'headCov' => $perfNum($headPerf, 'type_coverage_pct'),
+    ];
+}
+
 // --- Header ------------------------------------------------------------------
 
 /**
@@ -345,7 +365,7 @@ $out[] = '';
 
 $changed = array_values(array_filter($rows, static fn(array $r): bool => $r['total'] > 0));
 
-$out[] = '### Per-app delta';
+$out[] = '### Per-app delta — Issues';
 $out[] = '';
 if ($changed === []) {
     $out[] = 'No issue changes across the benchmarked apps.';
@@ -382,6 +402,65 @@ if ($changed === []) {
             );
         }
     }
+}
+
+// --- Per-app time table (all apps) ------------------------------------------
+//
+// Columns: base wall-seconds, head (PR) wall-seconds, Δ (head − base). Every
+// requested app is listed; a side that left no perf.json (crash / not run)
+// shows "—" and suppresses the Δ.
+
+$out[] = '';
+$out[] = '### Per-app delta — Time (seconds)';
+$out[] = '';
+$out[] = '| App | base | PR | Δ |';
+$out[] = '|-----|-----:|----:|-----:|';
+$intCell = static fn(?int $v): string => $v === null ? '—' : (string) $v;
+foreach ($perfRows as $p) {
+    $delta = ($p['baseWall'] !== null && $p['headWall'] !== null)
+        ? sprintf('%+d', $p['headWall'] - $p['baseWall'])
+        : '—';
+    $out[] = sprintf('| %s | %s | %s | %s |', $p['app'], $intCell($p['baseWall']), $intCell($p['headWall']), $delta);
+}
+
+// --- Per-app type-coverage table (all apps) ---------------------------------
+//
+// Psalm's inferred-type coverage %, base vs head (Δ = head − base). A PR can
+// move coverage without moving any issue (e.g. adding annotations), so every
+// app is listed; a side with no perf.json shows "—".
+
+$out[] = '';
+$out[] = '### Per-app delta — Type coverage (%)';
+$out[] = '';
+$out[] = '| App | base | PR | Δ |';
+$out[] = '|-----|-----:|----:|-----:|';
+$covCell = static fn(?float $v): string => $v === null ? '—' : sprintf('%.2f', $v);
+foreach ($perfRows as $p) {
+    $delta = ($p['baseCov'] !== null && $p['headCov'] !== null)
+        ? sprintf('%+.2f', $p['headCov'] - $p['baseCov'])
+        : '—';
+    $out[] = sprintf('| %s | %s | %s | %s |', $p['app'], $covCell($p['baseCov']), $covCell($p['headCov']), $delta);
+}
+
+// Weighted ΔCov: one headline coverage move across all apps. A plain mean of
+// the per-app Δ would weight a one-file lib equal to a 5k-file app, so each
+// app's Δ is weighted by its base wall_seconds (analysis time — a cheap proxy
+// for codebase size; perf.json carries no file count). Only apps with coverage
+// on both sides and a positive base wall contribute; the total can therefore
+// differ from a naive sum of the Δ column.
+$weightNum = 0.0;
+$weightDen = 0.0;
+foreach ($perfRows as $p) {
+    if ($p['baseCov'] === null || $p['headCov'] === null || $p['baseWall'] === null || $p['baseWall'] <= 0) {
+        continue;
+    }
+    $weightNum += ($p['headCov'] - $p['baseCov']) * (float) $p['baseWall'];
+    $weightDen += (float) $p['baseWall'];
+}
+if ($weightDen > 0.0) {
+    $out[] = sprintf('| **Weighted Δ** | — | — | **%+.2f** |', $weightNum / $weightDen);
+    $out[] = '';
+    $out[] = '_Weighted Δ is weighted by base `wall_seconds` (proxy for codebase size)._';
 }
 
 // Apps that ran cleanly on both sides but produced no delta — kept separate
