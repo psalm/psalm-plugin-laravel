@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781766387087,
+  "lastUpdate": 1781780827115,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6465,6 +6465,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 33.58,
             "range": "± 0.41",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0365f736efc4797a93acbc8f51c643996731bb88",
+          "message": "feat: narrow when()/unless() callback returns via handler (#993) (#997)\n\nKeep the Conditionable stub at `@return $this` (Laravel's own signature;\nPsalm 7 renders it as `<Class>&static`, observationally identical to\n`static` at every call site) and add ConditionableWhenHandler to recover\nthe gap #993 actually asks for: when a when()/unless() callback returns a\ntype the receiver is not, the result narrows to `$this | <callback-return>`.\n\nVoid/null/mixed and same-class callback returns defer to the stub's `$this`,\nmatching Laravel's `$callback($this, $value) ?? $this` runtime collapse and\npreserving the fluent-chain typing from #704.\n\nThe handler registers on the Conditionable trait itself, so every host\n(Builder, Collection, Stringable, Request, and user classes) is covered via\nPsalm's declaring-class dispatch without enumerating concrete classes.\n\nCloses #993",
+          "timestamp": "2026-06-18T13:03:56+02:00",
+          "tree_id": "e9ee0b8e15839cf8867ae6f5f6000f7481c689e7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0365f736efc4797a93acbc8f51c643996731bb88"
+        },
+        "date": 1781780826066,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.29,
+            "range": "± 0.29",
             "unit": "s"
           },
           {
