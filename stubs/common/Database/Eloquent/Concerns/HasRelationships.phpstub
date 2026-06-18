@@ -122,7 +122,11 @@ trait HasRelationships
      * @param  string  $parentKey
      * @param  string  $relatedKey
      * @param  string  $relation
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<TRelatedModel, static>
+     *
+     * All 4 params filled: Psalm 7 ignores @template defaults (vimeo/psalm#5407), so a
+     * 2-of-4 return trips MissingTemplateParam on in-body chains (#1088). `->using()` /
+     * `->as()` re-narrow the pivot/accessor slots; `static` avoids the #913 collapse.
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<TRelatedModel, static, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
      */
     public function belongsToMany($related, $table = null, $foreignPivotKey = null, $relatedPivotKey = null,
                                   $parentKey = null, $relatedKey = null, $relation = null) {}
@@ -140,7 +144,10 @@ trait HasRelationships
      * @param  string  $relatedKey
      * @param  string  $relation
      * @param  bool  $inverse
-     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static>
+     *
+     * 4 params filled like belongsToMany() (Psalm ignores @template defaults, #1088);
+     * MorphToMany's pivot default is MorphPivot.
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
      */
     public function morphToMany($related, $name, $table = null, $foreignPivotKey = null,
                                 $relatedPivotKey = null, $parentKey = null,
@@ -158,7 +165,9 @@ trait HasRelationships
      * @param  string  $parentKey
      * @param  string  $relatedKey
      * @param  string  $relation
-     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static>
+     *
+     * 4 params filled like belongsToMany() (#1088); MorphToMany pivot default is MorphPivot.
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
      */
     public function morphedByMany($related, $name, $table = null, $foreignPivotKey = null,
                                   $relatedPivotKey = null, $parentKey = null,
