@@ -305,17 +305,37 @@ foreach ($apps as $app) {
 
 // --- Header ------------------------------------------------------------------
 
-$baseDesc = $baseRef !== '' ? $baseRef : $baseLabel;
-$headDesc = $headRef !== '' ? $headRef : $headLabel;
-if ($baseSha !== '') {
-    $baseDesc = "{$baseDesc} ({$baseSha})";
-}
-if ($headSha !== '') {
-    $headDesc = "{$headDesc} ({$headSha})";
-}
+/**
+ * Build a heading description like "Base (7fb82df7)" for one side.
+ *
+ * The artifact label is "<prefix>-<shortsha>" (e.g. "base-7fb82df7"), kept
+ * verbatim for file matching — so reusing it as the heading would print the
+ * embedded short sha *and* the separate --*-sha, e.g. "base-7fb82df7
+ * (7fb82df70a30…)". Prefer an explicit ref; otherwise strip the trailing
+ * "-<sha>" off the label to recover the prefix word, tidy its casing, and
+ * append a single short sha (skipped when the word already carries it).
+ */
+$describe = static function (string $ref, string $label, string $sha): string {
+    $word = $ref !== '' ? $ref : (preg_replace('/-[0-9a-f]{7,40}$/', '', $label) ?? $label);
+    $word = match (strtolower($word)) {
+        'base' => 'Base',
+        'pr' => 'PR',
+        default => $word,
+    };
+    if ($sha !== '') {
+        $short = substr($sha, 0, 8);
+        if (!str_contains($word, $short)) {
+            $word .= " ({$short})";
+        }
+    }
+
+    return $word;
+};
+$baseDesc = $describe($baseRef, $baseLabel, $baseSha);
+$headDesc = $describe($headRef, $headLabel, $headSha);
 
 $out = [];
-$out[] = "# PR delta: {$baseDesc} -> {$headDesc}";
+$out[] = "## PR delta: {$baseDesc} -> {$headDesc}";
 $out[] = '';
 
 // --- Per-app delta table (changed apps only) --------------------------------
@@ -325,7 +345,7 @@ $out[] = '';
 
 $changed = array_values(array_filter($rows, static fn(array $r): bool => $r['total'] > 0));
 
-$out[] = '## Per-app delta';
+$out[] = '### Per-app delta';
 $out[] = '';
 if ($changed === []) {
     $out[] = 'No issue changes across the benchmarked apps.';
@@ -349,7 +369,7 @@ if ($changed === []) {
     // identity churn that a net-count diff alone would hide.
     foreach ($changed as $r) {
         $out[] = '';
-        $out[] = '### ' . $r['app'];
+        $out[] = '#### ' . $r['app'];
         $out[] = '';
         foreach ($r['movements'] as $m) {
             $out[] = sprintf(
@@ -394,7 +414,7 @@ if ($missing !== []) {
 
     if ($crashed !== []) {
         $out[] = '';
-        $out[] = '## Crashed';
+        $out[] = '### Crashed';
         $out[] = '';
         $out[] = 'No usable report — Psalm crashed or analysis aborted. A crash on BOTH sides is not caused by this PR.';
         $out[] = '';
