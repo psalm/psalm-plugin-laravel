@@ -383,12 +383,15 @@ if ($changed === []) {
     }
     $out[] = sprintf('| **Total** | **%d** | **%d** | **%d** | **%+d** |', $tTotal, $tAdded, $tRemoved, $tNet);
 
-    // Per-app issue-type movements, each collapsed in a <details> so a PR that
-    // touches many apps stays scannable: base -> head count, with the
-    // +added/-removed identity churn a net-count diff alone would hide.
+    // Per-app issue-type movements, all under ONE collapsible block so the
+    // comment stays compact regardless of how many apps changed: per app, the
+    // base -> head count with the +added/-removed identity churn a net-count
+    // diff alone would hide.
+    $out[] = '';
+    $out[] = '<details><summary>Per-app issue-type breakdown</summary>';
     foreach ($changed as $r) {
         $out[] = '';
-        $out[] = sprintf('<details><summary>%s (+%d/-%d)</summary>', $r['app'], $r['added'], $r['removed']);
+        $out[] = sprintf('#### %s (+%d/-%d)', $r['app'], $r['added'], $r['removed']);
         $out[] = '';
         foreach ($r['movements'] as $m) {
             $out[] = sprintf(
@@ -400,9 +403,9 @@ if ($changed === []) {
                 $m['removed'],
             );
         }
-        $out[] = '';
-        $out[] = '</details>';
     }
+    $out[] = '';
+    $out[] = '</details>';
 }
 
 // Apps that ran cleanly on both sides but produced no delta — listed here under
