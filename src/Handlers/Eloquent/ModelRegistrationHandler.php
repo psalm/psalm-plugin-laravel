@@ -7,13 +7,15 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeMutatorInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
+use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
@@ -116,6 +118,14 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             // schema-column match, so with migrations off it is inert — its sole consumer,
             // ModelPropertyHandler, is itself migration-gated below.
             ModelMetadataRegistryBuilder::warmUp($codebase, $storage->name);
+
+            // Write types for accessor (mutator) + relationship properties run AFTER warmUp: the
+            // mutator branch reads the registry's mutators() (populated by warmUp), while the
+            // relation-write branch keeps its own declared-return-type detection. Same per-model
+            // sequence as before (this used to be the last step of registerHandlersForModel), just
+            // moved past warm-up so the registry is available; registerWriteTypesForColumns stays in
+            // registerHandlersForModel and still runs first.
+            self::registerWriteTypesForMethods($codebase, $storage);
         }
     }
 
@@ -322,8 +332,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             self::registerWriteTypesForColumns($storage, $className);
         }
 
-        // Register write types for accessor and relationship properties
-        self::registerWriteTypesForMethods($codebase, $storage);
+        // NOTE: write types for accessor/relationship properties (registerWriteTypesForMethods) are
+        // registered AFTER warmUp() in afterCodebasePopulated() — its mutator branch now reads the
+        // registry's mutators(), which is only populated once warmUp() has run for this model.
     }
 
     /**
@@ -838,17 +849,80 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      */
     private static function registerWriteTypesForMethods(Codebase $codebase, ClassLikeStorage $storage): void
     {
+        // Mutator writes (legacy setXxxAttribute + Attribute set:) come from the registry's mutators()
+        // map — the production consumer that validates mutators(). Runs first so a mutator key claims
+        // its pseudo-property before the relation pass (mirrors the old single-pass guard order);
+        // registerWriteTypesForColumns already ran during registration, so column keys still win.
+        self::registerMutatorWriteTypes($storage);
+
+        // Relation writes keep their own declared-return-type detection — relations() is a different
+        // (own-class, parse-body) contract that intentionally does NOT cover the write set.
+        self::registerRelationWriteTypes($codebase, $storage);
+    }
+
+    /**
+     * Bake mutator write types into `pseudo_property_set_types` from the registry's `mutators()` map.
+     * Legacy `setXxxAttribute` → mixed; `Attribute<TGet, TSet>` → TSet (read-only `never` setters are
+     * already excluded from `mutators()`). The map is keyed by the separator-collapsed accessor
+     * identity, but a write targets the snake_case property the user assigns (`$model->first_name`),
+     * so the snake key is re-derived per mutator from its declaring method's cased name — legacy strips
+     * `set`…`Attribute`, attribute-style uses the whole method name — exactly the pre-registry
+     * derivation. The `hasUserDefinedPseudoProperty` guard keeps a user `@property` (and any
+     * already-registered column write) authoritative.
+     */
+    private static function registerMutatorWriteTypes(ClassLikeStorage $storage): void
+    {
+        // Only Model subclasses reach warm-up, so the registry entry (if any) is keyed by this FQCN.
+        /** @var class-string<Model> $modelFqcn */
+        $modelFqcn = $storage->name;
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+        if (!$metadata instanceof ModelMetadata) {
+            return;
+        }
+
+        foreach ($metadata->mutators() as $mutator) {
+            $casedName = $mutator->method->cased_name;
+            if ($casedName === null) {
+                continue;
+            }
+
+            if ($mutator instanceof AttributeMutatorInfo) {
+                // Attribute-style: the property is the whole method name (`firstName` → `first_name`).
+                $propertyName = self::studlyToSnakeCase($casedName);
+                $setType = $mutator->setType;
+            } else {
+                // Legacy `setXxxAttribute` → property `xxx` (strip the `set` prefix + `Attribute` suffix).
+                $propertyName = self::studlyToSnakeCase(\substr($casedName, 3, -9));
+                $setType = Type::getMixed();
+            }
+
+            if ($propertyName === '') {
+                continue;
+            }
+
+            $pseudoKey = '$' . $propertyName;
+            if (!self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
+                $storage->pseudo_property_set_types[$pseudoKey] = $setType;
+            }
+        }
+    }
+
+    /**
+     * Register mixed write types for relationship properties. Detection stays on the DECLARED return
+     * type (a Relation subclass) over the full callable method set — a different, broader contract
+     * than the registry's own-class parse-based `relations()`, which is therefore not used here. The
+     * pseudo key is the relation method name verbatim (`$posts`), not a snake-cased property.
+     */
+    private static function registerRelationWriteTypes(Codebase $codebase, ClassLikeStorage $storage): void
+    {
         $mixedType = Type::getMixed();
 
-        foreach ($storage->declaring_method_ids as $methodName => $methodIdentifier) {
-            // Skip inherited framework methods — only user-defined methods can be accessors/relations
+        foreach ($storage->declaring_method_ids as $methodIdentifier) {
+            // Skip inherited framework methods — only user-defined methods can be relations.
             if (\str_starts_with($methodIdentifier->fq_class_name, 'Illuminate\\')) {
                 continue;
             }
 
-            // Fetch method storage once — used for both cased_name and return_type.
-            // This avoids the overhead of getMethodReturnType() (alias resolution, declaring/appearing
-            // method lookups, template substitution) and the redundant getStorage() call in getCasedMethodName().
             $methodStorage = self::getMethodStorage($codebase, $methodIdentifier);
             if (!$methodStorage instanceof \Psalm\Storage\MethodStorage) {
                 continue;
@@ -859,56 +933,14 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 continue;
             }
 
-            // Legacy mutator: setXxxAttribute → property xxx
-            if (
-                \str_starts_with($methodName, 'set')
-                && \str_ends_with($methodName, 'attribute')
-                && $methodName !== 'setattribute'
-            ) {
-                $propertyName = self::studlyToSnakeCase(\substr($casedName, 3, -9));
-                if ($propertyName === '') {
-                    continue;
-                }
-
-                $pseudoKey = '$' . $propertyName;
-                if (!self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
-                    $storage->pseudo_property_set_types[$pseudoKey] = $mixedType;
-                }
-
-                continue;
-            }
-
-            // Check return type for Attribute accessors and Relation methods
             $returnType = $methodStorage->return_type;
             if (!$returnType instanceof Union) {
                 continue;
             }
 
             foreach ($returnType->getAtomicTypes() as $type) {
-                if (!$type instanceof TNamedObject) {
-                    continue;
-                }
-
-                // New-style Attribute accessor
-                if (\is_a($type->value, Attribute::class, true)) {
-                    $pseudoKey = '$' . self::studlyToSnakeCase($casedName);
-                    if (self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
-                        break;
-                    }
-
-                    $setType = $type instanceof TGenericObject ? $type->type_params[1] ?? null : null;
-                    if ($setType instanceof Union && $setType->isNever()) {
-                        break;
-                    }
-
-                    $storage->pseudo_property_set_types[$pseudoKey] = $setType instanceof Union ? $setType : $mixedType;
-                    break;
-                }
-
-                // Relationship method
-                if (\is_a($type->value, Relation::class, true)) {
+                if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
                     $pseudoKey = '$' . $casedName;
-
                     if (!self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
                         $storage->pseudo_property_set_types[$pseudoKey] = $mixedType;
                     }

@@ -479,22 +479,24 @@ final class ModelMetadataRegistryBuilder
             return;
         }
 
-        [$getType, $hasMutator] = $attribute;
+        [$getType, $hasMutator, $setType] = $attribute;
         self::insertAccessor($accessors, new AttributeAccessorInfo($property, $getType, $methodStorage, $hasMutator));
 
         if ($hasMutator) {
-            self::insertMutator($mutators, new AttributeMutatorInfo($property, $methodStorage, $property));
+            self::insertMutator($mutators, new AttributeMutatorInfo($property, $methodStorage, $property, $setType));
         }
     }
 
     /**
      * Inspect a method's DECLARED return type for an `Attribute<TGet, TSet>` (or bare `Attribute`).
-     * Returns `[TGet, hasMutator]`, or null when the method does not return an Attribute. Reads the
-     * declared type only (no `getMethodReturnType()`): an attribute-style accessor must declare
+     * Returns `[TGet, hasMutator, TSet]`, or null when the method does not return an Attribute. Reads
+     * the declared type only (no `getMethodReturnType()`): an attribute-style accessor must declare
      * `: Attribute` to work at runtime, so the signal is always on storage and the read is safe at
-     * warm-up. `hasMutator` follows Laravel's write rule — a `never` TSet means read-only.
+     * warm-up. `hasMutator` follows Laravel's write rule — a `never` TSet means read-only. TSet is the
+     * setter type the write-path bakes into `pseudo_property_set_types` (mixed when TSet is absent or
+     * the Attribute is bare).
      *
-     * @return array{0: Union, 1: bool}|null
+     * @return array{0: Union, 1: bool, 2: Union}|null
      * @psalm-mutation-free
      */
     private static function resolveAttributeReturn(MethodStorage $methodStorage): ?array
@@ -513,14 +515,16 @@ final class ModelMetadataRegistryBuilder
                 // Bare `Attribute` (no generics): TGet is unknown (mixed) and the attribute is writable
                 // with a mixed setter — mirrors the write-type pass treating a non-generic Attribute as
                 // a mixed mutator.
-                return [Type::getMixed(), true];
+                return [Type::getMixed(), true, Type::getMixed()];
             }
 
             $getType = $atomic->type_params[0] ?? Type::getMixed();
-            $setType = $atomic->type_params[1] ?? null;
-            $hasMutator = !($setType instanceof Union && $setType->isNever());
+            // TSet absent (e.g. `Attribute<string>`) means a mixed setter, matching the write-path's
+            // `$setType instanceof Union ? $setType : mixed` fallback.
+            $setType = $atomic->type_params[1] ?? Type::getMixed();
+            $hasMutator = !$setType->isNever();
 
-            return [$getType, $hasMutator];
+            return [$getType, $hasMutator, $setType];
         }
 
         return null;

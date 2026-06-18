@@ -284,6 +284,9 @@ final class ModelMetadataRegistryTest extends TestCase
         $mutator = $metadata->mutators()['firstname'] ?? null;
         $this->assertInstanceOf(AttributeMutatorInfo::class, $mutator);
         $this->assertSame('firstname', $mutator->accessorPropertyName);
+        // setType is the Attribute<TGet, TSet> setter type — the value the write-path bakes into
+        // pseudo_property_set_types (here TSet = string).
+        $this->assertTrue($mutator->setType->hasString());
     }
 
     #[Test]
