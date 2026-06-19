@@ -223,6 +223,16 @@ Set this to `true` to throw the exception instead.
 **Recommended for CI.** Without this, a misconfigured environment causes the plugin to silently disable itself — your pipeline passes but without any plugin analysis.
 With `failOnInternalError`, the Psalm run fails immediately, so you know the plugin isn't working.
 
+### Degraded boot
+
+The plugin boots your real Laravel application to read its configuration, models, and bindings. To stay crash resistant, it tolerates a `bootstrap()` failure (for example a `config/*.php` file that fatals during evaluation, such as a computation over an unset `env()` value): rather than disabling the plugin for the whole run, it keeps going on a partially booted application.
+
+That partial boot is now surfaced. A normal `psalm` run prints a `DEGRADED mode` warning that names the originating error, because the later boot stages were skipped and the partial application is missing its configured service providers, facade bindings, and migration schema, which produces false positive `Undefined*` / `Mixed*` findings and lower type coverage. Run `vendor/bin/psalm-laravel diagnose` for the full boot report.
+
+With `failOnInternalError` set to `true`, a tolerated `bootstrap()` failure is treated as an internal error and stops the run (the same as any other boot failure), instead of analysing on a half booted application.
+
+Note on `--no-progress`: that flag selects a renderer that discards plugin warnings, so a run using it is silent about a degraded boot by default. CI setups that pass `--no-progress` should also set `failOnInternalError`, which stops the run through a channel that stays visible regardless of progress mode.
+
 ### Example
 
 ```xml

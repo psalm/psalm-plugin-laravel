@@ -12,6 +12,7 @@ use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
+use Psalm\LaravelPlugin\Util\BootstrapDegradationReporter;
 use Psalm\LaravelPlugin\Util\InternalErrorReporter;
 use Psalm\LaravelPlugin\Util\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -33,7 +34,39 @@ final class Plugin implements PluginEntryPointInterface
         try {
             ApplicationProvider::bootApp();
 
-            if ($pluginConfig->shouldUseMigrations()) {
+            // #1096: ApplicationProvider tolerates a throwable from `bootstrap()` (so one bad
+            // config/*.php cannot disable the plugin for the whole run) by swallowing it and
+            // continuing with a partially-booted app. That degraded state — handlers running
+            // inert with no providers, model metadata, or facade bindings, yet a clean-looking
+            // run — used to be observable only via `bin/psalm-laravel diagnose`. Surface it here,
+            // where $output and $pluginConfig are in scope, before any handler is registered.
+            $bootstrapError = ApplicationProvider::getBootstrapError();
+            if ($bootstrapError instanceof \Throwable) {
+                if ($pluginConfig->failOnInternalError) {
+                    // The user opted into failing on internal errors, and a half-booted app is one.
+                    // Rethrow so the shared catch routes it through InternalErrorReporter, which —
+                    // because failOnInternalError is on — rethrows and stops the Psalm run (Psalm
+                    // wraps it as a ConfigException). Thrown before registerHandlers() so we never
+                    // half-register handlers we are about to abandon.
+                    throw $bootstrapError;
+                }
+
+                // Crash-resistant default: keep analysing on the partial app, but make the
+                // degradation loud instead of silent.
+                BootstrapDegradationReporter::warn($bootstrapError, $output);
+            }
+
+            // Skip migration-schema building on a degraded boot. It resolves the `migrator`
+            // binding, which a partial app never registered (RegisterProviders did not run),
+            // so on a degraded app it throws and re-enters the catch below as a generic
+            // "plugin disabled" InternalErrorReporter error — burying the clearer degraded
+            // signal above under a stack trace. Skipping it lets the remaining handlers still
+            // register and run (inert for model metadata) instead of disabling the plugin.
+            // The init steps below already tolerate a partial app (they use bound() guards or
+            // only touch the filesystem); a new step that resolves a binding an unbooted app
+            // lacks must guard the degraded case the same way, or it will surface here as a
+            // misleading "disabled" error rather than the degraded warning.
+            if (!$bootstrapError instanceof \Throwable && $pluginConfig->shouldUseMigrations()) {
                 $this->buildSchema($pluginConfig);
             }
 
