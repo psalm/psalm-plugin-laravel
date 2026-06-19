@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781892495844,
+  "lastUpdate": 1781894907708,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6715,6 +6715,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "e688966825b84544c258ff377fc56a8c4ff135c6",
+          "message": "docs(validation): correct stale cache-reset rationale #1099\n\nThe afterCodebasePopulated reset comment cited the language server, but\nthe LS never dispatches that event (it uses scanFiles/reloadFiles; only\nProjectAnalyzer::check()/checkPaths() dispatch afterCodebasePopulated).\nReword to the accurate case: a tooling/test harness analyzing several\ncodebases in one process.",
+          "timestamp": "2026-06-19T20:45:13+02:00",
+          "tree_id": "19cac1e5d8e8686f4be5f0a0db239239eefb9b81",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e688966825b84544c258ff377fc56a8c4ff135c6"
+        },
+        "date": 1781894907024,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.95,
+            "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
             "unit": "MB"
           }
         ]
