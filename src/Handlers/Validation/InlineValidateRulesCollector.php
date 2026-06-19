@@ -219,8 +219,7 @@ final class InlineValidateRulesCollector implements
      * Sourced from {@see ValidatedFieldReadResolver::KEYED_ACCESSOR_METHODS}
      * so the two handlers share a single definition for the same data
      * flow — the variable binding is the same flow with one extra hop.
-     * Names are in canonical Laravel casing; non-canonical casing is
-     * rejected for consistency with the sibling handler.
+     * Names are lowercase because PHP method names are case-insensitive.
      */
     private const KEYED_ACCESSOR_METHODS = ValidatedFieldReadResolver::KEYED_ACCESSOR_METHODS;
 
@@ -509,15 +508,11 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        // Canonical Laravel casing — direct string comparison avoids a
-        // strtolower() allocation on every MethodCall in the project. PHP
-        // method names are technically case-insensitive, but callers of
-        // these Laravel macros always write them in canonical camelCase.
-        $rawName = $expr->name->name;
+        $methodName = $expr->name->toLowerString();
 
-        if ($rawName === 'validate') {
+        if ($methodName === 'validate') {
             $rulesArgIndex = 0;
-        } elseif ($rawName === 'validateWithBag') {
+        } elseif ($methodName === 'validatewithbag') {
             $rulesArgIndex = 1;
         } else {
             return null;
@@ -737,7 +732,7 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        if (!\in_array($rhs->name->name, self::KEYED_ACCESSOR_METHODS, true)) {
+        if (!\in_array($rhs->name->toLowerString(), self::KEYED_ACCESSOR_METHODS, true)) {
             return null;
         }
 
