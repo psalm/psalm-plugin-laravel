@@ -63,9 +63,10 @@ final class FormRequestPropertyHandler implements AfterCodebasePopulatedInterfac
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
-        // Psalm can run the plugin more than once in a long-lived process
-        // (language server / test harnesses). Rebuild the registry from the
-        // current populated codebase instead of carrying stale rule answers.
+        // Psalm can run the plugin more than once in a single long-lived
+        // process when a tooling or test harness analyzes several codebases in
+        // sequence. Rebuild the registry from the current populated codebase
+        // instead of carrying stale rule answers across runs.
         self::$formRequestClasses = [];
         self::$cache = [];
 
