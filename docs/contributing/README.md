@@ -111,7 +111,19 @@ This means splitting type and taint annotations for the same method across two s
 
 When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects -- one per class/trait. There is no cross-merging: if `Connection.phpstub` overrides a method defined in `ManagesTransactions.phpstub`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
 
-Stub files are loaded in alphabetical order (sorted by full path) to ensure deterministic results across OSes.
+Registration order (`Plugin::registerStubs()`): all `common` files, then version dirs ascending (`array_merge`). Since type annotations are last-loaded-wins, this order -- not alphabetical path -- decides overrides.
+
+### Version-specific overrides (conditional stub loading)
+
+A file in a version dir (`stubs/13.16.0/...`, loaded when installed Laravel `>=` that version) overrides the same-named `common` file **per method**. Multiple version dirs cascade ascending: per method, the highest dir `<=` the installed version wins; a method it doesn't redeclare falls through to lower dirs, then `common`. (Verified: with `common` + `12.6.0` + `12.8.0` all declaring `MessageBag::has`, `12.8.0` won; `missing()` declared only in `12.6.0` survived; `isEmpty()` came from `common`.)
+
+Authoring an override:
+
+- Declare only the changed methods; the rest merge from `common`.
+- Copy the full class header (`extends`/`implements` + `use`) verbatim -- a class re-declaration resets Psalm's interface list and silently strips contracts (see stub-authoring rules).
+- Types replace, taints accumulate (OR) -- keep both for a method in one file.
+
+**Common vs version dir.** Return narrowing that holds across all versions (Laravel only improved its annotation) goes in `common`. A parameter widened by behavior present only in a newer Laravel (e.g. `firstOrNew`'s `values` taking `\Closure|array` only on 13) must go in the version dir: widening `common` would tell Psalm a call is valid that fatals at runtime on older versions (silent false negative).
 
 ## How to add a handler
 
