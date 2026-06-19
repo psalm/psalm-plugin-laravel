@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781821217633,
+  "lastUpdate": 1781892495844,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6680,6 +6680,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d0e28c6c63f53178514acf8b1ba59acfcae63ede",
+          "message": "Harden validation taint casing (#1099)",
+          "timestamp": "2026-06-19T20:05:30+02:00",
+          "tree_id": "47a335ef2b677bcbe5c093e694331cb4f47b4150",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d0e28c6c63f53178514acf8b1ba59acfcae63ede"
+        },
+        "date": 1781892494775,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.27,
+            "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
             "unit": "MB"
           }
         ]
