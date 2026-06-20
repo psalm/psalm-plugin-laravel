@@ -182,7 +182,12 @@ class Builder implements BuilderContract
     /**
      * Add a raw where clause to the query.
      *
-     * @param  string  $sql
+     * Laravel documents $sql as Expression|string (the method body is unchanged across
+     * all supported versions, so this is annotation-only and safe in common). We keep
+     * `string` and add the Expression member; the literal-string Laravel 13 documents is
+     * deliberately not adopted (our taint layer guards SQLi more precisely).
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $sql
      * @param  mixed  $bindings
      * @param  string  $boolean
      * @return $this
