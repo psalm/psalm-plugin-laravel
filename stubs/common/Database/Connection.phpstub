@@ -35,7 +35,7 @@ class Connection implements ConnectionInterface
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
-     * @return \Generator
+     * @return \Generator<int, \stdClass>
      *
      * @psalm-taint-sink sql $query
      */
