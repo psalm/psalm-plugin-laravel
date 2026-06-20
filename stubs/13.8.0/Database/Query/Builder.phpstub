@@ -17,8 +17,10 @@ use Illuminate\Support\Traits\Macroable;
  * symfony/polyfill-php86 (which declares the enum on PHP < 8.6), and this override only
  * loads when Laravel >= 13.8 is installed.
  *
- * The common stub already types $direction as 'asc'|'desc'; this override re-states
- * those and adds the \SortDirection member (types replace, they do not merge).
+ * The common stub (Laravel 12–13.7) also accepts the uppercase literals 'ASC'|'DESC' that
+ * the runtime tolerates via strtolower. From 13.8 the \SortDirection enum is the canonical
+ * way to express a non-lowercase direction, so this override drops uppercase and restates
+ * the documented 'asc'|'desc'|\SortDirection (types replace, they do not merge).
  *
  * The full class header (use-traits + implements) and the orderBy SQL taint sink are
  * copied verbatim because re-declaring the class resets Psalm's metadata, and types
