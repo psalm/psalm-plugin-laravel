@@ -206,7 +206,7 @@ $issueKey = static function (array $i): string {
  *     added: int,
  *     removed: int,
  *     net: int,
- *     movements: list<array{type: string, base: int, head: int, added: int, removed: int, delta: int}>,
+ *     movements: list<array{type: string, level: int|null, base: int, head: int, added: int, removed: int, delta: int}>,
  * }> $rows
  */
 $rows = [];
@@ -227,15 +227,29 @@ foreach ($apps as $app) {
     // multi-line code snippet, would hold ~100 MB on a 20k-issue app). Keyed by
     // identity so duplicates collapse and the per-type counts below reconcile
     // with the +/- churn. The foreach @var types each decoded issue (mixed JSON).
+    // type -> Psalm error level (the config level at which the issue surfaces,
+    // carried verbatim in each issue's "error_level"). A type's level is stable
+    // across issues, so last-write-wins is fine; head is read after base so its
+    // value (the post-PR config) wins on the rare cross-side disagreement.
+    /** @var array<string, int> $typeLevel */
+    $typeLevel = [];
     $baseByKey = [];
     /** @var array<string, mixed> $i */
     foreach ($baseIssues as $i) {
-        $baseByKey[$issueKey($i)] = (string) ($i['type'] ?? '?');
+        $type = (string) ($i['type'] ?? '?');
+        $baseByKey[$issueKey($i)] = $type;
+        if (isset($i['error_level']) && is_numeric($i['error_level'])) {
+            $typeLevel[$type] = (int) $i['error_level'];
+        }
     }
     $headByKey = [];
     /** @var array<string, mixed> $i */
     foreach ($headIssues as $i) {
-        $headByKey[$issueKey($i)] = (string) ($i['type'] ?? '?');
+        $type = (string) ($i['type'] ?? '?');
+        $headByKey[$issueKey($i)] = $type;
+        if (isset($i['error_level']) && is_numeric($i['error_level'])) {
+            $typeLevel[$type] = (int) $i['error_level'];
+        }
     }
     unset($baseIssues, $headIssues);
 
@@ -269,6 +283,7 @@ foreach ($apps as $app) {
         }
         $movements[] = [
             'type' => $type,
+            'level' => $typeLevel[$type] ?? null,
             'base' => $baseTypeCount[$type] ?? 0,
             'head' => $headTypeCount[$type] ?? 0,
             'added' => $a,
@@ -281,8 +296,8 @@ foreach ($apps as $app) {
     usort(
         $movements,
         /**
-         * @param array{type: string, base: int, head: int, added: int, removed: int, delta: int} $x
-         * @param array{type: string, base: int, head: int, added: int, removed: int, delta: int} $y
+         * @param array{type: string, level: int|null, base: int, head: int, added: int, removed: int, delta: int} $x
+         * @param array{type: string, level: int|null, base: int, head: int, added: int, removed: int, delta: int} $y
          */
         static fn(array $x, array $y): int => [$x['delta'], -($x['added'] + $x['removed']), $x['type']]
             <=> [$y['delta'], -($y['added'] + $y['removed']), $y['type']],
@@ -394,8 +409,13 @@ if ($changed === []) {
         $out[] = sprintf('#### %s (+%d/-%d)', $r['app'], $r['added'], $r['removed']);
         $out[] = '';
         foreach ($r['movements'] as $m) {
+            // Prefix the Psalm error level (e.g. "L3: ") so a reader can gauge
+            // severity at a glance — lower levels are stricter/higher-signal.
+            // Omitted only if the JSON carried no error_level for the type.
+            $levelPrefix = $m['level'] !== null ? sprintf('L%d: ', $m['level']) : '';
             $out[] = sprintf(
-                '- %s: %d -> %d (+%d/-%d)',
+                '- %s%s: %d -> %d (+%d/-%d)',
+                $levelPrefix,
                 $m['type'],
                 $m['base'],
                 $m['head'],
