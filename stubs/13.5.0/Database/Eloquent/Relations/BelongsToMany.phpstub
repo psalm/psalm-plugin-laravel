@@ -1,0 +1,41 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+/**
+ * From Laravel 13.5.0+, firstOrNew() and updateOrCreate() accept a deferred-value
+ * closure for $values (12.62 still ships plain array). This override widens just
+ * those two methods; everything else merges from stubs/common/.
+ *
+ * The full class header (templates, @template-extends, @mixin, use-trait) is copied
+ * verbatim from common because re-declaring the class resets Psalm's
+ * interface/template metadata to whatever this declaration carries.
+ *
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * Covariant TDeclaringModel — required by #913 (see Relation.phpstub for the rationale).
+ * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\Pivot
+ * @template TAccessor of string = 'pivot'
+ * @template-extends Relation<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
+class BelongsToMany extends Relation
+{
+    use Concerns\InteractsWithPivotTable;
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @return TRelatedModel&object{pivot: TPivotModel}
+     */
+    public function firstOrNew(array $attributes = [], \Closure|array $values = []) {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @param  array<string, mixed>  $joining
+     * @param  bool   $touch
+     * @return TRelatedModel&object{pivot: TPivotModel}
+     */
+    public function updateOrCreate(array $attributes, \Closure|array $values = [], array $joining = [], $touch = true) {}
+}
