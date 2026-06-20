@@ -408,8 +408,13 @@ class Builder implements BuilderContract
     /**
      * Add an "order by" clause to the query.
      *
+     * Typed as the canonical lowercase literals (not a bare `string`) to catch typos and
+     * keep parity with Larastan and Laravel 13.8's `'asc'|'desc'|\SortDirection`, where
+     * the new PHP enum canonicalizes to lowercase. Dynamic directions belong to the
+     * validation layer, not this signature. The 13.8 override adds the enum member.
+     *
      * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Contracts\Database\Query\Expression|string  $column
-     * @param  string  $direction
+     * @param  'asc'|'desc'  $direction
      * @return $this
      *
      * @psalm-taint-sink sql $column

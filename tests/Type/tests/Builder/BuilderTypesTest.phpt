@@ -140,7 +140,7 @@ final class EloquentBuilderCustomerRepository
 * @psalm-return Builder<Customer>
 */
 function can_call_methods_on_underlying_query_builder(Builder $builder): Builder {
-    return $builder->orderBy('id', 'ASC');
+    return $builder->orderBy('id', 'asc');
 }
 
 function test_whereDateWithDateTimeInterface(Builder $builder): Builder {
