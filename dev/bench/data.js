@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781920436142,
+  "lastUpdate": 1781945882910,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6815,6 +6815,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.73,
             "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9a1ee0c022b0ec18c28f048af51498e0c7626c37",
+          "message": "feat(query-builder): type orderBy direction as asc/desc literals plus SortDirection #1103 (#1104)\n\nType Query\\Builder::orderBy()'s $direction as the canonical lowercase\nliterals 'asc'|'desc' in common (all supported versions) instead of a\nbare string, and add the PHP 8.6 \\SortDirection enum member on\nLaravel 13.8+ via a stubs/13.8.0/ override.\n\nRationale:\n- Laravel 13.8 narrowed the param to 'asc'|'desc'|\\SortDirection. The\n  enum fatals at runtime on Laravel 12 (strtolower over an enum), so the\n  enum member is version-scoped; the literal narrowing itself holds on\n  every version (Laravel lowercases the direction at runtime).\n- Lowercase-only matches Larastan (which reports the same) and the new\n  PHP enum, so dual-engine projects get a consistent signal and users are\n  nudged toward the canonical form ahead of upgrading.\n- Dynamic directions sourced from request input are the validation\n  layer's concern, not this signature.\n\n\\SortDirection is always resolvable where the override loads:\nlaravel/framework ^13.8 hard-requires symfony/polyfill-php86 (which\ndeclares the enum on PHP < 8.6), and the override only loads on\nLaravel >= 13.8. The override re-states the literals and adds the enum\n(types replace, not merge) and copies the full class header plus the\norderBy SQL taint sink verbatim.\n\nScope::apply's Laravel 13.7 Builder<covariant TModel> change was\nevaluated and dropped: Psalm 7 does not parse use-site variance in a\ndocblock type param. Left as a checklist item in #1103.\n\nPart of #1103",
+          "timestamp": "2026-06-20T10:54:53+02:00",
+          "tree_id": "621b1a704b0d9a4779977eb92d48a731be221b3e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9a1ee0c022b0ec18c28f048af51498e0c7626c37"
+        },
+        "date": 1781945882488,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.06,
+            "range": "± 0.2",
             "unit": "s"
           },
           {
