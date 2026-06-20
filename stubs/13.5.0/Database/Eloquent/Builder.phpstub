@@ -1,0 +1,51 @@
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
+use Illuminate\Database\Concerns\BuildsQueries;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Traits\ForwardsCalls;
+
+/**
+ * From Laravel 13.5.0+, firstOrNew() and updateOrCreate() accept a deferred-value
+ * closure for $values (12.62 still ships plain array). This override widens just
+ * those two methods; everything else merges from stubs/common/.
+ *
+ * The full class header (templates, @property-read proxies, @mixin, use-traits) is
+ * copied verbatim from common because re-declaring the class resets Psalm's
+ * interface/template metadata to whatever this declaration carries.
+ *
+ * @template-covariant TModel of \Illuminate\Database\Eloquent\Model
+ *
+ * Higher-order where proxies (`$builder->orWhere->scope()`). The `<TModel>` arg is
+ * essential and threads through to `HigherOrderBuilderProxy::__call`, which returns
+ * `Builder<TModel>` — see HigherOrderBuilderProxy.phpstub.
+ * Do NOT drop it to `@property-read HigherOrderBuilderProxy` (non-generic), nor to
+ * `@property-read static`/`$this` (Larastan's form): Psalm 7 then loses TModel in the
+ * property-read (the latter collapse to `Builder&static`) and the chained scope falls
+ * to mixed. Verified empirically.
+ * @property-read HigherOrderBuilderProxy<TModel> $orWhere
+ * @property-read HigherOrderBuilderProxy<TModel> $whereNot
+ * @property-read HigherOrderBuilderProxy<TModel> $orWhereNot
+ *
+ * @mixin \Illuminate\Database\Query\Builder
+ */
+class Builder implements BuilderContract
+{
+    use BuildsQueries, Concerns\QueriesRelationships, ForwardsCalls;
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @return TModel
+     */
+    public function firstOrNew(array $attributes = [], \Closure|array $values = []) {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @return TModel
+     */
+    public function updateOrCreate(array $attributes, \Closure|array $values = []) {}
+}

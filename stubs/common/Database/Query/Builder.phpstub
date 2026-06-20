@@ -16,7 +16,7 @@ class Builder implements BuilderContract
     /**
      * Execute a query for a single record by ID.
      *
-     * @param  list<non-empty-string>  $columns
+     * @param  non-empty-string|list<non-empty-string>  $columns
      * @return \stdClass|null
      *
      * @psalm-taint-escape sql
