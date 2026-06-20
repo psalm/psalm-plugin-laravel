@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781894907708,
+  "lastUpdate": 1781914877633,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6750,6 +6750,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "02dfb2d0ebcb2c2a150e5d8acec20778fcabffb3",
+          "message": "fix(database): type Connection::cursor() return as Generator<int, \\stdClass> (#1100)\n\nLaravel's Connection::cursor() yields stdClass rows and annotates\n@return \\Generator<int, \\stdClass> across all supported versions\n(verified against 11.x, 12.x, 13.x source). Our stub used a bare\n\\Generator, so callers iterated mixed rows. Narrow the stub return to\nmatch and add a type test.",
+          "timestamp": "2026-06-20T02:18:42+02:00",
+          "tree_id": "1210f7ae28411ebe821a0e532ee1672d212f015f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/02dfb2d0ebcb2c2a150e5d8acec20778fcabffb3"
+        },
+        "date": 1781914876994,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.15,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
             "unit": "MB"
           }
         ]
