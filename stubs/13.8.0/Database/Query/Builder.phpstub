@@ -1,0 +1,43 @@
+<?php
+
+namespace Illuminate\Database\Query;
+
+use Illuminate\Contracts\Database\Query\Builder as BuilderContract;
+use Illuminate\Database\Concerns\BuildsQueries;
+use Illuminate\Support\Traits\ForwardsCalls;
+use Illuminate\Support\Traits\Macroable;
+
+/**
+ * From Laravel 13.8.0+, orderBy() takes 'asc'|'desc'|\SortDirection (the PHP 8.6
+ * enum) for the direction. On Laravel 12 the enum fatals at runtime (strtolower over
+ * an enum) and the method is not version-loaded there, so this override lives in the
+ * version dir, not common.
+ *
+ * \SortDirection is always resolvable here: laravel/framework ^13.8 hard-requires
+ * symfony/polyfill-php86 (which declares the enum on PHP < 8.6), and this override only
+ * loads when Laravel >= 13.8 is installed.
+ *
+ * The common stub already types $direction as 'asc'|'desc'; this override re-states
+ * those and adds the \SortDirection member (types replace, they do not merge).
+ *
+ * The full class header (use-traits + implements) and the orderBy SQL taint sink are
+ * copied verbatim because re-declaring the class resets Psalm's metadata, and types
+ * replace while taints accumulate — both must be present in this one declaration.
+ */
+class Builder implements BuilderContract
+{
+    use BuildsQueries, ForwardsCalls, Macroable {
+        __call as macroCall;
+    }
+
+    /**
+     * Add an "order by" clause to the query.
+     *
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @param  'asc'|'desc'|\SortDirection  $direction
+     * @return $this
+     *
+     * @psalm-taint-sink sql $column
+     */
+    public function orderBy($column, $direction = 'asc') {}
+}
