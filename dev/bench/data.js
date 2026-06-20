@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781957242611,
+  "lastUpdate": 1781962467368,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6885,6 +6885,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.32,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b84b111d41be1b780f1b1b1d1c0dbbdceca7f614",
+          "message": "fix(query-builder): accept uppercase orderBy direction on Laravel <13.8 #1103 (#1111)\n\nTyping orderBy()'s $direction as the lowercase-only literals 'asc'|'desc'\nflagged the idiomatic uppercase form orderBy('x', 'DESC') as a hard\nInvalidArgument across real apps, even though the runtime accepts it: the\nquery builder canonicalizes via strtolower($direction) === 'asc'|'desc'.\n\nWiden the common stub (Laravel 12-13.7) to 'asc'|'desc'|'ASC'|'DESC'.\nThe 13.8 override keeps 'asc'|'desc'|\\SortDirection: from 13.8 the PHP 8.6\nenum is the canonical way to express a non-lowercase direction, so users\non that version are nudged to it instead. Dynamic string/array directions\nstay flagged (validation-layer concern), unchanged by this.",
+          "timestamp": "2026-06-20T15:31:47+02:00",
+          "tree_id": "197d1df74f4ddcf75a47e991f49d498fa5a6a9b6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b84b111d41be1b780f1b1b1d1c0dbbdceca7f614"
+        },
+        "date": 1781962466237,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.08,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
