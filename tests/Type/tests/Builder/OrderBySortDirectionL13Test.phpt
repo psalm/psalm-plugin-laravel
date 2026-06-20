@@ -23,6 +23,12 @@ function test_order_by(): void {
     // the new PHP 8.6 enum is accepted
     $_enum = Customer::query()->orderBy('name', \SortDirection::Ascending);
     /** @psalm-check-type-exact $_enum = Builder<Customer>&static */
+
+    // From 13.8 the canonical non-lowercase form is the enum, so uppercase string literals
+    // are rejected (use \SortDirection or lowercase). The common stub still tolerates these
+    // on Laravel 12–13.7, which have no enum to canonicalize with.
+    Customer::query()->orderBy('name', 'DESC');
 }
 ?>
 --EXPECTF--
+%AInvalidArgument on line %d: Argument 2 of Illuminate\Database\Query\Builder::orderBy expects 'asc'|'desc'|SortDirection, but 'DESC' provided%A
