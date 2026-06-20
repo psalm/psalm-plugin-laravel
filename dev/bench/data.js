@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781914877633,
+  "lastUpdate": 1781920436142,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6785,6 +6785,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6485df4987484e5391bd3958b0e5267e87c15c3d",
+          "message": "fix(builder): accept a single column name string on paginators and find #1103 (#1105)\n\nLaravel accepts a single column name as a string (not only an array) on\npaginate()/simplePaginate()/cursorPaginate() and Query\\Builder::find()\nacross all supported versions: get()/first() run Arr::wrap($columns),\nwhich wraps a scalar into a one-element list. Our stubs typed $columns as\nthe array form only, so the idiomatic ->paginate(15, 'name') was a\nfalse-positive ArgumentTypeCoercion.\n\nWiden $columns to non-empty-string|<array form> in common (the behavior\nholds on every version, so no version dir is needed). non-empty-string,\nnot bare string: a column name is never empty, and it matches the\nexisting list<non-empty-string> array element type. The string form is\nany single column name, not just '*' ('*' is merely the default ['*']).\n\nTwo adjacent report items were evaluated and rejected:\n\n- Response::{json,object,collect,fluent} $flags int|null ->\n  int-mask<JSON_*>: a pure narrowing. It rejects developer-safe dynamic\n  or config-sourced ints, and the benefit (catching invalid decode\n  flags) is marginal, so the permissive int|null stays.\n- Query\\Builder::find $id int|string: although the source documents it,\n  narrowing from the current untyped (mixed) param breaks the common\n  $request->input('id') -> find($id) pattern with a MixedArgument\n  false positive (caught by the taint suite). Left untyped.\n\nPart of #1103",
+          "timestamp": "2026-06-20T03:50:37+02:00",
+          "tree_id": "79977f28c8de58df3ba78d8d33738528f9c9fd2a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6485df4987484e5391bd3958b0e5267e87c15c3d"
+        },
+        "date": 1781920435094,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.73,
+            "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
             "unit": "MB"
           }
         ]
