@@ -48,6 +48,19 @@ final class InitCommand extends Command
     /** One indent level. Matches the template heredoc's per-nesting whitespace. */
     private const TAB = '    ';
 
+    /**
+     * Laravel-tailored psalm.xml template; {{LEVEL}} and {{PROJECT_FILES}} are
+     * substituted at write time.
+     *
+     * Every issue handler listed here MUST exist in the installed Psalm's
+     * config.xsd, or Psalm rejects the generated config on startup. This is the
+     * Psalm 6 line, so the Psalm-7-only handlers MissingPureAnnotation,
+     * MissingAbstractPureAnnotation and MissingInterfaceImmutableAnnotation are
+     * intentionally absent (they belong to the 4.x/master template, which targets
+     * Psalm 7). Do not re-add them when merging master into 3.x:
+     * InitCommandTest::generated_config_validates_against_installed_psalm_schema,
+     * run under the pinned Psalm 6, is the guard that catches a reintroduction (#1115).
+     */
     private const PSALM_XML_TEMPLATE = <<<'XML'
         <?xml version="1.0"?>
         <psalm
@@ -75,12 +88,9 @@ final class InitCommand extends Command
             <issueHandlers>
                 <ClassMustBeFinal errorLevel="info"/>
                 <ImplicitToStringCast errorLevel="info"/>
-                <MissingAbstractPureAnnotation errorLevel="info"/>
                 <MissingClosureReturnType errorLevel="info"/>
                 <MissingImmutableAnnotation errorLevel="info"/>
-                <MissingInterfaceImmutableAnnotation errorLevel="info"/>
                 <MissingOverrideAttribute errorLevel="info"/>
-                <MissingPureAnnotation errorLevel="info"/>
                 <RedundantCast errorLevel="info"/>
                 <RedundantCondition errorLevel="info"/>
                 <UnnecessaryVarAnnotation errorLevel="suppress"/>

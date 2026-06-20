@@ -108,6 +108,53 @@ final class InitCommandTest extends TestCase
         }
     }
 
+    /**
+     * The generated psalm.xml must validate against the *installed* Psalm's
+     * config.xsd. Psalm validates its config against that schema on startup and
+     * refuses to run if it fails, so a config referencing issue handlers absent
+     * from the schema is broken out of the box (#1115: the Psalm 6 line must not
+     * emit Psalm-7-only handlers such as MissingPureAnnotation).
+     *
+     * This is the real re-introduction guard: it runs under the Psalm version
+     * pinned in composer.json, so a Psalm-7-only handler creeping back in (e.g.
+     * via a master -> 3.x merge) fails here rather than in users' projects.
+     */
+    #[Test]
+    public function generated_config_validates_against_installed_psalm_schema(): void
+    {
+        $schema = \dirname(__DIR__, 3) . \DIRECTORY_SEPARATOR
+            . 'vendor' . \DIRECTORY_SEPARATOR . 'vimeo' . \DIRECTORY_SEPARATOR . 'psalm'
+            . \DIRECTORY_SEPARATOR . 'config.xsd';
+        // Fail loudly rather than skip: a silent skip would turn this regression
+        // guard into dead weight that protects nothing.
+        $this->assertFileExists($schema, 'Psalm config.xsd not found; run composer install first.');
+
+        $tester = $this->makeTester();
+        $tester->execute([]);
+
+        $contents = \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertIsString($contents);
+
+        $previous = \libxml_use_internal_errors(true);
+        try {
+            $dom = new \DOMDocument();
+            $this->assertTrue($dom->loadXML($contents), 'Generated psalm.xml must be loadable XML.');
+
+            $valid = $dom->schemaValidate($schema);
+            $errors = \array_map(
+                static fn(\LibXMLError $error): string => \trim($error->message),
+                \libxml_get_errors(),
+            );
+            $this->assertTrue(
+                $valid,
+                \sprintf("Generated psalm.xml failed config.xsd validation:\n%s", \implode("\n", $errors)),
+            );
+        } finally {
+            \libxml_clear_errors();
+            \libxml_use_internal_errors($previous);
+        }
+    }
+
     #[Test]
     public function refuses_to_overwrite_by_default_when_answered_no(): void
     {
