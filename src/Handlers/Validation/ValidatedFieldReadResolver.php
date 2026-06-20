@@ -39,10 +39,9 @@ final class ValidatedFieldReadResolver
 {
     /**
      * Accessor methods whose single-key form selects a rule-covered field.
-     * Canonical Laravel casing only — the camelCase convention is universal in
-     * practice, and skipping `strtolower()` keeps this off the per-expression
-     * allocation path. `public` so {@see InlineValidateRulesCollector} shares
-     * one definition (same flow, one extra hop).
+     * Stored lowercase because PHP method names are case-insensitive. `public`
+     * so {@see InlineValidateRulesCollector} shares one definition (same flow,
+     * one extra hop).
      *
      * @internal shared only with {@see InlineValidateRulesCollector}.
      */
@@ -72,7 +71,7 @@ final class ValidatedFieldReadResolver
         }
 
         if ($expr instanceof MethodCall && $expr->name instanceof Identifier) {
-            return self::fromMethodCall($event, $expr, $expr->name->name);
+            return self::fromMethodCall($event, $expr, $expr->name->toLowerString());
         }
 
         return null;
