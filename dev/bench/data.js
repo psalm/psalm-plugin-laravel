@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781962467368,
+  "lastUpdate": 1781966830286,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6920,6 +6920,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.08,
             "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "78665a16939f96eee981c8188a2ef9a8659be274",
+          "message": "feat(tappable): type no-arg tap() higher-order form #1110 (#1112)\n\nThe no-arg `Tappable::tap()` returns a HigherOrderTapProxy that forwards\nevery call back to the target; the old `@return $this` stub mistyped that\nterminal object. Ship a generic HigherOrderTapProxy<TClass> stub whose\n`__call` threads the target type natively (no proxy handler needed, and it\nsatisfies sealAllMethods), plus a MethodReturnTypeProvider that supplies the\nproxy for the no-callback case and defers to `$this` for the callback case.\n\nA conditional return type in the stub cannot do this: when it overrides a\nreflected trait method, Psalm collapses every call to the null branch\n(verified on stubbed and un-stubbed Tappable users), so the discrimination\nlives in the handler, mirroring ConditionableWhenHandler.\n\nScoped to direct Tappable users (Stringable, Http\\Client\\Response, Uri,\nMailable, Router, the paginators, ...). Eloquent Model/Builder tap() comes\nfrom BuildsQueries::tap (callback required) and is intentionally unaffected.\n\nCloses #1110",
+          "timestamp": "2026-06-20T16:44:19+02:00",
+          "tree_id": "65d92568e5ce62b488d636dd4016bb6eadffa376",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/78665a16939f96eee981c8188a2ef9a8659be274"
+        },
+        "date": 1781966829729,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.44,
+            "range": "± 0.25",
             "unit": "s"
           },
           {
