@@ -1,0 +1,49 @@
+<?php
+
+namespace Illuminate\Support;
+
+/**
+ * Higher-order tap proxy: the no-argument `$value->tap()` returns this proxy, and any method
+ * called on it runs that method on the target and returns the target — `$s->tap()->foo()`
+ * yields the target, never `foo()`'s own return value.
+ *
+ * Laravel's real class is NOT generic (`@var mixed $target`, `__call(): mixed`). We re-declare
+ * it WITH a `@template TClass` so the target binding survives the chain:
+ * {@see \Psalm\LaravelPlugin\Handlers\Support\TappableTapHandler} types `Tappable::tap()` as
+ * `HigherOrderTapProxy<static>`, and `__call` returns `TClass`. Every proxied call yields the
+ * same target type, so a single `@return TClass` covers it — no proxy handler needed (the
+ * `__call` stub also satisfies `sealAllMethods`).
+ *
+ * `@template-covariant` (not invariant): `TClass` appears only in output position (`__call`'s
+ * return and the read-only `$target`), so a `HigherOrderTapProxy<Sub&static>` must satisfy a
+ * declared `HigherOrderTapProxy<Sub>` — covariance accepts it, invariance would reject. Mirrors
+ * the {@see \Illuminate\Database\Eloquent\HigherOrderBuilderProxy} variance, and the same
+ * covariance convention the relation stubs follow (see Eloquent's `HasRelationships` /
+ * `Relation`). Keep `TClass` output-only (no `__construct(TClass)` here) or the covariance
+ * becomes unsound. Laravel's real `$target` is a writable `public mixed` property; exposing it as
+ * `@property-read TClass` both narrows it to the target type and keeps `TClass` out of the
+ * writable (invariant) position.
+ *
+ * Taint limitation (lenient by design, like {@see \Illuminate\Database\Eloquent\HigherOrderBuilderProxy}):
+ * a proxied call resolves to `HigherOrderTapProxy::__call`, never to the proxied method's own
+ * signature, so a parameter-level `@psalm-taint-sink` on that method is never consulted (its
+ * arguments arrive as an opaque `array<array-key, mixed>` at the dispatch boundary) and
+ * `$value->tap()->sink($tainted)` does not flag. The gap is narrow: every sink reachable via
+ * `tap()->method()` is also reachable by calling `method()` directly, where the sink still fires;
+ * and re-dispatching per-argument sinks through `__call` is not expressible in a stub. Guarded by
+ * tests/Type/tests/TaintAnalysis/SafeTapProxySinkKnownLimitation.phpt.
+ *
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1110
+ *
+ * @template-covariant TClass of object
+ *
+ * @property-read TClass $target
+ */
+class HigherOrderTapProxy
+{
+    /**
+     * @param array<array-key, mixed> $parameters
+     * @return TClass
+     */
+    public function __call(string $method, array $parameters): mixed {}
+}
