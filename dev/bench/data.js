@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781945882910,
+  "lastUpdate": 1781957242611,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6850,6 +6850,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.06,
             "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8f17fe4acbd5c1fa4fec708577692ee2f10ad15d",
+          "message": "fix(filesystem): type Filesystem::hash() return as non-empty-string|false #1103 (#1109)\n\nhash() is `return hash_file($algorithm, $path)`, which returns a\nfixed-length hex digest (always non-empty) on success and false only\nwhen the file can't be read — but the stub typed @return string. That\nfalse-negative flagged valid `=== false` checks on the result. Body is\nidentical across all supported Laravel versions, so the fix is\nannotation-only in common. The @psalm-taint-sink file $path annotation\nis preserved.\n\nPart of #1103",
+          "timestamp": "2026-06-20T14:04:31+02:00",
+          "tree_id": "7f5305089ec06d7d9b08d4ae60c6542d8db57ae1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8f17fe4acbd5c1fa4fec708577692ee2f10ad15d"
+        },
+        "date": 1781957242088,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.32,
+            "range": "± 0.25",
             "unit": "s"
           },
           {
