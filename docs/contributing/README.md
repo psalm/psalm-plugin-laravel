@@ -125,6 +125,21 @@ Authoring an override:
 
 **Common vs version dir.** Return narrowing that holds across all versions (Laravel only improved its annotation) goes in `common`. A parameter widened by behavior present only in a newer Laravel (e.g. `firstOrNew`'s `values` taking `\Closure|array` only on 13) must go in the version dir: widening `common` would tell Psalm a call is valid that fatals at runtime on older versions (silent false negative).
 
+### Testing version-specific stubs
+
+A type test that asserts a `stubs/<version>/` override would fail on the lower cells of the CI matrix (`.github/workflows/tests.yml` runs `test:type` over `^13.0` and `^12.4`, including `prefer-lowest`), because the override does not load on the older Laravel. Gate such a test with a `--SKIPIF--` section so it runs only where the stub applies:
+
+```
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.42.0');
+--FILE--
+... assertion of the version-specific behavior ...
+```
+
+`LaravelVersion::skipBelow($version)` skips when the installed Laravel is older than the stub dir (`skipFrom($version)` does the reverse for behavior only on older lines). The `--SKIPIF--` script runs in a bare process from the project root, so it requires the autoloader via `getcwd()`. See `tests/Type/tests/Http/PendingRequestTest.phpt` for a worked example (the async HTTP client types are 12.42+).
+
 ## How to add a handler
 
 Handlers implement Psalm event interfaces to override type inference.
