@@ -43,13 +43,21 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * support. See stubs/common/Http/Concerns/InteractsWithInput.phpstub for
      * the long-form rationale and laravel/framework history.
      *
-     * Refs: https://github.com/psalm/psalm-plugin-laravel/issues/925
+     * Not a taint source: file() returns an UploadedFile object whose only
+     * string coercion is its path (via __toString()/SplFileInfo::getPathname()),
+     * i.e. the PHP-assigned temp upload path in upload_tmp_dir. That path is
+     * server-controlled (not attacker-controllable), so tainting the whole
+     * object raised false TaintedFile/TaintedSSRF when it reached a path sink
+     * such as file_get_contents(). The genuinely user-controlled data
+     * (contents, client filename, MIME type) is tainted at the UploadedFile
+     * accessors instead (see stubs/common/Http/UploadedFile.phpstub).
+     *
+     * Refs: https://github.com/psalm/psalm-plugin-laravel/issues/925,
+     *       https://github.com/psalm/psalm-plugin-laravel/issues/1134
      *
      * @param  string|null  $key
      * @param  mixed  $default
      * @return ($key is null ? array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>> : \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>|null)
-     *
-     * @psalm-taint-source input
      */
     public function file($key = null, $default = null) {}
 
