@@ -57,4 +57,4 @@ function test_unshadowed_pseudo_preserved(): void
     /** @psalm-check-type-exact $_result = \Illuminate\Database\Eloquent\Builder */
 }
 ?>
---EXPECT--
+--EXPECTF--

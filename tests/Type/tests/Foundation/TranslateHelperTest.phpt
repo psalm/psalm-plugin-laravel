@@ -38,4 +38,4 @@ $_nullable = __($maybeKey);
 $_translator = trans();
 /** @psalm-check-type-exact $_translator = \Illuminate\Contracts\Translation\Translator */
 ?>
---EXPECT--
+--EXPECTF--
