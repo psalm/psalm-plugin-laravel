@@ -51,6 +51,7 @@ final class DiagnoseCommandTest extends TestCase
             bootPath: null,
             bootstrapErrors: ['synthetic'],
             hardFailures: ['Application boot failed: synthetic'],
+            loadedProviders: [],
         );
 
         $tester = $this->testerFor($this->fixtureProvider($failing));
@@ -79,6 +80,7 @@ final class DiagnoseCommandTest extends TestCase
             bootPath: $base->bootPath,
             bootstrapErrors: ['Call to a member function bar() on null in config/app.php:42'],
             hardFailures: [],
+            loadedProviders: $base->loadedProviders,
         );
 
         $tester = $this->testerFor($this->fixtureProvider($warned));
@@ -137,6 +139,33 @@ final class DiagnoseCommandTest extends TestCase
     }
 
     #[Test]
+    public function provider_count_renders_by_default_without_the_full_list(): void
+    {
+        $tester = $this->testerFor($this->fixtureProvider($this->okReport()));
+
+        $exit = $tester->execute([]);
+        $display = $tester->getDisplay();
+
+        $this->assertSame(Command::SUCCESS, $exit, $display);
+        $this->assertStringContainsString('Providers', $display);
+        $this->assertStringContainsString('2 (use --providers to list them)', $display);
+        $this->assertStringNotContainsString('Illuminate\\Auth\\AuthServiceProvider', $display);
+    }
+
+    #[Test]
+    public function providers_flag_lists_every_provider(): void
+    {
+        $tester = $this->testerFor($this->fixtureProvider($this->okReport()));
+
+        $exit = $tester->execute(['--providers' => true]);
+        $display = $tester->getDisplay();
+
+        $this->assertSame(Command::SUCCESS, $exit, $display);
+        $this->assertStringContainsString('Illuminate\\Auth\\AuthServiceProvider', $display);
+        $this->assertStringContainsString('Illuminate\\Database\\DatabaseServiceProvider', $display);
+    }
+
+    #[Test]
     public function real_diagnostics_collect_returns_well_formed_report(): void
     {
         $report = (new Diagnostics())->collect();
@@ -145,6 +174,12 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertNotEmpty($report->phpAnalysisVersion);
         $this->assertContains($report->phpAnalysisSource, ['runtime', 'psalm.xml']);
         $this->assertContains($report->bootMode, ['bootstrap', 'testbench_fallback', null]);
+        // A successful boot registers Laravel's core providers; assert the list is
+        // populated and sorted so the diagnose output is deterministic.
+        $this->assertNotEmpty($report->loadedProviders);
+        $sorted = $report->loadedProviders;
+        \sort($sorted);
+        $this->assertSame($sorted, $report->loadedProviders);
     }
 
 
@@ -201,6 +236,10 @@ final class DiagnoseCommandTest extends TestCase
             bootPath: '/app/bootstrap/app.php',
             bootstrapErrors: [],
             hardFailures: [],
+            loadedProviders: [
+                'Illuminate\\Auth\\AuthServiceProvider',
+                'Illuminate\\Database\\DatabaseServiceProvider',
+            ],
         );
     }
 }

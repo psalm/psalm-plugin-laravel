@@ -22,6 +22,8 @@ For Psalm's upstream taint analysis documentation, see:
 Taint annotations live in `stubs/common/` alongside type stubs, organized by Laravel namespace.
 Taint analysis is opt-in (`runTaintAnalysis="true"` in `psalm.xml`, or `--taint-analysis` CLI flag), so there is no need for a separate directory. The stubs apply whenever taint analysis is enabled.
 
+**Exception — classes reached only through narrowing.** A taint stub redeclares the class to host the annotated method, which makes the stub claim the class's file slot. Psalm *merges* that stub with the real class (stub members win on overlapping names) — but only when the real source is **also** scanned, which a direct mention of the class in analysed code triggers. A class reached only through a return-type provider — e.g. `Illuminate\Auth\SessionGuard` produced by `auth('web')` narrowing, never named — never triggers a scan of its real source, so the stub becomes the class's sole definition and every non-stubbed method is missing, breaking calls like `auth('web')->user()` (#1113). For those, set the taint on the *real* method storage from a scan-phase handler instead: `taint_source_types` / `removed_taints` are the exact fields `@psalm-taint-source` / `@psalm-taint-escape` populate. See `src/Handlers/Auth/GuardTaintHandler.php`.
+
 ## Annotations quick reference
 
 There are six taint-related annotations. The first four are the ones you'll use most in stubs:
@@ -382,7 +384,7 @@ public static function of($string) {}
 2. Add `@psalm-taint-specialize` and re-run the test. If it now reports zero errors, the stub falls into the broken-asymmetry class — revert the annotation and open a Psalm 7 bug report with a minimal repro.
 3. Add a per-callsite regression test under `tests/Type/tests/TaintAnalysis/Safe<Stub><Method>SpecializePerCallsite.phpt` modeled on `SafeJsEncodeSpecializePerCallsite.phpt`.
 
-The known-broken candidates (`e()`, `encrypt()` / `decrypt()` and `*String` variants, `SessionGuard::hashPasswordForCookie()`, `Connection::escape()`, `DB::escape()`) are tracked as follow-ups to #1007. Do not blanket-apply the annotation; treat every site as its own bisect.
+The known-broken candidates (`e()`, `encrypt()` / `decrypt()` and `*String` variants, `Connection::escape()`, `DB::escape()`) are tracked as follow-ups to #1007. Do not blanket-apply the annotation; treat every site as its own bisect. (`SessionGuard::hashPasswordForCookie()` was on this list but no longer applies: its escape moved to `GuardTaintHandler` and dropped the `@psalm-flow` propagation entirely — see #1113.)
 
 ## Per-rule escape on Rule objects
 

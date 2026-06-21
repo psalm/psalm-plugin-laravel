@@ -95,6 +95,11 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
+        // Taint source/escape for the concrete guards. Lives in a handler, not a
+        // `.phpstub`, because redeclaring the guard class to host a taint method
+        // shadows every other method (see GuardTaintHandler / #1113).
+        require_once __DIR__ . '/Handlers/Auth/GuardTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\GuardTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Filesystem/StorageHandler.php';
         $registration->registerHooksFromClass(Handlers\Filesystem\StorageHandler::class);
@@ -203,6 +208,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
+        require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Console\ConsoleClosureScopeHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);

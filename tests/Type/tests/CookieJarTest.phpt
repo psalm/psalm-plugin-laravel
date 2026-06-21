@@ -18,4 +18,4 @@ final class CookieJarTest
     }
 }
 ?>
---EXPECT--
+--EXPECTF--

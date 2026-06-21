@@ -51,4 +51,4 @@ function cursor_paginator_items(CursorPaginator $paginator): void
     $_collection = $paginator->getCollection();
     /** @psalm-check-type-exact $_collection = Collection<int, string> */
 }
---EXPECT--
+--EXPECTF--
