@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782042609772,
+  "lastUpdate": 1782045722114,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7025,6 +7025,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.36,
             "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bcff13a1883efc2cf02130f26d20d4a0c80513b4",
+          "message": "feat(diagnose): list auto-discovered service providers #1123 (#1124)\n\ndiagnose had no visibility into which providers the booted kernel\nregistered, the fastest signal when debugging missing Facade/binding\nsupport. Add a Providers section: compact count by default, full sorted\nlist under --providers. Sourced from the booted app's\ngetLoadedProviders(); empty list when boot fails.",
+          "timestamp": "2026-06-21T14:39:22+02:00",
+          "tree_id": "d893715503362cc480cf48064dfb96317b8af55a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bcff13a1883efc2cf02130f26d20d4a0c80513b4"
+        },
+        "date": 1782045721107,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.6,
+            "range": "± 0.2",
             "unit": "s"
           },
           {
