@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782030656997,
+  "lastUpdate": 1782042609772,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6990,6 +6990,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.72,
             "range": "± 0.31",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e1d6a8f43ef79bc0cf4ed728eaffaf6fa936d30",
+          "message": "fix(auth): stop taint stubs stripping guard methods #1113 (#1121)\n\nA full-class `.phpstub` that redeclared SessionGuard/TokenGuard only to\nhost one `@psalm-taint-*` method shadowed the entire class. A guard\nreached solely through `auth('web')` / `Auth::guard('web')` narrowing is\nnever named, so Psalm never scans its real vendor source and stripped\nevery other method, making `auth('web')->user()` report UndefinedMethod\n(and fatally crash if Macroable was re-added, via getMethodParams on a\nreturn-type-provider-only class).\n\nGuardTaintHandler now sets the same metadata Psalm derives from the\ndocblock tags (`taint_source_types` / `removed_taints`) on the real\nmethod storage during the scan phase, leaving the class intact. The old\n`@psalm-flow` propagation on hashPasswordForCookie is dropped as\nover-conservative: a hex HMAC digest cannot carry injection taint.",
+          "timestamp": "2026-06-21T13:47:13+02:00",
+          "tree_id": "adb9c583fe9b1c2f1e99623ed97bd6820a3f21a9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5e1d6a8f43ef79bc0cf4ed728eaffaf6fa936d30"
+        },
+        "date": 1782042609280,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.36,
+            "range": "± 0.14",
             "unit": "s"
           },
           {
