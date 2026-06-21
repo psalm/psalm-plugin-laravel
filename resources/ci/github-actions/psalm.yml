@@ -53,10 +53,11 @@ jobs:
 
       - uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
 
-      # One pass: GitHub annotations on stdout + a SARIF report.
+      # One pass = type + taint. Psalm 7 runs taint analysis by default (no --taint-analysis flag needed),
+      # so a plain run emits both type and taint findings: GitHub annotations on stdout + a SARIF report.
       # Exits 0 even on findings; a real crash exits non-zero, fails this step, and skips the rest.
       - name: Run Psalm
-        run: ./vendor/bin/psalm --taint-analysis --report=psalm.sarif --report-show-info=false
+        run: ./vendor/bin/psalm --report=psalm.sarif --report-show-info=false
 
       - name: Upload SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
