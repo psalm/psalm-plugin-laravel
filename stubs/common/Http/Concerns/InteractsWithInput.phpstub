@@ -122,9 +122,14 @@ trait InteractsWithInput
     /**
      * Get all uploaded files for the request.
      *
-     * @return array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>>
+     * Not a taint source, for the same reason as Request::file(): the returned
+     * UploadedFile objects only coerce to their server-controlled temp path.
+     * The user-controlled upload data is tainted at the UploadedFile accessors
+     * instead (see stubs/common/Http/UploadedFile.phpstub).
      *
-     * @psalm-taint-source input
+     * Refs: https://github.com/psalm/psalm-plugin-laravel/issues/1134
+     *
+     * @return array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>>
      */
     public function allFiles() {}
 

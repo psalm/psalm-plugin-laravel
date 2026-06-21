@@ -48,8 +48,10 @@ final class AddCommandTest extends TestCase
         $contents = \file_get_contents($workflow);
         $this->assertIsString($contents);
         $this->assertStringContainsString('name: Psalm', $contents);
+        // Two-job workflow (#1133): Psalm 6.x needs separate type and taint jobs.
         $this->assertStringContainsString('static-analysis:', $contents);
         $this->assertStringContainsString('taint-analysis:', $contents);
+        $this->assertStringContainsString('security-events: write', $contents);
     }
 
     #[Test]

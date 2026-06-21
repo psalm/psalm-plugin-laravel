@@ -86,11 +86,14 @@ final class GitHubActionsTargetTest extends TestCase
         // Assert structural contents rather than whole file equality so doc
         // tweaks to the template don't break the test.
         $this->assertStringContainsString('name: Psalm', $plan->contents);
+        // Two-job workflow (#1133): Psalm 6.x runs type and taint as separate jobs;
+        // the taint job uploads SARIF and feeds Code Scanning via security-events: write.
         $this->assertStringContainsString('static-analysis:', $plan->contents);
         $this->assertStringContainsString('taint-analysis:', $plan->contents);
+        $this->assertStringContainsString('security-events: write', $plan->contents);
         $this->assertStringContainsString('shivammathur/setup-php', $plan->contents);
         $this->assertStringContainsString('github/codeql-action/upload-sarif', $plan->contents);
-        $this->assertStringContainsString('--taint-analysis', $plan->contents);
+        $this->assertStringContainsString('--report=psalm.sarif', $plan->contents);
     }
 
     #[Test]
