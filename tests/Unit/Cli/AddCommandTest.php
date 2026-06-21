@@ -48,8 +48,8 @@ final class AddCommandTest extends TestCase
         $contents = \file_get_contents($workflow);
         $this->assertIsString($contents);
         $this->assertStringContainsString('name: Psalm', $contents);
-        $this->assertStringContainsString('types:', $contents);
-        $this->assertStringContainsString('security:', $contents);
+        $this->assertStringContainsString('static-analysis:', $contents);
+        $this->assertStringContainsString('taint-analysis:', $contents);
     }
 
     #[Test]
