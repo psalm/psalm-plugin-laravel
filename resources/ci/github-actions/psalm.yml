@@ -44,7 +44,13 @@ jobs:
             repo.packagist.org:443
             results-receiver.actions.githubusercontent.com:443
 
+      # No git operations run after checkout, so drop the persisted token. Defense in depth:
+      # a compromised later step (a malicious Composer dependency or Psalm plugin) cannot reuse the
+      # token to push, even though github.com is on the egress allowlist. The SARIF upload uses the
+      # Actions token (security-events: write), not git credentials.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
