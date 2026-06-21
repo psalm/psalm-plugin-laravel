@@ -27,9 +27,6 @@ The run is a plain `./vendor/bin/psalm`, no `--taint-analysis` flag. Psalm 7 ena
 
 The template also pins every action to a commit SHA and hardens the runner with a blocking egress policy plus an allowed-endpoints allowlist. Both are documented inline in the generated file.
 
-> **Why not `psalm/psalm-github-actions` or `psalm/psalm-github-security-scan`?**
-> Those official Docker actions bundle their own Psalm binary (Psalm 5.x) and support neither Psalm 7 nor Composer-installed plugins. psalm-plugin-laravel requires Psalm 7, so the generated workflow installs PHP with `shivammathur/setup-php` and runs the Composer-installed Psalm instead.
-
 ## Customizing
 
 The generated file carries inline comments for each knob. The common edits:
