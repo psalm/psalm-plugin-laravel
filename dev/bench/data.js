@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782079947441,
+  "lastUpdate": 1782081213452,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7165,6 +7165,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.6,
             "range": "± 1.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "09a6233f86b1b9e1307eedcde0854b3b9c169183",
+          "message": "Stop false `TaintedFile`/`TaintedSSRF` on `UploadedFile` reads (#1136)\n\n* fix(taint): stop false TaintedFile/SSRF on UploadedFile reads #1134\n\nRequest::file() and allFiles() carried @psalm-taint-source input, which\ntainted the whole UploadedFile object. An UploadedFile's only string\ncoercion is its server-controlled temp path (__toString to\nSplFileInfo::getPathname()), so passing the object to a path sink such\nas file_get_contents() raised false TaintedFile and TaintedSSRF.\n\nThe genuinely user-controlled data (contents, client name, MIME type)\nstays tainted at the UploadedFile accessors, so the object-level source\nwas both redundant and wrong. Drop it from both methods.\n\nTests cover the safe direction (path read, no taint) and the preserved\ndangerous ones (contents to HTML, client name to a path sink).\n\nClaude-Session: https://claude.ai/code/session_0162N2vvtjfypfHaYxRobxFq\n\n* fix(taint): taint UploadedFile::getContent() like get() #1134\n\ngetContent() (the Symfony File parent API) returns the same raw\nattacker-controlled bytes as Laravel's get(), so reading it must be\ntainted too. This is the contents accessor the file() fix relies on\nwhen it argues user data stays tainted at the accessors.\n\nClaude-Session: https://claude.ai/code/session_0162N2vvtjfypfHaYxRobxFq\n\n* test(taint): cover more UploadedFile-to-string coercions #1134\n\nThe safe-path regression test asserted only `(string) $file`. Exercise\nthe other coercions that route through __toString -> getPathname() too\n(string interpolation, strval(), sprintf '%s'), so a future partial\nre-taint of file() that only some coercion forms catch cannot slip\nthrough. Each carries the object's taint before the fix and is clean\nafter; concatenation is omitted as it adds an orthogonal\nImplicitToStringCast that would pollute the zero-output assertion.\n\nClaude-Session: https://claude.ai/code/session_0162N2vvtjfypfHaYxRobxFq",
+          "timestamp": "2026-06-22T00:30:46+02:00",
+          "tree_id": "cbe9c9f891a35160023703b858b1e10c003f2576",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/09a6233f86b1b9e1307eedcde0854b3b9c169183"
+        },
+        "date": 1782081212667,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.18,
+            "range": "± 0.28",
             "unit": "s"
           },
           {
