@@ -341,4 +341,4 @@ function testOptionalParentGroupWithChildren(OptionalParentGroupRequest $request
     /** @psalm-check-type-exact $_all = array{settings?: array{theme: string}} */
 }
 ?>
---EXPECT--
+--EXPECTF--

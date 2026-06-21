@@ -58,4 +58,4 @@ function pass_to_route_collection_add(RouteCollectionInterface $routes): Route
     );
 }
 ?>
---EXPECT--
+--EXPECTF--
