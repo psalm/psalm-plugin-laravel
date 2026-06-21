@@ -171,13 +171,8 @@ final class ConsoleClosureScopeHandler implements
         return null;
     }
 
-    /**
-     * `setFQCLN()` is the only side effect, and Psalm models it as
-     * external-mutation-free (it touches the analyzer's own `fake_this_class`),
-     * so the method analyses as pure even though it steers later analysis.
-     *
-     * @psalm-external-mutation-free
-     */
+    // Not marked mutation-free: Psalm 6's `StatementsAnalyzer::setFQCLN()` is not annotated
+    // mutation-free, unlike Psalm 7, so a purity tag here trips `ImpureMethodCall`.
     #[\Override]
     public static function beforeStatementAnalysis(BeforeStatementAnalysisEvent $event): ?bool
     {
@@ -293,7 +288,8 @@ final class ConsoleClosureScopeHandler implements
         return $callback;
     }
 
-    /** @psalm-external-mutation-free */
+    // Not marked mutation-free: Psalm 6's `Codebase::classExists()` / `classExtends()` are not
+    // annotated mutation-free, unlike Psalm 7, so a purity tag here trips `ImpureMethodCall`.
     private static function resolvesToArtisanFacade(string $className, Codebase $codebase): bool
     {
         if ($className === self::ARTISAN_FACADE) {

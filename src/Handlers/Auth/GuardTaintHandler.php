@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Auth;
 
 use Illuminate\Auth\SessionGuard;
 use Illuminate\Auth\TokenGuard;
+use Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -59,15 +60,31 @@ final class GuardTaintHandler implements AfterClassLikeVisitInterface
             $method = self::resolveMethod($event, $storage, 'gettokenforrequest');
 
             if ($method instanceof \Psalm\Storage\MethodStorage) {
-                $method->taint_source_types |= TaintKind::ALL_INPUT;
+                // Psalm 6 models a taint set as a list<string> of kind names (Psalm 7 uses an int
+                // bitmask), and has no TaintKind::ALL_INPUT constant — merge the ALL_INPUT group list.
+                $method->taint_source_types = self::mergeTaints($method->taint_source_types, ValidationRuleAnalyzer::allInputTaints());
             }
         } elseif (\strcasecmp($storage->name, SessionGuard::class) === 0) {
             $method = self::resolveMethod($event, $storage, 'hashpasswordforcookie');
 
             if ($method instanceof \Psalm\Storage\MethodStorage) {
-                $method->removed_taints |= TaintKind::USER_SECRET;
+                $method->removed_taints = self::mergeTaints($method->removed_taints, [TaintKind::USER_SECRET]);
             }
         }
+    }
+
+    /**
+     * Merge two Psalm 6 taint lists (Psalm 7 would do this with a bitwise `|`).
+     *
+     * @param array<string> $a
+     * @param list<string> $b
+     * @return list<string>
+     *
+     * @psalm-pure
+     */
+    private static function mergeTaints(array $a, array $b): array
+    {
+        return \array_values(\array_unique(\array_merge($a, $b)));
     }
 
     /**

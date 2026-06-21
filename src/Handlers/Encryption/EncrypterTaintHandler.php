@@ -74,7 +74,9 @@ final class EncrypterTaintHandler implements AfterClassLikeVisitInterface
             $method = self::resolveMethod($event, $storage, $method_name);
 
             if ($method instanceof MethodStorage) {
-                $method->removed_taints |= TaintKind::USER_SECRET | TaintKind::SYSTEM_SECRET;
+                // Psalm 6 models a taint set as a list<string> of kind names, not an int bitmask
+                // (Psalm 7) — merge the secret kinds rather than OR-ing them.
+                $method->removed_taints = self::mergeTaints($method->removed_taints, [TaintKind::USER_SECRET, TaintKind::SYSTEM_SECRET]);
                 self::flowFirstParamToReturn($method);
             }
         }
@@ -83,10 +85,24 @@ final class EncrypterTaintHandler implements AfterClassLikeVisitInterface
             $method = self::resolveMethod($event, $storage, $method_name);
 
             if ($method instanceof MethodStorage) {
-                $method->added_taints |= TaintKind::USER_SECRET | TaintKind::SYSTEM_SECRET;
+                $method->added_taints = self::mergeTaints($method->added_taints, [TaintKind::USER_SECRET, TaintKind::SYSTEM_SECRET]);
                 self::flowFirstParamToReturn($method);
             }
         }
+    }
+
+    /**
+     * Merge two Psalm 6 taint lists (Psalm 7 would do this with a bitwise `|`).
+     *
+     * @param array<string> $a
+     * @param list<string> $b
+     * @return list<string>
+     *
+     * @psalm-pure
+     */
+    private static function mergeTaints(array $a, array $b): array
+    {
+        return \array_values(\array_unique(\array_merge($a, $b)));
     }
 
     /**
