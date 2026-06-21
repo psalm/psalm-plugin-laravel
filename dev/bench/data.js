@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782046481006,
+  "lastUpdate": 1782052644923,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7095,6 +7095,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 27.9,
             "range": "± 0.01",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8943f6551778c6d0fcbe59d54f3191af6e054e9e",
+          "message": "fix(console): scope $this override to the callback closure #1114 (#1127)\n\nFollow-up to #1122. That handler set Context::$self to ClosureCommand for\nthe whole Artisan::command() call, so self::/static:: in the *signature*\nargument resolved against ClosureCommand — e.g. Artisan::command(self::SIG,\nfn ...) inside a class reported a false UndefinedConstant/UndefinedMethod.\n\nOverride self only while the callback closure node itself is analysed\n(record the callback arg's spl_object_id at the call, flip self when that\nnode is visited, restore after), leaving sibling arguments on the real\nself. The callback id is not consumed on first match: the facade @method\ndispatch analyses the argument more than once, so each pass re-applies the\noverride; the id set is reset per file to bound it and avoid spl_object_id\nreuse across files.\n\nAlso restricts detection to the actual callback argument (2nd positional\nor named `callback`), runs the cheap AST checks before codebase queries,\nand strengthens the type tests (self::/static:: signature regression,\narrow and static-arrow forms, named-argument callback, non-global option).",
+          "timestamp": "2026-06-21T16:34:25+02:00",
+          "tree_id": "b8af1cf5cbde820e313ca7111a0e549216898108",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8943f6551778c6d0fcbe59d54f3191af6e054e9e"
+        },
+        "date": 1782052644212,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.9,
+            "range": "± 0.21",
             "unit": "s"
           },
           {
