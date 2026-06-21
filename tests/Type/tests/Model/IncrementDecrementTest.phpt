@@ -71,4 +71,4 @@ function test_decrement_each_with_extra(Customer $customer): void
     /** @psalm-check-type-exact $_result = int */
 }
 ?>
---EXPECT--
+--EXPECTF--

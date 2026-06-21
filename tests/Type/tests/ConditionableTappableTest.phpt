@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Support\HigherOrderTapProxy;
 use Illuminate\Support\Stringable;
 
 /**
@@ -215,16 +216,17 @@ function test_stringable_tap_with_callback(): void
 }
 
 /**
- * tap() without a callback also types as $this (stub simplification).
+ * tap() without a callback returns the higher-order proxy generic over the target.
  *
- * At runtime Laravel returns HigherOrderTapProxy for the null case.
- * The stub approximates this as $this to avoid mixed collapse — acceptable
- * because HigherOrderTapProxy proxies all calls back to the original object.
+ * TappableTapHandler supplies this (a conditional return type in the stub cannot
+ * discriminate the callback / no-callback branches when overriding a reflected trait).
+ *
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1110
  */
 function test_tap_without_callback(): void
 {
     $_result = (new Stringable('hello'))->tap();
-    /** @psalm-check-type-exact $_result = Stringable&static */
+    /** @psalm-check-type-exact $_result = HigherOrderTapProxy<Stringable> */
 }
 /**
  * tap() on Http\Client\Response (another Tappable user) confirms trait-level application

@@ -48,4 +48,4 @@ final class LegacyScopeModel extends Model
 
 new LegacyScopeModel();
 ?>
---EXPECT--
+--EXPECTF--
