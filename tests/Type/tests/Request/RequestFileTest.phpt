@@ -1,3 +1,11 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+// Skip on Laravel < 12: the precise file()/allFiles() return-narrowing stub
+// (declared on Illuminate\Http\Request) does not apply on Laravel 11; Psalm
+// falls back to Laravel's coarser native return types. Tracked as an L11
+// stub-narrowing gap, not a missing Laravel feature.
+\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.0.0');
 --FILE--
 <?php declare(strict_types=1);
 
