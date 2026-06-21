@@ -44,6 +44,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+        $this->assertFalse($config->reportImplicitFormRequestPropertyReads);
         // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
         // explicit true/false in XML overrides the auto-detection.
         $this->assertNull($config->findOctaneIncompatibleBinding);
@@ -256,6 +257,37 @@ final class PluginConfigTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("Invalid reportImplicitQueryBuilderCalls value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function report_implicit_form_request_property_reads_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><reportImplicitFormRequestPropertyReads value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->reportImplicitFormRequestPropertyReads);
+    }
+
+    #[Test]
+    public function report_implicit_form_request_property_reads_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><reportImplicitFormRequestPropertyReads value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->reportImplicitFormRequestPropertyReads);
+    }
+
+    #[Test]
+    public function invalid_report_implicit_form_request_property_reads_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><reportImplicitFormRequestPropertyReads value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid reportImplicitFormRequestPropertyReads value 'yes'");
 
         PluginConfig::fromXml($xml);
     }

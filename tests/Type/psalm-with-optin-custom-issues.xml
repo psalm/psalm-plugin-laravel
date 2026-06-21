@@ -17,6 +17,7 @@
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <reportImplicitQueryBuilderCalls value="true" />
+            <reportImplicitFormRequestPropertyReads value="true" />
             <findMissingTranslations value="true" />
             <findMissingViews value="true" />
             <findOctaneIncompatibleBinding value="true" />
