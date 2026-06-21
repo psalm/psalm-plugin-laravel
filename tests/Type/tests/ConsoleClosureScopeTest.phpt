@@ -3,25 +3,20 @@
 
 use Illuminate\Support\Facades\Artisan;
 
-// Canonical routes/console.php pattern. Laravel rebinds the callback to a
-// ClosureCommand instance at runtime, so $this->comment()/info()/etc.
-// (mixed in from Illuminate\Console\Command) are valid — no InvalidScope.
+// $this is the bound ClosureCommand inside routes/console.php callbacks.
 Artisan::command('inspire', function (): void {
     /** @psalm-check-type-exact $this = Illuminate\Foundation\Console\ClosureCommand&static */
     $this->comment('Display an inspiring quote');
     $this->info('done');
-
-    // argument()/option() resolve against ClosureCommand, whose signature is
-    // not statically known here — no false InvalidConsoleArgumentName /
-    // InvalidConsoleOptionName, just the declared fallback return type.
+    // unknown signature → no false InvalidConsole*Name
     $this->argument('name');
     $this->option('verbose');
 })->purpose('Display an inspiring quote');
 
-// Arrow-function form binds $this the same way.
+// arrow fn
 Artisan::command('inspire-arrow', fn () => $this->comment('x'));
 
-// The generated `\Artisan` global alias (extends the facade) is covered too.
+// \Artisan global alias
 \Artisan::command('inspire-alias', function (): void {
     /** @psalm-check-type-exact $this = Illuminate\Foundation\Console\ClosureCommand&static */
     $this->comment('x');

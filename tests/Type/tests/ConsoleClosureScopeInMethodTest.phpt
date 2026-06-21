@@ -6,9 +6,7 @@ namespace App\Providers;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
 
-// Artisan::command() called from inside a class method (a common place to
-// register closure commands). $this is rebound to ClosureCommand inside the
-// callback, then restored to the enclosing class once the call returns.
+// Called inside a method: $this is ClosureCommand in the callback, restored after.
 class ConsoleServiceProvider extends ServiceProvider
 {
     public function boot(): void
@@ -18,7 +16,7 @@ class ConsoleServiceProvider extends ServiceProvider
             $this->comment('x');
         });
 
-        // self restored: $this is the provider again, not ClosureCommand.
+        // restored
         /** @psalm-check-type-exact $this = \App\Providers\ConsoleServiceProvider&static */
         $this->commands([]);
     }
