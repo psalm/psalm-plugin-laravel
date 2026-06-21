@@ -10,6 +10,7 @@
 >
     <projectFiles>
         <directory name="app"/>
+        <directory name="routes"/>
         <ignoreFiles>
             <directory name="vendor"/>
         </ignoreFiles>
