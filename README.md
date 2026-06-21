@@ -56,8 +56,6 @@ You can read more about how the plugin's taint analysis works and what vulnerabi
 
 ### Step 1: Install
 
-Since [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta, allow dev (or beta) packages first:
-
 ```bash
 composer require --dev "psalm/plugin-laravel:^3.8"
 ```
