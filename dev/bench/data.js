@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782045722114,
+  "lastUpdate": 1782046481006,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7060,6 +7060,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 27.6,
             "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bca83ddf3ff4313167b8dcf6f89d562e131a5f94",
+          "message": "Type `$this` in `Artisan::command()` closures (#1122)\n\n* fix(console): type $this in Artisan::command closures #1114\n\nLaravel binds the routes/console.php callback to a ClosureCommand at\nruntime (ClosureCommand::execute() rebinds it via bindTo), so\n$this->comment()/argument()/etc. are valid. Psalm saw a free closure at\nfile scope and reported a false InvalidScope out of the box for every\nanalysed Laravel app.\n\nThe handler types the closure body's $this as ClosureCommand and clears\nthe structural getFQCLN() guard for the call span, restoring scope after.\nThe proper fix is upstream: Psalm lacks PHPStan's @param-closure-this\n(Larastan's one-liner), so this handler is a workaround pending that tag.\n\n* test(console): trim verbose inline comments #1114\n\n* test(app): analyze routes/ so console.php exercises the fix #1114\n\n* docs(console): cite psalm#11853 as the retire trigger #1114",
+          "timestamp": "2026-06-21T14:52:00+02:00",
+          "tree_id": "6d7116067b383c0935bf4d57b6c2c57400ef1e44",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bca83ddf3ff4313167b8dcf6f89d562e131a5f94"
+        },
+        "date": 1782046480091,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.9,
+            "range": "± 0.01",
             "unit": "s"
           },
           {
