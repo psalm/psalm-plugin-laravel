@@ -7,7 +7,7 @@
  * Encrypter::decryptString() should unescape user_secret taint — decrypted data
  * is back to plaintext and must be treated as tainted again.
  *
- * Tests the class-level stub (not the global decrypt() helper).
+ * Tests the class-level Encrypter taint contract set by EncrypterTaintHandler (not the global decrypt() helper).
  */
 function renderDecryptedToken(\Illuminate\Http\Request $request, \Illuminate\Encryption\Encrypter $encrypter): void {
     /** @var string $token */

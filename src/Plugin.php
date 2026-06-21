@@ -100,6 +100,11 @@ final class Plugin implements PluginEntryPointInterface
         // shadows every other method (see GuardTaintHandler / #1113).
         require_once __DIR__ . '/Handlers/Auth/GuardTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\GuardTaintHandler::class);
+        // Same shadowing trap as the guards (#1113): the encrypter is reached via container
+        // narrowing (`app('encrypter')`) and carries no Macroable/__call to mask the strip, so a
+        // taint `.phpstub` would break `app('encrypter')->getKey()`. Keep the taint in a handler.
+        require_once __DIR__ . '/Handlers/Encryption/EncrypterTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Encryption\EncrypterTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Filesystem/StorageHandler.php';
         $registration->registerHooksFromClass(Handlers\Filesystem\StorageHandler::class);
