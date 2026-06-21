@@ -41,17 +41,6 @@ The generated file carries inline comments for each knob. The common edits:
 
 Psalm defaults to a single thread in CI (it detects the `CI` variable). Standard `ubuntu-latest` runners have 4 cores, so add `--threads=4` to the Psalm step on larger codebases. Persisting `~/.cache/psalm` between runs (with `git-restore-mtime-action`, since `git checkout` resets file mtimes) and installing the `igbinary` extension further speed up repeated runs.
 
-## Setting up a baseline
-
-On existing projects Psalm reports many pre-existing issues. A [baseline](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/#using-a-baseline-file) suppresses them so CI fails only on new issues.
-
-```bash
-# Type + taint baseline (Psalm 7 runs both by default)
-./vendor/bin/psalm --set-baseline=psalm-baseline.xml
-```
-
-Commit `psalm-baseline.xml`. The command adds the `errorBaseline` attribute to your `psalm.xml` automatically.
-
 ## Troubleshooting
 
 **Psalm runs out of memory.** Raise the PHP memory limit on the Psalm step:
