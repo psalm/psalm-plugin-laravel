@@ -24,7 +24,7 @@ Two jobs that run in parallel:
 
 Two jobs are required on Psalm 6.x because `--taint-analysis` switches Psalm to a taint-only mode that skips type analysis, so a single run cannot cover both. (Psalm 7 enables taint by default and the `master` branch ships a single-job template instead.)
 
-Both jobs pin every action to a commit SHA and harden the runner with a blocking egress policy plus an allowed-endpoints allowlist. Only the taint job needs `security-events: write` (for the SARIF upload); the type job runs with read-only permissions. Everything is documented inline in the generated file.
+Both jobs pin every action to a commit SHA and harden the runner with a blocking egress policy plus an allowed-endpoints allowlist. Checkout runs with `persist-credentials: false` so the `GITHUB_TOKEN` is not left in the git config for later steps to reuse (nothing here runs a git operation after checkout, and the SARIF upload uses the Actions token, not git credentials). Only the taint job needs `security-events: write` (for the SARIF upload); the type job runs with read-only permissions. Everything is documented inline in the generated file.
 
 ## Customizing
 
