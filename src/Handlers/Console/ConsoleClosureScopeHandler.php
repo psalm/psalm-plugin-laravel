@@ -72,9 +72,13 @@ use Psalm\Plugin\EventHandler\Event\BeforeStatementAnalysisEvent;
  * **Why a handler and not a stub.** The clean fix lives upstream in Psalm:
  * PHPStan — and therefore Larastan, see its `Foundation/Console/Kernel.stub` —
  * expresses this with a `@param-closure-this ClosureCommand $callback` docblock
- * tag. Psalm has no equivalent tag, so the binding has to be applied
- * imperatively. If Psalm gains `@param-closure-this`, this handler can be
- * replaced by a one-line stub annotation.
+ * tag. Psalm has no equivalent tag yet — it is being added in
+ * {@link https://github.com/vimeo/psalm/pull/11853} (closes
+ * {@link https://github.com/vimeo/psalm/issues/11851}). Once that ships in the
+ * plugin's Psalm version, retire this handler: delete it and its
+ * {@see \Psalm\LaravelPlugin\Plugin} registration, and add a
+ * `@param-closure-this \Illuminate\Foundation\Console\ClosureCommand $callback`
+ * stub on the `command()` signature (the Larastan one-liner).
  *
  * **Scope.** Covers the `Artisan` facade static call (the documented skeleton
  * form) and the generated `\Artisan` global alias. Two cases are intentionally
