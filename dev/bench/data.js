@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782081213452,
+  "lastUpdate": 1782085020423,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7200,6 +7200,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.18,
             "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d30c460ae02a9f77df5e751570832aa74433cd39",
+          "message": "feat(application): resolve concrete-only contract methods #1108 (#1141)\n\nCalling concrete-only Illuminate\\Foundation\\Application methods\n(isProduction, isLocal, the environment* family, path, ...) on a\nreceiver typed as the Illuminate\\Contracts\\Foundation\\Application\ncontract raised UndefinedInterfaceMethod (181). Command::$laravel,\nServiceProvider::$app and app() are all typed on that contract.\n\nA new AfterCodebasePopulated handler points the contract's\ndeclaring_method_ids / appearing_method_ids at the concrete app's own\nmethod ids, so the calls resolve with version-correct signatures\nwithout restating them. $contract->methods is deliberately left\nuntouched so the interface-compliance check does not force implementors\nto declare the bridged methods (spurious UnimplementedInterfaceMethod).\n\nScoped via an explicit contract -> concrete allow-list (seeded with the\nApplication contract), not a blind walk of Illuminate\\Contracts\\*:\nmulti-driver contracts resolve to a config-dependent concrete, so\nbridging them would hide real bugs. Magic and non-public methods are\nnever bridged, and the contract is widened only when the running\ncontainer actually resolves it to the mapped concrete.\n\nAlternative to the narrower hand-listed approach in #1130.",
+          "timestamp": "2026-06-22T01:34:09+02:00",
+          "tree_id": "db7555931a230fd1a67bde442fa7ea0b365c8376",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d30c460ae02a9f77df5e751570832aa74433cd39"
+        },
+        "date": 1782085019878,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.86,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
