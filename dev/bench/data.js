@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782052644923,
+  "lastUpdate": 1782079947441,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7130,6 +7130,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.9,
             "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "67167babc5e93d8cf6224e17186f89deacf1d35f",
+          "message": "ci: set persist-credentials: false on read-only checkouts (#1138)\n\nactions/checkout persists the GITHUB_TOKEN for later steps by default. For\njobs that run no authenticated git operation after checkout, dropping the\ntoken is defense in depth: a compromised later step cannot reuse it to push.\n\nApplied to the checkouts in psalm, code-style (fork check job), tests\n(unit + type-test jobs), spelling, test-laravel-app, and both benchmark\njobs. The benchmark master job pushes to gh-pages, but\nbenchmark-action/github-action-benchmark authenticates that push with its\ngithub-token input (it builds an x-access-token remote and clears the\ncheckout extraheader), so it does not need the persisted credential.\n\nDeliberately left as-is: the code-style auto-fix job, where\nstefanzweifel/git-auto-commit-action pushes the style fix using the token\npersisted by checkout.",
+          "timestamp": "2026-06-22T00:09:29+02:00",
+          "tree_id": "64a2c8935de56101393366932a7110241c980140",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/67167babc5e93d8cf6224e17186f89deacf1d35f"
+        },
+        "date": 1782079946643,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.6,
+            "range": "± 1.08",
             "unit": "s"
           },
           {
