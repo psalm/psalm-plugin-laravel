@@ -11,18 +11,25 @@
  * temp path (PHP-assigned, in upload_tmp_dir): server-controlled, not
  * attacker-controllable. The user controls the file contents and client name
  * (tainted at the UploadedFile accessors), never the path. So file() is no
- * longer an object-level taint source, and coercing the object to its path
- * must reach the file/SSRF sink untainted. The explicit (string) cast is the
- * type-checkable form of what file_get_contents($file) does implicitly.
+ * longer an object-level taint source, and EVERY way the object coerces to its
+ * path (all routing through __toString -> SplFileInfo::getPathname()) must
+ * reach the file/SSRF sink untainted.
  *
- * Empty EXPECTF asserts zero Psalm output. Before the fix this flagged
- * TaintedFile + TaintedSSRF (the cast carries the object's source taint), so
- * the empty block is a real regression guard, not a vacuous pass.
+ * Empty EXPECTF asserts zero Psalm output. Before the fix each line below
+ * flagged TaintedFile + TaintedSSRF (the coercions carry the object's source
+ * taint), so the empty block is a real regression guard, not a vacuous pass.
+ *
+ * Concatenation ($file . '') is intentionally omitted: it is the same taint
+ * path but Psalm adds an orthogonal ImplicitToStringCast for object-in-concat,
+ * which would pollute the zero-output assertion.
  */
 function readUpload(\Illuminate\Http\Request $request): void {
     $file = $request->file('avatar');
     if ($file instanceof \Illuminate\Http\UploadedFile) {
-        file_get_contents((string) $file);
+        file_get_contents((string) $file);       // explicit cast
+        file_get_contents("$file");               // string interpolation
+        file_get_contents(strval($file));         // strval()
+        file_get_contents(sprintf('%s', $file));  // sprintf %s
     }
 }
 ?>
