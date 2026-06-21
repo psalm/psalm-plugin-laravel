@@ -23,9 +23,9 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Default values
-UPDATE_BASELINE=false
-VERBOSE=false
-REMOVE=false
+UPDATE_BASELINE=false # --update (-u) arg
+VERBOSE=false # --verbose (-v) arg
+REMOVE=false # --remove (-r) arg
 PSALM_PASSED=false
 
 # Function to display script usage
