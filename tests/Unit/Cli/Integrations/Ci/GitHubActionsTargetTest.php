@@ -86,8 +86,8 @@ final class GitHubActionsTargetTest extends TestCase
         // Assert structural contents rather than whole file equality so doc
         // tweaks to the template don't break the test.
         $this->assertStringContainsString('name: Psalm', $plan->contents);
-        $this->assertStringContainsString('types:', $plan->contents);
-        $this->assertStringContainsString('security:', $plan->contents);
+        $this->assertStringContainsString('static-analysis:', $plan->contents);
+        $this->assertStringContainsString('taint-analysis:', $plan->contents);
         $this->assertStringContainsString('shivammathur/setup-php', $plan->contents);
         $this->assertStringContainsString('github/codeql-action/upload-sarif', $plan->contents);
         $this->assertStringContainsString('--taint-analysis', $plan->contents);
