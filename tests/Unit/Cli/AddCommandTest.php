@@ -48,8 +48,9 @@ final class AddCommandTest extends TestCase
         $contents = \file_get_contents($workflow);
         $this->assertIsString($contents);
         $this->assertStringContainsString('name: Psalm', $contents);
-        $this->assertStringContainsString('types:', $contents);
-        $this->assertStringContainsString('security:', $contents);
+        // Single-job workflow (#1132): one `psalm:` job, SARIF-driven Code Scanning.
+        $this->assertStringContainsString('psalm:', $contents);
+        $this->assertStringContainsString('security-events: write', $contents);
     }
 
     #[Test]
