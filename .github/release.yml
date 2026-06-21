@@ -1,4 +1,5 @@
-# @see https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+# see https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+# see .github/workflows/release-drafter.yml
 changelog:
   exclude:
     labels:

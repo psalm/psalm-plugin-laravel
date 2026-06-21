@@ -1,3 +1,5 @@
+# see https://github.com/release-drafter/release-drafter
+# see .github/release.yml (contains the template)
 name: Release Drafter
 
 on:
