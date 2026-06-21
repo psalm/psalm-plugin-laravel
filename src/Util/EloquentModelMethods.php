@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Util;
 
 use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\Storage\ClassLikeStorage;
@@ -94,6 +95,18 @@ final class EloquentModelMethods
      */
     public static function hasScopeAttribute(MethodStorage $methodStorage): bool
     {
+        // The #[Scope] attribute ships with Laravel 12. On Laravel 11 the attribute class
+        // does not exist, so a method written with #[Scope] is not a usable scope there —
+        // Psalm already reports UndefinedAttributeClass on the declaration. The check below
+        // matches by attribute name only and cannot tell a defined attribute from an
+        // undefined one, so without this version gate the scope handlers (unused-method
+        // suppression, call-site resolution, PublicModelScope) would treat a non-functional
+        // Laravel 11 attribute as a real scope. Application::VERSION reflects the booted app
+        // the plugin analyses (same gate Plugin/StubFileFinder use for version-specific stubs).
+        if (\version_compare(Application::VERSION, '12.0.0', '<')) {
+            return false;
+        }
+
         if ($methodStorage->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
             return false;
         }
