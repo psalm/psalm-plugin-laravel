@@ -13,7 +13,7 @@ The plugin ships a ready-to-commit workflow and a CLI command that installs it f
 ./vendor/bin/psalm-laravel add github
 ```
 
-This writes `.github/workflows/psalm.yml`, copied verbatim from the plugin's bundled template ([view on GitHub](https://github.com/psalm/psalm-plugin-laravel/blob/master/resources/ci/github-actions/psalm.yml)). Use `add ci` instead of `add github` to auto-detect the provider, and `--force` to overwrite an existing file.
+This writes `.github/workflows/psalm.yml`, copied verbatim from the plugin's bundled template ([view on GitHub](https://github.com/psalm/psalm-plugin-laravel/blob/master/resources/ci/github-actions/psalm.yml)). Pass `--force` to overwrite an existing file.
 
 ## What it generates
 
