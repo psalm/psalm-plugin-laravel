@@ -1,3 +1,10 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+// Skip on Laravel < 12: this test asserts #[Scope]-attributed scope resolution.
+// The #[Scope] attribute is Laravel 12+, so on Laravel 11 the plugin correctly does
+// not resolve such methods as scopes (see EloquentModelMethods::hasScopeAttribute).
+\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.0.0');
 --FILE--
 <?php declare(strict_types=1);
 
