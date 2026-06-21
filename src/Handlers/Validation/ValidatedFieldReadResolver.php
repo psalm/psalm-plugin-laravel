@@ -244,26 +244,16 @@ final class ValidatedFieldReadResolver
 
         $propertyName = $expr->name->name;
 
-        foreach ($callerType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
-                continue;
-            }
+        // Shared receiver-union walk with the ImplicitFormRequestPropertyRead rule (both receive a
+        // Union). The narrowing providers reach the same per-field verdict via resolveRuleForProperty,
+        // so all three agree on which fetches are magic reads.
+        $match = FormRequestPropertyHandler::resolveReceiverRule($callerType, $propertyName);
 
-            // Cheap exact-class check against the FormRequest registry. For a
-            // non-FormRequest caller (the common case under taint analysis)
-            // this short-circuits before `resolveRuleForProperty` walks storage.
-            if (!FormRequestPropertyHandler::isFormRequest($atomic->value)) {
-                continue;
-            }
-
-            $rule = FormRequestPropertyHandler::resolveRuleForProperty($atomic->value, $propertyName);
-
-            if ($rule instanceof ResolvedRule) {
-                return new ValidatedFieldRead(TaintKind::ALL_INPUT, $rule->removedTaints);
-            }
+        if ($match === null) {
+            return null;
         }
 
-        return null;
+        return new ValidatedFieldRead(TaintKind::ALL_INPUT, $match[1]->removedTaints);
     }
 
     /**
