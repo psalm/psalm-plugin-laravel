@@ -1,3 +1,10 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+// Skip on Laravel < 12: Illuminate\Http\Client\Response gained the Tappable
+// tap() method in Laravel 12; on Laravel 11 $response->tap() does not exist, so
+// the higher-order-proxy return type asserted here cannot resolve.
+\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.0.0');
 --FILE--
 <?php declare(strict_types=1);
 

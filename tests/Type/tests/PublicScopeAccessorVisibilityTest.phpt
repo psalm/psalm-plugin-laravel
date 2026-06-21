@@ -1,3 +1,11 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+// Skip on Laravel < 12: this test relies on Laravel-12-only Eloquent attributes
+// (#[Scope] / #[UseEloquentBuilder]), used directly or by a scanned app model.
+// Those attribute classes do not exist on Laravel 11, so the asserted output
+// cannot be produced there.
+\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.0.0');
 --FILE--
 <?php declare(strict_types=1);
 
