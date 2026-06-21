@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781966830286,
+  "lastUpdate": 1782030656997,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -6955,6 +6955,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.44,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b8f401ffc3eb1aa1ce7200bc87617c68befd1eaa",
+          "message": "ci(tests): gate PHPT type tests on --EXPECTF-- and %d line numbers (#1118)\n\n* ci(tests): gate PHPT type tests on --EXPECTF-- and %d line numbers\n\nAdd bin/ci/check-phpt-conventions.sh, run as the `PHPT conventions` job in\ntests.yml. It fails the build when a file under tests/Type/tests uses the\nexact-match `--EXPECT--` section instead of `--EXPECTF--`, or hardcodes a line\nnumber (`on line 34`) instead of the `%d` specifier. Both drift whenever a\nfixture shifts and the convention was already documented but unenforced.\n\nConvert the 24 existing empty `--EXPECT--` blocks to `--EXPECTF--` and replace\nthe hardcoded line number in ScopeAttributeUnusedMethodTest with `%d`.\n\n* ci(tests): run PHPT conventions gate in test:type composer script",
+          "timestamp": "2026-06-21T10:28:03+02:00",
+          "tree_id": "a6a28f62752740e6aa98c61d150070d6c4dc342e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b8f401ffc3eb1aa1ce7200bc87617c68befd1eaa"
+        },
+        "date": 1782030655988,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.72,
+            "range": "± 0.31",
             "unit": "s"
           },
           {
