@@ -67,7 +67,7 @@ final class LiteralHandler implements FunctionReturnTypeProviderInterface
         // A single *named* arg (literal(a: 1)) is not a list, so it falls through to
         // the object-shape branch below. A null type here means "unknown" — return
         // null so Psalm keeps the reflected type rather than asserting mixed.
-        if (\count($args) === 1 && $args[0]->name === null && !$args[0]->unpack) {
+        if (\count($args) === 1 && !$args[0]->name instanceof \PhpParser\Node\Identifier && !$args[0]->unpack) {
             return $node_type_provider->getType($args[0]->value);
         }
 
