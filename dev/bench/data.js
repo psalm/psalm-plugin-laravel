@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782085020423,
+  "lastUpdate": 1782164111971,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7235,6 +7235,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.86,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7e7be1952712fc57580747bdd81dd92239e237f9",
+          "message": "fix(stubs): allow null values in __() $replace parameter (#1151)\n\nLaravel's Translator coerces null replacement values to '' (Translator::makeReplacements,\n$value ?? ''), so `__('msg', ['x' => null])` is valid at runtime. The stub typed $replace\nas array<string, scalar>, which rejected null and produced a false-positive InvalidArgument.\nWiden to array<string, scalar|null> (matches Larastan parity).",
+          "timestamp": "2026-06-22T23:32:18+02:00",
+          "tree_id": "3d1d5a1d72b5aaf8d9c5af4afb3a31fb768638cd",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7e7be1952712fc57580747bdd81dd92239e237f9"
+        },
+        "date": 1782164111464,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.13,
+            "range": "± 0.27",
             "unit": "s"
           },
           {
