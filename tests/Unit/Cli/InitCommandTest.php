@@ -88,6 +88,23 @@ final class InitCommandTest extends TestCase
     }
 
     #[Test]
+    public function generated_config_omits_run_taint_analysis(): void
+    {
+        // Regression guard for #1139. On Psalm 6, runTaintAnalysis="true" switches Psalm to a
+        // taint-only mode that skips type analysis, so a plain `vendor/bin/psalm` (and the `add`
+        // workflow's type job) would silently check no types. Taint runs per-job via the
+        // --taint-analysis flag instead. The attribute is valid Psalm 6 config, so the
+        // schema-validation test cannot catch a re-add (e.g. from a master merge); asserting the
+        // bare token is absent is the only guard, and trips on any form (true or false).
+        $tester = $this->makeTester();
+        $tester->execute([]);
+
+        $contents = \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertIsString($contents);
+        $this->assertStringNotContainsString('runTaintAnalysis', $contents);
+    }
+
+    #[Test]
     public function generated_xml_is_well_formed(): void
     {
         $tester = $this->makeTester();
