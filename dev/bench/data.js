@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782170403104,
+  "lastUpdate": 1782172735311,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7375,6 +7375,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.68,
             "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d58db5ca8cfa56e5c2e85af2b7fe24d46296cae3",
+          "message": "fix(config): tighten Config::collection() facade closure default (#1162)\n\nsynthesizeCollectionParams() built the closure form of $default as a bare\nClosure, so Config::collection('x', fn () => 'fallback') was accepted on the\nfacade even though the concrete Repository::collection() path rejects it and\nLaravel throws when the default branch is used (the resolved value must be an\narray). Mirror the stub's (\\Closure():(array<array-key, mixed>|null)) exactly:\nzero-arg closure returning array|null. Add a facade test for the wrong-return\nclosure case.",
+          "timestamp": "2026-06-23T01:55:47+02:00",
+          "tree_id": "8811825b1e8bbde5fc187a2da0aee40658338da5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d58db5ca8cfa56e5c2e85af2b7fe24d46296cae3"
+        },
+        "date": 1782172734219,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.35,
+            "range": "± 0.29",
             "unit": "s"
           },
           {
