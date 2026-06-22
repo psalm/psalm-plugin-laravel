@@ -1,0 +1,43 @@
+<?php
+
+namespace Carbon;
+
+use Carbon\Traits\IntervalRounding;
+use Carbon\Traits\Mixin;
+use Carbon\Traits\Options;
+use Carbon\Traits\ToStringFormat;
+use Countable;
+use Iterator;
+use JsonSerializable;
+
+/**
+ * Carbon 2 shape of CarbonPeriod (`implements Iterator` directly, no DatePeriodBase).
+ * The Carbon 3 variant (`extends DatePeriodBase`) lives in `../3/CarbonPeriod.phpstub`;
+ * `CarbonStubProvider` registers exactly one, keyed on the installed Carbon major (#1142).
+ *
+ * Carbon 2's `CarbonPeriod::current()` is `?CarbonInterface` and `key()` is `?int`, but
+ * the class carries no iterable template, so Psalm widens `collect(CarbonPeriod::create(...))`
+ * to `Collection<int, mixed>`. `@implements Iterator<int, CarbonInterface>` binds the value
+ * type for the `iterable<TKey, TValue>` reads (`collect()`, `iterator_to_array()`), narrowing
+ * it to `Collection<int, CarbonInterface>`. A direct `foreach` still reads the reflected
+ * `current(): ?CarbonInterface`, so the loop var is nullable there — we keep that rather than
+ * pin `current()` non-null, which would hide the real null on a standalone `current()` call
+ * (the Carbon 3 variant leaves `current()` nullable too, narrowing only via `getIterator()`).
+ *
+ * `Iterator` MUST appear in the explicit `implements` clause for the `@implements` template to
+ * bind: Psalm's `ClassLikeNodeScanner::implementTemplatedType()` validates `@implements` against
+ * `class_implements` at scan time, and a class declaration wipes the reflected `class_implements`
+ * (CLAUDE.md). So the `implements` / `use` clauses are copied verbatim from Carbon 2 source;
+ * methods not redeclared here continue to come from reflection of the real class.
+ *
+ * @implements Iterator<int, CarbonInterface>
+ */
+class CarbonPeriod implements Iterator, Countable, JsonSerializable
+{
+    use IntervalRounding;
+    use Mixin {
+        Mixin::mixin as baseMixin;
+    }
+    use Options;
+    use ToStringFormat;
+}

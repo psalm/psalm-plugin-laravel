@@ -36,6 +36,21 @@ use Psalm\Progress\Progress;
  */
 final class CarbonStubProvider
 {
+    /**
+     * Carbon major 3: CarbonPeriod `extends DatePeriodBase` and the WeekDay/Month enums exist.
+     * The CI matrix only ever resolves Carbon 3, so this boundary is exercised by a unit test
+     * ({@see \Tests\Psalm\LaravelPlugin\Unit\Providers\CarbonStubProviderTest}) rather than the
+     * type suite.
+     */
+    public const CARBON_3_CONSTRAINT = '>=3.0';
+
+    /**
+     * Dual-purpose getter/setter narrowings apply to Carbon 3.0-3.11: they type params as the
+     * Carbon-3 `WeekDay` enum (absent on Carbon 2), and Carbon 3.12 supersedes them with its own
+     * inline conditional (#1059).
+     */
+    public const DUAL_PURPOSE_NARROWINGS_CONSTRAINT = '>=3.0 <3.12';
+
     public static function register(RegistrationInterface $registration, Progress $output): void
     {
         if (!InstalledVersions::isInstalled('nesbot/carbon')) {
@@ -48,18 +63,31 @@ final class CarbonStubProvider
             return;
         }
 
+        $versionParser = new VersionParser();
+        // Carbon 3 reshaped CarbonPeriod (`extends DatePeriodBase`) and added the WeekDay/Month
+        // enums; Carbon 2 has neither. The stubs below are gated on this major so a fully supported
+        // Laravel 11 + Carbon 2 install (illuminate ^11.35 resolves nesbot/carbon ^2.72 || ^3) no
+        // longer hits MissingDependency / UndefinedClass (#1142).
+        $isCarbon3 = InstalledVersions::satisfies($versionParser, 'nesbot/carbon', self::CARBON_3_CONSTRAINT);
+
         $translatorVariant = self::symfonyTranslatorHasReturnType() ? 'Strong' : 'Weak';
         $formatterVariant = self::symfonyMessageFormatterFirstParamHasType() ? 'Strong' : 'Weak';
 
+        // Translator / MessageFormatter lazy splits exist in both Carbon 2 and 3.
         $lazyStubs = [
-            // Carbon\DatePeriodBase — picked at CarbonPeriod.php:50 via `PHP_VERSION < 8.2`.
-            // Plugin requires PHP 8.2+ (composer.json), so Unprotected is always correct.
-            $carbonRoot . '/lazy/Carbon/UnprotectedDatePeriod.php',
-
             $carbonRoot . "/lazy/Carbon/Translator{$translatorVariant}Type.php",
 
             $carbonRoot . "/lazy/Carbon/MessageFormatter/MessageFormatterMapper{$formatterVariant}Type.php",
         ];
+
+        if ($isCarbon3) {
+            // Carbon\DatePeriodBase is declared only by this lazy file, and only on Carbon 3.
+            // CarbonPeriod.php:50 picks Unprotected vs Protected via `PHP_VERSION < 8.2`; the plugin
+            // requires PHP 8.2+ (composer.json), so Unprotected is always correct. Carbon 2 has no
+            // DatePeriodBase split (CarbonPeriod implements Iterator directly), so the file is absent
+            // there — registering it would fail realpath() and warn for nothing (#1142).
+            $lazyStubs[] = $carbonRoot . '/lazy/Carbon/UnprotectedDatePeriod.php';
+        }
 
         foreach ($lazyStubs as $stub) {
             $realPath = \realpath($stub);
@@ -91,14 +119,20 @@ final class CarbonStubProvider
         // a package the consumer does not actually use.
         //
         // The directory is split by load condition:
-        //   - shared/   — version-independent stubs (the CarbonPeriod lazy-collect helper
-        //                 and the Constants/* interfaces). Always registered.
-        //   - pre-3.12/ — conditional-return narrowings for Carbon's dual-purpose
-        //                 getter/setter methods. Registered ONLY for nesbot/carbon < 3.12
-        //                 (see the version gate below).
+        //   - shared/   — version-independent stubs (the Constants/* interfaces). Always registered.
+        //   - 2/ , 3/   — the Carbon-major-specific CarbonPeriod shape. Exactly one is registered,
+        //                 keyed on $isCarbon3: Carbon 3 `extends DatePeriodBase` + `@implements
+        //                 IteratorAggregate`, Carbon 2 `implements Iterator` directly. Shipping the
+        //                 wrong shape breaks every CarbonPeriod consumer with MissingDependency (#1142).
+        //   - pre-3.12/ — conditional-return narrowings for Carbon's dual-purpose getter/setter
+        //                 methods. Registered ONLY for nesbot/carbon >=3.0 <3.12 (see the gate below).
         $integrationStubsDir = \dirname(__DIR__, 2) . '/stubs/integrations/carbon';
 
         foreach (StubFileFinder::findIn($integrationStubsDir . '/shared', $output) as $stub) {
+            $registration->addStubFile($stub);
+        }
+
+        foreach (StubFileFinder::findIn($integrationStubsDir . ($isCarbon3 ? '/3' : '/2'), $output) as $stub) {
             $registration->addStubFile($stub);
         }
 
@@ -134,7 +168,13 @@ final class CarbonStubProvider
         //     conditional on BOTH the Localization trait and CarbonInterface (plus a variadic
         //     tail param). That is an upstream Carbon/Psalm interaction the plugin cannot fix by
         //     gating.
-        if (InstalledVersions::satisfies(new VersionParser(), 'nesbot/carbon', '<3.12')) {
+        //
+        // The gate's lower bound is >=3.0, not "everything below 3.12": these stubs type the
+        // dual-purpose params as Carbon\WeekDay, an enum added in Carbon 3.0 that does not exist on
+        // Carbon 2. Registering them on Carbon 2 injects a dangling Carbon\WeekDay reference and
+        // forces a Carbon-3 signature onto Carbon 2's untyped methods (UndefinedClass at WeekDay
+        // use-sites, #1142). Carbon 2 keeps its own `@return static|int` instead.
+        if (InstalledVersions::satisfies($versionParser, 'nesbot/carbon', self::DUAL_PURPOSE_NARROWINGS_CONSTRAINT)) {
             foreach (StubFileFinder::findIn($integrationStubsDir . '/pre-3.12', $output) as $stub) {
                 $registration->addStubFile($stub);
             }
