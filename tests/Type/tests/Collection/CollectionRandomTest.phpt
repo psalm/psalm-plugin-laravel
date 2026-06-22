@@ -4,6 +4,8 @@
 use App\Models\Customer;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection as BaseCollection;
+use Illuminate\Support\Enumerable;
+use Illuminate\Support\LazyCollection;
 
 /**
  * Collection::random() stub alignment with Laravel's actual signature.
@@ -24,6 +26,14 @@ use Illuminate\Support\Collection as BaseCollection;
  * non-null. That is tracked separately in
  * https://github.com/psalm/psalm-plugin-laravel/issues/903 and is out of scope
  * for this stub-signature fix.
+ *
+ * Also covers (#1149): the same no-arg narrowing on the `Enumerable` interface
+ * and `LazyCollection` receivers, which previously fell back to Laravel's
+ * reflected `static<int, TValue>|TValue` union. Receivers are bare `Enumerable`/
+ * `LazyCollection` (via `@param`) so calls route to those stubs, not Collection.
+ * Asserted only for the no-arg branch (the headline fix); the non-null branch is
+ * the #903 limitation noted above. `LazyCollection::random` also carries the
+ * `$preserveKeys` second parameter (Enumerable's does not) — guarded below.
  */
 final class CollectionRandomTest
 {
@@ -35,12 +45,11 @@ final class CollectionRandomTest
 
     /**
      * No argument: returns a single Customer.
-     *
-     * @psalm-check-type-exact $result = Customer
      */
     public function randomNoArg(): Customer
     {
         $result = $this->getCustomers()->random();
+        /** @psalm-check-type-exact $result = Customer */
 
         return $result;
     }
@@ -62,6 +71,45 @@ final class CollectionRandomTest
     public function randomWithPreserveKeys(): void
     {
         $this->getCustomers()->random(3, true);
+    }
+
+    /**
+     * #1149: bare Enumerable-interface receiver, no argument → single Customer.
+     * Routes to the interface stub (not Collection); before #1149 this fell back
+     * to the reflected static<int, TValue>|TValue union.
+     *
+     * @param  Enumerable<int, Customer>  $items
+     */
+    public function enumerableRandomNoArg(Enumerable $items): Customer
+    {
+        $result = $items->random();
+        /** @psalm-check-type-exact $result = Customer */
+
+        return $result;
+    }
+
+    /**
+     * #1149: bare LazyCollection receiver, no argument → single Customer.
+     *
+     * @param  LazyCollection<int, Customer>  $items
+     */
+    public function lazyCollectionRandomNoArg(LazyCollection $items): Customer
+    {
+        $result = $items->random();
+        /** @psalm-check-type-exact $result = Customer */
+
+        return $result;
+    }
+
+    /**
+     * #1149: LazyCollection::random carries $preserveKeys (Enumerable's does not);
+     * the two-argument form compiles without TooManyArguments.
+     *
+     * @param  LazyCollection<int, Customer>  $items
+     */
+    public function lazyCollectionRandomWithPreserveKeys(LazyCollection $items): void
+    {
+        $items->random(3, true);
     }
 }
 ?>
