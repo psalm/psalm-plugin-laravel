@@ -54,6 +54,16 @@ function facade_collection_rejects_scalar_default(): void
     // throw InvalidArgumentException at runtime when the key is absent.
     Config::collection('auth.defaults', 'fallback');
 }
+
+function facade_collection_rejects_scalar_returning_closure(): void
+{
+    // The closure form is tightened to `\Closure():(array|null)`, mirroring the
+    // concrete stub. A closure returning a scalar is rejected on the facade just as
+    // it is on the Repository — Laravel throws when the resolved default is not an
+    // array. A bare Closure default would wrongly accept this.
+    Config::collection('auth.defaults', fn (): string => 'fallback');
+}
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 2 of Illuminate\Support\Facades\Config::collection expects %s, but 'fallback' provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Support\Facades\Config::collection expects %s, but %s provided
