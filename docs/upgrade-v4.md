@@ -157,7 +157,7 @@ composer require --dev psalm/plugin-laravel:^4.0
 #      Do not touch @param or @var annotations.
 
 # 5. Run Psalm and update your baseline
-./vendor/bin/psalm --set-baseline=psalm-baseline.xml
+./vendor/bin/psalm-laravel analyze --set-baseline=psalm-baseline.xml
 
 # 6. Review new issues
 #    - InvalidConsoleArgumentName / InvalidConsoleOptionName are real bugs — fix them

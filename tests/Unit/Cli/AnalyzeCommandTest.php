@@ -57,4 +57,95 @@ final class AnalyzeCommandTest extends TestCase
         // Application::find() accepts both the canonical name and any alias.
         $this->assertSame($application->find('analyze'), $application->find('analyse'));
     }
+
+    #[Test]
+    public function forwards_flags_after_the_explicit_command_name(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $this->assertSame(
+            ['--set-baseline=psalm-baseline.xml'],
+            $command->forwardedArguments(['psalm-laravel', 'analyze', '--set-baseline=psalm-baseline.xml']),
+        );
+    }
+
+    #[Test]
+    public function forwards_flags_after_the_command_alias(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $this->assertSame(
+            ['--threads=1'],
+            $command->forwardedArguments(['psalm-laravel', 'analyse', '--threads=1']),
+        );
+    }
+
+    #[Test]
+    public function forwards_flags_for_the_default_command_form_without_a_name_token(): void
+    {
+        // `psalm-laravel --set-baseline=...` routes here via the default command,
+        // so there is no command-name token to strip.
+        $command = new AnalyzeCommand();
+
+        $this->assertSame(
+            ['--set-baseline=psalm-baseline.xml'],
+            $command->forwardedArguments(['psalm-laravel', '--set-baseline=psalm-baseline.xml']),
+        );
+    }
+
+    #[Test]
+    public function forwards_multiple_flags_and_path_arguments_verbatim(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $this->assertSame(
+            ['--set-baseline=foo.xml', '--no-cache', 'src'],
+            $command->forwardedArguments(['psalm-laravel', 'analyze', '--set-baseline=foo.xml', '--no-cache', 'src']),
+        );
+    }
+
+    #[Test]
+    public function forwards_nothing_when_only_the_command_name_is_present(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $this->assertSame([], $command->forwardedArguments(['psalm-laravel', 'analyze']));
+    }
+
+    #[Test]
+    public function reads_the_process_argv_when_no_override_is_given(): void
+    {
+        // This is the path execute() actually hits — forwardedArguments() with no
+        // argument falls back to $_SERVER['argv']. Save/restore so the rest of the
+        // suite is unaffected.
+        $original = $_SERVER['argv'] ?? null;
+        $_SERVER['argv'] = ['psalm-laravel', 'analyze', '--set-baseline=psalm-baseline.xml'];
+
+        try {
+            $this->assertSame(['--set-baseline=psalm-baseline.xml'], (new AnalyzeCommand())->forwardedArguments());
+        } finally {
+            if ($original === null) {
+                unset($_SERVER['argv']);
+            } else {
+                $_SERVER['argv'] = $original;
+            }
+        }
+    }
+
+    #[Test]
+    public function forwards_nothing_when_the_process_argv_is_unavailable(): void
+    {
+        // `register_argc_argv = Off` leaves $_SERVER['argv'] unset; the `?? []`
+        // fallback must yield an empty list rather than erroring.
+        $original = $_SERVER['argv'] ?? null;
+        unset($_SERVER['argv']);
+
+        try {
+            $this->assertSame([], (new AnalyzeCommand())->forwardedArguments());
+        } finally {
+            if ($original !== null) {
+                $_SERVER['argv'] = $original;
+            }
+        }
+    }
 }
