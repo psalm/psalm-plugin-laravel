@@ -250,6 +250,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Helpers\NowTodayHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\PathHandler::class);
+        require_once __DIR__ . '/Handlers/Helpers/LiteralHandler.php';
+        $registration->registerHooksFromClass(Handlers\Helpers\LiteralHandler::class);
 
         // config() helper + Repository::get() narrowing — reflect runtime config
         // values from the booted Laravel app. See
