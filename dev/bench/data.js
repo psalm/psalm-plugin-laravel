@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782169214094,
+  "lastUpdate": 1782169584731,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7305,6 +7305,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.61,
             "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b542fb2f485637d5f7ae5fd5e89cdc2759d27c15",
+          "message": "feat(facades): resolve configured date class for Date facade #1154 (#1157)\n\nDate facade static calls (Date::now(), Date::parse(), Date::create*(),\nDate::instance(), ...) always inferred Illuminate\\Support\\Carbon from the\nfacade's hardcoded @method tags, ignoring projects that swap the date class\nvia Date::use(CarbonImmutable::class) / Date::useClass() in a provider.\n\nDateFacadeHandler reads each method's declared @method return type from the\nfacade's pseudo-method storage and swaps the Carbon atomic for the runtime\nclass resolved from the booted app (same mechanism as NowTodayHandler),\npreserving every other atomic. Reading the declared type keeps nullability\ncorrect across Laravel versions for free (create() is Carbon|null on L12+,\nCarbon|false on L11) and covers all create* variants without a hardcoded list.\n\nA params provider mirrors the retyped methods so the pseudo-method arg-check\npath does not fatal with \"Cannot get method params\".",
+          "timestamp": "2026-06-23T01:03:21+02:00",
+          "tree_id": "bd92565736e7a95272736719504eb87e143f8d41",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b542fb2f485637d5f7ae5fd5e89cdc2759d27c15"
+        },
+        "date": 1782169583538,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.53,
+            "range": "± 0.12",
             "unit": "s"
           },
           {
