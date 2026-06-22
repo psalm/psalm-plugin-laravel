@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782164111971,
+  "lastUpdate": 1782169214094,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7275,6 +7275,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9e0eeb19aee900d9b35f8f2b4f04acfe0d0a68f5",
+          "message": "feat(config): value-specialize collection() return type #1150 (#1159)\n\nconfig()->collection() / Config::collection() / Repository::collection()\nreturned a generic Collection<array-key, mixed>. Reuse the existing get()\nconfig reflection to wrap the reflected array at $key in\nCollection<keyType, valueType> from the booted app.\n\n- ConfigKeyResolver::resolveCollectionReturnType wraps the reflected\n  array (TKeyedArray -> getGeneric{Key,Value}Type, TArray -> type_params)\n  in a Collection generic.\n- Defer to the stub when the key is absent, the value is not an array\n  (collection() throws at runtime), or the array is empty (never params).\n- Values stay generalized (env-driven); structural keys are preserved.\n- Synthesize facade collection() params: the @method pseudo-method would\n  otherwise crash the return-type provider (same class as #454/#854).\n\nFollow-up (out of scope): the common stub declares collection() for all\nversions, but Repository::collection() only exists from Laravel 12.20+.",
+          "timestamp": "2026-06-23T00:57:24+02:00",
+          "tree_id": "52804d19675565e27cfbeafaf73ec6df525e1461",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9e0eeb19aee900d9b35f8f2b4f04acfe0d0a68f5"
+        },
+        "date": 1782169213551,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.61,
+            "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
             "unit": "MB"
           }
         ]
