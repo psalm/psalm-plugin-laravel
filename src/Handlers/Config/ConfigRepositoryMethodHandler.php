@@ -132,8 +132,17 @@ final class ConfigRepositoryMethodHandler implements MethodReturnTypeProviderInt
     private static function synthesizeCollectionParams(): array
     {
         $key = new Type\Union([new Type\Atomic\TString()]);
+
+        // Mirror the concrete stub's `(\Closure():(array<array-key, mixed>|null))` exactly:
+        // a zero-arg closure returning array|null. A bare TClosure() would also accept
+        // `fn () => 'scalar'`, which Laravel rejects at runtime (the resolved value must be
+        // an array), so the facade must reproduce the same return-type constraint.
+        $arrayOrNull = new Type\Union([
+            new Type\Atomic\TArray([Type::getArrayKey(), Type::getMixed()]),
+            new Type\Atomic\TNull(),
+        ]);
         $default = new Type\Union([
-            new Type\Atomic\TClosure(),
+            new Type\Atomic\TClosure(params: [], return_type: $arrayOrNull),
             new Type\Atomic\TArray([Type::getArrayKey(), Type::getMixed()]),
             new Type\Atomic\TNull(),
         ]);
