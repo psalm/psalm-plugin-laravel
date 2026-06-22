@@ -1,3 +1,9 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+// Carbon\WeekDay (used below) is a Carbon 3 enum, and the dual-purpose narrowing stub that
+// drives the asserted setter type is registered only on Carbon >= 3.0. Skip on Carbon 2.
+\Tests\Psalm\LaravelPlugin\Type\CarbonVersion::skipBelow('3.0.0');
 --FILE--
 <?php declare(strict_types=1);
 

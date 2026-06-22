@@ -1,3 +1,9 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+// Asserts the Carbon 3 dual-purpose isoWeekday() narrowing (plugin stub registered only on
+// Carbon >= 3.0). On Carbon 2 the method resolves to Carbon's own wider `static|int`. Skip.
+\Tests\Psalm\LaravelPlugin\Type\CarbonVersion::skipBelow('3.0.0');
 --FILE--
 <?php declare(strict_types=1);
 

@@ -1,3 +1,9 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+// Exercises Carbon\DatePeriodBase, declared by a lazy stub that only exists on Carbon 3.
+// Carbon 2's CarbonPeriod implements Iterator directly (no DatePeriodBase). Skip on Carbon 2.
+\Tests\Psalm\LaravelPlugin\Type\CarbonVersion::skipBelow('3.0.0');
 --FILE--
 <?php declare(strict_types=1);
 

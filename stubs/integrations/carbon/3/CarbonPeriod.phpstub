@@ -12,6 +12,10 @@ use Countable;
 use JsonSerializable;
 
 /**
+ * Carbon 3 shape of CarbonPeriod (`extends DatePeriodBase`). The Carbon 2 variant
+ * (`implements Iterator` directly, no DatePeriodBase) lives in `../2/CarbonPeriod.phpstub`;
+ * `CarbonStubProvider` registers exactly one, keyed on the installed Carbon major (#1142).
+ *
  * Real signature in vendor/nesbot/carbon/src/Carbon/CarbonPeriod.php:329 is
  * `public function getIterator(): Generator` with no template — Psalm widens
  * the yield to `mixed`, which collapses `collect(CarbonPeriod::create(...))`
