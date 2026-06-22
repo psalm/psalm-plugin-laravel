@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782169584731,
+  "lastUpdate": 1782170403104,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7345,6 +7345,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "030782552a45bc6262737c4f03c0a276a3dbb911",
+          "message": "feat(console): narrow hasArgument/hasOption to literal bool #1155 (#1161)\n\nhasArgument()/hasOption() inferred a bare bool, but the parsed command\ndefinition already lets us resolve a literal result for a known\nsignature and a literal name. Reuses CommandDefinitionAnalyzer, the same\nmachinery argument()/option() already use.\n\n- Both methods live on the InteractsWithIO trait that\n  CommandArgumentHandler already hooks, so no separate registration\n  target is needed (the issue assumed Symfony's Command base).\n- Narrows both directions for parity with Larastan: a present name to\n  true, an absent name to false. No undefined-name issue is emitted here\n  since existence-testing is the method's purpose.\n- Corrects CommandDefinitionAnalyzer::hasOption() to mirror Symfony's\n  Input::hasOption (long name OR negation such as --no-ansi), never\n  shortcuts: hasOption('F') is false at runtime even when -F is a defined\n  shortcut. This also fixes the pre-existing option() handling for those\n  names.\n- Trade-off: a literal bool surfaces RedundantCondition (always-true\n  guard) and TypeDoesNotContainType (always-false guard) on checks over\n  known names. Accepted deliberately and locked in by a type test.\n\nCloses #1155",
+          "timestamp": "2026-06-23T01:17:06+02:00",
+          "tree_id": "a1fee981b7493ef5fbd68507c520e8a54c73324d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/030782552a45bc6262737c4f03c0a276a3dbb911"
+        },
+        "date": 1782170402342,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.68,
+            "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
             "unit": "MB"
           }
         ]
