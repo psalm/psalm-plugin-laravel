@@ -6,9 +6,13 @@
 #   * taint-analysis  - taint/security analysis. Uploads SARIF to Code Scanning and fails on findings.
 #
 # Add your release branches under `push:` so Code Scanning builds the default-branch baseline it diffs PRs against.
-# Reduce existing-finding noise with separate baselines:
+# Baseline existing type issues so only new ones fail the type job:
 #   ./vendor/bin/psalm --set-baseline=psalm-baseline.xml
-#   ./vendor/bin/psalm --taint-analysis --set-baseline=psalm-taint-baseline.xml
+# That writes errorBaseline into psalm.xml; the taint job below runs --ignore-baseline so the
+# type baseline does not surface as UnusedBaselineEntry (taint mode skips type analysis, so a
+# type baseline matches nothing and every entry reads as "unused"). Psalm 6 has a single
+# errorBaseline attribute, so a per-job taint baseline is not wired here: --set-baseline under
+# --taint-analysis would overwrite that single errorBaseline pointer.
 
 name: Psalm
 
@@ -106,8 +110,11 @@ jobs:
       # generated_report_options + $_SERVER['GITHUB_WORKFLOW']), so the run step succeeds and CI is
       # failed from the SARIF after upload, not from the exit code. A real crash exits non-zero,
       # fails this step and skips the rest.
+      # --ignore-baseline keeps a type baseline (errorBaseline in psalm.xml) from reporting as
+      # UnusedBaselineEntry here: taint mode skips type analysis, so the baseline matches none
+      # and each entry would otherwise count as "unused" and fail the job (#1139).
       - name: Run Psalm (taint analysis)
-        run: ./vendor/bin/psalm --taint-analysis --report=psalm.sarif --report-show-info=false
+        run: ./vendor/bin/psalm --taint-analysis --ignore-baseline --report=psalm.sarif --report-show-info=false
 
       - name: Upload SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2

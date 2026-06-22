@@ -94,6 +94,14 @@ final class GitHubActionsTargetTest extends TestCase
         $this->assertStringContainsString('shivammathur/setup-php', $plan->contents);
         $this->assertStringContainsString('github/codeql-action/upload-sarif', $plan->contents);
         $this->assertStringContainsString('--report=psalm.sarif', $plan->contents);
+        // #1139: the type job must run plain psalm (no --taint-analysis), or it runs taint-only
+        // and skips type analysis. End-anchored so the taint job's `run:` line (same prefix,
+        // trailing flags) cannot satisfy it.
+        $this->assertMatchesRegularExpression('~run: \./vendor/bin/psalm$~m', $plan->contents);
+        // #1139: the taint job must ignore a type baseline, or every errorBaseline entry reports
+        // as UnusedBaselineEntry (taint mode skips type analysis, so the baseline matches none).
+        // Anchored to the `run:` line so a comment mentioning the flags cannot satisfy it.
+        $this->assertStringContainsString('run: ./vendor/bin/psalm --taint-analysis --ignore-baseline', $plan->contents);
     }
 
     #[Test]

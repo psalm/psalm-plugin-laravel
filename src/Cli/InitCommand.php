@@ -60,6 +60,15 @@ final class InitCommand extends Command
      * Psalm 7). Do not re-add them when merging master into 3.x:
      * InitCommandTest::generated_config_validates_against_installed_psalm_schema,
      * run under the pinned Psalm 6, is the guard that catches a reintroduction (#1115).
+     *
+     * The runTaintAnalysis attribute is intentionally absent too: on Psalm 6 it
+     * switches Psalm to a taint-only mode that skips type analysis, so a plain
+     * `vendor/bin/psalm` (and the `add` workflow's type job) would silently check
+     * no types. Taint runs per-job via the `--taint-analysis` flag instead (#1139).
+     * Harmless on Psalm 7 (4.x/master runs type and taint in one pass), so do not
+     * re-add it when merging master in. Unlike the handlers above, the schema test
+     * cannot catch a re-add (the attribute is valid Psalm 6 config); the explicit
+     * guard is InitCommandTest::generated_config_omits_run_taint_analysis.
      */
     private const PSALM_XML_TEMPLATE = <<<'XML'
         <?xml version="1.0"?>
@@ -70,7 +79,6 @@ final class InitCommand extends Command
             errorLevel="{{LEVEL}}"
             findUnusedCode="false"
             ensureOverrideAttribute="false"
-            runTaintAnalysis="true"
         >
             <projectFiles>
         {{PROJECT_FILES}}
