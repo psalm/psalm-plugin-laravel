@@ -38,11 +38,7 @@ final class GuardTaintAnnotationTest extends TestCase
 
         GuardTaintHandler::annotateGuardTaints(new ClassLikeStorage(SessionGuard::class), $progress);
 
-        self::assertSame(
-            [],
-            $progress->warnings,
-            'hashPasswordForCookie() is absent on Laravel 11 by design — its no-op escape must stay silent',
-        );
+        $this->assertSame([], $progress->warnings, 'hashPasswordForCookie() is absent on Laravel 11 by design — its no-op escape must stay silent');
     }
 
     #[Test]
@@ -52,8 +48,8 @@ final class GuardTaintAnnotationTest extends TestCase
 
         GuardTaintHandler::annotateGuardTaints(new ClassLikeStorage(TokenGuard::class), $progress);
 
-        self::assertCount(1, $progress->warnings, 'a vanished load-bearing taint source must surface');
-        self::assertStringContainsString('gettokenforrequest', $progress->warnings[0]);
+        $this->assertCount(1, $progress->warnings, 'a vanished load-bearing taint source must surface');
+        $this->assertStringContainsString('gettokenforrequest', $progress->warnings[0]);
     }
 
     #[Test]
@@ -66,7 +62,7 @@ final class GuardTaintAnnotationTest extends TestCase
 
         GuardTaintHandler::annotateGuardTaints(new ClassLikeStorage(\stdClass::class), $progress);
 
-        self::assertSame([], $progress->warnings);
+        $this->assertSame([], $progress->warnings);
     }
 
     #[Test]
@@ -77,10 +73,7 @@ final class GuardTaintAnnotationTest extends TestCase
 
         GuardTaintHandler::annotateGuardTaints($storage, new RecordingProgress());
 
-        self::assertSame(
-            [TaintKind::USER_SECRET],
-            $storage->methods['hashpasswordforcookie']->removed_taints,
-        );
+        $this->assertSame([TaintKind::USER_SECRET], $storage->methods['hashpasswordforcookie']->removed_taints);
     }
 
     #[Test]
@@ -93,9 +86,6 @@ final class GuardTaintAnnotationTest extends TestCase
 
         // The source must carry exactly the all-input taint set (the contract: the token is read from
         // request input). Canonicalizing keeps this independent of merge order/dedup.
-        self::assertEqualsCanonicalizing(
-            ValidationRuleAnalyzer::allInputTaints(),
-            $storage->methods['gettokenforrequest']->taint_source_types,
-        );
+        $this->assertEqualsCanonicalizing(ValidationRuleAnalyzer::allInputTaints(), $storage->methods['gettokenforrequest']->taint_source_types);
     }
 }
