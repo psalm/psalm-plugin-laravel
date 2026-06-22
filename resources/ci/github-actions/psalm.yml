@@ -33,7 +33,7 @@ jobs:
     name: Psalm type analysis
     runs-on: ubuntu-latest
     steps:
-      - name: Harden the runner (block unexpected egress)
+      - name: Block unexpected egress
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           # Covers checkout, setup-php and Composer (public Packagist). Extend it if your project

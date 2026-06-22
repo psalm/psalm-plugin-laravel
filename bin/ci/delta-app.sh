@@ -220,8 +220,40 @@ write_psalm_xml() {
 XMLEOF
 }
 
-# Run the one-time source install only if vendor is absent (cache-friendly).
+# Records the base plugin dependency signature the cached vendor was solved
+# against. Lives inside the cached app-src so a later run can prove the vendor
+# still matches the plugin shape under test.
+PLUGIN_SIG_FILE="$APP_SRC/.plugin-dep-sig"
+
+# Reuse the cached vendor only when it provably matches the base plugin's
+# dependency shape. A cached app-src is keyed on the app ref, NOT on the plugin
+# under test, so a vendor solved for one plugin line can be restored for another
+# (e.g. a Psalm 7 line on 4.x feeding a Psalm 6 line on 3.x and vice versa).
+# Reusing a mismatched vendor loads the wrong dependency set — most visibly an
+# `AddTaintsInterface` whose `addTaints()` return type differs (array in 6, int
+# in 7), fataling every handler at class-load before analysis even starts.
+#
+# `plugin_dep_sig` (require + autoload — the only sections that change what gets
+# installed) is the same signature the head/base relink already trusts, so ANY
+# dependency drift triggers a reinstall: a Psalm major OR minor constraint bump,
+# an added runtime dependency, an autoload change. A missing or unreadable
+# signature means we cannot prove compatibility, so we also reinstall — a
+# self-healing guard must never reuse an unverifiable vendor. The reinstall is a
+# clean `composer update` that honours the plugin's constraints.
+want_sig="$(plugin_dep_sig "$PLUGIN_BASE")"
+need_install=0
 if [[ ! -f "$APP_SRC/vendor/bin/psalm" ]]; then
+    need_install=1
+elif [[ -z "$want_sig" ]]; then
+    echo "[$APP] cannot compute base plugin dependency signature; reinstalling to stay safe" >&2
+    need_install=1
+elif [[ ! -f "$PLUGIN_SIG_FILE" || "$(cat "$PLUGIN_SIG_FILE")" != "$want_sig" ]]; then
+    echo "[$APP] cached vendor was solved for a different plugin dependency shape; reinstalling" >&2
+    need_install=1
+fi
+
+# Run the one-time source install only when needed (cache-friendly otherwise).
+if [[ "$need_install" == 1 ]]; then
     echo "[$APP] installing dependencies" >&2
     (
         cd "$APP_SRC"
@@ -239,6 +271,8 @@ if [[ ! -f "$APP_SRC/vendor/bin/psalm" ]]; then
     # written into composer.json, so the per-side COW copies inherit it.
     (cd "$APP_SRC" && composer config --no-interaction policy.advisories.block false 2>/dev/null || true)
     (cd "$APP_SRC" && composer update "${COMPOSER_FLAGS[@]}" --quiet)
+    # Stamp what this vendor was solved against, so a future run can verify reuse.
+    printf '%s' "$want_sig" > "$PLUGIN_SIG_FILE"
 else
     echo "[$APP] reusing installed vendor" >&2
     write_psalm_xml
