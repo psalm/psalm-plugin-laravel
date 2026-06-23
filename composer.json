@@ -110,6 +110,7 @@
         "test:app": "./tests/Application/laravel-test.sh",
         "test:type": [
             "Composer\\Config::disableProcessTimeout",
+            "./bin/ci/check-phpt-conventions.sh",
             "phpunit --testsuite=type"
         ],
         "test:unit": "phpunit --testsuite=unit --display-deprecations --display-notices --display-phpunit-notices"

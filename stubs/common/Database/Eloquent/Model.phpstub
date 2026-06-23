@@ -182,7 +182,12 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
     /**
      * Eager load relation counts on the model.
      *
-     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * Unlike load()/loadMissing(), the constraint closure receives a Builder, not
+     * a Relation: loadCount() -> loadAggregate() -> Builder::withAggregate() applies
+     * it via Builder::callScope(), which invokes the closure with the Builder.
+     * (Laravel's own Collection docblock mistypes this as Relation; keep Builder.)
+     *
+     * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Builder): mixed)|string>|string  $relations
      * @return $this
      *
      * @psalm-variadic

@@ -80,4 +80,4 @@ function if_first_value_arg_is_not_closure_then_mixed_expected(): mixed
     );
 }
 ?>
---EXPECT--
+--EXPECTF--

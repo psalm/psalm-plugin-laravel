@@ -369,7 +369,9 @@ final class CommandDefinitionAnalyzer
     /**
      * Check if an option exists in the command's definition.
      *
-     * Also checks option shortcuts (e.g., 'F' for {--F|force}).
+     * Mirrors Symfony's Input::hasOption() — a name matches a long option OR a negation
+     * (e.g. 'no-ansi' for the negatable '--ansi'). Shortcuts are NOT valid hasOption()
+     * names: Input::hasOption('F') is false even when -F is a defined shortcut.
      *
      * @param class-string $commandClass
      */
@@ -381,11 +383,6 @@ final class CommandDefinitionAnalyzer
             return null; // cannot determine — definition unavailable
         }
 
-        if ($definition->hasOption($name)) {
-            return true;
-        }
-
-        // Check if the name matches a shortcut
-        return $definition->hasShortcut($name);
+        return $definition->hasOption($name) || $definition->hasNegation($name);
     }
 }

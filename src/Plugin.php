@@ -96,6 +96,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Application\ContainerHandler::class);
         require_once __DIR__ . '/Handlers/Application/OffsetHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\OffsetHandler::class);
+        require_once __DIR__ . '/Handlers/Application/ContractMethodBridgeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Application\ContractMethodBridgeHandler::class);
 
         require_once __DIR__ . '/Handlers/Auth/AuthMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\AuthMethodHandler::class);
@@ -105,6 +107,16 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
+        // Taint source/escape for the concrete guards. Lives in a handler, not a
+        // `.phpstub`, because redeclaring the guard class to host a taint method
+        // shadows every other method (see GuardTaintHandler / #1113).
+        require_once __DIR__ . '/Handlers/Auth/GuardTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\GuardTaintHandler::class);
+        // Same shadowing trap as the guards (#1113): the encrypter is reached via container
+        // narrowing (`app('encrypter')`) and carries no Macroable/__call to mask the strip, so a
+        // taint `.phpstub` would break `app('encrypter')->getKey()`. Keep the taint in a handler.
+        require_once __DIR__ . '/Handlers/Encryption/EncrypterTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Encryption\EncrypterTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Filesystem/StorageHandler.php';
         $registration->registerHooksFromClass(Handlers\Filesystem\StorageHandler::class);
@@ -208,8 +220,13 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/ConditionableWhenHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableWhenHandler::class);
 
+        require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);
+
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
+        require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Console\ConsoleClosureScopeHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
@@ -243,6 +260,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Helpers\NowTodayHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\PathHandler::class);
+        require_once __DIR__ . '/Handlers/Helpers/LiteralHandler.php';
+        $registration->registerHooksFromClass(Handlers\Helpers\LiteralHandler::class);
 
         // config() helper + Repository::get() narrowing — reflect runtime config
         // values from the booted Laravel app. See
@@ -286,6 +305,12 @@ final class Plugin implements PluginEntryPointInterface
         // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
         require_once __DIR__ . '/Handlers/Facades/AppFacadeMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeMakeHandler::class);
+
+        // Date facade static calls (`Date::now()`, `Date::parse()`, `Date::create*()`, ...).
+        // getClassLikeNames() reads FacadeMapProvider for the `\Date` alias, so it relies on
+        // init() having run above. See https://github.com/psalm/psalm-plugin-laravel/issues/1154.
+        require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
