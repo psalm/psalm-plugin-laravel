@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782172735311,
+  "lastUpdate": 1782200879364,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7410,6 +7410,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.35,
             "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "021468cd6feef6e25cd33f0f6ccc5d30e9291ee2",
+          "message": "fix(eloquent): type loadCount constraint closure as Builder #1163 (#1164)\n\nloadCount() applies its constraint closure through Builder::callScope()\n(loadCount -> loadAggregate -> Builder::withAggregate), which invokes the\nclosure with a Builder, not a Relation. The stub typed it as\ncallable(Relation), so a closure correctly hinting Builder raised a false\nInvalidArgument. load()/loadMissing() genuinely receive a Relation and\nstay unchanged.",
+          "timestamp": "2026-06-23T09:44:45+02:00",
+          "tree_id": "9314b524f13348ad0142167aaafd7c3b3d66b59b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/021468cd6feef6e25cd33f0f6ccc5d30e9291ee2"
+        },
+        "date": 1782200878063,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.4,
+            "range": "± 0.12",
             "unit": "s"
           },
           {
