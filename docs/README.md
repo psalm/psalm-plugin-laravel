@@ -35,3 +35,4 @@ Each one links to detailed documentation with examples and fix guidance.
 - [MissingView](issues/MissingView.md)
 - [ModelMakeDiscouraged](issues/ModelMakeDiscouraged.md)
 - [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md)
+- [UnknownModelAttribute](issues/UnknownModelAttribute.md)

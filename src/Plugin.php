@@ -315,6 +315,12 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
 
+        // Flags unknown attribute keys passed to mass-assignment methods (create/forceCreate/fill/
+        // forceFill/update) — the #699 typo case. Always on, but self-silences on any model whose
+        // column schema is unknown (migrations disabled), so it never floods.
+        require_once __DIR__ . '/Handlers/Rules/UnknownModelAttributeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UnknownModelAttributeHandler::class);
+
         // Detects timing-unsafe comparisons of secret-tainted values (CWE-208).
         // The hook is a no-op outside `--taint-analysis` runs (early-exits when
         // taint_flow_graph is null), so per-expression overhead in normal analysis
