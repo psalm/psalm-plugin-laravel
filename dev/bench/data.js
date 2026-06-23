@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782200879364,
+  "lastUpdate": 1782208679984,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7445,6 +7445,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 33.4,
             "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "69fe8112c5feb870b58bbd1fedaac6c25c7d11d8",
+          "message": "fix(console): allow null shortcut in getOptions() #1165 (#1166)\n\nOverriding getOptions() with a null option shortcut (the common\n\"no shortcut\" case) tripped a false-positive InvalidReturnType /\nInvalidReturnStatement. Laravel's HasParameters::getOptions() types\nthe return element index 1 (the shortcut) as\nstring|non-empty-array<string>, omitting the |null that Symfony's\nInputOption constructor accepts. A stub adds |null.\n\nThe getOptions() contract (InputOption objects or addOption() tuples)\nis identical across all supported Laravel versions, so the stub lives\nin common/. Laravel only declared this array-shape in v12.50.0; 11.x\nand 12.0 to 12.49 used a looser @return array, which this stub\ntightens to the same precise shape.",
+          "timestamp": "2026-06-23T11:55:21+02:00",
+          "tree_id": "d3ff86721764f79b194b32a421965a3cb6498dd6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/69fe8112c5feb870b58bbd1fedaac6c25c7d11d8"
+        },
+        "date": 1782208678866,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.29,
+            "range": "± 0.09",
             "unit": "s"
           },
           {
