@@ -250,6 +250,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Helpers\NowTodayHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\PathHandler::class);
+        require_once __DIR__ . '/Handlers/Helpers/LiteralHandler.php';
+        $registration->registerHooksFromClass(Handlers\Helpers\LiteralHandler::class);
 
         // config() helper + Repository::get() narrowing — reflect runtime config
         // values from the booted Laravel app. See
@@ -293,6 +295,12 @@ final class Plugin implements PluginEntryPointInterface
         // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
         require_once __DIR__ . '/Handlers/Facades/AppFacadeMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeMakeHandler::class);
+
+        // Date facade static calls (`Date::now()`, `Date::parse()`, `Date::create*()`, ...).
+        // getClassLikeNames() reads FacadeMapProvider for the `\Date` alias, so it relies on
+        // init() having run above. See https://github.com/psalm/psalm-plugin-laravel/issues/1154.
+        require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
