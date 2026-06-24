@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782208679984,
+  "lastUpdate": 1782341656346,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7480,6 +7480,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 27.29,
             "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "527c6641a34a3b7b1238041399d34edb8a66710d",
+          "message": "fix(pagination): remap value type in Paginator through() #1172 (#1173)\n\nAbstractPaginator::through() and AbstractCursorPaginator::through() were\nnot stubbed, so Psalm fell back to Laravel's reflected source. That source\ncarries only `@return $this` plus `@phpstan-this-out static<TKey, TMapValue>`,\nwhich Psalm ignores, so the value template was never remapped. After\n`$paginator->through(fn (User $u): array => ...)` Psalm still inferred the\noriginal `LengthAwarePaginator<int, TModel>`, producing false\nInvalidReturnType / InvalidReturnStatement at inline `return` call sites.\n\nDeclare through() in the stub for both abstract bases. Type the return as\n`static<TKey, TMapValue>` so inline `return $p->through(...)` remaps the\nvalue param (unlike setCollection, the call site is commonly used inline,\nwhere @psalm-this-out alone is insufficient since it mutates the variable\nnot the returned expression). Pair @psalm-this-out for the\nassigned-variable case.",
+          "timestamp": "2026-06-25T00:51:26+02:00",
+          "tree_id": "c8a107e2e4094a2f1ebdd08d7c9600b4ccf92dc2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/527c6641a34a3b7b1238041399d34edb8a66710d"
+        },
+        "date": 1782341655817,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.16,
+            "range": "± 0.39",
             "unit": "s"
           },
           {
