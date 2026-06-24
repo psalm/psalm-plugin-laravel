@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782341656346,
+  "lastUpdate": 1782342649981,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7515,6 +7515,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.16,
             "range": "± 0.39",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ccfcbb6a9de1bdbeb3bde22f068fa38e845ad4e2",
+          "message": "feat(routing): conditional return type for Route::domain() (#1174)\n\nRoute::domain() is a get-or-set method: a null argument is the getter\n(returns string|null), any other argument is the setter (returns the route\nfor chaining). Reflected Laravel declares the flat union `$this|string|null`,\nso `->domain('example.com')->name(...)` breaks (Psalm calls the next method\non the string|null part of the union).\n\nStub a conditional return `($domain is null ? string|null : static)`. Use\n`static` rather than `$this` on the setter branch: with `$this` Psalm merges\nthe stub conditional back into the reflected `@return $this|string|null` and\nthe result collapses to the flat union again (same stub/source merge issue\nbehind #888). `static` is substituted by the late-static-bound class and\noverrides cleanly.\n\nNew RouteDomainTest pins the getter (string|null), the setter (Route&static),\nand the chained setter + facade-chain forms.",
+          "timestamp": "2026-06-25T01:07:53+02:00",
+          "tree_id": "85411582852379cedcda0501bcacb79d2ce4bcdc",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ccfcbb6a9de1bdbeb3bde22f068fa38e845ad4e2"
+        },
+        "date": 1782342648846,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.94,
+            "range": "± 0.03",
             "unit": "s"
           },
           {
