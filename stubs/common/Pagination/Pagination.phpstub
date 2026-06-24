@@ -37,6 +37,21 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
     public function setCollection(\Illuminate\Support\Collection $collection) {}
 
     /**
+     * Transform each item using a callback. Laravel's source returns `$this`
+     * but mutates the value template via `@phpstan-this-out` (which Psalm
+     * ignores). Type the return directly so inline `return $p->through(...)`
+     * remaps the value param; pair `@psalm-this-out` for the assigned-variable
+     * case (`$p->through(...)` then read `$p`), mirroring `setCollection()`.
+     *
+     * @template TMapValue
+     *
+     * @param  callable(TValue, TKey): TMapValue  $callback
+     * @psalm-this-out static<TKey, TMapValue>
+     * @return static<TKey, TMapValue>
+     */
+    public function through(callable $callback) {}
+
+    /**
      * @return \ArrayIterator<TKey, TValue>
      */
     public function getIterator(): \Traversable {}
@@ -111,6 +126,21 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
      * @return $this
      */
     public function setCollection(\Illuminate\Support\Collection $collection) {}
+
+    /**
+     * Transform each item using a callback. Laravel's source returns `$this`
+     * but mutates the value template via `@phpstan-this-out` (which Psalm
+     * ignores). Type the return directly so inline `return $p->through(...)`
+     * remaps the value param; pair `@psalm-this-out` for the assigned-variable
+     * case (`$p->through(...)` then read `$p`), mirroring `setCollection()`.
+     *
+     * @template TMapValue
+     *
+     * @param  callable(TValue, TKey): TMapValue  $callback
+     * @psalm-this-out static<TKey, TMapValue>
+     * @return static<TKey, TMapValue>
+     */
+    public function through(callable $callback) {}
 
     /**
      * @return \ArrayIterator<TKey, TValue>
