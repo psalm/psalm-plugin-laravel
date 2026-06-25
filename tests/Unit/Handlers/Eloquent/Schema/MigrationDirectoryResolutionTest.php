@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\MigrationSchemaBuilder;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Progress\Progress;
 
 /**
@@ -45,6 +46,35 @@ final class MigrationDirectoryResolutionTest extends TestCase
 
         $this->assertSame(['/extra/package/migrations', '/fake-app/database/migrations'], $directories);
         $this->assertSame([], $progress->warnings, 'No warning when the migrator resolves cleanly.');
+    }
+
+    #[Test]
+    public function warning_surfaces_boot_mode_and_swallowed_bootstrap_error(): void
+    {
+        // The plugin swallows a partial-bootstrap throwable to stay alive; that throwable is
+        // the real reason the migrator is missing, so the warning must surface it (#1170).
+        $this->setBootState('testbench_fallback', new \RuntimeException('parse error in config/app.php'));
+
+        $app = $this->fakeApp(migratorBound: false, migratorPaths: []);
+        $progress = $this->capturingProgress();
+
+        $this->resolveDirectories($app, $progress);
+
+        $this->assertStringContainsString('boot mode: testbench_fallback', (string) $progress->warnings[0]);
+        $this->assertStringContainsString('parse error in config/app.php', (string) $progress->warnings[0]);
+    }
+
+    protected function tearDown(): void
+    {
+        // Boot state is global static — reset so it can't leak into other tests.
+        $this->setBootState(null, null);
+        parent::tearDown();
+    }
+
+    private function setBootState(?string $bootMode, ?\Throwable $bootstrapError): void
+    {
+        (new \ReflectionProperty(ApplicationProvider::class, 'bootMode'))->setValue(null, $bootMode);
+        (new \ReflectionProperty(ApplicationProvider::class, 'bootstrapError'))->setValue(null, $bootstrapError);
     }
 
     /**

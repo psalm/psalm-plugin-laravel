@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use Illuminate\Foundation\Application;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Progress\Progress;
 
 /**
@@ -223,11 +224,7 @@ final class MigrationSchemaBuilder
         $defaultDirectory = $this->app->databasePath('migrations');
 
         if (!$this->app->bound('migrator')) {
-            $progress->warning(
-                "Laravel plugin: the 'migrator' service is not bound (the app bootstrapped only partially); "
-                . 'falling back to the default migrations directory. Paths registered via '
-                . 'loadMigrationsFrom() will be ignored.',
-            );
+            $progress->warning($this->migratorUnavailableWarning());
 
             return [$defaultDirectory];
         }
@@ -236,6 +233,32 @@ final class MigrationSchemaBuilder
         $migrator = $this->app->make('migrator');
 
         return \array_values(\array_merge($migrator->paths(), [$defaultDirectory]));
+    }
+
+    /**
+     * Compose the migrator-unavailable warning, enriched with the boot diagnostics
+     * the plugin already captured.
+     *
+     * This degrades gracefully instead of reaching {@see InternalErrorReporter}, so the
+     * one datum that actually explains *why* the deferred-services map is incomplete —
+     * the bootstrap throwable the plugin swallowed to tolerate a partial boot — is pulled
+     * in here from {@see ApplicationProvider}. Without it the user sees only the symptom
+     * (migrator missing) and not the root cause (the bad config/provider that aborted boot).
+     */
+    private function migratorUnavailableWarning(): string
+    {
+        $bootMode = ApplicationProvider::getBootMode();
+        $mode = $bootMode !== null ? " (boot mode: {$bootMode})" : '';
+
+        $bootstrapError = ApplicationProvider::getBootstrapError();
+        $cause = $bootstrapError instanceof \Throwable
+            ? " The Laravel bootstrap did not complete: {$bootstrapError->getMessage()}."
+            : '';
+
+        return "Laravel plugin: the 'migrator' service is not bound{$mode}, so migration paths "
+            . 'registered via loadMigrationsFrom() cannot be auto-discovered.' . $cause
+            . ' Only the default database/migrations directory will be scanned — fix the bootstrap '
+            . 'error above or declare the extra paths another way.';
     }
 
     /**
