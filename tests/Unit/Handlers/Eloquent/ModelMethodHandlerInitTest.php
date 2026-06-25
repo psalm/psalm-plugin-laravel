@@ -38,11 +38,9 @@ final class ModelMethodHandlerInitTest extends TestCase
         // would inherit registrations that the new run hasn't repopulated yet.
         $reflection = new \ReflectionClass(ModelMethodHandler::class);
         $prop = $reflection->getProperty('customBuilderMap');
-        $prop->setAccessible(true);
         $this->assertSame([], $prop->getValue(), 'init() must clear the custom-builder map.');
 
         $unresolved = $reflection->getProperty('unresolvedCache');
-        $unresolved->setAccessible(true);
         $this->assertSame([], $unresolved->getValue(), 'init() must clear the unresolved-method cache so a config flip is honoured.');
     }
 }

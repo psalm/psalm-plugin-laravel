@@ -13,8 +13,25 @@ use Illuminate\Support\Traits\Macroable;
  * class_implements list when a stub re-declares the class, so the clause
  * must be repeated verbatim or callers typed on the contract break.
  *
+ * TDeclaringModel is covariant (`@template-covariant`) on purpose: the relation methods in
+ * HasRelationships return e.g. BelongsTo<TRelatedModel, static> (a deliberate Psalm-7
+ * divergence from Laravel's $this; Psalm does not late-static-substitute $this when the
+ * relation is chained). On a non-final model `static` resolves to the model intersected with
+ * `static` (e.g. `Order&static`), so a call-site `@return BelongsTo<..., self>` is only
+ * satisfiable if TDeclaringModel is covariant (`Order&static` <: `Order`). Keep it covariant
+ * or #913 regresses to InvalidReturnStatement.
+ *
+ * Covariance is sound here because TDeclaringModel is never consumed through a
+ * non-constructor parameter in these stubs: it surfaces via reads (getParent(): TDeclaringModel
+ * and the protected $parent property, which is written only at construction) and via the
+ * `@template-extends` propagation to parent relations. Its one input-position use is the
+ * internal HasOneOrManyThrough::__construct($farParent) parameter, which is variance-exempt
+ * (you never invoke a constructor through a covariantly-widened reference). If you add a stub
+ * method that takes TDeclaringModel as a (non-constructor) parameter, revisit this: covariance
+ * would then be able to mask a real argument-type error.
+ *
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
- * @template TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
  * @template TResult
  * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
  */
@@ -81,6 +98,53 @@ abstract class Relation implements BuilderContract
     {
         return $this->query->get($columns);
     }
+
+    /**
+     * Paginate the query (forwarded to the related model's Builder).
+     *
+     * Declared here (not just on Builder) for the same reason as get()/first():
+     * Psalm's templated @mixin Builder<TRelatedModel> resolution fails to substitute
+     * TRelatedModel into a *nested* generic on a non-fluent return, so the inferred
+     * value collapses to the `Model` bound (LengthAwarePaginator<int, TRelatedModel as Model>).
+     * MethodForwardingHandler skips these via isInDeclaringMethodIds, so this stub type
+     * is used directly. The concrete Illuminate\Pagination class is returned (see Builder
+     * stub) so the concrete-only surface (getCollection(), …) resolves on the result.
+     * Subclasses that narrow the value (BelongsToMany's pivot variant, the Through
+     * relations) override these.
+     *
+     * The signature mirrors Eloquent\Builder::paginate (the __call forwarding target),
+     * including the Closure $perPage and the fifth $total argument. BelongsToMany and
+     * HasOneOrManyThrough declare their OWN narrower paginate() in Laravel (no $total),
+     * so they keep the four-argument override — passing $total there errors at runtime.
+     *
+     * @param  int|null|(\Closure(int): int)  $perPage
+     * @param  list<non-empty-string>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @param  (\Closure(): int)|int|null  $total
+     * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel>
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null, $total = null) {}
+
+    /**
+     * @param  int|null  $perPage
+     * @param  list<non-empty-string>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @return \Illuminate\Pagination\Paginator<int, TRelatedModel>
+     */
+    public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+
+    /**
+     * @param  int|null  $perPage
+     * @param  list<non-empty-string>  $columns
+     * @param  string  $cursorName
+     * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
+     * @return \Illuminate\Pagination\CursorPaginator<int, TRelatedModel>
+     */
+    public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 
     /**
      * Set the columns to be selected.

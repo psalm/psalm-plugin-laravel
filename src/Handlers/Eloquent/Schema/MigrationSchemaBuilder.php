@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use Illuminate\Foundation\Application;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Progress\Progress;
 
 /**
@@ -35,11 +36,11 @@ final class MigrationSchemaBuilder
         $sqlDumpFiles = $this->discoverSqlDumpFiles($progress);
         $migrationFiles = $this->discoverMigrationFiles($progress);
 
-        $tables = $this->cache->remember(
-            $migrationFiles,
+        $tables = $this->cache->remember($migrationFiles, $sqlDumpFiles, fn(): array => $this->parse(
             $sqlDumpFiles,
-            fn(): array => $this->parse($sqlDumpFiles, $migrationFiles, $progress),
-        );
+            $migrationFiles,
+            $progress,
+        ));
 
         $this->reportCacheStatus($progress);
 
@@ -66,9 +67,7 @@ final class MigrationSchemaBuilder
             try {
                 $aggregator->addStatements($this->codebase->getStatementsForFile($file));
             } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-                $progress->warning(
-                    "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}",
-                );
+                $progress->warning("Laravel plugin: skipping migration '{$file}': {$e->getMessage()}");
             }
         }
 
@@ -118,7 +117,7 @@ final class MigrationSchemaBuilder
     {
         $files = [];
 
-        foreach ($this->getMigrationDirectories() as $directory) {
+        foreach ($this->getMigrationDirectories($progress) as $directory) {
             \array_push($files, ...$this->findPhpFilesRecursive($directory, $progress));
         }
 
@@ -139,11 +138,8 @@ final class MigrationSchemaBuilder
      *
      * @param list<string> $sqlDumpFiles
      */
-    private function parseSqlDumps(
-        array $sqlDumpFiles,
-        SchemaAggregator $schemaAggregator,
-        Progress $progress,
-    ): void {
+    private function parseSqlDumps(array $sqlDumpFiles, SchemaAggregator $schemaAggregator, Progress $progress): void
+    {
         if ($sqlDumpFiles === []) {
             return;
         }
@@ -181,7 +177,9 @@ final class MigrationSchemaBuilder
         try {
             $iterator = new \DirectoryIterator($directory);
         } catch (\UnexpectedValueException $unexpectedValueException) {
-            $progress->warning("Laravel plugin: could not read schema directory '{$directory}': {$unexpectedValueException->getMessage()}");
+            $progress->warning(
+                "Laravel plugin: could not read schema directory '{$directory}': {$unexpectedValueException->getMessage()}",
+            );
             return [];
         }
 
@@ -206,17 +204,50 @@ final class MigrationSchemaBuilder
     }
 
     /**
-     * Resolve migration directories the same way Laravel does:
-     * extra paths registered via loadMigrationsFrom() + the default database/migrations directory.
+     * loadMigrationsFrom() paths + the default database/migrations directory.
+     *
+     * `migrator` is deferred, so it's only resolvable after a full bootstrap. The plugin
+     * tolerates a partial boot, so guard with `bound()` (like translator/view in Plugin.php)
+     * and fall back to the default directory instead of crashing on `make()` (#1170).
      *
      * @return non-empty-list<string>
      */
-    private function getMigrationDirectories(): array
+    private function getMigrationDirectories(Progress $progress): array
     {
+        $defaultDirectory = $this->app->databasePath('migrations');
+
+        if (!$this->app->bound('migrator')) {
+            $progress->warning($this->migratorUnavailableWarning());
+
+            return [$defaultDirectory];
+        }
+
         /** @var \Illuminate\Database\Migrations\Migrator $migrator */
         $migrator = $this->app->make('migrator');
 
-        return \array_values(\array_merge($migrator->paths(), [$this->app->databasePath('migrations')]));
+        return \array_values(\array_merge($migrator->paths(), [$defaultDirectory]));
+    }
+
+    /**
+     * Graceful degradation skips {@see InternalErrorReporter}, so surface the swallowed
+     * bootstrap error here — it's the root cause of the missing migrator, not just the symptom.
+     *
+     * @psalm-external-mutation-free
+     */
+    private function migratorUnavailableWarning(): string
+    {
+        $bootMode = ApplicationProvider::getBootMode();
+        $mode = $bootMode !== null ? " (boot mode: {$bootMode})" : '';
+
+        $bootstrapError = ApplicationProvider::getBootstrapError();
+        $cause = $bootstrapError instanceof \Throwable
+            ? " The Laravel bootstrap did not complete: {$bootstrapError->getMessage()}."
+            : '';
+
+        return "Laravel plugin: the 'migrator' service is not bound{$mode}, so migration paths "
+            . 'registered via loadMigrationsFrom() cannot be auto-discovered.' . $cause
+            . ' Only the default database/migrations directory will be scanned — fix the bootstrap '
+            . 'error above or declare the extra paths another way.';
     }
 
     /**
@@ -231,11 +262,14 @@ final class MigrationSchemaBuilder
         }
 
         try {
-            $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-            );
+            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(
+                $directory,
+                \FilesystemIterator::SKIP_DOTS,
+            ));
         } catch (\UnexpectedValueException $unexpectedValueException) {
-            $progress->warning("Laravel plugin: could not read migration directory '{$directory}': {$unexpectedValueException->getMessage()}");
+            $progress->warning(
+                "Laravel plugin: could not read migration directory '{$directory}': {$unexpectedValueException->getMessage()}",
+            );
             return [];
         }
 
@@ -255,7 +289,9 @@ final class MigrationSchemaBuilder
             }
         } catch (\UnexpectedValueException $unexpectedValueException) {
             // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories
-            $progress->warning("Laravel plugin: error scanning migration directory '{$directory}': {$unexpectedValueException->getMessage()}");
+            $progress->warning(
+                "Laravel plugin: error scanning migration directory '{$directory}': {$unexpectedValueException->getMessage()}",
+            );
         }
 
         return $files;

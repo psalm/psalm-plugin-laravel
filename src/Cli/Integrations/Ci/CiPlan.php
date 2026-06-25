@@ -48,7 +48,9 @@ final readonly class CiPlan
     public function __construct(string $path, string $contents, bool $targetExists)
     {
         if ($contents === '') {
-            throw new \InvalidArgumentException('CiPlan::$contents must not be empty; a zero-byte workflow would break CI.');
+            throw new \InvalidArgumentException(
+                'CiPlan::$contents must not be empty; a zero-byte workflow would break CI.',
+            );
         }
 
         $this->path = $path;

@@ -31,4 +31,4 @@ function except_variadic(PendingSingletonResourceRegistration $reg): void
     /** @psalm-check-type-exact $_c = \Illuminate\Routing\PendingSingletonResourceRegistration&static */
 }
 ?>
---EXPECT--
+--EXPECTF--

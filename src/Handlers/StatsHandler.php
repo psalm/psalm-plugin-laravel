@@ -43,7 +43,9 @@ final class StatsHandler implements AfterAnalysisInterface
         $modelCount = self::countModels($codebase);
 
         $schema = SchemaStateProvider::getSchema();
-        $tables = $schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator ? (string) \count($schema->tables) : 'N/A';
+        $tables = $schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator
+            ? (string) \count($schema->tables)
+            : 'N/A';
 
         $progress->write("Laravel plugin stats:\n");
         $progress->write("  Models discovered: {$modelCount}\n");

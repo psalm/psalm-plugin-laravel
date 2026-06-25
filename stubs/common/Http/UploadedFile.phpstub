@@ -67,4 +67,16 @@ class UploadedFile
      * @psalm-taint-source input
      */
     public function get() {}
+
+    /**
+     * Returns the raw contents of the uploaded file (Symfony File parent API).
+     *
+     * Same attacker-controlled bytes as get(), so it is likewise a source. This
+     * is the contents accessor the Request::file() taint fix relies on (#1134).
+     *
+     * @return string
+     *
+     * @psalm-taint-source input
+     */
+    public function getContent(): string {}
 }

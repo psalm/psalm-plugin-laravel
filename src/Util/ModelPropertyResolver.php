@@ -55,11 +55,8 @@ final class ModelPropertyResolver
      * @param class-string<Model> $modelClass
      * @psalm-mutation-free
      */
-    public static function resolvePropertyType(
-        Codebase $codebase,
-        string $modelClass,
-        string $propertyName,
-    ): ?Union {
+    public static function resolvePropertyType(Codebase $codebase, string $modelClass, string $propertyName): ?Union
+    {
         try {
             $classStorage = $codebase->classlike_storage_provider->get($modelClass);
         } catch (\InvalidArgumentException) {
@@ -113,10 +110,7 @@ final class ModelPropertyResolver
         // concrete model. Fall back to inspecting the call's LHS expression, whose
         // type carries the concrete generic arguments.
         if ($modelClass === null && $lhsExpr instanceof \PhpParser\Node\Expr) {
-            $modelClass = self::extractModelFromLhsType(
-                $nodeTypeProvider->getType($lhsExpr),
-                $modelTemplateIndex,
-            );
+            $modelClass = self::extractModelFromLhsType($nodeTypeProvider->getType($lhsExpr), $modelTemplateIndex);
         }
 
         if ($modelClass === null) {

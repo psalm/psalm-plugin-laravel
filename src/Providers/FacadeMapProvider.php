@@ -183,11 +183,15 @@ final class FacadeMapProvider
             // lookups below.
             try {
                 if (!\class_exists($concrete)) {
-                    $progress->debug("Laravel plugin: FacadeMapProvider skipped multi-target concrete {$concrete}: class not found\n");
+                    $progress->debug(
+                        "Laravel plugin: FacadeMapProvider skipped multi-target concrete {$concrete}: class not found\n",
+                    );
                     continue;
                 }
             } catch (\Throwable $e) {
-                $progress->warning("Laravel plugin: FacadeMapProvider could not load multi-target concrete {$concrete}: {$e->getMessage()}");
+                $progress->warning(
+                    "Laravel plugin: FacadeMapProvider could not load multi-target concrete {$concrete}: {$e->getMessage()}",
+                );
                 continue;
             }
 
@@ -217,7 +221,9 @@ final class FacadeMapProvider
                         continue;
                     }
                 } catch (\Throwable $e) {
-                    $progress->warning("Laravel plugin: FacadeMapProvider could not load multi-target facade {$facadeClass}: {$e->getMessage()}");
+                    $progress->warning(
+                        "Laravel plugin: FacadeMapProvider could not load multi-target facade {$facadeClass}: {$e->getMessage()}",
+                    );
                     continue;
                 }
 

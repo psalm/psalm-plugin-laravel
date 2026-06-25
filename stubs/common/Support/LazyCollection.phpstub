@@ -66,6 +66,26 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     public static function empty() {}
 
     /**
+     * Get one or a specified number of items randomly from the collection.
+     *
+     * No argument → a single random element (TValue). With $number → a
+     * sub-collection (static<int, TValue>). Mirrors the conditional already
+     * shipped on Collection so LazyCollection-typed callers keep the narrowing
+     * instead of falling back to Laravel's reflected static<int, TValue>|TValue.
+     *
+     * Unlike Enumerable::random, LazyCollection carries the $preserveKeys second
+     * parameter (it forwards func_get_args() to Collection::random) — matched
+     * here against Laravel source.
+     *
+     * @param  int|null  $number
+     * @param  bool  $preserveKeys
+     * @return ($number is null ? TValue : static<int, TValue>)
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function random($number = null, $preserveKeys = false) {}
+
+    /**
      * Determine if an item exists in the enumerable by key.
      *
      * Accepts an array of keys or variadic key arguments via func_get_args().

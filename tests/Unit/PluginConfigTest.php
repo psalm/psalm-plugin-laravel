@@ -8,9 +8,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\ColumnFallback;
+use Psalm\LaravelPlugin\Config\ColumnFallback;
+use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Plugin;
-use Psalm\LaravelPlugin\PluginConfig;
 
 #[CoversClass(PluginConfig::class)]
 #[CoversClass(ColumnFallback::class)]
@@ -43,6 +43,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
         // explicit true/false in XML overrides the auto-detection.
         $this->assertNull($config->findOctaneIncompatibleBinding);
@@ -226,6 +227,37 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->findMissingViews);
+    }
+
+    #[Test]
+    public function report_implicit_query_builder_calls_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><reportImplicitQueryBuilderCalls value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->reportImplicitQueryBuilderCalls);
+    }
+
+    #[Test]
+    public function report_implicit_query_builder_calls_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><reportImplicitQueryBuilderCalls value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+    }
+
+    #[Test]
+    public function invalid_report_implicit_query_builder_calls_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><reportImplicitQueryBuilderCalls value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid reportImplicitQueryBuilderCalls value 'yes'");
+
+        PluginConfig::fromXml($xml);
     }
 
     #[Test]

@@ -7,11 +7,14 @@ namespace Psalm\LaravelPlugin\Util;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Psalm\LaravelPlugin\Providers\ConfigRepositoryProvider;
 use Psalm\Type;
+use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TBool;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TFalse;
 use Psalm\Type\Atomic\TFloat;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TLiteralFloat;
 use Psalm\Type\Atomic\TLiteralInt;
 use Psalm\Type\Atomic\TLiteralString;
@@ -45,7 +48,9 @@ final class ConfigKeyResolver
     private array $cache = [];
 
     /** @psalm-mutation-free */
-    public function __construct(private readonly ConfigRepository $config) {}
+    public function __construct(
+        private readonly ConfigRepository $config,
+    ) {}
 
     /**
      * Swallows `ConfigRepositoryProvider::get()` failures with a
@@ -103,6 +108,35 @@ final class ConfigKeyResolver
     }
 
     /**
+     * `Repository::collection($key)` wraps `$this->array($key)` in a Collection
+     * (`Illuminate\Config\Repository::collection()` → `new Collection($this->array($key))`).
+     * We reuse the same reflected value as {@see resolveCallReturnType()} and
+     * collapse its array shape to `Collection<keyType, valueType>`.
+     *
+     * Returns null (caller defers to the stub's `Collection<array-key, mixed>`)
+     * when there is no sound narrowed type:
+     *   - key absent → no default arg is threaded here (see
+     *     {@see resolveCollectionFromCallArgs()}); the runtime default's shape is
+     *     not reflected, so we defer (deliberate scope cut, the case is rare).
+     *   - value is not an array → `array()` throws InvalidArgumentException at
+     *     runtime, so no Collection is ever produced.
+     *   - value is an empty array → `Collection<never, never>` is strictly less
+     *     useful than the generic stub for a mutable container.
+     */
+    public function resolveCollectionReturnType(string $key): ?Union
+    {
+        $this->warm($key);
+
+        $reflected = $this->cache[$key];
+
+        if ($reflected === null) {
+            return null;
+        }
+
+        return $this->wrapReflectedArrayInCollection($reflected);
+    }
+
+    /**
      * Shared entry point for both `config()` and `Repository::get()` handlers.
      * Returns null on non-narrowable shapes (no args, dynamic key, array
      * first-arg) so the caller defers to the stub.
@@ -117,10 +151,25 @@ final class ConfigKeyResolver
             return null;
         }
 
-        return self::instance()->resolveCallReturnType(
-            $key,
-            self::readDefaultTypeAt($call_args, 1, $nodeTypeProvider),
-        );
+        return self::instance()->resolveCallReturnType($key, self::readDefaultTypeAt($call_args, 1, $nodeTypeProvider));
+    }
+
+    /**
+     * `collection()` counterpart of {@see resolveFromCallArgs()}. The default
+     * argument is intentionally ignored: it only matters for the absent-key
+     * branch, which {@see resolveCollectionReturnType()} already defers.
+     *
+     * @param list<\PhpParser\Node\Arg> $call_args
+     */
+    public static function resolveCollectionFromCallArgs(array $call_args, \Psalm\NodeTypeProvider $nodeTypeProvider): ?Union
+    {
+        $key = self::extractLiteralKey($call_args, $nodeTypeProvider);
+
+        if ($key === null || $key === false) {
+            return null;
+        }
+
+        return self::instance()->resolveCollectionReturnType($key);
     }
 
     /**
@@ -135,8 +184,10 @@ final class ConfigKeyResolver
      *
      * @param list<\PhpParser\Node\Arg> $call_args
      */
-    private static function extractLiteralKey(array $call_args, \Psalm\NodeTypeProvider $nodeTypeProvider): string|false|null
-    {
+    private static function extractLiteralKey(
+        array $call_args,
+        \Psalm\NodeTypeProvider $nodeTypeProvider,
+    ): string|false|null {
         if ($call_args === []) {
             return null;
         }
@@ -180,8 +231,11 @@ final class ConfigKeyResolver
      *
      * @param list<\PhpParser\Node\Arg> $call_args
      */
-    private static function readDefaultTypeAt(array $call_args, int $index, \Psalm\NodeTypeProvider $nodeTypeProvider): Union
-    {
+    private static function readDefaultTypeAt(
+        array $call_args,
+        int $index,
+        \Psalm\NodeTypeProvider $nodeTypeProvider,
+    ): Union {
         if (!isset($call_args[$index])) {
             return Type::getNull();
         }
@@ -271,6 +325,49 @@ final class ConfigKeyResolver
 
         // Every Union needs at least one atomic; empty input is defensive only.
         return $atomics === [] ? Type::getMixed() : new Union($atomics);
+    }
+
+    /**
+     * Collapse a reflected array type to `Collection<keyType, valueType>`. Same
+     * result as Larastan's `getIterableKeyType()`/`getIterableValueType()` wrap
+     * (PHPStan APIs); here we dispatch over `TKeyedArray`/`TArray` explicitly.
+     *
+     * The value type is already generalized by {@see ConfigValueReflector}
+     * (env-driven values collapse to a single observation); the structural key
+     * type is preserved, since config keys are static across env unlike values.
+     *
+     * Returns null (caller defers to the stub) for non-array reflections and for
+     * any array whose key or value reflects to `never` — in practice the empty
+     * array, whose `never` params make a poor mutable Collection.
+     *
+     * @psalm-mutation-free
+     */
+    private function wrapReflectedArrayInCollection(Union $reflected): ?Union
+    {
+        // ConfigValueReflector emits a single atomic for array values; anything
+        // else (a union) is unexpected, so play safe and defer.
+        if (!$reflected->isSingle()) {
+            return null;
+        }
+
+        $atomic = $reflected->getSingleAtomic();
+
+        if ($atomic instanceof TKeyedArray) {
+            $keyType = $atomic->getGenericKeyType();
+            $valueType = $atomic->getGenericValueType();
+        } elseif ($atomic instanceof TArray) {
+            [$keyType, $valueType] = $atomic->type_params;
+        } else {
+            return null;
+        }
+
+        if ($keyType->isNever() || $valueType->isNever()) {
+            return null;
+        }
+
+        return new Union([
+            new TGenericObject(\Illuminate\Support\Collection::class, [$keyType, $valueType]),
+        ]);
     }
 
     private function warm(string $key): void

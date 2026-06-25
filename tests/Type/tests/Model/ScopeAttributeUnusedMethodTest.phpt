@@ -46,4 +46,5 @@ final class ScopeAttributeModel extends Model
 
 new ScopeAttributeModel();
 ?>
---EXPECT--
+--EXPECTF--
+PublicModelScope on line %d: Eloquent #[Scope] method publicPublished() should be protected, not public: called statically (Model::publicPublished()) it is a runtime fatal.

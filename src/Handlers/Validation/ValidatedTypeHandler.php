@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
+use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Util\Arg;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -46,6 +47,12 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             \Illuminate\Foundation\Http\FormRequest::class,
             \Illuminate\Http\Request::class,
             \Illuminate\Support\ValidatedInput::class,
+            // input() is declared on the InteractsWithInput trait, not on
+            // FormRequest/Request directly. Without this entry Psalm's method
+            // provider only matches the declaring class chain, so the
+            // resolveSelfInput dispatch below never fires for
+            // `$this->input(...)` inside a FormRequest subclass. See #1015.
+            \Illuminate\Http\Concerns\InteractsWithInput::class,
         ];
     }
 
@@ -65,8 +72,121 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             'validated' => self::resolveValidated($event),
             'safe' => self::resolveSafe($event),
             'validate' => self::resolveInlineValidate($event),
+            'input' => self::resolveSelfInput($event),
             default => null,
         };
+    }
+
+    /**
+     * FormRequest subclass::input('field') → rule type, when the field's rule
+     * guarantees presence (required / present / accepted / declined).
+     *
+     * Covers `$this->input(...)` called inside the FormRequest itself
+     * (prepareForValidation, passedValidation, withValidator, custom helpers)
+     * — the controller-side narrowing already flows through `validated()` and
+     * `safe()->input()`. See issue #1015.
+     *
+     * Soundness window: only fields with an unconditional presence rule
+     * (required / present / accepted / declined, and only when `sometimes`
+     * is absent) narrow — the field is guaranteed to exist post-validation,
+     * matching the validated() trade-off. Optional fields, `sometimes|required`,
+     * and conditional-presence siblings (required_if, present_with, …) fall
+     * through to the stub's mixed return. Mirrors the `required`-gated
+     * `setPossiblyUndefined` branch in {@see buildUnionFromTree}.
+     *
+     * Pre-validation unsoundness (deliberate, documented): reads in
+     * prepareForValidation() / authorize() / rules() callbacks run BEFORE
+     * the validator has constrained the value, so `required|integer` does
+     * not yet imply the runtime value is `int|numeric-string`. This narrowing
+     * matches the existing validated()-style "trust the rule" precedent for
+     * analysis precision; downstream consumers in pre-validation contexts
+     * (notably `header()` sinks) carry the same residual false-negative
+     * surface that the controller-side narrowing has always had.
+     *
+     * Inheritance gate: `getRulesForCalledClass` only resolves `rules()`
+     * via the codebase classlike storage, so a custom Request subclass
+     * (or other unrelated class) that happens to define `rules()` could in
+     * principle slip through. We require the called class to actually
+     * extend `FormRequest` to keep the narrowing scoped to the framework
+     * contract it models.
+     *
+     * The taint flow for the narrowed expression is restored in
+     * {@see ValidatedFieldReadResolver} — Psalm drops
+     * the stub's @psalm-taint-source when a return-type override fires,
+     * so the taint handler explicitly re-emits ALL_INPUT for `input()` on
+     * a FormRequest caller.
+     */
+    private static function resolveSelfInput(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $callArgs = $event->getCallArgs();
+
+        if ($callArgs === []) {
+            return null;
+        }
+
+        // Cheap literal-key check first — dynamic-key call sites are common and
+        // skipping the rules() AST walk for them avoids a per-expression hit
+        // (extractRulesFromClass walks parent_class via classlike storage; not
+        // free even after the per-class memoization).
+        $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
+        $firstArgType = $nodeTypeProvider->getType($callArgs[0]->value);
+
+        if (!$firstArgType instanceof Union || !$firstArgType->isSingleStringLiteral()) {
+            return null;
+        }
+
+        // Inheritance gate: limit narrowing to genuine FormRequest subclasses.
+        // InteractsWithInput is also used by plain Request and by user-authored
+        // traits that pair an unrelated `rules()` method with the trait — none
+        // of those should be narrowed under the FormRequest validation contract.
+        $calledClass = $event->getCalledFqClasslikeName();
+
+        if ($calledClass === null) {
+            return null;
+        }
+
+        try {
+            $codebase = ProjectAnalyzer::getInstance()->getCodebase();
+        } catch (\RuntimeException|\Error) {
+            return null;
+        }
+
+        try {
+            $isFormRequest
+                = $calledClass === \Illuminate\Foundation\Http\FormRequest::class
+                || $codebase->classExtends($calledClass, \Illuminate\Foundation\Http\FormRequest::class);
+        } catch (\Psalm\Exception\UnpopulatedClasslikeException|\InvalidArgumentException) {
+            return null;
+        }
+
+        if (!$isFormRequest) {
+            return null;
+        }
+
+        // `classExtends` succeeded above (no UnpopulatedClasslikeException), so
+        // Psalm has metadata for `$calledClass`. Narrow to `class-string` here
+        // since `getCalledFqClasslikeName()` is typed as plain `string`.
+        /** @var class-string $calledClass */
+        $rules = ValidationRuleAnalyzer::getRulesForFormRequest($calledClass);
+
+        if ($rules === null) {
+            return null;
+        }
+
+        $key = $firstArgType->getSingleStringLiteral()->value;
+        $rule = $rules[$key] ?? null;
+
+        // Bail when the field has no rule or the rule does not guarantee
+        // presence. Laravel's `sometimes|required` means "if the field is
+        // present it must be valid", so the field can still be legitimately
+        // absent at the input() call site — same treatment {@see buildUnionFromTree}
+        // gives the validated() output (marks the field possibly_undefined
+        // when `sometimes || !required`).
+        if ($rule === null || !$rule->guaranteesPresence()) {
+            return null;
+        }
+
+        return self::resolveFieldType($rules, $callArgs, $event);
     }
 
     /**

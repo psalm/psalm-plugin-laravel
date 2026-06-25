@@ -137,4 +137,4 @@ final class CollectionFlattenTest
     }
 }
 ?>
---EXPECT--
+--EXPECTF--

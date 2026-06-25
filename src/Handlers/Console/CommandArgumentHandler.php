@@ -20,9 +20,16 @@ use Symfony\Component\Console\Input\InputOption;
  *
  * @see \Illuminate\Console\Concerns\InteractsWithIO::argument()
  * @see \Illuminate\Console\Concerns\InteractsWithIO::option()
+ * @see \Illuminate\Console\Concerns\InteractsWithIO::hasArgument()
+ * @see \Illuminate\Console\Concerns\InteractsWithIO::hasOption()
  *
- * Also emits {@see InvalidConsoleArgumentName} / {@see InvalidConsoleOptionName}
- * when the requested name is not defined.
+ * argument()/option(): narrows the value type, and emits {@see InvalidConsoleArgumentName} /
+ * {@see InvalidConsoleOptionName} when the requested name is not defined.
+ *
+ * hasArgument()/hasOption(): narrows to a literal true/false for a known signature and a literal
+ * name. No undefined-name issue is emitted here — existence-testing is the method's purpose; a
+ * definitely-absent name narrows to false, letting Psalm's own RedundantCondition surface the
+ * resulting dead branch (parity with Larastan's HasArgument/HasOption extensions).
  */
 final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
 {
@@ -46,7 +53,7 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
         $methodName = $event->getMethodNameLowercase();
 
         // @todo Narrow arguments()/options() to a constant array shape with per-key types
-        if ($methodName !== 'argument' && $methodName !== 'option') {
+        if (!\in_array($methodName, ['argument', 'option', 'hasargument', 'hasoption'], true)) {
             return null;
         }
 
@@ -75,7 +82,32 @@ final class CommandArgumentHandler implements MethodReturnTypeProviderInterface
             return self::resolveArgumentType($commandClass, $key, $event);
         }
 
-        return self::resolveOptionType($commandClass, $key, $event);
+        if ($methodName === 'option') {
+            return self::resolveOptionType($commandClass, $key, $event);
+        }
+
+        if ($methodName === 'hasargument') {
+            return self::existenceToType(CommandDefinitionAnalyzer::hasArgument($commandClass, $key));
+        }
+
+        // hasoption — the only remaining name allowed by the guard above
+        return self::existenceToType(CommandDefinitionAnalyzer::hasOption($commandClass, $key));
+    }
+
+    /**
+     * Map the analyzer's existence result to a literal-bool return type for
+     * hasArgument()/hasOption(). A null result (signature unavailable) leaves the
+     * declared bool in place; otherwise narrows to literal true/false.
+     *
+     * @psalm-pure
+     */
+    private static function existenceToType(?bool $exists): ?Type\Union
+    {
+        if ($exists === null) {
+            return null; // definition unavailable — cannot narrow
+        }
+
+        return $exists ? Type::getTrue() : Type::getFalse();
     }
 
     /**

@@ -40,9 +40,10 @@ final class StubFileFinder
             return [];
         }
 
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-        );
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(
+            $directory,
+            \FilesystemIterator::SKIP_DOTS,
+        ));
 
         $stubs = [];
 
@@ -65,7 +66,9 @@ final class StubFileFinder
             // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories.
             // Return whatever stubs were collected before the error — partial results from
             // readable subdirectories are better than none.
-            $output->warning("Laravel plugin: error scanning stub directory '{$directory}': {$unexpectedValueException->getMessage()}");
+            $output->warning(
+                "Laravel plugin: error scanning stub directory '{$directory}': {$unexpectedValueException->getMessage()}",
+            );
         }
 
         \sort($stubs);
@@ -130,10 +133,11 @@ final class StubFileFinder
      */
     public static function filterVersionDirectories(array $candidates, string $targetVersion): array
     {
-        $matched = \array_filter(
-            $candidates,
-            static fn(string $dir): bool => \version_compare($dir, $targetVersion, '<='),
-        );
+        $matched = \array_filter($candidates, static fn(string $dir): bool => \version_compare(
+            $dir,
+            $targetVersion,
+            '<=',
+        ));
 
         \usort($matched, static fn(string $a, string $b): int => \version_compare($a, $b));
 

@@ -84,17 +84,23 @@ final class OffsetHandler implements
             return null;
         }
 
-        return $source->getCodebase()->getMethodParams(
-            ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $event->getMethodNameLowercase(),
-        );
+        return $source
+            ->getCodebase()
+            ->getMethodParams(
+                ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $event->getMethodNameLowercase(),
+            );
     }
 
     /** @psalm-pure */
     private static function isOffsetMethod(string $methodName): bool
     {
-        return \in_array($methodName, [
-            'offsetget',
-            'offsetset',
-        ], true);
+        return \in_array(
+            $methodName,
+            [
+                'offsetget',
+                'offsetset',
+            ],
+            true,
+        );
     }
 }

@@ -37,17 +37,17 @@ final class RequestHandler implements MethodReturnTypeProviderInterface
         }
 
         $default_guard = AuthConfigAnalyzer::instance()->getDefaultGuard();
-        if (! \is_string($default_guard)) {
+        if (!\is_string($default_guard)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
         $guard = self::getGuardNameFromFirstArgument($event->getStmt(), $default_guard);
-        if (! \is_string($guard)) {
+        if (!\is_string($guard)) {
             return null;
         }
 
         $authenticatable_fqcn = AuthConfigAnalyzer::instance()->getAuthenticatableFQCN($guard);
-        if (! \is_string($authenticatable_fqcn)) {
+        if (!\is_string($authenticatable_fqcn)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
