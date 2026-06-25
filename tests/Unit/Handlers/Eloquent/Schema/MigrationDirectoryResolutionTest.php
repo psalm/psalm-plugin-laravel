@@ -13,16 +13,10 @@ use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Progress\Progress;
 
 /**
- * Guards the {@see MigrationSchemaBuilder::getMigrationDirectories()} fallback.
- *
- * A booted app whose container can't resolve the `migrator` service (trimmed or
- * partially-registered providers) must not abort the whole migration-schema
- * feature with an uncaught BindingResolutionException — see issue #1170.
- *
- * Both Application and Progress are mocked rather than instantiated: a real
- * Application boots framework code, and a hand-rolled Progress subclass risks
- * leaving an abstract Progress method unimplemented — either crashes the PHP
- * process when this runs inside the full unit suite.
+ * An unresolvable `migrator` service (partial bootstrap) must degrade to the default
+ * directory, not crash the whole migration-schema feature (#1170). Application and Progress
+ * are stubbed, not instantiated — real instances boot framework/Psalm code that crashes the
+ * process inside the full unit suite.
  */
 #[CoversClass(MigrationSchemaBuilder::class)]
 final class MigrationDirectoryResolutionTest extends TestCase
@@ -83,8 +77,7 @@ final class MigrationDirectoryResolutionTest extends TestCase
     }
 
     /**
-     * Invoke the private resolver without booting the heavy Codebase/MigrationCache
-     * collaborators the constructor wants — only the app is exercised here.
+     * Call the private resolver directly, skipping the Codebase/MigrationCache collaborators.
      *
      * @return list<string>
      */
@@ -100,10 +93,9 @@ final class MigrationDirectoryResolutionTest extends TestCase
     }
 
     /**
-     * A mocked {@see Application} — only the three container methods the resolver
-     * touches are stubbed; every other method is a mock no-op, so nothing boots.
+     * Stubbed Application — only the methods the resolver calls; nothing boots.
      *
-     * @param list<string> $migratorPaths the migrator's registered extra paths (loadMigrationsFrom)
+     * @param list<string> $migratorPaths loadMigrationsFrom() paths the migrator would expose
      */
     private function fakeApp(bool $migratorBound, array $migratorPaths): Application
     {
@@ -130,10 +122,7 @@ final class MigrationDirectoryResolutionTest extends TestCase
         return $app;
     }
 
-    /**
-     * A mocked Progress that records the warnings the resolver emits. Mocking sidesteps
-     * the abstract-method surface of Progress, which differs across Psalm versions.
-     */
+    /** Stubbed Progress that records emitted warnings into {@see self::$warnings}. */
     private function recordingProgress(): Progress
     {
         $progress = $this->createStub(Progress::class);

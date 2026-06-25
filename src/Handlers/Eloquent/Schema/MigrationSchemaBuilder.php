@@ -204,18 +204,11 @@ final class MigrationSchemaBuilder
     }
 
     /**
-     * Resolve migration directories the same way Laravel does:
-     * extra paths registered via loadMigrationsFrom() + the default database/migrations directory.
+     * loadMigrationsFrom() paths + the default database/migrations directory.
      *
-     * `migrator` is a *deferred* service (MigrationServiceProvider implements DeferrableProvider),
-     * so it only becomes resolvable once the RegisterProviders bootstrapper builds the app's
-     * deferred-services map. The plugin deliberately tolerates a partial bootstrap
-     * (see ApplicationProvider), which can leave that map incomplete — `make('migrator')` would
-     * then throw BindingResolutionException and abort the whole migration-schema feature (#1170).
-     *
-     * Guard with `bound()` exactly like the sibling init methods (translator/view in Plugin.php):
-     * `Application::bound()` already accounts for deferred services and partial bootstrap, so an
-     * unresolvable migrator degrades to the default migrations directory instead of crashing.
+     * `migrator` is deferred, so it's only resolvable after a full bootstrap. The plugin
+     * tolerates a partial boot, so guard with `bound()` (like translator/view in Plugin.php)
+     * and fall back to the default directory instead of crashing on `make()` (#1170).
      *
      * @return non-empty-list<string>
      */
@@ -236,14 +229,8 @@ final class MigrationSchemaBuilder
     }
 
     /**
-     * Compose the migrator-unavailable warning, enriched with the boot diagnostics
-     * the plugin already captured.
-     *
-     * This degrades gracefully instead of reaching {@see InternalErrorReporter}, so the
-     * one datum that actually explains *why* the deferred-services map is incomplete —
-     * the bootstrap throwable the plugin swallowed to tolerate a partial boot — is pulled
-     * in here from {@see ApplicationProvider}. Without it the user sees only the symptom
-     * (migrator missing) and not the root cause (the bad config/provider that aborted boot).
+     * Graceful degradation skips {@see InternalErrorReporter}, so surface the swallowed
+     * bootstrap error here — it's the root cause of the missing migrator, not just the symptom.
      *
      * @psalm-external-mutation-free
      */
