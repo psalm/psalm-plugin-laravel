@@ -21,10 +21,19 @@ See `ApplicationProvider::getApp()` for the resolution logic and the recorded bo
 Application boot has three outcomes:
 
 1. **Full boot** — `bootstrap/app.php` or Testbench returns an app and the console kernel bootstrap completes. All container-backed features may run.
-2. **Partial boot** — an app object exists, but Laravel's analysis prep or kernel bootstrap throws, usually because `config/*.php`, `.env`-dependent code, the container, or a service provider is broken. The plugin records that throwable on `ApplicationProvider`, warns once through `ApplicationBootReporter`, keeps the partial app, and feature code must degrade locally when a binding is missing or unresolvable.
-3. **Hard failure** — no usable app can be returned. The plugin reports the failure through `InternalErrorReporter`, points the user at `vendor/bin/psalm-laravel diagnose --tips --providers`, and disables itself for that run unless `failOnInternalError` asks Psalm to throw.
+2. **Partial boot** — an app object exists, but Laravel's analysis prep or kernel bootstrap throws, usually because `config/*.php`, `.env`-dependent code, the container, or a service provider is broken. The plugin records that throwable on `ApplicationProvider`, collects one user-facing warning through `ApplicationBootReporter` (buffered, see below), keeps the partial app, and feature code must degrade locally when a binding is missing or unresolvable.
+3. **Hard failure** — no usable app can be returned. The plugin reports the failure through `InternalErrorReporter` (which first flushes any collected diagnostics), points the user at `vendor/bin/psalm-laravel diagnose --tips --providers`, and disables itself for that run unless `failOnInternalError` asks Psalm to throw.
 
-Feature code should not try to repair a broken application by force-registering framework providers. Prefer `bound()` plus a guarded `make()` and a narrow fallback for that feature. For example, migration schema discovery may scan only the default `database/migrations` directory when `migrator` is unavailable, while the global boot warning carries the root cause.
+Feature code should not try to repair a broken application by force-registering framework providers. Prefer `bound()` plus a guarded `make()` and a narrow fallback for that feature. For example, migration schema discovery may scan only the default `database/migrations` directory when `migrator` is unavailable, while the buffered boot warning carries the root cause.
+
+### Initialization diagnostics
+
+Warnings raised while the plugin initializes (a partial boot, an unavailable `migrator`, an unreadable stub directory) are collected in a `DiagnosticsBuffer` instead of printing the moment they occur. `Plugin::__invoke()` wraps Psalm's progress in a `BufferedProgress` and tags each captured warning with the lifecycle stage that produced it (boot, schema, facades, translations, views, handlers, stubs). The buffer is flushed once, at a stable point:
+
+1. On a successful init, after handler and stub registration, as one block grouped by severity.
+2. On a failed init, by `InternalErrorReporter`, which prints the collected diagnostics first and then the final error report.
+
+That keeps boot warnings out of the middle of Psalm's progress bars and groups a degraded run into one coherent notice. Buffering covers initialization only. Handlers that run later (during the scan, on `afterCodebasePopulated`) keep writing to Psalm's real progress.
 
 ```mermaid
 flowchart TD
