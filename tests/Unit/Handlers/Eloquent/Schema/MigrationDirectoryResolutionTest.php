@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
+use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Foundation\Application;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\MigrationSchemaBuilder;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Progress\Progress;
 
 /**
@@ -49,31 +49,19 @@ final class MigrationDirectoryResolutionTest extends TestCase
     }
 
     #[Test]
-    public function warning_surfaces_boot_mode_and_swallowed_bootstrap_error(): void
+    public function falls_back_to_default_directory_when_migrator_resolution_throws(): void
     {
-        // The plugin swallows a partial-bootstrap throwable to stay alive; that throwable is
-        // the real reason the migrator is missing, so the warning must surface it (#1170).
-        $this->setBootState('testbench_fallback', new \RuntimeException('parse error in config/app.php'));
+        $app = $this->fakeApp(
+            migratorBound: true,
+            migratorPaths: [],
+            makeFailure: new \RuntimeException('database manager is unavailable'),
+        );
 
-        $app = $this->fakeApp(migratorBound: false, migratorPaths: []);
+        $directories = $this->resolveDirectories($app);
 
-        $this->resolveDirectories($app);
-
-        $this->assertStringContainsString('boot mode: testbench_fallback', $this->warnings[0]);
-        $this->assertStringContainsString('parse error in config/app.php', $this->warnings[0]);
-    }
-
-    protected function tearDown(): void
-    {
-        // Boot state is global static — reset so it can't leak into other tests.
-        $this->setBootState(null, null);
-        parent::tearDown();
-    }
-
-    private function setBootState(?string $bootMode, ?\Throwable $bootstrapError): void
-    {
-        (new \ReflectionProperty(ApplicationProvider::class, 'bootMode'))->setValue(null, $bootMode);
-        (new \ReflectionProperty(ApplicationProvider::class, 'bootstrapError'))->setValue(null, $bootstrapError);
+        $this->assertSame(['/fake-app/database/migrations'], $directories);
+        $this->assertStringContainsString('Resolving the service threw RuntimeException', $this->warnings[0]);
+        $this->assertStringContainsString('database manager is unavailable', $this->warnings[0]);
     }
 
     /**
@@ -97,18 +85,10 @@ final class MigrationDirectoryResolutionTest extends TestCase
      *
      * @param list<string> $migratorPaths loadMigrationsFrom() paths the migrator would expose
      */
-    private function fakeApp(bool $migratorBound, array $migratorPaths): Application
+    private function fakeApp(bool $migratorBound, array $migratorPaths, ?\Throwable $makeFailure = null): Application
     {
-        $migrator = new class ($migratorPaths) {
-            /** @param list<string> $paths */
-            public function __construct(private readonly array $paths) {}
-
-            /** @return list<string> */
-            public function paths(): array
-            {
-                return $this->paths;
-            }
-        };
+        $migrator = $this->createStub(Migrator::class);
+        $migrator->method('paths')->willReturn($migratorPaths);
 
         $app = $this->createStub(Application::class);
         $app->method('databasePath')->willReturn('/fake-app/database/migrations');
@@ -116,7 +96,13 @@ final class MigrationDirectoryResolutionTest extends TestCase
             static fn(string $abstract): bool => $abstract === 'migrator' && $migratorBound,
         );
         $app->method('make')->willReturnCallback(
-            static fn(string $abstract): ?object => $abstract === 'migrator' ? $migrator : null,
+            static function (string $abstract) use ($makeFailure, $migrator): ?object {
+                if ($makeFailure instanceof \Throwable) {
+                    throw $makeFailure;
+                }
+
+                return $abstract === 'migrator' ? $migrator : null;
+            },
         );
 
         return $app;

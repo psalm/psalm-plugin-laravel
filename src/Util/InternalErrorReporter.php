@@ -32,6 +32,8 @@ final class InternalErrorReporter
             $output->warning("Laravel plugin: {$hint}");
         }
 
+        $output->warning('Laravel plugin: ' . ApplicationBootReporter::hardFailureNextSteps());
+
         // URL generation is best-effort — a secondary failure here (e.g. a
         // throwable with a broken __toString(), a corrupt composer installed.php)
         // must never shadow the original init error that the user actually cares

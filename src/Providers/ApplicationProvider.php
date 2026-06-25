@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Providers;
 
-use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Application as LaravelApplication;
@@ -19,7 +18,7 @@ final class ApplicationProvider
 {
     use CreatesApplication;
 
-    private static ?\Illuminate\Foundation\Application $app = null;
+    private static ?LaravelApplication $app = null;
 
     /**
      * Records which {@see doGetApp()} branch resolved the Laravel app.
@@ -37,18 +36,22 @@ final class ApplicationProvider
     private static ?string $bootPath = null;
 
     /**
-     * Set when {@see doGetApp()} successfully `require`d a `bootstrap/app.php`
-     * but the subsequent `$consoleApp->bootstrap()` threw — typically because
-     * one of the user project's `config/*.php` files fatals during evaluation
-     * (e.g. `parse_url(env('UNSET_VAR'))` returning null on PHP 8.1+).
+     * Set when the provider could not return a usable Laravel app at all. Unlike
+     * {@see $bootstrapError}, this disables the plugin for the current run.
+     */
+    private static ?\Throwable $bootFailure = null;
+
+    /**
+     * Set when an Application instance exists, but analysis prep or Laravel's
+     * console bootstrap throws — typically because a user project's `config/*.php`,
+     * `.env`-dependent code, container binding, or service provider is broken.
      *
-     * Plugin continues with a partially-loaded app: `config` binding still
-     * exists (created before LoadConfiguration iterates files) but later
-     * bootstrappers (RegisterFacades, RegisterProviders, BootProviders) never
-     * ran. Handlers tolerate partial state — same swallow semantics as
-     * {@see Plugin::__invoke}.
+     * Plugin continues with a partially-loaded app. Handlers must tolerate
+     * missing bindings locally and let the global warning carry the root cause.
      */
     private static ?\Throwable $bootstrapError = null;
+
+    private static bool $booted = false;
 
     public static function bootApp(): void
     {
@@ -56,8 +59,9 @@ final class ApplicationProvider
     }
 
     /**
-     * Throwable raised during eager Laravel bootstrap (LoadConfiguration etc.).
-     * Null when no bootstrap was attempted yet, or when bootstrap succeeded.
+     * Throwable raised after an Application instance was resolved, while preparing
+     * Laravel for static-analysis reads. Null when no boot was attempted yet, or
+     * when boot/prep succeeded.
      *
      * @psalm-external-mutation-free
      */
@@ -66,7 +70,18 @@ final class ApplicationProvider
         return self::$bootstrapError;
     }
 
-    private static bool $booted = false;
+    /**
+     * Throwable that prevented returning a usable Application instance.
+     * Null when boot has not been attempted yet, when boot succeeded, or when
+     * the app is only partially booted and {@see getBootstrapError()} carries
+     * the recoverable failure.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function getBootFailure(): ?\Throwable
+    {
+        return self::$bootFailure;
+    }
 
     /**
      * Which {@see doGetApp()} branch resolved the Laravel app.
@@ -98,7 +113,7 @@ final class ApplicationProvider
 
     public static function getApp(): LaravelApplication
     {
-        if (self::$app instanceof Container) {
+        if (self::$app instanceof LaravelApplication) {
             return self::$app;
         }
 
@@ -106,9 +121,13 @@ final class ApplicationProvider
         // Laravel's bootstrap process may emit warnings during service provider loading
         // (e.g., deprecated features, missing extensions). We suppress exception-throwing
         // during boot to prevent these from crashing the plugin.
-        return self::withErrorExceptionsSuppressed(static function (): LaravelApplication {
-            return (new self())->doGetApp();
-        });
+        try {
+            return self::withErrorExceptionsSuppressed(static fn(): LaravelApplication => (new self())->doGetApp());
+        } catch (\Throwable $throwable) {
+            self::$bootFailure = $throwable;
+
+            throw $throwable;
+        }
     }
 
     /**
@@ -117,6 +136,11 @@ final class ApplicationProvider
      */
     private function doGetApp(): LaravelApplication
     {
+        self::$bootFailure = null;
+        self::$bootstrapError = null;
+        self::$bootMode = null;
+        self::$bootPath = null;
+
         if (!\defined('LARAVEL_START')) {
             \define('LARAVEL_START', \microtime(true));
         }
@@ -125,64 +149,22 @@ final class ApplicationProvider
         //   1. cwd-relative bootstrap/app.php — Applications and local dev (Psalm run from project root).
         //   2. vendor-parent-relative bootstrap/app.php — plugin installed into a project's vendor/.
         //   3. Orchestra Testbench skeleton — Laravel packages with no host app (e.g. test:type).
-        $app
-            = $this->bootFromBootstrapFile((\getcwd() ?: '.') . '/bootstrap/app.php') ?? $this->bootFromBootstrapFile(
-                \dirname(__DIR__, 5) . '/bootstrap/app.php',
-            ) ?? $this->bootFromTestbench();
+        $app = $this->bootFromBootstrapFile((\getcwd() ?: '.') . '/bootstrap/app.php');
+        if (!$app instanceof LaravelApplication) {
+            $app = $this->bootFromBootstrapFile(\dirname(__DIR__, 5) . '/bootstrap/app.php');
+        }
+
+        if (!$app instanceof LaravelApplication) {
+            $app = $this->bootFromTestbench();
+        }
 
         self::$app = $app;
 
-        // Initialize view system first. Must precede vendor-provider registration: the
-        // app is already booted by createApplication() / bootstrap/app.php, so each
-        // $app->register() in registerDiscoveredVendorProviders() triggers the
-        // provider's boot() inline. Many vendor packages (Filament, Livewire, Telescope,
-        // etc.) touch View::composer() or Blade::component() in boot(); without a 'view'
-        // binding those throw BindingResolutionException and the per-provider try/catch
-        // silently swallows the failure.
-        if (!$app->bound('view')) {
-            $filesystem = new \Illuminate\Filesystem\Filesystem();
-            $viewFinder = new FileViewFinder($filesystem, []);
-            $engineResolver = new EngineResolver();
-            $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
-            /** @var \Illuminate\Contracts\Events\Dispatcher $events */
-            $events = $app['events'];
-            $app->singleton(
-                'view',
-                fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events),
-            );
-        }
-
-        // Branch 3 only: register Composer-discovered vendor providers that Testbench's
-        // swapped PackageManifest filters out via `ignorePackageDiscoveriesFrom() === ['*']`.
-        // The `bootMode` sentinel is set by `bootFromTestbench()`. View must be bound first
-        // (handled above) — many vendor `boot()` methods touch `View::composer()`.
-        if (self::$bootMode === 'testbench_fallback') {
-            $this->registerDiscoveredVendorProviders($app);
-        }
-
         if (!self::$booted) {
-            // Bootstrap console app — runs Laravel's standard bootstrappers
-            // (LoadEnvironmentVariables, LoadConfiguration, RegisterFacades,
-            // RegisterProviders, BootProviders). Required because handlers
-            // read app('config'), facades, and provider-registered bindings.
-            $consoleApp = $app->make(Kernel::class);
-            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function (): object {
-                return new class {
-                    /** @psalm-mutation-free */
-                    public function bootstrap(): void {}
-                };
-            });
-
-            // Tolerate partial bootstrap. One bad config file (`parse_url(env('UNSET'))`
-            // throwing TypeError on PHP 8.1+ is a common pattern) would otherwise
-            // abort the entire bootstrap chain and disable the plugin for the run.
-            // The 'config' binding is created BEFORE LoadConfiguration iterates files,
-            // so handlers reading config still see whatever loaded prior to the throw.
             try {
-                $consoleApp->bootstrap();
-                $this->ensureAppKey($app);
-            } catch (\Throwable $bootstrapError) {
-                self::$bootstrapError = $bootstrapError;
+                $this->prepareApplicationForAnalysis($app);
+            } catch (\Throwable $throwable) {
+                self::$bootstrapError = $throwable;
             }
 
             self::$booted = true;
@@ -233,7 +215,7 @@ final class ApplicationProvider
     /**
      * Require a `bootstrap/app.php` from $path and return its Application, or
      * null if the file does not exist. Records `bootMode = 'bootstrap'` and the
-     * resolved path as a side effect on success.
+     * resolved path before requiring the file so hard failures can still report it.
      */
     private function bootFromBootstrapFile(string $path): ?LaravelApplication
     {
@@ -241,15 +223,15 @@ final class ApplicationProvider
             return null;
         }
 
+        self::$bootMode = 'bootstrap';
+        self::$bootPath = $path;
+
         /** @psalm-suppress MixedAssignment */
         $app = require $path;
         assert(
             $app instanceof LaravelApplication,
             'bootstrap/app.php did not return an Application instance: ' . $path,
         );
-
-        self::$bootMode = 'bootstrap';
-        self::$bootPath = $path;
 
         return $app;
     }
@@ -261,7 +243,7 @@ final class ApplicationProvider
     private function bootFromTestbench(): LaravelApplication
     {
         /** @psalm-suppress InternalMethod */
-        $app = (new self())->createApplication();
+        $app = $this->createApplication();
 
         $this->retargetConfigPathAtProjectRoot($app);
 
@@ -288,9 +270,9 @@ final class ApplicationProvider
      * may not handle a real-but-empty project tree well — leaving them at the
      * Testbench skeleton keeps that behaviour unchanged.
      *
-     * Only branch 3 of {@see self::doGetApp()} calls this — for projects with a
-     * real `bootstrap/app.php`, that file's Application instance is used verbatim
-     * and Testbench is never consulted.
+     * Only the Testbench-fallback branch calls this — for projects with a real
+     * `bootstrap/app.php`, that file's Application instance is used verbatim and
+     * Testbench is never consulted.
      *
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/940
      */
@@ -303,6 +285,55 @@ final class ApplicationProvider
         }
 
         $app->useConfigPath($projectRoot . \DIRECTORY_SEPARATOR . 'config');
+    }
+
+    /**
+     * Prepare a resolved Laravel app for static-analysis reads.
+     *
+     * The caller catches any throwable here as a partial boot: an Application
+     * object exists, but container-backed inference may be degraded.
+     */
+    private function prepareApplicationForAnalysis(LaravelApplication $app): void
+    {
+        // Initialize view system first. Must precede vendor-provider registration:
+        // the app is already booted by createApplication() / bootstrap/app.php, so
+        // each $app->register() in registerDiscoveredVendorProviders() triggers the
+        // provider's boot() inline. Many vendor packages touch View::composer() or
+        // Blade::component() in boot(); without a 'view' binding those throw.
+        if (!$app->bound('view')) {
+            $filesystem = new \Illuminate\Filesystem\Filesystem();
+            $viewFinder = new FileViewFinder($filesystem, []);
+            $engineResolver = new EngineResolver();
+            $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
+            /** @var \Illuminate\Contracts\Events\Dispatcher $events */
+            $events = $app['events'];
+            $app->singleton(
+                'view',
+                fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events),
+            );
+        }
+
+        // Branch 3 only: register Composer-discovered vendor providers that Testbench's
+        // swapped PackageManifest filters out via `ignorePackageDiscoveriesFrom() === ['*']`.
+        // View must be bound first (handled above).
+        if (self::$bootMode === 'testbench_fallback') {
+            $this->registerDiscoveredVendorProviders($app);
+        }
+
+        // Bootstrap console app — runs Laravel's standard bootstrappers
+        // (LoadEnvironmentVariables, LoadConfiguration, RegisterFacades,
+        // RegisterProviders, BootProviders). Required because handlers read
+        // app('config'), facades, and provider-registered bindings.
+        $consoleApp = $app->make(Kernel::class);
+        $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function (): object {
+            return new class {
+                /** @psalm-mutation-free */
+                public function bootstrap(): void {}
+            };
+        });
+
+        $consoleApp->bootstrap();
+        $this->ensureAppKey($app);
     }
 
     /**
@@ -555,9 +586,9 @@ final class ApplicationProvider
     {
         // Backfill app.key BEFORE testbench's BootProviders runs (called next in
         // resolveApplicationBootstrappers) so any provider that reads config('app.key')
-        // during boot sees the dummy. doGetApp() also calls ensureAppKey() after the
-        // console bootstrap completes — that covers the bootstrap-file branch, which
-        // never enters this method. Single constant lives in ensureAppKey().
+        // during boot sees the dummy. doGetApp() also calls ensureAppKey()
+        // after the console bootstrap completes — that covers the bootstrap-file
+        // branch, which never enters this method. Single constant lives in ensureAppKey().
         $this->ensureAppKey($app);
 
         /** @var \Illuminate\Config\Repository $config */

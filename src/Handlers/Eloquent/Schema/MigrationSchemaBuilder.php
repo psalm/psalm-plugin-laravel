@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
+use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Foundation\Application;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\Progress\Progress;
 
 /**
@@ -222,32 +222,33 @@ final class MigrationSchemaBuilder
             return [$defaultDirectory];
         }
 
-        /** @var \Illuminate\Database\Migrations\Migrator $migrator */
-        $migrator = $this->app->make('migrator');
+        try {
+            $migrator = $this->app->make('migrator');
+        } catch (\Throwable $throwable) {
+            $progress->warning($this->migratorUnavailableWarning($throwable));
+
+            return [$defaultDirectory];
+        }
+
+        if (!$migrator instanceof Migrator) {
+            $progress->warning($this->migratorUnavailableWarning());
+
+            return [$defaultDirectory];
+        }
 
         return \array_values(\array_merge($migrator->paths(), [$defaultDirectory]));
     }
 
-    /**
-     * Graceful degradation skips {@see InternalErrorReporter}, so surface the swallowed
-     * bootstrap error here — it's the root cause of the missing migrator, not just the symptom.
-     *
-     * @psalm-external-mutation-free
-     */
-    private function migratorUnavailableWarning(): string
+    /** @psalm-mutation-free */
+    private function migratorUnavailableWarning(?\Throwable $throwable = null): string
     {
-        $bootMode = ApplicationProvider::getBootMode();
-        $mode = $bootMode !== null ? " (boot mode: {$bootMode})" : '';
-
-        $bootstrapError = ApplicationProvider::getBootstrapError();
-        $cause = $bootstrapError instanceof \Throwable
-            ? " The Laravel bootstrap did not complete: {$bootstrapError->getMessage()}."
+        $cause = $throwable instanceof \Throwable
+            ? ' Resolving the service threw ' . $throwable::class . ": {$throwable->getMessage()}."
             : '';
 
-        return "Laravel plugin: the 'migrator' service is not bound{$mode}, so migration paths "
+        return "Laravel plugin: the 'migrator' service is unavailable, so migration paths "
             . 'registered via loadMigrationsFrom() cannot be auto-discovered.' . $cause
-            . ' Only the default database/migrations directory will be scanned — fix the bootstrap '
-            . 'error above or declare the extra paths another way.';
+            . ' Only the default database/migrations directory will be scanned.';
     }
 
     /**

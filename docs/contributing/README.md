@@ -14,7 +14,17 @@ The app is needed at boot time to read config values (e.g. `auth.php` guards), r
 When run inside a Laravel project, the plugin loads the project's own `bootstrap/app.php` — so it sees the real config, routes, and providers.
 When no `bootstrap/app.php` is found (e.g. analyzing a Laravel package, or running the plugin's own tests), it falls back to [Orchestra Testbench](https://github.com/orchestral/testbench) which provides a minimal Laravel app skeleton.
 
-See `ApplicationProvider::doGetApp()` for the resolution logic.
+See `ApplicationProvider::getApp()` for the resolution logic and the recorded boot context.
+
+### Laravel app boot strategy
+
+Application boot has three outcomes:
+
+1. **Full boot** — `bootstrap/app.php` or Testbench returns an app and the console kernel bootstrap completes. All container-backed features may run.
+2. **Partial boot** — an app object exists, but Laravel's analysis prep or kernel bootstrap throws, usually because `config/*.php`, `.env`-dependent code, the container, or a service provider is broken. The plugin records that throwable on `ApplicationProvider`, warns once through `ApplicationBootReporter`, keeps the partial app, and feature code must degrade locally when a binding is missing or unresolvable.
+3. **Hard failure** — no usable app can be returned. The plugin reports the failure through `InternalErrorReporter`, points the user at `vendor/bin/psalm-laravel diagnose --tips --providers`, and disables itself for that run unless `failOnInternalError` asks Psalm to throw.
+
+Feature code should not try to repair a broken application by force-registering framework providers. Prefer `bound()` plus a guarded `make()` and a narrow fallback for that feature. For example, migration schema discovery may scan only the default `database/migrations` directory when `migrator` is unavailable, while the global boot warning carries the root cause.
 
 ```mermaid
 flowchart TD

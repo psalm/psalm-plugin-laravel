@@ -11,6 +11,7 @@ use Psalm\LaravelPlugin\Cli\Diagnose\Diagnostics;
 use Psalm\LaravelPlugin\Cli\Diagnose\Report;
 use Psalm\LaravelPlugin\Cli\Diagnose\TipsProvider;
 use Psalm\LaravelPlugin\Cli\DiagnoseCommand;
+use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -62,6 +63,35 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame(Command::FAILURE, $exit);
         $this->assertStringContainsString('Hard failures', $display);
         $this->assertStringContainsString('Application boot failed: synthetic', $display);
+    }
+
+    #[Test]
+    public function hard_failure_can_still_render_the_attempted_bootstrap_path(): void
+    {
+        $base = $this->okReport();
+        $failing = new Report(
+            pluginVersion: $base->pluginVersion,
+            psalmVersion: $base->psalmVersion,
+            laravelVersion: $base->laravelVersion,
+            phpRuntimeVersion: $base->phpRuntimeVersion,
+            phpRequiredVersion: $base->phpRequiredVersion,
+            phpAnalysisVersion: $base->phpAnalysisVersion,
+            phpAnalysisSource: $base->phpAnalysisSource,
+            bootMode: 'bootstrap',
+            bootPath: '/broken/bootstrap/app.php',
+            bootstrapErrors: ['syntax error in bootstrap/app.php'],
+            hardFailures: ['Application boot failed: syntax error in bootstrap/app.php'],
+            loadedProviders: [],
+        );
+
+        $tester = $this->testerFor($this->fixtureProvider($failing));
+
+        $exit = $tester->execute([]);
+        $display = $tester->getDisplay();
+
+        $this->assertSame(Command::FAILURE, $exit);
+        $this->assertStringContainsString('FAILED', $display);
+        $this->assertStringContainsString('/broken/bootstrap/app.php', $display);
     }
 
     #[Test]
@@ -182,6 +212,58 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame($sorted, $report->loadedProviders);
     }
 
+    #[Test]
+    public function real_diagnostics_collect_reports_recorded_hard_boot_failure_without_rethrowing(): void
+    {
+        $originalState = $this->snapshotApplicationProviderState();
+
+        $app = $this->createStub(\Illuminate\Foundation\Application::class);
+        $app->method('getLoadedProviders')->willReturn([]);
+
+        $this->reflectApplicationProviderProperty('app')->setValue(null, $app);
+        $this->reflectApplicationProviderProperty('bootMode')->setValue(null, 'bootstrap');
+        $this->reflectApplicationProviderProperty('bootPath')->setValue(null, '/broken/bootstrap/app.php');
+        $this->reflectApplicationProviderProperty('bootFailure')->setValue(
+            null,
+            new \RuntimeException('syntax error in bootstrap/app.php'),
+        );
+        $this->reflectApplicationProviderProperty('bootstrapError')->setValue(null, null);
+        $this->reflectApplicationProviderProperty('booted')->setValue(null, true);
+
+        try {
+            $report = (new Diagnostics())->collect();
+        } finally {
+            foreach ($originalState as $property => $value) {
+                $this->reflectApplicationProviderProperty($property)->setValue(null, $value);
+            }
+        }
+
+        $this->assertSame('bootstrap', $report->bootMode);
+        $this->assertSame('/broken/bootstrap/app.php', $report->bootPath);
+        $this->assertSame(['syntax error in bootstrap/app.php'], $report->bootstrapErrors);
+        $this->assertSame(['Application boot failed: syntax error in bootstrap/app.php'], $report->hardFailures);
+        $this->assertSame([], $report->loadedProviders);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshotApplicationProviderState(): array
+    {
+        return [
+            'app' => $this->reflectApplicationProviderProperty('app')->getValue(),
+            'bootMode' => $this->reflectApplicationProviderProperty('bootMode')->getValue(),
+            'bootPath' => $this->reflectApplicationProviderProperty('bootPath')->getValue(),
+            'bootFailure' => $this->reflectApplicationProviderProperty('bootFailure')->getValue(),
+            'bootstrapError' => $this->reflectApplicationProviderProperty('bootstrapError')->getValue(),
+            'booted' => $this->reflectApplicationProviderProperty('booted')->getValue(),
+        ];
+    }
+
+    private function reflectApplicationProviderProperty(string $name): \ReflectionProperty
+    {
+        return new \ReflectionProperty(ApplicationProvider::class, $name);
+    }
 
     private function testerFor(Diagnostics $diagnostics, ?TipsProvider $tipsProvider = null): CommandTester
     {

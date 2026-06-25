@@ -12,9 +12,9 @@ use Tests\Psalm\LaravelPlugin\Unit\Providers\Fixtures\BindingServiceProvider;
 use Tests\Psalm\LaravelPlugin\Unit\Providers\Fixtures\ThrowingServiceProvider;
 
 /**
- * Regression coverage for issue #942 — branch 3 of `ApplicationProvider::doGetApp()`
- * must discover and register vendor service providers (which Testbench would
- * otherwise filter out via `ignorePackageDiscoveriesFrom() === ['*']`), and a single
+ * Regression coverage for issue #942 — the Testbench-fallback branch must
+ * discover and register vendor service providers (which Testbench would otherwise
+ * filter out via `ignorePackageDiscoveriesFrom() === ['*']`), and a single
  * throwing provider must NOT prevent the rest from registering.
  *
  * We pin a fake project root via `APP_BASE_PATH` (Testbench's documented escape
@@ -33,20 +33,14 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
     private ?string $originalAppBasePath;
 
     /** @var array<string, mixed> */
-    private array $originalState;
+    private array $originalState = [];
 
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->originalAppBasePath = $_ENV['APP_BASE_PATH'] ?? null;
-        $this->originalState = [
-            'app' => $this->reflectProperty('app')->getValue(),
-            'booted' => $this->reflectProperty('booted')->getValue(),
-            'bootMode' => $this->reflectProperty('bootMode')->getValue(),
-            'bootPath' => $this->reflectProperty('bootPath')->getValue(),
-            'bootstrapError' => $this->reflectProperty('bootstrapError')->getValue(),
-        ];
+        $this->originalState = $this->snapshotApplicationProviderState();
 
         $this->fakeProjectRoot = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR
             . 'psalm-plugin-laravel-test-' . \bin2hex(\random_bytes(6));
@@ -55,6 +49,8 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
         $_ENV['APP_BASE_PATH'] = $this->fakeProjectRoot;
         $this->reflectProperty('app')->setValue(null, null);
         $this->reflectProperty('booted')->setValue(null, false);
+        $this->reflectProperty('bootFailure')->setValue(null, null);
+        $this->reflectProperty('bootstrapError')->setValue(null, null);
     }
 
     protected function tearDown(): void
@@ -65,11 +61,9 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
             $_ENV['APP_BASE_PATH'] = $this->originalAppBasePath;
         }
 
-        $this->reflectProperty('app')->setValue(null, $this->originalState['app']);
-        $this->reflectProperty('booted')->setValue(null, $this->originalState['booted']);
-        $this->reflectProperty('bootMode')->setValue(null, $this->originalState['bootMode']);
-        $this->reflectProperty('bootPath')->setValue(null, $this->originalState['bootPath']);
-        $this->reflectProperty('bootstrapError')->setValue(null, $this->originalState['bootstrapError']);
+        foreach ($this->originalState as $property => $value) {
+            $this->reflectProperty($property)->setValue(null, $value);
+        }
 
         $this->removeDirectory($this->fakeProjectRoot);
 
@@ -79,9 +73,9 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
     #[Test]
     public function discovered_vendor_provider_binding_survives_an_earlier_throwing_provider(): void
     {
-        // ApplicationProvider::getApp() goes through doGetApp(). The plugin repo has no
-        // bootstrap/app.php at the test's cwd nor at dirname(__DIR__, 5), so branch 3
-        // fires and registerDiscoveredVendorProviders() runs against APP_BASE_PATH.
+        // The plugin repo has no bootstrap/app.php at the test's cwd nor at
+        // dirname(__DIR__, 5), so the Testbench fallback runs vendor discovery
+        // against APP_BASE_PATH.
         $app = ApplicationProvider::getApp();
 
         $this->assertTrue(
@@ -149,6 +143,21 @@ final class ApplicationProviderVendorRegistrationTest extends TestCase
         }
 
         \rmdir($path);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshotApplicationProviderState(): array
+    {
+        return [
+            'app' => $this->reflectProperty('app')->getValue(),
+            'bootMode' => $this->reflectProperty('bootMode')->getValue(),
+            'bootPath' => $this->reflectProperty('bootPath')->getValue(),
+            'bootFailure' => $this->reflectProperty('bootFailure')->getValue(),
+            'bootstrapError' => $this->reflectProperty('bootstrapError')->getValue(),
+            'booted' => $this->reflectProperty('booted')->getValue(),
+        ];
     }
 
     private function reflectProperty(string $name): \ReflectionProperty

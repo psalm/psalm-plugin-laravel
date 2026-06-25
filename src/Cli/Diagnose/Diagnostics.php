@@ -23,27 +23,37 @@ class Diagnostics
     public function collect(): Report
     {
         $bootstrapErrors = [];
+        $bootFailure = null;
 
         try {
             ApplicationProvider::bootApp();
         } catch (\Throwable $throwable) {
-            $bootstrapErrors[] = $throwable->getMessage();
+            $bootFailure = $throwable;
         }
 
-        // Throws swallowed inside `doGetApp()` (e.g. `$consoleApp->bootstrap()`
-        // failing on a bad `config/*.php`) never propagate to the catch above —
-        // ApplicationProvider stashes them so diagnose can surface partial-boot state.
-        $swallowed = ApplicationProvider::getBootstrapError();
-        if ($swallowed instanceof \Throwable) {
-            $bootstrapErrors[] = $swallowed->getMessage();
+        $recordedBootFailure = ApplicationProvider::getBootFailure();
+        if ($recordedBootFailure instanceof \Throwable) {
+            $bootFailure = $recordedBootFailure;
         }
 
-        // A null bootMode means the boot pipeline never reached a resolution branch
-        // (the try/catch above swallowed a hard throw). Treat that as a hard failure
-        // so the CLI exits non-zero; partial-bootstrap warnings alone are informational.
+        if ($bootFailure instanceof \Throwable) {
+            $bootstrapErrors[] = $bootFailure->getMessage();
+        }
+
+        // Partial boot errors (e.g. analysis prep or `$consoleApp->bootstrap()`
+        // failing on a bad `config/*.php`) are recorded by ApplicationProvider so
+        // diagnose can surface degraded app state without re-running boot.
+        $partialBootError = ApplicationProvider::getBootstrapError();
+        if ($partialBootError instanceof \Throwable) {
+            $bootstrapErrors[] = $partialBootError->getMessage();
+        }
+
+        // Hard failures prevent the plugin from returning a usable Application and
+        // make diagnose exit non-zero. Partial-boot warnings alone are
+        // informational because the plugin can continue in degraded mode.
         $hardFailures = [];
-        if (ApplicationProvider::getBootMode() === null && $bootstrapErrors !== []) {
-            $hardFailures[] = 'Application boot failed: ' . $bootstrapErrors[0];
+        if ($bootFailure instanceof \Throwable) {
+            $hardFailures[] = 'Application boot failed: ' . $bootFailure->getMessage();
         }
 
         $cwd = \getcwd();

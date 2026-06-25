@@ -12,6 +12,7 @@ use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
+use Psalm\LaravelPlugin\Util\ApplicationBootReporter;
 use Psalm\LaravelPlugin\Util\InternalErrorReporter;
 use Psalm\LaravelPlugin\Util\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -32,6 +33,7 @@ final class Plugin implements PluginEntryPointInterface
 
         try {
             ApplicationProvider::bootApp();
+            ApplicationBootReporter::reportPartialBoot($output);
 
             if ($pluginConfig->shouldUseMigrations()) {
                 $this->buildSchema($pluginConfig);

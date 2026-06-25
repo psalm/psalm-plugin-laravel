@@ -30,7 +30,7 @@ final class ApplicationProviderConfigPathTest extends TestCase
     private string $originalCwd;
 
     /** @var array<string, mixed> */
-    private array $originalState;
+    private array $originalState = [];
 
     protected function setUp(): void
     {
@@ -40,23 +40,23 @@ final class ApplicationProviderConfigPathTest extends TestCase
         \assert(\is_string($cwd), 'getcwd() must succeed before the test');
         $this->originalCwd = $cwd;
 
-        // Snapshot ApplicationProvider's memoised state so a previous test that booted
-        // the app from a different cwd cannot leak its `configPath()` into this one.
-        $this->originalState = [
-            'app' => $this->reflectProperty('app')->getValue(),
-            'booted' => $this->reflectProperty('booted')->getValue(),
-        ];
-
+        // Snapshot ApplicationProvider's memoised state so a previous test that
+        // booted the app from a different cwd cannot leak its `configPath()` into
+        // this one.
+        $this->originalState = $this->snapshotApplicationProviderState();
         $this->reflectProperty('app')->setValue(null, null);
         $this->reflectProperty('booted')->setValue(null, false);
+        $this->reflectProperty('bootFailure')->setValue(null, null);
+        $this->reflectProperty('bootstrapError')->setValue(null, null);
     }
 
     protected function tearDown(): void
     {
         \chdir($this->originalCwd);
 
-        $this->reflectProperty('app')->setValue(null, $this->originalState['app']);
-        $this->reflectProperty('booted')->setValue(null, $this->originalState['booted']);
+        foreach ($this->originalState as $property => $value) {
+            $this->reflectProperty($property)->setValue(null, $value);
+        }
 
         parent::tearDown();
     }
@@ -74,8 +74,8 @@ final class ApplicationProviderConfigPathTest extends TestCase
             'pre-condition: the auto-detection requires composer.json at the anchor',
         );
 
-        // Boots via Testbench because the plugin repo has no `bootstrap/app.php`.
-        // Branch 3 of doGetApp() fires and retargetConfigPathAtProjectRoot() runs.
+        // Boots via Testbench because the plugin repo has no `bootstrap/app.php`;
+        // that fallback branch retargets config_path() at the package root.
         $app = ApplicationProvider::getApp();
 
         $this->assertSame(
@@ -84,6 +84,21 @@ final class ApplicationProviderConfigPathTest extends TestCase
             'config_path() must resolve to <project>/config so NoEnvOutsideConfig '
                 . 'sees the package config files instead of Testbench skeleton.',
         );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshotApplicationProviderState(): array
+    {
+        return [
+            'app' => $this->reflectProperty('app')->getValue(),
+            'bootMode' => $this->reflectProperty('bootMode')->getValue(),
+            'bootPath' => $this->reflectProperty('bootPath')->getValue(),
+            'bootFailure' => $this->reflectProperty('bootFailure')->getValue(),
+            'bootstrapError' => $this->reflectProperty('bootstrapError')->getValue(),
+            'booted' => $this->reflectProperty('booted')->getValue(),
+        ];
     }
 
     private function reflectProperty(string $name): \ReflectionProperty

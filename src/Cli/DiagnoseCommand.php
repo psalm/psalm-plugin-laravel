@@ -98,13 +98,24 @@ final class DiagnoseCommand extends Command
             'Analysis' => $report->phpAnalysisVersion . ' (from ' . $report->phpAnalysisSource . ')',
         ]);
 
-        if ($report->bootMode === null) {
-            $this->renderSection($io, 'Boot mode', ['Status' => '<error>FAILED</error>']);
+        if ($report->hardFailures !== []) {
+            $boot = ['Status' => '<error>FAILED</error>'];
+            if ($report->bootMode !== null) {
+                $boot['Mode'] = self::BOOT_MODE_LABELS[$report->bootMode] ?? '(unknown)';
+            }
+
+            if ($report->bootPath !== null) {
+                $boot['Path'] = $report->bootPath;
+            }
+
+            $this->renderSection($io, 'Boot mode', $boot);
             foreach ($report->bootstrapErrors as $error) {
                 $io->writeln('  <fg=red>!</> ' . $error);
             }
 
             $io->newLine();
+        } elseif ($report->bootMode === null) {
+            $this->renderSection($io, 'Boot mode', ['Status' => '(not attempted)']);
         } else {
             $this->renderSection($io, 'Boot mode', [
                 'Mode' => self::BOOT_MODE_LABELS[$report->bootMode] ?? '(unknown)',
