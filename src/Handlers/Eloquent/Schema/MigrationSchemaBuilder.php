@@ -28,10 +28,12 @@ final class MigrationSchemaBuilder
         private readonly MigrationCache $cache,
     ) {}
 
-    public function build(): SchemaAggregator
+    /**
+     * @param Progress $progress Injected by the caller (rather than read from `$this->codebase->progress`)
+     *                           so init-time warnings route through the plugin's buffered progress (#1170).
+     */
+    public function build(Progress $progress): SchemaAggregator
     {
-        $progress = $this->codebase->progress;
-
         // Discover all files first — needed for cache fingerprinting
         $sqlDumpFiles = $this->discoverSqlDumpFiles($progress);
         $migrationFiles = $this->discoverMigrationFiles($progress);

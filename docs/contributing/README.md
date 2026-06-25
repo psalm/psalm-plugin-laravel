@@ -64,6 +64,12 @@ flowchart TD
     "]
 ```
 
+### Initialisation diagnostics
+
+Warnings raised while the plugin initialises (partial boot, an unavailable `migrator`, a missing translator or view binding, stub discovery) are not printed the moment they happen, because inline they would interleave with Psalm's progress bars. A small in-memory buffer (`Diagnostics\DiagnosticsBuffer`) collects them instead, each tagged with a severity (info, warning, error) and a lifecycle stage (boot, schema, facades, translations, views, handlers, stubs, internal). A `Diagnostics\BufferedProgress` decorator captures every `Progress::warning()` call during init, so existing call sites stay unchanged.
+
+The buffer is flushed once, at a stable point. On a successful init that happens after handlers and stubs are registered, grouped by severity. On a failed init `InternalErrorReporter` replays the collected diagnostics ahead of the final error report, so the warnings that explain the failure travel with it. Each diagnostic surfaces exactly once.
+
 ## Getting started
 
 ```bash

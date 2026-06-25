@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Util;
 
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Diagnostics\DiagnosticsBuffer;
 use Psalm\Progress\Progress;
 
 /**
@@ -20,8 +21,16 @@ use Psalm\Progress\Progress;
 final class InternalErrorReporter
 {
     /** @throws \Throwable when {@see PluginConfig::$failOnInternalError} is on */
-    public static function report(\Throwable $throwable, Progress $output, PluginConfig $pluginConfig): void
-    {
+    public static function report(
+        \Throwable $throwable,
+        Progress $output,
+        PluginConfig $pluginConfig,
+        DiagnosticsBuffer $diagnostics,
+    ): void {
+        // Replay diagnostics collected before the failure first, so the partial-boot /
+        // schema warnings that may explain the error appear ahead of the report itself.
+        $diagnostics->flushTo($output);
+
         $output->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
 
         // Best-effort classification: tells the user whether the failure

@@ -7,6 +7,8 @@ namespace Psalm\LaravelPlugin;
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Diagnostics\BufferedProgress;
+use Psalm\LaravelPlugin\Diagnostics\DiagnosticsBuffer;
 use Psalm\LaravelPlugin\Providers\AliasStubProvider;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
@@ -29,35 +31,58 @@ final class Plugin implements PluginEntryPointInterface
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
         $pluginConfig = PluginConfig::fromXml($config);
-        $output = $this->getProgress($registration);
+        $realOutput = $this->getProgress($registration);
+
+        // Buffer init-time warnings instead of printing them mid-progress: the wrapper
+        // tags every captured warning with the current lifecycle stage. The collected
+        // diagnostics are flushed once at a stable point below on success, or replayed by
+        // InternalErrorReporter ahead of the failure report in the catch.
+        $diagnostics = new DiagnosticsBuffer();
+        $output = new BufferedProgress($realOutput, $diagnostics);
 
         try {
+            $output->setStage('boot');
             ApplicationProvider::bootApp();
             ApplicationBootReporter::reportPartialBoot($output);
 
             if ($pluginConfig->shouldUseMigrations()) {
-                $this->buildSchema($pluginConfig);
+                $output->setStage('schema');
+                $this->buildSchema($pluginConfig, $output);
             }
 
             // Build facade → service class map before registering handlers.
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
+            $output->setStage('facades');
             FacadeMapProvider::init($output);
 
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled
+            $output->setStage('translations');
             $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations);
 
             if ($pluginConfig->findMissingViews) {
+                $output->setStage('views');
                 $this->initMissingViewHandler($output);
             }
 
+            $output->setStage('handlers');
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
-
             $this->registerHandlers($registration, $pluginConfig);
+
+            $output->setStage('stubs');
             $this->registerStubs($registration, $pluginConfig, $output);
+
+            // Stable output point: replay the buffered diagnostics once, grouped by severity.
+            $diagnostics->flushTo($realOutput);
         } catch (\Throwable $throwable) {
-            InternalErrorReporter::report($throwable, $output, $pluginConfig);
+            // Failure: InternalErrorReporter replays the diagnostics collected so far ahead
+            // of the error report, so the warnings that explain the failure travel with it.
+            InternalErrorReporter::report($throwable, $realOutput, $pluginConfig, $diagnostics);
+        } finally {
+            // Restore direct output on every exit path, so a warning raised later (e.g. by a
+            // handler that retained the wrapper) prints instead of vanishing into the buffer.
+            $output->stopBuffering();
         }
     }
 
@@ -484,7 +509,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Views\MissingViewHandler::init($paths, $extensions);
     }
 
-    private function buildSchema(PluginConfig $pluginConfig): void
+    private function buildSchema(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
     {
         $app = ApplicationProvider::getApp();
 
@@ -499,7 +524,7 @@ final class Plugin implements PluginEntryPointInterface
         $codebase = ProjectAnalyzer::getInstance()->getCodebase();
         $cache = new Handlers\Eloquent\Schema\MigrationCache(self::getCacheLocation($pluginConfig));
 
-        $aggregator = (new Handlers\Eloquent\Schema\MigrationSchemaBuilder($app, $codebase, $cache))->build();
+        $aggregator = (new Handlers\Eloquent\Schema\MigrationSchemaBuilder($app, $codebase, $cache))->build($output);
 
         SchemaStateProvider::setSchema($aggregator);
     }

@@ -7,6 +7,8 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Util;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Diagnostics\BufferedProgress;
+use Psalm\LaravelPlugin\Diagnostics\DiagnosticsBuffer;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Util\ApplicationBootReporter;
 use Psalm\Progress\Progress;
@@ -65,6 +67,30 @@ final class ApplicationBootReporterTest extends TestCase
         $this->assertStringContainsString('/app/bootstrap/app.php', $this->warnings[0]);
         $this->assertStringContainsString('parse_url(): Argument #1 must be string', $this->warnings[0]);
         $this->assertStringContainsString('vendor/bin/psalm-laravel diagnose --tips --providers', $this->warnings[0]);
+    }
+
+    #[Test]
+    public function the_partial_boot_warning_is_buffered_not_printed_mid_progress(): void
+    {
+        $this->reflectProperty('bootMode')->setValue(null, 'bootstrap');
+        $this->reflectProperty('bootPath')->setValue(null, '/app/bootstrap/app.php');
+        $this->reflectProperty('bootstrapError')->setValue(null, new \RuntimeException('boom in config/app.php'));
+
+        $buffer = new DiagnosticsBuffer();
+        $output = new BufferedProgress($this->recordingProgress(), $buffer);
+        $output->setStage('boot');
+
+        ApplicationBootReporter::reportPartialBoot($output);
+
+        // Captured into the buffer, so nothing reached the (inner) progress yet.
+        $this->assertSame([], $this->warnings);
+
+        // Draining the buffer surfaces the warning under the boot stage.
+        $buffer->flushTo($this->recordingProgress());
+        $this->assertCount(1, $this->warnings);
+        $this->assertStringContainsString('[boot]', $this->warnings[0]);
+        $this->assertStringContainsString('Laravel boot completed only partially', $this->warnings[0]);
+        $this->assertStringContainsString('boom in config/app.php', $this->warnings[0]);
     }
 
     /** Stubbed Progress that records emitted warnings into the test buffer. */

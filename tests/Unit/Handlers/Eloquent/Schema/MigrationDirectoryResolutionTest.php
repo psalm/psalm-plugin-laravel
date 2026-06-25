@@ -9,6 +9,8 @@ use Illuminate\Foundation\Application;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Diagnostics\BufferedProgress;
+use Psalm\LaravelPlugin\Diagnostics\DiagnosticsBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\MigrationSchemaBuilder;
 use Psalm\Progress\Progress;
 
@@ -64,12 +66,47 @@ final class MigrationDirectoryResolutionTest extends TestCase
         $this->assertStringContainsString('database manager is unavailable', $this->warnings[0]);
     }
 
+    #[Test]
+    public function the_migrator_unavailable_warning_is_buffered_not_printed_mid_progress(): void
+    {
+        $app = $this->fakeApp(migratorBound: false, migratorPaths: []);
+
+        $buffer = new DiagnosticsBuffer();
+        $output = new BufferedProgress($this->recordingProgress(), $buffer);
+        $output->setStage('schema');
+
+        $directories = $this->invokeGetMigrationDirectories($app, $output);
+
+        // Fallback is unchanged: still scan only the default directory.
+        $this->assertSame(['/fake-app/database/migrations'], $directories);
+        // Captured into the buffer, so nothing reached the (inner) progress mid-scan.
+        $this->assertSame([], $this->warnings);
+
+        // Draining the buffer surfaces the warning under the schema stage.
+        $buffer->flushTo($this->recordingProgress());
+        $this->assertCount(1, $this->warnings);
+        $this->assertStringContainsString('[schema]', $this->warnings[0]);
+        $this->assertStringContainsString('migrator', $this->warnings[0]);
+    }
+
     /**
-     * Call the private resolver directly, skipping the Codebase/MigrationCache collaborators.
+     * Call the private resolver directly with the test's recording progress, skipping
+     * the Codebase/MigrationCache collaborators.
      *
      * @return list<string>
      */
     private function resolveDirectories(Application $app): array
+    {
+        return $this->invokeGetMigrationDirectories($app, $this->recordingProgress());
+    }
+
+    /**
+     * Invoke the private resolver with a caller-supplied progress, so tests can pass a
+     * {@see BufferedProgress} to assert buffering as well as a plain recording stub.
+     *
+     * @return list<string>
+     */
+    private function invokeGetMigrationDirectories(Application $app, Progress $progress): array
     {
         $builder = (new \ReflectionClass(MigrationSchemaBuilder::class))->newInstanceWithoutConstructor();
         (new \ReflectionProperty(MigrationSchemaBuilder::class, 'app'))->setValue($builder, $app);
@@ -77,7 +114,7 @@ final class MigrationDirectoryResolutionTest extends TestCase
         $method = new \ReflectionMethod(MigrationSchemaBuilder::class, 'getMigrationDirectories');
 
         /** @var list<string> */
-        return $method->invoke($builder, $this->recordingProgress());
+        return $method->invoke($builder, $progress);
     }
 
     /**
