@@ -77,12 +77,12 @@ This writes a `psalm.xml` at the project root with the plugin already enabled, s
 ./vendor/bin/psalm-laravel analyze
 ```
 
-`analyze` delegates to `vendor/bin/psalm`, forwarding any flags you pass and passing the exit code through (so invoking `./vendor/bin/psalm` directly works too). Security taint analysis runs automatically, no extra flags needed.
+`analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can also invoke `./vendor/bin/psalm` directly. Security taint analysis runs automatically, no extra flags needed.
 
 **Existing projects:** the first run will likely report many issues. Create a [baseline](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/#using-a-baseline-file) to suppress them and focus only on new code:
 
 ```bash
-./vendor/bin/psalm-laravel analyze --set-baseline=psalm-baseline.xml
+./vendor/bin/psalm --set-baseline=psalm-baseline.xml
 ```
 
 From here, gradually increase `errorLevel` (start at `4`, work toward `1`) and shrink the baseline over time.
