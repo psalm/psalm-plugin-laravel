@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\LaravelPlugin\Util\ApplicationBootReporter;
+use Psalm\LaravelPlugin\Util\Diagnostics\BufferedProgress;
 use Psalm\Progress\Progress;
 
 #[CoversClass(ApplicationBootReporter::class)]
@@ -65,6 +66,36 @@ final class ApplicationBootReporterTest extends TestCase
         $this->assertStringContainsString('/app/bootstrap/app.php', $this->warnings[0]);
         $this->assertStringContainsString('parse_url(): Argument #1 must be string', $this->warnings[0]);
         $this->assertStringContainsString('vendor/bin/psalm-laravel diagnose --tips --providers', $this->warnings[0]);
+    }
+
+    #[Test]
+    public function partial_boot_warning_is_buffered_through_buffered_progress_until_flush(): void
+    {
+        $this->reflectProperty('bootMode')->setValue(null, 'bootstrap');
+        $this->reflectProperty('bootPath')->setValue(null, '/app/bootstrap/app.php');
+        $this->reflectProperty('bootstrapError')->setValue(null, new \RuntimeException('config blew up'));
+
+        $written = [];
+        $inner = $this->createStub(Progress::class);
+        $inner->method('write')->willReturnCallback(
+            function (string $message) use (&$written): void {
+                $written[] = $message;
+            },
+        );
+
+        $buffered = new BufferedProgress($inner);
+        $buffered->stage('boot');
+        ApplicationBootReporter::reportPartialBoot($buffered);
+
+        // Collected, not printed in the middle of Psalm's progress output.
+        $this->assertSame([], $written, 'the partial-boot warning must not reach the progress stream yet');
+
+        $buffered->flush();
+
+        $this->assertCount(1, $written);
+        $this->assertStringContainsString('[warning/boot]', $written[0]);
+        $this->assertStringContainsString('Laravel boot completed only partially', $written[0]);
+        $this->assertStringContainsString('config blew up', $written[0]);
     }
 
     /** Stubbed Progress that records emitted warnings into the test buffer. */

@@ -13,6 +13,7 @@ use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
 use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
 use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\LaravelPlugin\Util\ApplicationBootReporter;
+use Psalm\LaravelPlugin\Util\Diagnostics\BufferedProgress;
 use Psalm\LaravelPlugin\Util\InternalErrorReporter;
 use Psalm\LaravelPlugin\Util\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -29,33 +30,50 @@ final class Plugin implements PluginEntryPointInterface
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
         $pluginConfig = PluginConfig::fromXml($config);
-        $output = $this->getProgress($registration);
+
+        // Wrap Psalm's progress so init-time warnings are collected instead of
+        // printed mid-stream. They are flushed as one grouped block once init
+        // succeeds, or folded into the error report by InternalErrorReporter on
+        // failure. $output->stage(...) tags each captured warning with its phase.
+        $output = new BufferedProgress($this->getProgress($registration));
 
         try {
+            $output->stage('boot');
             ApplicationProvider::bootApp();
             ApplicationBootReporter::reportPartialBoot($output);
 
             if ($pluginConfig->shouldUseMigrations()) {
-                $this->buildSchema($pluginConfig);
+                $output->stage('schema');
+                $this->buildSchema($pluginConfig, $output);
             }
 
             // Build facade → service class map before registering handlers.
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
+            $output->stage('facades');
             FacadeMapProvider::init($output);
 
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled
+            $output->stage('translations');
             $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations);
 
             if ($pluginConfig->findMissingViews) {
+                $output->stage('views');
                 $this->initMissingViewHandler($output);
             }
 
+            $output->stage('handlers');
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
             $this->registerHandlers($registration, $pluginConfig);
+
+            $output->stage('stubs');
             $this->registerStubs($registration, $pluginConfig, $output);
+
+            // Init succeeded: surface any collected notices (partial boot, degraded
+            // schema discovery, …) here, after handler/stub setup, as one block.
+            $output->flush();
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
@@ -484,7 +502,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Views\MissingViewHandler::init($paths, $extensions);
     }
 
-    private function buildSchema(PluginConfig $pluginConfig): void
+    private function buildSchema(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
     {
         $app = ApplicationProvider::getApp();
 
@@ -499,7 +517,7 @@ final class Plugin implements PluginEntryPointInterface
         $codebase = ProjectAnalyzer::getInstance()->getCodebase();
         $cache = new Handlers\Eloquent\Schema\MigrationCache(self::getCacheLocation($pluginConfig));
 
-        $aggregator = (new Handlers\Eloquent\Schema\MigrationSchemaBuilder($app, $codebase, $cache))->build();
+        $aggregator = (new Handlers\Eloquent\Schema\MigrationSchemaBuilder($app, $codebase, $cache, $output))->build();
 
         SchemaStateProvider::setSchema($aggregator);
     }

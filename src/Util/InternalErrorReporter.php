@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Util;
 
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Util\Diagnostics\BufferedProgress;
 use Psalm\Progress\Progress;
 
 /**
@@ -22,17 +23,29 @@ final class InternalErrorReporter
     /** @throws \Throwable when {@see PluginConfig::$failOnInternalError} is on */
     public static function report(\Throwable $throwable, Progress $output, PluginConfig $pluginConfig): void
     {
-        $output->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
+        // This reporter composes the whole failure output, so it also owns flushing
+        // the diagnostics collected before the failure: they appear with, not buried
+        // under, the final error report. Keeping the flush here (over Plugin's catch)
+        // keeps the ordering unit-testable. After flushing, terminal messages go
+        // straight to the real progress; writing them back through the buffer would
+        // re-collect them after flush() already cleared it, so they'd never print.
+        $real = $output;
+        if ($output instanceof BufferedProgress) {
+            $output->flush();
+            $real = $output->inner();
+        }
+
+        $real->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
 
         // Best-effort classification: tells the user whether the failure
         // looks like an app-level config issue, a plugin bug, a Laravel
         // framework problem, or a Testbench fallback issue.
         $hint = InternalErrorClassifier::hint($throwable);
         if ($hint !== null) {
-            $output->warning("Laravel plugin: {$hint}");
+            $real->warning("Laravel plugin: {$hint}");
         }
 
-        $output->warning('Laravel plugin: ' . ApplicationBootReporter::hardFailureNextSteps());
+        $real->warning('Laravel plugin: ' . ApplicationBootReporter::hardFailureNextSteps());
 
         // URL generation is best-effort — a secondary failure here (e.g. a
         // throwable with a broken __toString(), a corrupt composer installed.php)
@@ -43,13 +56,13 @@ final class InternalErrorReporter
         try {
             $url = IssueUrlGenerator::generate($throwable, $pluginConfig);
         } catch (\Throwable $urlGenerationFailure) {
-            $output->warning(
+            $real->warning(
                 "Laravel plugin failed to build a detailed report URL: {$urlGenerationFailure->getMessage()}",
             );
             $url = 'https://github.com/psalm/psalm-plugin-laravel/issues';
         }
 
-        $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $url);
+        $real->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $url);
 
         if ($pluginConfig->failOnInternalError) {
             throw $throwable;

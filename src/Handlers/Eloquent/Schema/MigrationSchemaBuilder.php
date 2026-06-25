@@ -26,11 +26,15 @@ final class MigrationSchemaBuilder
         private readonly Application $app,
         private readonly Codebase $codebase,
         private readonly MigrationCache $cache,
+        // Progress is injected (rather than read from $codebase->progress) so the
+        // plugin can pass its buffered progress and collect the degradation warnings
+        // emitted here with the rest of init instead of printing them mid-stream.
+        private readonly Progress $progress,
     ) {}
 
     public function build(): SchemaAggregator
     {
-        $progress = $this->codebase->progress;
+        $progress = $this->progress;
 
         // Discover all files first — needed for cache fingerprinting
         $sqlDumpFiles = $this->discoverSqlDumpFiles($progress);
