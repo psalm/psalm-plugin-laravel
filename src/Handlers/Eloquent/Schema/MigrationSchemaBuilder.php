@@ -244,6 +244,8 @@ final class MigrationSchemaBuilder
      * the bootstrap throwable the plugin swallowed to tolerate a partial boot — is pulled
      * in here from {@see ApplicationProvider}. Without it the user sees only the symptom
      * (migrator missing) and not the root cause (the bad config/provider that aborted boot).
+     *
+     * @psalm-external-mutation-free
      */
     private function migratorUnavailableWarning(): string
     {
