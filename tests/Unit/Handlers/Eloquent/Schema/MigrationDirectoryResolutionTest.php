@@ -24,35 +24,30 @@ final class MigrationDirectoryResolutionTest extends TestCase
     #[Test]
     public function falls_back_to_default_directory_when_migrator_is_unbound(): void
     {
-        // A bare Application registers base providers only — `migrator` stays unbound,
-        // so make('migrator') throws BindingResolutionException, reproducing #1170.
-        $app = new Application('/tmp/app-without-migrator');
+        // migrator unbound reproduces #1170: make('migrator') would throw, the guard must not.
+        $app = $this->fakeApp(migratorBound: false, migratorPaths: []);
         $progress = $this->capturingProgress();
 
         $directories = $this->resolveDirectories($app, $progress);
 
-        $this->assertSame(['/tmp/app-without-migrator/database/migrations'], $directories);
-        $this->assertNotEmpty($progress->warnings, 'A warning must surface the missing migrator service.');
-        $this->assertStringContainsString('migrator', (string) $progress->warnings[0]);
+        self::assertSame(['/fake-app/database/migrations'], $directories);
+        self::assertNotEmpty($progress->warnings, 'A warning must surface the missing migrator service.');
+        self::assertStringContainsString('migrator', $progress->warnings[0]);
     }
 
     #[Test]
     public function merges_registered_paths_when_migrator_is_available(): void
     {
-        $app = new Application('/tmp/app-with-migrator');
-        $app->instance('migrator', new class {
-            /** @return list<string> */
-            public function paths(): array
-            {
-                return ['/extra/package/migrations'];
-            }
-        });
+        $app = $this->fakeApp(migratorBound: true, migratorPaths: ['/extra/package/migrations']);
         $progress = $this->capturingProgress();
 
         $directories = $this->resolveDirectories($app, $progress);
 
-        $this->assertSame(['/extra/package/migrations', '/tmp/app-with-migrator/database/migrations'], $directories);
-        $this->assertSame([], $progress->warnings, 'No warning when the migrator resolves cleanly.');
+        self::assertSame(
+            ['/extra/package/migrations', '/fake-app/database/migrations'],
+            $directories,
+        );
+        self::assertSame([], $progress->warnings, 'No warning when the migrator resolves cleanly.');
     }
 
     /**
@@ -70,6 +65,36 @@ final class MigrationDirectoryResolutionTest extends TestCase
 
         /** @var list<string> */
         return $method->invoke($builder, $progress);
+    }
+
+    /**
+     * A real {@see Application} built *without* its constructor, so the framework
+     * boot (provider registration, global container/facade binding) never runs —
+     * a full `new Application()` inside a unit test crashes the process. The
+     * untyped legacy `$basePath` / `$databasePath` properties tolerate the missing
+     * constructor, so `databasePath('migrations')` resolves to `<base>/database/migrations`.
+     *
+     * @param list<string> $migratorPaths the migrator's registered extra paths (loadMigrationsFrom)
+     */
+    private function fakeApp(bool $migratorBound, array $migratorPaths): Application
+    {
+        $app = (new \ReflectionClass(Application::class))->newInstanceWithoutConstructor();
+        (new \ReflectionProperty(Application::class, 'basePath'))->setValue($app, '/fake-app');
+
+        if ($migratorBound) {
+            $app->instance('migrator', new class ($migratorPaths) {
+                /** @param list<string> $paths */
+                public function __construct(private readonly array $paths) {}
+
+                /** @return list<string> */
+                public function paths(): array
+                {
+                    return $this->paths;
+                }
+            });
+        }
+
+        return $app;
     }
 
     private function capturingProgress(): Progress
