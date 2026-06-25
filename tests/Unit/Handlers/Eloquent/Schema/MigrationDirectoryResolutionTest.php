@@ -30,9 +30,9 @@ final class MigrationDirectoryResolutionTest extends TestCase
 
         $directories = $this->resolveDirectories($app, $progress);
 
-        self::assertSame(['/fake-app/database/migrations'], $directories);
-        self::assertNotEmpty($progress->warnings, 'A warning must surface the missing migrator service.');
-        self::assertStringContainsString('migrator', $progress->warnings[0]);
+        $this->assertSame(['/fake-app/database/migrations'], $directories);
+        $this->assertNotEmpty($progress->warnings, 'A warning must surface the missing migrator service.');
+        $this->assertStringContainsString('migrator', (string) $progress->warnings[0]);
     }
 
     #[Test]
@@ -43,11 +43,8 @@ final class MigrationDirectoryResolutionTest extends TestCase
 
         $directories = $this->resolveDirectories($app, $progress);
 
-        self::assertSame(
-            ['/extra/package/migrations', '/fake-app/database/migrations'],
-            $directories,
-        );
-        self::assertSame([], $progress->warnings, 'No warning when the migrator resolves cleanly.');
+        $this->assertSame(['/extra/package/migrations', '/fake-app/database/migrations'], $directories);
+        $this->assertSame([], $progress->warnings, 'No warning when the migrator resolves cleanly.');
     }
 
     /**
