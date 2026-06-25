@@ -85,8 +85,8 @@ final class MigrationDirectoryResolutionTest extends TestCase
         // Draining the buffer surfaces the warning under the schema stage.
         $buffer->flushTo($this->recordingProgress());
         $this->assertCount(1, $this->warnings);
-        $this->assertStringContainsString('[schema]', $this->warnings[0]);
-        $this->assertStringContainsString('migrator', $this->warnings[0]);
+        $this->assertStringContainsString('[schema]', (string) $this->warnings[0]);
+        $this->assertStringContainsString('migrator', (string) $this->warnings[0]);
     }
 
     /**

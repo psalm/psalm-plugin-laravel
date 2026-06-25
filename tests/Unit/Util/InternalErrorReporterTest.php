@@ -82,8 +82,8 @@ final class InternalErrorReporterTest extends TestCase
                 $config,
                 $diagnostics,
             );
-        } catch (\Throwable $caught) {
-            $thrown = $caught;
+        } catch (\Throwable $throwable) {
+            $thrown = $throwable;
         }
 
         // The rethrow must not skip the flush: failOnInternalError is the CI path, exactly

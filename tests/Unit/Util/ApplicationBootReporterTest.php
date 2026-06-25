@@ -88,9 +88,9 @@ final class ApplicationBootReporterTest extends TestCase
         // Draining the buffer surfaces the warning under the boot stage.
         $buffer->flushTo($this->recordingProgress());
         $this->assertCount(1, $this->warnings);
-        $this->assertStringContainsString('[boot]', $this->warnings[0]);
-        $this->assertStringContainsString('Laravel boot completed only partially', $this->warnings[0]);
-        $this->assertStringContainsString('boom in config/app.php', $this->warnings[0]);
+        $this->assertStringContainsString('[boot]', (string) $this->warnings[0]);
+        $this->assertStringContainsString('Laravel boot completed only partially', (string) $this->warnings[0]);
+        $this->assertStringContainsString('boom in config/app.php', (string) $this->warnings[0]);
     }
 
     /** Stubbed Progress that records emitted warnings into the test buffer. */
