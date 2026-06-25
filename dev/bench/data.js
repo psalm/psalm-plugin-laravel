@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782342649981,
+  "lastUpdate": 1782382376970,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7550,6 +7550,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.94,
             "range": "± 0.03",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c664cb953ce24e68aa9367cd77f0d6074484bfa",
+          "message": "Add conditional return types for `Pagination::fragment()`, `Arr::random()`, `Lottery::choose()` (#1176)\n\n* feat(pagination): conditional return type for fragment()\n\nPorts the get-or-set conditional return from laravel/framework#60586: a\nnull arg reads the fragment (string|null), any other arg sets it and\nreturns the paginator for chaining. Added to both abstract paginators and\nthe contract interfaces.\n\n`static`, not `$this`, on the setter branch — `$this` collapses back into\nthe reflected flat union through Psalm's stub/source merge (mirrors\nRoute::domain(), #1174).\n\n* feat(collections): conditional return type for Arr::random()\n\nPorts laravel/framework#60586: a null count returns one random element\n(mixed), an int returns that many as an array. Re-declares Arr with its\nMacroable trait so the reflected metadata survives the override.\n\n* feat(support): conditional return type for Lottery::choose()\n\nPorts laravel/framework#60586: a null count runs the lottery once (mixed),\nan int runs it that many times and returns the results as a list.",
+          "timestamp": "2026-06-25T12:10:00+02:00",
+          "tree_id": "35c22e9f1bf793d7b75988b60f254c5843a0bfe9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7c664cb953ce24e68aa9367cd77f0d6074484bfa"
+        },
+        "date": 1782382376423,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.75,
+            "range": "± 0.36",
             "unit": "s"
           },
           {
