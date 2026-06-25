@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782382376970,
+  "lastUpdate": 1782395390253,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7585,6 +7585,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.75,
             "range": "± 0.36",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f363fcd48da41354def7be34fa55dfd94684acde",
+          "message": "fix(container): avoid crash on over-long string binding #1178 (#1179)\n\nContainerResolver fed the container concrete to TLiteralString::make(),\nwhich throws once the string exceeds Config::max_string_length (1000).\nA binding resolving to a large value (e.g. a minified asset blob) then\ncrashed the whole Psalm run via an uncaught Throwable propagated out of\nthe amphp workers.\n\nType::getAtomicStringFromLiteral() degrades over-long values to a\nnon-empty-string supertype instead of throwing, so the run completes and\nthe inferred type stays a sound supertype of the concrete.",
+          "timestamp": "2026-06-25T15:46:53+02:00",
+          "tree_id": "5bc178301330de6f3d5f7f2bf056dcb7b87dded8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f363fcd48da41354def7be34fa55dfd94684acde"
+        },
+        "date": 1782395389716,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.97,
+            "range": "± 0.29",
             "unit": "s"
           },
           {
