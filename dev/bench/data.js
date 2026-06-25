@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782395390253,
+  "lastUpdate": 1782429732579,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7625,6 +7625,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1105,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "27111b303bb6ad8d131a36571399994dfb5c0e4f",
+          "message": "Guard `migrator` resolution when the app bootstraps partially (#1175)\n\n* fix(eloquent): guard migrator resolution on partial bootstrap #1170\n\n`migrator` is a deferred service (MigrationServiceProvider implements\nDeferrableProvider), resolvable only after RegisterProviders builds the\ndeferred-services map. The plugin deliberately tolerates a partial\nbootstrap, which can leave that map incomplete, so make('migrator') threw\nan uncaught BindingResolutionException and aborted the whole\nmigration-schema feature.\n\nGuard with bound() like the sibling translator/view init methods.\nApplication::bound() already accounts for deferred services and partial\nbootstrap, so an unresolvable migrator degrades to the default migrations\ndirectory instead of crashing.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* test(eloquent): avoid booting real Application in migrator guard test #1170\n\nnew Application() boots the framework (provider registration, global\ncontainer/facade binding) and crashed the unit process on CI. Build the\nApplication without its constructor instead, so only the container methods\nthe resolver touches are exercised.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix(eloquent): surface swallowed bootstrap error in migrator warning #1170\n\nThe graceful migrator-unbound fallback no longer reaches InternalErrorReporter,\nso the one datum that explains WHY the deferred-services map is incomplete — the\nbootstrap throwable the plugin swallowed to tolerate a partial boot — is pulled\ninto the warning directly from ApplicationProvider, alongside the boot mode.\nWithout it the user only sees the symptom (migrator missing), not the root cause\n(the bad config/provider that aborted boot).\n\n* test(eloquent): stub Application and Progress in migrator guard test #1170\n\nInstantiating a real Application (or a hand-rolled Progress subclass that may\nmiss an abstract method on some Psalm versions) crashed the PHP process when\nthis test ran inside the full unit suite. createStub() bypasses the constructor\nand stubs every method, so no framework or Psalm internals execute.\n\n* style: mark migratorUnavailableWarning external-mutation-free #1170\n\n* docs: trim inline docs in migrator guard #1170\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-06-26T01:18:55+02:00",
+          "tree_id": "48c63093238b004043049ee610982147f985c56a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/27111b303bb6ad8d131a36571399994dfb5c0e4f"
+        },
+        "date": 1782429731416,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.87,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
             "unit": "MB"
           }
         ]
