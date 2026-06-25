@@ -116,7 +116,7 @@ final class MigrationSchemaBuilder
     {
         $files = [];
 
-        foreach ($this->getMigrationDirectories() as $directory) {
+        foreach ($this->getMigrationDirectories($progress) as $directory) {
             \array_push($files, ...$this->findPhpFilesRecursive($directory, $progress));
         }
 
@@ -206,14 +206,36 @@ final class MigrationSchemaBuilder
      * Resolve migration directories the same way Laravel does:
      * extra paths registered via loadMigrationsFrom() + the default database/migrations directory.
      *
+     * `migrator` is a *deferred* service (MigrationServiceProvider implements DeferrableProvider),
+     * so it only becomes resolvable once the RegisterProviders bootstrapper builds the app's
+     * deferred-services map. The plugin deliberately tolerates a partial bootstrap
+     * (see ApplicationProvider), which can leave that map incomplete — `make('migrator')` would
+     * then throw BindingResolutionException and abort the whole migration-schema feature (#1170).
+     *
+     * Guard with `bound()` exactly like the sibling init methods (translator/view in Plugin.php):
+     * `Application::bound()` already accounts for deferred services and partial bootstrap, so an
+     * unresolvable migrator degrades to the default migrations directory instead of crashing.
+     *
      * @return non-empty-list<string>
      */
-    private function getMigrationDirectories(): array
+    private function getMigrationDirectories(Progress $progress): array
     {
+        $defaultDirectory = $this->app->databasePath('migrations');
+
+        if (!$this->app->bound('migrator')) {
+            $progress->warning(
+                "Laravel plugin: the 'migrator' service is not bound (the app bootstrapped only partially); "
+                . 'falling back to the default migrations directory. Paths registered via '
+                . 'loadMigrationsFrom() will be ignored.',
+            );
+
+            return [$defaultDirectory];
+        }
+
         /** @var \Illuminate\Database\Migrations\Migrator $migrator */
         $migrator = $this->app->make('migrator');
 
-        return \array_values(\array_merge($migrator->paths(), [$this->app->databasePath('migrations')]));
+        return \array_values(\array_merge($migrator->paths(), [$defaultDirectory]));
     }
 
     /**
