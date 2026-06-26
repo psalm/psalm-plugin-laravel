@@ -1,0 +1,22 @@
+<?php
+
+namespace Illuminate\Support;
+
+/**
+ * Lottery has no interfaces or traits, so re-declaring it to narrow `choose()` resets
+ * no metadata; every other method merges from reflection.
+ */
+class Lottery
+{
+    /**
+     * Run the lottery.
+     *
+     * Null/absent `$times` runs the lottery once and returns the callback result
+     * (mixed); an int runs it that many times and collects the results into a list.
+     * Reflected Laravel declares the flat `mixed`.
+     *
+     * @param  int|null  $times
+     * @return ($times is null ? mixed : list<mixed>)
+     */
+    public function choose($times = null) {}
+}

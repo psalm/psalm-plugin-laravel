@@ -7,8 +7,8 @@ namespace Psalm\LaravelPlugin\Util;
 use PhpParser\Node\Arg;
 use Psalm\LaravelPlugin\Providers\ApplicationProvider;
 use Psalm\NodeTypeProvider;
+use Psalm\Type;
 use Psalm\Type\Atomic\TClassString;
-use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TTemplateParamClass;
 use Psalm\Type\Union;
@@ -135,9 +135,14 @@ final class ContainerResolver
             ]);
         }
 
-        // the likes of publicPath, which returns a literal string
+        // The likes of publicPath, which returns a literal string. Use
+        // Type::getAtomicStringFromLiteral() rather than TLiteralString::make(): a binding can
+        // resolve to a string at least Config::$max_string_length chars long (e.g. a minified
+        // asset blob), and make() throws InvalidArgumentException on those — uncaught, that
+        // crashes the whole run under amphp workers. The helper degrades such values to a
+        // non-falsy-string supertype instead, keeping the inferred type sound. See #1178.
         return new Union([
-            TLiteralString::make($concrete),
+            Type::getAtomicStringFromLiteral($concrete),
         ]);
     }
 
