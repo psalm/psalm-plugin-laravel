@@ -35,12 +35,14 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\SerializedIntStatus;
 /**
  * Unit coverage for the serialized array-shape builder.
  *
- * The positive shape cannot be asserted as a `.phpt` against app models: the type-test harness
- * boots Testbench with no migrations, so every app model has an empty schema and the schema-empty
- * gate suppresses the shape (the same harness constraint #1167 documents). The shape is therefore
- * driven here from a hand-built {@see ModelMetadata} installed via `overrideForTesting()`, exercising
+ * The COLUMN-driven shape cannot be asserted as a `.phpt` against app models: the type-test harness
+ * boots Testbench with no migrations, so every app model has an empty schema (the same harness
+ * constraint #1167 documents). Column shapes are therefore driven here from a hand-built
+ * {@see ModelMetadata} installed via `overrideForTesting()`, exercising
  * {@see ModelToArrayShapeHandler::buildShape()} against a real {@see Codebase} so column value types
  * resolve through {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler::resolveColumnType()}.
+ * The APPENDS-driven shape needs no schema, so it is additionally asserted end-to-end through Psalm in
+ * tests/Type/tests/Model/ToArrayShapeTest.phpt.
  *
  * The shape is always OPEN (`...<string, mixed>`): the runtime attribute bag carries query-dependent
  * keys (aggregate/`selectRaw` aliases, `setAttribute`, relations) beyond the columns + `$appends`, so
@@ -230,11 +232,28 @@ final class ModelToArrayShapeHandlerTest extends TestCase
     }
 
     #[Test]
-    public function an_empty_schema_defers_to_the_stub(): void
+    public function no_columns_and_no_appends_defers_to_the_stub(): void
     {
+        // Nothing names a key — no parsed columns (migrations disabled) and no $appends. The builder
+        // defers to the stub's array<string, mixed> rather than emitting an empty shape.
         $this->override(columns: []);
 
         $this->assertNull($this->build());
+    }
+
+    #[Test]
+    public function appends_emit_a_shape_even_without_columns(): void
+    {
+        // The schema-empty case is NOT a hard gate: $appends are always serialized, so they name keys
+        // even when migrations are disabled. The shape stays OPEN, so the unseen columns fall through
+        // to mixed. This pins the production behavior that ToArrayShapeTest.phpt asserts end-to-end.
+        $this->override(
+            columns: [],
+            accessors: ['fullname' => new LegacyAccessorInfo('fullname', Type::getString(), new MethodStorage())],
+            appends: ['full_name'],
+        );
+
+        $this->assertSame('array{full_name?: string, ...<string, mixed>}', (string) $this->build());
     }
 
     #[Test]

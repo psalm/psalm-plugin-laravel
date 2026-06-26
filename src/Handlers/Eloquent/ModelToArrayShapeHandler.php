@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Concerns\HasAttributes;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Enumerable;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\AccessorInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeAccessorInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\CastInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\CastShape;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
@@ -18,8 +22,11 @@ use Psalm\LaravelPlugin\Util\EloquentModelMethods;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic;
+use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TString;
 use Psalm\Type\Union;
@@ -42,8 +49,10 @@ use Psalm\Type\Union;
  *    property-read form: a `datetime`/`date` cast reads as `Carbon` but serializes to an ISO
  *    string, and a backed-enum cast serializes to its backing scalar. Those are mapped to their
  *    serialized type here (see {@see serializedCastType()}).
- *  - Appended value types come from the matching accessor's return type, or `mixed` when no
- *    statically known accessor backs the key.
+ *  - Appended value types come from the matching accessor's return type, mapped to the serialized
+ *    form when it diverges (a generic collection → `array<TKey, …>`, any other `Arrayable` →
+ *    `array`, a modern `Attribute` date → `string`; a legacy date accessor keeps its object), or
+ *    `mixed` when no statically known accessor backs the key. See {@see serializedAppendType()}.
  *
  * Both methods produce an OPEN shape (`array{known?: T, …, ...<string, mixed>}`). The attribute bag
  * is query-dependent: `withCount()`/`withSum()` aggregate aliases (`posts_count`), `selectRaw()`
@@ -61,12 +70,15 @@ use Psalm\Type\Union;
  *    at runtime and are invisible here; only declared `$hidden`/`$visible`/`$appends` are modeled.
  *  - Casts other than date/backed-enum that serialize differently than they read (a non-backed
  *    enum, `AsEnumCollection`, an `Arrayable`/`Collection` custom cast) keep their read-type.
+ *  - An appended collection maps to `array<TKey, V>` collapsing one level (each `Arrayable` element
+ *    becomes `array<array-key, mixed>`); deeper nesting and non-collection `Arrayable` value shapes
+ *    are not modeled.
  *  - A real column that also has an accessor keeps its column/cast type, not the accessor type
  *    (the issue scopes accessor value types to `$appends`).
  *
  * Registered per concrete Model class by {@see ModelRegistrationHandler} because Psalm's provider
- * lookup uses exact class-name matching. Abstract bases have an empty schema and fall through the
- * gate below, returning null.
+ * lookup uses exact class-name matching. A model that yields no known key — no parsed columns and no
+ * `$appends` — returns null and defers to the stub's `array<string, mixed>`.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/923
  * @internal
@@ -122,13 +134,12 @@ final class ModelToArrayShapeHandler
             return null;
         }
 
-        // Schema-empty gate: with no parsed columns (migrations disabled or the table unparsed) the
-        // attribute set is unknowable, and a shape built from $appends alone would omit every real
-        // column. Defer to the stub instead. Same gate #1167 relies on.
+        // No schema-empty bail: a model with no parsed columns (migrations disabled or the table
+        // unparsed) can still expose a known serialized surface through $appends, which Laravel always
+        // serializes. The shape stays OPEN, so real columns we cannot see fall through to `mixed`
+        // rather than being dropped — strictly more than the stub, and still sound. When neither
+        // columns nor appends yield a surviving key, the `$properties === []` guard below defers.
         $columns = $metadata->schema()->all();
-        if ($columns === []) {
-            return null;
-        }
 
         $visible = $metadata->visible;
         $hidden = $metadata->hidden;
@@ -152,7 +163,7 @@ final class ModelToArrayShapeHandler
                 continue;
             }
 
-            $properties[$appendName] = self::appendValueType($metadata, $appendName)
+            $properties[$appendName] = self::appendValueType($codebase, $metadata, $appendName)
                 ->setPossiblyUndefined(true);
         }
 
@@ -260,13 +271,18 @@ final class ModelToArrayShapeHandler
     }
 
     /**
-     * Appended value type: the matching accessor's return type, or `mixed` when no statically
-     * known accessor backs the key. The accessor map is keyed by the separator-collapsed
-     * lowercase identity, so `full_name` / `fullName` / `fullname` all resolve to one accessor.
+     * Appended value type: the matching accessor's return type mapped to its serialized form, or
+     * `mixed` when no statically known accessor backs the key. The accessor map is keyed by the
+     * separator-collapsed lowercase identity, so `full_name` / `fullName` / `fullname` all resolve.
      *
-     * @psalm-mutation-free
+     * The registry captured the accessor's READ type, but an append is serialized through
+     * {@see HasAttributes::mutateAttributeForArray()}: an `Arrayable` (a Collection, a related
+     * Model, …) becomes its `array` form, and a modern `Attribute` accessor converts a
+     * `DateTimeInterface` to an ISO string. {@see serializedAppendType()} maps those to the
+     * serialized type; a legacy `getXxxAttribute()` does not convert dates, so a legacy date accessor
+     * keeps its object.
      */
-    private static function appendValueType(ModelMetadata $metadata, string $appendName): Union
+    private static function appendValueType(Codebase $codebase, ModelMetadata $metadata, string $appendName): Union
     {
         $key = EloquentModelMethods::accessorPropertyKey($appendName);
         if ($key === null) {
@@ -274,8 +290,107 @@ final class ModelToArrayShapeHandler
         }
 
         $accessor = $metadata->accessors()[$key] ?? null;
+        if (!$accessor instanceof AccessorInfo) {
+            return Type::getMixed();
+        }
 
-        return $accessor instanceof AccessorInfo ? $accessor->returnType : Type::getMixed();
+        return self::serializedAppendType($codebase, $accessor);
+    }
+
+    /**
+     * Map an appended accessor's READ type to its SERIALIZED type, mirroring
+     * {@see HasAttributes::mutateAttributeForArray()}: an `Arrayable` atom becomes `array` (for BOTH
+     * accessor styles, via `$value->toArray()`), and on a modern `Attribute` accessor a
+     * `DateTimeInterface` atom becomes a `string` (via `serializeDate()`). A legacy `getXxxAttribute()`
+     * does NOT convert dates, so the date map is gated on the accessor being attribute-style. Other
+     * atomics (scalars, arrays, null, non-Arrayable objects) serialize as-is. The `Arrayable` array's
+     * inner shape is not modeled (`array<array-key, mixed>`).
+     */
+    private static function serializedAppendType(Codebase $codebase, AccessorInfo $accessor): Union
+    {
+        $isModern = $accessor instanceof AttributeAccessorInfo;
+
+        $changed = false;
+        $atomics = [];
+        foreach ($accessor->returnType->getAtomicTypes() as $atomic) {
+            $mapped = self::serializedAtomic($codebase, $atomic, $isModern);
+            if ($mapped !== $atomic) {
+                $changed = true;
+            }
+
+            $atomics[] = $mapped;
+        }
+
+        // $atomics is one-for-one with the (non-empty) source atomics, so it is non-empty here.
+        return $changed ? new Union($atomics) : $accessor->returnType;
+    }
+
+    /**
+     * Serialized form of a single top-level append atomic:
+     *  - a Laravel `Enumerable` (Collection / LazyCollection / Eloquent Collection) with a declared
+     *    value type → `array<TKey, …>`, keeping the key type and collapsing each `Arrayable` element
+     *    one level (the element's own recursive shape is not modeled);
+     *  - any other `Arrayable` (a related Model, a bare or custom collection) → `array<array-key, mixed>`;
+     *  - on a modern `Attribute` accessor only, a `DateTimeInterface` → `string` (`serializeDate()`).
+     * Everything else (scalars, arrays, null, a legacy date object) serializes as-is.
+     */
+    private static function serializedAtomic(Codebase $codebase, Atomic $atomic, bool $isModern): Atomic
+    {
+        if (!$atomic instanceof TNamedObject) {
+            return $atomic;
+        }
+
+        $single = new Union([$atomic]);
+
+        // Enumerable::toArray() keeps the keys and maps each element through Arrayable::toArray(), so a
+        // generic collection serializes to array<TKey, serialized(TValue)>. Requires a declared TValue.
+        if ($atomic instanceof TGenericObject
+            && isset($atomic->type_params[1])
+            && UnionTypeComparator::isContainedBy($codebase, $single, new Union([new TNamedObject(Enumerable::class)]))) {
+            return new TArray([
+                $atomic->type_params[0],
+                self::collapseArrayableValues($codebase, $atomic->type_params[1]),
+            ]);
+        }
+
+        if (UnionTypeComparator::isContainedBy($codebase, $single, new Union([new TNamedObject(Arrayable::class)]))) {
+            return new TArray([Type::getArrayKey(), Type::getMixed()]);
+        }
+
+        if ($isModern
+            && UnionTypeComparator::isContainedBy($codebase, $single, new Union([new TNamedObject(\DateTimeInterface::class)]))) {
+            return new TString();
+        }
+
+        return $atomic;
+    }
+
+    /**
+     * Collapse one level of `Enumerable` element types: an `Arrayable` element serializes to an
+     * `array` (inner shape unmodeled); everything else is kept — including a `DateTimeInterface`,
+     * which `Enumerable::toArray()` (unlike a modern `Attribute`) does NOT date-serialize. Used for
+     * the value type of a serialized collection.
+     */
+    private static function collapseArrayableValues(Codebase $codebase, Union $value): Union
+    {
+        $arrayable = new Union([new TNamedObject(Arrayable::class)]);
+
+        $changed = false;
+        $atomics = [];
+        foreach ($value->getAtomicTypes() as $atomic) {
+            $mapped = $atomic instanceof TNamedObject
+                && UnionTypeComparator::isContainedBy($codebase, new Union([$atomic]), $arrayable)
+                ? new TArray([Type::getArrayKey(), Type::getMixed()])
+                : $atomic;
+            if ($mapped !== $atomic) {
+                $changed = true;
+            }
+
+            $atomics[] = $mapped;
+        }
+
+        // $atomics is one-for-one with the (non-empty) source atomics, so it is non-empty here.
+        return $changed ? new Union($atomics) : $value;
     }
 
     /**
