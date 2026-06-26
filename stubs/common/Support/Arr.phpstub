@@ -1,0 +1,30 @@
+<?php
+
+namespace Illuminate\Support;
+
+/**
+ * Arr declares no interfaces, so re-declaring it to narrow `random()` resets no reflected
+ * metadata (the stub re-scan resets only class_implements / parent_interfaces, never
+ * methods or used_traits). The `Macroable` trait is copied verbatim per stub convention
+ * and survives via reflection regardless; every other static helper merges from reflection.
+ */
+class Arr
+{
+    use Traits\Macroable;
+
+    /**
+     * Get one or a specified number of random values from an array.
+     *
+     * Null/absent `$number` returns a single random element (mixed); any int returns
+     * that many elements as an array. Reflected Laravel declares the flat `mixed`, so
+     * `Arr::random($a, 2)` would otherwise stay `mixed`.
+     *
+     * @param  array  $array
+     * @param  int|null  $number
+     * @param  bool  $preserveKeys
+     * @return ($number is null ? mixed : array)
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function random($array, $number = null, $preserveKeys = false) {}
+}
