@@ -7,12 +7,15 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeMutatorInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
+use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
@@ -102,7 +105,20 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 continue;
             }
 
+            // Warm the registry FIRST (idempotent, never throws) for every model — concrete and
+            // abstract bases alike (#1058), not migration-gated (ModelPropertyAccessorHandler reads
+            // accessors()/mutators() unconditionally). Must precede registerHandlersForModel so the
+            // latter reads the resolved customBuilder/customCollection off the registry instead of
+            // reflecting a SECOND time (Gotcha 8). Safe reorder: compute() reads only real-method +
+            // reflection state, never the pseudo_* maps registerHandlersForModel mutates.
+            ModelMetadataRegistryBuilder::warmUp($codebase, $storage->name);
+
             self::registerHandlersForModel($codebase, $storage);
+
+            // Mutator + relation write-types run after warmUp + registration: the mutator branch reads
+            // mutators() (populated by warmUp); relation-write keeps its own declared-return-type
+            // detection. registerWriteTypesForColumns ran earlier, inside registerHandlersForModel.
+            self::registerWriteTypesForMethods($codebase, $storage);
         }
     }
 
@@ -134,25 +150,31 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
         }
 
-        // Detect custom builder class via attribute, method override, or $builder property.
-        // Class is already loaded by autoloader above.
-        //
-        // Skipped for abstract bases — not because detection itself is unsafe (it only reflects on
-        // class metadata), but because a non-null result drives handleTraitBuilderMethods(), which
-        // STRIPS the SoftDeletes @method pseudo-methods (withTrashed/onlyTrashed) off the model's
-        // storage so they resolve through the custom builder instead. An abstract base is commonly
-        // queried through the base Builder<AbstractBase> (e.g. `/** @var Builder<Entity> $q */`);
-        // BuilderScopeHandler resolves `Builder<AbstractBase>->onlyTrashed()` by reading those model
-        // pseudo-methods, so stripping them regresses the call to mixed (issue #901). Concrete
-        // children detect their builder normally; an abstract base falls back to base Builder, a
-        // sound supertype. See AbstractModelCustomBuilderTest for the regression guard.
+        // Custom builder/collection come from the warmed registry — no reflection here (Gotcha 8:
+        // kills the second per-model reflection the old detectCustom*() wrappers did). On the rare
+        // warm-up failure (logged by warmUp()) the entry is absent, so re-resolve them below from
+        // reflection (the only reflection-derived fields; the rest of the entry stays missing).
         /** @var class-string<Model> $className — verified by parent_classes check in caller */
-        $customBuilder = $storage->abstract ? null : self::detectCustomBuilder($codebase, $className);
+        $metadata = ModelMetadataRegistry::for($className);
 
-        // For models with custom builders: handle @method static annotations from traits
-        // (e.g., SoftDeletes::withTrashed) that return Builder<static>. These are builder
-        // macros at runtime — remap them to return the custom builder type.
+        // Abstract bases skip the custom builder: a non-null result drives handleTraitBuilderMethods(),
+        // which STRIPS the SoftDeletes @method pseudo-methods (withTrashed/onlyTrashed) so they resolve
+        // through the custom builder — but an abstract base is queried through base Builder<AbstractBase>,
+        // where BuilderScopeHandler reads those pseudo-methods, so stripping regresses to mixed (#901).
+        // Concrete children use their detected builder; abstract bases fall back to base Builder, a sound
+        // supertype. See AbstractModelCustomBuilderTest.
+        if ($storage->abstract) {
+            $customBuilder = null;
+        } else {
+            $customBuilder = $metadata instanceof ModelMetadata
+                ? $metadata->customBuilder
+                : self::resolveCustomBuilderClass($codebase, $className);
+        }
+
+        // Custom-builder models: register the model→builder map and remap trait @method static macros
+        // (e.g. SoftDeletes::withTrashed returning Builder<static>) to the custom builder type.
         if ($customBuilder !== null) {
+            ModelMethodHandler::registerCustomBuilder($className, $customBuilder);
             self::handleTraitBuilderMethods($codebase, $storage, $className, $customBuilder);
 
             // Register scope handlers for the custom builder class so that builder
@@ -207,12 +229,16 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             ModelMethodHandler::getReturnTypeForForwardedMethod(...),
         );
 
-        // Detect custom collection class via #[CollectedBy] attribute or newCollection() override.
-        // Class is already loaded by autoloader above. Skipped for abstract bases (mirroring the
-        // custom builder above): an abstract base falls back to the base Eloquent collection,
-        // matching its base-Builder fallback. Concrete children detect their collection normally.
+        // Custom collection: same registry read + warm-up-failure fallback as the builder above
+        // (Gotcha 8). Abstract bases fall back to the base Eloquent collection, mirroring the builder.
         if (!$storage->abstract) {
-            self::detectCustomCollection($codebase, $className);
+            $customCollection = $metadata instanceof ModelMetadata
+                ? $metadata->customCollection
+                : self::resolveCustomCollectionClass($codebase, $className);
+
+            if ($customCollection !== null) {
+                CustomCollectionHandler::registerCustomCollection($className, $customCollection);
+            }
         }
 
         // Custom collection: narrows Model::all() return type for models using
@@ -309,23 +335,29 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             self::registerWriteTypesForColumns($storage, $className);
         }
 
-        // Register write types for accessor and relationship properties
-        self::registerWriteTypesForMethods($codebase, $storage);
+        // NOTE: write types for accessor/relationship properties (registerWriteTypesForMethods) are
+        // registered AFTER warmUp() in afterCodebasePopulated() — its mutator branch now reads the
+        // registry's mutators(), which is only populated once warmUp() has run for this model.
     }
 
     /**
-     * Detect a custom Eloquent builder for a model and register it.
-     *
-     * Matches Laravel's own resolution priority in Model::newEloquentBuilder():
-     * 1. newEloquentBuilder() override — if the model overrides this method, it bypasses
-     *    the attribute and property checks entirely (Laravel calls the override directly)
+     * Pure detection of a model's custom Eloquent builder, matching Laravel's resolution priority in
+     * Model::newEloquentBuilder():
+     * 1. newEloquentBuilder() override — if the model overrides this method, it bypasses the attribute
+     *    and property checks entirely (Laravel calls the override directly)
      * 2. #[UseEloquentBuilder] attribute — checked first inside the base newEloquentBuilder()
      * 3. protected static string $builder property — fallback in the base newEloquentBuilder()
      *
+     * Reflection-only (abstract bases included). Single detection path: warmUp() calls it to populate
+     * ModelMetadata::$customBuilder; registerHandlersForModel() reads that value and owns the
+     * registerCustomBuilder() side effect (the old detectCustomBuilder() wrapper is gone — Gotcha 8).
+     *
      * @param class-string<Model> $className
      * @return class-string<Builder>|null The custom builder class, or null if using base Builder.
+     * @internal called by ModelMetadataRegistryBuilder (warm-up) and the warm-up-failure fallback in
+     *   registerHandlersForModel(). Phase-1 cross-namespace seam (Provider → Handler).
      */
-    private static function detectCustomBuilder(Codebase $codebase, string $className): ?string
+    public static function resolveCustomBuilderClass(Codebase $codebase, string $className): ?string
     {
         try {
             $reflection = new \ReflectionClass($className);
@@ -367,8 +399,6 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 
         if ($isValid) {
             /** @var class-string<Builder> $builderClass */
-            ModelMethodHandler::registerCustomBuilder($className, $builderClass);
-
             return $builderClass;
         }
 
@@ -565,20 +595,23 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     }
 
     /**
-     * Detect a custom Eloquent collection for a model and register it.
-     *
-     * Matches Laravel's own resolution priority in HasCollection::newCollection():
-     * 1. newCollection() override — if the model overrides this method, it bypasses
-     *    the attribute and property checks entirely (Laravel calls the override directly)
+     * Pure detection of a model's custom Eloquent collection, matching Laravel's resolution priority
+     * in HasCollection::newCollection():
+     * 1. newCollection() override — if the model overrides this method, it bypasses the attribute and
+     *    property checks entirely (Laravel calls the override directly)
      * 2. #[CollectedBy] attribute — checked first inside the base newCollection()
      * 3. protected static string $collectionClass property — fallback in the base newCollection()
      *
-     * Uses runtime reflection (consistent with custom builder detection) since the model
-     * class is already loaded by the autoloader in the caller.
+     * Reflection-only (abstract bases included). Single detection path, mirroring
+     * {@see resolveCustomBuilderClass}: warmUp() populates ModelMetadata::$customCollection;
+     * registerHandlersForModel() reads it and owns the registerCustomCollection() side effect (the old
+     * detectCustomCollection() wrapper is gone — Gotcha 8).
      *
      * @param class-string<Model> $className
+     * @return class-string<EloquentCollection>|null
+     * @internal called by ModelMetadataRegistryBuilder (warm-up) and the warm-up-failure fallback.
      */
-    private static function detectCustomCollection(Codebase $codebase, string $className): void
+    public static function resolveCustomCollectionClass(Codebase $codebase, string $className): ?string
     {
         try {
             $reflection = new \ReflectionClass($className);
@@ -587,7 +620,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 "Laravel plugin: could not reflect model '{$className}' for custom collection detection: {$reflectionException->getMessage()}\n",
             );
 
-            return;
+            return null;
         }
 
         // 1. newCollection() override — bypasses attribute and property when present.
@@ -604,7 +637,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         }
 
         if ($collectionClass === null) {
-            return;
+            return null;
         }
 
         // Validate that the class is a Collection subclass.
@@ -616,14 +649,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 "Laravel plugin: model '{$className}' collection '{$collectionClass}' failed autoloading: {$error->getMessage()}\n",
             );
 
-            return;
+            return null;
         }
 
         if ($isValid) {
             /** @var class-string<EloquentCollection> $collectionClass */
-            CustomCollectionHandler::registerCustomCollection($className, $collectionClass);
-
-            return;
+            return $collectionClass;
         }
 
         $codebase->progress->debug(
@@ -632,6 +663,8 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             . EloquentCollection::class
             . " — ignoring\n",
         );
+
+        return null;
     }
 
     /**
@@ -782,17 +815,80 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      */
     private static function registerWriteTypesForMethods(Codebase $codebase, ClassLikeStorage $storage): void
     {
+        // Mutator writes (legacy setXxxAttribute + Attribute set:) come from the registry's mutators()
+        // map — the production consumer that validates mutators(). Runs first so a mutator key claims
+        // its pseudo-property before the relation pass (mirrors the old single-pass guard order);
+        // registerWriteTypesForColumns already ran during registration, so column keys still win.
+        self::registerMutatorWriteTypes($storage);
+
+        // Relation writes keep their own declared-return-type detection — relations() is a different
+        // (own-class, parse-body) contract that intentionally does NOT cover the write set.
+        self::registerRelationWriteTypes($codebase, $storage);
+    }
+
+    /**
+     * Bake mutator write types into `pseudo_property_set_types` from the registry's `mutators()` map.
+     * Legacy `setXxxAttribute` → mixed; `Attribute<TGet, TSet>` → TSet (read-only `never` setters are
+     * already excluded from `mutators()`). The map is keyed by the separator-collapsed accessor
+     * identity, but a write targets the snake_case property the user assigns (`$model->first_name`),
+     * so the snake key is re-derived per mutator from its declaring method's cased name — legacy strips
+     * `set`…`Attribute`, attribute-style uses the whole method name — exactly the pre-registry
+     * derivation. The `hasUserDefinedPseudoProperty` guard keeps a user `@property` (and any
+     * already-registered column write) authoritative.
+     */
+    private static function registerMutatorWriteTypes(ClassLikeStorage $storage): void
+    {
+        // Only Model subclasses reach warm-up, so the registry entry (if any) is keyed by this FQCN.
+        /** @var class-string<Model> $modelFqcn */
+        $modelFqcn = $storage->name;
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+        if (!$metadata instanceof ModelMetadata) {
+            return;
+        }
+
+        foreach ($metadata->mutators() as $mutator) {
+            $casedName = $mutator->method->cased_name;
+            if ($casedName === null) {
+                continue;
+            }
+
+            if ($mutator instanceof AttributeMutatorInfo) {
+                // Attribute-style: the property is the whole method name (`firstName` → `first_name`).
+                $propertyName = self::studlyToSnakeCase($casedName);
+                $setType = $mutator->setType;
+            } else {
+                // Legacy `setXxxAttribute` → property `xxx` (strip the `set` prefix + `Attribute` suffix).
+                $propertyName = self::studlyToSnakeCase(\substr($casedName, 3, -9));
+                $setType = Type::getMixed();
+            }
+
+            if ($propertyName === '') {
+                continue;
+            }
+
+            $pseudoKey = '$' . $propertyName;
+            if (!self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
+                $storage->pseudo_property_set_types[$pseudoKey] = $setType;
+            }
+        }
+    }
+
+    /**
+     * Register mixed write types for relationship properties. Detection stays on the DECLARED return
+     * type (a Relation subclass) over the full callable method set — a different, broader contract
+     * than the registry's own-class parse-based `relations()`, which is therefore not used here. The
+     * pseudo key is the relation method name verbatim (`$posts`), not a snake-cased property.
+     */
+    private static function registerRelationWriteTypes(Codebase $codebase, ClassLikeStorage $storage): void
+    {
         $mixedType = Type::getMixed();
 
-        foreach ($storage->declaring_method_ids as $methodName => $methodIdentifier) {
-            // Skip inherited framework methods — only user-defined methods can be accessors/relations
+        foreach ($storage->declaring_method_ids as $methodIdentifier) {
+            // Skip inherited framework methods — only user-defined methods can be relations.
             if (\str_starts_with($methodIdentifier->fq_class_name, 'Illuminate\\')) {
                 continue;
             }
 
-            // Fetch method storage once — used for both cased_name and return_type.
-            // This avoids the overhead of getMethodReturnType() (alias resolution, declaring/appearing
-            // method lookups, template substitution) and the redundant getStorage() call in getCasedMethodName().
             $methodStorage = self::getMethodStorage($codebase, $methodIdentifier);
             if (!$methodStorage instanceof \Psalm\Storage\MethodStorage) {
                 continue;
@@ -803,56 +899,14 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 continue;
             }
 
-            // Legacy mutator: setXxxAttribute → property xxx
-            if (
-                \str_starts_with($methodName, 'set')
-                && \str_ends_with($methodName, 'attribute')
-                && $methodName !== 'setattribute'
-            ) {
-                $propertyName = self::studlyToSnakeCase(\substr($casedName, 3, -9));
-                if ($propertyName === '') {
-                    continue;
-                }
-
-                $pseudoKey = '$' . $propertyName;
-                if (!self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
-                    $storage->pseudo_property_set_types[$pseudoKey] = $mixedType;
-                }
-
-                continue;
-            }
-
-            // Check return type for Attribute accessors and Relation methods
             $returnType = $methodStorage->return_type;
             if (!$returnType instanceof Union) {
                 continue;
             }
 
             foreach ($returnType->getAtomicTypes() as $type) {
-                if (!$type instanceof TNamedObject) {
-                    continue;
-                }
-
-                // New-style Attribute accessor
-                if (\is_a($type->value, Attribute::class, true)) {
-                    $pseudoKey = '$' . self::studlyToSnakeCase($casedName);
-                    if (self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
-                        break;
-                    }
-
-                    $setType = $type instanceof TGenericObject ? $type->type_params[1] ?? null : null;
-                    if ($setType instanceof Union && $setType->isNever()) {
-                        break;
-                    }
-
-                    $storage->pseudo_property_set_types[$pseudoKey] = $setType instanceof Union ? $setType : $mixedType;
-                    break;
-                }
-
-                // Relationship method
-                if (\is_a($type->value, Relation::class, true)) {
+                if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
                     $pseudoKey = '$' . $casedName;
-
                     if (!self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
                         $storage->pseudo_property_set_types[$pseudoKey] = $mixedType;
                     }

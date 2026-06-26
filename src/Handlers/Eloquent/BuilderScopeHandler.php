@@ -14,7 +14,8 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
-use Psalm\LaravelPlugin\Util\EloquentModelMethods;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\ScopeInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -44,9 +45,8 @@ use Psalm\Type\Union;
 final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
     /**
-     * Cache for isTraitBuilderMethod results.
-     *
-     * Separate from {@see $scopeParamsCache} to keep concerns distinct.
+     * Cache for isTraitBuilderMethod results — the #635 trait-builder-macro path, distinct from
+     * scope resolution (scope identity is now served by {@see ModelMetadataRegistry}).
      *
      * @var array<string, bool>
      */
@@ -63,19 +63,12 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * entry matches the call being checked even when two models declare a scope with the
      * same name. The consumer {@see \unset()}s the entry immediately after reading it, so a
      * stale entry can never shadow a later call — which is why this stores the model class
-     * and re-resolves params through the memoized {@see getScopeParams} rather than caching
-     * a param list (mirrors {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler}).
+     * and re-resolves params through {@see getScopeParams} rather than caching a param list
+     * (mirrors {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler}).
      *
      * @var array<lowercase-string, class-string<Model>>
      */
     private static array $pendingScopeModel = [];
-
-    /**
-     * Memoization for {@see getScopeParams}: 'Model::method' -> params or null (not a scope).
-     *
-     * @var array<string, list<FunctionLikeParameter>|null>
-     */
-    private static array $scopeParamsCache = [];
 
     /**
      * Registry of trait-declared builder methods for the base Builder class.
@@ -122,7 +115,6 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     public static function init(): void
     {
         self::$pendingScopeModel = [];
-        self::$scopeParamsCache = [];
         self::$traitBuilderCache = [];
         self::$baseBuilderTraitMethods = [];
     }
@@ -245,10 +237,10 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         $methodName = $event->getMethodNameLowercase();
 
         // Instance scope hand-off (see $pendingScopeModel), consumed once: re-resolve the
-        // scope's params (minus the leading $query) through the memoized getScopeParams and
-        // unset the entry so a stale value can never shadow a later call. No isRealBuilderMethod
-        // guard is needed: the producer already excluded real Eloquent\Builder methods, and
-        // consume-once prevents cross-call leaks.
+        // scope's params (minus the leading $query) through getScopeParams and unset the entry so a
+        // stale value can never shadow a later call. No isRealBuilderMethod guard is needed: the
+        // producer already excluded real Eloquent\Builder methods, and consume-once prevents
+        // cross-call leaks.
         $modelClass = self::$pendingScopeModel[$methodName] ?? null;
         if ($modelClass !== null) {
             unset(self::$pendingScopeModel[$methodName]);
@@ -303,76 +295,69 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * the method is a real scope — callers don't need a separate hasScopeMethod()
      * guard.
      *
-     * Memoized: deterministic per model+method once the codebase is populated.
+     * The returned params come from the scope's DECLARING storage (minus `$query`). For the rare
+     * scope that OVERRIDES a parent scope yet declares no docblock param/return types of its own,
+     * Psalm's `getMethodParams` would have localized the parent's documented param types onto the
+     * child (`documenting_method_ids`); the registry's raw declaring-storage slice does not, so such
+     * an override's args are checked against the child's looser native signature. The divergence is
+     * in the missed-error direction (never a false positive) and is verified zero-movement on real
+     * apps via the acceptance delta.
      *
      * @param class-string<Model> $modelClass
      * @return list<FunctionLikeParameter>|null
      */
     public static function getScopeParams(Codebase $codebase, string $modelClass, string $methodName): ?array
     {
-        // Normalize once: Psalm lowercases method names before invoking providers, but external
-        // callers (ModelMethodHandler, MethodForwardingHandler) may pass any casing. Lowercasing
-        // here de-fragments the cache key and lets the MethodIdentifier constructor accept it.
-        $methodName = \strtolower($methodName);
-
-        $key = $modelClass . '::' . $methodName;
-        if (\array_key_exists($key, self::$scopeParamsCache)) {
-            return self::$scopeParamsCache[$key];
+        // Psalm lowercases method names before invoking providers, but external callers
+        // (ModelMethodHandler, MethodForwardingHandler) may pass any casing — the registry keys
+        // scopes by the lowercase normalized name, so normalize before the lookup. The pre-computed
+        // map already encodes Laravel's callNamedScope precedence (attribute beats legacy twin;
+        // private #[Scope] excluded), replacing the per-call methodExists re-discovery.
+        $scopeInfo = ModelMetadataRegistry::for($modelClass)?->scopes()[\strtolower($methodName)] ?? null;
+        if (!$scopeInfo instanceof ScopeInfo) {
+            return null;
         }
 
-        $scopeMethodId = self::resolveScopeMethodId($codebase, $modelClass, $methodName);
-        if (!$scopeMethodId instanceof \Psalm\Internal\MethodIdentifier) {
-            return self::$scopeParamsCache[$key] = null;
+        // The common `scopePublished(Builder $query)` takes no caller-facing args — skip the
+        // appearing-class resolution and TypeExpander entirely (expanding an empty list is a no-op).
+        if ($scopeInfo->parameters === []) {
+            return [];
         }
 
-        // Methods::getMethodParams resolves the declaring class internally, so scopes
-        // declared on abstract parent models or in traits keep their signatures. Drop the
-        // leading $query param; the caller passes everything after it.
-        $callerParams = \array_slice($codebase->methods->getMethodParams($scopeMethodId), 1);
-
-        // `self` in a trait- or parent-hosted scope follows PHP trait semantics: it binds to
-        // the class that *composes* the scope method (its appearing class), not the subclass
-        // being queried. Resolve it from the scope MethodIdentifier built above; fall back to
-        // the queried model when the appearing id is unavailable. `static`/`$this` stay pinned
-        // to the queried model inside expandScopeParamSelfReferences() (late static binding).
-        $selfClass = $codebase->methods->getAppearingMethodId($scopeMethodId)?->fq_class_name ?? $modelClass;
-
-        return self::$scopeParamsCache[$key] = self::expandScopeParamSelfReferences(
+        // `self` in a trait- or parent-hosted scope follows PHP trait semantics: it binds to the
+        // class that *composes* the scope method (its appearing class), not the queried subclass —
+        // and that composing class is call-site-dependent for a trait used at different hierarchy
+        // levels, so it is resolved live here rather than baked into the registry. `static`/`$this`
+        // stay pinned to the queried model inside expandScopeParamSelfReferences() (late static
+        // binding). ScopeInfo->parameters already excludes the leading $query.
+        return self::expandScopeParamSelfReferences(
             $codebase,
-            $selfClass,
+            self::appearingScopeClass($codebase, $modelClass, $scopeInfo),
             $modelClass,
-            $callerParams,
+            $scopeInfo->parameters,
         );
     }
 
     /**
-     * Resolve the {@see MethodIdentifier} a scope name dispatches to, or null when the model
-     * declares no such scope.
-     *
-     * Mirrors Laravel's Model::callNamedScope precedence: a #[Scope]-attributed method wins
-     * over a legacy scopeXxx() twin of the same name. Shared by {@see getScopeParams} (params)
-     * and {@see forwardedScopeReturnType} (return type) so both consult one dispatch rule.
+     * Resolve the class a scope's `self` binds to — its composing (appearing) class on the queried
+     * model's hierarchy. Reconstructs the scope's {@see MethodIdentifier} from the registry's
+     * declaring MethodStorage cased name (`scopeXxx` for legacy, the bare name for `#[Scope]`) and
+     * asks Psalm for the appearing id, falling back to the queried model when unavailable. This is
+     * the exact resolution the pre-registry code performed via getAppearingMethodId($scopeMethodId).
      *
      * @param class-string<Model> $modelClass
+     * @psalm-mutation-free
      */
-    private static function resolveScopeMethodId(
-        Codebase $codebase,
-        string $modelClass,
-        string $methodName,
-    ): ?MethodIdentifier {
-        $methodName = \strtolower($methodName);
-
-        if ($codebase->methodExists($modelClass . '::' . $methodName)
-            && self::hasScopeAttribute($codebase, $modelClass, $methodName)
-        ) {
-            return new MethodIdentifier($modelClass, $methodName);
+    private static function appearingScopeClass(Codebase $codebase, string $modelClass, ScopeInfo $scopeInfo): string
+    {
+        $casedName = $scopeInfo->method->cased_name;
+        if ($casedName === null) {
+            return $modelClass;
         }
 
-        if ($codebase->methodExists($modelClass . '::scope' . \ucfirst($methodName))) {
-            return new MethodIdentifier($modelClass, 'scope' . $methodName);
-        }
+        $scopeMethodId = new MethodIdentifier($modelClass, \strtolower($casedName));
 
-        return null;
+        return $codebase->methods->getAppearingMethodId($scopeMethodId)?->fq_class_name ?? $modelClass;
     }
 
     /**
@@ -411,20 +396,14 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         string $methodName,
         Union $fallback,
     ): Union {
-        $scopeMethodId = self::resolveScopeMethodId($codebase, $modelClass, $methodName);
-        if (!$scopeMethodId instanceof \Psalm\Internal\MethodIdentifier) {
+        $scopeInfo = ModelMetadataRegistry::for($modelClass)?->scopes()[\strtolower($methodName)] ?? null;
+        if (!$scopeInfo instanceof ScopeInfo) {
             return $fallback;
         }
 
-        $declaringMethodId = $codebase->methods->getDeclaringMethodId($scopeMethodId) ?? $scopeMethodId;
-
-        try {
-            $storage = $codebase->methods->getStorage($declaringMethodId);
-        } catch (\UnexpectedValueException) {
-            return $fallback;
-        }
-
-        $declared = $storage->return_type ?? $storage->signature_return_type;
+        // ScopeInfo->method is the DECLARING storage (appearingMethods() yields it), so its declared
+        // return is exactly what the pre-registry getDeclaringMethodId()->getStorage() read.
+        $declared = $scopeInfo->method->return_type ?? $scopeInfo->method->signature_return_type;
 
         // No declared return, or `void`/`never`: the scope surfaces nothing, so `?? $this`
         // always falls back to the builder/relation — the long-standing behavior.
@@ -450,7 +429,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         // `?Post` before the null is dropped below. `final: true` keeps `static` as the plain
         // model (not `Model&static`): a returned value is checked against the plain class at the
         // call site, exactly as a parameter is (see expandScopeParamSelfReferences).
-        $selfClass = $codebase->methods->getAppearingMethodId($scopeMethodId)?->fq_class_name ?? $modelClass;
+        $selfClass = self::appearingScopeClass($codebase, $modelClass, $scopeInfo);
         $declared = TypeExpander::expandUnion(
             $codebase,
             $declared,
@@ -721,10 +700,11 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     /**
      * Check if the model has a scope for the given method name.
      *
-     * Boolean-equivalent to {@see getScopeParams()} !== null — both detect a #[Scope]-attributed
-     * method (visibility-gated) or a legacy scopeXxx() twin — so this delegates instead of
-     * duplicating the detection and its cache. getScopeParams returns null cheaply for a
-     * non-scope (no param expansion) and memoizes the verdict.
+     * Boolean-equivalent to {@see getScopeParams()} !== null — both resolve the same registry scope
+     * map (a #[Scope]-attributed method, visibility-gated, or a legacy scopeXxx() twin) — so this
+     * delegates rather than duplicating the lookup. getScopeParams returns null only for a key absent
+     * from the map (a present key always yields an array), so membership and a non-null result
+     * coincide.
      *
      * Public so ModelMethodHandler can reuse this for method existence checks
      * on static Model calls (e.g., User::active() → scopeActive).
@@ -845,32 +825,5 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     private static function templateParamsId(array $params): string
     {
         return \implode(',', \array_map(static fn(Union $param): string => $param->getId(), $params));
-    }
-
-    /**
-     * Check for #[Scope] attribute using Psalm's method storage rather than runtime Reflection.
-     *
-     * Psalm stores attribute metadata on the *declaring* class's MethodStorage — the trait or
-     * parent that defines the method — not on the using/inheriting class. Resolving through
-     * getDeclaringMethodId first ensures that a #[Scope] attribute on a trait-declared method
-     * is found, even though the composing model's storage entry does not duplicate the attributes.
-     *
-     * @param class-string<Model> $modelClass
-     * @psalm-mutation-free
-     */
-    private static function hasScopeAttribute(Codebase $codebase, string $modelClass, string $methodName): bool
-    {
-        $methodId = new MethodIdentifier($modelClass, \strtolower($methodName));
-        $declaringMethodId = $codebase->methods->getDeclaringMethodId($methodId) ?? $methodId;
-
-        try {
-            $methodStorage = $codebase->methods->getStorage($declaringMethodId);
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
-            return false;
-        }
-
-        // Shared with SuppressHandler (#874) and PublicScopeAccessorVisibilityHandler (#695): the
-        // attribute check plus the private-#[Scope] gate live in EloquentModelMethods::hasScopeAttribute.
-        return EloquentModelMethods::hasScopeAttribute($methodStorage);
     }
 }
