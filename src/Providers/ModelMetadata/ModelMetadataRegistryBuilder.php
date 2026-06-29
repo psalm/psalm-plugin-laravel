@@ -262,10 +262,13 @@ final class ModelMetadataRegistryBuilder
             fqcn: $modelFqcn,
             primaryKey: self::computePrimaryKey($instance, $traits),
             traits: $traits,
-            // NB: PHP-attribute config (#[Fillable] / #[Guarded] / #[Connection] / #[Table] / etc.) is
-            // NOT applied here — newInstanceWithoutConstructor() skips Model::initializeTraits() and
-            // initializeModelAttributes(), so these getters reflect property declarations only. A future
-            // phase that wires a consumer for these fields must run those initializers first.
+            // NB: PHP-attribute config (#[Fillable] / #[Guarded] / #[Connection] / #[Table] /
+            // #[Appends] / #[Hidden] / #[Visible] / etc.) is NOT applied here —
+            // newInstanceWithoutConstructor() skips Model::initializeTraits() and
+            // initializeModelAttributes(), so these getters reflect property declarations only.
+            // The #[Appends]/#[Hidden]/#[Visible] gap surfaces in #923's serialized shape (a #[Hidden]
+            // column may leak in); a future phase wiring those serialization consumers must run the
+            // initializers first.
             //
             // Preserve case — Laravel's isFillable / isGuarded / getHidden / getVisible do exact-string
             // comparisons, so lowercasing would diverge from runtime semantics.

@@ -41,8 +41,11 @@ use Psalm\Type\Union;
  * relations) and partial loads / runtime visibility changes mean no key is guaranteed and unknown keys
  * must not false-positive.
  *
- * Not modeled: runtime mutators (`makeHidden`/`append`/…); divergent casts other than date/backed-enum
- * (kept at read-type); collection element shapes past one level; a column that also has an accessor.
+ * Not modeled: `#[Appends]`/`#[Hidden]`/`#[Visible]` PHP-attribute config (skipped at warm-up, so the
+ * shape may carry a `#[Hidden]` key); a real column with an accessor (keeps its cast/schema type, not
+ * the accessor's serialized type — Laravel applies mutators before casts); runtime mutators
+ * (`makeHidden`/`append`/…); divergent casts other than date/backed-enum (kept at read-type);
+ * collection element shapes past one level.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/923
  * @internal
