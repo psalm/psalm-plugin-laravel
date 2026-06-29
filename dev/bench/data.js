@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782429732579,
+  "lastUpdate": 1782757049595,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7660,6 +7660,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "daa85f687cc4782f4c32791b50f933e010599f24",
+          "message": "fix(eloquent): narrow relation and collection aggregates #1182 (#1183)\n\nsum/avg/average/min/max were narrowed only on the query builder. The\nrelation (`$model->rel()->sum('col')`) and in-memory collection\n(`$model->rel->sum('col')`) shapes returned `mixed`, surfacing as a\nMixedOperand the moment the result was used arithmetically.\n\n- Relations forward aggregates via `__call`, a path on which Psalm\n  exposes neither the argument types nor the substituted model. Declare\n  the five aggregates as real methods on the Relation stub (same\n  precedent as get()/first()/paginate()) so BuilderAggregateHandler can\n  read the column; the base returns mirror Query\\Builder as the\n  unknown-column fallback.\n- Register Support/Eloquent Collection in the handler and resolve the\n  model from whichever template param holds it (the value parameter for\n  collections, the first for builder/relation).\n\nCustom collection subclasses (newCollection()/#[CollectedBy]) and\nLazyCollection stay out of scope on the in-memory read because Psalm\ndispatches providers on the exact receiver class; the relation-level\npath still narrows those models.",
+          "timestamp": "2026-06-29T20:14:56+02:00",
+          "tree_id": "21d031ba4e1b17de1687c71e639843272ede620b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/daa85f687cc4782f4c32791b50f933e010599f24"
+        },
+        "date": 1782757048939,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.8,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1106,
             "unit": "MB"
           }
         ]
