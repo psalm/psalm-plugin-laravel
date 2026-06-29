@@ -242,4 +242,45 @@ abstract class Relation implements BuilderContract
      * @throws \Illuminate\Database\MultipleRecordsFoundException
      */
     public function sole($columns = ['*']) {}
+
+    /**
+     * Aggregates forwarded to the related model's Builder (Relation::__call ->
+     * forwardCallTo($this->query)). Declared here for the same reason as get()/
+     * first(): on the __call path Psalm exposes neither the argument types nor the
+     * substituted TRelatedModel, so BuilderAggregateHandler cannot read the column.
+     * As real methods they regain both, and the handler narrows the return to the
+     * column's resolved type. These base returns mirror Query\Builder (the forwarding
+     * target) and act as the fallback for non-literal / unknown columns.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return numeric-string|int|float
+     */
+    public function sum($column) {}
+
+    /**
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return numeric-string|int|float|null
+     */
+    public function avg($column) {}
+
+    /**
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return numeric-string|int|float|null
+     */
+    public function average($column) {}
+
+    /**
+     * min()/max() mirror Query\Builder, which leaves them unstubbed (reflected
+     * `mixed`); BuilderAggregateHandler narrows known columns to `columnType|null`.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return mixed
+     */
+    public function min($column) {}
+
+    /**
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return mixed
+     */
+    public function max($column) {}
 }

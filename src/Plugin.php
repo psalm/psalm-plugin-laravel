@@ -131,6 +131,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
         // even when migrations are disabled (the @property branch still applies).
@@ -141,6 +142,7 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelFactoryMethodTypeProvider::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryCountTypeProvider::class);
 
