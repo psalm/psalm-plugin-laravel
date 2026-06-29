@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782757049595,
+  "lastUpdate": 1782757814357,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7695,6 +7695,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1106,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c8722747b6f147e04c43871b68e41e65c874e7fa",
+          "message": "fix(eloquent): restore query-builder mixin on builder subclass #1140 (#1145)\n\n- User `@mixin <Model>` on an Eloquent\\Builder subclass shadows the\n  inherited `@mixin Query\\Builder`: Psalm replaces, not merges, a\n  child's mixins with the parent's.\n- Forwarded methods (whereNotNull, orWhereNull, ...) then surface as\n  false UndefinedMethod on the builder (and the model via @mixin).\n- BuilderSubclassQueryMixinHandler re-injects Query\\Builder post-population.\n- Upstream: the non-merging mixin inheritance is a vimeo/psalm limit.",
+          "timestamp": "2026-06-29T20:27:19+02:00",
+          "tree_id": "f0dd32369a2e924d592e3f904b930e90df91ec1b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c8722747b6f147e04c43871b68e41e65c874e7fa"
+        },
+        "date": 1782757813197,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.73,
+            "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
             "unit": "MB"
           }
         ]
