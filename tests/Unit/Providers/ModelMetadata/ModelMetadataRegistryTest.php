@@ -214,6 +214,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertInstanceOf(SchemaAggregator::class, $schema);
         $schemaTable = new SchemaTable();
         $schemaTable->setColumn(new SchemaColumn('flagged', SchemaColumn::TYPE_BOOL));
+
         $schema->setTable('attr_table', $schemaTable);
 
         $codebase = $this->makeCodebase();
@@ -258,6 +259,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertInstanceOf(SchemaAggregator::class, $schema);
         $schemaTable = new SchemaTable();
         $schemaTable->setColumn(new SchemaColumn('own_col', SchemaColumn::TYPE_STRING));
+
         $schema->setTable('own_table', $schemaTable);
 
         $codebase = $this->makeCodebase();
