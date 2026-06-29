@@ -131,6 +131,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelToArrayShapeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
