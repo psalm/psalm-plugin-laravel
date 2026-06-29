@@ -34,20 +34,10 @@ use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\SerializedIntStatus;
 
 /**
- * Unit coverage for the serialized array-shape builder.
- *
- * The COLUMN-driven shape cannot be asserted as a `.phpt` against app models: the type-test harness
- * boots Testbench with no migrations, so every app model has an empty schema (the same harness
- * constraint #1167 documents). Column shapes are therefore driven here from a hand-built
- * {@see ModelMetadata} installed via `overrideForTesting()`, exercising
- * {@see ModelSerializationShapeBuilder::build()} against a real {@see Codebase} so column value types
- * resolve through {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler::resolveColumnType()}.
- * The APPENDS-driven shape needs no schema, so it is additionally asserted end-to-end through Psalm in
- * tests/Type/tests/Model/ToArrayShapeTest.phpt.
- *
- * The shape is always OPEN (`...<string, mixed>`): the runtime attribute bag carries query-dependent
- * keys (aggregate/`selectRaw` aliases, `setAttribute`, relations) beyond the columns + `$appends`, so
- * an extra key resolves to `mixed` rather than a false-positive offset error.
+ * Unit coverage for {@see ModelSerializationShapeBuilder}. The COLUMN shape can't be a `.phpt` (the
+ * harness runs no migrations, so app models have empty schemas — #1167); it is driven here from a
+ * hand-built {@see ModelMetadata} via `overrideForTesting()` against a real {@see Codebase}. The
+ * APPENDS shape needs no schema and is asserted end-to-end in ToArrayShapeTest.phpt.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/923
  */

@@ -9,22 +9,11 @@ use Carbon\CarbonInterface;
 /**
  * Real serialized shape for attributesToArray()/toArray(), driven by $appends.
  *
- * The type-test harness runs no migrations, so a model's columns are unknowable here. SerializableModel
- * therefore carries no schema, and its serialized surface comes entirely from $appends — which Laravel
- * always serializes — so this asserts the handler's real (non-mixed) output end-to-end through Psalm.
- * It also pins HasAttributes::mutateAttributeForArray()'s serialization-divergence rules:
- *  - full_name:     legacy string accessor, kept as string.
- *  - badge_number:  modern Attribute::get(fn(): int) accessor, kept as int.
- *  - roles:         legacy Collection<int, string> -> array<int, string> (generic keys/values kept).
- *  - tags:          modern bare Collection -> array<array-key, mixed> (value type unknown).
- *  - permissions:   modern Collection<int, Collection<int, string>> -> array<int, array<array-key, mixed>> (one-level collapse).
- *  - published_at:  modern date accessor -> serialized to a string.
- *  - registered_at: legacy date accessor -> not date-serialized, kept as Carbon.
- *  - secret_token:  appended but also in $hidden, so it is dropped (hidden wins).
- *
- * The shape is OPEN (...<string, mixed>) and every key optional: query-dependent keys (aggregate /
- * selectRaw aliases, setAttribute, relations) and partial column loads keep unknown keys at mixed
- * rather than a false-positive offset error.
+ * The harness runs no migrations, so SerializableModel has no schema and its shape comes entirely from
+ * $appends — asserting the handler's real (non-mixed) output end-to-end. The appends pin each
+ * HasAttributes::mutateAttributeForArray() rule (scalar / collection / date, modern vs legacy, hidden);
+ * see the SerializableModel method docblocks. The shape is OPEN (...<string, mixed>) with every key
+ * optional: query-dependent keys and partial loads keep unknown keys at mixed, not an offset error.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/923
  *

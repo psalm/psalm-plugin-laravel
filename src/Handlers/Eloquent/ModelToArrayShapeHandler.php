@@ -14,20 +14,11 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type\Union;
 
 /**
- * Psalm event adapter for a model's serialization methods,
- * {@see HasAttributes::attributesToArray()} and {@see Model::toArray()}.
- *
- * Without this handler both return Laravel's loose `array<string, mixed>`. With it the inferred type
- * names each serialized key, e.g.
- *
- *   array{id?: int, name?: string, created_at?: string|null, full_name?: string, ...<string, mixed>}
- *
- * This class only wires the Psalm hook: it gates on the method name, bails when the model overrides
- * the serializer, resolves the warmed {@see ModelMetadata}, and delegates the actual shape (Laravel's
- * serialization order + per-attribute serialized types) to {@see ModelSerializationShapeBuilder}.
- *
- * Registered per concrete Model class by {@see ModelRegistrationHandler} because Psalm's provider
- * lookup uses exact class-name matching.
+ * Psalm event adapter for {@see HasAttributes::attributesToArray()} / {@see Model::toArray()}, which
+ * otherwise return Laravel's loose `array<string, mixed>`. Wires the hook only — method-name gate,
+ * override bail, warmed {@see ModelMetadata} lookup — then delegates the shape to
+ * {@see ModelSerializationShapeBuilder}. Registered per concrete Model class by
+ * {@see ModelRegistrationHandler} (Psalm's provider lookup is exact-class).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/923
  * @internal
@@ -50,10 +41,8 @@ final class ModelToArrayShapeHandler
         /** @var class-string<Model> $modelClass */
         $modelClass = $event->getFqClasslikeName();
 
-        // Bail when the model (or a trait) overrides the serializer — an override may return a shape
-        // different from Laravel's. Model::toArray() delegates to attributesToArray(), so a toArray()
-        // shape is valid only when BOTH are the framework's: an attributesToArray()-only override
-        // still changes toArray()'s output. Mirrors ModelAttributeSubsetHandler's override bail.
+        // Bail on an overridden serializer (may return a different shape). toArray() delegates to
+        // attributesToArray(), so a toArray() shape needs BOTH to be the framework's.
         if (!self::isFrameworkSerializer($codebase, $modelClass, self::ATTRIBUTES_TO_ARRAY)) {
             return null;
         }

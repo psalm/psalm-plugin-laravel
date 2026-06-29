@@ -10,29 +10,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
 /**
- * Serialization archetype: appended, accessor-backed attributes with no migration schema.
- *
- * The type-test harness runs no migrations, so this model has an empty column schema. Its serialized
- * shape therefore comes entirely from `$appends`, which Laravel always serializes — letting
- * ToArrayShapeTest.phpt assert a real, non-`mixed` shape end-to-end through Psalm. The appends cover
- * the accessor styles and the serialization rules in HasAttributes::mutateAttributeForArray():
- *  - `full_name`:     legacy `getFullNameAttribute(): string` — a scalar, kept as `string`.
- *  - `badge_number`:  modern `Attribute::get(fn(): int)` — a scalar, kept as `int`.
- *  - `secret_token`:  appended but also in `$hidden`, so it is dropped from the shape.
- *  - `roles`:         legacy accessor declared `@return Collection<int, string>` — a generic
- *                     collection serializes to `array<int, string>` (keys kept, scalar values kept).
- *  - `tags`:          modern `Attribute` returning a bare `Collection` — no declared value type, so
- *                     the inner shape is unknown and it serializes to `array<array-key, mixed>`.
- *  - `permissions`:   modern `Attribute<Collection<int, Collection<int, string>>>` — an `Arrayable`
- *                     element collapses one level, so `array<int, array<array-key, mixed>>`.
- *  - `published_at`:  modern date accessor — a modern `Attribute` converts a `DateTimeInterface` to
- *                     an ISO string, so it serializes to `string`.
- *  - `registered_at`: legacy date accessor — a legacy `getXxxAttribute()` does NOT convert dates, so
- *                     it keeps its read type (`CarbonInterface`); proves the date mapping is gated on
- *                     the modern accessor style.
- *
- * Consumed only by ToArrayShapeTest.phpt; the unit test drives column shapes from a hand-built
- * WorkOrder metadata instead, so this model carries the appends-only end-to-end case.
+ * Serialization archetype: appended, accessor-backed attributes with no migration schema. The harness
+ * runs no migrations, so the shape comes entirely from `$appends` (always serialized) — letting
+ * ToArrayShapeTest.phpt assert a real, non-`mixed` shape end-to-end. Each append (see its method
+ * docblock) exercises one HasAttributes::mutateAttributeForArray() rule; the unit test instead drives
+ * column shapes from a hand-built WorkOrder metadata.
  */
 class SerializableModel extends Model
 {
