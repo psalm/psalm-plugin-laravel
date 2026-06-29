@@ -11,7 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelToArrayShapeHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelSerializationShapeBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\AccessorInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\CastInfo;
@@ -24,6 +24,7 @@ use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyType;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\TableSchema;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\TraitFlags;
+use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
 use Psalm\Progress\VoidProgress;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type;
@@ -39,7 +40,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\SerializedIntStatus;
  * boots Testbench with no migrations, so every app model has an empty schema (the same harness
  * constraint #1167 documents). Column shapes are therefore driven here from a hand-built
  * {@see ModelMetadata} installed via `overrideForTesting()`, exercising
- * {@see ModelToArrayShapeHandler::buildShape()} against a real {@see Codebase} so column value types
+ * {@see ModelSerializationShapeBuilder::build()} against a real {@see Codebase} so column value types
  * resolve through {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler::resolveColumnType()}.
  * The APPENDS-driven shape needs no schema, so it is additionally asserted end-to-end through Psalm in
  * tests/Type/tests/Model/ToArrayShapeTest.phpt.
@@ -50,8 +51,8 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\SerializedIntStatus;
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/923
  */
-#[CoversClass(ModelToArrayShapeHandler::class)]
-final class ModelToArrayShapeHandlerTest extends TestCase
+#[CoversClass(ModelSerializationShapeBuilder::class)]
+final class ModelSerializationShapeBuilderTest extends TestCase
 {
     private ClassLikeStorageProvider $classLikeStorageProvider;
 
@@ -273,7 +274,10 @@ final class ModelToArrayShapeHandlerTest extends TestCase
 
     private function build(): ?Union
     {
-        return ModelToArrayShapeHandler::buildShape($this->codebase, WorkOrder::class);
+        $metadata = ModelMetadataRegistry::for(WorkOrder::class);
+        \assert($metadata instanceof ModelMetadata);
+
+        return ModelSerializationShapeBuilder::build($this->codebase, WorkOrder::class, $metadata);
     }
 
     /** @param non-empty-string $type */
