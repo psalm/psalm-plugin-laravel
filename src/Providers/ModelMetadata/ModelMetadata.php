@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Providers\ModelMetadata;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
+use Psalm\LaravelPlugin\Util\EloquentModelMethods;
 
 /**
  * Immutable metadata snapshot for a single Eloquent model.
@@ -96,6 +97,25 @@ final readonly class ModelMetadata
     public function accessors(): array
     {
         return $this->accessorsData;
+    }
+
+    /**
+     * Resolve the accessor backing `$name`, applying {@see accessors()}' keying convention so a caller
+     * need not know it: `$name` is normalized through
+     * {@see \Psalm\LaravelPlugin\Util\EloquentModelMethods::accessorPropertyKey()} (separators stripped,
+     * lowercased), so `full_name` / `fullName` / `fullname` all resolve the same accessor. Covers legacy
+     * `getXxxAttribute()` and modern `Attribute` accessors alike.
+     *
+     * @psalm-mutation-free
+     */
+    public function accessor(string $name): ?AccessorInfo
+    {
+        $key = EloquentModelMethods::accessorPropertyKey($name);
+        if ($key === null) {
+            return null;
+        }
+
+        return $this->accessorsData[$key] ?? null;
     }
 
     /**

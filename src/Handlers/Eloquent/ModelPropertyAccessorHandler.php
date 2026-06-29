@@ -109,17 +109,13 @@ final class ModelPropertyAccessorHandler
             return null;
         }
 
-        $key = EloquentModelMethods::accessorPropertyKey($propertyName);
-        if ($key === null) {
-            return null;
-        }
-
         $metadata = ModelMetadataRegistry::for($fqcn);
         if (!$metadata instanceof ModelMetadata) {
             return null;
         }
 
-        return $metadata->accessors()[$key] ?? null;
+        // {@see ModelMetadata::accessor()} owns the separator-collapsed keying convention.
+        return $metadata->accessor($propertyName);
     }
 
     /** @psalm-external-mutation-free */

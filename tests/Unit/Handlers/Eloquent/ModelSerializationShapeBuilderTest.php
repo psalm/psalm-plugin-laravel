@@ -14,6 +14,7 @@ use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelSerializationShapeBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\AccessorInfo;
+use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeAccessorInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\CastInfo;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\CastShape;
 use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
@@ -220,6 +221,60 @@ final class ModelSerializationShapeBuilderTest extends TestCase
             'array{status?: ' . SerializedIntStatus::class . ', ...<string, mixed>}',
             (string) $this->build(),
         );
+    }
+
+    #[Test]
+    public function a_column_backed_by_a_legacy_accessor_takes_the_accessor_type(): void
+    {
+        // Laravel runs mutators before casts and skips the cast for a mutated key, so a real column with
+        // an accessor serializes as the accessor's type — here the int column reads back as the
+        // accessor's string, not the schema int.
+        $this->override(
+            columns: ['score' => $this->col('score', SchemaColumn::TYPE_INT)],
+            accessors: ['score' => new LegacyAccessorInfo('score', Type::getString(), new MethodStorage())],
+        );
+
+        $this->assertSame('array{score?: string, ...<string, mixed>}', (string) $this->build());
+    }
+
+    #[Test]
+    public function a_column_accessor_wins_over_a_divergent_cast(): void
+    {
+        // The accessor short-circuits before the cast is consulted (accessor > date/enum cast > schema):
+        // the backed-enum cast would serialize to its int backing, but the accessor's string wins.
+        $this->override(
+            columns: ['status' => $this->col('status', SchemaColumn::TYPE_STRING)],
+            casts: ['status' => $this->enumCast('status')],
+            accessors: ['status' => new LegacyAccessorInfo('status', Type::getString(), new MethodStorage())],
+        );
+
+        $this->assertSame('array{status?: string, ...<string, mixed>}', (string) $this->build());
+    }
+
+    #[Test]
+    public function a_column_backed_by_a_modern_accessor_takes_the_accessor_type(): void
+    {
+        // Modern Attribute accessors flow through the same accessorFor()/serializedAppendType() path as
+        // legacy ones; for a scalar return the serialized type equals the read type.
+        $this->override(
+            columns: ['ratio' => $this->col('ratio', SchemaColumn::TYPE_INT)],
+            accessors: ['ratio' => new AttributeAccessorInfo('ratio', Type::getString(), new MethodStorage(), hasMutator: false)],
+        );
+
+        $this->assertSame('array{ratio?: string, ...<string, mixed>}', (string) $this->build());
+    }
+
+    #[Test]
+    public function an_unhinted_column_accessor_yields_mixed(): void
+    {
+        // An accessor with no resolvable return type makes the present key mixed (sound: the runtime
+        // value is the accessor's, which is genuinely unknown) rather than keeping the precise schema type.
+        $this->override(
+            columns: ['data' => $this->col('data', SchemaColumn::TYPE_INT)],
+            accessors: ['data' => new LegacyAccessorInfo('data', Type::getMixed(), new MethodStorage())],
+        );
+
+        $this->assertSame('array{data?: mixed, ...<string, mixed>}', (string) $this->build());
     }
 
     #[Test]
