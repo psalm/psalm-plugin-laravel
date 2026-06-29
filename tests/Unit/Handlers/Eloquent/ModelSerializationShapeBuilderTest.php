@@ -275,7 +275,7 @@ final class ModelSerializationShapeBuilderTest extends TestCase
     private function build(): ?Union
     {
         $metadata = ModelMetadataRegistry::for(WorkOrder::class);
-        \assert($metadata instanceof ModelMetadata);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
 
         return ModelSerializationShapeBuilder::build($this->codebase, WorkOrder::class, $metadata);
     }
