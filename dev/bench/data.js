@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782804212501,
+  "lastUpdate": 1782839599377,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7760,6 +7760,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.2,
             "range": "± 0.22",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "b785e58877a446a0856c1887905495a2a5a67ed0",
+          "message": "fix(stubs): keep Arr/Lottery class shells to avoid UndefinedClass #0\n\nThe previous commit deleted the Arr and Lottery stubs outright. But those\nstubs also DECLARED `Illuminate\\Support\\{Arr,Lottery}` for projects whose\nanalyzed vendor does not reflect `illuminate/support` (slim libraries such\nas laravel/socialite). Removing them turned every `Arr::` reference in\nsuch a project into UndefinedClass (psalm-delta: laravel-socialite +32).\n\nRestore both as empty class shells: the class stays declared, while the\ncollapsing conditional `random()` / `choose()` methods stay out (Laravel\n13.18.0 #60586 supplies them natively; a stub conditional collapses\nagainst the reflected one on Psalm beta19). Re-declaring Arr also lets\nPsalm re-scan and honor the reflected conditional on 13.18.",
+          "timestamp": "2026-06-30T19:09:19+02:00",
+          "tree_id": "894b4315384a1d53bb28067aa481de8b0be453f5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b785e58877a446a0856c1887905495a2a5a67ed0"
+        },
+        "date": 1782839598785,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.42,
+            "range": "± 0.25",
             "unit": "s"
           },
           {
