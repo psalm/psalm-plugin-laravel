@@ -198,7 +198,7 @@ class Filesystem
      *
      * @param  string  $path
      * @param  string  $algorithm
-     * @return string
+     * @return non-empty-string|false
      *
      * @psalm-taint-sink file $path
      */

@@ -8,9 +8,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\ColumnFallback;
+use Psalm\LaravelPlugin\Config\ColumnFallback;
+use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Plugin;
-use Psalm\LaravelPlugin\PluginConfig;
 
 #[CoversClass(PluginConfig::class)]
 #[CoversClass(ColumnFallback::class)]
@@ -43,10 +43,12 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
         // explicit true/false in XML overrides the auto-detection.
         $this->assertNull($config->findOctaneIncompatibleBinding);
         $this->assertTrue($config->resolveDynamicWhereClauses);
+        $this->assertTrue($config->resolveConfigReturnTypes);
         $this->assertSame([], $config->configDirectories);
     }
 
@@ -228,6 +230,37 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function report_implicit_query_builder_calls_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><reportImplicitQueryBuilderCalls value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->reportImplicitQueryBuilderCalls);
+    }
+
+    #[Test]
+    public function report_implicit_query_builder_calls_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><reportImplicitQueryBuilderCalls value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+    }
+
+    #[Test]
+    public function invalid_report_implicit_query_builder_calls_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><reportImplicitQueryBuilderCalls value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid reportImplicitQueryBuilderCalls value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
     public function invalid_find_missing_views_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findMissingViews value="yes" /></pluginClass>');
@@ -314,6 +347,37 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function resolve_config_return_types_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><resolveConfigReturnTypes value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->resolveConfigReturnTypes);
+    }
+
+    #[Test]
+    public function resolve_config_return_types_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><resolveConfigReturnTypes value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->resolveConfigReturnTypes);
+    }
+
+    #[Test]
+    public function invalid_resolve_config_return_types_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><resolveConfigReturnTypes value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid resolveConfigReturnTypes value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
     #[IgnoreDeprecations]
     public function cache_path_uses_env_var(): void
     {
@@ -391,6 +455,7 @@ final class PluginConfigTest extends TestCase
             '<pluginClass>'
             . '<modelProperties columnFallback="none" />'
             . '<resolveDynamicWhereClauses value="false" />'
+            . '<resolveConfigReturnTypes value="false" />'
             . '<failOnInternalError value="true" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
@@ -403,6 +468,7 @@ final class PluginConfigTest extends TestCase
 
         $this->assertSame(ColumnFallback::None, $config->modelPropertiesColumnFallback);
         $this->assertFalse($config->resolveDynamicWhereClauses);
+        $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);

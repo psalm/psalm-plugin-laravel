@@ -1,0 +1,40 @@
+name: Spelling
+
+# Lints prose for typos in README, source, docs, and stubs.
+# Catches typos before they ship to users as comments or documentation.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - "3.x"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spelling-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  typos:
+    name: Check for typos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Check for typos
+        # Configuration lives in _typos.toml at the repo root.
+        # Default path (.) scans the whole tree; vendor/build and other noise
+        # are excluded via extend-exclude in _typos.toml.
+        uses: crate-ci/typos@f8a58b6b53f2279f71eb605f03a4ae4d10608f45 # v1.47.0

@@ -9,7 +9,17 @@ use Illuminate\Support\Traits\ForwardsCalls;
 
 /**
  * @template-covariant TModel of \Illuminate\Database\Eloquent\Model
- * @property-read HigherOrderBuilderProxy $orWhere
+ *
+ * Higher-order where proxies (`$builder->orWhere->scope()`). The `<TModel>` arg is
+ * essential and threads through to `HigherOrderBuilderProxy::__call`, which returns
+ * `Builder<TModel>` — see HigherOrderBuilderProxy.phpstub.
+ * Do NOT drop it to `@property-read HigherOrderBuilderProxy` (non-generic), nor to
+ * `@property-read static`/`$this` (Larastan's form): Psalm 7 then loses TModel in the
+ * property-read (the latter collapse to `Builder&static`) and the chained scope falls
+ * to mixed. Verified empirically.
+ * @property-read HigherOrderBuilderProxy<TModel> $orWhere
+ * @property-read HigherOrderBuilderProxy<TModel> $whereNot
+ * @property-read HigherOrderBuilderProxy<TModel> $orWhereNot
  *
  * @mixin \Illuminate\Database\Query\Builder
  */
@@ -512,22 +522,30 @@ class Builder implements BuilderContract
     public function pluck($column, $key = null) {}
 
     /**
-     * @param  int  $perPage
-     * @param  list<non-empty-string>  $columns
+     * Returns the concrete Illuminate\Pagination class, not the contract. Laravel's
+     * own Eloquent\Builder docblock and runtime both produce the concrete paginator
+     * (`new LengthAwarePaginator(...)`); typing the concrete class lets callers reach
+     * its concrete-only surface (getCollection(), through(), withQueryString(), …)
+     * without an UndefinedInterfaceMethod. The concrete implements the contract, so
+     * code typed on the contract still accepts the result.
+     *
+     * @param  int|null|(\Closure(int): int)  $perPage
+     * @param  non-empty-string|list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, TModel>
+     * @param  (\Closure(): int)|int|null  $total
+     * @return \Illuminate\Pagination\LengthAwarePaginator<int, TModel>
      *
      * @throws \InvalidArgumentException
      */
-    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
+    public function paginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null, $total = null) {}
 
     /**
      * @param  int|null  $perPage
-     * @param  list<non-empty-string>  $columns
+     * @param  non-empty-string|list<non-empty-string>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
-     * @return \Illuminate\Contracts\Pagination\Paginator<int, TModel>
+     * @return \Illuminate\Pagination\Paginator<int, TModel>
      */
     public function simplePaginate($perPage = null, $columns = ['*'], $pageName = 'page', $page = null) {}
 
@@ -535,7 +553,7 @@ class Builder implements BuilderContract
      * Paginate the given query into a cursor paginator.
      *
      * @param  int|null  $perPage
-     * @param  array<array-key, mixed>  $columns
+     * @param  non-empty-string|array<array-key, mixed>  $columns
      * @param  string  $cursorName
      * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
      * @return \Illuminate\Pagination\CursorPaginator<int, TModel>

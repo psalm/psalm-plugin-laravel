@@ -64,19 +64,21 @@ function test_create_infers_pivot_intersection(BelongsToMany $relation): void
     /** @psalm-check-type-exact $_ = MechanicSpecialization&object{pivot: SpecializationPivot} */
 }
 
-// --- using() is callable and accepts a class-string<TPivotModel> ---
+// --- using() narrows TPivotModel on the returned relation ---
 
 /**
- * using() must accept a class-string of a Pivot subclass.
- * The @psalm-this-out annotation is present for future Psalm narrowing support;
- * in Psalm 7, TPivotModel narrowing via @psalm-this-out is not yet fully
- * propagated through generic params.
+ * using() accepts a class-string of a Pivot subclass and re-narrows TPivotModel via the
+ * stub's `@return static<...>` (#1088). The related/declaring models and the 'pivot'
+ * accessor are preserved; only the pivot slot changes.
  *
  * @param BelongsToMany<MechanicSpecialization, Mechanic, Pivot, 'pivot'> $relation
  */
-function test_using_accepts_pivot_class(BelongsToMany $relation): BelongsToMany
+function test_using_narrows_pivot_class(BelongsToMany $relation): BelongsToMany
 {
-    return $relation->using(SpecializationPivot::class);
+    $narrowed = $relation->using(SpecializationPivot::class);
+    /** @psalm-check-type-exact $narrowed = BelongsToMany<MechanicSpecialization, Mechanic, SpecializationPivot, 'pivot'>&static */
+
+    return $narrowed;
 }
 
 /**

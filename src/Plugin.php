@@ -6,13 +6,14 @@ namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
-use Psalm\LaravelPlugin\Providers\AliasStubProvider;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
-use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
-use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
-use Psalm\LaravelPlugin\Util\InternalErrorReporter;
-use Psalm\LaravelPlugin\Util\StubFileFinder;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
+use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
+use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
+use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
+use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
+use Psalm\LaravelPlugin\Stubs\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 
@@ -58,8 +59,11 @@ final class Plugin implements PluginEntryPointInterface
         }
     }
 
-    private function registerStubs(RegistrationInterface $registration, PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
-    {
+    private function registerStubs(
+        RegistrationInterface $registration,
+        PluginConfig $pluginConfig,
+        \Psalm\Progress\Progress $output,
+    ): void {
         $stubsRoot = \dirname(__DIR__) . '/stubs';
 
         $stubs = \array_merge(
@@ -122,13 +126,30 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Application\ContainerHandler::class);
         require_once __DIR__ . '/Handlers/Application/OffsetHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\OffsetHandler::class);
+        require_once __DIR__ . '/Handlers/Application/ContractMethodBridgeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Application\ContractMethodBridgeHandler::class);
 
-        require_once __DIR__ . '/Handlers/Auth/AuthHandler.php';
-        $registration->registerHooksFromClass(Handlers\Auth\AuthHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/AuthMethodHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\AuthMethodHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/AuthFunctionHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\AuthFunctionHandler::class);
         require_once __DIR__ . '/Handlers/Auth/GuardHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
+        // Taint source/escape for the concrete guards. Lives in a handler, not a
+        // `.phpstub`, because redeclaring the guard class to host a taint method
+        // shadows every other method (see GuardTaintHandler / #1113).
+        require_once __DIR__ . '/Handlers/Auth/GuardTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\GuardTaintHandler::class);
+        // Same shadowing trap as the guards (#1113): the encrypter is reached via container
+        // narrowing (`app('encrypter')`) and carries no Macroable/__call to mask the strip, so a
+        // taint `.phpstub` would break `app('encrypter')->getKey()`. Keep the taint in a handler.
+        require_once __DIR__ . '/Handlers/Encryption/EncrypterTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Encryption\EncrypterTaintHandler::class);
+
+        require_once __DIR__ . '/Handlers/Filesystem/StorageHandler.php';
+        $registration->registerHooksFromClass(Handlers\Filesystem\StorageHandler::class);
 
         // Model property handlers are registered dynamically by ModelRegistrationHandler
         // after Psalm populates its codebase (AfterCodebasePopulated event).
@@ -136,27 +157,37 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/CustomCollectionHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
+        // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
+        // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
+        // even when migrations are disabled (the @property branch still applies).
+        // Schema population (ModelRegistrationHandler::enableMigrations) stays gated.
+        require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
         if ($pluginConfig->shouldUseMigrations()) {
-            require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
             Handlers\Eloquent\ModelRegistrationHandler::enableMigrations();
         }
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelFactoryMethodTypeProvider::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryCountTypeProvider::class);
 
         // Magic method forwarding: Relation -> Builder (decorated forwarding).
         // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and
         // CustomCollectionHandler — the handler returns null for non-Relation callers
         // (fast O(1) check), so downstream handlers fire unaffected.
+        require_once __DIR__ . '/Handlers/Eloquent/Support/DynamicWhereResolver.php';
         require_once __DIR__ . '/Handlers/Magic/ForwardingRule.php';
         require_once __DIR__ . '/Handlers/Magic/ReturnTypeResolver.php';
         require_once __DIR__ . '/Handlers/Magic/MethodForwardingHandler.php';
         require_once __DIR__ . '/Handlers/Magic/MacroHandler.php';
         $registration->registerHooksFromClass(Handlers\Magic\MacroHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
+        Handlers\Eloquent\ModelMethodHandler::init();
         require_once __DIR__ . '/Handlers/Eloquent/ModelBuilderMixinHandler.php';
         Handlers\Magic\MethodForwardingHandler::init(new Handlers\Magic\ForwardingRule(
             sourceClass: \Illuminate\Database\Eloquent\Relations\Relation::class,
@@ -186,7 +217,7 @@ final class Plugin implements PluginEntryPointInterface
             interceptMixin: true,
         ));
         if ($pluginConfig->resolveDynamicWhereClauses) {
-            Handlers\Magic\MethodForwardingHandler::enableDynamicWhere();
+            Handlers\Eloquent\Support\DynamicWhereResolver::enable();
         }
 
         // Eloquent's Model -> Builder @mixin host correction is intentionally separate
@@ -197,11 +228,14 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Magic\MethodForwardingHandler::class);
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelMethodHandler::class);
-        require_once __DIR__ . '/Util/ModelPropertyResolver.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
+        Handlers\Eloquent\BuilderScopeHandler::init();
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderScopeHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/BuilderPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderAggregateHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderAggregateHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\CustomCollectionHandler::class);
 
         require_once __DIR__ . '/Handlers/Collections/CollectionFilterHandler.php';
@@ -215,11 +249,24 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Collections/HigherOrderCollectionProxyHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\HigherOrderCollectionProxyHandler::class);
 
+        require_once __DIR__ . '/Handlers/Support/ConditionableWhenHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ConditionableWhenHandler::class);
+
+        require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);
+
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
+        require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Console\ConsoleClosureScopeHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
+        // FormRequest magic-property narrowing (#1016): `$this->email`, `$user->email`.
+        // Registers its property providers per-subclass at AfterCodebasePopulated
+        // because Psalm's property lookup is exact-class.
+        require_once __DIR__ . '/Handlers/Validation/FormRequestPropertyHandler.php';
+        $registration->registerHooksFromClass(Handlers\Validation\FormRequestPropertyHandler::class);
         // Collector populates its cache via AfterExpressionAnalysisEvent on
         // $request->validate([...]) and evicts it via AfterFunctionLikeAnalysisEvent.
         // ValidationTaintHandler::removeTaints consults the cache during
@@ -229,6 +276,13 @@ final class Plugin implements PluginEntryPointInterface
         // here to keep the feed/consume relationship obvious to readers.
         require_once __DIR__ . '/Handlers/Validation/InlineValidateRulesCollector.php';
         $registration->registerHooksFromClass(Handlers\Validation\InlineValidateRulesCollector::class);
+        // ValidatedFieldReadResolver interprets every validated-read syntax
+        // (keyed accessor, ValidatedInput accessor, magic property, tracked
+        // variable) into one answer; ValidationTaintHandler applies it. The
+        // resolver and its value object are plain collaborators (no hooks), so
+        // they are require_once'd but not registered.
+        require_once __DIR__ . '/Handlers/Validation/ValidatedFieldRead.php';
+        require_once __DIR__ . '/Handlers/Validation/ValidatedFieldReadResolver.php';
         require_once __DIR__ . '/Handlers/Validation/ValidationTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidationTaintHandler::class);
 
@@ -238,14 +292,34 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Helpers\NowTodayHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/PathHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\PathHandler::class);
+        require_once __DIR__ . '/Handlers/Helpers/LiteralHandler.php';
+        $registration->registerHooksFromClass(Handlers\Helpers\LiteralHandler::class);
+
+        // config() helper + Repository::get() narrowing — reflect runtime config
+        // values from the booted Laravel app. See
+        // https://github.com/psalm/psalm-plugin-laravel/issues/752.
+        // Opt-out via `<resolveConfigReturnTypes value="false" />` for apps that
+        // construct ad-hoc Repository instances (false positives possible — the
+        // handler can't tell a fresh `new Repository([])` apart from the booted
+        // singleton at analysis time).
+        if ($pluginConfig->resolveConfigReturnTypes) {
+            require_once __DIR__ . '/Handlers/Config/ConfigValueReflector.php';
+            require_once __DIR__ . '/Handlers/Config/ThrowingConfigRepository.php';
+            require_once __DIR__ . '/Handlers/Config/ConfigKeyResolver.php';
+            require_once __DIR__ . '/Handlers/Helpers/ConfigHelperHandler.php';
+            $registration->registerHooksFromClass(Handlers\Helpers\ConfigHelperHandler::class);
+            require_once __DIR__ . '/Handlers/Config/ConfigRepositoryMethodHandler.php';
+            $registration->registerHooksFromClass(Handlers\Config\ConfigRepositoryMethodHandler::class);
+        }
+
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         $registration->registerHooksFromClass(Handlers\Translations\TranslationKeyHandler::class);
 
-        require_once __DIR__ . '/Handlers/SuppressHandler.php';
-        $registration->registerHooksFromClass(Handlers\SuppressHandler::class);
+        require_once __DIR__ . '/Handlers/Diagnostics/SuppressHandler.php';
+        $registration->registerHooksFromClass(Handlers\Diagnostics\SuppressHandler::class);
 
-        require_once __DIR__ . '/Handlers/StatsHandler.php';
-        $registration->registerHooksFromClass(Handlers\StatsHandler::class);
+        require_once __DIR__ . '/Handlers/Diagnostics/StatsHandler.php';
+        $registration->registerHooksFromClass(Handlers\Diagnostics\StatsHandler::class);
 
         require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
         $registration->registerHooksFromClass(Handlers\Jobs\DispatchableHandler::class);
@@ -259,6 +333,17 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
 
+        // `App::make()`/`makeWith()`/`get()` class-string narrowing. Its getClassLikeNames() reads
+        // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
+        require_once __DIR__ . '/Handlers/Facades/AppFacadeMakeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\AppFacadeMakeHandler::class);
+
+        // Date facade static calls (`Date::now()`, `Date::parse()`, `Date::create*()`, ...).
+        // getClassLikeNames() reads FacadeMapProvider for the `\Date` alias, so it relies on
+        // init() having run above. See https://github.com/psalm/psalm-plugin-laravel/issues/1154.
+        require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
 
@@ -269,6 +354,24 @@ final class Plugin implements PluginEntryPointInterface
         if ($this->isInstalledAndSatisfies('laravel/ai', '^0.6')) {
             require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
+        }
+
+        // Detects timing-unsafe comparisons of secret-tainted values (CWE-208).
+        // The hook is a no-op outside `--taint-analysis` runs (early-exits when
+        // taint_flow_graph is null), so per-expression overhead in normal analysis
+        // is negligible.
+        require_once __DIR__ . '/Handlers/Rules/TimingUnsafeComparisonHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\TimingUnsafeComparisonHandler::class);
+
+        require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
+
+        // Opt-in: forbid Laravel's __callStatic/__call magic forwarding on models and require
+        // the explicit Model::query()->... entry point. Off by default — the forwarding is
+        // idiomatic Laravel, so this only registers when the user asks for it.
+        if ($pluginConfig->reportImplicitQueryBuilderCalls) {
+            require_once __DIR__ . '/Handlers/Rules/ImplicitQueryBuilderCallHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\ImplicitQueryBuilderCallHandler::class);
         }
 
         // Tri-state gate for the OctaneIncompatibleBinding rule:
@@ -302,6 +405,12 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
         }
+
+        // Flag `public` Eloquent scopes / legacy accessors (Laravel's convention is `protected` — they
+        // are dispatched indirectly, never called by name). Enabled by default; silence per project via
+        // the issueHandlers config (PublicModelScope / PublicModelAccessor).
+        require_once __DIR__ . '/Handlers/Rules/PublicScopeAccessorVisibilityHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\PublicScopeAccessorVisibilityHandler::class);
     }
 
     /**

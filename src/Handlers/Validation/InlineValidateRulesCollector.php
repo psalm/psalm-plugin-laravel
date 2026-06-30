@@ -216,13 +216,12 @@ final class InlineValidateRulesCollector implements
      * read can be bound to a local variable while keeping the rule's
      * taint-escape attached to that variable.
      *
-     * Sourced from {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS}
+     * Sourced from {@see ValidatedFieldReadResolver::KEYED_ACCESSOR_METHODS}
      * so the two handlers share a single definition for the same data
      * flow — the variable binding is the same flow with one extra hop.
-     * Names are in canonical Laravel casing; non-canonical casing is
-     * rejected for consistency with the sibling handler.
+     * Names are lowercase because PHP method names are case-insensitive.
      */
-    private const KEYED_ACCESSOR_METHODS = ValidationTaintHandler::KEYED_ACCESSOR_METHODS;
+    private const KEYED_ACCESSOR_METHODS = ValidatedFieldReadResolver::KEYED_ACCESSOR_METHODS;
 
     /**
      * Rules collected per enclosing FunctionLikeAnalyzer and caller
@@ -509,15 +508,11 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        // Canonical Laravel casing — direct string comparison avoids a
-        // strtolower() allocation on every MethodCall in the project. PHP
-        // method names are technically case-insensitive, but callers of
-        // these Laravel macros always write them in canonical camelCase.
-        $rawName = $expr->name->name;
+        $methodName = $expr->name->toLowerString();
 
-        if ($rawName === 'validate') {
+        if ($methodName === 'validate') {
             $rulesArgIndex = 0;
-        } elseif ($rawName === 'validateWithBag') {
+        } elseif ($methodName === 'validatewithbag') {
             $rulesArgIndex = 1;
         } else {
             return null;
@@ -605,10 +600,7 @@ final class InlineValidateRulesCollector implements
         // (see FunctionLikeAnalyzer::analyze()), so its spl_object_id matches
         // the one used as the cache key in afterExpressionAnalysis.
         $functionId = \spl_object_id($event->getStatementsSource());
-        unset(
-            self::$rulesByFunction[$functionId],
-            self::$inputVariablesByFunction[$functionId],
-        );
+        unset(self::$rulesByFunction[$functionId], self::$inputVariablesByFunction[$functionId]);
 
         return null;
     }
@@ -639,7 +631,7 @@ final class InlineValidateRulesCollector implements
      * Look up the cached escape mask for a local variable that was bound
      * to a tracked accessor read on a validated Request — either via
      * `$v = $req->{accessor}('key')` (see
-     * {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS} for the full
+     * {@see ValidatedFieldReadResolver::KEYED_ACCESSOR_METHODS} for the full
      * list) or via `foreach ($req->{accessor}('key') as $v)` (issue #840).
      *
      * Returns `null` when the variable was never bound to such a read in
@@ -659,7 +651,7 @@ final class InlineValidateRulesCollector implements
     /**
      * Cheap check: are there any cached variable-escape bindings at all?
      *
-     * Lets {@see ValidationTaintHandler::lookupInlineValidateVariableEscape}
+     * Lets {@see ValidatedFieldReadResolver::fromInlineVariable}
      * skip the `getFunctionLikeId` analyzer-chain walk for every bare
      * Variable expression in the project when no function has populated
      * the cache yet. The check is a single hash-table-emptiness test and
@@ -712,11 +704,11 @@ final class InlineValidateRulesCollector implements
      * Inspect an expression (an `Expr\Assign` RHS or a `Stmt\Foreach_`
      * iterable) and return the rule's `removedTaints` mask if it is a
      * recognised keyed-accessor call (see
-     * {@see ValidationTaintHandler::KEYED_ACCESSOR_METHODS}) where the
+     * {@see ValidatedFieldReadResolver::KEYED_ACCESSOR_METHODS}) where the
      * caller variable already has rules cached for this scope and the
      * literal key matches one of those rule-covered fields.
      *
-     * Pattern requirements (mirrors {@see ValidationTaintHandler::matchKeyedAccessor},
+     * Pattern requirements (mirrors {@see ValidatedFieldReadResolver::matchKeyedAccessor},
      * with the difference that the type-based caller check is replaced by
      * a name-based lookup against the rule cache — type inference for the
      * expression hasn't run yet at the `BeforeExpressionAnalysis` /
@@ -740,7 +732,7 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        if (!\in_array($rhs->name->name, self::KEYED_ACCESSOR_METHODS, true)) {
+        if (!\in_array($rhs->name->toLowerString(), self::KEYED_ACCESSOR_METHODS, true)) {
             return null;
         }
 
@@ -786,16 +778,11 @@ final class InlineValidateRulesCollector implements
      * too — they carry their own `rules()` method but may additionally
      * have an inline `$this->validate([...])` call).
      */
-    private static function callerIsRequest(
-        MethodCall $expr,
-        StatementsSource $source,
-        Codebase $codebase,
-    ): bool {
-        return ValidationCallerResolver::resolveCallerClass(
-            $expr,
-            $source,
-            $codebase,
-            \Illuminate\Http\Request::class,
-        ) !== null;
+    private static function callerIsRequest(MethodCall $expr, StatementsSource $source, Codebase $codebase): bool
+    {
+        return (
+            ValidationCallerResolver::resolveCallerClass($expr, $source, $codebase, \Illuminate\Http\Request::class)
+            !== null
+        );
     }
 }

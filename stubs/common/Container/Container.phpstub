@@ -26,4 +26,31 @@ class Container implements ArrayAccess, ContainerContract
      * @psalm-variadic
      */
     public function tag($abstracts, $tags) {}
+
+    /**
+     * Resolve the given type from the container.
+     *
+     * $abstract is an unsafe-reflection taint sink (CWE-470): a user-controlled
+     * class name lets an attacker instantiate arbitrary classes. Reuses the
+     * built-in `callable` taint kind. The return type is supplied by
+     * {@see \Psalm\LaravelPlugin\Handlers\Application\ContainerHandler}.
+     *
+     * @param  string|class-string  $abstract
+     * @param  array  $parameters
+     * @return mixed
+     *
+     * @psalm-taint-sink callable $abstract
+     */
+    public function make($abstract, array $parameters = []) {}
+
+    /**
+     * Resolve the given type with the given parameters.
+     *
+     * @param  string|class-string  $abstract
+     * @param  array  $parameters
+     * @return mixed
+     *
+     * @psalm-taint-sink callable $abstract
+     */
+    public function makeWith($abstract, array $parameters = []) {}
 }

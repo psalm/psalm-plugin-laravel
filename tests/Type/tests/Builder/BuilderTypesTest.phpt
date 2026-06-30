@@ -5,6 +5,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Pagination\CursorPaginator;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Collection as SupportCollection;
 use App\Models\Customer;
 use App\Models\Vehicle;
 
@@ -75,22 +79,39 @@ final class EloquentBuilderCustomerRepository
             });
     }
 
-    /** @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, Customer> */
-    public function testPaginate(): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    /**
+     * paginate() resolves to the concrete Illuminate\Pagination class (issue #1052),
+     * so the concrete-only getCollection() resolves on the result (subsumes #978).
+     *
+     * @return LengthAwarePaginator<int, Customer>
+     */
+    public function testPaginate(): LengthAwarePaginator
     {
-        return Customer::query()->paginate();
+        $paginator = Customer::query()->paginate();
+        /** @psalm-check-type-exact $paginator = LengthAwarePaginator<int, Customer> */
+
+        $_collection = $paginator->getCollection();
+        /** @psalm-check-type-exact $_collection = SupportCollection<int, Customer> */
+
+        return $paginator;
     }
 
-    /** @return \Illuminate\Contracts\Pagination\Paginator<int, Customer> */
-    public function testSimplePaginate(): \Illuminate\Contracts\Pagination\Paginator
+    /** @return Paginator<int, Customer> */
+    public function testSimplePaginate(): Paginator
     {
-        return Customer::query()->simplePaginate();
+        $paginator = Customer::query()->simplePaginate();
+        /** @psalm-check-type-exact $paginator = Paginator<int, Customer> */
+
+        return $paginator;
     }
 
-    /** @return \Illuminate\Pagination\CursorPaginator<int, Customer> */
-    public function testCursorPaginate(Builder $builder): \Illuminate\Pagination\CursorPaginator
+    /** @return CursorPaginator<int, Customer> */
+    public function testCursorPaginate(Builder $builder): CursorPaginator
     {
-        return Customer::query()->cursorPaginate();
+        $paginator = Customer::query()->cursorPaginate();
+        /** @psalm-check-type-exact $paginator = CursorPaginator<int, Customer> */
+
+        return $paginator;
     }
 
     /** @return Builder<Customer> */
@@ -119,7 +140,7 @@ final class EloquentBuilderCustomerRepository
 * @psalm-return Builder<Customer>
 */
 function can_call_methods_on_underlying_query_builder(Builder $builder): Builder {
-    return $builder->orderBy('id', 'ASC');
+    return $builder->orderBy('id', 'asc');
 }
 
 function test_whereDateWithDateTimeInterface(Builder $builder): Builder {
@@ -181,6 +202,19 @@ function test_scopes_on_builder_contract_preserves_concrete_builder_surface(Buil
     $_result = $query->scopes(['active'])->whereNull('deleted_at');
     /** @psalm-check-type-exact $_result = Builder<Model>&static */
     return $_result;
+}
+
+/**
+ * paginate() accepts a Closure $perPage and the fifth $total argument (Laravel v13).
+ * These named-argument forms must type-check without TooManyArguments / InvalidArgument.
+ */
+function test_paginate_accepts_total_and_closure(): void
+{
+    $_total = Customer::query()->paginate(total: fn (): int => 100);
+    /** @psalm-check-type-exact $_total = LengthAwarePaginator<int, Customer> */
+
+    $_closure = Customer::query()->paginate(perPage: fn (int $total): int => $total, total: 100);
+    /** @psalm-check-type-exact $_closure = LengthAwarePaginator<int, Customer> */
 }
 ?>
 --EXPECTF--

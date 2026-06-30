@@ -1,0 +1,43 @@
+# @see https://github.com/release-drafter/release-drafter
+
+name-template: '$RESOLVED_VERSION'
+tag-template: '$RESOLVED_VERSION'
+# Pin the draft to master's history only. `3.x` is a separate major line:
+# without `filter-by-commitish`, release-drafter pulls every merged PR since the
+# last tag regardless of base branch, so 3.x PRs would leak into the master draft.
+commitish: refs/heads/master
+filter-by-commitish: true
+categories:
+  - title: 'Features'
+    labels:
+      - 'release:feature'
+  - title: 'Fixes'
+    labels:
+      - 'release:fix'
+  - title: 'Internal changes'
+    labels:
+      - 'release:internal'
+      - 'release:typo'
+      - 'chore'
+exclude-labels:
+  - 'release:skip-changelog'
+category-template: '### $TITLE'
+change-template: '- $TITLE (#$NUMBER) @$AUTHOR '
+version-template: 'v$MAJOR.$MINOR.$PATCH'
+version-resolver:
+  major:
+    labels:
+      - 'release:major'
+  minor:
+    labels:
+      - 'release:minor'
+  patch:
+    labels:
+      - 'release:patch'
+  default: patch
+template: |
+  ## What’s Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...$RESOLVED_VERSION

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Builders\VehicleBuilder;
+use App\Models\Concerns\HasFlaggedScope;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -17,12 +18,15 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
  * Car or truck belonging to a customer.
  *
  * Custom query builder via newEloquentBuilder() override (pre-Laravel 12 pattern).
+ * Uses HasFlaggedScope to provide trait-hosted #[Scope] methods for the custom-builder surface.
  *
  * @property string $make  Manufacturer (e.g. "Toyota")
  * @property string $model Vehicle model name (e.g. "Camry")
  */
 final class Vehicle extends Model
 {
+    use HasFlaggedScope;
+
     protected $table = 'vehicles';
 
     /**
@@ -88,6 +92,19 @@ final class Vehicle extends Model
     public function electric(Builder $query): void
     {
         $query->where('fuel_type', 'electric');
+    }
+
+    /**
+     * Value-returning scope on a relation's related model. On a relation chain Laravel's
+     * callScope returns the wrapped query for a null result, which Relation::__call maps back
+     * to the Relation, so a forwarded call ($customer->vehicles()->firstElectric()) is
+     * `self | <Relation>`, never null. Exercises issue #1053 on the relation-chain path.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeFirstElectric($query): ?self
+    {
+        return $query->where('fuel_type', 'electric')->first();
     }
 
     public function newEloquentBuilder($query): VehicleBuilder

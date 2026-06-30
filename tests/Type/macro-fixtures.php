@@ -23,11 +23,80 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/macro-fixtures-class.phpstub';
 
+// Issue #991 — the AST-scan fallback path requires a closure registered from a
+// file Psalm does NOT scan. We deliberately keep `macro-fixtures-vendor-style.php`
+// out of `<projectFiles>`, `<stubs>`, and the `autoloader` attribute; PHP still
+// executes it because this autoloader `require_once`s it at boot, so reflection
+// finds the closure, but Psalm's `file_storage_provider->has()` returns false.
+// That gap is what {@see \Psalm\LaravelPlugin\Internal\Ast\CachedClosureTypeFactory::fromClosureObject()}
+// closes by parsing the file with `nikic/php-parser` on demand.
+require_once __DIR__ . '/macro-fixtures-vendor-style.php';
+
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureBag;
 
 MacroFixtureBag::macro('shoutTest', static fn(): string => 'OK');
 MacroFixtureBag::macro('countCharsTest', static fn(string $needle): int => 0);
+
+// Locks in coverage for issue #899 idea #1: docblock-aware closure type extraction.
+// The closure has NO native return type but a `@return non-empty-string` docblock,
+// and `@param positive-int $count` narrows what reflection's plain `int` would surface.
+// Reflection cannot see the docblock at all — only Psalm's pre-scanned
+// {@see \Psalm\Storage\FunctionLikeStorage} carries the parsed `@param` / `@return`
+// Union types. `MacroRegistry::recoverClosureStorage()` looks them up by file + line
+// and `MacroRegistry::buildDefinitionFromStorage()` copies the docblock Unions into
+// the pseudo-method's params and return type.
+//
+// Without docblock recovery, the registered macro would surface as `function (int): mixed`
+// because the closure declares no native return type. With recovery, it surfaces as
+// `function (positive-int): non-empty-string`.
+MacroFixtureBag::macro(
+    'docblockReturnTest',
+    /**
+     * @param positive-int $count
+     * @return non-empty-string
+     */
+    static function (int $count) {
+        return \str_repeat('x', $count);
+    },
+);
+
+// Generic return-type recovery — the closure's `@return Collection<int, string>`
+// docblock cannot be expressed natively (PHP has no generics), so reflection sees
+// `Collection` at best and `mixed` at worst. The plugin lifts the full generic
+// shape from Psalm's storage so chained calls retain `Collection<int, string>`
+// rather than degrading to `mixed` or the raw class.
+MacroFixtureBag::macro(
+    'docblockGenericTest',
+    /**
+     * @return Collection<int, string>
+     */
+    static function (): \Illuminate\Support\Collection {
+        return new Collection(['a', 'b']);
+    },
+);
+
+// Fluent macro returning `static` — locks in issue #899 §C signal 1
+// (fluent return narrowing). Macroable rebinds the closure to the calling
+// instance via `bindTo($this, static::class)`, so `static` resolves to the
+// caller's runtime class. Psalm's pseudo-method dispatch expands a
+// `TNamedObject('static')` in the return type against the lhs caller, so the
+// registry must preserve the literal `static` token rather than flattening
+// it to the declaring-class FQCN.
+//
+// Use a non-`static` closure so `Macroable::__call` can `bindTo($this, ...)`
+// successfully — a `static fn(): static => $this` closure can't rebind to a
+// non-null `$this` (PHP raises a warning, `bindTo` returns null), forcing the
+// `bindTo(null, static::class)` fallback. The current shape avoids that
+// detour while still exercising the `: static` return-type expansion.
+MacroFixtureBag::macro(
+    'fluentTest',
+    function (): static {
+        /** @var static $this */
+        return $this;
+    },
+);
 
 // Locks in coverage for the issue #648 motivating case: a Builder macro
 // registered at runtime should resolve when reached through the typed
@@ -65,4 +134,47 @@ Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
 \Illuminate\Foundation\Vite::macro(
     'testViteFacadeMacro',
     static fn(string $asset): string => "resources/images/{$asset}",
+);
+
+// Locks in coverage for issue #899 idea #4 (multi-target facade dispatch). Each
+// registration targets a Macroable per-store concrete reached only through a
+// non-Macroable manager's `__call` forwarding:
+//
+//   Auth::macro(...)    -> AuthManager::__call -> SessionGuard / RequestGuard / TokenGuard
+//   Cache::macro(...)   -> CacheManager::__call -> Repository
+//   Session::macro(...) -> SessionManager extends Manager::__call -> Store
+//   Storage::macro(...) -> FilesystemManager::__call -> FilesystemAdapter
+//   Mail::macro(...)    -> MailManager::__call -> Mailer
+//
+// The macros land on the concrete's `$macros` storage at registration time; the
+// plugin's `FacadeMapProvider::MULTI_TARGET_FACADES` edge set links each
+// concrete back to the facade so the existing propagation pass injects the
+// macro pseudo-methods on the facade class itself.
+\Illuminate\Auth\SessionGuard::macro(
+    'testAuthSessionGuardMacro',
+    static fn(string $token): string => $token,
+);
+\Illuminate\Auth\RequestGuard::macro(
+    'testAuthRequestGuardMacro',
+    static fn(string $name): int => \strlen($name),
+);
+\Illuminate\Auth\TokenGuard::macro(
+    'testAuthTokenGuardMacro',
+    static fn(string $token): bool => $token !== '',
+);
+\Illuminate\Cache\Repository::macro(
+    'testCacheFacadeMacro',
+    static fn(string $key): string => "cached:{$key}",
+);
+\Illuminate\Session\Store::macro(
+    'testSessionFacadeMacro',
+    static fn(string $key): bool => $key !== '',
+);
+\Illuminate\Filesystem\FilesystemAdapter::macro(
+    'testStorageFacadeMacro',
+    static fn(string $path): int => \strlen($path),
+);
+\Illuminate\Mail\Mailer::macro(
+    'testMailFacadeMacro',
+    static fn(string $to): string => "queued:{$to}",
 );

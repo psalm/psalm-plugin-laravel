@@ -6,7 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
-use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Union;
@@ -46,6 +46,9 @@ final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        $stmt = $event->getStmt();
+        $lhsExpr = $stmt instanceof \PhpParser\Node\Expr\MethodCall ? $stmt->var : null;
+
         // Collection<TKey, TValue> — TValue (the model) is template param at index 1.
         // For non-Model collections, resolvePluckReturnType returns null and Psalm uses
         // its default type inference.
@@ -55,6 +58,7 @@ final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
             modelTemplateIndex: 1,
             nodeTypeProvider: $event->getSource()->getNodeTypeProvider(),
             codebase: $event->getSource()->getCodebase(),
+            lhsExpr: $lhsExpr,
         );
     }
 }

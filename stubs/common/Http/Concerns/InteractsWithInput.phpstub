@@ -29,9 +29,16 @@ trait InteractsWithInput
     /**
      * Retrieve a query string item from the request.
      *
+     * Query strings come from `$_GET` via Symfony's `InputBag`, which only
+     * holds scalars and arrays. Laravel documents the return as
+     * `string|array|null`; we keep `null` here because the default falls
+     * back to `null` when no key is matched.
+     *
+     * @template TDefault
+     *
      * @param  string|null  $key
-     * @param  mixed  $default
-     * @return ($key is null ? array<string, mixed> : mixed)
+     * @param  TDefault  $default
+     * @return ($key is null ? array<string, string|array<array-key, mixed>> : string|array<array-key, mixed>|TDefault)
      *
      * @psalm-taint-source input
      */
@@ -40,9 +47,15 @@ trait InteractsWithInput
     /**
      * Retrieve a request payload item from the request.
      *
+     * Mirrors `query()` but reads from `$_POST` / form-encoded bodies.
+     * JSON bodies are merged in via `input()`/`json()`, not `post()`,
+     * so the value here is always scalar or array (plus the default).
+     *
+     * @template TDefault
+     *
      * @param  string|null  $key
-     * @param  mixed  $default
-     * @return ($key is null ? array<string, mixed> : mixed)
+     * @param  TDefault  $default
+     * @return ($key is null ? array<string, string|array<array-key, mixed>> : string|array<array-key, mixed>|TDefault)
      *
      * @psalm-taint-source input
      */
@@ -81,23 +94,42 @@ trait InteractsWithInput
      */
     public function header($key = null, $default = null) {}
 
-    /**
-     * Retrieve a file from the request.
-     *
-     * @param  string|null  $key
-     * @param  mixed  $default
-     * @return \Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]|null
-     *
-     * @psalm-taint-source input
-     */
-    public function file($key = null, $default = null) {}
+    // Note: file() is stubbed on the Illuminate\Http\Request class itself
+    // (stubs/common/Http/Request.phpstub), not on this trait.
+    //
+    // Redeclaring file() on the trait — even verbatim against Laravel's source
+    // signature — triggers a Psalm 7 stub-override bug:
+    // FunctionLikeNodeScanner mutates the trait's MethodStorage and sets
+    // `$storage->stubbed = true`, after which MethodCallReturnTypeFetcher
+    // collapses the conditional `($key is null ? ... : ...)` return to the
+    // no-arg branch for every call. Declaring on the class instead bypasses
+    // the trait-override code path, so the conditional narrows correctly
+    // across every Laravel version we support (11.x via plugin 3.x, 12.x and
+    // 13.x via plugin 4.x).
+    //
+    // Laravel source history for `Concerns\InteractsWithInput::file()`:
+    //   - <= v11.x and v12.0.0-12.3.x: flat union, no conditional.
+    //     `@return UploadedFile|UploadedFile[]|array|null`
+    //   - v12.4.0-12.7.x: conditional with buggy `array<int, ...>` keys.
+    //     https://github.com/laravel/framework/pull/55156
+    //   - v12.8.0+ and 13.x: corrected `array<string, ...>` keys.
+    //     https://github.com/laravel/framework/pull/55287
+    //
+    // Refs:
+    //   - psalm-plugin-laravel issue: https://github.com/psalm/psalm-plugin-laravel/issues/925
+    //   - Laravel source: vendor/laravel/framework/src/Illuminate/Http/Concerns/InteractsWithInput.php
 
     /**
      * Get all uploaded files for the request.
      *
-     * @return array
+     * Not a taint source, for the same reason as Request::file(): the returned
+     * UploadedFile objects only coerce to their server-controlled temp path.
+     * The user-controlled upload data is tainted at the UploadedFile accessors
+     * instead (see stubs/common/Http/UploadedFile.phpstub).
      *
-     * @psalm-taint-source input
+     * Refs: https://github.com/psalm/psalm-plugin-laravel/issues/1134
+     *
+     * @return array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>>
      */
     public function allFiles() {}
 

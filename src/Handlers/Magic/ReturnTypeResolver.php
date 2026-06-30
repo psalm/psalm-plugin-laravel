@@ -72,12 +72,16 @@ final class ReturnTypeResolver
      * @psalm-external-mutation-free
      */
     public static function resolve(
-        string   $sourceClass,
-        ?array   $sourceTemplateParams,
+        string $sourceClass,
+        ?array $sourceTemplateParams,
         Codebase $codebase,
-        string   $methodNameLowercase,
+        string $methodNameLowercase,
     ): ?Union {
-        if (!self::$rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule || $sourceTemplateParams === null || $sourceTemplateParams === []) {
+        if (
+            !self::$rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule
+            || $sourceTemplateParams === null
+            || $sourceTemplateParams === []
+        ) {
             return null;
         }
 
@@ -105,17 +109,18 @@ final class ReturnTypeResolver
      *
      * @psalm-external-mutation-free
      */
-    private static function anyTargetClassMethodReturnsSelf(
-        Codebase $codebase,
-        string $methodNameLowercase,
-    ): bool {
+    private static function anyTargetClassMethodReturnsSelf(Codebase $codebase, string $methodNameLowercase): bool
+    {
         // Cache key is just the method name — the rule is a singleton per Psalm run.
         if (\array_key_exists($methodNameLowercase, self::$selfReturnCache)) {
             return self::$selfReturnCache[$methodNameLowercase];
         }
 
         $rule = self::$rule;
-        \assert($rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule, 'initForRule() must be called before anyTargetClassMethodReturnsSelf()');
+        \assert(
+            $rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule,
+            'initForRule() must be called before anyTargetClassMethodReturnsSelf()',
+        );
 
         $result = false;
 

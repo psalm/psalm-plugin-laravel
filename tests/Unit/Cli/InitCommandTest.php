@@ -27,19 +27,44 @@ final class InitCommandTest extends TestCase
 
     protected function tearDown(): void
     {
-        $target = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        if (\file_exists($target) && ! @\unlink($target)) {
+        $this->removeRecursively($this->tempDir);
+    }
+
+    private function removeRecursively(string $path): void
+    {
+        if (\is_file($path) || \is_link($path)) {
+            @\unlink($path);
             return;
         }
 
-        if (\is_dir($this->tempDir)) {
-            @\rmdir($this->tempDir);
+        if (! \is_dir($path)) {
+            return;
         }
+
+        $entries = @\scandir($path);
+        if ($entries !== false) {
+            foreach ($entries as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+
+                $this->removeRecursively($path . \DIRECTORY_SEPARATOR . $entry);
+            }
+        }
+
+        @\rmdir($path);
     }
 
     #[Test]
     public function writes_psalm_xml_when_absent(): void
     {
+        // Pre-create the conventional ignore targets so the generator emits them.
+        // Without these, the dir-existence filter (correctly) skips them.
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'vendor');
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'storage');
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'bootstrap');
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'bootstrap' . \DIRECTORY_SEPARATOR . 'cache');
+
         $tester = $this->makeTester();
 
         $exit = $tester->execute([]);
@@ -53,7 +78,7 @@ final class InitCommandTest extends TestCase
         $this->assertStringContainsString('errorLevel="4"', $contents);
         $this->assertStringContainsString('findUnusedCode="false"', $contents);
         $this->assertStringContainsString('ensureOverrideAttribute="false"', $contents);
-        $this->assertStringContainsString('<pluginClass class="Psalm\\LaravelPlugin\\Plugin"/>', $contents);
+        $this->assertStringContainsString('<pluginClass class="Psalm\\LaravelPlugin\\Plugin"', $contents);
         $this->assertStringContainsString('<directory name="vendor"/>', $contents);
         $this->assertStringContainsString('<directory name="storage"/>', $contents);
         $this->assertStringContainsString('<directory name="bootstrap/cache"/>', $contents);
@@ -125,6 +150,73 @@ final class InitCommandTest extends TestCase
 
         $this->assertSame(Command::SUCCESS, $exit);
         $this->assertStringContainsString('pluginClass', (string) \file_get_contents($target));
+    }
+
+    #[Test]
+    public function treats_existing_psalm_xml_dist_as_existing_config_and_prompts(): void
+    {
+        $dist = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist';
+        \file_put_contents($dist, '<existing-dist/>');
+
+        $tester = $this->makeTester();
+        $tester->setInputs(['no']);
+
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertSame('<existing-dist/>', \file_get_contents($dist));
+        $this->assertFileDoesNotExist($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('psalm.xml.dist already exists', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function overwrites_psalm_xml_dist_in_place_when_answered_yes(): void
+    {
+        $dist = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist';
+        \file_put_contents($dist, '<existing-dist/>');
+
+        $tester = $this->makeTester();
+        $tester->setInputs(['yes']);
+
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringContainsString('pluginClass', (string) \file_get_contents($dist));
+        $this->assertFileDoesNotExist($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+    }
+
+    #[Test]
+    public function force_overwrites_psalm_xml_dist_in_place(): void
+    {
+        $dist = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist';
+        \file_put_contents($dist, '<existing-dist/>');
+
+        $tester = $this->makeTester();
+
+        $exit = $tester->execute(['--force' => true]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringContainsString('pluginClass', (string) \file_get_contents($dist));
+        $this->assertFileDoesNotExist($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+    }
+
+    #[Test]
+    public function prefers_psalm_xml_over_psalm_xml_dist_when_both_present(): void
+    {
+        $xml = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
+        $dist = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist';
+        \file_put_contents($xml, '<existing-xml/>');
+        \file_put_contents($dist, '<existing-dist/>');
+
+        $tester = $this->makeTester();
+
+        $exit = $tester->execute(['--force' => true]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringContainsString('pluginClass', (string) \file_get_contents($xml));
+        // psalm.xml.dist must be left untouched: Psalm uses psalm.xml first,
+        // so writing the .dist would orphan the generated config.
+        $this->assertSame('<existing-dist/>', \file_get_contents($dist));
     }
 
     #[Test]

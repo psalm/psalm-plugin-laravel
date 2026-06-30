@@ -113,7 +113,7 @@ final readonly class SqlSchemaParser
                     $i++;
                 } elseif ($char === "'") {
                     // SQL-standard escaped quote (''): skip the pair
-                    if ($i + 1 < $length && $sql[$i + 1] === "'") {
+                    if (($i + 1) < $length && $sql[$i + 1] === "'") {
                         $i++;
                     } else {
                         $inQuote = false;
@@ -158,13 +158,13 @@ final readonly class SqlSchemaParser
                 $current .= $char;
                 if ($char === '\\') {
                     // Backslash escape (MySQL): consume the next character as-is
-                    if ($i + 1 < $length) {
+                    if (($i + 1) < $length) {
                         $i++;
                         $current .= $body[$i];
                     }
                 } elseif ($char === "'") {
                     // SQL-standard escaped quote (''): consume the pair
-                    if ($i + 1 < $length && $body[$i + 1] === "'") {
+                    if (($i + 1) < $length && $body[$i + 1] === "'") {
                         $i++;
                         $current .= "'";
                     } else {
@@ -285,7 +285,8 @@ final readonly class SqlSchemaParser
     {
         // Match everything up to the first modifier keyword.
         // The non-greedy quantifier ensures we stop at the earliest modifier.
-        $modifiers = 'UNSIGNED|NOT\s+NULL|(?<!\w)NULL(?!\w)|DEFAULT|AUTO_INCREMENT'
+        $modifiers
+            = 'UNSIGNED|NOT\s+NULL|(?<!\w)NULL(?!\w)|DEFAULT|AUTO_INCREMENT'
             . '|COMMENT|ON\s+UPDATE|PRIMARY|UNIQUE|GENERATED|REFERENCES|CHECK|CONSTRAINT';
 
         if (\preg_match('/^(.+?)(?:\s+(?:' . $modifiers . ')\b|$)/i', $def, $match)) {
@@ -331,26 +332,54 @@ final readonly class SqlSchemaParser
 
         return match ($firstWord) {
             // Integer types (MySQL + PostgreSQL)
-            'int', 'integer', 'bigint', 'mediumint', 'smallint', 'tinyint',
-            'serial', 'bigserial', 'smallserial' => SchemaColumn::TYPE_INT,
-
+            'int',
+            'integer',
+            'bigint',
+            'mediumint',
+            'smallint',
+            'tinyint',
+            'serial',
+            'bigserial',
+            'smallserial',
+            => SchemaColumn::TYPE_INT,
             // Float types
             'decimal', 'numeric', 'float', 'double', 'real' => SchemaColumn::TYPE_FLOAT,
-
             // Boolean (PostgreSQL uses boolean/bool directly; MySQL tinyint(1) handled above)
             'boolean', 'bool' => SchemaColumn::TYPE_BOOL,
-
             // String types — dates/times, text, binary, JSON, network types
-            'varchar', 'char', 'character', 'text', 'tinytext', 'mediumtext', 'longtext', 'clob',
-            'date', 'datetime', 'timestamp', 'time', 'timetz', 'timestamptz', 'year',
-            'json', 'jsonb', 'uuid',
-            'binary', 'varbinary', 'blob', 'tinyblob', 'mediumblob', 'longblob', 'bytea',
-            'inet', 'cidr', 'macaddr', 'citext' => SchemaColumn::TYPE_STRING,
-
+            'varchar',
+            'char',
+            'character',
+            'text',
+            'tinytext',
+            'mediumtext',
+            'longtext',
+            'clob',
+            'date',
+            'datetime',
+            'timestamp',
+            'time',
+            'timetz',
+            'timestamptz',
+            'year',
+            'json',
+            'jsonb',
+            'uuid',
+            'binary',
+            'varbinary',
+            'blob',
+            'tinyblob',
+            'mediumblob',
+            'longblob',
+            'bytea',
+            'inet',
+            'cidr',
+            'macaddr',
+            'citext',
+            => SchemaColumn::TYPE_STRING,
             // enum/set without options (rare, but handle gracefully)
             'enum' => SchemaColumn::TYPE_ENUM,
             'set' => SchemaColumn::TYPE_SET,
-
             default => SchemaColumn::TYPE_MIXED,
         };
     }

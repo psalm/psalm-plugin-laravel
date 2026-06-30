@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
-use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Union;
@@ -42,6 +42,9 @@ final class BuilderPluckHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        $stmt = $event->getStmt();
+        $lhsExpr = $stmt instanceof \PhpParser\Node\Expr\MethodCall ? $stmt->var : null;
+
         // Builder<TModel> — TModel is template param at index 0
         return ModelPropertyResolver::resolvePluckReturnType(
             args: $event->getCallArgs(),
@@ -49,6 +52,7 @@ final class BuilderPluckHandler implements MethodReturnTypeProviderInterface
             modelTemplateIndex: 0,
             nodeTypeProvider: $event->getSource()->getNodeTypeProvider(),
             codebase: $event->getSource()->getCodebase(),
+            lhsExpr: $lhsExpr,
         );
     }
 }
