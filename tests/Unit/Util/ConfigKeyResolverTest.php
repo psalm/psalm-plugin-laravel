@@ -8,7 +8,7 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\ConfigKeyResolver;
+use Psalm\LaravelPlugin\Handlers\Config\ConfigKeyResolver;
 use Psalm\Type;
 use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;
 

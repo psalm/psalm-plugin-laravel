@@ -6,14 +6,14 @@ namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
-use Psalm\LaravelPlugin\Providers\AliasStubProvider;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Providers\CarbonStubProvider;
-use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
-use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
-use Psalm\LaravelPlugin\Util\InternalErrorReporter;
-use Psalm\LaravelPlugin\Util\StubFileFinder;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
+use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
+use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
+use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
+use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
+use Psalm\LaravelPlugin\Stubs\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 
@@ -121,6 +121,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
         // even when migrations are disabled (the @property branch still applies).
@@ -131,6 +132,7 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelFactoryMethodTypeProvider::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryCountTypeProvider::class);
 
@@ -138,7 +140,7 @@ final class Plugin implements PluginEntryPointInterface
         // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and
         // CustomCollectionHandler — the handler returns null for non-Relation callers
         // (fast O(1) check), so downstream handlers fire unaffected.
-        require_once __DIR__ . '/Util/DynamicWhereResolver.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/DynamicWhereResolver.php';
         require_once __DIR__ . '/Handlers/Magic/ForwardingRule.php';
         require_once __DIR__ . '/Handlers/Magic/ReturnTypeResolver.php';
         require_once __DIR__ . '/Handlers/Magic/MethodForwardingHandler.php';
@@ -175,7 +177,7 @@ final class Plugin implements PluginEntryPointInterface
             interceptMixin: true,
         ));
         if ($pluginConfig->resolveDynamicWhereClauses) {
-            Util\DynamicWhereResolver::enable();
+            Handlers\Eloquent\Support\DynamicWhereResolver::enable();
         }
 
         // Eloquent's Model -> Builder @mixin host correction is intentionally separate
@@ -186,7 +188,7 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Magic\MethodForwardingHandler::class);
 
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelMethodHandler::class);
-        require_once __DIR__ . '/Util/ModelPropertyResolver.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/ModelPropertyResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderScopeHandler.php';
         Handlers\Eloquent\BuilderScopeHandler::init();
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderScopeHandler::class);
@@ -261,9 +263,9 @@ final class Plugin implements PluginEntryPointInterface
         // handler can't tell a fresh `new Repository([])` apart from the booted
         // singleton at analysis time).
         if ($pluginConfig->resolveConfigReturnTypes) {
-            require_once __DIR__ . '/Util/ConfigValueReflector.php';
-            require_once __DIR__ . '/Util/ThrowingConfigRepository.php';
-            require_once __DIR__ . '/Util/ConfigKeyResolver.php';
+            require_once __DIR__ . '/Handlers/Config/ConfigValueReflector.php';
+            require_once __DIR__ . '/Handlers/Config/ThrowingConfigRepository.php';
+            require_once __DIR__ . '/Handlers/Config/ConfigKeyResolver.php';
             require_once __DIR__ . '/Handlers/Helpers/ConfigHelperHandler.php';
             $registration->registerHooksFromClass(Handlers\Helpers\ConfigHelperHandler::class);
             require_once __DIR__ . '/Handlers/Config/ConfigRepositoryMethodHandler.php';
@@ -273,11 +275,11 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         $registration->registerHooksFromClass(Handlers\Translations\TranslationKeyHandler::class);
 
-        require_once __DIR__ . '/Handlers/SuppressHandler.php';
-        $registration->registerHooksFromClass(Handlers\SuppressHandler::class);
+        require_once __DIR__ . '/Handlers/Diagnostics/SuppressHandler.php';
+        $registration->registerHooksFromClass(Handlers\Diagnostics\SuppressHandler::class);
 
-        require_once __DIR__ . '/Handlers/StatsHandler.php';
-        $registration->registerHooksFromClass(Handlers\StatsHandler::class);
+        require_once __DIR__ . '/Handlers/Diagnostics/StatsHandler.php';
+        $registration->registerHooksFromClass(Handlers\Diagnostics\StatsHandler::class);
 
         require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
         $registration->registerHooksFromClass(Handlers\Jobs\DispatchableHandler::class);
