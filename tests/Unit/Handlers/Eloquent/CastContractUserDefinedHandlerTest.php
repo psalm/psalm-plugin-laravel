@@ -48,6 +48,7 @@ final class CastContractUserDefinedHandlerTest extends TestCase
         // Reproduce the cached snapshot written while register_stub_files was true.
         $castsAttributes = $provider->create(CastsAttributes::class);
         $castsAttributes->user_defined = false;
+
         $castsInbound = $provider->create(CastsInboundAttributes::class);
         $castsInbound->user_defined = false;
 
