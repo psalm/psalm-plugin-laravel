@@ -6,8 +6,8 @@ namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Closure;
 use PhpParser\Node\Scalar\String_;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Util\Arg;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
@@ -44,7 +44,9 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
     {
         $function_id = $event->getFunctionId();
 
-        return self::resolveReturnType($event->getCallArgs(), static function (array $args = []) use ($function_id): mixed {
+        return self::resolveReturnType($event->getCallArgs(), static function (array $args = []) use (
+            $function_id,
+        ): mixed {
             return $function_id(...$args);
         });
     }
@@ -82,7 +84,9 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
         /**
          * @psalm-suppress MissingClosureReturnType
          */
-        return self::resolveReturnType($event->getCallArgs(), static function (array $args) use ($method_name_lowercase) {
+        return self::resolveReturnType($event->getCallArgs(), static function (array $args) use (
+            $method_name_lowercase,
+        ) {
             return ApplicationProvider::getApp()->{$method_name_lowercase}(...$args);
         });
     }

@@ -24,13 +24,17 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  *     config?: array{'vendor-dir'?: string},
  * }
  */
-#[AsCommand(
-    name: 'init',
-    description: 'Generate a Laravel-tailored psalm.xml in the current directory.',
-)]
+#[AsCommand(name: 'init', description: 'Generate a Laravel-tailored psalm.xml in the current directory.')]
 final class InitCommand extends Command
 {
     private const DEFAULT_ERROR_LEVEL = '4';
+
+    /**
+     * Config file names Psalm itself recognises, in the same precedence order
+     * Psalm uses when locating a project's config. `psalm.xml` wins over
+     * `psalm.xml.dist` when both are present.
+     */
+    private const PSALM_CONFIG_FILENAMES = ['psalm.xml', 'psalm.xml.dist'];
 
     /** Conventional Laravel app directories. Only emitted if present on disk. */
     private const LARAVEL_APP_DIRS = ['app', 'bootstrap', 'config', 'database', 'lang', 'routes'];
@@ -132,8 +136,13 @@ final class InitCommand extends Command
             return Command::FAILURE;
         }
 
-        $targetPath = \rtrim($cwd, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        if (! $this->shouldWrite($targetPath, $input, $io)) {
+        $cwdNormalized = \rtrim($cwd, \DIRECTORY_SEPARATOR);
+        // Reuse the existing config path (psalm.xml or psalm.xml.dist) so the
+        // generated file lands where Psalm and the user already expect it,
+        // rather than silently creating a second config file alongside the old one.
+        $existingPath = $this->findExistingConfig($cwdNormalized);
+        $targetPath = $existingPath ?? $cwdNormalized . \DIRECTORY_SEPARATOR . 'psalm.xml';
+        if (!$this->shouldWrite($targetPath, $existingPath !== null, $input, $io)) {
             return Command::SUCCESS;
         }
 
@@ -147,7 +156,7 @@ final class InitCommand extends Command
             '{{PROJECT_FILES}}' => $this->buildProjectFiles($directories, $files, $ignores, $hasPhpunitPlugin),
         ]);
 
-        if (! $this->writeFile($targetPath, $contents, $io)) {
+        if (!$this->writeFile($targetPath, $contents, $io)) {
             return Command::FAILURE;
         }
 
@@ -173,19 +182,33 @@ final class InitCommand extends Command
         return null;
     }
 
-    /** True when no psalm.xml exists, --force is set, or the user confirms overwrite. */
-    private function shouldWrite(string $targetPath, InputInterface $input, SymfonyStyle $io): bool
+    /**
+     * Return the first existing Psalm config path under $cwd, following Psalm's
+     * own precedence (psalm.xml beats psalm.xml.dist). Returns null when neither exists.
+     */
+    private function findExistingConfig(string $cwd): ?string
     {
-        if (! \file_exists($targetPath) || $input->getOption('force') === true) {
+        foreach (self::PSALM_CONFIG_FILENAMES as $name) {
+            $candidate = $cwd . \DIRECTORY_SEPARATOR . $name;
+            if (\file_exists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /** True when no Psalm config exists, --force is set, or the user confirms overwrite. */
+    private function shouldWrite(string $targetPath, bool $exists, InputInterface $input, SymfonyStyle $io): bool
+    {
+        if (!$exists || $input->getOption('force') === true) {
             return true;
         }
 
-        $overwrite = $io->confirm(
-            \sprintf('psalm.xml already exists at %s. Overwrite?', $targetPath),
-            false,
-        );
-        if (! $overwrite) {
-            $io->note('Left existing psalm.xml untouched.');
+        $filename = \basename($targetPath);
+        $overwrite = $io->confirm(\sprintf('%s already exists at %s. Overwrite?', $filename, $targetPath), false);
+        if (!$overwrite) {
+            $io->note(\sprintf('Left existing %s untouched.', $filename));
         }
 
         return $overwrite;
@@ -227,9 +250,11 @@ final class InitCommand extends Command
 
         // Mirror inline XML hint when tests/ exists but isn't scanned,
         // usually because psalm/plugin-phpunit isn't installed.
-        if (! \in_array('tests', $directories, true) && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')) {
+        if (!\in_array('tests', $directories, true) && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')) {
             $io->writeln('');
-            $io->writeln('<comment>Note:</comment> tests/ dir skipped. To scan it: <info>composer require --dev psalm/plugin-phpunit</info> and add tests dir to <projectFiles>');
+            $io->writeln(
+                '<comment>Note:</comment> tests/ dir skipped. To scan it: <info>composer require --dev psalm/plugin-phpunit</info> and add tests dir to <projectFiles>',
+            );
         }
 
         $io->writeln('');
@@ -260,7 +285,7 @@ final class InitCommand extends Command
         // false positives, so opt in only when the plugin is already wired up.
         if ($hasPhpunitPlugin
             && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')
-            && ! \in_array('tests', $directories, true)
+            && !\in_array('tests', $directories, true)
         ) {
             $directories[] = 'tests';
         }
@@ -298,13 +323,13 @@ final class InitCommand extends Command
     {
         $directories = [];
         foreach ($this->extractComposerAutoloadDirs($composer) as $dir) {
-            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $dir) && ! \in_array($dir, $directories, true)) {
+            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $dir) && !\in_array($dir, $directories, true)) {
                 $directories[] = $dir;
             }
         }
 
         // Package configs commonly live in config/ even without an artisan entrypoint.
-        if (\is_dir($cwd . \DIRECTORY_SEPARATOR . 'config') && ! \in_array('config', $directories, true)) {
+        if (\is_dir($cwd . \DIRECTORY_SEPARATOR . 'config') && !\in_array('config', $directories, true)) {
             $directories[] = 'config';
         }
 
@@ -332,7 +357,7 @@ final class InitCommand extends Command
         foreach (self::IGNORE_DIRS as $dir) {
             // Swap the canonical 'vendor' token for the project-specific path; other entries pass through.
             $candidate = $dir === 'vendor' ? $vendorDir : $dir;
-            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $candidate) && ! \in_array($candidate, $present, true)) {
+            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $candidate) && !\in_array($candidate, $present, true)) {
                 $present[] = $candidate;
             }
         }
@@ -349,7 +374,7 @@ final class InitCommand extends Command
     private function readComposerJson(string $cwd): ?array
     {
         $path = $cwd . \DIRECTORY_SEPARATOR . 'composer.json';
-        if (! \is_file($path)) {
+        if (!\is_file($path)) {
             return null;
         }
 

@@ -25,10 +25,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * `Command::FAILURE` when boot failed entirely. Soft warnings like the
  * Testbench fallback are surfaced in the report but do **not** fail.
  */
-#[AsCommand(
-    name: 'diagnose',
-    description: 'Print runtime introspection of the plugin (versions, boot mode).',
-)]
+#[AsCommand(name: 'diagnose', description: 'Print runtime introspection of the plugin (versions, boot mode).')]
 final class DiagnoseCommand extends Command
 {
     /** Presentation labels for boot modes — purely UI text, kept out of ApplicationProvider. */
@@ -60,18 +57,23 @@ final class DiagnoseCommand extends Command
             'Show the Tips section. Use --no-tips to suppress it.',
             false,
         );
+
+        $this->addOption(
+            'providers',
+            null,
+            InputOption::VALUE_NONE,
+            'List every service provider the booted kernel registered (the default report shows only the count).',
+        );
     }
 
     #[\Override]
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $report = ($this->diagnostics ?? new Diagnostics())->collect();
-        $tips = (bool) $input->getOption('tips')
-            ? ($this->tipsProvider ?? new TipsProvider())->collect()
-            : [];
+        $tips = (bool) $input->getOption('tips') ? ($this->tipsProvider ?? new TipsProvider())->collect() : [];
         $io = new SymfonyStyle($input, $output);
 
-        $this->renderReport($io, $report, $tips);
+        $this->renderReport($io, $report, $tips, (bool) $input->getOption('providers'));
 
         return $report->hardFailures === [] ? Command::SUCCESS : Command::FAILURE;
     }
@@ -79,7 +81,7 @@ final class DiagnoseCommand extends Command
     /**
      * @param list<string> $tips
      */
-    private function renderReport(SymfonyStyle $io, Report $report, array $tips): void
+    private function renderReport(SymfonyStyle $io, Report $report, array $tips, bool $listProviders): void
     {
         $io->writeln('<comment>Psalm Laravel Plugin Diagnostics</comment>');
         $io->newLine();
@@ -126,6 +128,8 @@ final class DiagnoseCommand extends Command
             $io->newLine();
         }
 
+        $this->renderProviders($io, $report->loadedProviders, $listProviders);
+
         if ($tips !== []) {
             $io->writeln('<info>Tips</info>');
             foreach ($tips as $tip) {
@@ -134,6 +138,33 @@ final class DiagnoseCommand extends Command
 
             $io->newLine();
         }
+    }
+
+    /**
+     * Renders the service-provider section. The default report stays compact —
+     * just the count plus a hint — because the full list runs to ~30 lines on a
+     * stock Laravel app. `--providers` expands it into the complete sorted list.
+     *
+     * @param list<string> $providers
+     */
+    private function renderProviders(SymfonyStyle $io, array $providers, bool $listProviders): void
+    {
+        $count = \count($providers);
+
+        if (!$listProviders) {
+            $this->renderSection($io, 'Providers', [
+                'Loaded' => $count . ' (use --providers to list them)',
+            ]);
+            return;
+        }
+
+        $io->writeln('<info>Providers</info>');
+        $io->writeln('  Loaded  ' . $count);
+        foreach ($providers as $provider) {
+            $io->writeln('    - ' . $provider);
+        }
+
+        $io->newLine();
     }
 
     /**

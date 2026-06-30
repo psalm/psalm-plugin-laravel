@@ -164,9 +164,8 @@ final class SchemaAggregator
      * Deeper chains like Schema::connection()->connection()->create() are not supported
      * because they are invalid at runtime.
      */
-    private function extractSchemaCall(
-        PhpParser\Node\Expr $expr,
-    ): PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall|null {
+    private function extractSchemaCall(PhpParser\Node\Expr $expr): PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall|null
+    {
         // Direct Schema facade call: Schema::create(...), Schema::table(...), etc.
         if (
             $expr instanceof PhpParser\Node\Expr\StaticCall
@@ -194,12 +193,11 @@ final class SchemaAggregator
         return null;
     }
 
-    private function alterTable(PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall $call, bool $creating): void
-    {
-        if (
-            !isset($call->args[0])
-            || !$call->args[0] instanceof PhpParser\Node\Arg
-        ) {
+    private function alterTable(
+        PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall $call,
+        bool $creating,
+    ): void {
+        if (!isset($call->args[0]) || !$call->args[0] instanceof PhpParser\Node\Arg) {
             return;
         }
 
@@ -214,8 +212,7 @@ final class SchemaAggregator
             || !$call->args[1]->value instanceof PhpParser\Node\Expr\Closure
             || \count($call->args[1]->value->params) < 1
             || ($call->args[1]->value->params[0]->type instanceof PhpParser\Node\Name
-                && $call->args[1]->value->params[0]->type->getAttribute('resolvedName')
-                !== Blueprint::class)
+                && $call->args[1]->value->params[0]->type->getAttribute('resolvedName') !== Blueprint::class)
         ) {
             return;
         }
@@ -243,10 +240,7 @@ final class SchemaAggregator
 
     private function dropTable(PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall $call): void
     {
-        if (
-            !isset($call->args[0])
-            || !$call->args[0] instanceof PhpParser\Node\Arg
-        ) {
+        if (!isset($call->args[0]) || !$call->args[0] instanceof PhpParser\Node\Arg) {
             return;
         }
 

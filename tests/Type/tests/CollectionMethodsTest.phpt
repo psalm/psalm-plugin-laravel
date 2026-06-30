@@ -267,4 +267,4 @@ foreach ($collection as $key => $value) {
 }
 
 ?>
---EXPECT--
+--EXPECTF--

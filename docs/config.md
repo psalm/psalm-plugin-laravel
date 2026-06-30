@@ -23,6 +23,7 @@ Full config example:
         <modelProperties columnFallback="none" />
         <resolveDynamicWhereClauses value="false" />
         <resolveConfigReturnTypes value="false" />
+        <reportImplicitQueryBuilderCalls value="true" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
@@ -91,6 +92,20 @@ When you always use `Config::ineteger()`, `Config::string()` and other typed cal
 
 ```xml
 <resolveConfigReturnTypes value="false" />
+```
+
+## `reportImplicitQueryBuilderCalls`
+
+**default**: `false`
+
+When enabled, the plugin flags query builder and local scope methods called directly on an Eloquent model (forwarded by Laravel through `__callStatic` / `__call`) and asks for the explicit `Model::query()->...` form instead. It reports query builder methods (`where`, `find`, `orderBy`, ...), custom builder methods, and local scopes (legacy `scopeXxx()` and modern `#[Scope]`). Real model methods (including a method whose name collides with a builder method) and genuinely undefined methods are left alone.
+
+See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
+
+### Example
+
+```xml
+<reportImplicitQueryBuilderCalls value="true" />
 ```
 
 ## `configDirectory`

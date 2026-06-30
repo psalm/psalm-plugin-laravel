@@ -6,7 +6,7 @@ namespace Psalm\LaravelPlugin\Cli\Diagnose;
 
 use Composer\InstalledVersions;
 use Illuminate\Foundation\Application as LaravelApplication;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 
 /**
  * Collects runtime introspection data about the plugin's resolved state.
@@ -63,7 +63,31 @@ class Diagnostics
             bootPath: ApplicationProvider::getBootPath(),
             bootstrapErrors: $bootstrapErrors,
             hardFailures: $hardFailures,
+            loadedProviders: $this->collectLoadedProviders(),
         );
+    }
+
+    /**
+     * Service providers the booted kernel registered, sorted for stable output.
+     *
+     * Includes framework core providers plus anything package discovery (and, in
+     * package-source boots, {@see ApplicationProvider::registerDiscoveredVendorProviders()})
+     * registered. Returns an empty list when the app never resolved — `getApp()`
+     * throws in that case, and a failed boot has no providers to report.
+     *
+     * @return list<string>
+     */
+    private function collectLoadedProviders(): array
+    {
+        try {
+            $providers = \array_keys(ApplicationProvider::getApp()->getLoadedProviders());
+        } catch (\Throwable) {
+            return [];
+        }
+
+        \sort($providers);
+
+        return $providers;
     }
 
     /**

@@ -37,4 +37,26 @@ interface Container extends ContainerInterface, \ArrayAccess
      * @psalm-variadic
      */
     public function tag($abstracts, $tags);
+
+    /**
+     * Resolve the given type from the container.
+     *
+     * Declared on the contract so the sink also fires for the idiomatic
+     * interface-typed receivers — `Illuminate\Contracts\Container\Container`
+     * and `Illuminate\Contracts\Foundation\Application` (which extends it),
+     * e.g. `$this->app->make(...)` in a service provider. Taint sinks
+     * propagate parent → child, so a sink only on the concrete class would
+     * miss these. $abstract is an unsafe-reflection sink (CWE-470).
+     *
+     * `@return mixed` is harmless: ContainerHandler's MethodReturnTypeProvider
+     * is registered for this contract (see ContainerHandler::getClassLikeNames)
+     * and narrows the return from the literal $abstract, overriding it.
+     *
+     * @param  string|class-string  $abstract
+     * @param  array  $parameters
+     * @return mixed
+     *
+     * @psalm-taint-sink callable $abstract
+     */
+    public function make($abstract, array $parameters = []);
 }

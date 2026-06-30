@@ -183,4 +183,4 @@ $_authUnknown = auth('nonexistent-guard');
 // unknown guard name — falls back to the stub-declared union
 /** @psalm-check-type-exact $_authUnknown = \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard */
 ?>
---EXPECT--
+--EXPECTF--

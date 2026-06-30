@@ -153,6 +153,73 @@ final class InitCommandTest extends TestCase
     }
 
     #[Test]
+    public function treats_existing_psalm_xml_dist_as_existing_config_and_prompts(): void
+    {
+        $dist = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist';
+        \file_put_contents($dist, '<existing-dist/>');
+
+        $tester = $this->makeTester();
+        $tester->setInputs(['no']);
+
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertSame('<existing-dist/>', \file_get_contents($dist));
+        $this->assertFileDoesNotExist($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('psalm.xml.dist already exists', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function overwrites_psalm_xml_dist_in_place_when_answered_yes(): void
+    {
+        $dist = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist';
+        \file_put_contents($dist, '<existing-dist/>');
+
+        $tester = $this->makeTester();
+        $tester->setInputs(['yes']);
+
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringContainsString('pluginClass', (string) \file_get_contents($dist));
+        $this->assertFileDoesNotExist($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+    }
+
+    #[Test]
+    public function force_overwrites_psalm_xml_dist_in_place(): void
+    {
+        $dist = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist';
+        \file_put_contents($dist, '<existing-dist/>');
+
+        $tester = $this->makeTester();
+
+        $exit = $tester->execute(['--force' => true]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringContainsString('pluginClass', (string) \file_get_contents($dist));
+        $this->assertFileDoesNotExist($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+    }
+
+    #[Test]
+    public function prefers_psalm_xml_over_psalm_xml_dist_when_both_present(): void
+    {
+        $xml = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
+        $dist = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist';
+        \file_put_contents($xml, '<existing-xml/>');
+        \file_put_contents($dist, '<existing-dist/>');
+
+        $tester = $this->makeTester();
+
+        $exit = $tester->execute(['--force' => true]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringContainsString('pluginClass', (string) \file_get_contents($xml));
+        // psalm.xml.dist must be left untouched: Psalm uses psalm.xml first,
+        // so writing the .dist would orphan the generated config.
+        $this->assertSame('<existing-dist/>', \file_get_contents($dist));
+    }
+
+    #[Test]
     public function writes_custom_error_level(): void
     {
         $tester = $this->makeTester();

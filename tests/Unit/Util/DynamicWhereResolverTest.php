@@ -7,7 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Util;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\DynamicWhereResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver;
 
 #[CoversClass(DynamicWhereResolver::class)]
 final class DynamicWhereResolverTest extends TestCase

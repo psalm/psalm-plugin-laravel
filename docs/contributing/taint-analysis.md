@@ -22,6 +22,8 @@ For Psalm's upstream taint analysis documentation, see:
 Taint annotations live in `stubs/common/` alongside type stubs, organized by Laravel namespace.
 Taint analysis is opt-in (`runTaintAnalysis="true"` in `psalm.xml`, or `--taint-analysis` CLI flag), so there is no need for a separate directory. The stubs apply whenever taint analysis is enabled.
 
+**Exception — classes reached only through narrowing.** A taint stub redeclares the class to host the annotated method, which makes the stub claim the class's file slot. Psalm *merges* that stub with the real class (stub members win on overlapping names) — but only when the real source is **also** scanned, which a direct mention of the class in analysed code triggers. A class reached only through a return-type provider (for example `Illuminate\Auth\SessionGuard` produced by `auth('web')`, or `Illuminate\Encryption\Encrypter` produced by `app('encrypter')`) is never named in analysed code, so its real source is never scanned. The stub then becomes the class's sole definition and every non-stubbed method goes missing, breaking calls like `auth('web')->user()` and `app('encrypter')->getKey()` (#1113). The strip stays invisible when the class carries a `Macroable` or `__call` (most Laravel service classes, such as `Cache\Repository`, `Session\Store`, and `Database\Connection`, mask the missing methods as magic calls). It surfaces as a hard `UndefinedMethod` only on the few classes that lack that masking, like the auth guards and the encrypter. For those, set the taint on the *real* method storage from a scan-phase handler instead. The fields `taint_source_types`, `added_taints`, `removed_taints`, and `return_source_params` are exactly what `@psalm-taint-source`, `@psalm-taint-unescape`, `@psalm-taint-escape`, and `@psalm-flow` populate, and the instance-call taint path reads them back. See `src/Handlers/Auth/GuardTaintHandler.php` and `src/Handlers/Encryption/EncrypterTaintHandler.php`.
+
 ## Annotations quick reference
 
 There are six taint-related annotations. The first four are the ones you'll use most in stubs:
@@ -88,7 +90,7 @@ public function input($key = null, $default = null) {}
 
 ## Taint kinds
 
-All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https://github.com/vimeo/psalm/blob/master/src/Psalm/Type/TaintKind.php). These are the strings you use in annotations.
+Most taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https://github.com/vimeo/psalm/blob/master/src/Psalm/Type/TaintKind.php). Psalm's docblock parser also accepts arbitrary strings as taint kinds: anything not in that constant flows through `TaintedCustom` and reports as `Detected tainted <kind>`. The plugin uses this to model `html_url` (see [URL context vs HTML escaping](#url-context-vs-html-escaping-html_url)).
 
 ### Common kinds used in stubs
 
@@ -96,12 +98,13 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 |-----------------|-------------------------------------------|-----------------------------------------------|-----------------------------------------------|
 | `html`          | XSS via HTML injection                    | `echo`, `Response::make()`                    | `e()`, `htmlspecialchars()`                   |
 | `has_quotes`    | Attribute injection via unquoted strings  | `echo` inside HTML attributes                 | `e()`, `urlencode()`                          |
+| `html_url`      | XSS via URL-scheme injection in `<a href>` / `<img src>` (e.g. `javascript:`, `data:`) | `Notifications\Messages\MailMessage::action($url)` | App-defined URL allowlister (e.g. `Str::sanitizeUrl()`); NOT `e()` |
 | `sql`           | SQL injection                             | `Connection::unprepared()`                    | `Connection::escape()`, parameterized queries |
 | `shell`         | Command injection                         | `Process::run()`                              | `escapeshellarg()`                            |
 | `ssrf`          | Server-side request forgery               | `Http::get($url)`                             | N/A                                           |
 | `file`          | Path traversal                            | `Filesystem::get()`, `response()->download()` | N/A                                           |
-| `user_secret`   | Password/token exposure in logs or output | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
-| `system_secret` | Internal secret exposure                  | `echo`, log sinks                             | `Hash::make()`, `Encrypter::encrypt()`        |
+| `user_secret`   | Password/token exposure in logs or output | `echo`, log sinks, `md5()`, `sha1()`          | `Hash::make()`, `Encrypter::encrypt()`        |
+| `system_secret` | Internal secret exposure                  | `echo`, log sinks, `md5()`, `sha1()`          | `Hash::make()`, `Encrypter::encrypt()`        |
 
 ### All available kinds
 
@@ -128,6 +131,65 @@ All taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https:
 | `input`              | `ALL_INPUT`                | Alias: all input-related kinds combined (excludes secrets) |
 | `tainted`            | `ALL_INPUT`                | Alias: same as `input`                                     |
 | `input_except_sleep` | `ALL_INPUT & ~INPUT_SLEEP` | All input kinds except `sleep` (used by `filter_var()`)    |
+| `html_url`           | (custom, plugin-defined)   | URL emitted into an HTML attribute (`href`, `src`, …). Distinct from `html` because HTML-escaping (`e()`) blocks attribute breakout but NOT scheme injection (`javascript:`, `data:`). Distinct from `ssrf` because the threat is client-side XSS, not server-side request forgery. NOT a member of the `input` alias: must be sourced explicitly. |
+
+## URL context vs HTML escaping (`html_url`)
+
+`e()` (and `htmlspecialchars()`) escapes HTML special characters. That blocks attribute-breakout XSS like `"><script>alert(1)</script>`. It does NOT validate the URL scheme, so a value emitted into `<a href="{{ $url }}">` or `<img src="{{ $url }}">` can still execute as `javascript:alert(1)` or `data:text/html,...`. Filament shipped a stored-XSS fix for exactly this pattern (GHSA-3fc8-8hp6-6jr4), adding a separate `Str::sanitizeUrl()` helper that allowlists `http` / `https` / `mailto` / `tel` schemes and applying it across every URL-attribute renderer (`<a href>`, `<img src>`, and friends). Laravel's `MailMessage::action($url)` lands in the same `<a href="…">` shape via the notification email template, which is why the new sink targets it.
+
+`html_url` models this cleanser-context distinction:
+
+- `e()` escapes `html` and `has_quotes` only (see `stubs/common/Support/helpers.phpstub`). It does NOT escape `html_url`, so an `html_url`-tainted value that flows through `e()` is still flagged at an `html_url` sink.
+- `Notifications\Messages\MailMessage::action($url)` is annotated with both `@psalm-taint-sink html` and `@psalm-taint-sink html_url`. The first catches body-content XSS (the URL is concatenated into HTML); the second catches scheme-injection inside the `<a href="…">` attribute.
+
+### Detection gap: `html_url` is opt-in at the source
+
+`html_url` is NOT a member of `TaintKindGroup::ALL_INPUT`. That means generic Laravel input sources (`$request->input(…)`, `$request->query(…)`, model attributes) do NOT auto-flow as `html_url`. The canonical Filament flow (form input → DB → Blade `{{ $url }}` → `<img src>`) will NOT be caught out of the box. You must mark the value at a boundary you trust:
+
+```php
+final class StoreAvatarRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return ['avatar_url' => ['required', 'url']];
+    }
+
+    /**
+     * @psalm-taint-source html_url
+     */
+    public function avatarUrl(): string
+    {
+        return (string) $this->input('avatar_url');
+    }
+}
+```
+
+Anywhere this accessor is used and the value reaches an `html_url` sink without passing through an `html_url` escape, the plugin flags `TaintedCustom: Detected tainted html_url`.
+
+### Annotating an app-level URL sanitizer
+
+Laravel core ships `Str::isUrl($value, ['http', 'https'])` as a scheme-allowlisting *validator* (returns `bool`), but no first-party *sanitizer* that returns a cleaned string. To use `Str::isUrl()` as an `html_url` escape, wrap it in an app helper that returns the URL on `true` and a safe fallback (e.g. `'#'`) on `false`, then annotate the wrapper. If your app defines its own sanitizer (a `Str::macro('sanitizeUrl', …)`, an `HtmlUrl` value object, a dedicated helper), annotate that instead:
+
+```php
+/**
+ * Allowlists http/https/mailto/tel; returns '#' for anything else.
+ *
+ * @psalm-taint-escape html_url
+ * @psalm-flow ($url) -> return
+ */
+function safe_url(string $url): string
+{
+    return preg_match('#^(https?|mailto|tel):#i', $url) === 1 ? $url : '#';
+}
+```
+
+The `@psalm-flow` line is mandatory. Without it `@psalm-taint-escape` drops every taint kind on the return value, including `html`, so a value that was tainted for both kinds would silently appear clean (see [Critical rule: always pair `@psalm-taint-escape` with `@psalm-flow`](#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow)). The regression test `tests/Type/tests/TaintAnalysis/TaintedHtmlSanitizeUrlPreservesHtmlTaint.phpt` exercises this exact mutation.
+
+A value passed only through `e()` (which escapes `html` and `has_quotes`) is still tainted for `html_url`; a value passed only through `safe_url()` (which escapes `html_url`) is still tainted for `html` and `has_quotes`. The two cleansers are not interchangeable. Test coverage for this contract lives in `tests/Type/tests/TaintAnalysis/TaintedHtmlUrl*.phpt` and `SafeHtmlUrl*.phpt`.
+
+### Testing-time pitfall: Psalm's per-sink-node taint de-duplication
+
+When two PHPT tests in the same suite source the same taint kind into the **same stubbed sink** (e.g. both flow `html_url` into `MailMessage::action()`), only one of the two will emit `TaintedCustom`. `TaintFlowGraph::connectSinksAndSources()` keeps a `visited_source_ids[$sink_node][$taint_mask]` set and skips repeated visits, so the first `(sink, mask)` pair reached during BFS wins the report and any subsequent source path to that same pair is silently dropped. The Tainted case using `e()` (`TaintedHtmlUrlEDoesNotEscape.phpt`) therefore routes through a per-file local sink instead of `MailMessage::action()`. The Safe test is unaffected: the sanitizer drops `html_url`, so the taint mask reaching the shared sink is `0`, which is a distinct dedupe key from any concurrent Tainted test's `html_url` mask. Use a local `@psalm-taint-sink html_url $url` helper whenever you need a second Tainted test against an already-covered sink.
 
 ## Stub patterns by annotation type
 
@@ -162,6 +224,34 @@ Multiple parameters can be sinks:
  */
 public function jsonp($callback, $data = []) {}
 ```
+
+#### Unsafe reflection (CWE-470) — container resolution
+
+A user-controlled class name resolved through the container lets an attacker
+instantiate arbitrary classes (constructor side effects, gadget chains). The
+container entry points reuse the built-in `callable` kind, the same kind Psalm
+applies to `new $var()` and dynamic invocation:
+
+- `app($abstract)` / `resolve($name)` — `stubs/common/Foundation/helpers.phpstub`
+- `Container::make($abstract)` / `Container::makeWith($abstract)` — `stubs/common/Container/Container.phpstub`
+
+```php
+/**
+ * @psalm-taint-sink callable $abstract
+ */
+public function make($abstract, array $parameters = []) {}
+```
+
+The helper stubs (`app`, `resolve`) carry the sink only; their return type is
+still produced by `ContainerHandler`. The bare `new $var()`, `$callback()`, and
+`call_user_func()` forms in the issue are already caught by Psalm core's
+`callable` sink combined with the plugin's `Request` taint sources, so no stub
+is needed for those.
+
+The `App::make(...)` facade form does **not** propagate taint — see
+[Known limitation: Facade static calls](#known-limitation-facade-static-calls).
+Use the `app()` / `resolve()` helpers or an instance typed as
+`Illuminate\Container\Container` for analyzable code.
 
 ### Escape stubs (with flow)
 
@@ -286,7 +376,15 @@ When a function has `@psalm-flow ($param) -> return` without `@psalm-taint-speci
 public static function of($string) {}
 ```
 
-This differs from **escape functions** like `e()`, where `@psalm-taint-specialize` is not needed because the escape annotation removes the dangerous taint kind regardless of call site. Pure flow-through functions (no escape/unescape) must always pair `@psalm-taint-specialize` with `@psalm-flow`.
+**Escape functions still need `@psalm-taint-specialize`** when the stub returns a `mixed`-or-wider value that can pool. `@psalm-taint-escape` only strips the listed kind(s) (e.g. `html`, `has_quotes`); every other taint that flows through `@psalm-flow` (`sql`, `shell`, `user_secret`, `system_secret`, etc.) continues to pool into the single global return node and re-emerges at every other callsite (issue #1007). For `Js::from()` / `Js::encode()` adding `@psalm-taint-specialize` cleanly isolates per-callsite flow and is verified by `SafeJsEncodeSpecializePerCallsite.phpt`.
+
+**Empirical verification is mandatory.** Adding `@psalm-taint-specialize` to a `@psalm-flow` + `@psalm-taint-escape` (or `@psalm-taint-unescape`) stub is NOT mechanically safe in Psalm 7. Spot-checking issue #1007's follow-up list showed that the same triple breaks within-callsite taint propagation on `Connection::escape()`, `SessionGuard::hashPasswordForCookie()`, and `Encrypter::*String` — the `TaintedHtml*` tests for those methods stopped firing after `@psalm-taint-specialize` was added, even though `Js::encode()` with the same triple keeps propagating SQL taint correctly in `TaintedSqlJsEncodePreservesTaint.phpt`. The asymmetry is not localized yet (likely a Psalm-7 interaction between `@psalm-taint-specialize` and the `input` group alias on narrow parameter types). Before adding `@psalm-taint-specialize` to any other escape/unescape stub:
+
+1. Identify the existing test that asserts within-callsite non-escaped-kind flow through the stub. If no such test exists, write one.
+2. Add `@psalm-taint-specialize` and re-run the test. If it now reports zero errors, the stub falls into the broken-asymmetry class — revert the annotation and open a Psalm 7 bug report with a minimal repro.
+3. Add a per-callsite regression test under `tests/Type/tests/TaintAnalysis/Safe<Stub><Method>SpecializePerCallsite.phpt` modeled on `SafeJsEncodeSpecializePerCallsite.phpt`.
+
+The known-broken candidates (`e()`, `encrypt()` / `decrypt()` and `*String` variants, `Connection::escape()`, `DB::escape()`) are tracked as follow-ups to #1007. Do not blanket-apply the annotation; treat every site as its own bisect. (`SessionGuard::hashPasswordForCookie()` was on this list but no longer applies: its escape moved to `GuardTaintHandler` and dropped the `@psalm-flow` propagation entirely — see #1113. The `Encrypter` class methods (`encrypt`/`encryptString`/`decrypt`/`decryptString`) likewise moved to `EncrypterTaintHandler` and are no longer stubs, so the specialize question does not arise for them; the handler preserves their `@psalm-flow` via `return_source_params`. The global `encrypt()` / `decrypt()` helpers remain function stubs in `helpers.phpstub` and are unaffected.)
 
 ## Per-rule escape on Rule objects
 
@@ -357,13 +455,57 @@ final class EmailWithDnsRule implements ValidationRule
 
 **Trust model.** The plugin trusts the developer's assertion, just like any `@psalm-taint-escape`. A mis-annotated rule becomes a **false negative**: the escape removes taint kinds the value still actually carries. Only annotate kinds the rule genuinely prevents, and prefer narrow escapes (such as `header`, `cookie`) over the broad `input` alias unless the rule truly constrains the value to a digit-like or date-like form.
 
+## Plugin-emitted taint sinks (handler-driven)
+
+Some taint sinks are not expressible as `@psalm-taint-sink` docblocks because they target language constructs (comparison operators) or call shapes that the stub parser cannot annotate. These sinks are registered programmatically by handlers in `src/Handlers/Rules/`.
+
+### `TimingUnsafeComparisonHandler` — CWE-208
+
+Detects timing-unsafe comparisons of secret-tainted values. The handler registers a taint sink (matching `USER_SECRET | SYSTEM_SECRET`) at every:
+
+- Strict and loose equality / inequality operator: `===`, `==`, `!==`, `!=`
+- The spaceship operator `<=>` (compares byte-by-byte; its `-1`/`0`/`1` result leaks ordering like `strcmp()`)
+- Variable-time string-compare function: `strcmp()`, `strcasecmp()`, `strncmp()`, `strncasecmp()`, `substr_compare()`
+
+Comparisons against a literal scalar (`null`, `''`, `'sentinel'`, `42`, `false`) are skipped: the literal IS the known half of the comparison, so no character-by-character information about the secret leaks. Idiomatic defensive checks (`if ($token === null)`, `if ($apiKey === '')`) do not trigger the handler.
+
+The literal carve-out matches by **AST shape**, not by Psalm's inferred type. Integer/float/string scalars, magic constants (`__FILE__`, `__LINE__`, ...), `null`/`true`/`false`, unary `+`/`-` over a literal, and concatenation of two literals all count. Class constants (`Foo::BAR`) and enum cases (`Status::Active`) are **not** exempt — an attacker-controlled indirection could resolve to one at runtime, so the handler errs on flagging.
+
+When a value carrying `user_secret` or `system_secret` taint flows into one of these sinks, Psalm emits `TaintedUserSecret` or `TaintedSystemSecret`. The fix is to use `hash_equals()` for constant-time comparison.
+
+```php
+// Triggers TaintedUserSecret
+function check(\Illuminate\Foundation\Auth\User $user, string $given): bool {
+    return $user->getAuthPassword() === $given;
+}
+
+// Safe — hash_equals() is not watched as a sink
+function checkSafe(\Illuminate\Foundation\Auth\User $user, string $given): bool {
+    return hash_equals($user->getAuthPassword(), $given);
+}
+```
+
+**Runtime cost.** The handler hooks `AfterExpressionAnalysisInterface`, which fires per expression. It exits immediately when `taint_flow_graph` is null (i.e. when `--taint-analysis` is not enabled), so the only cost in regular analysis is an `instanceof` check against the event's expression. Sink registration only happens during taint analysis runs.
+
+**Issue-message limitation.** Psalm 7 hardcodes the issue message per taint kind in `TaintFlowGraph::connectSinksAndSources()`, so the emitted text is the generic `"Detected tainted user secret leaking"` rather than something CWE-208-specific. Tracked upstream as [vimeo/psalm#11762](https://github.com/vimeo/psalm/issues/11762); the handler will switch to a CWE-tagged message once a custom-message API lands. The data-flow trace itself still pinpoints the timing-unsafe comparison site, so the report is actionable today.
+
+**Scope.** Only secret-tainted operands are flagged. Plain `===` on user input (e.g. `$request->input('name') === 'admin'`) is not reported, because the sink does not match `INPUT_*` taint kinds.
+
+**Known gaps.** These shapes are NOT currently watched, even when one operand carries secret taint:
+
+- `switch ($secret) { case $candidate: }` — `switch`/`case` uses `==` semantics but lives in `Stmt\Switch_`/`Stmt\Case_`, not a `BinaryOp` node, so it bypasses the operator branch.
+- `match ($secret) { 'literal' => ... }` — same reason. Note: `match` against a literal arm would be exempt by the literal carve-out anyway, but `match` against a variable arm would slip through.
+- Partial-leak operations: `str_starts_with`, `str_ends_with`, `str_contains` on a secret; `preg_match` with an attacker-controlled pattern; `in_array($secret, $list, false)` / `array_search($secret, $list, false)`; fluent chains like `Str::of($secret)->is($candidate)`.
+
+These are tracked as follow-ups. Until they are covered, treat the handler as a high-signal first-line check rather than a complete CWE-208 audit.
+
 ## Stub authoring checklist
 
 1. **Verify the function's actual behavior** against Laravel source in `vendor/laravel/framework/`
 2. **For database methods, check whether values are PDO-bound or raw SQL**. See [PDO parameterized queries](#pdo-parameterized-queries). Column names go into SQL identifiers (sink); values go into bindings (escape).
 3. **Choose the correct annotation type**: source, sink, escape, or flow
 4. **If using `@psalm-taint-escape` or `@psalm-taint-unescape`**: always add `@psalm-flow` to preserve other taint kinds (unless the return value's other taints are truly irrelevant)
-5. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution. This applies whether or not `@psalm-taint-escape` is also present
+5. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution, then run the existing `Tainted<NonEscapedKind>*` test for the stub to confirm within-callsite flow still propagates. The combination is not mechanically safe on every stub shape in Psalm 7 — see [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the empirical-verification protocol
 6. **Match parameter types exactly** to Laravel's signatures. Do not narrow types.
 7. **Place in `stubs/common/`** under a path matching the Laravel namespace
 8. **Keep taint and type annotations together**. If a method already has type stubs, add taint annotations to the same file (see [Stub merging](README.md#stub-merging-how-psalm-combines-annotations))

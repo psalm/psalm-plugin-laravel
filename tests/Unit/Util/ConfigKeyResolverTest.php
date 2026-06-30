@@ -8,7 +8,7 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\ConfigKeyResolver;
+use Psalm\LaravelPlugin\Handlers\Config\ConfigKeyResolver;
 use Psalm\Type;
 use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;
 
@@ -232,6 +232,54 @@ final class ConfigKeyResolverTest extends TestCase
         $generalized = ConfigKeyResolver::generalizeDefault(new \Psalm\Type\Union([$closure]));
 
         $this->assertTrue($generalized->isMixed());
+    }
+
+    #[Test]
+    public function resolveCollectionReturnType_wraps_array_in_collection(): void
+    {
+        // A list keeps the structural key (`int<0, 2>`) and a value generalized
+        // by the reflector (`int`). Keyed arrays follow the identical wrap path
+        // but intern literal string keys, which needs a bootstrapped
+        // ProjectAnalyzer the unit harness deliberately avoids — that rendering
+        // (`Collection<'guard'|'passwords', string>`) is exercised by the type
+        // tests instead.
+        $repo = $this->fakeRepository(['app.aliases' => [1, 2, 3]]);
+        $resolver = new ConfigKeyResolver($repo);
+
+        $type = $resolver->resolveCollectionReturnType('app.aliases');
+
+        $this->assertNotNull($type);
+        $this->assertSame('Illuminate\\Support\\Collection<int<0, 2>, int>', $type->getId());
+    }
+
+    #[Test]
+    public function resolveCollectionReturnType_returns_null_when_key_absent(): void
+    {
+        $repo = $this->fakeRepository(['app.name' => 'Laravel']);
+        $resolver = new ConfigKeyResolver($repo);
+
+        // Absent key → array() resolves the default, whose shape we don't reflect.
+        $this->assertNull($resolver->resolveCollectionReturnType('app.missing'));
+    }
+
+    #[Test]
+    public function resolveCollectionReturnType_returns_null_when_value_not_array(): void
+    {
+        $repo = $this->fakeRepository(['app.name' => 'Laravel']);
+        $resolver = new ConfigKeyResolver($repo);
+
+        // Scalar value → collection() throws InvalidArgumentException at runtime.
+        $this->assertNull($resolver->resolveCollectionReturnType('app.name'));
+    }
+
+    #[Test]
+    public function resolveCollectionReturnType_returns_null_for_empty_array(): void
+    {
+        $repo = $this->fakeRepository(['app.providers' => []]);
+        $resolver = new ConfigKeyResolver($repo);
+
+        // Collection<never, never> is useless for a mutable container — defer to stub.
+        $this->assertNull($resolver->resolveCollectionReturnType('app.providers'));
     }
 
     /**

@@ -6,9 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Magic;
 
 use Illuminate\Validation\ValidationException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
-use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
-use Psalm\LaravelPlugin\Providers\MacroDefinition;
-use Psalm\LaravelPlugin\Providers\MacroRegistry;
+use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -282,10 +280,8 @@ final class MacroHandler implements AfterCodebasePopulatedInterface
      * `@method` annotations and earlier macros in the propagation chain take
      * precedence.
      */
-    private static function injectPseudoMethod(
-        ClassLikeStorage $storage,
-        MacroDefinition $def,
-    ): void {
+    private static function injectPseudoMethod(ClassLikeStorage $storage, MacroDefinition $def): void
+    {
         $methodName = $def->methodName;
 
         // Block injection if a real method with this name exists anywhere in the
@@ -295,10 +291,7 @@ final class MacroHandler implements AfterCodebasePopulatedInterface
         // `declaring_method_ids`. Without checking both, a propagated macro could
         // shadow a real inherited method's signature in the static-call path,
         // mis-reporting argument-count diagnostics.
-        if (
-            isset($storage->methods[$methodName])
-            || isset($storage->declaring_method_ids[$methodName])
-        ) {
+        if (isset($storage->methods[$methodName]) || isset($storage->declaring_method_ids[$methodName])) {
             return;
         }
 

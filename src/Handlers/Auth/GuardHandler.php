@@ -58,7 +58,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
     {
         $method_name_lowercase = $event->getMethodNameLowercase();
 
-        if (! \in_array($method_name_lowercase, ['user', 'loginusingid', 'onceusingid'], true)) {
+        if (!\in_array($method_name_lowercase, ['user', 'loginusingid', 'onceusingid'], true)) {
             return null;
         }
 
@@ -77,19 +77,19 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
         $default_return_type = new Type\Union([...$app_possible_authenticatable_types, $empty_return_type]);
 
         $statement = $event->getStmt();
-        if (! $statement instanceof MethodCall) { // in theory, it can also be a StaticCall
+        if (!$statement instanceof MethodCall) { // in theory, it can also be a StaticCall
             return $default_return_type;
         }
 
         $guard = self::findGuardNameInCallChain($statement);
 
         $is_guard_known = \is_string($guard);
-        if (! $is_guard_known) {
+        if (!$is_guard_known) {
             return $default_return_type;
         }
 
         $authenticatable_fqcn = AuthConfigAnalyzer::instance()->getAuthenticatableFQCN($guard);
-        if (! \is_string($authenticatable_fqcn)) {
+        if (!\is_string($authenticatable_fqcn)) {
             return $default_return_type;
         }
 
@@ -117,7 +117,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
         $previous_call = $methodCall->var;
         while ($call_contains_guard_name === null && $previous_call instanceof CallLike) {
             if ($previous_call instanceof MethodCall || $previous_call instanceof StaticCall) {
-                if (($previous_call->name instanceof Identifier) && $previous_call->name->name === 'guard') {
+                if ($previous_call->name instanceof Identifier && $previous_call->name->name === 'guard') {
                     $call_contains_guard_name = $previous_call; // exit from while loop
                     continue;
                 }
@@ -134,6 +134,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
                 && ($previous_call->name instanceof Name && $previous_call->name->getParts()[0] === 'auth')
             ) {
                 $call_contains_guard_name = $previous_call;
+
                 // exit from while loop
             }
 
@@ -142,18 +143,15 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
 
         unset($previous_call);
 
-        if (! $call_contains_guard_name instanceof CallLike) {
+        if (!$call_contains_guard_name instanceof CallLike) {
             return null;
         }
 
         $default_guard = AuthConfigAnalyzer::instance()->getDefaultGuard();
-        if (! \is_string($default_guard)) {
+        if (!\is_string($default_guard)) {
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
-        return self::getGuardNameFromFirstArgument(
-            $call_contains_guard_name,
-            $default_guard,
-        );
+        return self::getGuardNameFromFirstArgument($call_contains_guard_name, $default_guard);
     }
 }

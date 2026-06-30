@@ -12,6 +12,18 @@ interface Paginator
      * @return array<TItem>
      */
     public function items(): array;
+
+    /**
+     * Get / set the URL fragment to be appended to URLs.
+     *
+     * Conditional return mirrors the concrete `AbstractPaginator::fragment()`:
+     * null arg is the getter (string|null), any other arg returns the implementor
+     * for chaining. `static`, not `$this`, on the setter branch (stub/source merge).
+     *
+     * @param  string|null  $fragment
+     * @return ($fragment is null ? string|null : static)
+     */
+    public function fragment($fragment = null);
 }
 
 /**
@@ -33,4 +45,13 @@ interface CursorPaginator
      * @return array<TItem>
      */
     public function items(): array;
+
+    /**
+     * Get / set the URL fragment to be appended to URLs. See `Paginator::fragment()`
+     * for the conditional-return / `static`-setter-branch rationale.
+     *
+     * @param  string|null  $fragment
+     * @return ($fragment is null ? string|null : static)
+     */
+    public function fragment($fragment = null);
 }

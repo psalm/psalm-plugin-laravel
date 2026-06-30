@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
-use Psalm\LaravelPlugin\Providers\ConfigRepositoryProvider;
+use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
 
 final class AuthConfigAnalyzer
 {
@@ -46,14 +46,14 @@ final class AuthConfigAnalyzer
         if ($guard === null) {
             $guard = $this->getDefaultGuard();
 
-            if (! \is_string($guard)) {
+            if (!\is_string($guard)) {
                 return null;
             }
         }
 
         $provider = $this->config->get("auth.guards.{$guard}.provider");
 
-        if (! \is_string($provider)) {
+        if (!\is_string($provider)) {
             return null;
         }
 
@@ -99,7 +99,7 @@ final class AuthConfigAnalyzer
 
         $driver = $this->config->get("auth.guards.{$guard}.driver");
 
-        if (! \is_string($driver)) {
+        if (!\is_string($driver)) {
             return $this->guardFqcnCache[$guard] = null;
         }
 

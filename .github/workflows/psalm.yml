@@ -2,6 +2,7 @@ name: Psalm
 
 on:
   push:
+    branches: [master]
     paths:
       - '**.php'
       - 'psalm*'
@@ -14,13 +15,18 @@ on:
       - 'composer.json'
       - '.github/workflows/psalm.yml'
 
+# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   psalm:
     name: Psalm
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Block all outbound calls except allowlist)
-        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -35,6 +41,8 @@ jobs:
         run: sudo systemctl mask --now apt-news esm-cache motd-news ua-timer.timer
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup PHP
         uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
