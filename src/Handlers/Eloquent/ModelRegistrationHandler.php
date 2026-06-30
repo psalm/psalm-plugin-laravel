@@ -256,6 +256,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // Model::only() shape narrowing from literal keys.
         // See https://github.com/psalm/psalm-plugin-laravel/issues/931
         $methods->return_type_provider->registerClosure($className, ModelAttributeSubsetHandler::getReturnType(...));
+        // attributesToArray()/toArray() precise array-shape inference (columns + $appends, honoring
+        // $hidden/$visible). See https://github.com/psalm/psalm-plugin-laravel/issues/923
+        $methods->return_type_provider->registerClosure($className, ModelToArrayShapeHandler::getReturnType(...));
 
         // Registration order matters — the first non-null result wins.
 
