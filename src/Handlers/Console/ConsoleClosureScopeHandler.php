@@ -6,7 +6,6 @@ namespace Psalm\LaravelPlugin\Handlers\Console;
 
 use Illuminate\Foundation\Console\ClosureCommand;
 use Illuminate\Support\Facades\Artisan;
-use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\ArrowFunction;
 use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\StaticCall;
@@ -16,9 +15,11 @@ use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
+use Psalm\Plugin\EventHandler\BeforeFileAnalysisInterface;
 use Psalm\Plugin\EventHandler\BeforeStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
+use Psalm\Plugin\EventHandler\Event\BeforeFileAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\BeforeStatementAnalysisEvent;
 
 /**
@@ -44,21 +45,21 @@ use Psalm\Plugin\EventHandler\Event\BeforeStatementAnalysisEvent;
  * **How it works.** A bound `$this` at file scope needs *two* things, and Psalm
  * gates them separately — exactly the pair a `@var ClosureCommand $this` var
  * docblock would set (see {@see \Psalm\Internal\Analyzer\StatementsAnalyzer}'s
- * handling of a `$this` var-comment), so we reproduce both:
+ * handling of a `$this` var-comment), so we reproduce both, scoped to the
+ * callback closure node alone:
  *
  * 1. **The `$this` variable's type.**
  *    {@see \Psalm\Internal\Analyzer\ClosureAnalyzer::analyzeExpression()} derives
  *    a closure body's `$this` purely from the *enclosing* `Context::$self`
  *    (`new TNamedObject($context->self)`; it ignores any pre-set `vars_in_scope`).
- *    {@see self::beforeExpressionAnalysis()} sets `Context::$self` to
- *    `ClosureCommand` for the span of the `Artisan::command()` call — the
- *    argument is analysed against that same `Context` (no clone on the facade
- *    `@method` dispatch path) — and {@see self::afterExpressionAnalysis()}
- *    restores it once the call is analysed so no sibling expression sees the
- *    override. (The restore rides Psalm's after-hook, which is skipped if the
- *    call hard-fails analysis; the enclosing statement list is abandoned in that
- *    case, so a still-overridden `self` is never reused, and the after-hook
- *    re-validates the node to stay safe against `spl_object_id` recycling.)
+ *    When {@see self::beforeExpressionAnalysis()} sees an `Artisan::command()`
+ *    call it records the `spl_object_id` of its callback argument; when that exact
+ *    closure node is then analysed, the same hook sets `Context::$self` to
+ *    `ClosureCommand` for that node's span only, and
+ *    {@see self::afterExpressionAnalysis()} restores it. Overriding at the closure
+ *    node (not the whole call) keeps the *other* arguments on the real `self`, so
+ *    `Artisan::command(self::SIG, fn ...)` still resolves `self::SIG` against the
+ *    enclosing class.
  * 2. **The structural `$this->...` guard.** `MethodCallAnalyzer` (and the
  *    property-fetch analyzer) reject `$this` whenever
  *    `StatementsAnalyzer::getFQCLN()` is null — a separate check that step 1 does
@@ -66,8 +67,16 @@ use Psalm\Plugin\EventHandler\Event\BeforeStatementAnalysisEvent;
  *    `InvalidScope: Use of $this in non-class context`.
  *    {@see self::beforeStatementAnalysis()} calls `setFQCLN(ClosureCommand)` on
  *    the closure body's analyzer (detected by `Context::$self` already being
- *    `ClosureCommand`, which only our own step 1 produces), clearing the guard
- *    on a per-body analyzer that is discarded when the closure finishes.
+ *    `ClosureCommand`, which only step 1 produces), clearing the guard on a
+ *    per-body analyzer that is discarded when the closure finishes.
+ *
+ * The recorded callback id is intentionally *not* consumed on first use: the
+ * facade `@method` dispatch analyses the callback argument more than once
+ * (`AtomicStaticCallAnalyzer::analyzePseudoMethodCall` re-runs `ArgumentsAnalyzer`
+ * for the data-flow pass), so each pass must re-apply the override. The id set and
+ * the saved-`self` map are cleared per file ({@see self::beforeAnalyzeFile()}),
+ * which bounds them and prevents an `spl_object_id` recorded in one file from
+ * matching an unrelated closure in another.
  *
  * **Why a handler and not a stub.** The clean fix lives upstream in Psalm:
  * PHPStan — and therefore Larastan, see its `Foundation/Console/Kernel.stub` —
@@ -87,30 +96,37 @@ use Psalm\Plugin\EventHandler\Event\BeforeStatementAnalysisEvent;
  * - The instance form `$kernel->command(...)` on the concrete
  *   `Illuminate\Foundation\Console\Kernel` (the method is not on the
  *   `Contracts\Console\Kernel` interface) — detection matches static calls only
- *   ({@see self::isArtisanCommandClosureCall()} requires a `StaticCall`), and
- *   this instance form is rare in practice.
- * - A `static function` callback — a static closure cannot be rebound at
- *   runtime, so `$this` inside it is a genuine error. We skip it at detection
- *   ({@see self::hasInlineBindableClosureArg()}), leaving Psalm's `InvalidScope`
- *   to fire as it should.
- *
- * The override spans the whole `command()` call, so in the rare in-method form
- * `Artisan::command(self::SIG, fn ...)` a `self::`/`static::` reference in the
- * signature argument would resolve against ClosureCommand. Harmless in practice:
- * the signature argument is a string literal in real code.
+ *   ({@see self::callbackToBind()} requires a `StaticCall`), and this instance
+ *   form is rare in practice.
+ * - A `static function`/`static fn` callback — a static closure cannot be
+ *   rebound at runtime, so `$this` inside it is a genuine error. We skip it at
+ *   detection ({@see self::bindableCallbackArg()}), leaving Psalm's
+ *   `InvalidScope` to fire as it should.
  */
 final class ConsoleClosureScopeHandler implements
     BeforeExpressionAnalysisInterface,
     BeforeStatementAnalysisInterface,
-    AfterExpressionAnalysisInterface
+    AfterExpressionAnalysisInterface,
+    BeforeFileAnalysisInterface
 {
     private const ARTISAN_FACADE = Artisan::class;
 
     private const CLOSURE_COMMAND = ClosureCommand::class;
 
     /**
-     * Outer `Context::$self` saved per `Artisan::command()` call node (keyed by
-     * the node's `spl_object_id`) so it can be restored once the call has been
+     * `spl_object_id`s of callback closure nodes seen as the callback argument of
+     * an `Artisan::command()` call in the file currently being analysed. Recorded
+     * when the call is visited and matched when the closure node is analysed (kept,
+     * not consumed: the callback is analysed more than once per call). Cleared in
+     * {@see self::beforeAnalyzeFile()}.
+     *
+     * @var array<int, true>
+     */
+    private static array $callbackIds = [];
+
+    /**
+     * Outer `Context::$self` saved per overridden callback closure node (keyed by
+     * the node's `spl_object_id`) so it can be restored once the closure has been
      * analysed. Values are nullable because the dominant call site is file scope
      * (`routes/console.php`), where `self` is null.
      *
@@ -123,16 +139,34 @@ final class ConsoleClosureScopeHandler implements
     {
         $expr = $event->getExpr();
 
-        if (!self::isArtisanCommandClosureCall($expr, $event->getCodebase())) {
+        // First pass: an Artisan::command() call — remember its callback node so
+        // the override fires on that node alone (below), not across sibling args.
+        if ($expr instanceof StaticCall) {
+            $callback = self::callbackToBind($expr, $event->getCodebase());
+            if ($callback !== null) {
+                self::$callbackIds[\spl_object_id($callback)] = true;
+            }
+
             return null;
         }
 
-        // Inject ClosureCommand as the closure's `$this` by overriding the
-        // enclosing `self` for the span of this call's analysis. The callback
-        // body is analysed within that span, so ClosureAnalyzer picks it up.
-        $context = $event->getContext();
-        self::$savedSelf[\spl_object_id($expr)] = $context->self;
-        $context->self = self::CLOSURE_COMMAND;
+        // The callback closure node itself — override `self` so ClosureAnalyzer
+        // types the body `$this` as ClosureCommand.
+        if ($expr instanceof Closure || $expr instanceof ArrowFunction) {
+            $context = $event->getContext();
+
+            // Skip non-callbacks, and skip when our override is already in place:
+            // the callback is analysed more than once, and a re-entrant call must
+            // not capture ClosureCommand itself as the "outer" self to restore.
+            if (!isset(self::$callbackIds[\spl_object_id($expr)])
+                || $context->self === self::CLOSURE_COMMAND
+            ) {
+                return null;
+            }
+
+            self::$savedSelf[\spl_object_id($expr)] = $context->self;
+            $context->self = self::CLOSURE_COMMAND;
+        }
 
         return null;
     }
@@ -153,14 +187,14 @@ final class ConsoleClosureScopeHandler implements
         // `StatementsAnalyzer::getFQCLN()`, which stays null for a file-scope
         // closure and emits `InvalidScope: Use of $this in non-class context`.
         //
-        // The closure body is the only place that runs with `self` already set to
-        // ClosureCommand (we set it solely for `Artisan::command()` callbacks and
-        // restore it straight after), so that identity reliably marks "inside a
-        // console-command closure". Calling `setFQCLN()` on the body analyzer is
-        // exactly what a `/** @var ClosureCommand $this */` docblock does
-        // (StatementsAnalyzer sets `fake_this_class` from such a comment), so it
-        // clears the structural guard the same sanctioned way — scoped to this
-        // body analyzer, which is discarded when the closure finishes.
+        // The callback body is the only place that runs with `self` set to
+        // ClosureCommand (we set it solely on the registered callback node), so
+        // that identity reliably marks "inside a console-command closure". Calling
+        // `setFQCLN()` on the body analyzer is exactly what a
+        // `/** @var ClosureCommand $this */` docblock does (StatementsAnalyzer sets
+        // `fake_this_class` from such a comment), so it clears the structural guard
+        // the same sanctioned way — scoped to this body analyzer, which is
+        // discarded when the closure finishes.
         if ($event->getContext()->self !== self::CLOSURE_COMMAND) {
             return null;
         }
@@ -178,7 +212,7 @@ final class ConsoleClosureScopeHandler implements
     {
         $expr = $event->getExpr();
 
-        if (!$expr instanceof StaticCall) {
+        if (!$expr instanceof Closure && !$expr instanceof ArrowFunction) {
             return null;
         }
 
@@ -190,59 +224,73 @@ final class ConsoleClosureScopeHandler implements
             return null;
         }
 
-        $saved = self::$savedSelf[$id];
-        unset(self::$savedSelf[$id]);
+        $context = $event->getContext();
 
-        // Restore `self` only on the node we actually overrode. If
-        // `handleExpression()` returned false for an earlier `Artisan::command()`
-        // call, its paired after-hook was skipped (Psalm dispatches it only on
-        // success), leaving a stale entry; `spl_object_id` can then be recycled
-        // onto an unrelated StaticCall. Re-detecting the node — a stable property
-        // that always holds for the call we saved — rejects that recycled id so
-        // we never write a stale `self` onto someone else's context. Any id the
-        // after-hook observes is dropped above, so the map stays bounded — a
-        // hard-failed call's own entry lingers only until its id is recycled (or
-        // the worker exits), never growing without bound.
-        if (self::isArtisanCommandClosureCall($expr, $event->getCodebase())) {
-            $event->getContext()->self = $saved;
+        // Restore only while our override is still live. If the closure hard-failed
+        // analysis Psalm skips this after-hook; the `self === ClosureCommand` guard
+        // means a later node reusing this id (after the entry leaked) drops the
+        // stale entry below without being clobbered.
+        if ($context->self === self::CLOSURE_COMMAND) {
+            $context->self = self::$savedSelf[$id];
         }
+
+        unset(self::$savedSelf[$id]);
 
         return null;
     }
 
-    private static function isArtisanCommandClosureCall(Expr $expr, Codebase $codebase): bool
+    /**
+     * Per-file reset, at file start. Bounds the static maps and ensures an
+     * `spl_object_id` recorded for one file's callback cannot match an unrelated
+     * closure node in the next file (ids are unique only among live objects).
+     * Resetting at the *start* (rather than end) keeps it correct even if a prior
+     * file's analysis threw before any end-of-file hook could run.
+     *
+     * @psalm-external-mutation-free
+     */
+    #[\Override]
+    public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void
     {
-        if (!$expr instanceof StaticCall) {
-            return false;
-        }
+        self::$callbackIds = [];
+        self::$savedSelf = [];
+    }
 
+    /**
+     * The inline, bindable callback of an `Artisan::command()` static call, or
+     * null when this is not such a call. Cheap AST checks (method name, named
+     * receiver, the callback argument) run before the codebase queries so
+     * unrelated `::command()` calls bail early.
+     */
+    private static function callbackToBind(StaticCall $expr, Codebase $codebase): Closure|ArrowFunction|null
+    {
         // Method names are case-insensitive in PHP; match `command` exactly so
         // siblings like `commandStartedAt()` are not picked up.
         if (!$expr->name instanceof Identifier || \strtolower($expr->name->name) !== 'command') {
-            return false;
+            return null;
         }
 
         // Statically-named receiver only (not `$class::command(...)`).
         if (!$expr->class instanceof Name) {
-            return false;
+            return null;
+        }
+
+        $callback = self::bindableCallbackArg($expr);
+        if ($callback === null) {
+            return null;
         }
 
         $className = $expr->class->getAttribute('resolvedName');
         if (!\is_string($className) || !self::resolvesToArtisanFacade($className, $codebase)) {
-            return false;
-        }
-
-        // Only an inline, non-static closure/arrow function is rebound by Laravel
-        // at runtime. A variable holding a callable was analysed in its own scope
-        // already, and a `static` closure cannot be rebound — `$this` inside it is
-        // a genuine error that must keep surfacing.
-        if (!self::hasInlineBindableClosureArg($expr)) {
-            return false;
+            return null;
         }
 
         // ClosureAnalyzer will call classlike_storage_provider->get() on the
         // injected self; bail if ClosureCommand was never scanned to avoid a throw.
-        return $codebase->classlike_storage_provider->has(self::CLOSURE_COMMAND);
+        if (!$codebase->classlike_storage_provider->has(self::CLOSURE_COMMAND)) {
+            return null;
+        }
+
+        return $callback;
     }
 
     /** @psalm-external-mutation-free */
@@ -257,16 +305,32 @@ final class ConsoleClosureScopeHandler implements
             && $codebase->classExtends($className, self::ARTISAN_FACADE);
     }
 
-    private static function hasInlineBindableClosureArg(StaticCall $expr): bool
+    /**
+     * The `command(string $signature, Closure $callback)` callback argument — the
+     * 2nd positional arg or a named `callback:` arg — when it is an inline,
+     * non-static closure/arrow function (the only form Laravel rebinds). Any other
+     * argument (including a closure passed as the signature) is ignored.
+     */
+    private static function bindableCallbackArg(StaticCall $expr): Closure|ArrowFunction|null
     {
+        $positional = 0;
+
         foreach ($expr->getArgs() as $arg) {
+            $isCallback = $arg->name instanceof Identifier
+                ? $arg->name->name === 'callback'
+                : $positional++ === 1;
+
+            if (!$isCallback) {
+                continue;
+            }
+
             $value = $arg->value;
 
-            if (($value instanceof Closure || $value instanceof ArrowFunction) && !$value->static) {
-                return true;
-            }
+            return ($value instanceof Closure || $value instanceof ArrowFunction) && !$value->static
+                ? $value
+                : null;
         }
 
-        return false;
+        return null;
     }
 }

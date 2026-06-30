@@ -187,11 +187,24 @@ jobs:
       # ref, so steady-state runs skip the cold composer install (the dominant
       # cost). The runner workspace path is stable across runs, so the plugin
       # path-repo symlink inside vendor stays valid.
+      #
+      # hashFiles(plugin-base/composer.json) namespaces the key by the measured
+      # plugin's dependency declaration — the superset of delta-app.sh's
+      # plugin_dep_sig (require + autoload), which is what actually determines the
+      # installed vendor. The 3.x and 4.x lines pin the same app refs, so a key
+      # without it lets both lines collide on one entry and poison each other with
+      # an incompatible vendor (e.g. the installed AddTaintsInterface return type
+      # mismatches every handler and fatals at class-load). The hash differs
+      # whenever ANY dependency does — a Psalm major or minor bump, an added
+      # runtime dep — which is exactly when a reinstall is warranted. delta-app.sh
+      # re-validates the same signature on reuse, so an already-poisoned cache
+      # self-heals even when this key happens to hit. Native expression: no
+      # parsing step, no shell, nothing written to an output.
       - name: Cache app source
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: ~/app-cache/${{ matrix.name }}
-          key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-v1
+          key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-${{ hashFiles('plugin-base/composer.json') }}-v1
 
       - name: Run delta for ${{ matrix.name }}
         # All interpolated values go through env (not inline ${{ }} in run) so a

@@ -15,7 +15,7 @@ declare(strict_types=1);
  *
  * The storage path added by #989 misses (`file_storage_provider->has()` returns
  * `false`), and the AST-scan fallback added by #991 (
- * {@see \Psalm\LaravelPlugin\Util\Ast\CachedClosureTypeFactory::fromClosureObject()}
+ * {@see \Psalm\LaravelPlugin\Internal\Ast\CachedClosureTypeFactory::fromClosureObject()}
  * ) is the only way for the docblock-only `@param positive-int $count` and
  * `@return non-empty-string` narrowing below to survive into the synthesised
  * pseudo-method.
