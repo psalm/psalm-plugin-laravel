@@ -126,4 +126,4 @@ final class CollectionWhereNotNullTest
     }
 }
 ?>
---EXPECT--
+--EXPECTF--

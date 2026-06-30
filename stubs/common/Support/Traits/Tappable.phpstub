@@ -3,16 +3,23 @@
 namespace Illuminate\Support\Traits;
 
 /**
- * Simplify return type for Tappable::tap().
+ * Refine the return type of Tappable::tap().
  *
- * Without a stub, tap() returns `mixed` because Psalm can't resolve
- * the global tap() helper's generic return type. Stubbing as `@return $this`
- * fixes fluent chains on Builder, Stringable, and other Tappable classes.
+ * Laravel's real signature is conditional: a `null` callback returns a
+ * {@see \Illuminate\Support\HigherOrderTapProxy} that forwards every call back to the
+ * target; a real callback runs it and returns the target ($this).
  *
- * Note: Laravel's own PHPDoc uses a conditional return type that distinguishes
- * null callback → HigherOrderTapProxy vs callable → $this. This simplification
- * skips that distinction because conditional return types with $this do not
- * work in Psalm 7 trait stubs.
+ * We cannot express that split in this stub. A conditional return type
+ * (`($callback is null ? HigherOrderTapProxy<static> : static)`) does NOT discriminate when
+ * it overrides a reflected trait method — Psalm collapses every call to the null branch
+ * regardless of the argument (verified on both stubbed and un-stubbed Tappable users). So the
+ * stub declares only the safe fallback `@return $this` (the callback branch), and
+ * {@see \Psalm\LaravelPlugin\Handlers\Support\TappableTapHandler} supplies the precise
+ * `HigherOrderTapProxy<static>` for the no-argument higher-order form. The proxy is stubbed
+ * generic ({@see \Illuminate\Support\HigherOrderTapProxy}) so a proxied call threads the
+ * target type natively through `__call` — no proxy handler needed.
+ *
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1110
  */
 trait Tappable
 {

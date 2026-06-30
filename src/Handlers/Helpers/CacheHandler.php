@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
-use Psalm\LaravelPlugin\Util\Arg;
+use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;

@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Facade;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Plugin;
-use Psalm\LaravelPlugin\PluginConfig;
 
 #[CoversClass(Plugin::class)]
 final class AliasStubCompletenessTest extends TestCase

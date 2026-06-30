@@ -9,8 +9,8 @@ use PhpParser\Node\Arg;
 use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Issues\MissingTranslation;
-use Psalm\LaravelPlugin\Util\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
@@ -245,9 +245,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
                 ? new Union([new TNonEmptyArray([Type::getArrayKey(), Type::getMixed()])])
                 : Type::getArray();
         } else {
-            $type = $value !== ''
-                ? Type::getNonEmptyString()
-                : Type::getString();
+            $type = $value !== '' ? Type::getNonEmptyString() : Type::getString();
         }
 
         self::$resolvedKeys[$translationKey] = $type;

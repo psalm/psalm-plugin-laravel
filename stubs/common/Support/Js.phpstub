@@ -23,6 +23,7 @@ class Js implements Htmlable, Stringable
      * @psalm-taint-escape html
      * @psalm-taint-escape has_quotes
      * @psalm-flow ($data) -> return
+     * @psalm-taint-specialize
      */
     public static function from($data, $flags = 0, $depth = 512) {}
 
@@ -41,6 +42,7 @@ class Js implements Htmlable, Stringable
      * @psalm-taint-escape html
      * @psalm-taint-escape has_quotes
      * @psalm-flow ($data) -> return
+     * @psalm-taint-specialize
      */
     public static function encode($data, $flags = 0, $depth = 512) {}
 }

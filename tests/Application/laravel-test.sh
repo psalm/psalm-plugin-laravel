@@ -23,9 +23,9 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Default values
-UPDATE_BASELINE=false
-VERBOSE=false
-REMOVE=false
+UPDATE_BASELINE=false # --update (-u) arg
+VERBOSE=false # --verbose (-v) arg
+REMOVE=false # --remove (-r) arg
 PSALM_PASSED=false
 
 # Function to display script usage
@@ -47,21 +47,39 @@ Environment variables:
 EOF
 }
 
-# Function to display error messages
+# Structured logging core. Every record is written to stderr as
+#   <ISO-8601-UTC-timestamp> [LEVEL] message
+# so logs stay machine-filterable, e.g. grep -E '\b(ERROR|FATAL|CRITICAL)\b' app.log.
+# Color is emitted only when stderr is a TTY; when redirected to a file or pipe the
+# output is plain text with no ANSI escapes, so grep/awk see clean fields.
+# Diagnostics go to stderr by design, leaving stdout for the Psalm analysis result.
+log() {
+    local level="$1" color="$2"
+    shift 2
+    local ts
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [ -t 2 ]; then
+        printf '%b%s [%s] %s%b\n' "$color" "$ts" "$level" "$*" "$NC" >&2
+    else
+        printf '%s [%s] %s\n' "$ts" "$level" "$*" >&2
+    fi
+}
+
+# Fatal error: log at ERROR level and abort.
 error() {
-    echo -e "${RED}Error: $1${NC}" >&2
+    log ERROR "$RED" "$1"
     exit 1
 }
 
-# Function to display info messages
+# Informational progress message.
 info() {
-    echo -e "${GREEN}$1${NC}"
+    log INFO "$GREEN" "$1"
 }
 
-# Function to display debug messages
+# Verbose-only debug message.
 debug() {
     if [ "$VERBOSE" = true ]; then
-        echo -e "${YELLOW}Debug: $1${NC}"
+        log DEBUG "$YELLOW" "$1"
     fi
 }
 
@@ -81,7 +99,7 @@ quiet_run() {
         rm -f "$log_file"
     else
         local exit_code=$?
-        echo -e "${RED}${label} failed (exit ${exit_code}). Captured output:${NC}" >&2
+        log ERROR "$RED" "${label} failed (exit ${exit_code}). Captured output:"
         cat "$log_file" >&2
         rm -f "$log_file"
         exit "$exit_code"
@@ -148,7 +166,7 @@ if [ -d "$APP_INSTALLATION_PATH" ]; then
 fi
 
 RELATIVE_PATH="${APP_INSTALLATION_PATH#"$PROJECT_ROOT"/}"
-info "Creating a new Laravel project using installer ${LARAVEL_INSTALLER_VERSION} at ${RELATIVE_PATH}"
+info "Creating a new Laravel project using '${LARAVEL_INSTALLER_VERSION}' installer at ${RELATIVE_PATH}"
 info "Tip: set LARAVEL_INSTALLER_VERSION to test a different Laravel. Use --verbose for full tool output."
 # --no-security-blocking: laravel/laravel's pinned phpunit/phpunit range can become
 # fully covered by a fresh advisory, which would otherwise make `composer create-project`
@@ -163,12 +181,14 @@ info "Generating example Laravel classes for analysis"
 # ~30 separate `./artisan` invocations is ~16× slower (~10s vs ~0.6s locally).
 # BufferedOutput captures the per-command "INFO ... created successfully" chatter
 # so we only emit a single summary line on success, and the full buffer on failure.
-VERBOSE="$VERBOSE" php -r '
+GENERATED_COUNT=$(VERBOSE="$VERBOSE" php -r '
 require __DIR__."/vendor/autoload.php";
 $app = require __DIR__."/bootstrap/app.php";
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+// Verbose chatter is streamed to STDERR (not STDOUT) so this process emits only the
+// final class count on STDOUT, which the calling shell captures and logs.
 $output = getenv("VERBOSE") === "true"
-    ? new Symfony\Component\Console\Output\ConsoleOutput()
+    ? new Symfony\Component\Console\Output\StreamOutput(fopen("php://stderr", "w"))
     : new Symfony\Component\Console\Output\BufferedOutput();
 $cmds = [
     ["make:cast", "ExampleCast"],
@@ -204,15 +224,17 @@ $cmds = [
 foreach ($cmds as [$cmd, $name]) {
     $exit = Illuminate\Support\Facades\Artisan::call($cmd, ["name" => $name], $output);
     if ($exit !== 0) {
-        fwrite(STDERR, "artisan {$cmd} {$name} failed (exit {$exit})\n");
+        fwrite(STDERR, gmdate("Y-m-d\TH:i:s\Z") . " [ERROR] artisan {$cmd} {$name} failed (exit {$exit})\n");
         if ($output instanceof Symfony\Component\Console\Output\BufferedOutput) {
             fwrite(STDERR, $output->fetch());
         }
         exit($exit);
     }
 }
-echo "Generated " . count($cmds) . " example classes\n";
-'
+// Sole STDOUT output: the class count, for the shell to capture and log.
+echo count($cmds);
+')
+info "Generated ${GENERATED_COUNT} example classes"
 
 info "Installing psalm/plugin-laravel from local source"
 composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} repositories.0 '{"type": "path", "url": "../../"}'
@@ -230,8 +252,10 @@ if [ "$UPDATE_BASELINE" = true ]; then
     ./vendor/bin/psalm --config="$PSALM_CONFIG" --set-baseline="$PSALM_BASELINE" --no-progress --no-suggestions
     info "Baseline file $PSALM_BASELINE is updated, please check the changes and commit them."
 else
-    info "Running Psalm analysis"
-    # set -e ensures script exits on failure, so cleanup below only runs on success
+    # Echo the exact command to stderr for visibility, then run it so its findings
+    # land on stdout. set -e ensures the script exits on failure, so the cleanup
+    # below only runs on success.
+    info "Running: ./vendor/bin/psalm --config=\"$PSALM_CONFIG\""
     ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --no-progress --no-suggestions --output-format=compact
 fi
 

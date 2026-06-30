@@ -32,7 +32,6 @@ final class MergeRequest extends FormRequest
     }
 }
 
-/** @psalm-suppress MixedArgument */
 function storeMerge(MergeRequest $request): \Illuminate\Http\RedirectResponse {
     // rules() already supplied the 'email' rule; the inline validate adds
     // an extra constraint via a custom Rule class. Both must pass.

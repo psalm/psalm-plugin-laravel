@@ -21,6 +21,7 @@ final readonly class Report
      * @param 'runtime'|'psalm.xml' $phpAnalysisSource
      * @param list<string> $bootstrapErrors
      * @param list<string> $hardFailures
+     * @param list<string> $loadedProviders Service provider class names the booted kernel registered, sorted. Empty when boot failed.
      */
     public function __construct(
         public ?string $pluginVersion,
@@ -34,5 +35,6 @@ final readonly class Report
         public ?string $bootPath,
         public array $bootstrapErrors,
         public array $hardFailures,
+        public array $loadedProviders,
     ) {}
 }

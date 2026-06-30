@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Application;
 
-use Psalm\LaravelPlugin\Providers\ApplicationInterfaceProvider;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Util\ContainerResolver;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationInterfaceProvider;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -84,17 +83,23 @@ final class OffsetHandler implements
             return null;
         }
 
-        return $source->getCodebase()->getMethodParams(
-            ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $event->getMethodNameLowercase(),
-        );
+        return $source
+            ->getCodebase()
+            ->getMethodParams(
+                ApplicationProvider::getAppFullyQualifiedClassName() . '::' . $event->getMethodNameLowercase(),
+            );
     }
 
     /** @psalm-pure */
     private static function isOffsetMethod(string $methodName): bool
     {
-        return \in_array($methodName, [
-            'offsetget',
-            'offsetset',
-        ], true);
+        return \in_array(
+            $methodName,
+            [
+                'offsetget',
+                'offsetset',
+            ],
+            true,
+        );
     }
 }

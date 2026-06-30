@@ -32,4 +32,4 @@ function test_negated_app_bound_supports_early_return(): void
 }
 
 ?>
---EXPECT--
+--EXPECTF--

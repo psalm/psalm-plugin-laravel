@@ -9,8 +9,8 @@ use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
-use Psalm\LaravelPlugin\Util\DynamicWhereResolver;
-use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -39,7 +39,7 @@ use Psalm\Type\Union;
  * Column names are validated against the model's declared @property annotations;
  * unmatched columns fall through to mixed without an error. The dynamic-where helpers
  * (validation, segment splitting, typed-param hand-off cache) live in
- * {@see \Psalm\LaravelPlugin\Util\DynamicWhereResolver}; this handler invokes them on the
+ * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver}; this handler invokes them on the
  * relation-chain path while {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler}
  * uses the same util for direct Model static/instance calls (issue #1000).
  * Disable via <resolveDynamicWhereClauses value="false" /> in psalm.xml.
@@ -48,9 +48,7 @@ use Psalm\Type\Union;
  * (e.g., $user->posts()->published()->get() where Post::scopePublished() exists).
  * Both legacy scope{Name}() methods and modern #[Scope] attribute methods are supported.
  */
-final class MethodForwardingHandler implements
-    MethodReturnTypeProviderInterface,
-    MethodParamsProviderInterface
+final class MethodForwardingHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
     private static ?ForwardingRule $rule = null;
 
@@ -170,15 +168,13 @@ final class MethodForwardingHandler implements
             return null;
         }
 
-        $templateParams = $event->getTemplateTypeParameters()
-            ?? self::extractTemplateParamsFromCaller($source, $event, $fqClassName);
-
-        $resolved = ReturnTypeResolver::resolve(
+        $templateParams = $event->getTemplateTypeParameters() ?? self::extractTemplateParamsFromCaller(
+            $source,
+            $event,
             $fqClassName,
-            $templateParams,
-            $codebase,
-            $methodName,
         );
+
+        $resolved = ReturnTypeResolver::resolve($fqClassName, $templateParams, $codebase, $methodName);
 
         if ($resolved instanceof \Psalm\Type\Union) {
             return $resolved;
@@ -194,7 +190,11 @@ final class MethodForwardingHandler implements
 
         // Dynamic where{Column} fallback for Path 2 (opt-in).
         // This handles the case where the method arrives via __call rather than @mixin.
-        if (DynamicWhereResolver::isEnabled() && $templateParams !== null && DynamicWhereResolver::isDynamicWhereMethod($methodName)) {
+        if (
+            DynamicWhereResolver::isEnabled()
+            && $templateParams !== null
+            && DynamicWhereResolver::isDynamicWhereMethod($methodName)
+        ) {
             return self::resolveDynamicWhereOnRelation($event, $codebase, $methodName, $fqClassName, $templateParams);
         }
 
@@ -274,8 +274,13 @@ final class MethodForwardingHandler implements
             // Use the scope's actual params when available; fall back to a permissive variadic
             // signature (same as the dynamic-where fallback) rather than returning [] (zero params),
             // which would emit misleading TooManyArguments for scopes that accept arguments.
-            return ModelMethodHandler::getScopeParams($codebase, self::$scopeParamsCache[$scopeKey], $methodName)
-                ?? DynamicWhereResolver::variadicMixedParams();
+            return (
+                BuilderScopeHandler::getScopeParams(
+                    $codebase,
+                    self::$scopeParamsCache[$scopeKey],
+                    $methodName,
+                ) ?? DynamicWhereResolver::variadicMixedParams()
+            );
         }
 
         // Dynamic where{Column}: provide a variadic mixed signature so Psalm's magic-method
@@ -290,8 +295,12 @@ final class MethodForwardingHandler implements
             // on type mismatch. Everything else (multi-segment, unknown column, non-scalar
             // column, 0 or 2+ args) falls through to the permissive variadic-mixed
             // signature. {@see DynamicWhereResolver::consumeTypedParams} for the rationale.
-            return DynamicWhereResolver::consumeTypedParams($methodName, $event->getCallArgs())
-                ?? DynamicWhereResolver::variadicMixedParams();
+            return (
+                DynamicWhereResolver::consumeTypedParams(
+                    $methodName,
+                    $event->getCallArgs(),
+                ) ?? DynamicWhereResolver::variadicMixedParams()
+            );
         }
 
         return null;
@@ -319,9 +328,7 @@ final class MethodForwardingHandler implements
         }
 
         $stmt = $event->getStmt();
-        $callerType = $stmt instanceof MethodCall
-            ? $source->getNodeTypeProvider()->getType($stmt->var)
-            : null;
+        $callerType = $stmt instanceof MethodCall ? $source->getNodeTypeProvider()->getType($stmt->var) : null;
 
         if (!$stmt instanceof MethodCall) {
             return null;
@@ -431,10 +438,7 @@ final class MethodForwardingHandler implements
         $expectedLower = \strtolower($expectedClass);
 
         foreach ($varType->getAtomicTypes() as $atomic) {
-            if (
-                $atomic instanceof TGenericObject
-                && \strtolower($atomic->value) === $expectedLower
-            ) {
+            if ($atomic instanceof TGenericObject && \strtolower($atomic->value) === $expectedLower) {
                 return $atomic->type_params;
             }
         }
@@ -586,10 +590,15 @@ final class MethodForwardingHandler implements
         $cacheKey = \strtolower($relationClass) . '::' . $methodName;
         self::$scopeParamsCache[$cacheKey] = $modelClass;
 
-        // Scope exists on the related model → method is fluent, return the full Relation type.
-        return new Union([
+        // Scope exists on the related model → method is fluent: the Relation type is the
+        // `?? $this` fallback. On a relation chain Laravel's callScope returns the wrapped
+        // query for a null result, and Relation::__call maps that back to $this (the Relation),
+        // so a value-returning scope surfaces `declared | Relation` while a void/fluent scope
+        // keeps the full Relation type (issue #1053).
+        $relationFallback = new Union([
             new TGenericObject($relationClass, $templateParams),
         ]);
-    }
 
+        return BuilderScopeHandler::forwardedScopeReturnType($codebase, $modelClass, $methodName, $relationFallback);
+    }
 }

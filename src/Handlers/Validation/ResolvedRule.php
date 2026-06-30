@@ -27,4 +27,21 @@ final readonly class ResolvedRule
         public bool $sometimes,
         public bool $required = false,
     ) {}
+
+    /**
+     * Whether the rule unconditionally guarantees that the field will be
+     * present in the validated output — `required` / `present` / `accepted`
+     * / `declined` without a `sometimes` override.
+     *
+     * Source of truth for the gate that drives both type narrowing and
+     * taint escape on `$this->input('key')` / `$this->key` reads: the two
+     * paths must agree, otherwise users can see narrowed types without
+     * matching taint behaviour (or vice-versa).
+     *
+     * @psalm-mutation-free
+     */
+    public function guaranteesPresence(): bool
+    {
+        return $this->required && !$this->sometimes;
+    }
 }

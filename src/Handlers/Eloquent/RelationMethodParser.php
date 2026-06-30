@@ -66,11 +66,31 @@ final class RelationMethodParser
 
     /** @var list<string> Types that should not be resolved as class names in generic params */
     private const NON_CLASS_TYPES = [
-        'static', 'self', 'parent', 'null', 'int', 'string', 'bool', 'float', 'mixed',
-        'array', 'object', 'callable', 'iterable', 'void', 'never', 'true', 'false',
-        'scalar', 'numeric', 'resource',
+        'static',
+        'self',
+        'parent',
+        'null',
+        'int',
+        'string',
+        'bool',
+        'float',
+        'mixed',
+        'array',
+        'object',
+        'callable',
+        'iterable',
+        'void',
+        'never',
+        'true',
+        'false',
+        'scalar',
+        'numeric',
+        'resource',
         // Deprecated aliases recognized by Psalm's TypeTokenizer
-        'boolean', 'integer', 'double', 'real',
+        'boolean',
+        'integer',
+        'double',
+        'real',
     ];
 
     /**
@@ -156,7 +176,9 @@ final class RelationMethodParser
         try {
             $storage = $codebase->classlike_storage_provider->get($className);
         } catch (\InvalidArgumentException $invalidArgumentException) {
-            $codebase->progress->debug("Laravel plugin: could not resolve parent class for {$className}: {$invalidArgumentException->getMessage()}\n");
+            $codebase->progress->debug(
+                "Laravel plugin: could not resolve parent class for {$className}: {$invalidArgumentException->getMessage()}\n",
+            );
             return null;
         }
 
@@ -459,7 +481,9 @@ final class RelationMethodParser
         try {
             $methodStorage = $codebase->methods->getStorage($methodIdentifier);
         } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-            $codebase->progress->debug("Laravel plugin: could not get method storage for {$methodId}: {$e->getMessage()}\n");
+            $codebase->progress->debug(
+                "Laravel plugin: could not get method storage for {$methodId}: {$e->getMessage()}\n",
+            );
             return null;
         }
 
@@ -471,7 +495,9 @@ final class RelationMethodParser
         try {
             $stmts = $codebase->getStatementsForFile($location->file_path);
         } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-            $codebase->progress->debug("Laravel plugin: could not get statements for {$location->file_path}: {$e->getMessage()}\n");
+            $codebase->progress->debug(
+                "Laravel plugin: could not get statements for {$location->file_path}: {$e->getMessage()}\n",
+            );
             return null;
         }
 
@@ -550,7 +576,8 @@ final class RelationMethodParser
                 // has TYPE_UNKNOWN and items have TYPE_NORMAL. For "use function App\{foo}"
                 // the GroupUse has TYPE_FUNCTION and items have TYPE_UNKNOWN.
                 $type = $stmt->type | $use->type;
-                if ($type === PhpParser\Node\Stmt\Use_::TYPE_FUNCTION
+                if (
+                    $type === PhpParser\Node\Stmt\Use_::TYPE_FUNCTION
                     || $type === PhpParser\Node\Stmt\Use_::TYPE_CONSTANT
                 ) {
                     continue;

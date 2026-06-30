@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
-use Psalm\LaravelPlugin\Util\ConfigKeyResolver;
+use Psalm\LaravelPlugin\Handlers\Config\ConfigKeyResolver;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
 
 /**
  * Narrows `config('some.key', $default)` to the runtime value from the booted
- * Laravel app (generalized — see {@see \Psalm\LaravelPlugin\Util\ConfigValueReflector}).
+ * Laravel app (generalized — see {@see \Psalm\LaravelPlugin\Handlers\Config\ConfigValueReflector}).
  *
  * Defers to the helpers stub on non-narrowable shapes (no args → Repository;
  * array first arg → null setter form; dynamic key → mixed).
