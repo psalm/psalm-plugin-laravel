@@ -278,6 +278,21 @@ final class ModelSerializationShapeBuilderTest extends TestCase
     }
 
     #[Test]
+    public function a_class_cast_wins_over_an_accessor_on_the_same_column(): void
+    {
+        // mutateAttributeForArray() applies isClassCastable() BEFORE the accessor, so a column with a
+        // CastsAttributes/Castable cast AND an accessor serializes as the cast (we keep the read type),
+        // not the accessor. Here the accessor int is suppressed; the column keeps its schema string.
+        $this->override(
+            columns: ['foo' => $this->col('foo', SchemaColumn::TYPE_STRING)],
+            casts: ['foo' => new CastInfo('foo', CastShape::CustomCastsAttributes, null, Type::getString(), null)],
+            accessors: ['foo' => new LegacyAccessorInfo('foo', Type::getInt(), new MethodStorage())],
+        );
+
+        $this->assertSame('array{foo?: string, ...<string, mixed>}', (string) $this->build());
+    }
+
+    #[Test]
     public function no_columns_and_no_appends_defers_to_the_stub(): void
     {
         // Nothing names a key — no parsed columns (migrations disabled) and no $appends. The builder

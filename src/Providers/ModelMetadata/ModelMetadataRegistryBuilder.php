@@ -514,7 +514,14 @@ final class ModelMetadataRegistryBuilder
         }
 
         [$getType, $hasMutator, $setType] = $attribute;
-        self::insertAccessor($accessors, new AttributeAccessorInfo($property, $getType, $methodStorage, $hasMutator));
+
+        // Laravel treats a modern Attribute as a read accessor (getMutatedAttributes(), property read)
+        // only when `get` is callable; a set-only `Attribute<never, TSet>` is a mutator alone. A `never`
+        // TGet is that signal — skip the accessor insert so it can't override a serialized column/append
+        // type or resolve a magic property read.
+        if (!$getType->isNever()) {
+            self::insertAccessor($accessors, new AttributeAccessorInfo($property, $getType, $methodStorage, $hasMutator));
+        }
 
         if ($hasMutator) {
             self::insertMutator($mutators, new AttributeMutatorInfo($property, $methodStorage, $property, $setType));
@@ -1355,8 +1362,12 @@ final class ModelMetadataRegistryBuilder
      * `initializeModelAttributes()`: a `#[Table]` declared DIRECTLY on the concrete class (Laravel's
      * non-recursive `getAttributes()` check) AND no own `$table` property overwrites the table; otherwise
      * the resolved (ancestor-walked) name only fills a still-null table (`??=`). Feeds
-     * {@see computeSchema()}'s migration lookup. A `key`/`keyType`-only `#[Table]` (null name) is left to
-     * the PK known-gap on {@see applyClassAttributeConfig()}.
+     * {@see computeSchema()}'s migration lookup.
+     *
+     * Known-gap: a `key`/`keyType`-only `#[Table]` (null name) does NOT clear an inherited `$table`
+     * default the way Laravel's force-branch does (`$this->table = $table->name ?? null`). That sits
+     * inside the same exotic, deferred scenario as the `key`/`keyType`/`incrementing` PK sub-overrides
+     * (see {@see applyClassAttributeConfig()}), so it is left untouched rather than half-applied.
      *
      * @param \ReflectionClass<Model> $reflection
      */

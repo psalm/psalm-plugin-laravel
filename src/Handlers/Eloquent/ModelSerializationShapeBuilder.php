@@ -111,12 +111,12 @@ final class ModelSerializationShapeBuilder
     }
 
     /**
-     * Serialized column type, precedence accessor > date/backed-enum cast > read type — mirroring
-     * Laravel's mutator-before-cast order ({@see HasAttributes::attributesToArray()} runs
-     * `addMutatedAttributesToArray()` before `addCastAttributesToArray()`, which skips a mutated key).
-     * An accessor backing the column serializes via {@see serializedAppendType()}; otherwise a divergent
-     * cast via {@see serializedCastType()}; otherwise the read type
-     * ({@see ModelPropertyHandler::resolveColumnType()}).
+     * Serialized column type, precedence class-cast > accessor > date/backed-enum cast > read type,
+     * mirroring {@see HasAttributes::mutateAttributeForArray()} (isClassCastable before the accessor) and
+     * the mutator-before-other-casts order of {@see HasAttributes::attributesToArray()}. A class cast
+     * keeps the read type (class-cast serialization is not modeled); else an accessor serializes via
+     * {@see serializedAppendType()}; else a divergent cast via {@see serializedCastType()}; else the read
+     * type ({@see ModelPropertyHandler::resolveColumnType()}).
      *
      * @param class-string<Model> $modelClass
      */
@@ -127,14 +127,23 @@ final class ModelSerializationShapeBuilder
         string $columnName,
         ColumnInfo $columnInfo,
     ): Union {
-        // Accessor wins over cast/schema: Laravel applies mutators before casts and skips the cast for a
-        // mutated key, so a real column backed by an accessor serializes as the accessor's type.
-        $accessor = $metadata->accessor($columnName);
-        if ($accessor instanceof AccessorInfo) {
-            return self::serializedAppendType($codebase, $accessor);
+        $cast = $metadata->casts()[$columnName] ?? null;
+
+        // A class cast (CastsAttributes/Castable) wins over a get accessor: mutateAttributeForArray()
+        // applies isClassCastable() BEFORE the accessor. We don't model class-cast serialization, so such
+        // a column keeps its read type whether or not it also has an accessor (the same as a class-cast
+        // column without one).
+        $hasClassCast = $cast instanceof CastInfo && $cast->shape->isClassCastable();
+
+        // Otherwise the accessor wins over the (primitive/date/enum) cast and schema: Laravel applies
+        // mutators before those casts and skips the cast for a mutated key.
+        if (!$hasClassCast) {
+            $accessor = $metadata->accessor($columnName);
+            if ($accessor instanceof AccessorInfo) {
+                return self::serializedAppendType($codebase, $accessor);
+            }
         }
 
-        $cast = $metadata->casts()[$columnName] ?? null;
         if ($cast instanceof CastInfo) {
             $serialized = self::serializedCastType($codebase, $cast, $columnInfo);
             if ($serialized instanceof Union) {

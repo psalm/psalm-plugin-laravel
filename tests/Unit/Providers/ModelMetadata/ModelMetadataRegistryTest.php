@@ -476,6 +476,24 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
+    public function set_only_attribute_is_not_a_read_accessor(): void
+    {
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        // Attribute<never, string>: TGet=never (Attribute::set(...) with no get). Laravel excludes it from
+        // getMutatedAttributes(), so it must NOT be a read accessor — else it would override a serialized
+        // column/append type or resolve a magic property read. It IS still a mutator (the set side).
+        $this->defineAppearingMethod($storage, 'writeOnly', $this->attributeReturn(Type::getNever(), Type::getString()));
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+        $metadata = $this->metadataFor(Customer::class);
+
+        $this->assertNull($metadata->accessor('write_only'), 'set-only Attribute is not a read accessor');
+        $this->assertArrayNotHasKey('writeonly', $metadata->accessors());
+        $this->assertInstanceOf(AttributeMutatorInfo::class, $metadata->mutators()['writeonly'] ?? null);
+    }
+
+    #[Test]
     public function acronym_accessor_collapses_to_laravel_resolution_key(): void
     {
         // getApiURLAttribute() must key as 'apiurl' (separators stripped, lowercased) so it resolves via

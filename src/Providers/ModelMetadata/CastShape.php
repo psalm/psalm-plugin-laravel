@@ -47,4 +47,21 @@ enum CastShape: string
      * authoritative.
      */
     case CustomCastsAttributes = 'custom';
+
+    /**
+     * Whether the cast resolves to a CastsAttributes/Castable class, mirroring
+     * `Model::isClassCastable()`. A class cast wins over a get accessor during serialization:
+     * `HasAttributes::mutateAttributeForArray()` applies `isClassCastable()` before the accessor, so a
+     * column with both a class cast and an accessor serializes as the cast value. Only the primitive,
+     * date, and (plain) backed-enum casts are NOT class-castable; every `As*` wrapper is Castable.
+     *
+     * @psalm-mutation-free
+     */
+    public function isClassCastable(): bool
+    {
+        return match ($this) {
+            self::Primitive, self::DateTime, self::BackedEnum => false,
+            default => true,
+        };
+    }
 }
