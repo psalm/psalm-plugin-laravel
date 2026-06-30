@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782757814357,
+  "lastUpdate": 1782804212501,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7725,6 +7725,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.73,
             "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e739108f4928eea1080ca669b7921b0cfa1ac5e",
+          "message": "refactor: reorganize src/ by domain; retire Providers/ and Util/ grab-bags (#1185)\n\nPure reorganization so files are simpler to discover. No behavior change\nbeyond the namespace / use / require_once-path updates the moves force.\n\nProviders/ held unrelated concepts under one word; split and removed:\n- Laravel app bootstrap -> Bootstrap/ (ApplicationProvider,\n  ApplicationInterfaceProvider, ConfigRepositoryProvider)\n- Psalm stub generation  -> Stubs/ (AliasStubProvider, CarbonStubProvider,\n  FacadeMapProvider; joined by Util/StubFileFinder)\nSchemaStateProvider and Macro{Registry,Definition} were domain state, not\n\"providers\": moved next to their consumers (Handlers/Eloquent/Schema/ and\nHandlers/Magic/).\n\nUtil/ was a grab-bag; split and removed. Generic infra -> Internal/ (Ast/,\nArg, AnonymousClassNameDetector, InternalError*, IssueUrlGenerator,\nProxyMethodReturnTypeProvider). Domain-coupled helpers to their domain:\n- ContainerResolver -> Handlers/Application/\n- EloquentModelMethods, ModelPropertyResolver, DynamicWhereResolver\n                    -> Handlers/Eloquent/Support/\n- ConfigKeyResolver, ConfigValueReflector, ThrowingConfigRepository\n                    -> Handlers/Config/\n\nLoose hooks at Handlers/ root (StatsHandler, SuppressHandler) -> Handlers/Diagnostics/.\n\nThe *Handler suffix was already correct: every *Handler is a registered hook\n(registerHooksFromClass or registerClosure); non-hook helpers already use\n*Parser/*Resolver/*Analyzer/value-object names.\n\nInternalErrorClassifier matches its own source path as a string literal to\nskip plugin-internal frames; updated /Util/ -> /Internal/ (a move static\nanalysis cannot catch) with its unit test.\n\nVerified: psalm 0 errors, 100% type coverage, unit 822 pass, type 534 pass,\nfresh-app integration pass, php-cs-fixer clean.",
+          "timestamp": "2026-06-30T09:20:34+02:00",
+          "tree_id": "c9ab41930a67e360ba9a393521a0f09c89a6ccaf",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6e739108f4928eea1080ca669b7921b0cfa1ac5e"
+        },
+        "date": 1782804211989,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.2,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
