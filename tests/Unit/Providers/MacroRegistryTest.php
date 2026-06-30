@@ -8,9 +8,9 @@ use Illuminate\Support\Stringable;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Providers\MacroDefinition;
-use Psalm\LaravelPlugin\Providers\MacroRegistry;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Handlers\Magic\MacroDefinition;
+use Psalm\LaravelPlugin\Handlers\Magic\MacroRegistry;
 use Psalm\Progress\VoidProgress;
 
 #[CoversClass(MacroRegistry::class)]

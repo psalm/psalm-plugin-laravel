@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
+use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;

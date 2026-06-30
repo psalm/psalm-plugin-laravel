@@ -6,7 +6,7 @@ namespace Psalm\LaravelPlugin\Cli\Diagnose;
 
 use Composer\InstalledVersions;
 use Illuminate\Foundation\Application as LaravelApplication;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 
 /**
  * Collects runtime introspection data about the plugin's resolved state.

@@ -6,8 +6,8 @@ namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
 use Closure;
 use PhpParser\Node\Scalar\String_;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Util\Arg;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
