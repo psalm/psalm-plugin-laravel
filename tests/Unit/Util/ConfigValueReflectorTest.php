@@ -7,7 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Util;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\ConfigValueReflector;
+use Psalm\LaravelPlugin\Handlers\Config\ConfigValueReflector;
 use Psalm\Type;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;

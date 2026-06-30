@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
-use Psalm\LaravelPlugin\Util\Arg;
+use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;

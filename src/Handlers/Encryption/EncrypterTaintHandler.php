@@ -18,7 +18,7 @@ use Psalm\Type\TaintKind;
  * A stub that redeclares `Illuminate\Encryption\Encrypter` to host its `@psalm-taint-*` methods
  * shadows the whole class: a class declaration in a stub claims the class's file slot, so when user
  * code reaches the encrypter only through container narrowing — `app('encrypter')` /
- * `resolve('encrypter')` / `make('encrypter')`, which the plugin's {@see \Psalm\LaravelPlugin\Util\ContainerResolver}
+ * `resolve('encrypter')` / `make('encrypter')`, which the plugin's {@see \Psalm\LaravelPlugin\Handlers\Application\ContainerResolver}
  * resolves to a bare `Encrypter` object *without naming the class* — Psalm never scans the real
  * vendor source and strips every other method, breaking `app('encrypter')->getKey()` and friends
  * with `UndefinedMethod`. This is the same trap fixed for the auth guards in #1113; unlike most
