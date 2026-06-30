@@ -10,8 +10,8 @@ use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -31,7 +31,7 @@ use Psalm\Type\Union;
  * real stub method is shadowed by Laravel's reflected magic-method tag on static calls, and a
  * class-docblock `@method` override can't express templates/conditional returns in Psalm 7.
  *
- * Why not {@see \Psalm\LaravelPlugin\Util\ContainerResolver}: `make` dispatches via
+ * Why not {@see \Psalm\LaravelPlugin\Handlers\Application\ContainerResolver}: `make` dispatches via
  * `Facade::__callStatic`, and in `AtomicStaticCallAnalyzer` the return-type provider for that branch
  * fires *before* arguments are analysed (a Psalm hook-ordering limitation), so `NodeTypeProvider::getType()`
  * is null for every argument.
