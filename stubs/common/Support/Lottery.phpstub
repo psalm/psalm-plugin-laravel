@@ -1,0 +1,17 @@
+<?php
+
+namespace Illuminate\Support;
+
+/**
+ * Empty re-declaration kept on purpose: it DECLARES `Illuminate\Support\Lottery` for
+ * projects whose analyzed vendor does not reflect `illuminate/support`, mirroring the
+ * sibling `Arr` stub (otherwise `Lottery` references become `UndefinedClass`).
+ *
+ * `choose()` is intentionally NOT stubbed: Laravel 13.18.0 (#60586) added the conditional
+ * `@return ($times is null ? mixed : list<mixed>)` natively and a stub conditional
+ * collapses against the reflected one on Psalm beta19 (upstream merge bug). Every other
+ * method merges from reflection.
+ */
+class Lottery
+{
+}
