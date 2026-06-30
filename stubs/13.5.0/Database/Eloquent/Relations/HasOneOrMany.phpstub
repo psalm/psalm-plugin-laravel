@@ -1,0 +1,39 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
+
+/**
+ * From Laravel 13.5.0+, firstOrNew() and updateOrCreate() accept a deferred-value
+ * closure for $values (12.62 still ships plain array). This override widens just
+ * those two methods; everything else merges from stubs/common/.
+ *
+ * The full class header (templates, @template-extends, @mixin, use-imports) is copied
+ * verbatim from common because re-declaring the class resets Psalm's
+ * interface/template metadata to whatever this declaration carries.
+ *
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * Covariant TDeclaringModel — required by #913 (see Relation.phpstub for the rationale).
+ * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template TResult
+ * @template-extends Relation<TRelatedModel, TDeclaringModel, TResult>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
+abstract class HasOneOrMany extends Relation
+{
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @return TRelatedModel
+     */
+    public function firstOrNew(array $attributes = [], \Closure|array $values = []) {}
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  (\Closure(): array<string, mixed>)|array<string, mixed>  $values
+     * @return TRelatedModel
+     */
+    public function updateOrCreate(array $attributes, \Closure|array $values = []) {}
+}

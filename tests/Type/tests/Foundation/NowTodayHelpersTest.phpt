@@ -25,4 +25,4 @@ $_todayTz = today('UTC');
 $_todayDtz = today(new \DateTimeZone('UTC'));
 /** @psalm-check-type-exact $_todayDtz = \Illuminate\Support\Carbon */
 ?>
---EXPECT--
+--EXPECTF--

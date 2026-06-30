@@ -114,12 +114,22 @@ class MailMessage extends SimpleMessage implements Renderable
     /**
      * Configure the "call to action" button.
      *
+     * The $url is rendered into an `<a href="...">` attribute by the
+     * notification template. HTML-escaping the string (via `e()`) blocks
+     * attribute breakout but does NOT validate the URL scheme, so
+     * `javascript:` / `data:` URLs survive. The `html_url` sink models
+     * this scheme-injection threat as a separate cleanser context from
+     * generic HTML escaping. See Filament GHSA-3fc8-8hp6-6jr4 for a
+     * worked stored-XSS example, and docs/contributing/taint-analysis.md
+     * for the `html_url` annotation guide.
+     *
      * @param  string  $text
      * @param  string  $url
      * @return $this
      *
      * @psalm-taint-sink html $text
      * @psalm-taint-sink html $url
+     * @psalm-taint-sink html_url $url
      */
     public function action($text, $url) {}
 }

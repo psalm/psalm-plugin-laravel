@@ -69,4 +69,4 @@ class ExampleCommand extends Command
     }
 }
 ?>
---EXPECT--
+--EXPECTF--

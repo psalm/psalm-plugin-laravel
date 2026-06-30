@@ -68,3 +68,10 @@ mis = "mis"
 alikes = "alikes"
 # `Unparseable` is an accepted variant spelling of `Unparsable`.
 Unparseable = "Unparseable"
+# `Encrypter` (Laravel's `Illuminate\Encryption\Encrypter`) appears as a sub-word
+# inside our own compound identifiers — `EncrypterTaintHandler`,
+# `EncrypterMethodResolutionTest`, the `$encrypterUndefined` local, etc. The
+# extend-identifiers entries above only match whole tokens, so allow the bare
+# word here to cover every compound, current and future.
+Encrypter = "Encrypter"
+encrypter = "encrypter"

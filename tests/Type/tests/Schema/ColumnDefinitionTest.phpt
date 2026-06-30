@@ -90,4 +90,4 @@ Schema::create('damage_reports', function (Blueprint $table) {
     $table->foreign('team_id')->references('id')->on('teams')->lock('none');
 });
 ?>
---EXPECT--
+--EXPECTF--

@@ -6,7 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Facades;
 
 use Illuminate\Support\Facades\Facade;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
+use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
@@ -29,7 +29,7 @@ use Psalm\Type\Union;
  * callbacks to each one.
  *
  * First-party `Illuminate\` facades are skipped — Laravel's framework source already
- * ships rich `@method` catalogues on those classes, and {@see \Psalm\LaravelPlugin\Providers\FacadeMapProvider::init()}
+ * ships rich `@method` catalogues on those classes, and {@see \Psalm\LaravelPlugin\Stubs\FacadeMapProvider::init()}
  * covers the alias path. `Laravel\` sub-packages (Cashier, Horizon, Telescope, Pulse,
  * Octane, Pennant) ship their own facades whose bindings live in package service providers
  * that may not run in Testbench — autoloading their root class would chain into
@@ -117,6 +117,23 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                 continue;
             }
 
+            // Global-namespace alias stubs (e.g. `class Redis extends \Illuminate\Support\Facades\Redis {}`
+            // emitted by AliasStubProvider for every entry in AliasLoader::getAliases()) duplicate
+            // facades that FacadeMapProvider::init() already discovered through the alias loader
+            // and registered providers for. Re-probing them here is wasted work AND produces
+            // user-visible warnings for environment collisions FacadeMapProvider silently
+            // tolerates (only debug-level there):
+            //   - `Redis` collides with the global \Redis class shipped by ext-redis, so
+            //     is_subclass_of() resolves to the extension class and returns false.
+            //   - `Concurrency` (and other manager-backed facades) need a service-provider
+            //     binding that may not run in Testbench; getFacadeRoot() throws.
+            // Skip when the facade is a global-namespace class whose parent is a first-party
+            // Illuminate facade. Coverage for these aliases comes from FacadeMapProvider via
+            // the alias-loader path; we lose nothing by not probing again here.
+            if (self::isIlluminateAliasStub($storage->name, $storage->parent_class)) {
+                continue;
+            }
+
             // Anonymous classes: Psalm synthesises an FQCN from the file path and position.
             // That name is not autoloadable and the class has no user-authored docblock to
             // parse, so there is nothing for our resolver to do.
@@ -138,9 +155,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                     continue;
                 }
             } catch (\Error|\Exception $error) {
-                $progress->warning(
-                    "Laravel plugin: skipping facade '{$storage->name}': {$error->getMessage()}",
-                );
+                $progress->warning("Laravel plugin: skipping facade '{$storage->name}': {$error->getMessage()}");
                 continue;
             }
 
@@ -172,8 +187,8 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      * throwing user-provider factory from re-running in the main process.
      *
      * Works when:
-     * - The accessor is a class-string (e.g. `protected static function getFacadeAccessor()
-     *   { return MyService::class; }`) — the container auto-wires it via reflection.
+     * - The accessor is a class-string (e.g. a `getFacadeAccessor()` that returns
+     *   `MyService::class`) — the container auto-wires it via reflection.
      * - The accessor is a string alias bound in our Testbench container (first-party
      *   services like `'cache'`, `'router'`, package bindings registered via discovered
      *   providers).
@@ -241,33 +256,27 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
     }
 
     /** @param class-string $rootClass */
-    private static function registerHandlersForFacade(
-        Codebase $codebase,
-        string $facadeClass,
-        string $rootClass,
-    ): void {
+    private static function registerHandlersForFacade(Codebase $codebase, string $facadeClass, string $rootClass): void
+    {
         $methods = $codebase->methods;
 
-        $methods->existence_provider->registerClosure(
-            $facadeClass,
-            static fn(MethodExistenceProviderEvent $event): ?bool
-                => FacadeMethodHandler::doesMethodExist($event, $rootClass),
-        );
-        $methods->params_provider->registerClosure(
-            $facadeClass,
-            static fn(MethodParamsProviderEvent $event): ?array
-                => FacadeMethodHandler::getMethodParams($event, $rootClass),
-        );
-        $methods->return_type_provider->registerClosure(
-            $facadeClass,
-            static fn(MethodReturnTypeProviderEvent $event): ?Union
-                => FacadeMethodHandler::getReturnType($event, $rootClass),
-        );
+        $methods->existence_provider->registerClosure($facadeClass, static fn(MethodExistenceProviderEvent $event): ?bool => FacadeMethodHandler::doesMethodExist(
+            $event,
+            $rootClass,
+        ));
+        $methods->params_provider->registerClosure($facadeClass, static fn(MethodParamsProviderEvent $event): ?array => FacadeMethodHandler::getMethodParams(
+            $event,
+            $rootClass,
+        ));
+        $methods->return_type_provider->registerClosure($facadeClass, static fn(MethodReturnTypeProviderEvent $event): ?Union => FacadeMethodHandler::getReturnType(
+            $event,
+            $rootClass,
+        ));
     }
 
     /**
      * Facades we never register against. First-party `Illuminate\` facades already ship with
-     * `@method` catalogues (and are covered by {@see \Psalm\LaravelPlugin\Providers\FacadeMapProvider::init()}
+     * `@method` catalogues (and are covered by {@see \Psalm\LaravelPlugin\Stubs\FacadeMapProvider::init()}
      * for the alias path). `Laravel\` sub-packages (Cashier, Horizon, Telescope, Pulse,
      * Octane, Pennant) register their accessors via package service providers that may not
      * run in our Testbench boot — probing them would autoload classes that immediately throw
@@ -278,10 +287,33 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      */
     private static function isSkippedFacade(string $fqcn): bool
     {
-        return \str_starts_with($fqcn, 'Illuminate\\')
+        return (
+            \str_starts_with($fqcn, 'Illuminate\\')
             || \str_starts_with($fqcn, 'Laravel\\')
             || \str_starts_with($fqcn, 'Mockery\\')
-            || \str_starts_with($fqcn, 'PHPUnit\\');
+            || \str_starts_with($fqcn, 'PHPUnit\\')
+        );
     }
 
+    /**
+     * Detect a global-namespace alias stub generated by {@see \Psalm\LaravelPlugin\Stubs\AliasStubProvider}.
+     *
+     * Such stubs take the form `class Foo extends \Illuminate\Support\Facades\Foo {}` — one per
+     * entry in `AliasLoader::getAliases()` whose alias name contains no backslash. They appear
+     * in Psalm's storage as Facade subclasses but are duplicates of facades already mapped by
+     * {@see \Psalm\LaravelPlugin\Stubs\FacadeMapProvider::init()} through the same alias loader.
+     * Re-probing them in {@see self::afterCodebasePopulated()} adds no coverage and surfaces
+     * environment-dependent failures (extension class collision, missing service-provider
+     * bindings) that FacadeMapProvider tolerates silently.
+     *
+     * @psalm-pure
+     */
+    private static function isIlluminateAliasStub(string $fqcn, ?string $parentClass): bool
+    {
+        return (
+            $parentClass !== null
+            && !\str_contains($fqcn, '\\')
+            && \str_starts_with($parentClass, 'Illuminate\\Support\\Facades\\')
+        );
+    }
 }

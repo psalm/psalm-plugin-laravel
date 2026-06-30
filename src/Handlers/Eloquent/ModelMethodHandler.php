@@ -12,7 +12,9 @@ use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\LaravelPlugin\Util\ProxyMethodReturnTypeProvider;
+use Psalm\Internal\Type\TypeExpander;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver;
+use Psalm\LaravelPlugin\Internal\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -56,6 +58,12 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * This method is called up to 4 times per static method call (existence, visibility,
      * params, return type), so caching avoids redundant methodExists lookups.
      *
+     * The dynamic-where branch of isUnresolvedBuilderMethod consults
+     * {@see DynamicWhereResolver::isEnabled}, so a stale entry produced under a
+     * previous "enabled" configuration could leak into a subsequent "disabled"
+     * bootstrap in the same process. Plugin re-bootstrap clears this cache via
+     * {@see init} to keep the cached verdict consistent with the active config.
+     *
      * @var array<string, bool>
      */
     private static array $unresolvedCache = [];
@@ -70,6 +78,30 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * @var array<class-string<Model>, class-string<Builder>>
      */
     private static array $customBuilderMap = [];
+
+    /**
+     * Memoized result of {@see expandedGlobalScopeParams} keyed by model FQCN.
+     * Cleared by {@see init} on plugin re-bootstrap.
+     *
+     * @var array<string, list<FunctionLikeParameter>|null>
+     */
+    private static array $globalScopeParamsCache = [];
+
+    /**
+     * Reset per-process caches. Called once per Plugin::__construct so a re-bootstrap
+     * doesn't carry stale verdicts across analysis runs. In particular, the
+     * dynamic-where branch of {@see isUnresolvedBuilderMethod} depends on the
+     * runtime-mutable {@see DynamicWhereResolver::isEnabled} flag; clearing the cache
+     * here ensures a `resolveDynamicWhereClauses` flip is honoured on the next run.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function init(): void
+    {
+        self::$unresolvedCache = [];
+        self::$customBuilderMap = [];
+        self::$globalScopeParamsCache = [];
+    }
 
     /**
      * Register a custom Eloquent builder class for a model.
@@ -115,8 +147,11 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * @internal Used by {@see CustomBuilderMethodHandler} for builder-instance return types
      * @psalm-mutation-free
      */
-    public static function builderType(string $builderClass, string $modelClass, Codebase $codebase): Type\Atomic\TNamedObject
-    {
+    public static function builderType(
+        string $builderClass,
+        string $modelClass,
+        Codebase $codebase,
+    ): Type\Atomic\TNamedObject {
         // Non-custom builders (base Builder) always have the TModel template param.
         if ($builderClass === Builder::class) {
             return new Type\Atomic\TGenericObject($builderClass, [
@@ -219,6 +254,15 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         $modelClass = $event->getFqClasslikeName();
         $methodName = $event->getMethodNameLowercase();
 
+        // addGlobalScope: re-expand formal params with final: true so Builder<static> resolves
+        // to Builder<ModelClass> without the &static intersection Psalm adds for non-final classes.
+        // The intersection causes false InvalidArgument when a closure uses a bare `Builder $query`
+        // hint, because template inference gives Builder<static> on the provided side while the
+        // expected side carries Builder<User&static> — unification fails (issue #1038).
+        if ($methodName === 'addglobalscope') {
+            return self::expandedGlobalScopeParams($codebase, $modelClass);
+        }
+
         if (!self::isUnresolvedBuilderMethod($codebase, $modelClass, $methodName)) {
             return null;
         }
@@ -239,6 +283,32 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return $traitParams;
         }
 
+        // Scope method — checked BEFORE Query\Builder forwarded methods because Laravel's
+        // Builder::__call tests hasNamedScope() before forwardCallTo($this->query, ...).
+        // A model scope whose name matches a Query\Builder-only method (e.g. scopeOrderBy)
+        // shadows that method at runtime, so the scope's params must win here too.
+        // isUnresolvedBuilderMethod() has already excluded real Eloquent\Builder methods
+        // (those are invoked directly by PHP, not via __call), so every scope reaching
+        // this point is a legitimate shadow of a Query\Builder-forwarded name.
+        /** @var class-string<Model> $modelClass */
+        $scopeParams = BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
+        if ($scopeParams !== null) {
+            // A direct call ($this->otherScope($query, ...) inside the model, or any call to an
+            // accessible real scope method) invokes the real method, so its full declared
+            // signature — including the leading $query — applies. Only the magic-forwarded forms
+            // (Model::scope() via __callStatic, $builder->scope()) inject $query and need the
+            // stripped params. The classifier decides from PHP dispatch semantics, not argument
+            // shapes, and declines for direct calls so Psalm checks the real signature instead of
+            // shifting every argument left by one. A null context (Psalm resolving this method's
+            // own declaration) also declines, keeping $query in scope for an overriding child.
+            // See issue #1034.
+            if (BuilderScopeHandler::isDirectScopeCall($codebase, $modelClass, $methodName, $event->getContext())) {
+                return null;
+            }
+
+            return $scopeParams;
+        }
+
         // Query\Builder method — use its actual params
         /** @var lowercase-string $methodName */
         $queryBuilderMethodId = new MethodIdentifier(QueryBuilder::class, $methodName);
@@ -246,9 +316,21 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return self::getParamsWithVariadicFlag($codebase, $queryBuilderMethodId);
         }
 
-        // Scope method — params from the scope definition minus the first $query param.
-        /** @var class-string<Model> $modelClass */
-        return self::getScopeParams($codebase, $modelClass, $methodName);
+        // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
+        // Mirrors the relation-chain fallback: typed single param when the return-type
+        // provider resolved a scalar column (issue #928 hand-off), variadic mixed
+        // otherwise so Psalm doesn't raise TooManyArguments on multi-segment forms
+        // like whereFirstNameAndLastName($a, $b).
+        if (DynamicWhereResolver::isEnabled() && DynamicWhereResolver::isDynamicWhereMethod($methodName)) {
+            return (
+                DynamicWhereResolver::consumeTypedParams(
+                    $methodName,
+                    $event->getCallArgs(),
+                ) ?? DynamicWhereResolver::variadicMixedParams()
+            );
+        }
+
+        return null;
     }
 
     /**
@@ -287,13 +369,73 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // Scope methods: return Builder<Model> directly.
         // Using executeFakeCall for scopes doesn't work reliably because the scope
         // is resolved via Builder's __call magic which may fail in a fake call context.
+        // A non-null getScopeParams() result implies the method is a real scope — no
+        // separate hasScopeMethod() guard needed (mirrors the params provider above).
         /** @var class-string<Model> $modelClass */
-        if (BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
-            return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+        $scopeParams = BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
+        if ($scopeParams !== null) {
+            // Direct calls to the underlying method ($this->someScope($query, ...), or any call
+            // to an accessible real scope method) return whatever the method declares (often
+            // void), not Builder<Model> — decline and let Psalm use the real declared return
+            // type. The classifier shares the params provider's dispatch-truth verdict so the
+            // two decline together (issue #1034).
+            if (BuilderScopeHandler::isDirectScopeCall($codebase, $modelClass, $methodName, $event->getContext())) {
+                return null;
+            }
+
+            // A value-returning scope surfaces its declared return via Laravel's `?? $this`
+            // coalesce; a plain void/fluent scope keeps the builder type (issue #1053).
+            $scopeFallback = new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+
+            return BuilderScopeHandler::forwardedScopeReturnType($codebase, $modelClass, $methodName, $scopeFallback);
         }
 
         // Trait-declared builder methods (e.g., SoftDeletes::withTrashed): return custom builder type.
         if (CustomBuilderMethodHandler::hasTraitMethod($modelClass, $methodName)) {
+            return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
+        }
+
+        // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
+        // doesMethodExist has already confirmed via DynamicWhereResolver::methodMatchesColumns
+        // that the lowercase suffix matches columns. The gate excludes both Query\Builder
+        // methods (handled by the fake-call branch below) AND methods declared on the
+        // registered builder class itself — for a custom builder that defines `whereFoo()`
+        // directly, the fake-call path resolves it with the method's actual return type
+        // instead of unconditionally substituting Builder<TModel>.
+        //
+        // Strict camel-cased validation (`resolveColumnType`) decides whether to queue the
+        // typed-param hand-off for #928 and gates the final return: a `false` result means
+        // the lowercase backtracker over-accepted (e.g. `wherefoobar` with @property `foo`
+        // and `bar` only matches via lowercase, not the camel-cased And/Or split that
+        // Laravel's runtime requires). Returning null in that case avoids claiming
+        // Builder<TModel> for a call Laravel would parse differently — existence remains
+        // confirmed so Psalm doesn't raise UndefinedMagicMethod, but the return type stays
+        // Psalm's default rather than a fabricated builder.
+        if (
+            DynamicWhereResolver::isEnabled()
+            && DynamicWhereResolver::isDynamicWhereMethod($methodName)
+            && !$codebase->methodExists(new MethodIdentifier(QueryBuilder::class, $methodName))
+            && !$codebase->methodExists(new MethodIdentifier($builderClass, $methodName))
+        ) {
+            $stmt = $event->getStmt();
+            $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
+            $columnType = DynamicWhereResolver::resolveColumnType($codebase, $modelClass, $originalMethodName);
+
+            if ($columnType === false) {
+                return null;
+            }
+
+            // Queue typed param hand-off (issue #928) only when the producer/consumer
+            // contract holds: single-segment scalar column + exactly one argument. Mirrors
+            // {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler::resolveDynamicWhereOnRelation}.
+            if ($columnType instanceof Union) {
+                $args = $stmt->getArgs();
+
+                if (\count($args) === 1) {
+                    DynamicWhereResolver::storePendingColumnType($methodName, $args[0], $columnType);
+                }
+            }
+
             return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
         }
 
@@ -354,7 +496,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // Methods on a custom builder class (e.g., PostBuilder::wherePublished).
         // These are declared directly on the custom builder and forwarded via __callStatic.
         $builderClass = self::getBuilderClassForModel($modelClass);
-        if ($builderClass !== Builder::class && $codebase->methodExists(new MethodIdentifier($builderClass, $methodName))) {
+        if (
+            $builderClass !== Builder::class
+            && $codebase->methodExists(new MethodIdentifier($builderClass, $methodName))
+        ) {
             return self::$unresolvedCache[$key] = true;
         }
 
@@ -368,7 +513,54 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // Scope methods (e.g., scopeActive → active, #[Scope] verified → verified).
         // These are defined on the model and forwarded via __callStatic → Builder.
         /** @var class-string<Model> $modelClass */
-        return self::$unresolvedCache[$key] = BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName);
+        if (BuilderScopeHandler::hasScopeMethod($codebase, $modelClass, $methodName)) {
+            return self::$unresolvedCache[$key] = true;
+        }
+
+        // Dynamic where{Column} methods (e.g., whereUuid, whereFirstNameAndLastName).
+        // Laravel's `Builder::dynamicWhere` resolves these at runtime when the suffix
+        // segments match column names. When `<resolveDynamicWhereClauses value="true" />`
+        // is set (default), confirm existence so a direct Model::whereCol(...) call
+        // doesn't raise UndefinedMagicMethod (issue #1000).
+        //
+        // The match is lowercase-only because the existence hook receives no AST node
+        // (so we can't reconstruct the original camel-cased suffix here). The return-
+        // type and params providers still run the strict camel-cased validation via
+        // DynamicWhereResolver::resolveColumnType when they fire on the confirmed call.
+        if (
+            DynamicWhereResolver::isEnabled()
+            && DynamicWhereResolver::methodMatchesColumns($codebase, $modelClass, $methodName)
+        ) {
+            return self::$unresolvedCache[$key] = true;
+        }
+
+        return self::$unresolvedCache[$key] = false;
+    }
+
+    /**
+     * Whether a bare method name on $modelClass forwards to its query builder (default or custom):
+     * an Eloquent\Builder method reachable via the @mixin (`where`, `find`, `first`, `get`), a
+     * Query\Builder method (`orderBy`, `whereIn`), a custom builder or trait builder method, or a
+     * resolvable dynamic `where{Column}()` clause. Real methods declared on the model itself are
+     * excluded. Scopes may also report true here (the shared {@see isUnresolvedBuilderMethod}
+     * logic includes them), so a caller that must treat scopes specially should consult
+     * {@see BuilderScopeHandler::hasScopeMethod()} first.
+     *
+     * @internal Used by {@see \Psalm\LaravelPlugin\Handlers\Rules\ImplicitQueryBuilderCallHandler}
+     * to decide whether a direct model call is magic forwarding without duplicating the resolution.
+     *
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodNameLower
+     */
+    public static function forwardsToQueryBuilder(Codebase $codebase, string $modelClass, string $methodNameLower): bool
+    {
+        // Eloquent\Builder methods (where/find/create/first/get) resolve via Model's @mixin, so
+        // isUnresolvedBuilderMethod reports them as already-resolved (false); check them here.
+        if ($codebase->methodExists(new MethodIdentifier(Builder::class, $methodNameLower))) {
+            return true;
+        }
+
+        return self::isUnresolvedBuilderMethod($codebase, $modelClass, $methodNameLower);
     }
 
     /** @inheritDoc */
@@ -384,7 +576,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         $codebase = $source->getCodebase();
         $called_fq_classlike_name = $event->getCalledFqClasslikeName();
 
-        if (! \is_string($called_fq_classlike_name)) {
+        if (!\is_string($called_fq_classlike_name)) {
             return null;
         }
 
@@ -416,56 +608,79 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             $methodId = new MethodIdentifier($called_fq_classlike_name, $called_method_name_lowercase);
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
-            $fake_method_call = new MethodCall(
-                new Variable('builder'),
-                $methodId->method_name,
-                $event->getCallArgs(),
-            );
+            $fake_method_call = new MethodCall(new Variable('builder'), $methodId->method_name, $event->getCallArgs());
 
             $fakeProxy = self::builderType($builderClass, $called_fq_classlike_name, $codebase);
 
-            return ProxyMethodReturnTypeProvider::executeFakeCall($source, $fake_method_call, $event->getContext(), $fakeProxy);
+            return ProxyMethodReturnTypeProvider::executeFakeCall(
+                $source,
+                $fake_method_call,
+                $event->getContext(),
+                $fakeProxy,
+            );
         }
 
         return null;
     }
 
     /**
-     * Get params for a scope method on a model, minus the $query parameter.
+     * Return the formal params of Model::addGlobalScope with `static` pinned to the concrete
+     * model class via TypeExpander::expandUnion final: true.
      *
-     * Handles both legacy scopeXxx() methods and modern #[Scope] attribute methods.
-     * Used by both the static model call handler ({@see getMethodParams}) and
-     * {@see CustomBuilderMethodHandler::getScopeMethodParamsOnBuilder}.
+     * Laravel's docblock uses Builder<static> in the Closure param position. Psalm expands
+     * `static` to `ModelClass&static` for non-final classes, while the user's bare
+     * `Builder $query` hint gets Builder<static> via template inference — the `&static`
+     * intersection on the expected side causes the unification to fail (issue #1038).
+     * Pinning with final: true resolves to the plain model class on both sides.
      *
-     * @internal Used by {@see CustomBuilderMethodHandler}
-     * @param class-string<Model> $modelClass
      * @return list<FunctionLikeParameter>|null
      */
-    public static function getScopeParams(Codebase $codebase, string $modelClass, string $methodName): ?array
+    private static function expandedGlobalScopeParams(Codebase $codebase, string $modelClass): ?array
     {
-        // Legacy: scopeActive(Builder $query, ...) → active(...)
-        $legacyScopeMethod = $modelClass . '::scope' . \ucfirst($methodName);
-        if ($codebase->methodExists($legacyScopeMethod)) {
-            /** @var lowercase-string $legacyScopeLower */
-            $legacyScopeLower = 'scope' . $methodName;
-
-            return \array_slice(
-                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $legacyScopeLower)),
-                1,
-            );
+        if (\array_key_exists($modelClass, self::$globalScopeParamsCache)) {
+            return self::$globalScopeParamsCache[$modelClass];
         }
 
-        // Modern #[Scope]: active(Builder $query, ...) → active(...)
-        $directMethod = $modelClass . '::' . $methodName;
-        if ($codebase->methodExists($directMethod)) {
-            /** @var lowercase-string $methodName */
-            return \array_slice(
-                $codebase->methods->getMethodParams(new MethodIdentifier($modelClass, $methodName)),
-                1,
-            );
+        $methodId = new MethodIdentifier($modelClass, 'addglobalscope');
+        if (!$codebase->methodExists($methodId)) {
+            return self::$globalScopeParamsCache[$modelClass] = null;
         }
 
-        return null;
+        // Fetch raw params from the declaring method storage directly, bypassing the
+        // params provider. Going through getMethodParams() would re-enter this provider
+        // (Methods::getMethodParams consults it before falling through to storage); the
+        // only protection against infinite recursion would be the null-source guard above.
+        // Using getStorage() makes the independence from the provider explicit.
+        $declaringMethodId = $codebase->methods->getDeclaringMethodId($methodId);
+        if (!$declaringMethodId instanceof \Psalm\Internal\MethodIdentifier) {
+            return self::$globalScopeParamsCache[$modelClass] = null;
+        }
+
+        return self::$globalScopeParamsCache[$modelClass] = \array_map(
+            static function (FunctionLikeParameter $param) use ($codebase, $modelClass): FunctionLikeParameter {
+                if (!$param->type instanceof Union) {
+                    return $param;
+                }
+
+                // setType() clones — never mutates the shared method storage params.
+                return $param->setType(TypeExpander::expandUnion(
+                    $codebase,
+                    $param->type,
+                    $modelClass,
+                    $modelClass,
+                    null,
+                    evaluate_class_constants: true,
+                    evaluate_conditional_types: false,
+                    // Resolves `static` to the plain model class instead of
+                    // the ModelClass&static intersection. In a closure param
+                    // (accept/contravariant position) the intersection over-rejects
+                    // because the provided Builder<static> cannot be proven to
+                    // contain Builder<ModelClass&static>. final: true prevents that.
+                    final: true,
+                ));
+            },
+            $codebase->methods->getStorage($declaringMethodId)->params,
+        );
     }
 
     /**
@@ -497,10 +712,14 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             // Append a synthetic variadic rest param instead of marking the last formal param.
             // Marking the last param as variadic would relax arity — e.g., addSelect($column)
             // would accept zero args. Appending preserves the required params while allowing extras.
-            $params[] = new FunctionLikeParameter(name: 'args', by_ref: false, type: Type::getMixed(), is_variadic: true);
+            $params[] = new FunctionLikeParameter(
+                name: 'args',
+                by_ref: false,
+                type: Type::getMixed(),
+                is_variadic: true,
+            );
         }
 
         return $params;
     }
-
 }

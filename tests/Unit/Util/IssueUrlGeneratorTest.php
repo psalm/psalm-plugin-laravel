@@ -9,8 +9,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\PluginConfig;
-use Psalm\LaravelPlugin\Util\IssueUrlGenerator;
+use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Internal\IssueUrlGenerator;
 
 #[CoversClass(IssueUrlGenerator::class)]
 final class IssueUrlGeneratorTest extends TestCase

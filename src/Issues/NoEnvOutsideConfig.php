@@ -14,5 +14,5 @@ final class NoEnvOutsideConfig extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/NoEnvOutsideConfig/';
 
-    public const ERROR_LEVEL = 1;
+    public const ERROR_LEVEL = 4;
 }

@@ -45,4 +45,4 @@ function test_builder_macro_resolves_through_relation_chain(Customer $customer):
     return $_;
 }
 ?>
---EXPECT--
+--EXPECTF--

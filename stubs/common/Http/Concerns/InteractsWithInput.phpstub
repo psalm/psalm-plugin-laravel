@@ -29,9 +29,16 @@ trait InteractsWithInput
     /**
      * Retrieve a query string item from the request.
      *
+     * Query strings come from `$_GET` via Symfony's `InputBag`, which only
+     * holds scalars and arrays. Laravel documents the return as
+     * `string|array|null`; we keep `null` here because the default falls
+     * back to `null` when no key is matched.
+     *
+     * @template TDefault
+     *
      * @param  string|null  $key
-     * @param  mixed  $default
-     * @return ($key is null ? array<string, mixed> : mixed)
+     * @param  TDefault  $default
+     * @return ($key is null ? array<string, string|array<array-key, mixed>> : string|array<array-key, mixed>|TDefault)
      *
      * @psalm-taint-source input
      */
@@ -40,9 +47,15 @@ trait InteractsWithInput
     /**
      * Retrieve a request payload item from the request.
      *
+     * Mirrors `query()` but reads from `$_POST` / form-encoded bodies.
+     * JSON bodies are merged in via `input()`/`json()`, not `post()`,
+     * so the value here is always scalar or array (plus the default).
+     *
+     * @template TDefault
+     *
      * @param  string|null  $key
-     * @param  mixed  $default
-     * @return ($key is null ? array<string, mixed> : mixed)
+     * @param  TDefault  $default
+     * @return ($key is null ? array<string, string|array<array-key, mixed>> : string|array<array-key, mixed>|TDefault)
      *
      * @psalm-taint-source input
      */
@@ -109,9 +122,14 @@ trait InteractsWithInput
     /**
      * Get all uploaded files for the request.
      *
-     * @return array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>>
+     * Not a taint source, for the same reason as Request::file(): the returned
+     * UploadedFile objects only coerce to their server-controlled temp path.
+     * The user-controlled upload data is tainted at the UploadedFile accessors
+     * instead (see stubs/common/Http/UploadedFile.phpstub).
      *
-     * @psalm-taint-source input
+     * Refs: https://github.com/psalm/psalm-plugin-laravel/issues/1134
+     *
+     * @return array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>>
      */
     public function allFiles() {}
 

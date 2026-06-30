@@ -1,0 +1,42 @@
+<?php
+
+namespace Illuminate\Console\Concerns;
+
+use Symfony\Component\Console\Completion\CompletionInput;
+use Symfony\Component\Console\Completion\CompletionSuggestions;
+use Symfony\Component\Console\Completion\Suggestion;
+use Symfony\Component\Console\Input\InputOption;
+
+trait HasParameters
+{
+    /**
+     * Get the console command options.
+     *
+     * Adds `|null` to element index 1 (the option shortcut).
+     *
+     * Laravel's native return type declares index 1 as `string|non-empty-array<string>`,
+     * but Symfony's `InputOption::__construct(string $name, string|array|null $shortcut = null, ...)`
+     * accepts (and defaults to) `null` for the "no shortcut" case, which is the common default.
+     * The missing `|null` produces a false-positive InvalidReturnType/InvalidReturnStatement on
+     * every getOptions() override returning the typical `['name', null, ...]` element (issue #1165).
+     *
+     * Kept in common/ because the getOptions() contract (an array of InputOption objects or
+     * `addOption(...$option)` argument tuples) is identical across all supported Laravel versions.
+     * Laravel only added this array-shape docblock in v12.50.0; 11.x and 12.0 to 12.49 declared a
+     * looser `@return array`, so on those versions this stub also tightens getOptions() to the same
+     * precise shape (the runtime contract is unchanged). Remove it once Laravel ships `|null` upstream.
+     *
+     * @return (InputOption|array{
+     *    0: non-empty-string,
+     *    1?: string|non-empty-array<string>|null,
+     *    2?: int-mask-of<InputOption::VALUE_*>,
+     *    3?: string,
+     *    4?: mixed,
+     *    5?: list<string|Suggestion>|\Closure(CompletionInput, CompletionSuggestions): list<string|Suggestion>
+     * })[]
+     */
+    protected function getOptions()
+    {
+        return [];
+    }
+}

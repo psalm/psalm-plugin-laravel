@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
-use Psalm\LaravelPlugin\Util\Arg;
+use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
@@ -53,7 +53,8 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
         //   - default has unknown type
         //   - default explicitly includes null
         //   - default is mixed (implicitly includes null)
-        if (!$second_arg_type instanceof \Psalm\Type\Union
+        if (
+            !$second_arg_type instanceof \Psalm\Type\Union
             || $second_arg_type->isNullable()
             || $second_arg_type->hasMixed()
         ) {

@@ -28,6 +28,12 @@ permissions:
 env:
   # Pinned Monica release for reproducible benchmarks.
   # Monica is a real-world Laravel app (~700 PHP files, Laravel 12) https://github.com/monicahq/monica.
+  # beta.5 is the lowest tag on Laravel 12 (the plugin requires illuminate ^12.4 || ^13;
+  # beta.4 and earlier ship Laravel 11). Requiring the plugin bumps Monica's Laravel
+  # to >=12.4 during `composer update`. Its lock pins the dev dependency
+  # laravel-lang/http-statuses 3.10.3, which Packagist flags as malware, so a plain
+  # `composer install` aborts. The Prime step below bumps that one package to a clean
+  # release before installing (see there).
   MONICA_REPO: monicahq/monica
   MONICA_REF: "v5.0.0-beta.5"
   PHP_VERSION: "8.3"
@@ -51,7 +57,7 @@ jobs:
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
@@ -65,34 +71,35 @@ jobs:
 
       - name: Get PR refs
         id: pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          PR_JSON=$(gh pr view "$PR_NUMBER" \
-            --repo ${{ github.repository }} \
-            --json headRefOid,baseRefOid,headRefName,number,headRepository)
-          HEAD_REPO=$(echo "$PR_JSON" | jq -r .headRepository.nameWithOwner)
-          EXPECTED_REPO="${{ github.repository }}"
-          if [ "$HEAD_REPO" != "$EXPECTED_REPO" ]; then
-            echo "::error::Refusing to benchmark PR from a different repository (head: $HEAD_REPO, expected: $EXPECTED_REPO)"
-            exit 1
-          fi
-          {
-            echo "head_sha=$(echo "$PR_JSON" | jq -r .headRefOid)"
-            echo "base_sha=$(echo "$PR_JSON" | jq -r .baseRefOid)"
-            echo "pr_number=$(echo "$PR_JSON" | jq -r .number)"
-          } >> "$GITHUB_OUTPUT"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            const expectedRepo = `${context.repo.owner}/${context.repo.repo}`;
+            const headRepo = pr.head.repo ? pr.head.repo.full_name : null;
+            if (headRepo !== expectedRepo) {
+              core.setFailed(`Refusing to benchmark PR from a different repository (head: ${headRepo}, expected: ${expectedRepo})`);
+              return;
+            }
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_sha', pr.base.sha);
+            core.setOutput('pr_number', String(pr.number));
 
       - name: Checkout PR branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ${{ steps.pr.outputs.head_sha }}
           path: plugin-pr
 
       - name: Checkout base branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           ref: ${{ steps.pr.outputs.base_sha }}
           path: plugin-base
 
@@ -121,14 +128,19 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: /tmp/monica-source/vendor
-          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
+          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v2
 
       - name: Prime Monica vendor
         run: |
-          if [ ! -d /tmp/monica-source/vendor ]; then
-            cd /tmp/monica-source
-            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
-          fi
+          cd /tmp/monica-source
+          # Monica's lock pins the dev dependency laravel-lang/http-statuses at a version
+          # Packagist flags as malware, so a plain `composer install` aborts. Bumping just
+          # that one package to a clean release (the constraint is ^3.8) rewrites the lock and
+          # installs the full set. Run unconditionally — not behind a `[ ! -d vendor ]` guard —
+          # because the vendor cache does not include composer.lock, so on a cache hit the lock
+          # is restored from the fresh git clone at the flagged version; the rewrite must run
+          # every time so the corrected lock is what `cp -a` copies into the base/pr projects.
+          COMPOSER_MEMORY_LIMIT=-1 composer update laravel-lang/http-statuses --no-interaction --no-progress
 
       - name: Setup benchmark projects
         run: |
@@ -207,12 +219,14 @@ jobs:
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
       - name: Checkout plugin
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup PHP
         uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
@@ -236,14 +250,16 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: /tmp/monica/vendor
-          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v1
+          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v2
 
       - name: Setup benchmark project
         run: |
           cd /tmp/monica
-          if [ ! -d vendor ]; then
-            COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --no-progress
-          fi
+          # Bump Monica's malware-flagged dev dependency laravel-lang/http-statuses to a clean
+          # release (see the pr-benchmark "Prime Monica vendor" step for the full rationale).
+          # Unconditional: the vendor cache excludes composer.lock, so the flagged lock returns
+          # on every cache hit and must be rewritten before any other composer command runs.
+          COMPOSER_MEMORY_LIMIT=-1 composer update laravel-lang/http-statuses --no-interaction --no-progress
           composer config repositories.plugin \
             '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true}}'
           composer config minimum-stability dev

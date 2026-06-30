@@ -18,14 +18,15 @@ final readonly class Report
 {
     /**
      * @param 'bootstrap'|'testbench_fallback'|null $bootMode
-     * @param 'runtime'|'config.platform.php' $phpAnalysisSource
+     * @param 'runtime'|'psalm.xml' $phpAnalysisSource
      * @param list<string> $bootstrapErrors
      * @param list<string> $hardFailures
+     * @param list<string> $loadedProviders Service provider class names the booted kernel registered, sorted. Empty when boot failed.
      */
     public function __construct(
         public ?string $pluginVersion,
-        public ?string $laravelVersion,
         public ?string $psalmVersion,
+        public ?string $laravelVersion,
         public string $phpRuntimeVersion,
         public ?string $phpRequiredVersion,
         public string $phpAnalysisVersion,
@@ -34,5 +35,6 @@ final readonly class Report
         public ?string $bootPath,
         public array $bootstrapErrors,
         public array $hardFailures,
+        public array $loadedProviders,
     ) {}
 }

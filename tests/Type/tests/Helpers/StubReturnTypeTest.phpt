@@ -122,4 +122,4 @@ function test_builder_with_callback(): Builder
     });
 }
 ?>
---EXPECT--
+--EXPECTF--

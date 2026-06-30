@@ -24,7 +24,7 @@ final class ModelFactoryTypeProvider
         $classlike = $source->getCodebase()->classlike_storage_provider->get($event->getFqClasslikeName());
 
         $usesHasFactory = isset($classlike->used_traits[\strtolower(HasFactory::class)]);
-        if (! $usesHasFactory) {
+        if (!$usesHasFactory) {
             return null;
         }
 

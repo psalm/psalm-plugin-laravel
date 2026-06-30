@@ -123,11 +123,7 @@ final class MigrationCache
     /** @psalm-mutation-free */
     private function getCachePath(string $fingerprint): string
     {
-        return $this->cacheDirectory
-            . \DIRECTORY_SEPARATOR
-            . self::CACHE_PREFIX
-            . $fingerprint
-            . self::CACHE_EXTENSION;
+        return $this->cacheDirectory . \DIRECTORY_SEPARATOR . self::CACHE_PREFIX . $fingerprint . self::CACHE_EXTENSION;
     }
 
     /**
@@ -229,11 +225,7 @@ final class MigrationCache
      */
     private function cleanupOldCacheFiles(string $currentFingerprint): void
     {
-        $pattern = $this->cacheDirectory
-            . \DIRECTORY_SEPARATOR
-            . self::CACHE_PREFIX
-            . '*'
-            . self::CACHE_EXTENSION;
+        $pattern = $this->cacheDirectory . \DIRECTORY_SEPARATOR . self::CACHE_PREFIX . '*' . self::CACHE_EXTENSION;
 
         $currentCachePath = $this->getCachePath($currentFingerprint);
 

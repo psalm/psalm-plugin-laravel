@@ -1,3 +1,7 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.42.0');
 --FILE--
 <?php declare(strict_types=1);
 

@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Builders\WorkOrderBuilder;
 use App\Collections\WorkOrderCollection;
+use App\Models\Concerns\ComparesRank;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
@@ -31,6 +32,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[UseEloquentBuilder(WorkOrderBuilder::class)]
 final class WorkOrder extends Model
 {
+    use ComparesRank;
     use SoftDeletes;
 
     protected $table = 'work_orders';

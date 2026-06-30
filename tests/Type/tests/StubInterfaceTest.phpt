@@ -241,4 +241,4 @@ final class StubInterfaceTest
     }
 }
 ?>
---EXPECT--
+--EXPECTF--
