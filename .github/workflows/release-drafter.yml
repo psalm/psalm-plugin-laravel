@@ -3,10 +3,10 @@ name: Release Drafter
 on:
   workflow_dispatch:
   push:
-    # branches to consider in the event; optional, defaults to all
+    # Draft releases only for the latest major (master). The 3.x branch is a
+    # separate major line and is released/tagged manually, not drafted here.
     branches:
       - master
-      - "3.x"
 
 permissions:
   contents: read

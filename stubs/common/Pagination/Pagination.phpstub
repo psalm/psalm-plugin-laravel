@@ -37,6 +37,40 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
     public function setCollection(\Illuminate\Support\Collection $collection) {}
 
     /**
+     * Transform each item using a callback. Laravel's source returns `$this`
+     * but mutates the value template via `@phpstan-this-out` (which Psalm
+     * ignores). Type the return directly so inline `return $p->through(...)`
+     * remaps the value param; pair `@psalm-this-out` for the assigned-variable
+     * case (`$p->through(...)` then read `$p`), mirroring `setCollection()`.
+     *
+     * @template TMapValue
+     *
+     * @param  callable(TValue, TKey): TMapValue  $callback
+     * @psalm-this-out static<TKey, TMapValue>
+     * @return static<TKey, TMapValue>
+     */
+    public function through(callable $callback) {}
+
+    /**
+     * Get / set the URL fragment to be appended to URLs.
+     *
+     * Null arg is the getter (string|null); any other arg is the setter and
+     * returns the paginator for chaining. Reflected Laravel declares the flat
+     * union `$this|string|null`, which breaks `->fragment('x')->links()` chains
+     * (Psalm would call the next method on `string|null`). The conditional return
+     * keeps the setter branch chainable.
+     *
+     * `static`, not `$this`, on the setter branch: with `$this` Psalm merges the
+     * stub conditional back into the reflected union and the call collapses to the
+     * flat union again. `static` is substituted by the late-static-bound class
+     * (carrying `<TKey, TValue>`) and overrides cleanly. Mirrors `domain()` (#1174).
+     *
+     * @param  string|null  $fragment
+     * @return ($fragment is null ? string|null : static)
+     */
+    public function fragment($fragment = null) {}
+
+    /**
      * @return \ArrayIterator<TKey, TValue>
      */
     public function getIterator(): \Traversable {}
@@ -111,6 +145,30 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
      * @return $this
      */
     public function setCollection(\Illuminate\Support\Collection $collection) {}
+
+    /**
+     * Transform each item using a callback. Laravel's source returns `$this`
+     * but mutates the value template via `@phpstan-this-out` (which Psalm
+     * ignores). Type the return directly so inline `return $p->through(...)`
+     * remaps the value param; pair `@psalm-this-out` for the assigned-variable
+     * case (`$p->through(...)` then read `$p`), mirroring `setCollection()`.
+     *
+     * @template TMapValue
+     *
+     * @param  callable(TValue, TKey): TMapValue  $callback
+     * @psalm-this-out static<TKey, TMapValue>
+     * @return static<TKey, TMapValue>
+     */
+    public function through(callable $callback) {}
+
+    /**
+     * Get / set the URL fragment to be appended to URLs. See `AbstractPaginator::fragment()`
+     * for the `static`-not-`$this` setter-branch rationale (stub/source merge bug).
+     *
+     * @param  string|null  $fragment
+     * @return ($fragment is null ? string|null : static)
+     */
+    public function fragment($fragment = null) {}
 
     /**
      * @return \ArrayIterator<TKey, TValue>
