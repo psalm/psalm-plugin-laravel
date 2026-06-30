@@ -8,7 +8,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\DateFactory;
 use Illuminate\Support\Facades\Date;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
+use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;

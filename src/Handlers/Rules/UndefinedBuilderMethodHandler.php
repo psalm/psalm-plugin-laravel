@@ -15,7 +15,7 @@ use Psalm\CodeLocation;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Issue\UndefinedMagicMethod;
 use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Util\DynamicWhereResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Type\Atomic\TGenericObject;
