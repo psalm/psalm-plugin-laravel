@@ -4,8 +4,18 @@ declare(strict_types=1);
 
 /**
  * Cross-OS install/configuration smoke test. Follows the README quickstart
- * verbatim against a fresh Laravel project: create project, install the plugin
- * from the current checkout, then `psalm-laravel init`, `analyze`, `diagnose`.
+ * verbatim, installing the plugin from the current checkout and then running
+ * `psalm-laravel init`, `analyze`, `diagnose` against a target project.
+ *
+ * Two target-project modes, selected by PROJECT_KIND (default `app`):
+ *   - `app`     — a fresh `laravel/laravel` project. Exercises the Laravel-app
+ *                 config path (`InitCommand::detectLaravelAppRoots()` and a
+ *                 `bootstrap/app.php` plugin boot).
+ *   - `package` — a real Laravel *package* checkout (default: laravel/socialite),
+ *                 which autoloads from `src/` and ships no `artisan`. Exercises the
+ *                 package config path (`InitCommand::detectPackageRoots()` and the
+ *                 Orchestra Testbench plugin-boot fallback) that the app flow never
+ *                 touches (#1198).
  *
  * PHP (not Bash) so the exact same script runs on Ubuntu, Windows, and macOS.
  * Subprocesses go through Symfony Process, which already solves the Windows
@@ -20,12 +30,17 @@ declare(strict_types=1);
  *
  * Usage:
  *   php bin/ci/install-smoke.php
+ *   PROJECT_KIND=package php bin/ci/install-smoke.php
  *   KEEP_APP=1 VERBOSE=1 php bin/ci/install-smoke.php
  *
  * Environment variables:
+ *   PROJECT_KIND     `app` (default) or `package` — see the mode descriptions above
  *   PLUGIN_PATH      Checkout to install (default: this repo's root)
- *   LARAVEL_VERSION  `laravel/laravel` installer version (default: latest stable)
- *   APP_DIR          Where to scaffold the throwaway app (default: a fresh temp dir)
+ *   LARAVEL_VERSION  `app` mode only: `laravel/laravel` installer version (default: latest stable)
+ *   PACKAGE_REPO     `package` mode only: git URL to clone (default: laravel/socialite)
+ *   PACKAGE_REF      `package` mode only: tag/branch to clone (default: a pinned socialite tag)
+ *   PACKAGE_EXPECTED_ROOTS  `package` mode only: comma-separated dirs the generated psalm.xml must scan (default: src)
+ *   APP_DIR          Where to scaffold the throwaway project (default: a fresh temp dir)
  *   KEEP_APP         1 to keep the app dir even on success (default: 0; failures always preserve it)
  *   VERBOSE          1 to stream every subprocess's output live (default: 0; failures always show it)
  *
@@ -123,8 +138,12 @@ function logOutput(string $label, string $output, string $errorOutput, bool $ver
  *
  * @param list<string> $command
  * @param array<string, string> $extraEnv
+ * @param list<int> $allowedExitCodes Exit codes treated as success. Defaults to [0];
+ *        `package`-mode `analyze` passes [0, 2] because Psalm exits 2 when it ran to
+ *        completion but found issues — expected for a real third-party package we do
+ *        not own — while 1 (a launcher/config error, the #1189 class) still fails.
  */
-function runStep(string $label, array $command, string $cwd, array $extraEnv, bool $verbose, string $appDir): Process
+function runStep(string $label, array $command, string $cwd, array $extraEnv, bool $verbose, string $appDir, array $allowedExitCodes = [0]): Process
 {
     logLine(\sprintf('==> %s', $label));
     logLine(\sprintf('    $ %s (cwd: %s)', \implode(' ', $command), $cwd));
@@ -151,7 +170,7 @@ function runStep(string $label, array $command, string $cwd, array $extraEnv, bo
 
     logOutput($label, $process->getOutput(), $process->getErrorOutput(), $verbose);
 
-    if (!$process->isSuccessful()) {
+    if (!\in_array($process->getExitCode(), $allowedExitCodes, true)) {
         reportFailure($label, $command, $process->getExitCode(), $cwd, $process->getOutput(), $process->getErrorOutput(), $appDir);
     }
 
@@ -209,6 +228,30 @@ if (!\is_file($pluginPath . \DIRECTORY_SEPARATOR . 'composer.json')) {
     exit(1);
 }
 
+$projectKind = \strtolower(envStr('PROJECT_KIND', 'app'));
+if (!\in_array($projectKind, ['app', 'package'], true)) {
+    \fwrite(\STDERR, \sprintf("PROJECT_KIND must be 'app' or 'package', got '%s'.\n", $projectKind));
+    exit(1);
+}
+
+// `package` mode targets a real Laravel package checkout. Pinned to a released
+// socialite tag (not a floating branch) so the run is reproducible and immune to
+// mid-refactor breakage on socialite's default branch — and so socialite's own
+// require-dev tree, pulled in when the plugin is required into it, stays frozen.
+// Override either to exercise a different package or ref.
+$packageRepo = envStr('PACKAGE_REPO', 'https://github.com/laravel/socialite.git');
+$packageRef = envStr('PACKAGE_REF', 'v5.28.0');
+
+// Directories the generated psalm.xml must scan in package mode, comma-separated.
+// Defaults to socialite's `src`; override it alongside PACKAGE_REPO for a package
+// that autoloads from a different or additional root (e.g. `lib`) so the assertion
+// tracks the target rather than assuming socialite's layout. The app-only-marker
+// negative assertions below are layout-independent and need no override.
+$expectedRoots = \array_values(\array_filter(\array_map(
+    'trim',
+    \explode(',', envStr('PACKAGE_EXPECTED_ROOTS', 'src')),
+)));
+
 $laravelVersion = envStr('LARAVEL_VERSION', '');
 $keepApp = envBool('KEEP_APP', false);
 $verbose = envBool('VERBOSE', false);
@@ -219,11 +262,10 @@ if ($appDir === '') {
         . \DIRECTORY_SEPARATOR . 'psalm-install-smoke-' . \bin2hex(\random_bytes(4));
 }
 
-logLine(\sprintf(
-    'Starting install smoke test: app_dir=%s laravel_version=%s',
-    $appDir,
-    $laravelVersion === '' ? '(latest stable)' : $laravelVersion,
-));
+$targetSummary = $projectKind === 'package'
+    ? \sprintf('package=%s@%s', $packageRepo, $packageRef)
+    : \sprintf('laravel_version=%s', $laravelVersion === '' ? '(latest stable)' : $laravelVersion);
+logLine(\sprintf('Starting install smoke test: kind=%s app_dir=%s %s', $projectKind, $appDir, $targetSummary));
 
 $psalmLaravelBin = static fn(string $dir): string => $dir . \DIRECTORY_SEPARATOR . 'vendor'
     . \DIRECTORY_SEPARATOR . 'bin' . \DIRECTORY_SEPARATOR . 'psalm-laravel';
@@ -234,17 +276,27 @@ if (!\is_dir($launchDir) && !@\mkdir($launchDir, 0755, true) && !\is_dir($launch
     exit(1);
 }
 
-// --- Step 1: fresh Laravel project -----------------------------------------
+// --- Step 1: create the target project -------------------------------------
+//
+// `app` mode scaffolds a fresh Laravel application; `package` mode clones a real
+// Laravel package (socialite by default). Both land at $appDir, and every later
+// step (configure Composer, require the plugin, init/analyze/diagnose) is shared.
 
-// --no-blocking: a security advisory against any of laravel/laravel's transitive
-// deps (historically phpunit's dev range) would otherwise block the install with
-// a Composer policy error unrelated to this script — the same lesson already
-// applied in tests/Application/laravel-test.sh's identical create-project call.
-$createProjectCommand = ['composer', 'create-project', '--prefer-dist', '--no-interaction', '--no-ansi', '--no-blocking', 'laravel/laravel', $appDir];
-if ($laravelVersion !== '') {
-    $createProjectCommand[] = $laravelVersion;
+if ($projectKind === 'package') {
+    // --depth 1 --branch <ref>: fetch only the pinned ref's tree, no history.
+    $cloneCommand = ['git', 'clone', '--depth', '1', '--branch', $packageRef, $packageRepo, $appDir];
+    runStep(\sprintf('git clone %s@%s', $packageRepo, $packageRef), $cloneCommand, $launchDir, [], $verbose, $appDir);
+} else {
+    // --no-blocking: a security advisory against any of laravel/laravel's transitive
+    // deps (historically phpunit's dev range) would otherwise block the install with
+    // a Composer policy error unrelated to this script — the same lesson already
+    // applied in tests/Application/laravel-test.sh's identical create-project call.
+    $createProjectCommand = ['composer', 'create-project', '--prefer-dist', '--no-interaction', '--no-ansi', '--no-blocking', 'laravel/laravel', $appDir];
+    if ($laravelVersion !== '') {
+        $createProjectCommand[] = $laravelVersion;
+    }
+    runStep('composer create-project', $createProjectCommand, $launchDir, [], $verbose, $appDir);
 }
-runStep('composer create-project', $createProjectCommand, $launchDir, [], $verbose, $appDir);
 
 // --- Step 2: configure Composer exactly as the README's Step 1 instructs ---
 //
@@ -287,10 +339,39 @@ if ($psalmXmlContents === false || !\str_contains($psalmXmlContents, 'Psalm\\Lar
     reportFailure('assert psalm.xml registers the plugin', [], null, $appDir, (string) $psalmXmlContents, 'Expected psalm.xml to reference Psalm\\LaravelPlugin\\Plugin.', $appDir);
 }
 
+// Package mode only: prove `init` took the package branch (detectPackageRoots),
+// not the Laravel-app branch. A package autoloads from its own root(s) — `src` for
+// socialite, or whatever PACKAGE_EXPECTED_ROOTS names — and ships no artisan, so a
+// correct package config scans each expected <directory name="..."/> and emits none
+// of the app-only <file name="artisan"/> / <directory name="app"/> entries.
+// Whitespace in the generated markup is fixed by InitCommand's template, so
+// exact-substring matching is safe here.
+if ($projectKind === 'package') {
+    $contents = (string) $psalmXmlContents;
+    foreach ($expectedRoots as $root) {
+        $marker = \sprintf('<directory name="%s"/>', $root);
+        if (!\str_contains($contents, $marker)) {
+            reportFailure('assert psalm.xml scans the package root', [], null, $appDir, $contents, \sprintf('Expected package-mode psalm.xml to scan %s.', $marker), $appDir);
+        }
+    }
+
+    foreach (['<file name="artisan"/>', '<directory name="app"/>'] as $appOnlyMarker) {
+        if (\str_contains($contents, $appOnlyMarker)) {
+            reportFailure('assert psalm.xml used the package (not Laravel-app) layout', [], null, $appDir, $contents, \sprintf('Package-mode psalm.xml unexpectedly contains the app-only marker %s.', $appOnlyMarker), $appDir);
+        }
+    }
+}
+
 // --- Step 5: psalm-laravel analyze ------------------------------------------
 
 $analyzeCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'analyze', '--no-cache', '--no-progress', '--output-format=compact'];
-runStep('psalm-laravel analyze', $analyzeCommand, $appDir, [], $verbose, $appDir);
+// app mode analyzes a pristine skeleton and must be issue-free (exit 0). package
+// mode analyzes a real third-party package we do not own: Psalm exiting 2 means it
+// ran to completion but found issues in *that package's* own code, which is not a
+// plugin install failure — accept it, while still failing on 1 (a Psalm/launcher
+// error, the #1189 class this smoke test exists to catch).
+$analyzeAllowedExitCodes = $projectKind === 'package' ? [0, 2] : [0];
+runStep('psalm-laravel analyze', $analyzeCommand, $appDir, [], $verbose, $appDir, $analyzeAllowedExitCodes);
 
 // --- Step 6: psalm-laravel diagnose -----------------------------------------
 //
@@ -298,7 +379,31 @@ runStep('psalm-laravel analyze', $analyzeCommand, $appDir, [], $verbose, $appDir
 // reportFailure() prints it too. No separate artifact is written.
 
 $diagnoseCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'diagnose', '--no-tips'];
-runStep('psalm-laravel diagnose', $diagnoseCommand, $appDir, [], $verbose, $appDir);
+$diagnoseProcess = runStep('psalm-laravel diagnose', $diagnoseCommand, $appDir, [], $verbose, $appDir);
+
+// Boot-mode differential. A package has no bootstrap/app.php, so the plugin must
+// boot Laravel through the Orchestra Testbench fallback (branch 3 of
+// ApplicationProvider); a fresh Laravel app must instead boot from its own
+// bootstrap/app.php. `diagnose` reports the resolved mode ("Testbench fallback"
+// is the only label containing "testbench", and only the fallback prints it), so
+// asserting BOTH directions makes the two kinds mutually discriminating: it proves
+// package mode exercises the Testbench path and guards the #766 silent-fallback
+// case on the app side. Matched case-insensitively for robustness to the wording.
+$bootedViaTestbench = \stripos($diagnoseProcess->getOutput(), 'testbench') !== false;
+$expectsTestbench = $projectKind === 'package';
+if ($bootedViaTestbench !== $expectsTestbench) {
+    reportFailure(
+        \sprintf('assert %s-mode boot path', $projectKind),
+        [],
+        null,
+        $appDir,
+        $diagnoseProcess->getOutput(),
+        $expectsTestbench
+            ? 'Expected `diagnose` to report the Testbench fallback boot mode for a package target.'
+            : 'Expected `diagnose` to report a real bootstrap/app.php boot mode (not Testbench) for an app target.',
+        $appDir,
+    );
+}
 
 // --- Done --------------------------------------------------------------
 
