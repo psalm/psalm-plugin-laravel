@@ -79,7 +79,7 @@ final class AnalyzeCommand extends Command
 
         // proc_open with an array argv runs the binary directly (no shell), so
         // forwarded tokens are passed literally and never re-interpreted.
-        $command = [$psalmBin, ...$this->forwardedArguments()];
+        $command = [\PHP_BINARY, $psalmBin, ...$this->forwardedArguments()];
 
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
         $process = \proc_open($command, $descriptors, $pipes, $cwd);
