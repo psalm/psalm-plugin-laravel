@@ -120,6 +120,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/FactoryTemplateInjectionHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
@@ -137,6 +138,11 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelFactoryMethodTypeProvider::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryCountTypeProvider::class);
+        // Inject `@extends Factory<TModel>` on factory subclasses that follow Laravel's
+        // naming convention but omit the docblock — unblocks `ModelFactoryMethodTypeProvider`
+        // Tier-2 lookup and silences `MissingTemplateParam` on stock pterodactyl/bookstack-shape
+        // factory classes. See #780.
+        $registration->registerHooksFromClass(Handlers\Eloquent\FactoryTemplateInjectionHandler::class);
 
         // Magic method forwarding: Relation -> Builder (decorated forwarding).
         // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and
