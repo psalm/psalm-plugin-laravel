@@ -327,6 +327,16 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Handlers\Rules\ImplicitQueryBuilderCallHandler::class);
         }
 
+        // Opt-in: forbid magic FormRequest property reads ($this->field / $request->field) that
+        // resolve through Laravel's Request::__get into the raw input bag, and require an explicit
+        // validated()/safe()/input() accessor instead. Off by default — the magic read is idiomatic
+        // and the plugin already narrows it (#1022); this only registers when the user asks for it.
+        // Reuses FormRequestPropertyHandler (registered unconditionally above) for the magic-read gate.
+        if ($pluginConfig->reportImplicitFormRequestPropertyReads) {
+            require_once __DIR__ . '/Handlers/Rules/ImplicitFormRequestPropertyReadHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\ImplicitFormRequestPropertyReadHandler::class);
+        }
+
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled

@@ -11,6 +11,7 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
@@ -165,6 +166,51 @@ final class FormRequestPropertyHandler implements AfterCodebasePopulatedInterfac
         }
 
         return self::$cache[$cacheKey][$propertyName] = self::doResolve($fqClasslikeName, $propertyName);
+    }
+
+    /**
+     * Walk a property-fetch receiver union and return the first atomic that is a
+     * FormRequest subclass whose `$propertyName` is a presence-guaranteed,
+     * undeclared magic input read, together with its rule — or null when no
+     * atomic qualifies. The first match wins, so a union mixing a FormRequest
+     * with `null` (a nullable `$request`) still resolves.
+     *
+     * Centralises the receiver-union walk for its two union-receiving callers: the
+     * taint source ({@see ValidatedFieldReadResolver::fromPropertyFetch}) and the
+     * `ImplicitFormRequestPropertyRead` rule. The type-narrowing property providers
+     * are handed an already-resolved class name by Psalm, so they call
+     * {@see resolveRuleForProperty()} directly rather than walking a union — but
+     * because that per-(class, property) verdict is the one all paths share, the
+     * narrowing, the taint source, and the rule still agree on exactly which fetches
+     * are magic input reads. This walk is the shared *recognition* of which receiver
+     * atom matches; it is deliberately context-free. Callers that need to exclude a
+     * context (e.g. the rule defers inside `isset()`/`unset()`) filter *before*
+     * calling it, so the taint path keeps sourcing every real `__get` read
+     * (`$req->field ?? x`, `empty($req->field)`).
+     *
+     * @return array{string, ResolvedRule}|null  [matching FormRequest FQCN, its rule]
+     */
+    public static function resolveReceiverRule(Union $receiverType, string $propertyName): ?array
+    {
+        foreach ($receiverType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                continue;
+            }
+
+            // Cheap exact-class check against the FormRequest registry before
+            // resolveRuleForProperty walks storage — skips non-FormRequest atomics fast.
+            if (!self::isFormRequest($atomic->value)) {
+                continue;
+            }
+
+            $rule = self::resolveRuleForProperty($atomic->value, $propertyName);
+
+            if ($rule instanceof ResolvedRule) {
+                return [$atomic->value, $rule];
+            }
+        }
+
+        return null;
     }
 
     private static function doResolve(string $fqClasslikeName, string $propertyName): ?ResolvedRule

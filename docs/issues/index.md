@@ -18,5 +18,6 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [PublicModelScope](PublicModelScope.md) — `public` `#[Scope]` Eloquent query scope, whose static call is a runtime fatal (reported at error levels 1 to 4)
 - [PublicModelAccessor](PublicModelAccessor.md) — `public` legacy `getXxxAttribute()` / `setXxxAttribute()` accessor or mutator, a pure convention nit (reported at error level 1)
 - [ImplicitQueryBuilderCall](ImplicitQueryBuilderCall.md) — a query builder or local scope method called directly on a model instead of through an explicit `query()` entry point (opt-in)
+- [ImplicitFormRequestPropertyRead](ImplicitFormRequestPropertyRead.md) — an undeclared field read as a magic property on a `FormRequest` (`$request->field`) instead of through `validated()` / `safe()` / `input()` (opt-in)
 
 Each issue page explains what it detects, why it matters, and how to fix it.

@@ -27,6 +27,7 @@ final readonly class PluginConfig
         public bool $resolveDynamicWhereClauses,
         public bool $resolveConfigReturnTypes,
         public bool $reportImplicitQueryBuilderCalls,
+        public bool $reportImplicitFormRequestPropertyReads,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         /**
@@ -61,6 +62,7 @@ final readonly class PluginConfig
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
+        $reportImplicitFormRequestPropertyReads = self::xmlBoolAttr($config?->reportImplicitFormRequestPropertyReads, 'reportImplicitFormRequestPropertyReads');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
@@ -72,6 +74,7 @@ final readonly class PluginConfig
             resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             resolveConfigReturnTypes: $resolveConfigReturnTypes,
             reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
+            reportImplicitFormRequestPropertyReads: $reportImplicitFormRequestPropertyReads,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,

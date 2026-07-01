@@ -24,6 +24,7 @@ Full config example:
         <resolveDynamicWhereClauses value="false" />
         <resolveConfigReturnTypes value="false" />
         <reportImplicitQueryBuilderCalls value="true" />
+        <reportImplicitFormRequestPropertyReads value="true" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
@@ -106,6 +107,20 @@ See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
 
 ```xml
 <reportImplicitQueryBuilderCalls value="true" />
+```
+
+## `reportImplicitFormRequestPropertyReads`
+
+**default**: `false`
+
+When enabled, the plugin flags an undeclared field read as a magic property on a `FormRequest` subclass (`$this->email`, `$request->email`), which Laravel resolves through `Request::__get` into the raw input bag, and asks for an explicit `validated()`, `safe()`, or `input()` accessor instead. It flags only the reads the plugin already narrows from a presence-guaranteeing rule (the silent magic reads). A declared member (real property or `@property`) opts out, and a field with no presence-guaranteeing rule is left to Psalm's own `UndefinedThisPropertyFetch`.
+
+See [ImplicitFormRequestPropertyRead](issues/ImplicitFormRequestPropertyRead.md) for details.
+
+### Example
+
+```xml
+<reportImplicitFormRequestPropertyReads value="true" />
 ```
 
 ## `configDirectory`
