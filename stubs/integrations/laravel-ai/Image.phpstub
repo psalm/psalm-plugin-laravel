@@ -1,0 +1,17 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Laravel\Ai\PendingResponses\PendingImageGeneration;
+
+class Image
+{
+    /**
+     * Image-generation prompts are still LLM prompts — same injection class
+     * with different output channel (and recent providers route image prompts
+     * through the same alignment layer).
+     *
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public static function of(string $prompt): PendingImageGeneration {}
+}

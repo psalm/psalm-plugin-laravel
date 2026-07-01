@@ -1,0 +1,50 @@
+<?php
+
+namespace Laravel\Ai\Responses;
+
+use Illuminate\Support\Collection;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
+
+/**
+ * LLM-generated text is untrusted. The model is downstream of every
+ * untrusted source that reached its prompt (web fetch, RAG corpus,
+ * tool output, attacker email — see EchoLeak CVE-2025-32711, Slack AI
+ * Aug 2024, ChatGPT SpAIware). Treat the response as user input on the
+ * way back out: passing it to sinks like SQL, shell, or HTML yields the
+ * standard Tainted* findings.
+ *
+ * Property reads (`$response->text`) are tainted programmatically by
+ * Handlers\Ai\LlmOutputTaintHandler — `@psalm-taint-source` on a
+ * property is not honored by Psalm.
+ *
+ * Member list mirrors `vendor/laravel/ai/src/Responses/TextResponse.php`
+ * verbatim because re-declaring the class to add the taint annotation
+ * would strip every property and method that lives on the real class
+ * (CLAUDE.local.md "Class declarations wipe reflected metadata").
+ *
+ * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
+ *
+ * @psalm-api
+ */
+class TextResponse
+{
+    public Collection $messages;
+
+    public Collection $toolCalls;
+
+    public Collection $toolResults;
+
+    public Collection $steps;
+
+    public function __construct(public string $text, public Usage $usage, public Meta $meta) {}
+
+    public function withMessages(Collection $messages): self {}
+
+    public function withToolCallsAndResults(Collection $toolCalls, Collection $toolResults): self {}
+
+    public function withSteps(Collection $steps): self {}
+
+    /** @psalm-taint-source input */
+    public function __toString(): string {}
+}

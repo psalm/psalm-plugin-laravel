@@ -244,6 +244,16 @@ quiet_run "composer require psalm/plugin-laravel" \
     composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n --dev \
         "psalm/plugin-laravel:*" --update-with-all-dependencies
 
+# Install laravel/ai so the integration stubs are loaded under real reflection.
+# The plugin gates its laravel-ai stubs on `InstalledVersions::satisfies('^0.6')`,
+# so without this install the application-level integration tests would silently
+# skip the entire laravel/ai surface — including the next-release drift detector
+# (a stub method signature that no longer matches the real source surfaces as a
+# real Psalm error here before it ships).
+quiet_run "composer require laravel/ai" \
+    composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n \
+        "laravel/ai:^0.6"
+
 PSALM_CONFIG="../../tests/Application/laravel-test-psalm.xml"
 PSALM_BASELINE="../../tests/Application/laravel-test-psalm-baseline.xml"
 

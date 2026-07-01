@@ -22,6 +22,22 @@ For Psalm's upstream taint analysis documentation, see:
 Taint annotations live in `stubs/common/` alongside type stubs, organized by Laravel namespace.
 Taint analysis is opt-in (`runTaintAnalysis="true"` in `psalm.xml`, or `--taint-analysis` CLI flag), so there is no need for a separate directory. The stubs apply whenever taint analysis is enabled.
 
+### Optional third-party integrations: `stubs/integrations/<package>/`
+
+Stubs for packages that ship outside `laravel/framework` (currently: `laravel/ai`) live under `stubs/integrations/<package>/` and are loaded only when the host application has the package installed. The plugin probes Composer's runtime metadata in `Plugin::optionalIntegrationStubs()`:
+
+```php
+if (self::isInstalledAndSatisfies('laravel/ai', '^0.6')) {
+    \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
+}
+```
+
+Two reasons for the version range:
+
+1. **Absent packages contribute zero cost** — no class lookups, no stub parsing.
+2. **A future major bump won't silently load stubs that reference removed or renamed classes** — `satisfies()` traps the mismatch and falls back to no-op.
+
+When adding a new integration, gate it on both `isInstalled()` (cheap presence check) and `satisfies()` (range guard), then drop the stubs into a new directory under `stubs/integrations/`.
 **Exception — classes reached only through narrowing.** A taint stub redeclares the class to host the annotated method, which makes the stub claim the class's file slot. Psalm *merges* that stub with the real class (stub members win on overlapping names) — but only when the real source is **also** scanned, which a direct mention of the class in analysed code triggers. A class reached only through a return-type provider (for example `Illuminate\Auth\SessionGuard` produced by `auth('web')`, or `Illuminate\Encryption\Encrypter` produced by `app('encrypter')`) is never named in analysed code, so its real source is never scanned. The stub then becomes the class's sole definition and every non-stubbed method goes missing, breaking calls like `auth('web')->user()` and `app('encrypter')->getKey()` (#1113). The strip stays invisible when the class carries a `Macroable` or `__call` (most Laravel service classes, such as `Cache\Repository`, `Session\Store`, and `Database\Connection`, mask the missing methods as magic calls). It surfaces as a hard `UndefinedMethod` only on the few classes that lack that masking, like the auth guards and the encrypter. For those, set the taint on the *real* method storage from a scan-phase handler instead. The fields `taint_source_types`, `added_taints`, `removed_taints`, and `return_source_params` are exactly what `@psalm-taint-source`, `@psalm-taint-unescape`, `@psalm-taint-escape`, and `@psalm-flow` populate, and the instance-call taint path reads them back. See `src/Handlers/Auth/GuardTaintHandler.php` and `src/Handlers/Encryption/EncrypterTaintHandler.php`.
 
 ## Annotations quick reference
@@ -128,6 +144,7 @@ Most taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https
 | `extract`            | `INPUT_EXTRACT`            | Values passed to `extract()`                               |
 | `user_secret`        | `USER_SECRET`              | User-supplied secrets (passwords, tokens)                  |
 | `system_secret`      | `SYSTEM_SECRET`            | System secrets (API keys, encryption keys)                 |
+| `llm_prompt`         | `INPUT_LLM_PROMPT`         | Strings reaching an LLM prompt or system prompt            |
 | `input`              | `ALL_INPUT`                | Alias: all input-related kinds combined (excludes secrets) |
 | `tainted`            | `ALL_INPUT`                | Alias: same as `input`                                     |
 | `input_except_sleep` | `ALL_INPUT & ~INPUT_SLEEP` | All input kinds except `sleep` (used by `filter_var()`)    |
@@ -540,3 +557,37 @@ cd /tmp/taint-test && /path/to/vendor/bin/psalm --no-cache
 ### Known limitation: Facade static calls
 
 Facade static calls (`DB::unprepared(...)`) may not propagate taint because `__callStatic` loses taint context. The generated alias stubs (`class X extends Y {}`) don't carry taint annotations. Calling the underlying class directly (`DB::connection()->unprepared(...)`) works correctly.
+
+## LLM prompt-injection sinks (`laravel/ai`)
+
+The `llm_prompt` taint kind models OWASP LLM01:2025 (direct + indirect prompt injection). Annotations are applied in two layers, depending on what the sink shape allows.
+
+### Parameter sinks (docblock annotation works)
+
+Methods that accept the prompt as a named parameter are annotated normally:
+
+```php
+trait Promptable
+{
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function prompt(string $prompt, ...): AgentResponse {}
+}
+```
+
+Same shape is used on `Promptable::stream()`, `queue()`, `broadcast*()`, the `\Laravel\Ai\agent()` factory, `AgentPrompt::prepend()`/`append()`/`revise()`, `Embeddings::for()`, `Tools\Document::fromString()/fromBase64()`, `Messages\UserMessage`, and `Messages\Message::__construct()`.
+
+### Property-source pattern: `$response->text` (handler required)
+
+Psalm honors `@psalm-taint-source` on **method return types** but not on **properties**. The model's `$text` output is downstream of every untrusted input that reached the prompt (indirect prompt injection via web pages, RAG corpora, tool output, attacker emails — see EchoLeak CVE-2025-32711), so we need to taint property reads programmatically.
+
+`src/Handlers/Ai/LlmOutputTaintHandler.php` subscribes to `AfterExpressionAnalysisEvent`, matches reads of `$x->text` where `$x` extends or implements one of `Laravel\Ai\Responses\{TextResponse, AgentResponse, StreamedAgentResponse, StreamableAgentResponse}`, and calls `Codebase::addTaintSource()` to add the `ALL_INPUT` taint to the expression's type. The stub at `stubs/integrations/laravel-ai/Responses/TextResponse.phpstub` additionally annotates `__toString()` so the same taint flows through string casts.
+
+The handler is registered alongside the integration stubs (`Plugin::__invoke`) and self-disables when `Codebase::$taint_flow_graph === null`, so it costs nothing on non-taint runs.
+
+### Return-value sinks are not yet expressible
+
+`Tool::description()` and `Agent::instructions()` produce values that the framework later concatenates into the LLM prompt (the static signature of MCP-style tool poisoning, CVE-2025-54136). The natural annotation shape is "the return value is a sink," but Psalm's docblock scanner only matches **parameter names** for `@psalm-taint-sink`. The `return` token is silently dropped; the annotation is inert.
+
+These return-value sinks are intentionally not annotated in stubs today (the comment in the stub says so). Coverage requires a dedicated `AfterMethodCallAnalysisInterface` / `MethodReturnTypeProvider`-style handler that wires the return expression into a synthetic sink — tracked in `#938`.
