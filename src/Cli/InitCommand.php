@@ -138,11 +138,11 @@ final class InitCommand extends Command
         // was skipped, rather than silently guessing wrong.
         try {
             $composerJson = ComposerJson::read($cwd);
-        } catch (\Throwable $composerJsonError) {
+        } catch (\Throwable $throwable) {
             $composerJson = null;
             $io->warning(\sprintf(
                 'composer.json exists but could not be parsed (%s); skipping autoload/vendor-dir detection.',
-                $composerJsonError->getMessage(),
+                $throwable->getMessage(),
             ));
         }
 

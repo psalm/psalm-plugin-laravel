@@ -71,9 +71,9 @@ class Diagnostics
         // confidently wrong instead. See ComposerJson::read().
         try {
             $composerJson = $projectRoot !== null ? ComposerJson::read($projectRoot) : null;
-        } catch (\Throwable $composerJsonError) {
+        } catch (\Throwable $throwable) {
             $composerJson = null;
-            $bootstrapErrors[] = 'composer.json exists but could not be parsed: ' . $composerJsonError->getMessage();
+            $bootstrapErrors[] = 'composer.json exists but could not be parsed: ' . $throwable->getMessage();
         }
 
         $vendorDir = $composerJson?->vendorDir() ?? 'vendor';
