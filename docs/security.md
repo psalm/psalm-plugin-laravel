@@ -1,3 +1,8 @@
+---
+title: Security (Taint) Checks
+nav_order: 6
+---
+
 # Security (Taint) Checks
 
 ### What it detects

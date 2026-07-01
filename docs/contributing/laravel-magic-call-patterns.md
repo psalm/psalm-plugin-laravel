@@ -421,20 +421,24 @@ Builder::macro('active', function () {
 User::query()->active();  // works via __call → macro lookup
 ```
 
-**Psalm challenge:** Macros are registered at runtime, so Psalm cannot see them during static analysis. Users must either:
-- Add `@mixin` annotations pointing to a class with the macro methods declared
-- Use `@method` annotations on the class
-- Accept that macro calls will be flagged as undefined methods
+**Psalm challenge:** Macros are registered at runtime, so Psalm cannot see them from source alone.
 
-**Plugin handler:** None currently. Larastan solves this via **runtime introspection**: it reads the
-actual `static::$macros` property via PHP reflection at analysis time (the app is already booted, so
-macros registered in ServiceProviders are populated). It then uses `ClosureTypeFactory` to extract
-parameter/return types from the Closure objects. Handles `Macroable` classes, Eloquent Builder (its
-own macro system), Facades (via `getFacadeRoot()`), and Carbon (`Carbon\Traits\Macro`).
+**Plugin handler:** `MacroHandler` (with `MacroRegistry`), registered unconditionally. During
+`AfterCodebasePopulated` it reads the booted app's `Macroable::$macros` registries via PHP reflection
+(macros registered in ServiceProviders are populated by then) and injects each macro as a synthesized
+pseudo-method into `ClassLikeStorage::$pseudo_methods` **and** `$pseudo_static_methods` — the same
+storage shape Psalm uses for `@method` annotations, so both `$instance->macroName()` and
+`Class::macroName()` resolve. It propagates macros to subclasses (walking `parent_classes`) and to
+facades that proxy to the Macroable owner (via `FacadeMapProvider`, including manager-forwarding
+facades like `Auth`/`Cache`/`Session`/`Storage`/`Mail`). Closure param/return types are recovered from
+Psalm's own scanned `FunctionLikeStorage` when the closure's file is analysed (docblock-aware); a
+`: static` native return type narrows to the calling instance.
 
-This plugin already boots the app for container bindings, auth config, translations, and views —
-the same pattern could discover macros. Limitation: only finds macros registered at boot time;
-conditional macros or those in unbooted providers are invisible.
+Known limitations (see `MacroHandler`'s docblock for the full list): only macros registered at boot
+time are visible (conditional macros and unbooted providers are not); Eloquent Builder's per-instance
+`$localMacros` are unreachable by reflection; macros on a package's own provider are invisible under
+the Testbench fallback (no `bootstrap/app.php`); vendor closures outside `<projectFiles>` fall back
+to `mixed` signatures.
 
 
 ### 7. Container `make()` / `app()` resolution
@@ -779,5 +783,5 @@ but the handler ensures template params propagate correctly.
 | Model scopes               | `BuilderScopeHandler`                                        | Resolves scope calls on Builder to model scope methods               |
 | Custom collections         | `CustomCollectionHandler`                                    | Narrows `Builder::get()`, `findMany()`, `Model::all()` return types  |
 | Model attributes           | Virtual properties from `@property` / migrations             | Requires schema analysis or annotations                              |
-| Macros                     | Not handled by plugin                                        | Runtime-registered; users need `@mixin` or `@method` annotations     |
+| Macros                     | `MacroHandler` (runtime reflection → pseudo-methods)         | Boot-time registrations only; Builder `$localMacros` not covered     |
 | Container resolution       | `ContainerHandler`                                           | Only known bindings are narrowed                                     |
