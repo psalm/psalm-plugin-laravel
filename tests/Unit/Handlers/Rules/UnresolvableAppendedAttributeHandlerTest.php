@@ -7,9 +7,9 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Rules;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastShape;
 use Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedAttributeHandler;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\CastInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\CastShape;
 use Psalm\Type;
 
 /**
