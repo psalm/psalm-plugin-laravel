@@ -36,6 +36,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/../../vendor/autoload.php';
 
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 const STEP_TIMEOUT_SECONDS = 300.0;
@@ -60,18 +61,43 @@ function envStr(string $name, string $default): string
 
 // --- logging -------------------------------------------------------------
 
-/** @var resource $GLOBALS['logHandle'] */
-$GLOBALS['logHandle'] = null;
-
 function logPath(): string
 {
     return \getcwd() . \DIRECTORY_SEPARATOR . 'install-smoke.log';
 }
 
+/**
+ * Lazily opens the log file once and caches the handle in a function-local
+ * static — not a $GLOBALS entry, since `bin/ci/` isn't in this repo's own
+ * psalm.xml, so neither form is actually checked today, but a $GLOBALS entry
+ * would still be wrong if that ever changed. A reassigned `static` local is
+ * itself widened to `mixed` on re-read, same as a $GLOBALS entry would be —
+ * the inline `@var` below (not the docblock `@return`) is what keeps this
+ * resolved as `resource` rather than `mixed` at every call site.
+ *
+ * @return resource
+ */
+function logHandle()
+{
+    /** @var resource|null $handle */
+    static $handle = null;
+    if ($handle === null) {
+        $opened = \fopen(logPath(), 'a');
+        if ($opened === false) {
+            \fwrite(\STDERR, \sprintf("Could not open %s for writing.\n", logPath()));
+            exit(1);
+        }
+
+        $handle = $opened;
+    }
+
+    return $handle;
+}
+
 function logLine(string $line): void
 {
     $timestamped = \sprintf('%s %s', \gmdate('Y-m-d\TH:i:s\Z'), $line);
-    \fwrite($GLOBALS['logHandle'], $timestamped . "\n");
+    \fwrite(logHandle(), $timestamped . "\n");
     \fwrite(\STDOUT, $timestamped . "\n");
 }
 
@@ -79,7 +105,7 @@ function logLine(string $line): void
 function logOutput(string $label, string $output, string $errorOutput, bool $verbose): void
 {
     $block = \sprintf("--- %s: stdout ---\n%s\n--- %s: stderr ---\n%s\n", $label, $output, $label, $errorOutput);
-    \fwrite($GLOBALS['logHandle'], $block);
+    \fwrite(logHandle(), $block);
     if ($verbose) {
         \fwrite(\STDOUT, $block);
     }
@@ -88,18 +114,52 @@ function logOutput(string $label, string $output, string $errorOutput, bool $ver
 // --- process execution ----------------------------------------------------
 
 /**
+ * Runs a step to completion, logs it, and calls reportFailure() (which never
+ * returns) if it didn't succeed — every call site can therefore treat a
+ * returned Process as a guaranteed success.
+ *
+ * Symfony throws ProcessTimedOutException instead of returning a failed
+ * Process when a step exceeds STEP_TIMEOUT_SECONDS (e.g. `composer
+ * create-project` on a cold, slow Windows runner). Left uncaught, that
+ * bypasses reportFailure() entirely — no diagnostic block, no preserved app
+ * dir, and a bare PHP exit code of 255 instead of the documented 1 — for
+ * exactly the transient failure mode this smoke test is most likely to hit
+ * in real CI. Catching it here and routing it through the same
+ * reportFailure() path keeps that guarantee for every step.
+ *
  * @param list<string> $command
  * @param array<string, string> $extraEnv
  */
-function runStep(string $label, array $command, string $cwd, array $extraEnv, bool $verbose): Process
+function runStep(string $label, array $command, string $cwd, array $extraEnv, bool $verbose, string $appDir): Process
 {
     logLine(\sprintf('==> %s', $label));
     logLine(\sprintf('    $ %s (cwd: %s)', \implode(' ', $command), $cwd));
 
     $process = new Process($command, $cwd, $extraEnv === [] ? null : $extraEnv, null, STEP_TIMEOUT_SECONDS);
-    $process->run();
+
+    try {
+        $process->run();
+    } catch (ProcessTimedOutException $timedOut) {
+        // The process is still killed by Symfony before the exception is thrown;
+        // its buffered output up to that point remains readable.
+        $timedOutProcess = $timedOut->getProcess();
+        logOutput($label, $timedOutProcess->getOutput(), $timedOutProcess->getErrorOutput(), $verbose);
+        reportFailure(
+            $label . ' (timed out)',
+            $command,
+            null,
+            $cwd,
+            $timedOutProcess->getOutput(),
+            $timedOutProcess->getErrorOutput(),
+            $appDir,
+        );
+    }
 
     logOutput($label, $process->getOutput(), $process->getErrorOutput(), $verbose);
+
+    if (!$process->isSuccessful()) {
+        reportFailure($label, $command, $process->getExitCode(), $cwd, $process->getOutput(), $process->getErrorOutput(), $appDir);
+    }
 
     return $process;
 }
@@ -127,7 +187,9 @@ function reportFailure(
         \sprintf('Step: %s', $label),
         \sprintf('Command: %s', $command === [] ? '(none — assertion failure)' : \implode(' ', $command)),
         \sprintf('Working directory: %s', $cwd),
-        \sprintf('Exit code: %s', $exitCode === null ? '(process could not start)' : (string) $exitCode),
+        // Null covers both "no process was ever spawned" (assertion failures)
+        // and "spawned but timed out" — the label already says which.
+        \sprintf('Exit code: %s', $exitCode === null ? '(none)' : (string) $exitCode),
         '--- stdout ---',
         $output,
         '--- stderr ---',
@@ -139,7 +201,7 @@ function reportFailure(
     // Written to the log file and STDERR directly (not logLine()) so a merged
     // stdout+stderr view — e.g. the GitHub Actions log — shows the block once.
     $message = \implode("\n", $lines);
-    \fwrite($GLOBALS['logHandle'], $message . "\n");
+    \fwrite(logHandle(), $message . "\n");
     \fwrite(\STDERR, $message . "\n");
 
     exit(1);
@@ -176,12 +238,6 @@ if ($appDir === '') {
         . \DIRECTORY_SEPARATOR . 'psalm-install-smoke-' . \bin2hex(\random_bytes(4));
 }
 
-$GLOBALS['logHandle'] = \fopen(logPath(), 'a');
-if ($GLOBALS['logHandle'] === false) {
-    \fwrite(\STDERR, \sprintf("Could not open %s for writing.\n", logPath()));
-    exit(1);
-}
-
 logLine(\sprintf(
     'Starting install smoke test: source=%s app_dir=%s laravel_version=%s',
     $pluginSource,
@@ -200,14 +256,15 @@ if (!\is_dir($launchDir) && !@\mkdir($launchDir, 0755, true) && !\is_dir($launch
 
 // --- Step 1: fresh Laravel project -----------------------------------------
 
-$createProjectCommand = ['composer', 'create-project', '--prefer-dist', '--no-interaction', '--no-ansi', 'laravel/laravel', $appDir];
+// --no-blocking: a security advisory against any of laravel/laravel's transitive
+// deps (historically phpunit's dev range) would otherwise block the install with
+// a Composer policy error unrelated to this script — the same lesson already
+// applied in tests/Application/laravel-test.sh's identical create-project call.
+$createProjectCommand = ['composer', 'create-project', '--prefer-dist', '--no-interaction', '--no-ansi', '--no-blocking', 'laravel/laravel', $appDir];
 if ($laravelVersion !== '') {
     $createProjectCommand[] = $laravelVersion;
 }
-$process = runStep('composer create-project', $createProjectCommand, $launchDir, [], $verbose);
-if (!$process->isSuccessful()) {
-    reportFailure('composer create-project', $createProjectCommand, $process->getExitCode(), $launchDir, $process->getOutput(), $process->getErrorOutput(), $appDir);
-}
+runStep('composer create-project', $createProjectCommand, $launchDir, [], $verbose, $appDir);
 
 // --- Step 2: configure Composer exactly as the README's Step 1 instructs ---
 //
@@ -228,28 +285,19 @@ if ($pluginSource === 'path') {
 
 foreach ($configSteps as $configArgs) {
     $command = ['composer', ...$configArgs];
-    $process = runStep('composer ' . \implode(' ', $configArgs), $command, $appDir, [], $verbose);
-    if (!$process->isSuccessful()) {
-        reportFailure('composer config', $command, $process->getExitCode(), $appDir, $process->getOutput(), $process->getErrorOutput(), $appDir);
-    }
+    runStep('composer ' . \implode(' ', $configArgs), $command, $appDir, [], $verbose, $appDir);
 }
 
 // --- Step 3: install psalm/plugin-laravel, exactly as the README's `composer require --dev` step ---
 
 $requirement = $pluginConstraint === '' ? 'psalm/plugin-laravel' : "psalm/plugin-laravel:{$pluginConstraint}";
-$requireCommand = ['composer', 'require', '--dev', '--no-interaction', '--no-ansi', $requirement];
-$process = runStep('composer require psalm/plugin-laravel', $requireCommand, $appDir, ['COMPOSER_MEMORY_LIMIT' => '-1'], $verbose);
-if (!$process->isSuccessful()) {
-    reportFailure('composer require psalm/plugin-laravel', $requireCommand, $process->getExitCode(), $appDir, $process->getOutput(), $process->getErrorOutput(), $appDir);
-}
+$requireCommand = ['composer', 'require', '--dev', '--no-interaction', '--no-ansi', '--no-blocking', $requirement];
+runStep('composer require psalm/plugin-laravel', $requireCommand, $appDir, ['COMPOSER_MEMORY_LIMIT' => '-1'], $verbose, $appDir);
 
 // --- Step 4: psalm-laravel init, and assert the generated config -----------
 
 $initCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'init', '--no-interaction'];
-$process = runStep('psalm-laravel init', $initCommand, $appDir, [], $verbose);
-if (!$process->isSuccessful()) {
-    reportFailure('psalm-laravel init', $initCommand, $process->getExitCode(), $appDir, $process->getOutput(), $process->getErrorOutput(), $appDir);
-}
+runStep('psalm-laravel init', $initCommand, $appDir, [], $verbose, $appDir);
 
 $psalmXmlPath = $appDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
 if (!\is_file($psalmXmlPath)) {
@@ -264,30 +312,21 @@ if ($psalmXmlContents === false || !\str_contains($psalmXmlContents, 'Psalm\\Lar
 // --- Step 5: psalm-laravel analyze ------------------------------------------
 
 $analyzeCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'analyze', '--no-cache', '--no-progress', '--output-format=compact'];
-$process = runStep('psalm-laravel analyze', $analyzeCommand, $appDir, [], $verbose);
-if (!$process->isSuccessful()) {
-    reportFailure('psalm-laravel analyze', $analyzeCommand, $process->getExitCode(), $appDir, $process->getOutput(), $process->getErrorOutput(), $appDir);
-}
+runStep('psalm-laravel analyze', $analyzeCommand, $appDir, [], $verbose, $appDir);
 
 // --- Step 6: psalm-laravel diagnose -----------------------------------------
 
 $diagnoseCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'diagnose', '--no-tips'];
-$process = runStep('psalm-laravel diagnose', $diagnoseCommand, $appDir, [], $verbose);
+$diagnoseProcess = runStep('psalm-laravel diagnose', $diagnoseCommand, $appDir, [], $verbose, $appDir);
 // diagnose.txt is the single most useful artifact when triaging an install bug report,
 // so it is saved standalone in addition to being folded into the main log.
-\file_put_contents($appDir . \DIRECTORY_SEPARATOR . 'diagnose.txt', $process->getOutput() . $process->getErrorOutput());
-if (!$process->isSuccessful()) {
-    reportFailure('psalm-laravel diagnose', $diagnoseCommand, $process->getExitCode(), $appDir, $process->getOutput(), $process->getErrorOutput(), $appDir);
-}
+\file_put_contents($appDir . \DIRECTORY_SEPARATOR . 'diagnose.txt', $diagnoseProcess->getOutput() . $diagnoseProcess->getErrorOutput());
 
 // --- Step 7 (optional): psalm-laravel add github ----------------------------
 
 if ($runAddGithub) {
     $addGithubCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'add', 'github', '--no-interaction'];
-    $process = runStep('psalm-laravel add github', $addGithubCommand, $appDir, [], $verbose);
-    if (!$process->isSuccessful()) {
-        reportFailure('psalm-laravel add github', $addGithubCommand, $process->getExitCode(), $appDir, $process->getOutput(), $process->getErrorOutput(), $appDir);
-    }
+    runStep('psalm-laravel add github', $addGithubCommand, $appDir, [], $verbose, $appDir);
 
     $workflowPath = $appDir . \DIRECTORY_SEPARATOR . '.github' . \DIRECTORY_SEPARATOR . 'workflows' . \DIRECTORY_SEPARATOR . 'psalm.yml';
     if (!\is_file($workflowPath)) {

@@ -45,9 +45,10 @@ final class DiagnoseCommandTest extends TestCase
 
         $this->assertSame(Command::SUCCESS, $exit, $display);
         $this->assertStringContainsString('System', $display);
-        // Values, not exact label wording — the fixture's OS/vendor-dir/config
-        // path should be reflected somewhere in the section.
-        $this->assertStringContainsString('vendor', $display);
+        // 'vendor-custom', not the generic 'vendor' — the section's own labels
+        // ("Composer vendor dir", "vendor/bin/psalm") already contain "vendor",
+        // so asserting that alone can't fail regardless of the actual value.
+        $this->assertStringContainsString('vendor-custom', $display);
         $this->assertStringContainsString('psalm.xml', $display);
     }
 
@@ -220,6 +221,31 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame($sorted, $report->loadedProviders);
     }
 
+    #[Test]
+    public function corrupt_composer_json_surfaces_as_a_bootstrap_warning(): void
+    {
+        // Constructor-injected $projectRoot (not chdir()) so this stays isolated
+        // from ApplicationProvider's process-wide boot singleton, which several
+        // other tests in this process also depend on being unpolluted.
+        $tempDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-diagnostics-' . \uniqid('', true);
+        \mkdir($tempDir);
+        \file_put_contents($tempDir . \DIRECTORY_SEPARATOR . 'composer.json', '{not valid json');
+
+        try {
+            $report = (new Diagnostics($tempDir))->collect();
+
+            $this->assertNotEmpty(\array_filter(
+                $report->bootstrapErrors,
+                static fn(string $error): bool => \str_contains($error, 'composer.json exists but could not be parsed'),
+            ));
+            // Falls back to the safe default rather than guessing wrong.
+            $this->assertSame('vendor', $report->composerVendorDir);
+        } finally {
+            @\unlink($tempDir . \DIRECTORY_SEPARATOR . 'composer.json');
+            @\rmdir($tempDir);
+        }
+    }
+
 
     private function testerFor(Diagnostics $diagnostics, ?TipsProvider $tipsProvider = null): CommandTester
     {
@@ -274,7 +300,10 @@ final class DiagnoseCommandTest extends TestCase
             phpRequiredVersion: '8.2.0-9.0.0',
             phpAnalysisVersion: '8.4.0',
             phpAnalysisSource: 'runtime',
-            composerVendorDir: 'vendor',
+            // Distinctive (not 'vendor') so a display assertion on this value
+            // can't pass merely because the section's own labels ("Composer
+            // vendor dir", "vendor/bin/psalm") already contain the substring.
+            composerVendorDir: 'vendor-custom',
             psalmBinExists: true,
             psalmLaravelBinExists: true,
             psalmConfigPath: '/app/psalm.xml',

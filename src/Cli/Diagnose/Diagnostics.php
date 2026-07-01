@@ -7,6 +7,8 @@ namespace Psalm\LaravelPlugin\Cli\Diagnose;
 use Composer\InstalledVersions;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Cli\ComposerJson;
+use Psalm\LaravelPlugin\Cli\PsalmConfigLocator;
 
 /**
  * Collects runtime introspection data about the plugin's resolved state.
@@ -15,15 +17,22 @@ use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
  * report without booting Laravel.
  *
  * @internal
- *
- * @psalm-type ComposerJson = array{
- *     require?: array{php?: string},
- *     config?: array{'vendor-dir'?: string},
- * }
  */
 class Diagnostics
 {
     private const PLUGIN_PACKAGE = 'psalm/plugin-laravel';
+
+    /**
+     * @param string|null $projectRoot Override for composer.json/psalm.xml lookups; defaults to
+     *                                 the process cwd when null. Exposed for tests. Deliberately
+     *                                 does NOT affect ApplicationProvider::bootApp(), which is a
+     *                                 process-wide singleton that always resolves against the
+     *                                 real process cwd — this constructor only lets tests isolate
+     *                                 the composer.json/psalm.xml lookups without touching that
+     *                                 singleton's cached state.
+     * @psalm-mutation-free
+     */
+    public function __construct(private readonly ?string $projectRoot = null) {}
 
     public function collect(): Report
     {
@@ -52,9 +61,22 @@ class Diagnostics
         }
 
         $cwd = \getcwd();
-        $projectRoot = \is_string($cwd) ? $cwd : null;
-        $composerJson = $projectRoot !== null ? $this->readComposerJson($projectRoot) : null;
-        $vendorDir = $this->resolveComposerVendorDir($composerJson);
+        $projectRoot = $this->projectRoot ?? (\is_string($cwd) ? $cwd : null);
+
+        // A composer.json that exists but fails to parse is a real, surfaceable
+        // problem — unlike "no composer.json" it means something is actually
+        // broken, and silently falling back to defaults (vendor dir 'vendor',
+        // bin-exists checks against the wrong path) would make this the one
+        // diagnostic command whose whole job is spotting a broken install look
+        // confidently wrong instead. See ComposerJson::read().
+        try {
+            $composerJson = $projectRoot !== null ? ComposerJson::read($projectRoot) : null;
+        } catch (\Throwable $composerJsonError) {
+            $composerJson = null;
+            $bootstrapErrors[] = 'composer.json exists but could not be parsed: ' . $composerJsonError->getMessage();
+        }
+
+        $vendorDir = $composerJson?->vendorDir() ?? 'vendor';
 
         [$analysisVersion, $analysisSource] = $this->resolveAnalysisPhpVersion($projectRoot);
 
@@ -64,16 +86,16 @@ class Diagnostics
             psalmVersion: $this->safePrettyVersion('vimeo/psalm'),
             laravelVersion: \defined(LaravelApplication::class . '::VERSION') ? LaravelApplication::VERSION : null,
             osFamily: \PHP_OS_FAMILY,
-            osVersion: \trim(\php_uname('s') . ' ' . \php_uname('r')),
+            osVersion: \php_uname('r'),
             phpRuntimeVersion: \PHP_VERSION,
             phpBinaryPath: \PHP_BINARY,
-            phpRequiredVersion: $this->readComposerRequirePhp($composerJson),
+            phpRequiredVersion: $composerJson?->requirePhp(),
             phpAnalysisVersion: $analysisVersion,
             phpAnalysisSource: $analysisSource,
             composerVendorDir: $vendorDir,
             psalmBinExists: $projectRoot !== null && \is_file($this->binPath($projectRoot, $vendorDir, 'psalm')),
             psalmLaravelBinExists: $projectRoot !== null && \is_file($this->binPath($projectRoot, $vendorDir, 'psalm-laravel')),
-            psalmConfigPath: $projectRoot !== null ? $this->detectPsalmConfigPath($projectRoot) : null,
+            psalmConfigPath: $projectRoot !== null ? PsalmConfigLocator::locate($projectRoot) : null,
             bootMode: ApplicationProvider::getBootMode(),
             bootPath: ApplicationProvider::getBootPath(),
             bootstrapErrors: $bootstrapErrors,
@@ -134,13 +156,17 @@ class Diagnostics
     }
 
     /**
-     * Read the `phpVersion` attribute from `<projectRoot>/psalm.xml`. We don't
-     * walk parent directories — diagnose is intended for the project root.
+     * Read the `phpVersion` attribute from the project's Psalm config, via the
+     * same psalm.xml-beats-psalm.xml.dist lookup used for `psalmConfigPath` —
+     * a project with only a `.dist` config previously fell back to 'runtime'
+     * here despite `psalmConfigPath` correctly pointing at that same file,
+     * disagreeing with itself about which file is "the config". We don't walk
+     * parent directories — diagnose is intended for the project root.
      */
     private function readPsalmXmlPhpVersion(string $projectRoot): ?string
     {
-        $path = $projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        if (!\is_file($path)) {
+        $path = PsalmConfigLocator::locate($projectRoot);
+        if ($path === null) {
             return null;
         }
 
@@ -169,83 +195,10 @@ class Diagnostics
         return $value === '' ? null : $value;
     }
 
-    /**
-     * Decode `<projectRoot>/composer.json` once so both the PHP constraint and
-     * the vendor-dir override can be read from a single parse. Returns null on
-     * any read/decode failure so callers can treat the project as if
-     * composer.json weren't there.
-     *
-     * @return ComposerJson|null
-     */
-    private function readComposerJson(string $projectRoot): ?array
-    {
-        $path = $projectRoot . \DIRECTORY_SEPARATOR . 'composer.json';
-        if (!\is_file($path)) {
-            return null;
-        }
-
-        $contents = \file_get_contents($path);
-        if ($contents === false) {
-            return null;
-        }
-
-        /** @psalm-var array{require?: array{php?: string}, config?: array{'vendor-dir'?: string}}|null $decoded */
-        $decoded = \json_decode($contents, true);
-        return \is_array($decoded) ? $decoded : null;
-    }
-
-    /**
-     * Return the raw `require.php` constraint string from `composer.json`
-     * (e.g. `^8.2`). We don't resolve to a single minor like Psalm does — the
-     * raw constraint is more informative for diagnose, and resolving it
-     * requires shipping a per-release PHP version table.
-     *
-     * @param ComposerJson|null $composerJson
-     * @psalm-pure
-     */
-    private function readComposerRequirePhp(?array $composerJson): ?string
-    {
-        return $composerJson['require']['php'] ?? null;
-    }
-
-    /**
-     * Read composer's relocated vendor directory if configured, else 'vendor'.
-     * Mirrors InitCommand::resolveVendorDir()'s normalisation.
-     *
-     * @param ComposerJson|null $composerJson
-     * @psalm-pure
-     */
-    private function resolveComposerVendorDir(?array $composerJson): string
-    {
-        $configured = $composerJson['config']['vendor-dir'] ?? null;
-        if ($configured === null || $configured === '') {
-            return 'vendor';
-        }
-
-        $normalised = \rtrim(\preg_replace('#^\./#', '', $configured) ?? $configured, '/');
-        return $normalised === '' ? 'vendor' : $normalised;
-    }
-
     /** @psalm-pure */
     private function binPath(string $projectRoot, string $vendorDir, string $bin): string
     {
         return $projectRoot . \DIRECTORY_SEPARATOR . $vendorDir . \DIRECTORY_SEPARATOR . 'bin' . \DIRECTORY_SEPARATOR . $bin;
-    }
-
-    /**
-     * First existing Psalm config path under $projectRoot, following Psalm's
-     * own precedence (psalm.xml beats psalm.xml.dist). Null if neither exists.
-     */
-    private function detectPsalmConfigPath(string $projectRoot): ?string
-    {
-        foreach (['psalm.xml', 'psalm.xml.dist'] as $name) {
-            $candidate = $projectRoot . \DIRECTORY_SEPARATOR . $name;
-            if (\is_file($candidate)) {
-                return $candidate;
-            }
-        }
-
-        return null;
     }
 
     private function safePrettyVersion(string $package): ?string

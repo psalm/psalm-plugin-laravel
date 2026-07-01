@@ -16,25 +16,11 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  *
  * Deliberately does NOT boot Psalm or Laravel: it must stay safe to run when
  * psalm.xml is broken or missing, which is exactly when users reach for it.
- *
- * @psalm-type ComposerJson = array{
- *     require?: array<string, string>,
- *     'require-dev'?: array<string, string>,
- *     autoload?: array{'psr-4'?: array<string, string|list<string>>},
- *     config?: array{'vendor-dir'?: string},
- * }
  */
 #[AsCommand(name: 'init', description: 'Generate a Laravel-tailored psalm.xml in the current directory.')]
 final class InitCommand extends Command
 {
     private const DEFAULT_ERROR_LEVEL = '4';
-
-    /**
-     * Config file names Psalm itself recognises, in the same precedence order
-     * Psalm uses when locating a project's config. `psalm.xml` wins over
-     * `psalm.xml.dist` when both are present.
-     */
-    private const PSALM_CONFIG_FILENAMES = ['psalm.xml', 'psalm.xml.dist'];
 
     /** Conventional Laravel app directories. Only emitted if present on disk. */
     private const LARAVEL_APP_DIRS = ['app', 'bootstrap', 'config', 'database', 'lang', 'routes'];
@@ -140,16 +126,29 @@ final class InitCommand extends Command
         // Reuse the existing config path (psalm.xml or psalm.xml.dist) so the
         // generated file lands where Psalm and the user already expect it,
         // rather than silently creating a second config file alongside the old one.
-        $existingPath = $this->findExistingConfig($cwdNormalized);
+        $existingPath = PsalmConfigLocator::locate($cwdNormalized);
         $targetPath = $existingPath ?? $cwdNormalized . \DIRECTORY_SEPARATOR . 'psalm.xml';
         if (!$this->shouldWrite($targetPath, $existingPath !== null, $input, $io)) {
             return Command::SUCCESS;
         }
 
-        $composer = $this->readComposerJson($cwd);
-        $hasPhpunitPlugin = $this->composerHasPackage($composer, 'psalm/plugin-phpunit');
-        [$directories, $files] = $this->detectSourceRoots($cwd, $composer, $hasPhpunitPlugin);
-        $ignores = $this->detectIgnoreDirs($cwd, $composer);
+        // A broken composer.json must not STOP init from writing a config —
+        // that is exactly the situation this command exists to recover from —
+        // but the user should still be told why autoload/vendor-dir detection
+        // was skipped, rather than silently guessing wrong.
+        try {
+            $composerJson = ComposerJson::read($cwd);
+        } catch (\Throwable $composerJsonError) {
+            $composerJson = null;
+            $io->warning(\sprintf(
+                'composer.json exists but could not be parsed (%s); skipping autoload/vendor-dir detection.',
+                $composerJsonError->getMessage(),
+            ));
+        }
+
+        $hasPhpunitPlugin = $composerJson?->hasPackage('psalm/plugin-phpunit') ?? false;
+        [$directories, $files] = $this->detectSourceRoots($cwd, $composerJson, $hasPhpunitPlugin);
+        $ignores = $this->detectIgnoreDirs($cwd, $composerJson);
 
         $contents = \strtr(self::PSALM_XML_TEMPLATE, [
             '{{LEVEL}}' => $level,
@@ -179,22 +178,6 @@ final class InitCommand extends Command
             'Invalid --level value %s. Must be an integer between 1 (strictest) and 8 (most lenient).',
             $level !== null ? "'{$level}'" : 'of unexpected type',
         ));
-        return null;
-    }
-
-    /**
-     * Return the first existing Psalm config path under $cwd, following Psalm's
-     * own precedence (psalm.xml beats psalm.xml.dist). Returns null when neither exists.
-     */
-    private function findExistingConfig(string $cwd): ?string
-    {
-        foreach (self::PSALM_CONFIG_FILENAMES as $name) {
-            $candidate = $cwd . \DIRECTORY_SEPARATOR . $name;
-            if (\file_exists($candidate)) {
-                return $candidate;
-            }
-        }
-
         return null;
     }
 
@@ -272,14 +255,13 @@ final class InitCommand extends Command
      * package mode based on the presence of artisan. Falls back to the Laravel
      * default if both branches produce empty results.
      *
-     * @param ComposerJson|null $composer
      * @return array{0: list<string>, 1: list<string>} [directories, files]
      */
-    private function detectSourceRoots(string $cwd, ?array $composer, bool $hasPhpunitPlugin): array
+    private function detectSourceRoots(string $cwd, ?ComposerJson $composerJson, bool $hasPhpunitPlugin): array
     {
         [$directories, $files] = \is_file($cwd . \DIRECTORY_SEPARATOR . 'artisan')
             ? $this->detectLaravelAppRoots($cwd)
-            : $this->detectPackageRoots($cwd, $composer);
+            : $this->detectPackageRoots($cwd, $composerJson);
 
         // Ultimate fallback so the template still validates.
         if ($directories === [] && $files === []) {
@@ -322,13 +304,12 @@ final class InitCommand extends Command
     }
 
     /**
-     * @param ComposerJson|null $composer
      * @return array{0: list<string>, 1: list<string>}
      */
-    private function detectPackageRoots(string $cwd, ?array $composer): array
+    private function detectPackageRoots(string $cwd, ?ComposerJson $composerJson): array
     {
         $directories = [];
-        foreach ($this->extractComposerAutoloadDirs($composer) as $dir) {
+        foreach ($composerJson?->autoloadPsr4Dirs() ?? [] as $dir) {
             if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $dir) && !\in_array($dir, $directories, true)) {
                 $directories[] = $dir;
             }
@@ -352,12 +333,11 @@ final class InitCommand extends Command
      * `config.vendor-dir` so projects that relocate vendor/ still ignore the
      * right path.
      *
-     * @param ComposerJson|null $composer
      * @return list<string>
      */
-    private function detectIgnoreDirs(string $cwd, ?array $composer): array
+    private function detectIgnoreDirs(string $cwd, ?ComposerJson $composerJson): array
     {
-        $vendorDir = $this->resolveVendorDir($composer);
+        $vendorDir = $composerJson?->vendorDir() ?? 'vendor';
 
         $present = [];
         foreach (self::IGNORE_DIRS as $dir) {
@@ -369,105 +349,6 @@ final class InitCommand extends Command
         }
 
         return $present;
-    }
-
-    /**
-     * Decode composer.json once. Returns null on any read/decode failure so
-     * callers can keep using the project as if composer.json weren't there.
-     *
-     * @return ComposerJson|null
-     */
-    private function readComposerJson(string $cwd): ?array
-    {
-        $path = $cwd . \DIRECTORY_SEPARATOR . 'composer.json';
-        if (!\is_file($path)) {
-            return null;
-        }
-
-        $contents = @\file_get_contents($path);
-        if ($contents === false) {
-            return null;
-        }
-
-        try {
-            // Composer schema is documented and stable; trust the declared shape
-            // for the keys we read. Unknown JSON content is rejected by is_array.
-            /** @psalm-var ComposerJson|null $decoded */
-            $decoded = \json_decode($contents, true, flags: \JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            return null;
-        }
-
-        return \is_array($decoded) ? $decoded : null;
-    }
-
-    /**
-     * True when $package is listed in `require` or `require-dev`. Version
-     * constraints are ignored: presence is the only signal we need.
-     *
-     * @param ComposerJson|null $composer
-     * @psalm-pure
-     */
-    private function composerHasPackage(?array $composer, string $package): bool
-    {
-        if ($composer === null) {
-            return false;
-        }
-
-        return \array_key_exists($package, $composer['require'] ?? [])
-            || \array_key_exists($package, $composer['require-dev'] ?? []);
-    }
-
-    /**
-     * Read composer's relocated vendor directory if configured, else 'vendor'.
-     *
-     * @param ComposerJson|null $composer
-     * @psalm-pure
-     */
-    private function resolveVendorDir(?array $composer): string
-    {
-        $configured = $composer['config']['vendor-dir'] ?? null;
-        if ($configured === null || $configured === '') {
-            return 'vendor';
-        }
-
-        // Strip leading `./` and trailing slashes. Composer accepts both forms,
-        // but psalm.xml paths are composer-root-relative without a prefix.
-        $normalised = \rtrim(\preg_replace('#^\./#', '', $configured) ?? $configured, '/');
-
-        return $normalised === '' ? 'vendor' : $normalised;
-    }
-
-    /**
-     * Extract `autoload.psr-4` directories from composer.json. Order preserved,
-     * duplicates removed, trailing slashes stripped.
-     *
-     * @param ComposerJson|null $composer
-     * @return list<string>
-     * @psalm-pure
-     */
-    private function extractComposerAutoloadDirs(?array $composer): array
-    {
-        $psr4 = $composer['autoload']['psr-4'] ?? [];
-
-        $dirs = [];
-        foreach ($psr4 as $paths) {
-            $items = \is_string($paths) ? [$paths] : $paths;
-            foreach ($items as $candidate) {
-                if ($candidate === '') {
-                    continue;
-                }
-
-                $dir = \rtrim($candidate, '/');
-                if ($dir === '' || \in_array($dir, $dirs, true)) {
-                    continue;
-                }
-
-                $dirs[] = $dir;
-            }
-        }
-
-        return $dirs;
     }
 
     /**
