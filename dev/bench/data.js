@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782839599377,
+  "lastUpdate": 1782912646764,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7795,6 +7795,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.42,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "49699333+dependabot[bot]@users.noreply.github.com",
+            "name": "dependabot[bot]",
+            "username": "dependabot[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b273fafd8422abe7f47a0ca542a496f0c107a3d",
+          "message": "chore(deps): bump actions/checkout from 6.0.2 to 7.0.0 (#1191)\n\nBumps [actions/checkout](https://github.com/actions/checkout) from 6.0.2 to 7.0.0.\n- [Release notes](https://github.com/actions/checkout/releases)\n- [Changelog](https://github.com/actions/checkout/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/actions/checkout/compare/de0fac2e4500dabe0009e67214ff5f5447ce83dd...9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0)\n\n---\nupdated-dependencies:\n- dependency-name: actions/checkout\n  dependency-version: 7.0.0\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+          "timestamp": "2026-07-01T15:27:35+02:00",
+          "tree_id": "ffc31e21d1caa5fec259b33b921c5fd8f5d49580",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1b273fafd8422abe7f47a0ca542a496f0c107a3d"
+        },
+        "date": 1782912645892,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.75,
+            "range": "± 0.11",
             "unit": "s"
           },
           {
