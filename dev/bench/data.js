@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782913526603,
+  "lastUpdate": 1782926079776,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7870,6 +7870,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fc543a30ed280bd01be2efaddeaf102c3f02e576",
+          "message": "Add cross-OS install smoke test (#1197)\n\nAdd a focused cross-OS install smoke test that runs the README quickstart\n(install plugin from the checkout, then init/analyze/diagnose) against a fresh\nLaravel app on Blacksmith Ubuntu/Windows/macOS runners, catching OS-specific\ninstall regressions like the Windows proc_open() bug from #1189.\n\n- bin/ci/install-smoke.php: single cross-OS PHP script using Symfony Process\n- .github/workflows/install-smoke.yml + .github/actionlint.yaml\n- minimal init/analyze CLI DX touch-ups (#1195 §3)\n\nCloses #1195. Follow-ups: #1198, #1199.",
+          "timestamp": "2026-07-01T19:11:26+02:00",
+          "tree_id": "c13815a13e0fe1c1e7f584c250d85d943afbd650",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fc543a30ed280bd01be2efaddeaf102c3f02e576"
+        },
+        "date": 1782926079224,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.64,
+            "range": "± 0.57",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
             "unit": "MB"
           }
         ]
