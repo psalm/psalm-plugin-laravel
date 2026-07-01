@@ -70,10 +70,8 @@ final class AnalyzeCommand extends Command
             . \DIRECTORY_SEPARATOR . 'psalm';
 
         if (!\is_file($psalmBin)) {
-            $io->error(\sprintf(
-                'Could not find %s. Install Psalm with `composer require --dev vimeo/psalm`.',
-                $psalmBin,
-            ));
+            $io->error(\sprintf('Could not find %s. Install Psalm with `composer require --dev vimeo/psalm`.', $psalmBin));
+            $this->writeLaunchDiagnostics($io, $psalmBin, $cwd);
             return Command::FAILURE;
         }
 
@@ -86,10 +84,27 @@ final class AnalyzeCommand extends Command
 
         if (!\is_resource($process)) {
             $io->error('Failed to launch Psalm.');
+            $this->writeLaunchDiagnostics($io, $psalmBin, $cwd);
             return Command::FAILURE;
         }
 
         return \proc_close($process);
+    }
+
+    /**
+     * Prints the PHP binary, Psalm binary path and existence, and working
+     * directory — the environment facts needed to triage a "Psalm won't start"
+     * report without a back-and-forth (#1195).
+     *
+     * Uses plain writeln(), not $io->error()'s styled block: that block
+     * word-wraps at the terminal width, which would break a long path.
+     */
+    private function writeLaunchDiagnostics(SymfonyStyle $io, string $psalmBin, string $cwd): void
+    {
+        $io->writeln(\sprintf('  PHP binary:        %s', \PHP_BINARY));
+        $io->writeln(\sprintf('  Psalm binary:      %s (exists: %s)', $psalmBin, \is_file($psalmBin) ? 'yes' : 'no'));
+        $io->writeln(\sprintf('  Working directory: %s', $cwd));
+        $io->newLine();
     }
 
     /**

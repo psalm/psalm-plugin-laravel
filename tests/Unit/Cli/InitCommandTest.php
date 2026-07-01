@@ -73,6 +73,10 @@ final class InitCommandTest extends TestCase
         $target = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
         $this->assertFileExists($target);
 
+        // Check for the plugin FQCN (a stable value), not the surrounding
+        // prose, which may reasonably reword.
+        $this->assertStringContainsString('Psalm\\LaravelPlugin\\Plugin', $tester->getDisplay());
+
         $contents = \file_get_contents($target);
         $this->assertIsString($contents);
         $this->assertStringContainsString('errorLevel="4"', $contents);
@@ -136,6 +140,10 @@ final class InitCommandTest extends TestCase
 
         $this->assertSame(Command::SUCCESS, $exit);
         $this->assertStringContainsString('pluginClass', (string) \file_get_contents($target));
+        // Short, tense-tolerant fragment rather than the full pinned sentence —
+        // proves the reused/overwritten case is distinguishable from a fresh
+        // write without coupling the test to exact copy.
+        $this->assertStringContainsStringIgnoringCase('overwrit', $tester->getDisplay());
     }
 
     #[Test]
