@@ -15,6 +15,11 @@ use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
  * report without booting Laravel.
  *
  * @internal
+ *
+ * @psalm-type ComposerJson = array{
+ *     require?: array{php?: string},
+ *     config?: array{'vendor-dir'?: string},
+ * }
  */
 class Diagnostics
 {
@@ -48,17 +53,27 @@ class Diagnostics
 
         $cwd = \getcwd();
         $projectRoot = \is_string($cwd) ? $cwd : null;
+        $composerJson = $projectRoot !== null ? $this->readComposerJson($projectRoot) : null;
+        $vendorDir = $this->resolveComposerVendorDir($composerJson);
 
         [$analysisVersion, $analysisSource] = $this->resolveAnalysisPhpVersion($projectRoot);
 
         return new Report(
             pluginVersion: $this->safePrettyVersion(self::PLUGIN_PACKAGE),
+            pluginInstallPath: $this->safeInstallPath(self::PLUGIN_PACKAGE),
             psalmVersion: $this->safePrettyVersion('vimeo/psalm'),
             laravelVersion: \defined(LaravelApplication::class . '::VERSION') ? LaravelApplication::VERSION : null,
+            osFamily: \PHP_OS_FAMILY,
+            osVersion: \trim(\php_uname('s') . ' ' . \php_uname('r')),
             phpRuntimeVersion: \PHP_VERSION,
-            phpRequiredVersion: $projectRoot !== null ? $this->readComposerRequirePhp($projectRoot) : null,
+            phpBinaryPath: \PHP_BINARY,
+            phpRequiredVersion: $this->readComposerRequirePhp($composerJson),
             phpAnalysisVersion: $analysisVersion,
             phpAnalysisSource: $analysisSource,
+            composerVendorDir: $vendorDir,
+            psalmBinExists: $projectRoot !== null && \is_file($this->binPath($projectRoot, $vendorDir, 'psalm')),
+            psalmLaravelBinExists: $projectRoot !== null && \is_file($this->binPath($projectRoot, $vendorDir, 'psalm-laravel')),
+            psalmConfigPath: $projectRoot !== null ? $this->detectPsalmConfigPath($projectRoot) : null,
             bootMode: ApplicationProvider::getBootMode(),
             bootPath: ApplicationProvider::getBootPath(),
             bootstrapErrors: $bootstrapErrors,
@@ -155,12 +170,14 @@ class Diagnostics
     }
 
     /**
-     * Return the raw `require.php` constraint string from `composer.json`
-     * (e.g. `^8.2`). We don't resolve to a single minor like Psalm does — the
-     * raw constraint is more informative for diagnose, and resolving it
-     * requires shipping a per-release PHP version table.
+     * Decode `<projectRoot>/composer.json` once so both the PHP constraint and
+     * the vendor-dir override can be read from a single parse. Returns null on
+     * any read/decode failure so callers can treat the project as if
+     * composer.json weren't there.
+     *
+     * @return ComposerJson|null
      */
-    private function readComposerRequirePhp(string $projectRoot): ?string
+    private function readComposerJson(string $projectRoot): ?array
     {
         $path = $projectRoot . \DIRECTORY_SEPARATOR . 'composer.json';
         if (!\is_file($path)) {
@@ -172,9 +189,63 @@ class Diagnostics
             return null;
         }
 
-        /** @psalm-var array{require?: array{php?: string}} $decoded */
+        /** @psalm-var array{require?: array{php?: string}, config?: array{'vendor-dir'?: string}}|null $decoded */
         $decoded = \json_decode($contents, true);
-        return $decoded['require']['php'] ?? null;
+        return \is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * Return the raw `require.php` constraint string from `composer.json`
+     * (e.g. `^8.2`). We don't resolve to a single minor like Psalm does — the
+     * raw constraint is more informative for diagnose, and resolving it
+     * requires shipping a per-release PHP version table.
+     *
+     * @param ComposerJson|null $composerJson
+     * @psalm-pure
+     */
+    private function readComposerRequirePhp(?array $composerJson): ?string
+    {
+        return $composerJson['require']['php'] ?? null;
+    }
+
+    /**
+     * Read composer's relocated vendor directory if configured, else 'vendor'.
+     * Mirrors InitCommand::resolveVendorDir()'s normalisation.
+     *
+     * @param ComposerJson|null $composerJson
+     * @psalm-pure
+     */
+    private function resolveComposerVendorDir(?array $composerJson): string
+    {
+        $configured = $composerJson['config']['vendor-dir'] ?? null;
+        if ($configured === null || $configured === '') {
+            return 'vendor';
+        }
+
+        $normalised = \rtrim(\preg_replace('#^\./#', '', $configured) ?? $configured, '/');
+        return $normalised === '' ? 'vendor' : $normalised;
+    }
+
+    /** @psalm-pure */
+    private function binPath(string $projectRoot, string $vendorDir, string $bin): string
+    {
+        return $projectRoot . \DIRECTORY_SEPARATOR . $vendorDir . \DIRECTORY_SEPARATOR . 'bin' . \DIRECTORY_SEPARATOR . $bin;
+    }
+
+    /**
+     * First existing Psalm config path under $projectRoot, following Psalm's
+     * own precedence (psalm.xml beats psalm.xml.dist). Null if neither exists.
+     */
+    private function detectPsalmConfigPath(string $projectRoot): ?string
+    {
+        foreach (['psalm.xml', 'psalm.xml.dist'] as $name) {
+            $candidate = $projectRoot . \DIRECTORY_SEPARATOR . $name;
+            if (\is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     private function safePrettyVersion(string $package): ?string
@@ -185,6 +256,19 @@ class Diagnostics
 
         try {
             return InstalledVersions::getPrettyVersion($package);
+        } catch (\OutOfBoundsException) {
+            return null;
+        }
+    }
+
+    private function safeInstallPath(string $package): ?string
+    {
+        if (!InstalledVersions::isInstalled($package)) {
+            return null;
+        }
+
+        try {
+            return InstalledVersions::getInstallPath($package);
         } catch (\OutOfBoundsException) {
             return null;
         }

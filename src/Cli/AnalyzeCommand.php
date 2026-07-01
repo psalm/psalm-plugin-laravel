@@ -69,27 +69,51 @@ final class AnalyzeCommand extends Command
             . \DIRECTORY_SEPARATOR . 'bin'
             . \DIRECTORY_SEPARATOR . 'psalm';
 
+        // proc_open with an array argv runs the binary directly (no shell), so
+        // forwarded tokens are passed literally and never re-interpreted. Built
+        // up front (not only on the success path) so both failure branches below
+        // can report the exact command they attempted.
+        $command = [\PHP_BINARY, $psalmBin, ...$this->forwardedArguments()];
+
         if (!\is_file($psalmBin)) {
-            $io->error(\sprintf(
-                'Could not find %s. Install Psalm with `composer require --dev vimeo/psalm`.',
-                $psalmBin,
-            ));
+            $io->error(\sprintf('Could not find %s. Install Psalm with `composer require --dev vimeo/psalm`.', $psalmBin));
+            $this->writeLaunchDiagnostics($io, $psalmBin, $cwd, $command);
             return Command::FAILURE;
         }
-
-        // proc_open with an array argv runs the binary directly (no shell), so
-        // forwarded tokens are passed literally and never re-interpreted.
-        $command = [\PHP_BINARY, $psalmBin, ...$this->forwardedArguments()];
 
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
         $process = \proc_open($command, $descriptors, $pipes, $cwd);
 
         if (!\is_resource($process)) {
             $io->error('Failed to launch Psalm.');
+            $this->writeLaunchDiagnostics($io, $psalmBin, $cwd, $command);
             return Command::FAILURE;
         }
 
         return \proc_close($process);
+    }
+
+    /**
+     * Prints the PHP binary, Psalm binary path and existence, working
+     * directory, attempted command, and a manual diagnostic command to run by
+     * hand — everything needed to triage a "Psalm won't start" report without
+     * a back-and-forth (#1195).
+     *
+     * Uses plain writeln(), not $io->error()'s styled block: that block
+     * word-wraps at the terminal width, which would break a long path or
+     * command across lines and defeat the point of a copy-pasteable "try this
+     * manually" command.
+     *
+     * @param list<string> $command
+     */
+    private function writeLaunchDiagnostics(SymfonyStyle $io, string $psalmBin, string $cwd, array $command): void
+    {
+        $io->writeln(\sprintf('  PHP binary:        %s', \PHP_BINARY));
+        $io->writeln(\sprintf('  Psalm binary:      %s (exists: %s)', $psalmBin, \is_file($psalmBin) ? 'yes' : 'no'));
+        $io->writeln(\sprintf('  Working directory: %s', $cwd));
+        $io->writeln(\sprintf('  Attempted command: %s', \implode(' ', $command)));
+        $io->writeln(\sprintf('  Try manually:      %s %s --version', \PHP_BINARY, $psalmBin));
+        $io->newLine();
     }
 
     /**

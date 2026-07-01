@@ -88,14 +88,24 @@ final class DiagnoseCommand extends Command
 
         $this->renderSection($io, 'Versions', [
             'Plugin' => $report->pluginVersion ?? '(unknown)',
+            'Plugin path' => $report->pluginInstallPath ?? '(unknown)',
             'Psalm' => $report->psalmVersion ?? '(unknown)',
             'Laravel' => $report->laravelVersion ?? '(unknown)',
         ]);
 
         $this->renderSection($io, 'PHP', [
             'Runtime' => $report->phpRuntimeVersion,
+            'Binary' => $report->phpBinaryPath,
             'Required' => $report->phpRequiredVersion ?? '(unknown)',
             'Analysis' => $report->phpAnalysisVersion . ' (from ' . $report->phpAnalysisSource . ')',
+        ]);
+
+        $this->renderSection($io, 'System', [
+            'OS' => \sprintf('%s (%s)', $report->osFamily, $report->osVersion),
+            'Composer vendor dir' => $report->composerVendorDir,
+            'vendor/bin/psalm' => $report->psalmBinExists ? 'found' : 'missing',
+            'vendor/bin/psalm-laravel' => $report->psalmLaravelBinExists ? 'found' : 'missing',
+            'Psalm config' => $report->psalmConfigPath ?? '(not found)',
         ]);
 
         if ($report->bootMode === null) {

@@ -36,17 +36,41 @@ final class DiagnoseCommandTest extends TestCase
     }
 
     #[Test]
+    public function fixture_report_includes_system_section(): void
+    {
+        $tester = $this->testerFor($this->fixtureProvider($this->okReport()));
+
+        $exit = $tester->execute([]);
+        $display = $tester->getDisplay();
+
+        $this->assertSame(Command::SUCCESS, $exit, $display);
+        $this->assertStringContainsString('System', $display);
+        // Values, not exact label wording — the fixture's OS/vendor-dir/config
+        // path should be reflected somewhere in the section.
+        $this->assertStringContainsString('vendor', $display);
+        $this->assertStringContainsString('psalm.xml', $display);
+    }
+
+    #[Test]
     public function exits_failure_when_a_hard_failure_is_present(): void
     {
         $base = $this->okReport();
         $failing = new Report(
             pluginVersion: $base->pluginVersion,
+            pluginInstallPath: $base->pluginInstallPath,
             psalmVersion: $base->psalmVersion,
             laravelVersion: $base->laravelVersion,
+            osFamily: $base->osFamily,
+            osVersion: $base->osVersion,
             phpRuntimeVersion: $base->phpRuntimeVersion,
+            phpBinaryPath: $base->phpBinaryPath,
             phpRequiredVersion: $base->phpRequiredVersion,
             phpAnalysisVersion: $base->phpAnalysisVersion,
             phpAnalysisSource: $base->phpAnalysisSource,
+            composerVendorDir: $base->composerVendorDir,
+            psalmBinExists: $base->psalmBinExists,
+            psalmLaravelBinExists: $base->psalmLaravelBinExists,
+            psalmConfigPath: $base->psalmConfigPath,
             bootMode: null,
             bootPath: null,
             bootstrapErrors: ['synthetic'],
@@ -70,12 +94,20 @@ final class DiagnoseCommandTest extends TestCase
         $base = $this->okReport();
         $warned = new Report(
             pluginVersion: $base->pluginVersion,
+            pluginInstallPath: $base->pluginInstallPath,
             psalmVersion: $base->psalmVersion,
             laravelVersion: $base->laravelVersion,
+            osFamily: $base->osFamily,
+            osVersion: $base->osVersion,
             phpRuntimeVersion: $base->phpRuntimeVersion,
+            phpBinaryPath: $base->phpBinaryPath,
             phpRequiredVersion: $base->phpRequiredVersion,
             phpAnalysisVersion: $base->phpAnalysisVersion,
             phpAnalysisSource: $base->phpAnalysisSource,
+            composerVendorDir: $base->composerVendorDir,
+            psalmBinExists: $base->psalmBinExists,
+            psalmLaravelBinExists: $base->psalmLaravelBinExists,
+            psalmConfigPath: $base->psalmConfigPath,
             bootMode: $base->bootMode,
             bootPath: $base->bootPath,
             bootstrapErrors: ['Call to a member function bar() on null in config/app.php:42'],
@@ -174,6 +206,12 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertNotEmpty($report->phpAnalysisVersion);
         $this->assertContains($report->phpAnalysisSource, ['runtime', 'psalm.xml']);
         $this->assertContains($report->bootMode, ['bootstrap', 'testbench_fallback', null]);
+        // New environment fields (#1195): check plausibility, not exact values —
+        // these vary by machine/OS.
+        $this->assertNotEmpty($report->osFamily);
+        $this->assertNotEmpty($report->osVersion);
+        $this->assertNotEmpty($report->phpBinaryPath);
+        $this->assertNotEmpty($report->composerVendorDir);
         // A successful boot registers Laravel's core providers; assert the list is
         // populated and sorted so the diagnose output is deterministic.
         $this->assertNotEmpty($report->loadedProviders);
@@ -226,12 +264,20 @@ final class DiagnoseCommandTest extends TestCase
     {
         return new Report(
             pluginVersion: '4.0.0',
+            pluginInstallPath: '/app/vendor/psalm/plugin-laravel',
             psalmVersion: '7.0.0-beta19',
             laravelVersion: '13.9.0',
+            osFamily: 'Linux',
+            osVersion: 'Linux 6.1.0',
             phpRuntimeVersion: '8.4.0',
+            phpBinaryPath: '/usr/bin/php',
             phpRequiredVersion: '8.2.0-9.0.0',
             phpAnalysisVersion: '8.4.0',
             phpAnalysisSource: 'runtime',
+            composerVendorDir: 'vendor',
+            psalmBinExists: true,
+            psalmLaravelBinExists: true,
+            psalmConfigPath: '/app/psalm.xml',
             bootMode: 'bootstrap',
             bootPath: '/app/bootstrap/app.php',
             bootstrapErrors: [],
