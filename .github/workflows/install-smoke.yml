@@ -1,0 +1,109 @@
+name: Install smoke test
+
+# Executes the README quickstart verbatim against a fresh Laravel project on
+# each supported OS: install the plugin from this checkout, then
+# `psalm-laravel init`, `analyze`, and `diagnose`. Complements
+# test-laravel-app.yml (which is Ubuntu-only and covers a PHP x Laravel
+# compatibility matrix on a heavily scaffolded app) by covering OS-specific
+# install/configuration behavior on a minimal one — the class of bug fixed in
+# #1189, where a Windows proc_open() launcher regression could pass every
+# Ubuntu-only check.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - README.md
+      - composer.json
+      - bin/psalm-laravel
+      - bin/ci/install-smoke.php
+      - src/Cli/**
+      - src/Plugin.php
+      - .github/workflows/install-smoke.yml
+  push:
+    branches: [master]
+    paths:
+      - README.md
+      - composer.json
+      - bin/psalm-laravel
+      - bin/ci/install-smoke.php
+      - src/Cli/**
+      - src/Plugin.php
+      - .github/workflows/install-smoke.yml
+
+# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  install-smoke:
+    name: Install smoke (${{ matrix.name }})
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu
+            runner: blacksmith-2vcpu-ubuntu-2404
+          - name: Windows
+            runner: blacksmith-2vcpu-windows-2025
+          - name: macOS
+            runner: blacksmith-6vcpu-macos-15
+    runs-on: ${{ matrix.runner }}
+    steps:
+      # NOTE: step-security/harden-runner is intentionally NOT used here.
+      # It only supports Linux runners; on Windows/macOS its post-step fails
+      # (ENOENT post_event.json) and takes the whole job down. A step-level
+      # `if: runner.os == 'Linux'` does not help — an action's pre/post hooks
+      # run on the job lifecycle regardless of the step's `if`, so the post
+      # still fires and fails. Keeping it Linux-only would mean splitting this
+      # into two near-duplicate jobs; not worth it for an audit-only egress
+      # log on a workflow whose network surface is just Composer, Packagist,
+      # and GitHub. The blocking egress policy lives on the analysis workflows.
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          # fileinfo: required transitively by laravel/framework (via
+          # league/flysystem-local) and not enabled by default on the Windows
+          # PHP build. Ubuntu/macOS bundle it, but the shared setup keeps the
+          # matrix identical.
+          extensions: fileinfo
+
+      - name: Install plugin repo dependencies (install-smoke.php itself needs symfony/process)
+        # --no-blocking: a security advisory against one of the plugin's own dev
+        # deps shouldn't fail every run of this workflow with an unrelated error.
+        run: composer install --prefer-dist --no-progress --no-interaction --no-blocking
+
+      - name: Run install smoke test
+        # APP_DIR is set here (step-level env), not job-level: the `runner`
+        # context isn't available in a job-level `env:` block. Passing it as an
+        # env value (rather than writing $GITHUB_ENV, or templating into the
+        # run: script) keeps it clear of both shell-injection and $GITHUB_ENV
+        # write concerns.
+        env:
+          APP_DIR: ${{ runner.temp }}/psalm-install-smoke
+        run: php bin/ci/install-smoke.php
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: install-smoke-${{ matrix.name }}
+          path: |
+            install-smoke.log
+            ${{ runner.temp }}/psalm-install-smoke/composer.json
+            ${{ runner.temp }}/psalm-install-smoke/composer.lock
+            ${{ runner.temp }}/psalm-install-smoke/psalm.xml
+          if-no-files-found: ignore
+          retention-days: 14
