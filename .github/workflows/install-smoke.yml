@@ -94,23 +94,19 @@ jobs:
           # matrix identical.
           extensions: fileinfo
 
-      # RUNNER_TEMP (the env-var form of the `runner` context, which isn't available
-      # in a job-level `env:` block) is resolved here and exported via $GITHUB_ENV
-      # for every later step — both install-smoke.php's own getenv('APP_DIR') and the
-      # upload step's `${{ env.APP_DIR }}` path list. `shell: bash` pins POSIX syntax
-      # on Windows too (Actions' default pwsh doesn't understand `$GITHUB_ENV`).
-      # Reads $RUNNER_TEMP directly rather than templating `${{ runner.temp }}` into
-      # the run: string, so nothing here goes through shell template expansion.
-      - name: Resolve app dir
-        shell: bash
-        run: echo "APP_DIR=$RUNNER_TEMP/psalm-install-smoke" >> "$GITHUB_ENV"
-
       - name: Install plugin repo dependencies (install-smoke.php itself needs symfony/process)
         # --no-blocking: a security advisory against one of the plugin's own dev
         # deps shouldn't fail every run of this workflow with an unrelated error.
         run: composer install --prefer-dist --no-progress --no-interaction --no-blocking
 
       - name: Run install smoke test
+        # APP_DIR is set here (step-level env), not job-level: the `runner`
+        # context isn't available in a job-level `env:` block. Passing it as an
+        # env value (rather than writing $GITHUB_ENV, or templating into the
+        # run: script) keeps it clear of both shell-injection and $GITHUB_ENV
+        # write concerns.
+        env:
+          APP_DIR: ${{ runner.temp }}/psalm-install-smoke
         run: php bin/ci/install-smoke.php
 
       - name: Upload diagnostics
@@ -120,10 +116,10 @@ jobs:
           name: install-smoke-${{ matrix.name }}
           path: |
             install-smoke.log
-            ${{ env.APP_DIR }}/diagnose.txt
-            ${{ env.APP_DIR }}/composer.json
-            ${{ env.APP_DIR }}/composer.lock
-            ${{ env.APP_DIR }}/psalm.xml
-            ${{ env.APP_DIR }}/.github/workflows/psalm.yml
+            ${{ runner.temp }}/psalm-install-smoke/diagnose.txt
+            ${{ runner.temp }}/psalm-install-smoke/composer.json
+            ${{ runner.temp }}/psalm-install-smoke/composer.lock
+            ${{ runner.temp }}/psalm-install-smoke/psalm.xml
+            ${{ runner.temp }}/psalm-install-smoke/.github/workflows/psalm.yml
           if-no-files-found: ignore
           retention-days: 14
