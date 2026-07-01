@@ -4,32 +4,30 @@ declare(strict_types=1);
 
 /**
  * Cross-OS install/configuration smoke test. Follows the README quickstart
- * verbatim against a fresh Laravel project: create project, install the
- * plugin, `psalm-laravel init`, `analyze`, `diagnose`, optionally `add github`.
+ * verbatim against a fresh Laravel project: create project, install the plugin
+ * from the current checkout, then `psalm-laravel init`, `analyze`, `diagnose`.
  *
  * PHP (not Bash) so the exact same script runs on Ubuntu, Windows, and macOS.
- * Subprocesses go through Symfony Process, which already solves the
- * Windows shim problem this script exists to guard against: Composer on
- * Windows is a `.bat`, and a native CreateProcess() call cannot exec a batch
- * file directly (the same class of bug fixed for `psalm-laravel analyze`
- * itself in #1189, where a bare `vendor/bin/psalm` shebang script failed the
- * same way).
+ * Subprocesses go through Symfony Process, which already solves the Windows
+ * shim problem this script exists to guard against: Composer on Windows is a
+ * `.bat`, and a native CreateProcess() call cannot exec a batch file directly
+ * (the same class of bug fixed for `psalm-laravel analyze` itself in #1189,
+ * where a bare `vendor/bin/psalm` shebang script failed the same way).
+ *
+ * The plugin is installed from the local checkout via a Composer path
+ * repository. Verifying the published Packagist package is a separate concern,
+ * tracked as a follow-up.
  *
  * Usage:
  *   php bin/ci/install-smoke.php
- *   PLUGIN_SOURCE=packagist RUN_ADD_GITHUB=1 php bin/ci/install-smoke.php
  *   KEEP_APP=1 VERBOSE=1 php bin/ci/install-smoke.php
  *
  * Environment variables:
- *   PLUGIN_SOURCE       path|packagist (default: path)
- *   PLUGIN_PATH         Checkout to install in path mode (default: this repo's root)
- *   PLUGIN_CONSTRAINT   Version constraint passed to `composer require` (default:
- *                       "*@dev" in path mode, "^4.8" — matching README.md's Step 1 — in packagist mode)
- *   LARAVEL_VERSION     `laravel/laravel` installer version (default: latest stable)
- *   APP_DIR             Where to scaffold the throwaway app (default: a fresh temp dir)
- *   KEEP_APP            1 to keep the app dir even on success (default: 0; failures always preserve it)
- *   VERBOSE             1 to stream every subprocess's output live (default: 0; failures always show it)
- *   RUN_ADD_GITHUB      1 to also exercise `psalm-laravel add github` (default: 0)
+ *   PLUGIN_PATH      Checkout to install (default: this repo's root)
+ *   LARAVEL_VERSION  `laravel/laravel` installer version (default: latest stable)
+ *   APP_DIR          Where to scaffold the throwaway app (default: a fresh temp dir)
+ *   KEEP_APP         1 to keep the app dir even on success (default: 0; failures always preserve it)
+ *   VERBOSE          1 to stream every subprocess's output live (default: 0; failures always show it)
  *
  * Exit codes: 0 = every step passed, 1 = a step failed (see the printed diagnostic block).
  */
@@ -68,12 +66,8 @@ function logPath(): string
 
 /**
  * Lazily opens the log file once and caches the handle in a function-local
- * static — not a $GLOBALS entry, since `bin/ci/` isn't in this repo's own
- * psalm.xml, so neither form is actually checked today, but a $GLOBALS entry
- * would still be wrong if that ever changed. A reassigned `static` local is
- * itself widened to `mixed` on re-read, same as a $GLOBALS entry would be —
- * the inline `@var` below (not the docblock `@return`) is what keeps this
- * resolved as `resource` rather than `mixed` at every call site.
+ * static. The inline `@var` keeps the handle typed as `resource` rather than
+ * being widened to `mixed` on re-read.
  *
  * @return resource
  */
@@ -114,28 +108,6 @@ function logOutput(string $label, string $output, string $errorOutput, bool $ver
 // --- process execution ----------------------------------------------------
 
 /**
- * Render a command array as a single copy-pasteable string, quoting any token
- * that isn't a bare word so paths containing spaces (or shell metacharacters)
- * survive a paste into a shell. POSIX single-quote style — the common case for
- * the macOS/Linux runners and most dev shells, and also accepted by PowerShell.
- *
- * @param list<string> $command
- */
-function formatCommand(array $command): string
-{
-    $quote = static function (string $token): string {
-        if ($token !== '' && \preg_match('/^[\w@%+=:,.\/-]+$/', $token) === 1) {
-            return $token;
-        }
-
-        // Wrap in single quotes; a literal single quote becomes '\'' .
-        return "'" . \str_replace("'", "'\\''", $token) . "'";
-    };
-
-    return \implode(' ', \array_map($quote, $command));
-}
-
-/**
  * Runs a step to completion, logs it, and calls reportFailure() (which never
  * returns) if it didn't succeed — every call site can therefore treat a
  * returned Process as a guaranteed success.
@@ -149,21 +121,13 @@ function formatCommand(array $command): string
  * in real CI. Catching it here and routing it through the same
  * reportFailure() path keeps that guarantee for every step.
  *
- * $afterRun, when given, runs once the process has finished and its output has
- * been logged, on the success, non-zero-exit, AND timeout paths alike — before
- * any reportFailure(). It lets a step persist an artifact from the (possibly
- * partial) output regardless of outcome; e.g. the diagnose step writes
- * diagnose.txt so it is still captured when diagnose itself fails, which is
- * exactly the failure a bug reporter most needs it for.
- *
  * @param list<string> $command
  * @param array<string, string> $extraEnv
- * @param (callable(Process): void)|null $afterRun
  */
-function runStep(string $label, array $command, string $cwd, array $extraEnv, bool $verbose, string $appDir, ?callable $afterRun = null): Process
+function runStep(string $label, array $command, string $cwd, array $extraEnv, bool $verbose, string $appDir): Process
 {
     logLine(\sprintf('==> %s', $label));
-    logLine(\sprintf('    $ %s (cwd: %s)', formatCommand($command), $cwd));
+    logLine(\sprintf('    $ %s (cwd: %s)', \implode(' ', $command), $cwd));
 
     $process = new Process($command, $cwd, $extraEnv === [] ? null : $extraEnv, null, STEP_TIMEOUT_SECONDS);
 
@@ -174,10 +138,6 @@ function runStep(string $label, array $command, string $cwd, array $extraEnv, bo
         // its buffered output up to that point remains readable.
         $timedOutProcess = $timedOut->getProcess();
         logOutput($label, $timedOutProcess->getOutput(), $timedOutProcess->getErrorOutput(), $verbose);
-        if ($afterRun !== null) {
-            $afterRun($timedOutProcess);
-        }
-
         reportFailure(
             $label . ' (timed out)',
             $command,
@@ -190,10 +150,6 @@ function runStep(string $label, array $command, string $cwd, array $extraEnv, bo
     }
 
     logOutput($label, $process->getOutput(), $process->getErrorOutput(), $verbose);
-
-    if ($afterRun !== null) {
-        $afterRun($process);
-    }
 
     if (!$process->isSuccessful()) {
         reportFailure($label, $command, $process->getExitCode(), $cwd, $process->getOutput(), $process->getErrorOutput(), $appDir);
@@ -223,7 +179,7 @@ function reportFailure(
         '',
         '=== install-smoke FAILURE ===',
         \sprintf('Step: %s', $label),
-        \sprintf('Command: %s', $command === [] ? '(none — assertion failure)' : formatCommand($command)),
+        \sprintf('Command: %s', $command === [] ? '(none — assertion failure)' : \implode(' ', $command)),
         \sprintf('Working directory: %s', $cwd),
         // Null covers both "no process was ever spawned" (assertion failures)
         // and "spawned but timed out" — the label already says which.
@@ -247,28 +203,15 @@ function reportFailure(
 
 // --- main ------------------------------------------------------------------
 
-$pluginSource = envStr('PLUGIN_SOURCE', 'path');
-if (!\in_array($pluginSource, ['path', 'packagist'], true)) {
-    \fwrite(\STDERR, \sprintf("PLUGIN_SOURCE must be 'path' or 'packagist', got '%s'.\n", $pluginSource));
-    exit(1);
-}
-
 $pluginPath = envStr('PLUGIN_PATH', \dirname(__DIR__, 2));
-if ($pluginSource === 'path' && !\is_file($pluginPath . \DIRECTORY_SEPARATOR . 'composer.json')) {
+if (!\is_file($pluginPath . \DIRECTORY_SEPARATOR . 'composer.json')) {
     \fwrite(\STDERR, \sprintf("PLUGIN_PATH '%s' has no composer.json; nothing to install.\n", $pluginPath));
     exit(1);
 }
 
-// Packagist-mode default mirrors README.md's Step 1 exactly (`^4.8`, currently
-// the beta 4.x/Psalm-7 line) — keep the two in sync when the README's pinned
-// constraint moves. An unconstrained `require` is NOT equivalent: with
-// prefer-stable it can resolve a numerically-higher but mis-tagged release
-// instead of the README's intended target (e.g. v4.12.3 pulls Psalm 6, not 7).
-$pluginConstraint = envStr('PLUGIN_CONSTRAINT', $pluginSource === 'path' ? '*@dev' : '^4.8');
 $laravelVersion = envStr('LARAVEL_VERSION', '');
 $keepApp = envBool('KEEP_APP', false);
 $verbose = envBool('VERBOSE', false);
-$runAddGithub = envBool('RUN_ADD_GITHUB', false);
 
 $appDir = envStr('APP_DIR', '');
 if ($appDir === '') {
@@ -277,8 +220,7 @@ if ($appDir === '') {
 }
 
 logLine(\sprintf(
-    'Starting install smoke test: source=%s app_dir=%s laravel_version=%s',
-    $pluginSource,
+    'Starting install smoke test: app_dir=%s laravel_version=%s',
     $appDir,
     $laravelVersion === '' ? '(latest stable)' : $laravelVersion,
 ));
@@ -308,19 +250,18 @@ runStep('composer create-project', $createProjectCommand, $launchDir, [], $verbo
 //
 // README: "Since Psalm 7.x is currently in beta, allow dev (or beta) packages
 // first: `composer config minimum-stability dev && composer config
-// prefer-stable true`". That applies regardless of install mode — path mode
-// additionally registers the path repository so `require` resolves the
-// current checkout instead of a published tag.
+// prefer-stable true`". The path repository points `require` at the current
+// checkout instead of a published tag.
 
-$configSteps = [['config', 'minimum-stability', 'dev'], ['config', 'prefer-stable', 'true']];
-if ($pluginSource === 'path') {
-    $repoJson = \json_encode(
-        ['type' => 'path', 'url' => $pluginPath, 'options' => ['symlink' => false]],
-        \JSON_THROW_ON_ERROR,
-    );
-    $configSteps[] = ['config', 'repositories.0', $repoJson];
-}
-
+$repoJson = \json_encode(
+    ['type' => 'path', 'url' => $pluginPath, 'options' => ['symlink' => false]],
+    \JSON_THROW_ON_ERROR,
+);
+$configSteps = [
+    ['config', 'minimum-stability', 'dev'],
+    ['config', 'prefer-stable', 'true'],
+    ['config', 'repositories.0', $repoJson],
+];
 foreach ($configSteps as $configArgs) {
     $command = ['composer', ...$configArgs];
     runStep('composer ' . \implode(' ', $configArgs), $command, $appDir, [], $verbose, $appDir);
@@ -328,8 +269,7 @@ foreach ($configSteps as $configArgs) {
 
 // --- Step 3: install psalm/plugin-laravel, exactly as the README's `composer require --dev` step ---
 
-$requirement = $pluginConstraint === '' ? 'psalm/plugin-laravel' : "psalm/plugin-laravel:{$pluginConstraint}";
-$requireCommand = ['composer', 'require', '--dev', '--no-interaction', '--no-ansi', '--no-blocking', $requirement];
+$requireCommand = ['composer', 'require', '--dev', '--no-interaction', '--no-ansi', '--no-blocking', 'psalm/plugin-laravel:*@dev'];
 runStep('composer require psalm/plugin-laravel', $requireCommand, $appDir, ['COMPOSER_MEMORY_LIMIT' => '-1'], $verbose, $appDir);
 
 // --- Step 4: psalm-laravel init, and assert the generated config -----------
@@ -353,38 +293,12 @@ $analyzeCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'analyze', '--no-cach
 runStep('psalm-laravel analyze', $analyzeCommand, $appDir, [], $verbose, $appDir);
 
 // --- Step 6: psalm-laravel diagnose -----------------------------------------
+//
+// Output lands in install-smoke.log (and, with VERBOSE, on stdout); on failure
+// reportFailure() prints it too. No separate artifact is written.
 
-// diagnose.txt is the single most useful artifact when triaging an install bug
-// report, so it is saved standalone (in addition to the main log) via the
-// afterRun hook — which also fires when diagnose itself fails, the failure mode
-// a bug reporter most needs the captured output for.
 $diagnoseCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'diagnose', '--no-tips'];
-runStep(
-    'psalm-laravel diagnose',
-    $diagnoseCommand,
-    $appDir,
-    [],
-    $verbose,
-    $appDir,
-    static function (Process $process) use ($appDir): void {
-        \file_put_contents(
-            $appDir . \DIRECTORY_SEPARATOR . 'diagnose.txt',
-            $process->getOutput() . $process->getErrorOutput(),
-        );
-    },
-);
-
-// --- Step 7 (optional): psalm-laravel add github ----------------------------
-
-if ($runAddGithub) {
-    $addGithubCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'add', 'github', '--no-interaction'];
-    runStep('psalm-laravel add github', $addGithubCommand, $appDir, [], $verbose, $appDir);
-
-    $workflowPath = $appDir . \DIRECTORY_SEPARATOR . '.github' . \DIRECTORY_SEPARATOR . 'workflows' . \DIRECTORY_SEPARATOR . 'psalm.yml';
-    if (!\is_file($workflowPath)) {
-        reportFailure('assert .github/workflows/psalm.yml exists', [], null, $appDir, '', \sprintf('Expected %s to exist after `psalm-laravel add github`.', $workflowPath), $appDir);
-    }
-}
+runStep('psalm-laravel diagnose', $diagnoseCommand, $appDir, [], $verbose, $appDir);
 
 // --- Done --------------------------------------------------------------
 

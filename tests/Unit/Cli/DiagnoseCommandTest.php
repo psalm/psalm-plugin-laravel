@@ -36,42 +36,16 @@ final class DiagnoseCommandTest extends TestCase
     }
 
     #[Test]
-    public function fixture_report_includes_system_section(): void
-    {
-        $tester = $this->testerFor($this->fixtureProvider($this->okReport()));
-
-        $exit = $tester->execute([]);
-        $display = $tester->getDisplay();
-
-        $this->assertSame(Command::SUCCESS, $exit, $display);
-        $this->assertStringContainsString('System', $display);
-        // 'vendor-custom', not the generic 'vendor' — the section's own labels
-        // ("Composer vendor dir", "vendor/bin/psalm") already contain "vendor",
-        // so asserting that alone can't fail regardless of the actual value.
-        $this->assertStringContainsString('vendor-custom', $display);
-        $this->assertStringContainsString('psalm.xml', $display);
-    }
-
-    #[Test]
     public function exits_failure_when_a_hard_failure_is_present(): void
     {
         $base = $this->okReport();
         $failing = new Report(
             pluginVersion: $base->pluginVersion,
-            pluginInstallPath: $base->pluginInstallPath,
             psalmVersion: $base->psalmVersion,
             laravelVersion: $base->laravelVersion,
-            osFamily: $base->osFamily,
-            osVersion: $base->osVersion,
             phpRuntimeVersion: $base->phpRuntimeVersion,
-            phpBinaryPath: $base->phpBinaryPath,
-            phpRequiredVersion: $base->phpRequiredVersion,
             phpAnalysisVersion: $base->phpAnalysisVersion,
             phpAnalysisSource: $base->phpAnalysisSource,
-            composerVendorDir: $base->composerVendorDir,
-            psalmBinExists: $base->psalmBinExists,
-            psalmLaravelBinExists: $base->psalmLaravelBinExists,
-            psalmConfigPath: $base->psalmConfigPath,
             bootMode: null,
             bootPath: null,
             bootstrapErrors: ['synthetic'],
@@ -95,20 +69,11 @@ final class DiagnoseCommandTest extends TestCase
         $base = $this->okReport();
         $warned = new Report(
             pluginVersion: $base->pluginVersion,
-            pluginInstallPath: $base->pluginInstallPath,
             psalmVersion: $base->psalmVersion,
             laravelVersion: $base->laravelVersion,
-            osFamily: $base->osFamily,
-            osVersion: $base->osVersion,
             phpRuntimeVersion: $base->phpRuntimeVersion,
-            phpBinaryPath: $base->phpBinaryPath,
-            phpRequiredVersion: $base->phpRequiredVersion,
             phpAnalysisVersion: $base->phpAnalysisVersion,
             phpAnalysisSource: $base->phpAnalysisSource,
-            composerVendorDir: $base->composerVendorDir,
-            psalmBinExists: $base->psalmBinExists,
-            psalmLaravelBinExists: $base->psalmLaravelBinExists,
-            psalmConfigPath: $base->psalmConfigPath,
             bootMode: $base->bootMode,
             bootPath: $base->bootPath,
             bootstrapErrors: ['Call to a member function bar() on null in config/app.php:42'],
@@ -207,43 +172,12 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertNotEmpty($report->phpAnalysisVersion);
         $this->assertContains($report->phpAnalysisSource, ['runtime', 'psalm.xml']);
         $this->assertContains($report->bootMode, ['bootstrap', 'testbench_fallback', null]);
-        // New environment fields (#1195): check plausibility, not exact values —
-        // these vary by machine/OS.
-        $this->assertNotEmpty($report->osFamily);
-        $this->assertNotEmpty($report->osVersion);
-        $this->assertNotEmpty($report->phpBinaryPath);
-        $this->assertNotEmpty($report->composerVendorDir);
         // A successful boot registers Laravel's core providers; assert the list is
         // populated and sorted so the diagnose output is deterministic.
         $this->assertNotEmpty($report->loadedProviders);
         $sorted = $report->loadedProviders;
         \sort($sorted);
         $this->assertSame($sorted, $report->loadedProviders);
-    }
-
-    #[Test]
-    public function corrupt_composer_json_surfaces_as_a_bootstrap_warning(): void
-    {
-        // Constructor-injected $projectRoot (not chdir()) so this stays isolated
-        // from ApplicationProvider's process-wide boot singleton, which several
-        // other tests in this process also depend on being unpolluted.
-        $tempDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-diagnostics-' . \uniqid('', true);
-        \mkdir($tempDir);
-        \file_put_contents($tempDir . \DIRECTORY_SEPARATOR . 'composer.json', '{not valid json');
-
-        try {
-            $report = (new Diagnostics($tempDir))->collect();
-
-            $this->assertNotEmpty(\array_filter(
-                $report->bootstrapErrors,
-                static fn(string $error): bool => \str_contains($error, 'composer.json exists but could not be parsed'),
-            ));
-            // Falls back to the safe default rather than guessing wrong.
-            $this->assertSame('vendor', $report->composerVendorDir);
-        } finally {
-            @\unlink($tempDir . \DIRECTORY_SEPARATOR . 'composer.json');
-            @\rmdir($tempDir);
-        }
     }
 
 
@@ -290,23 +224,11 @@ final class DiagnoseCommandTest extends TestCase
     {
         return new Report(
             pluginVersion: '4.0.0',
-            pluginInstallPath: '/app/vendor/psalm/plugin-laravel',
             psalmVersion: '7.0.0-beta19',
             laravelVersion: '13.9.0',
-            osFamily: 'Linux',
-            osVersion: 'Linux 6.1.0',
             phpRuntimeVersion: '8.4.0',
-            phpBinaryPath: '/usr/bin/php',
-            phpRequiredVersion: '8.2.0-9.0.0',
             phpAnalysisVersion: '8.4.0',
             phpAnalysisSource: 'runtime',
-            // Distinctive (not 'vendor') so a display assertion on this value
-            // can't pass merely because the section's own labels ("Composer
-            // vendor dir", "vendor/bin/psalm") already contain the substring.
-            composerVendorDir: 'vendor-custom',
-            psalmBinExists: true,
-            psalmLaravelBinExists: true,
-            psalmConfigPath: '/app/psalm.xml',
             bootMode: 'bootstrap',
             bootPath: '/app/bootstrap/app.php',
             bootstrapErrors: [],

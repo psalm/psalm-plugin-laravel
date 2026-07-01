@@ -1,21 +1,16 @@
 name: Install smoke test
 
 # Executes the README quickstart verbatim against a fresh Laravel project on
-# each supported OS: composer install, `psalm-laravel init`, `analyze`,
-# `diagnose`, and `add github`. Complements test-laravel-app.yml (which is
-# Ubuntu-only and covers a PHP x Laravel compatibility matrix on a heavily
-# scaffolded app) by covering OS-specific install/configuration behavior on a
-# minimal one — the class of bug fixed in #1189, where a Windows proc_open()
-# launcher regression could pass every Ubuntu-only check.
+# each supported OS: install the plugin from this checkout, then
+# `psalm-laravel init`, `analyze`, and `diagnose`. Complements
+# test-laravel-app.yml (which is Ubuntu-only and covers a PHP x Laravel
+# compatibility matrix on a heavily scaffolded app) by covering OS-specific
+# install/configuration behavior on a minimal one — the class of bug fixed in
+# #1189, where a Windows proc_open() launcher regression could pass every
+# Ubuntu-only check.
 
 on:
   workflow_dispatch:
-    inputs:
-      plugin_source:
-        description: 'Install the plugin from: path (this checkout) or packagist (published package)'
-        type: choice
-        options: [path, packagist]
-        default: path
   pull_request:
     paths:
       - README.md
@@ -35,10 +30,6 @@ on:
       - src/Cli/**
       - src/Plugin.php
       - .github/workflows/install-smoke.yml
-  schedule:
-    # Weekly on Friday at 06:00 UTC — validates the published Packagist install
-    # path (README's Step 1 exactly), independent of any pending PR.
-    - cron: "0 6 * * 5"
 
 # Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
 concurrency:
@@ -63,11 +54,6 @@ jobs:
           - name: macOS
             runner: blacksmith-6vcpu-macos-15
     runs-on: ${{ matrix.runner }}
-    env:
-      # schedule always validates the published package; workflow_dispatch lets a
-      # maintainer pick either mode; push/pull_request always test this checkout.
-      PLUGIN_SOURCE: ${{ github.event_name == 'schedule' && 'packagist' || github.event.inputs.plugin_source || 'path' }}
-      RUN_ADD_GITHUB: '1'
     steps:
       # NOTE: step-security/harden-runner is intentionally NOT used here.
       # It only supports Linux runners; on Windows/macOS its post-step fails
@@ -116,10 +102,8 @@ jobs:
           name: install-smoke-${{ matrix.name }}
           path: |
             install-smoke.log
-            ${{ runner.temp }}/psalm-install-smoke/diagnose.txt
             ${{ runner.temp }}/psalm-install-smoke/composer.json
             ${{ runner.temp }}/psalm-install-smoke/composer.lock
             ${{ runner.temp }}/psalm-install-smoke/psalm.xml
-            ${{ runner.temp }}/psalm-install-smoke/.github/workflows/psalm.yml
           if-no-files-found: ignore
           retention-days: 14

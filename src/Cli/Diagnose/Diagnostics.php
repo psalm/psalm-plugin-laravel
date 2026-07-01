@@ -7,8 +7,6 @@ namespace Psalm\LaravelPlugin\Cli\Diagnose;
 use Composer\InstalledVersions;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
-use Psalm\LaravelPlugin\Cli\ComposerJson;
-use Psalm\LaravelPlugin\Cli\PsalmConfigLocator;
 
 /**
  * Collects runtime introspection data about the plugin's resolved state.
@@ -21,18 +19,6 @@ use Psalm\LaravelPlugin\Cli\PsalmConfigLocator;
 class Diagnostics
 {
     private const PLUGIN_PACKAGE = 'psalm/plugin-laravel';
-
-    /**
-     * @param string|null $projectRoot Override for composer.json/psalm.xml lookups; defaults to
-     *                                 the process cwd when null. Exposed for tests. Deliberately
-     *                                 does NOT affect ApplicationProvider::bootApp(), which is a
-     *                                 process-wide singleton that always resolves against the
-     *                                 real process cwd — this constructor only lets tests isolate
-     *                                 the composer.json/psalm.xml lookups without touching that
-     *                                 singleton's cached state.
-     * @psalm-mutation-free
-     */
-    public function __construct(private readonly ?string $projectRoot = null) {}
 
     public function collect(): Report
     {
@@ -61,41 +47,17 @@ class Diagnostics
         }
 
         $cwd = \getcwd();
-        $projectRoot = $this->projectRoot ?? (\is_string($cwd) ? $cwd : null);
-
-        // A composer.json that exists but fails to parse is a real, surfaceable
-        // problem — unlike "no composer.json" it means something is actually
-        // broken, and silently falling back to defaults (vendor dir 'vendor',
-        // bin-exists checks against the wrong path) would make this the one
-        // diagnostic command whose whole job is spotting a broken install look
-        // confidently wrong instead. See ComposerJson::read().
-        try {
-            $composerJson = $projectRoot !== null ? ComposerJson::read($projectRoot) : null;
-        } catch (\Throwable $throwable) {
-            $composerJson = null;
-            $bootstrapErrors[] = 'composer.json exists but could not be parsed: ' . $throwable->getMessage();
-        }
-
-        $vendorDir = $composerJson?->vendorDir() ?? 'vendor';
+        $projectRoot = \is_string($cwd) ? $cwd : null;
 
         [$analysisVersion, $analysisSource] = $this->resolveAnalysisPhpVersion($projectRoot);
 
         return new Report(
             pluginVersion: $this->safePrettyVersion(self::PLUGIN_PACKAGE),
-            pluginInstallPath: $this->safeInstallPath(self::PLUGIN_PACKAGE),
             psalmVersion: $this->safePrettyVersion('vimeo/psalm'),
             laravelVersion: \defined(LaravelApplication::class . '::VERSION') ? LaravelApplication::VERSION : null,
-            osFamily: \PHP_OS_FAMILY,
-            osVersion: \php_uname('r'),
             phpRuntimeVersion: \PHP_VERSION,
-            phpBinaryPath: \PHP_BINARY,
-            phpRequiredVersion: $composerJson?->requirePhp(),
             phpAnalysisVersion: $analysisVersion,
             phpAnalysisSource: $analysisSource,
-            composerVendorDir: $vendorDir,
-            psalmBinExists: $projectRoot !== null && \is_file($this->binPath($projectRoot, $vendorDir, 'psalm')),
-            psalmLaravelBinExists: $projectRoot !== null && \is_file($this->binPath($projectRoot, $vendorDir, 'psalm-laravel')),
-            psalmConfigPath: $projectRoot !== null ? PsalmConfigLocator::locate($projectRoot) : null,
             bootMode: ApplicationProvider::getBootMode(),
             bootPath: ApplicationProvider::getBootPath(),
             bootstrapErrors: $bootstrapErrors,
@@ -130,10 +92,7 @@ class Diagnostics
     /**
      * Resolve the PHP version Psalm uses for analysis. Only `psalm.xml`'s
      * `phpVersion=` attribute is a concrete version; otherwise we fall back
-     * to the runtime. We deliberately do NOT consume `composer.json`'s
-     * `require.php` here — that's a constraint (`^8.2`), not a resolved
-     * version, and surfacing it under "Analysis" would mislead. The
-     * constraint is reported separately under `phpRequiredVersion`.
+     * to the runtime.
      *
      * We parse `psalm.xml` directly with SimpleXML instead of
      * `Config::getConfigForPath()` because the latter eagerly validates every
@@ -156,17 +115,13 @@ class Diagnostics
     }
 
     /**
-     * Read the `phpVersion` attribute from the project's Psalm config, via the
-     * same psalm.xml-beats-psalm.xml.dist lookup used for `psalmConfigPath` —
-     * a project with only a `.dist` config previously fell back to 'runtime'
-     * here despite `psalmConfigPath` correctly pointing at that same file,
-     * disagreeing with itself about which file is "the config". We don't walk
-     * parent directories — diagnose is intended for the project root.
+     * Read the `phpVersion` attribute from `<projectRoot>/psalm.xml`. We don't
+     * walk parent directories — diagnose is intended for the project root.
      */
     private function readPsalmXmlPhpVersion(string $projectRoot): ?string
     {
-        $path = PsalmConfigLocator::locate($projectRoot);
-        if ($path === null) {
+        $path = $projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml';
+        if (!\is_file($path)) {
             return null;
         }
 
@@ -195,12 +150,6 @@ class Diagnostics
         return $value === '' ? null : $value;
     }
 
-    /** @psalm-pure */
-    private function binPath(string $projectRoot, string $vendorDir, string $bin): string
-    {
-        return $projectRoot . \DIRECTORY_SEPARATOR . $vendorDir . \DIRECTORY_SEPARATOR . 'bin' . \DIRECTORY_SEPARATOR . $bin;
-    }
-
     private function safePrettyVersion(string $package): ?string
     {
         if (!InstalledVersions::isInstalled($package)) {
@@ -209,19 +158,6 @@ class Diagnostics
 
         try {
             return InstalledVersions::getPrettyVersion($package);
-        } catch (\OutOfBoundsException) {
-            return null;
-        }
-    }
-
-    private function safeInstallPath(string $package): ?string
-    {
-        if (!InstalledVersions::isInstalled($package)) {
-            return null;
-        }
-
-        try {
-            return InstalledVersions::getInstallPath($package);
         } catch (\OutOfBoundsException) {
             return null;
         }

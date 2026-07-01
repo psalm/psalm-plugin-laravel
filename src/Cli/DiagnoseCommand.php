@@ -88,27 +88,13 @@ final class DiagnoseCommand extends Command
 
         $this->renderSection($io, 'Versions', [
             'Plugin' => $report->pluginVersion ?? '(unknown)',
-            'Plugin path' => $report->pluginInstallPath ?? '(unknown)',
             'Psalm' => $report->psalmVersion ?? '(unknown)',
             'Laravel' => $report->laravelVersion ?? '(unknown)',
         ]);
 
         $this->renderSection($io, 'PHP', [
             'Runtime' => $report->phpRuntimeVersion,
-            'Binary' => $report->phpBinaryPath,
-            'Required' => $report->phpRequiredVersion ?? '(unknown)',
             'Analysis' => $report->phpAnalysisVersion . ' (from ' . $report->phpAnalysisSource . ')',
-        ]);
-
-        $this->renderSection($io, 'System', [
-            'OS' => \sprintf('%s (%s)', $report->osFamily, $report->osVersion),
-            'Composer vendor dir' => $report->composerVendorDir,
-            // Labels use the resolved vendor dir, not a hardcoded 'vendor/', so
-            // the printed path matches what psalmBinExists actually checked —
-            // otherwise a relocated vendor dir would print a misleading path.
-            \sprintf('%s/bin/psalm', $report->composerVendorDir) => $report->psalmBinExists ? 'found' : 'missing',
-            \sprintf('%s/bin/psalm-laravel', $report->composerVendorDir) => $report->psalmLaravelBinExists ? 'found' : 'missing',
-            'Psalm config' => $report->psalmConfigPath ?? '(not found)',
         ]);
 
         if ($report->bootMode === null) {
