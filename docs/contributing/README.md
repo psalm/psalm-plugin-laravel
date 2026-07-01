@@ -1,6 +1,6 @@
 ---
 title: Contributing
-nav_order: 3
+nav_order: 7
 has_children: true
 ---
 
@@ -18,41 +18,30 @@ See `ApplicationProvider::doGetApp()` for the resolution logic.
 
 ```mermaid
 flowchart TD
-    A["Plugin::__invoke"] --> B["Boot Laravel app"]
-    B --> C["Build schema\n(if columnFallback=migrations)"]
-    C --> D["Generate alias stubs\n(from AliasLoader)"]
-    D --> E["Register handlers"]
-    E --> F["Register stubs"]
+    A["Plugin::__invoke"] --> B["Parse PluginConfig from psalm.xml"]
+    B --> C["Boot Laravel app\n(ApplicationProvider::bootApp)"]
+    C --> D["Build migration schema\n(only if columnFallback=migrations)"]
+    D --> E["Init facade→service map\n(FacadeMapProvider)"]
+    E --> F["Init translation / view / env handlers\n(from booted app state)"]
+    F --> G["Register handlers\n(Plugin::registerHandlers)"]
+    G --> H["Register stubs\n(Plugin::registerStubs)"]
 
-    E --- handlers["
-        Application — ContainerHandler, OffsetHandler
-        Auth — AuthHandler, GuardHandler, RequestHandler
-        Collections — CollectionPluckHandler, CollectionFilterHandler
-        Console — CommandArgumentHandler
-        Eloquent — ModelRegistrationHandler,
-        ModelMethodHandler, BuilderScopeHandler, CustomCollectionHandler
-        Magic — MethodForwardingHandler
-        Helpers — CacheHandler, PathHandler, TransHandler
-        Translations — TranslationKeyHandler
-        Views — MissingViewHandler
-        Rules — NoEnvOutsideConfigHandler, ModelMakeHandler, OctaneIncompatibleBindingHandler
-        Validation — ValidatedTypeHandler, ValidationTaintHandler
-        SuppressHandler
-    "]
-
-    F --- stubs["
+    H --- stubs["
         stubs/common/ (types + taint annotations)
-        stubs/12/, stubs/13/ (version-specific)
-        aliases.phpstub (generated)
+        versioned dirs, ascending (e.g. stubs/12.42.0/, stubs/13.5.0/, stubs/13.8.0/)
+        stubs/integrations/carbon/ (gated on installed nesbot/carbon version)
+        aliases.phpstub (generated here from AliasLoader)
     "]
 
-    G["Psalm scans all project files"] -.->|afterCodebasePopulated| H["ModelRegistrationHandler"]
-    H --- models["
+    I["Psalm scans all project files"] -.->|afterCodebasePopulated| J["ModelRegistrationHandler"]
+    J --- models["
         Discover Model subclasses
-        Register property handlers:
+        Register per-model property/method closures:
         relationship > factory > accessor > column
     "]
 ```
+
+The whole `__invoke` body is wrapped in a try/catch: on any internal error the plugin reports a warning and disables itself for the run (or rethrows when `failOnInternalError` is set). See `src/Internal/InternalErrorReporter.php`.
 
 ## Getting started
 
@@ -93,7 +82,8 @@ composer rector # run rector refactoring
 Stubs override Laravel's type signatures. Place them in:
 
 - `stubs/common/` — shared across Laravel versions (includes both type stubs and taint annotations)
-- `stubs/12/`, `stubs/13/` — version-specific overrides
+- `stubs/<version>/` — version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work; currently `stubs/12.42.0/`, `stubs/13.5.0/`, and `stubs/13.8.0/` exist
+- `stubs/integrations/<package>/` — optional stubs for third-party packages, gated on the package being installed (currently `carbon/`, with a `pre-3.12/` subdir loaded only for older Carbon; see `src/Stubs/CarbonStubProvider.php`)
 
 Rules:
 - Verify signatures against actual Laravel code (not against Laravel PHPDoc or method signatures)
@@ -127,7 +117,7 @@ Authoring an override:
 
 ### Testing version-specific stubs
 
-A type test that asserts a `stubs/<version>/` override would fail on the lower cells of the CI matrix (`.github/workflows/tests.yml` runs `test:type` over `^13.0` and `^12.4`, including `prefer-lowest`), because the override does not load on the older Laravel. Gate such a test with a `--SKIPIF--` section so it runs only where the stub applies:
+A type test that asserts a `stubs/<version>/` override would fail on the lower cells of the CI matrix (`.github/workflows/tests.yml` runs `test:type` over Laravel `^13.0` and `^12.4`), because the override does not load on the older Laravel. Gate such a test with a `--SKIPIF--` section so it runs only where the stub applies:
 
 ```
 --SKIPIF--
@@ -150,101 +140,35 @@ Create the handler class in the appropriate `src/Handlers/` subdirectory, then r
 Psalm processes code in phases. Each hook fires at a specific phase and has different data available.
 Analysis hooks are hot paths — they fire on every matching expression. Scanning hooks fire once per class or once total.
 
-```mermaid
-flowchart LR
-    subgraph scanning ["Phase 1: Scanning"]
-        direction TB
-        S1["AfterClassLikeVisitInterface
-        fires after each class/trait/interface
-        ----
-        data: ClassLikeStorage
-        (direct parent only), AST statements
-        ----
-        ContainerHandler
-        ModelMethodHandler
-        SuppressHandler"]
-    end
+The table below maps each hook to the handlers using it. Source of truth: `Plugin::registerHandlers()` plus each handler's `implements` clause. Handlers marked `*` are registered conditionally (config flag or package detection).
 
-    subgraph populated ["Phase 2: Codebase populated"]
-        direction TB
-        P1["AfterCodebasePopulatedInterface
-        fires once, after all classes are known
-        ----
-        data: full Codebase, complete
-        ClassLikeStorage (full parent chain)
-        ----
-        ModelRegistrationHandler
-        SuppressHandler"]
-    end
+**Phase 1 — Scanning** (per class/trait/interface; `ClassLikeStorage` has direct parent only):
 
-    subgraph analysis ["Phase 3: Analysis (hot path)"]
-        direction TB
-        A1["FunctionReturnTypeProvider
-        on each global function call
-        ----
-        args, call location, file path
-        ----
-        CacheHandler, PathHandler
-        TranslationKeyHandler, TransHandler
-        MissingViewHandler
-        NoEnvOutsideConfigHandler"]
+| Hook | Handlers |
+|---|---|
+| `AfterClassLikeVisitInterface` | ContainerHandler, SuppressHandler, GuardTaintHandler, EncrypterTaintHandler, AppFacadeRegistrationHandler |
 
-        A2["MethodReturnTypeProvider
-        on each method call
-        ----
-        args, class FQCN, method name
-        ----
-        AuthHandler, GuardHandler
-        RequestHandler, ContainerHandler
-        CommandArgumentHandler
-        MethodForwardingHandler
-        ModelMethodHandler
-        BuilderScopeHandler, PathHandler
-        CollectionPluckHandler
-        CollectionFilterHandler
-        MissingViewHandler
-        ValidatedTypeHandler"]
+**Phase 2 — Codebase populated** (fires once; full parent chains resolved):
 
-        A3["MethodParamsProvider
-        before type-checking args
-        ----
-        overrides parameter types
-        ----
-        AuthHandler"]
+| Hook | Handlers |
+|---|---|
+| `AfterCodebasePopulatedInterface` | ModelRegistrationHandler, SuppressHandler, ContractMethodBridgeHandler, CastContractUserDefinedHandler, BuilderSubclassQueryMixinHandler, MacroHandler, FormRequestPropertyHandler, AppFacadeRegistrationHandler, PublicScopeAccessorVisibilityHandler |
 
-        A4["Property providers
-        Existence / Type / Visibility
-        ----
-        property name, class FQCN
-        read/write context
-        ----
-        Model property handlers
-        (registered via closures)"]
+**Phase 3 — Analysis** (hot path):
 
-        A5["AddTaints / RemoveTaints
-        on each expression with data flow
-        ----
-        expression, node type info
-        ----
-        ValidationTaintHandler"]
-
-        A6["AfterExpressionAnalysis
-        on each expression
-        ----
-        expression AST, codebase
-        ----
-        ModelMakeHandler"]
-
-        A7["AfterMethodCallAnalysis
-        on each resolved method call
-        ----
-        expression, declaring method id
-        ----
-        OctaneIncompatibleBindingHandler"]
-    end
-
-    scanning --> populated --> analysis
-```
+| Hook | Handlers |
+|---|---|
+| `FunctionReturnTypeProviderInterface` | ContainerHandler, AuthFunctionHandler, CacheHandler, NowTodayHandler, PathHandler, LiteralHandler, EnvHandler, TranslationKeyHandler, NoEnvOutsideConfigHandler, ConfigHelperHandler\*, MissingViewHandler\* |
+| `MethodReturnTypeProviderInterface` | OffsetHandler, ContainerHandler, AuthMethodHandler, GuardHandler, RequestHandler, StorageHandler, ModelFactoryMethodTypeProvider, FactoryCountTypeProvider, ModelBuilderMixinHandler, MethodForwardingHandler, ModelMethodHandler, BuilderScopeHandler, BuilderPluckHandler, BuilderAggregateHandler, CustomCollectionHandler, CollectionFilterHandler, CollectionFlattenHandler, CollectionPluckHandler, CollectionValuesAllHandler, HigherOrderCollectionProxyHandler, ConditionableWhenHandler, TappableTapHandler, CommandArgumentHandler, ValidatedTypeHandler, PathHandler, AppFacadeMakeHandler, DateFacadeHandler, ConfigRepositoryMethodHandler\*, MissingViewHandler\* |
+| `MethodParamsProviderInterface` | OffsetHandler, AuthMethodHandler, StorageHandler, MethodForwardingHandler, BuilderScopeHandler, HigherOrderCollectionProxyHandler, AppFacadeMakeHandler, DateFacadeHandler, ConfigRepositoryMethodHandler\* |
+| `MethodExistenceProviderInterface`, `MethodVisibilityProviderInterface` | OffsetHandler |
+| Property providers (existence / type / visibility) | per-model closures registered by ModelRegistrationHandler |
+| `AddTaintsInterface`, `RemoveTaintsInterface` | ValidationTaintHandler |
+| `AfterExpressionAnalysisInterface` | ModelMakeHandler, DispatchableHandler, TimingUnsafeComparisonHandler, UndefinedBuilderMethodHandler, ConsoleClosureScopeHandler, InlineValidateRulesCollector, ImplicitQueryBuilderCallHandler\* |
+| `AfterMethodCallAnalysisInterface` | HigherOrderCollectionProxyHandler, OctaneIncompatibleBindingHandler\* |
+| `Before{File,Statement,Expression}AnalysisInterface` | ConsoleClosureScopeHandler, InlineValidateRulesCollector (statement + expression) |
+| `AfterFunctionLikeAnalysisInterface`, `AfterFileAnalysisInterface` | ValidationTaintHandler, InlineValidateRulesCollector (function-like only) |
+| `AfterAnalysisInterface` | StatsHandler |
 
 ### Registering handlers
 

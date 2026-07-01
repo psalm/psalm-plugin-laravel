@@ -13,17 +13,9 @@ interface Paginator
      */
     public function items(): array;
 
-    /**
-     * Get / set the URL fragment to be appended to URLs.
-     *
-     * Conditional return mirrors the concrete `AbstractPaginator::fragment()`:
-     * null arg is the getter (string|null), any other arg returns the implementor
-     * for chaining. `static`, not `$this`, on the setter branch (stub/source merge).
-     *
-     * @param  string|null  $fragment
-     * @return ($fragment is null ? string|null : static)
-     */
-    public function fragment($fragment = null);
+    // `fragment()` is intentionally not stubbed: Laravel 13.18.0 (#60586) added the
+    // conditional return natively and a stub conditional collapses against the reflected
+    // one (Psalm beta19 merge bug), so the refined return is no longer achievable.
 }
 
 /**
@@ -46,12 +38,5 @@ interface CursorPaginator
      */
     public function items(): array;
 
-    /**
-     * Get / set the URL fragment to be appended to URLs. See `Paginator::fragment()`
-     * for the conditional-return / `static`-setter-branch rationale.
-     *
-     * @param  string|null  $fragment
-     * @return ($fragment is null ? string|null : static)
-     */
-    public function fragment($fragment = null);
+    // `fragment()` intentionally not stubbed; see `Paginator::fragment()` above.
 }
