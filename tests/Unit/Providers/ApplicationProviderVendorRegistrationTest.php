@@ -7,7 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Providers;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Tests\Psalm\LaravelPlugin\Unit\Providers\Fixtures\BindingServiceProvider;
 use Tests\Psalm\LaravelPlugin\Unit\Providers\Fixtures\ThrowingServiceProvider;
 

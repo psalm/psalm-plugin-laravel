@@ -10,12 +10,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Enumerable;
 use Psalm\Codebase;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\AccessorInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeAccessorInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\CastInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\CastShape;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AccessorInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeAccessorInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastShape;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TArray;
@@ -37,7 +37,7 @@ use Psalm\Type\Union;
  * cast's serialized type ({@see serializedCastType()}), else the read type
  * ({@see ModelPropertyHandler::resolveColumnType()}); `$appends` resolve via their accessor, else `mixed`.
  * `$appends`/`$hidden`/`$visible` include their `#[Appends]`/`#[Hidden]`/`#[Visible]` PHP-attribute config
- * (merged at warm-up by {@see \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder}).
+ * (merged at warm-up by {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder}).
  *
  * OPEN shape, every key optional: query-dependent keys (aggregate/`selectRaw` aliases, `setAttribute`,
  * relations) and partial loads / runtime visibility changes mean no key is guaranteed and unknown keys

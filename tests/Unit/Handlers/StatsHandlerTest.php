@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Handlers\StatsHandler;
+use Psalm\LaravelPlugin\Handlers\Diagnostics\StatsHandler;
 
 #[CoversClass(StatsHandler::class)]
 final class StatsHandlerTest extends TestCase

@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\InternalErrorClassifier;
+use Psalm\LaravelPlugin\Internal\InternalErrorClassifier;
 
 #[CoversClass(InternalErrorClassifier::class)]
 final class InternalErrorClassifierTest extends TestCase
@@ -46,12 +46,12 @@ final class InternalErrorClassifierTest extends TestCase
         ];
 
         yield 'plugin development checkout' => [
-            '/home/dev/code/psalm-plugin-laravel/src/Providers/ApplicationProvider.php',
+            '/home/dev/code/psalm-plugin-laravel/src/Bootstrap/ApplicationProvider.php',
             'Laravel plugin',
         ];
 
         yield 'plugin installed via composer wins over generic vendor' => [
-            '/home/user/app/vendor/psalm/plugin-laravel/src/Providers/ApplicationProvider.php',
+            '/home/user/app/vendor/psalm/plugin-laravel/src/Bootstrap/ApplicationProvider.php',
             'Laravel plugin',
         ];
 
@@ -79,8 +79,8 @@ final class InternalErrorClassifierTest extends TestCase
     #[Test]
     public function it_skips_internal_error_machinery_frames(): void
     {
-        $this->assertNull(InternalErrorClassifier::hintForFile('/x/src/Util/InternalErrorReporter.php'));
-        $this->assertNull(InternalErrorClassifier::hintForFile('/x/src/Util/InternalErrorClassifier.php'));
+        $this->assertNull(InternalErrorClassifier::hintForFile('/x/src/Internal/InternalErrorReporter.php'));
+        $this->assertNull(InternalErrorClassifier::hintForFile('/x/src/Internal/InternalErrorClassifier.php'));
     }
 
     #[Test]

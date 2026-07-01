@@ -94,7 +94,6 @@ final class DiagnoseCommand extends Command
 
         $this->renderSection($io, 'PHP', [
             'Runtime' => $report->phpRuntimeVersion,
-            'Required' => $report->phpRequiredVersion ?? '(unknown)',
             'Analysis' => $report->phpAnalysisVersion . ' (from ' . $report->phpAnalysisSource . ')',
         ]);
 

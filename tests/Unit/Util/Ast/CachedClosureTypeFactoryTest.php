@@ -8,7 +8,7 @@ use Closure;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\Ast\CachedClosureTypeFactory;
+use Psalm\LaravelPlugin\Internal\Ast\CachedClosureTypeFactory;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;

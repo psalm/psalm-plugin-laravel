@@ -3,28 +3,20 @@
 namespace Illuminate\Support;
 
 /**
- * Arr declares no interfaces, so re-declaring it to narrow `random()` resets no reflected
- * metadata (the stub re-scan resets only class_implements / parent_interfaces, never
- * methods or used_traits). The `Macroable` trait is copied verbatim per stub convention
- * and survives via reflection regardless; every other static helper merges from reflection.
+ * Empty re-declaration kept on purpose. Two reasons:
+ *
+ *  1. It DECLARES `Illuminate\Support\Arr` for projects whose analyzed vendor does not
+ *     reflect `illuminate/support` (e.g. slim libraries like laravel/socialite). Without
+ *     it every `Arr::` reference there becomes `UndefinedClass`.
+ *  2. Re-declaring the class makes Psalm re-scan it, which is what lets it honor Laravel
+ *     13.18.0's reflected conditional `@return ($number is null ? mixed : array)` on
+ *     `random()` (a bare reflected conditional is otherwise dropped to `mixed`).
+ *
+ * `random()` itself is intentionally NOT stubbed: a stub conditional collapses against
+ * the reflected one on Psalm beta19 (#60586 / upstream merge bug). The `Macroable` trait
+ * is copied verbatim per stub convention; every static helper merges from reflection.
  */
 class Arr
 {
     use Traits\Macroable;
-
-    /**
-     * Get one or a specified number of random values from an array.
-     *
-     * Null/absent `$number` returns a single random element (mixed); any int returns
-     * that many elements as an array. Reflected Laravel declares the flat `mixed`, so
-     * `Arr::random($a, 2)` would otherwise stay `mixed`.
-     *
-     * @param  array  $array
-     * @param  int|null  $number
-     * @param  bool  $preserveKeys
-     * @return ($number is null ? mixed : array)
-     *
-     * @throws \InvalidArgumentException
-     */
-    public static function random($array, $number = null, $preserveKeys = false) {}
 }

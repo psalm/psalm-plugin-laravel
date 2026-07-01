@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Model;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
-use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
-use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
@@ -34,7 +34,7 @@ use Psalm\Type\Union;
  * schema-mapping path produces the same types the pre-registry handler did. The cast
  * path additionally corrects two pre-registry bugs — the SoftDeletes `DELETED_AT`
  * column-override and the spurious UUID/ULID primary-key `int` cast — baked at warm-up
- * by {@see \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder::computeCasts()}.
+ * by {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::computeCasts()}.
  *
  * @internal
  */

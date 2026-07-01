@@ -8,8 +8,8 @@ use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Magic\MacroDefinition;
 use Psalm\LaravelPlugin\Handlers\Magic\MacroHandler;
-use Psalm\LaravelPlugin\Providers\MacroDefinition;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type;
 

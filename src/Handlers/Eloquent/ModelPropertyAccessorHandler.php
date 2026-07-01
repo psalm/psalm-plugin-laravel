@@ -6,10 +6,10 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\AccessorInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
-use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
-use Psalm\LaravelPlugin\Util\EloquentModelMethods;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AccessorInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;

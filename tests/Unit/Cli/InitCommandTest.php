@@ -73,6 +73,10 @@ final class InitCommandTest extends TestCase
         $target = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';
         $this->assertFileExists($target);
 
+        // Check for the plugin FQCN (a stable value), not the surrounding
+        // prose, which may reasonably reword.
+        $this->assertStringContainsString('Psalm\\LaravelPlugin\\Plugin', $tester->getDisplay());
+
         $contents = \file_get_contents($target);
         $this->assertIsString($contents);
         $this->assertStringContainsString('errorLevel="4"', $contents);
@@ -136,6 +140,10 @@ final class InitCommandTest extends TestCase
 
         $this->assertSame(Command::SUCCESS, $exit);
         $this->assertStringContainsString('pluginClass', (string) \file_get_contents($target));
+        // Short, tense-tolerant fragment rather than the full pinned sentence —
+        // proves the reused/overwritten case is distinguishable from a fresh
+        // write without coupling the test to exact copy.
+        $this->assertStringContainsStringIgnoringCase('overwrit', $tester->getDisplay());
     }
 
     #[Test]
@@ -269,6 +277,73 @@ final class InitCommandTest extends TestCase
         } finally {
             \chdir($originalCwd);
         }
+    }
+
+    #[Test]
+    public function detects_package_autoload_root_from_composer_psr4(): void
+    {
+        // A Composer package (PSR-4 autoload, no artisan) must scan its autoload
+        // root via detectPackageRoots, never the Laravel-app layout — the config
+        // path the package-mode install smoke test exercises end-to-end (#1198).
+        //
+        // Map PSR-4 to a NON-src directory on purpose: detectPackageRoots'
+        // last-resort branch only ever emits `src`, so a distinct name proves the
+        // composer-autoload extraction actually ran. A regressed extractor would
+        // fall through to the app-layout fallback, failing the `lib` assertion,
+        // rather than being silently rescued by the src fallback.
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\Widget\\' => 'lib/']]]),
+        );
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'lib');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="lib"/>', $contents);
+        $this->assertStringNotContainsString('<file name="artisan"/>', $contents);
+        $this->assertStringNotContainsString('<directory name="app"/>', $contents);
+    }
+
+    #[Test]
+    public function detects_laravel_app_layout_when_artisan_present(): void
+    {
+        // Presence of artisan selects the Laravel-app branch (detectLaravelAppRoots):
+        // conventional app dirs and entry files are scanned, so the discriminator the
+        // smoke test relies on (artisan/app present => app layout) is exercised here.
+        \file_put_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'artisan', "#!/usr/bin/env php\n");
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'app');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="app"/>', $contents);
+        $this->assertStringContainsString('<file name="artisan"/>', $contents);
+        // Only on-disk dirs are emitted by detectLaravelAppRoots; bootstrap/ was not
+        // created. If the app branch regressed to empty, detectSourceRoots' ultimate
+        // fallback would emit ALL app dirs (including bootstrap), so this negative
+        // proves the present-only real branch ran rather than the fallback.
+        $this->assertStringNotContainsString('<directory name="bootstrap"/>', $contents);
+    }
+
+    #[Test]
+    public function falls_back_to_src_directory_for_package_without_psr4(): void
+    {
+        // No artisan and no PSR-4 mapping: detectPackageRoots' last-resort branch
+        // scans src/ when present, so even a minimal package gets a valid config.
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'src');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="src"/>', $contents);
+        $this->assertStringNotContainsString('<file name="artisan"/>', $contents);
     }
 
     private function makeTester(): CommandTester

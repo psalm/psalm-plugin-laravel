@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Concerns\HasAttributes;
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
-use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type\Union;
 

@@ -34,27 +34,27 @@ use Psalm\Codebase;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeAccessorInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeMutatorInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeScopeInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastShape;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyAccessorInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyMutatorInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyScopeInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyType;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PropertyOrigin;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TableSchema;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TraitFlags;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeAccessorInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeMutatorInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\AttributeScopeInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\CastShape;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\LegacyAccessorInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\LegacyMutatorInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\LegacyScopeInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\PrimaryKeyType;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\PropertyOrigin;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\RelationInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\TableSchema;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\TraitFlags;
-use Psalm\LaravelPlugin\Providers\ModelMetadataRegistry;
-use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\Progress\VoidProgress;
 use Psalm\Storage\AttributeStorage;
 use Psalm\Storage\ClassLikeStorage;
@@ -136,7 +136,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, AbstractDocument::class);
 
         $metadata = ModelMetadataRegistry::for(AbstractDocument::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
 
         // Instance-derived fields are empty for an abstract base (no instance, no table).
         $this->assertSame([], $metadata->schema()->all());
@@ -392,7 +392,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
         $second = ModelMetadataRegistry::for(WorkOrder::class);
 
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $first);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $first);
         $this->assertSame($first, $second);
     }
 
@@ -599,7 +599,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, UuidModel::class);
 
         $metadata = ModelMetadataRegistry::for(UuidModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
         $this->assertTrue($metadata->traits->hasUuids);
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertFalse($metadata->primaryKey->incrementing);
@@ -618,7 +618,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, UuidModel::class);
 
         $metadata = ModelMetadataRegistry::for(UuidModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
 
         $casts = $metadata->casts();
         if (isset($casts['id'])) {
@@ -643,7 +643,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, UuidModel::class);
 
         $metadata = ModelMetadataRegistry::for(UuidModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
         $this->assertSame(['*'], $metadata->guarded);
         $this->assertSame([], $metadata->fillable);
     }
@@ -657,7 +657,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, CustomDeletedAtModel::class);
 
         $metadata = ModelMetadataRegistry::for(CustomDeletedAtModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
 
         $casts = $metadata->casts();
         $this->assertArrayHasKey('archived_at', $casts);
@@ -675,7 +675,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, UlidModel::class);
 
         $metadata = ModelMetadataRegistry::for(UlidModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
         $this->assertTrue($metadata->traits->hasUlids);
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertFalse($metadata->primaryKey->incrementing);
@@ -693,7 +693,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
 
         $metadata = ModelMetadataRegistry::for(Customer::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
         $this->assertTrue($metadata->traits->hasSoftDeletes);
         $this->assertArrayHasKey('deleted_at', $metadata->casts());
         $this->assertSame(CastShape::DateTime, $metadata->casts()['deleted_at']->shape);
@@ -708,7 +708,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
 
         $metadata = ModelMetadataRegistry::for(Customer::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
         $this->assertTrue($metadata->traits->hasFactory);
     }
 
@@ -721,7 +721,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, CustomPkUuidModel::class);
 
         $metadata = ModelMetadataRegistry::for(CustomPkUuidModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
         $this->assertSame('custom_pk', $metadata->primaryKey->name);
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertSame(['custom_pk'], $metadata->primaryKey->uuidColumns);
@@ -746,7 +746,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
 
         $metadata = ModelMetadataRegistry::for(WorkOrder::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
 
         $schema = $metadata->schema();
         $this->assertTrue($schema->has('title'));
@@ -763,7 +763,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, SpecializationPivot::class);
 
         $metadata = ModelMetadataRegistry::for(SpecializationPivot::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
     }
 
     #[Test]
@@ -778,7 +778,7 @@ final class ModelMetadataRegistryTest extends TestCase
             ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
 
             $metadata = ModelMetadataRegistry::for(WorkOrder::class);
-            $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+            $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
             $this->assertSame('wo', $metadata->morphAlias);
         } finally {
             Relation::morphMap([], merge: false);
@@ -797,7 +797,7 @@ final class ModelMetadataRegistryTest extends TestCase
             ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
 
             $metadata = ModelMetadataRegistry::for(WorkOrder::class);
-            $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+            $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
             $this->assertNull($metadata->morphAlias);
         } finally {
             Relation::morphMap([], merge: false);
@@ -813,7 +813,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, ScalarFieldsModel::class);
 
         $metadata = ModelMetadataRegistry::for(ScalarFieldsModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
 
         // All attribute-name and relation-method lists preserve the exact case the
         // user declared — Eloquent's isFillable / isGuarded / getHidden / with-loading
@@ -851,7 +851,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, InboundCastModel::class);
 
         $metadata = ModelMetadataRegistry::for(InboundCastModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
 
         $casts = $metadata->casts();
         $this->assertArrayHasKey('code', $casts);
@@ -877,7 +877,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, CustomDeletedAtModel::class);
 
         $metadata = ModelMetadataRegistry::for(CustomDeletedAtModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
 
         $casts = $metadata->casts();
         $this->assertArrayHasKey('archived_at', $casts);
@@ -898,7 +898,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
 
         $metadata = ModelMetadataRegistry::for(WorkOrder::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadata::class, $metadata);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
         $this->assertSame(WorkOrderBuilder::class, $metadata->customBuilder);
         $this->assertSame(WorkOrderCollection::class, $metadata->customCollection);
     }
@@ -1285,7 +1285,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
     /**
      * An {@see AttributeStorage} carrying only the `#[Scope]` FQCN — enough for
-     * {@see \Psalm\LaravelPlugin\Util\EloquentModelMethods::hasScopeAttribute}, which reads only
+     * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods::hasScopeAttribute}, which reads only
      * `fq_class_name`. Built via reflection because AttributeStorage's constructor demands a
      * CodeLocation that a storage-only unit fixture has no source node to produce.
      */

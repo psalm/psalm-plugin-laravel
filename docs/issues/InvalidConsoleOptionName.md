@@ -10,7 +10,7 @@ Emitted when `$this->option('name')` references an option that is not defined in
 
 ## Why this is a problem
 
-If you request an option that doesn't exist in your command's `$signature`, Laravel will throw a `RuntimeException` at runtime.
+If you request an option that doesn't exist in your command's `$signature`, Symfony Console throws an `InvalidArgumentException` at runtime.
 This check catches the mismatch during static analysis.
 
 ## Examples

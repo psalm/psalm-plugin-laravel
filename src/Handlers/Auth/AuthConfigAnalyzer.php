@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Auth;
 
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
-use Psalm\LaravelPlugin\Providers\ConfigRepositoryProvider;
+use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
 
 final class AuthConfigAnalyzer
 {
