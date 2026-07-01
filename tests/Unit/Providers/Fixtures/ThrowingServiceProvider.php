@@ -8,7 +8,7 @@ use Illuminate\Support\ServiceProvider;
 
 /**
  * Fixture provider whose `register()` throws. Used to verify that
- * {@see \Psalm\LaravelPlugin\Providers\ApplicationProvider::registerDiscoveredVendorProviders()}
+ * {@see \Psalm\LaravelPlugin\Bootstrap\ApplicationProvider::registerDiscoveredVendorProviders()}
  * isolates per-provider failures so subsequent providers still register.
  */
 final class ThrowingServiceProvider extends ServiceProvider

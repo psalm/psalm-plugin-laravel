@@ -9,8 +9,8 @@ use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
-use Psalm\LaravelPlugin\Util\DynamicWhereResolver;
-use Psalm\LaravelPlugin\Util\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -39,7 +39,7 @@ use Psalm\Type\Union;
  * Column names are validated against the model's declared @property annotations;
  * unmatched columns fall through to mixed without an error. The dynamic-where helpers
  * (validation, segment splitting, typed-param hand-off cache) live in
- * {@see \Psalm\LaravelPlugin\Util\DynamicWhereResolver}; this handler invokes them on the
+ * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver}; this handler invokes them on the
  * relation-chain path while {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler}
  * uses the same util for direct Model static/instance calls (issue #1000).
  * Disable via <resolveDynamicWhereClauses value="false" /> in psalm.xml.

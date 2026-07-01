@@ -10,13 +10,13 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder;
-use Psalm\LaravelPlugin\Providers\SchemaStateProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Progress\VoidProgress;
 use Psalm\StatementsSource;
@@ -24,7 +24,7 @@ use Psalm\StatementsSource;
 /**
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/446
  *
- * Property existence now resolves through {@see \Psalm\LaravelPlugin\Providers\ModelMetadataRegistry}
+ * Property existence now resolves through {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry}
  * (Phase 1 of the registry migration), so setUp() warms the model before asserting — the handler
  * no longer reads the schema lazily on its own. The SQL-type → Psalm-type mapper stays in the
  * handler and is exercised directly against {@see ColumnInfo}.

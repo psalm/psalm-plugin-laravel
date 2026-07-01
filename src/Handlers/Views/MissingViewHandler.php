@@ -10,7 +10,7 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\MissingView;
-use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
+use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;

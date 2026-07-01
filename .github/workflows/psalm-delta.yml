@@ -115,7 +115,7 @@ jobs:
       # harness would never reach an in-flight PR. issue_comment runs from the
       # default branch, so a ref-less checkout is master HEAD.
       - name: Checkout harness (default branch, for the registry)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -151,7 +151,7 @@ jobs:
       # requires resolve into the per-app vendor — these checkouts need no vendor.
       # persist-credentials: false — the executed PR code never gets git creds.
       - name: Checkout base plugin
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: plugin-base
@@ -161,7 +161,7 @@ jobs:
       # prepare, this job has contents:read and no credentials, and the head
       # code's only effect is producing issue JSON consumed as data downstream.
       - name: Checkout head plugin
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ needs.prepare.outputs.head_sha }}
           path: plugin-pr
@@ -170,7 +170,7 @@ jobs:
       # The measurement harness: default branch (master HEAD), not base/head. The
       # PR head cannot alter it, and harness fixes reach in-flight PRs immediately.
       - name: Checkout harness (default branch)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           path: harness
           persist-credentials: false
@@ -201,7 +201,7 @@ jobs:
       # self-heals even when this key happens to hit. Native expression: no
       # parsing step, no shell, nothing written to an output.
       - name: Cache app source
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: ~/app-cache/${{ matrix.name }}
           key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-${{ hashFiles('plugin-base/composer.json') }}-v1
@@ -268,7 +268,7 @@ jobs:
       # Harness from the default branch (master HEAD): this job runs only trusted
       # code (delta-report.php) over the per-app JSON, never the PR's plugin code.
       - name: Checkout harness (default branch, for the comparator + registry)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -280,7 +280,7 @@ jobs:
           coverage: none
 
       - name: Download all per-app JSON
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: delta-*
           merge-multiple: true  # reconstructs out/<app>/... from every artifact

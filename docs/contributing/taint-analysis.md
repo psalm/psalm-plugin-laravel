@@ -128,6 +128,7 @@ Most taint kind names are defined in [`Psalm\Type\TaintKind::TAINT_NAMES`](https
 | `extract`            | `INPUT_EXTRACT`            | Values passed to `extract()`                               |
 | `user_secret`        | `USER_SECRET`              | User-supplied secrets (passwords, tokens)                  |
 | `system_secret`      | `SYSTEM_SECRET`            | System secrets (API keys, encryption keys)                 |
+| `llm_prompt`         | `INPUT_LLM_PROMPT`         | Strings interpolated into LLM prompts (prompt injection)   |
 | `input`              | `ALL_INPUT`                | Alias: all input-related kinds combined (excludes secrets) |
 | `tainted`            | `ALL_INPUT`                | Alias: same as `input`                                     |
 | `input_except_sleep` | `ALL_INPUT & ~INPUT_SLEEP` | All input kinds except `sleep` (used by `filter_var()`)    |

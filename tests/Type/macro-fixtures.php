@@ -28,7 +28,7 @@ require_once __DIR__ . '/macro-fixtures-class.phpstub';
 // out of `<projectFiles>`, `<stubs>`, and the `autoloader` attribute; PHP still
 // executes it because this autoloader `require_once`s it at boot, so reflection
 // finds the closure, but Psalm's `file_storage_provider->has()` returns false.
-// That gap is what {@see \Psalm\LaravelPlugin\Util\Ast\CachedClosureTypeFactory::fromClosureObject()}
+// That gap is what {@see \Psalm\LaravelPlugin\Internal\Ast\CachedClosureTypeFactory::fromClosureObject()}
 // closes by parsing the file with `nikic/php-parser` on demand.
 require_once __DIR__ . '/macro-fixtures-vendor-style.php';
 

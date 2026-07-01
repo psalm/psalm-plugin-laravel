@@ -9,8 +9,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
-use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Progress\VoidProgress;
 
 #[CoversClass(FacadeMapProvider::class)]

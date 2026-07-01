@@ -47,7 +47,7 @@ final class ResolveColumnTypeTest extends TestCase
         $this->classLikeStorageProvider->remove(WorkOrder::class);
         // Reset the schema set by `it_returns_null_when_no_property_and_no_schema`
         // so later unit tests in the suite don't see a stray empty aggregator.
-        \Psalm\LaravelPlugin\Providers\SchemaStateProvider::setSchema(
+        \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider::setSchema(
             new \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator(),
         );
     }
@@ -85,7 +85,7 @@ final class ResolveColumnTypeTest extends TestCase
     public function it_returns_null_when_no_property_and_no_schema(): void
     {
         // No pseudo_property_get_types set; SchemaStateProvider has no schema for work_orders.
-        \Psalm\LaravelPlugin\Providers\SchemaStateProvider::setSchema(
+        \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider::setSchema(
             new \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator(),
         );
 

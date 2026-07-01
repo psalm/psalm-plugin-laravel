@@ -6,9 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Magic;
 
 use Illuminate\Validation\ValidationException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
-use Psalm\LaravelPlugin\Providers\FacadeMapProvider;
-use Psalm\LaravelPlugin\Providers\MacroDefinition;
-use Psalm\LaravelPlugin\Providers\MacroRegistry;
+use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
