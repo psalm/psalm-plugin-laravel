@@ -28,7 +28,6 @@ final readonly class Report
         public ?string $psalmVersion,
         public ?string $laravelVersion,
         public string $phpRuntimeVersion,
-        public ?string $phpRequiredVersion,
         public string $phpAnalysisVersion,
         public string $phpAnalysisSource,
         public ?string $bootMode,

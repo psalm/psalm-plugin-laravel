@@ -3,20 +3,15 @@
 namespace Illuminate\Support;
 
 /**
- * Lottery has no interfaces or traits, so re-declaring it to narrow `choose()` resets
- * no metadata; every other method merges from reflection.
+ * Empty re-declaration kept on purpose: it DECLARES `Illuminate\Support\Lottery` for
+ * projects whose analyzed vendor does not reflect `illuminate/support`, mirroring the
+ * sibling `Arr` stub (otherwise `Lottery` references become `UndefinedClass`).
+ *
+ * `choose()` is intentionally NOT stubbed: Laravel 13.18.0 (#60586) added the conditional
+ * `@return ($times is null ? mixed : list<mixed>)` natively and a stub conditional
+ * collapses against the reflected one on Psalm beta19 (upstream merge bug). Every other
+ * method merges from reflection.
  */
 class Lottery
 {
-    /**
-     * Run the lottery.
-     *
-     * Null/absent `$times` runs the lottery once and returns the callback result
-     * (mixed); an int runs it that many times and collects the results into a list.
-     * Reflected Laravel declares the flat `mixed`.
-     *
-     * @param  int|null  $times
-     * @return ($times is null ? mixed : list<mixed>)
-     */
-    public function choose($times = null) {}
 }

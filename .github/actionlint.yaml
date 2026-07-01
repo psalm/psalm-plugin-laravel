@@ -1,0 +1,8 @@
+self-hosted-runner:
+  # Blacksmith (https://blacksmith.sh) runner labels used by install-smoke.yml.
+  # These aren't in actionlint's built-in GitHub-hosted-runner list, so they need
+  # to be allowlisted explicitly or every actionlint run flags them as unknown.
+  labels:
+    - blacksmith-2vcpu-ubuntu-2404
+    - blacksmith-2vcpu-windows-2025
+    - blacksmith-6vcpu-macos-15

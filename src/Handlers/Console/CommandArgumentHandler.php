@@ -6,9 +6,9 @@ namespace Psalm\LaravelPlugin\Handlers\Console;
 
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\LaravelPlugin\Issues\InvalidConsoleArgumentName;
 use Psalm\LaravelPlugin\Issues\InvalidConsoleOptionName;
-use Psalm\LaravelPlugin\Util\Arg;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;

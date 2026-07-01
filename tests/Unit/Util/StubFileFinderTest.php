@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\StubFileFinder;
+use Psalm\LaravelPlugin\Stubs\StubFileFinder;
 
 #[CoversClass(StubFileFinder::class)]
 final class StubFileFinderTest extends TestCase

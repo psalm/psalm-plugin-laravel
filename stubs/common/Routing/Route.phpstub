@@ -35,24 +35,13 @@ class Route
      */
     public function getAction($key = null) {}
 
-    /**
-     * Get or set the domain for the route.
-     *
-     * Null arg is the getter (`getDomain()` → string|null); any other arg is the
-     * setter and returns the route for chaining. Reflected Laravel declares the flat
-     * union `$this|string|null`, which breaks `->domain('x')->name(...)` chains
-     * (Psalm calls the next method on `string|null`). The conditional return keeps
-     * the setter branch chainable.
-     *
-     * Use `static`, not `$this`, on the setter branch: with `$this` Psalm merges the
-     * stub conditional back into the reflected `@return $this|string|null` and the
-     * call collapses to the flat union again. `static` is substituted by the
-     * late-static-bound class and overrides cleanly.
-     *
-     * @param  \BackedEnum|string|null  $domain
-     * @return ($domain is null ? string|null : static)
-     */
-    public function domain($domain = null) {}
+    // `domain()` is intentionally NOT stubbed. Laravel 13.18.0 (#60586) added the
+    // conditional `@return ($domain is null ? string|null : $this)` natively, and a stub
+    // conditional collapses against the reflected one on Psalm beta19 (the two conditional
+    // `@return`s merge down to the flat union). The reflected `$this` setter branch is also
+    // unresolvable by Psalm beta19, so the refined chainable return is no longer achievable
+    // either way; the native (degraded) type stands until the upstream Psalm merge bug is
+    // fixed. See vimeo/psalm — conditional-return stub/source merge collapse.
 
     /**
      * Get a given parameter from the route.

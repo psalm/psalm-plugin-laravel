@@ -160,7 +160,7 @@ final class InitCommand extends Command
             return Command::FAILURE;
         }
 
-        $this->reportSuccess($io, $cwd, $targetPath, $level, $directories, $files);
+        $this->reportSuccess($io, $cwd, $targetPath, $existingPath !== null, $level, $directories, $files);
         return Command::SUCCESS;
     }
 
@@ -237,11 +237,17 @@ final class InitCommand extends Command
         SymfonyStyle $io,
         string $cwd,
         string $targetPath,
+        bool $existedBefore,
         string $level,
         array $directories,
         array $files,
     ): void {
-        $io->success(\sprintf('Wrote %s.', $targetPath));
+        $io->success(\sprintf(
+            '%s %s.',
+            $existedBefore ? 'Overwrote existing config at' : 'Wrote new config to',
+            $targetPath,
+        ));
+        $io->writeln('Plugin enabled: <info>Psalm\\LaravelPlugin\\Plugin</info>');
         $io->writeln(\sprintf('Error level: <info>%s</info>', $level));
         $io->writeln('Scanned paths:');
         foreach ([...$directories, ...$files] as $path) {

@@ -51,24 +51,11 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      */
     public function through(callable $callback) {}
 
-    /**
-     * Get / set the URL fragment to be appended to URLs.
-     *
-     * Null arg is the getter (string|null); any other arg is the setter and
-     * returns the paginator for chaining. Reflected Laravel declares the flat
-     * union `$this|string|null`, which breaks `->fragment('x')->links()` chains
-     * (Psalm would call the next method on `string|null`). The conditional return
-     * keeps the setter branch chainable.
-     *
-     * `static`, not `$this`, on the setter branch: with `$this` Psalm merges the
-     * stub conditional back into the reflected union and the call collapses to the
-     * flat union again. `static` is substituted by the late-static-bound class
-     * (carrying `<TKey, TValue>`) and overrides cleanly. Mirrors `domain()` (#1174).
-     *
-     * @param  string|null  $fragment
-     * @return ($fragment is null ? string|null : static)
-     */
-    public function fragment($fragment = null) {}
+    // `fragment()` is intentionally NOT stubbed. Laravel 13.18.0 (#60586) added the
+    // conditional `@return (... : $this)` natively; a stub conditional collapses against
+    // the reflected one on Psalm beta19 and the reflected `$this` setter branch is itself
+    // unresolvable, so the refined chainable return is no longer achievable. The native
+    // (degraded) type stands until the upstream Psalm merge bug is fixed.
 
     /**
      * @return \ArrayIterator<TKey, TValue>
@@ -161,14 +148,7 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
      */
     public function through(callable $callback) {}
 
-    /**
-     * Get / set the URL fragment to be appended to URLs. See `AbstractPaginator::fragment()`
-     * for the `static`-not-`$this` setter-branch rationale (stub/source merge bug).
-     *
-     * @param  string|null  $fragment
-     * @return ($fragment is null ? string|null : static)
-     */
-    public function fragment($fragment = null) {}
+    // `fragment()` intentionally not stubbed; see AbstractPaginator::fragment() above.
 
     /**
      * @return \ArrayIterator<TKey, TValue>

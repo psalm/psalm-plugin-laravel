@@ -86,7 +86,7 @@ Closure values stored in config reflect to `\Closure`. Closure defaults resolve 
 
 ### When to disable
 
-When you always use `Config::ineteger()`, `Config::string()` and other typed calls consistently.
+When you always use `Config::integer()`, `Config::string()` and other typed calls consistently.
 
 ### Example
 

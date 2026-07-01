@@ -8,8 +8,8 @@ use Closure;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\Ast\ClosureDocblockIndexVisitor;
-use Psalm\LaravelPlugin\Util\Ast\ClosureTypeFactory;
+use Psalm\LaravelPlugin\Internal\Ast\ClosureDocblockIndexVisitor;
+use Psalm\LaravelPlugin\Internal\Ast\ClosureTypeFactory;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;
@@ -24,7 +24,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingl
  * this test targets {@see ClosureTypeFactory} in isolation so failures
  * point at the factory layer rather than at the broader registry / handler
  * stack. The memoizing wrapper
- * {@see \Psalm\LaravelPlugin\Util\Ast\CachedClosureTypeFactory} has its own
+ * {@see \Psalm\LaravelPlugin\Internal\Ast\CachedClosureTypeFactory} has its own
  * dedicated test ({@see CachedClosureTypeFactoryTest}); we deliberately do
  * not exercise it here so failures in one layer cannot mask failures in
  * the other.

@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\AnonymousClassNameDetector;
+use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
 
 /**
  * Tests that Psalm's synthetic FQCNs for anonymous classes (e.g. `new class extends Model {}`)

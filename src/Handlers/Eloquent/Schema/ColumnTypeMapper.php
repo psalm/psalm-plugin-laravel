@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
-use Psalm\LaravelPlugin\Providers\ModelMetadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\Type;
 use Psalm\Type\Union;
 
@@ -13,7 +13,7 @@ use Psalm\Type\Union;
  *
  * Lives in the Schema namespace (not on a Handler) so BOTH the read-path handler
  * ({@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler}) and the metadata
- * builder ({@see \Psalm\LaravelPlugin\Providers\ModelMetadata\ModelMetadataRegistryBuilder})
+ * builder ({@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder})
  * depend on it directly: the dependency runs Handler→Schema / Provider→Schema, never
  * Provider→Handler. Previously this mapping lived on {@see ModelPropertyHandler}, which the
  * builder had to reach back into for the {@see \Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes}

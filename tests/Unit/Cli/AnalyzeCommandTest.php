@@ -44,8 +44,16 @@ final class AnalyzeCommandTest extends TestCase
         $exit = $tester->execute([]);
 
         $this->assertSame(Command::FAILURE, $exit);
-        $this->assertStringContainsString('Could not find', $tester->getDisplay());
-        $this->assertStringContainsString('vendor/bin/psalm', \str_replace(\DIRECTORY_SEPARATOR, '/', $tester->getDisplay()));
+        $display = \str_replace(\DIRECTORY_SEPARATOR, '/', $tester->getDisplay());
+        $this->assertStringContainsString('Could not find', $display);
+        $this->assertStringContainsString('vendor/bin/psalm', $display);
+
+        // Enriched launch diagnostics (#1195): check the underlying dynamic
+        // values are surfaced (proves the diagnostics reflect the real
+        // environment, not placeholder text), not the exact label wording
+        // around them, which may reasonably change.
+        $this->assertStringContainsString(\PHP_BINARY, $display);
+        $this->assertStringContainsString(\str_replace(\DIRECTORY_SEPARATOR, '/', $this->tempDir), $display);
     }
 
     #[Test]
