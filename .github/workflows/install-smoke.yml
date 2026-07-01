@@ -69,15 +69,15 @@ jobs:
       PLUGIN_SOURCE: ${{ github.event_name == 'schedule' && 'packagist' || github.event.inputs.plugin_source || 'path' }}
       RUN_ADD_GITHUB: '1'
     steps:
-      # harden-runner only supports Linux runners; on Windows/macOS its
-      # post-step errors (ENOENT post_event.json) and fails the whole job.
-      # Gate it to Linux so the audit still runs on the Ubuntu lane.
-      - name: Harden the runner (Audit all outbound calls)
-        if: runner.os == 'Linux'
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
+      # NOTE: step-security/harden-runner is intentionally NOT used here.
+      # It only supports Linux runners; on Windows/macOS its post-step fails
+      # (ENOENT post_event.json) and takes the whole job down. A step-level
+      # `if: runner.os == 'Linux'` does not help — an action's pre/post hooks
+      # run on the job lifecycle regardless of the step's `if`, so the post
+      # still fires and fails. Keeping it Linux-only would mean splitting this
+      # into two near-duplicate jobs; not worth it for an audit-only egress
+      # log on a workflow whose network surface is just Composer, Packagist,
+      # and GitHub. The blocking egress policy lives on the analysis workflows.
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
