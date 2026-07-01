@@ -6,7 +6,7 @@ nav_order: 1
 
 # NoEnvOutsideConfig
 
-Emitted when `env()` is called outside the application's config directory (by default the booted app's [`config_path()`](../config.md#configdirectory); configurable via `<configDirectory>` for non-standard layouts).
+Emitted when `env()` is called outside the application's config directory (by default the booted app's [`config_path()`](../config.md#configdirectory); configurable via `<configDirectory>` for non-standard layouts). Files under a `tests/` directory are always exempt.
 
 ## Why this is a problem
 
