@@ -111,9 +111,34 @@ final class AnalyzeCommand extends Command
         $io->writeln(\sprintf('  PHP binary:        %s', \PHP_BINARY));
         $io->writeln(\sprintf('  Psalm binary:      %s (exists: %s)', $psalmBin, \is_file($psalmBin) ? 'yes' : 'no'));
         $io->writeln(\sprintf('  Working directory: %s', $cwd));
-        $io->writeln(\sprintf('  Attempted command: %s', \implode(' ', $command)));
-        $io->writeln(\sprintf('  Try manually:      %s %s --version', \PHP_BINARY, $psalmBin));
+        $io->writeln(\sprintf('  Attempted command: %s', $this->formatCommand($command)));
+        $io->writeln(\sprintf('  Try manually:      %s --version', $this->formatCommand([\PHP_BINARY, $psalmBin])));
         $io->newLine();
+    }
+
+    /**
+     * Render a command array as a single copy-pasteable string, quoting any
+     * token that isn't a bare word so a path containing spaces (e.g. a psalm
+     * binary under "C:\Program Files\...") survives a paste into a shell.
+     * POSIX single-quote style — the common shell for the environments where
+     * `analyze` runs, and also accepted by PowerShell.
+     *
+     * @param list<string> $command
+     * @psalm-pure
+     */
+    private function formatCommand(array $command): string
+    {
+        return \implode(' ', \array_map(
+            static function (string $token): string {
+                if ($token !== '' && \preg_match('/^[\w@%+=:,.\/-]+$/', $token) === 1) {
+                    return $token;
+                }
+
+                // Wrap in single quotes; a literal single quote becomes '\'' .
+                return "'" . \str_replace("'", "'\\''", $token) . "'";
+            },
+            $command,
+        ));
     }
 
     /**

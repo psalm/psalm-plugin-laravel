@@ -56,16 +56,24 @@ final readonly class ComposerJson
             throw new \RuntimeException(\sprintf('Could not read %s', $path));
         }
 
-        /** @psalm-var mixed $decoded */
-        $decoded = \json_decode($contents, true, flags: \JSON_THROW_ON_ERROR);
-        if (!\is_array($decoded)) {
+        // Validate the TOP-LEVEL type in object mode first: composer.json must
+        // be a JSON object. In assoc mode both `{}` and `[]` decode to an empty
+        // PHP array and are indistinguishable, so a bare JSON list (`[]`,
+        // `[1,2]`) would sail through an `is_array()` check and be silently
+        // treated as an empty-but-valid composer.json. `stdClass` is produced
+        // only by a JSON object, so it cleanly accepts `{}`/`{...}` and rejects
+        // any top-level array, string, number, bool, or null.
+        /** @psalm-var mixed $probe */
+        $probe = \json_decode($contents, false, flags: \JSON_THROW_ON_ERROR);
+        if (!$probe instanceof \stdClass) {
             throw new \RuntimeException(\sprintf('%s did not decode to a JSON object', $path));
         }
 
-        // Composer's schema is documented and stable; trust the declared shape
-        // for the keys read below. Unknown/malformed content already failed
-        // the is_array() check above.
+        // Re-decode in assoc mode for the array-shaped reads below. This can't
+        // throw or produce a non-array now that the object check above passed.
         /** @psalm-var array{require?: array<string, string>, 'require-dev'?: array<string, string>, autoload?: array{'psr-4'?: array<string, string|list<string>>}, config?: array{'vendor-dir'?: string}} $decoded */
+        $decoded = (array) \json_decode($contents, true, flags: \JSON_THROW_ON_ERROR);
+
         return new self($decoded);
     }
 

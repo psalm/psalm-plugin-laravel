@@ -64,6 +64,31 @@ final class ComposerJsonTest extends TestCase
     }
 
     #[Test]
+    public function read_throws_on_a_top_level_json_array(): void
+    {
+        // A bare JSON list is valid JSON but not a valid composer.json; it must
+        // be rejected rather than silently treated as an empty object (in
+        // assoc-decode mode `[]` is indistinguishable from `{}`).
+        $this->writeComposerJson('[]');
+
+        $this->expectException(\RuntimeException::class);
+        ComposerJson::read($this->tempDir);
+    }
+
+    #[Test]
+    public function read_accepts_an_empty_json_object(): void
+    {
+        $this->writeComposerJson('{}');
+
+        $composerJson = ComposerJson::read($this->tempDir);
+
+        $this->assertNotNull($composerJson);
+        $this->assertNull($composerJson->requirePhp());
+        $this->assertSame('vendor', $composerJson->vendorDir());
+        $this->assertSame([], $composerJson->autoloadPsr4Dirs());
+    }
+
+    #[Test]
     public function require_php_returns_the_constraint_when_present(): void
     {
         $this->writeComposerJson(\json_encode(['require' => ['php' => '^8.2']], \JSON_THROW_ON_ERROR));

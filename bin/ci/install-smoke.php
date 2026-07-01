@@ -114,6 +114,28 @@ function logOutput(string $label, string $output, string $errorOutput, bool $ver
 // --- process execution ----------------------------------------------------
 
 /**
+ * Render a command array as a single copy-pasteable string, quoting any token
+ * that isn't a bare word so paths containing spaces (or shell metacharacters)
+ * survive a paste into a shell. POSIX single-quote style — the common case for
+ * the macOS/Linux runners and most dev shells, and also accepted by PowerShell.
+ *
+ * @param list<string> $command
+ */
+function formatCommand(array $command): string
+{
+    $quote = static function (string $token): string {
+        if ($token !== '' && \preg_match('/^[\w@%+=:,.\/-]+$/', $token) === 1) {
+            return $token;
+        }
+
+        // Wrap in single quotes; a literal single quote becomes '\'' .
+        return "'" . \str_replace("'", "'\\''", $token) . "'";
+    };
+
+    return \implode(' ', \array_map($quote, $command));
+}
+
+/**
  * Runs a step to completion, logs it, and calls reportFailure() (which never
  * returns) if it didn't succeed — every call site can therefore treat a
  * returned Process as a guaranteed success.
@@ -127,13 +149,21 @@ function logOutput(string $label, string $output, string $errorOutput, bool $ver
  * in real CI. Catching it here and routing it through the same
  * reportFailure() path keeps that guarantee for every step.
  *
+ * $afterRun, when given, runs once the process has finished and its output has
+ * been logged, on the success, non-zero-exit, AND timeout paths alike — before
+ * any reportFailure(). It lets a step persist an artifact from the (possibly
+ * partial) output regardless of outcome; e.g. the diagnose step writes
+ * diagnose.txt so it is still captured when diagnose itself fails, which is
+ * exactly the failure a bug reporter most needs it for.
+ *
  * @param list<string> $command
  * @param array<string, string> $extraEnv
+ * @param (callable(Process): void)|null $afterRun
  */
-function runStep(string $label, array $command, string $cwd, array $extraEnv, bool $verbose, string $appDir): Process
+function runStep(string $label, array $command, string $cwd, array $extraEnv, bool $verbose, string $appDir, ?callable $afterRun = null): Process
 {
     logLine(\sprintf('==> %s', $label));
-    logLine(\sprintf('    $ %s (cwd: %s)', \implode(' ', $command), $cwd));
+    logLine(\sprintf('    $ %s (cwd: %s)', formatCommand($command), $cwd));
 
     $process = new Process($command, $cwd, $extraEnv === [] ? null : $extraEnv, null, STEP_TIMEOUT_SECONDS);
 
@@ -144,6 +174,10 @@ function runStep(string $label, array $command, string $cwd, array $extraEnv, bo
         // its buffered output up to that point remains readable.
         $timedOutProcess = $timedOut->getProcess();
         logOutput($label, $timedOutProcess->getOutput(), $timedOutProcess->getErrorOutput(), $verbose);
+        if ($afterRun !== null) {
+            $afterRun($timedOutProcess);
+        }
+
         reportFailure(
             $label . ' (timed out)',
             $command,
@@ -156,6 +190,10 @@ function runStep(string $label, array $command, string $cwd, array $extraEnv, bo
     }
 
     logOutput($label, $process->getOutput(), $process->getErrorOutput(), $verbose);
+
+    if ($afterRun !== null) {
+        $afterRun($process);
+    }
 
     if (!$process->isSuccessful()) {
         reportFailure($label, $command, $process->getExitCode(), $cwd, $process->getOutput(), $process->getErrorOutput(), $appDir);
@@ -185,7 +223,7 @@ function reportFailure(
         '',
         '=== install-smoke FAILURE ===',
         \sprintf('Step: %s', $label),
-        \sprintf('Command: %s', $command === [] ? '(none — assertion failure)' : \implode(' ', $command)),
+        \sprintf('Command: %s', $command === [] ? '(none — assertion failure)' : formatCommand($command)),
         \sprintf('Working directory: %s', $cwd),
         // Null covers both "no process was ever spawned" (assertion failures)
         // and "spawned but timed out" — the label already says which.
@@ -316,11 +354,25 @@ runStep('psalm-laravel analyze', $analyzeCommand, $appDir, [], $verbose, $appDir
 
 // --- Step 6: psalm-laravel diagnose -----------------------------------------
 
+// diagnose.txt is the single most useful artifact when triaging an install bug
+// report, so it is saved standalone (in addition to the main log) via the
+// afterRun hook — which also fires when diagnose itself fails, the failure mode
+// a bug reporter most needs the captured output for.
 $diagnoseCommand = [\PHP_BINARY, $psalmLaravelBin($appDir), 'diagnose', '--no-tips'];
-$diagnoseProcess = runStep('psalm-laravel diagnose', $diagnoseCommand, $appDir, [], $verbose, $appDir);
-// diagnose.txt is the single most useful artifact when triaging an install bug report,
-// so it is saved standalone in addition to being folded into the main log.
-\file_put_contents($appDir . \DIRECTORY_SEPARATOR . 'diagnose.txt', $diagnoseProcess->getOutput() . $diagnoseProcess->getErrorOutput());
+runStep(
+    'psalm-laravel diagnose',
+    $diagnoseCommand,
+    $appDir,
+    [],
+    $verbose,
+    $appDir,
+    static function (Process $process) use ($appDir): void {
+        \file_put_contents(
+            $appDir . \DIRECTORY_SEPARATOR . 'diagnose.txt',
+            $process->getOutput() . $process->getErrorOutput(),
+        );
+    },
+);
 
 // --- Step 7 (optional): psalm-laravel add github ----------------------------
 
