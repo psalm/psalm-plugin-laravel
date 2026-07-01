@@ -69,7 +69,11 @@ jobs:
       PLUGIN_SOURCE: ${{ github.event_name == 'schedule' && 'packagist' || github.event.inputs.plugin_source || 'path' }}
       RUN_ADD_GITHUB: '1'
     steps:
+      # harden-runner only supports Linux runners; on Windows/macOS its
+      # post-step errors (ENOENT post_event.json) and fails the whole job.
+      # Gate it to Linux so the audit still runs on the Ubuntu lane.
       - name: Harden the runner (Audit all outbound calls)
+        if: runner.os == 'Linux'
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
@@ -84,6 +88,11 @@ jobs:
         with:
           php-version: '8.4'
           coverage: none
+          # fileinfo: required transitively by laravel/framework (via
+          # league/flysystem-local) and not enabled by default on the Windows
+          # PHP build. Ubuntu/macOS bundle it, but the shared setup keeps the
+          # matrix identical.
+          extensions: fileinfo
 
       # RUNNER_TEMP (the env-var form of the `runner` context, which isn't available
       # in a job-level `env:` block) is resolved here and exported via $GITHUB_ENV
