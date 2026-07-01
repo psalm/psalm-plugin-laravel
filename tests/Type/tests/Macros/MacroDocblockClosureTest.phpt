@@ -22,10 +22,10 @@ use Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureChild;
  *   docblockGenericTest():    mixed         (no native return type)
  *
  * After issue #991 the recovery pipeline tries AST first
- * ({@see \Psalm\LaravelPlugin\Util\Ast\CachedClosureTypeFactory::fromClosureObject()}):
+ * ({@see \Psalm\LaravelPlugin\Internal\Ast\CachedClosureTypeFactory::fromClosureObject()}):
  * the autoloader file is on disk, php-parser parses it on demand, the closure
  * node's own docblock is read directly. The pre-#991 Psalm-storage path
- * ({@see \Psalm\LaravelPlugin\Providers\MacroRegistry::recoverClosureStorage()}
+ * ({@see \Psalm\LaravelPlugin\Handlers\Magic\MacroRegistry::recoverClosureStorage()}
  * / `buildDefinitionFromStorage()`) is still the second-tier fallback for
  * closures whose source AST fails to recover (parse error, ambiguous start
  * line, no usable docblock).

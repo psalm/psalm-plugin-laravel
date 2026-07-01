@@ -10,7 +10,7 @@ use Illuminate\Support\ServiceProvider;
  * Fixture provider whose `register()` binds a sentinel into the container.
  * Used alongside {@see ThrowingServiceProvider} to verify the per-provider
  * try/catch isolation contract in
- * {@see \Psalm\LaravelPlugin\Providers\ApplicationProvider::registerDiscoveredVendorProviders()}:
+ * {@see \Psalm\LaravelPlugin\Bootstrap\ApplicationProvider::registerDiscoveredVendorProviders()}:
  * a throwing earlier provider must not stop this binding from being registered.
  */
 final class BindingServiceProvider extends ServiceProvider

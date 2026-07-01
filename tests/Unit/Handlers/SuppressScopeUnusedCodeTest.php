@@ -7,7 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Handlers\SuppressHandler;
+use Psalm\LaravelPlugin\Handlers\Diagnostics\SuppressHandler;
 use Symfony\Component\Process\Process;
 
 /**

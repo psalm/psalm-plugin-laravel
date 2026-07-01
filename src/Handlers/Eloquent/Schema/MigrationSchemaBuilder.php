@@ -6,7 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use Illuminate\Foundation\Application;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Providers\ApplicationProvider;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\Progress\Progress;
 
 /**

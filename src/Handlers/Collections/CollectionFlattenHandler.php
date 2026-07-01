@@ -8,7 +8,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Support\LazyCollection;
 use PhpParser\Node\Scalar\Int_;
-use Psalm\LaravelPlugin\Util\Arg;
+use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;

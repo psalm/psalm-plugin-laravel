@@ -7,7 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Util;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Util\EloquentModelMethods;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 
 /**
  * Direct coverage for the pure name classifiers. They were promoted from private SuppressHandler helpers
