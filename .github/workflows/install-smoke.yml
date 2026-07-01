@@ -1,0 +1,118 @@
+name: Install smoke test
+
+# Executes the README quickstart verbatim against a fresh Laravel project on
+# each supported OS: composer install, `psalm-laravel init`, `analyze`,
+# `diagnose`, and `add github`. Complements test-laravel-app.yml (which is
+# Ubuntu-only and covers a PHP x Laravel compatibility matrix on a heavily
+# scaffolded app) by covering OS-specific install/configuration behavior on a
+# minimal one — the class of bug fixed in #1189, where a Windows proc_open()
+# launcher regression could pass every Ubuntu-only check.
+
+on:
+  workflow_dispatch:
+    inputs:
+      plugin_source:
+        description: 'Install the plugin from: path (this checkout) or packagist (published package)'
+        type: choice
+        options: [path, packagist]
+        default: path
+  pull_request:
+    paths:
+      - README.md
+      - composer.json
+      - bin/psalm-laravel
+      - bin/ci/install-smoke.php
+      - src/Cli/**
+      - src/Plugin.php
+      - .github/workflows/install-smoke.yml
+  push:
+    branches: [master]
+    paths:
+      - README.md
+      - composer.json
+      - bin/psalm-laravel
+      - bin/ci/install-smoke.php
+      - src/Cli/**
+      - src/Plugin.php
+      - .github/workflows/install-smoke.yml
+  schedule:
+    # Weekly on Friday at 06:00 UTC — validates the published Packagist install
+    # path (README's Step 1 exactly), independent of any pending PR.
+    - cron: "0 6 * * 5"
+
+# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  install-smoke:
+    name: Install smoke (${{ matrix.name }})
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu
+            runner: blacksmith-2vcpu-ubuntu-2404
+          - name: Windows
+            runner: blacksmith-2vcpu-windows-2025
+          - name: macOS
+            runner: blacksmith-6vcpu-macos-15
+    runs-on: ${{ matrix.runner }}
+    env:
+      # schedule always validates the published package; workflow_dispatch lets a
+      # maintainer pick either mode; push/pull_request always test this checkout.
+      PLUGIN_SOURCE: ${{ github.event_name == 'schedule' && 'packagist' || github.event.inputs.plugin_source || 'path' }}
+      RUN_ADD_GITHUB: '1'
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      # RUNNER_TEMP (the env-var form of the `runner` context, which isn't available
+      # in a job-level `env:` block) is resolved here and exported via $GITHUB_ENV
+      # for every later step — both install-smoke.php's own getenv('APP_DIR') and the
+      # upload step's `${{ env.APP_DIR }}` path list. `shell: bash` pins POSIX syntax
+      # on Windows too (Actions' default pwsh doesn't understand `$GITHUB_ENV`).
+      # Reads $RUNNER_TEMP directly rather than templating `${{ runner.temp }}` into
+      # the run: string, so nothing here goes through shell template expansion.
+      - name: Resolve app dir
+        shell: bash
+        run: echo "APP_DIR=$RUNNER_TEMP/psalm-install-smoke" >> "$GITHUB_ENV"
+
+      - name: Install plugin repo dependencies (install-smoke.php itself needs symfony/process)
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Run install smoke test
+        run: php bin/ci/install-smoke.php
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: install-smoke-${{ matrix.name }}
+          path: |
+            install-smoke.log
+            ${{ env.APP_DIR }}/diagnose.txt
+            ${{ env.APP_DIR }}/composer.json
+            ${{ env.APP_DIR }}/composer.lock
+            ${{ env.APP_DIR }}/psalm.xml
+            ${{ env.APP_DIR }}/.github/workflows/psalm.yml
+          if-no-files-found: ignore
+          retention-days: 14
