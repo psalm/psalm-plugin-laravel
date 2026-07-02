@@ -19,6 +19,7 @@ final readonly class PluginConfig
     /**
      * @param list<string> $configDirectories
      * @param list<ExperimentalFeature> $experimentalFeatures
+     * @param list<string> $experimentalNotices
      *
      * @psalm-mutation-free
      */
@@ -43,6 +44,16 @@ final readonly class PluginConfig
         public bool $failOnInternalError,
         public bool $experimentalAll,
         public array $experimentalFeatures,
+        /**
+         * Non-fatal messages collected while parsing `<experimental>` (a childless element with
+         * no effect, a graduated/withdrawn feature name). Collected here instead of raised via
+         * `trigger_error(E_USER_DEPRECATED)` because Psalm's own CLI installs an error handler
+         * that turns every PHP error/warning/deprecation into a thrown exception during a real
+         * run — `trigger_error()` inside `fromXml()` would abort the whole analysis, exactly the
+         * hard-failure this feature exists to avoid. The caller (`Plugin::__invoke()`) surfaces
+         * these via `Psalm\Progress\Progress::warning()` once `$output` is available instead.
+         */
+        public array $experimentalNotices,
     ) {}
 
     public static function fromXml(?\SimpleXMLElement $config): self
@@ -86,6 +97,7 @@ final readonly class PluginConfig
             failOnInternalError: $failOnInternalError,
             experimentalAll: $experimental['all'],
             experimentalFeatures: $experimental['features'],
+            experimentalNotices: $experimental['notices'],
         );
     }
 
@@ -148,10 +160,17 @@ final readonly class PluginConfig
      * Absent element → nothing enabled, no notice (the common case). `all="true"` enables
      * every case in {@see ExperimentalFeature}; `<feature>` children are unioned with it
      * (redundant but harmless once `all` is set). Present-but-childless with no `all`
-     * attribute is very likely a mistake, so it gets a deprecation-style notice rather than
-     * silently doing nothing. Duplicate `<feature>` names dedupe silently.
+     * attribute is very likely a mistake, so it collects a deprecation-style notice rather
+     * than silently doing nothing. Duplicate `<feature>` names dedupe silently.
      *
-     * @return array{all: bool, features: list<ExperimentalFeature>}
+     * Notices are collected into the return value rather than raised via
+     * `trigger_error(E_USER_DEPRECATED)`: Psalm's CLI installs an error handler that turns
+     * every PHP error/warning/deprecation into a thrown exception during a real run, so
+     * calling `trigger_error()` from here would abort the whole analysis — exactly the
+     * hard-failure a "soft" notice is supposed to avoid. `Plugin::__invoke()` surfaces the
+     * collected messages via `Progress::warning()` once `$output` is available instead.
+     *
+     * @return array{all: bool, features: list<ExperimentalFeature>, notices: list<string>}
      */
     private static function xmlExperimentalFeatures(?\SimpleXMLElement $config): array
     {
@@ -160,7 +179,7 @@ final readonly class PluginConfig
         // there" signal — accessing a missing child via -> returns an empty proxy that also
         // satisfies `instanceof SimpleXMLElement`.
         if (!$config instanceof \SimpleXMLElement || !isset($config->experimental)) {
-            return ['all' => false, 'features' => []];
+            return ['all' => false, 'features' => [], 'notices' => []];
         }
 
         /** @psalm-var \SimpleXMLElement $element */
@@ -180,6 +199,7 @@ final readonly class PluginConfig
         $children = $element->feature;
 
         $features = [];
+        $notices = [];
         $sawChild = false;
 
         foreach ($children as $node) {
@@ -192,32 +212,31 @@ final readonly class PluginConfig
                 );
             }
 
-            $feature = self::resolveExperimentalFeatureName($name);
+            $feature = self::resolveExperimentalFeatureName($name, $notices);
 
-            if ($feature instanceof \Psalm\LaravelPlugin\Config\ExperimentalFeature && !\in_array($feature, $features, true)) {
+            if ($feature instanceof ExperimentalFeature && !\in_array($feature, $features, true)) {
                 $features[] = $feature;
             }
         }
 
         if (!$all && !$sawChild) {
-            \trigger_error(
-                '<experimental /> has no effect: it has no <feature> children and no all="true" attribute. '
-                . 'Remove it, or see docs/config.md for how to enable a specific feature.',
-                \E_USER_DEPRECATED,
-            );
+            $notices[] = '<experimental /> has no effect: it has no <feature> children and no all="true" attribute. '
+                . 'Remove it, or see docs/config.md for how to enable a specific feature.';
         }
 
-        return ['all' => $all, 'features' => $features];
+        return ['all' => $all, 'features' => $features, 'notices' => $notices];
     }
 
     /**
-     * Classify one `<feature name="...">` value. A live case is returned as-is. A
-     * graduated or withdrawn name emits a deprecation notice and returns null — dropped,
-     * not rejected, so upgrading the plugin never turns a previously-valid psalm.xml into
-     * a hard failure. Any other name throws, listing every valid name plus a nearest-match
-     * hint for typos.
+     * Classify one `<feature name="...">` value. A live case is returned as-is. A graduated
+     * or withdrawn name appends a deprecation-style notice to $notices and returns null —
+     * dropped, not rejected, so upgrading the plugin never turns a previously-valid
+     * psalm.xml into a hard failure. Any other name throws, listing every valid name plus a
+     * nearest-match hint for typos.
+     *
+     * @param list<string> $notices
      */
-    private static function resolveExperimentalFeatureName(string $name): ?ExperimentalFeature
+    private static function resolveExperimentalFeatureName(string $name, array &$notices): ?ExperimentalFeature
     {
         $feature = ExperimentalFeature::tryFrom($name);
 
@@ -228,11 +247,8 @@ final readonly class PluginConfig
         $graduatedVersion = ExperimentalFeature::graduatedIn($name);
 
         if ($graduatedVersion !== null) {
-            \trigger_error(
-                "Experimental feature '{$name}' graduated to stable in v{$graduatedVersion} and no longer needs "
-                . '<experimental>. Remove it from psalm.xml.',
-                \E_USER_DEPRECATED,
-            );
+            $notices[] = "Experimental feature '{$name}' graduated to stable in v{$graduatedVersion} and no longer "
+                . 'needs <experimental>. Remove it from psalm.xml.';
 
             return null;
         }
@@ -240,11 +256,8 @@ final readonly class PluginConfig
         $withdrawnReason = ExperimentalFeature::withdrawnBecause($name);
 
         if ($withdrawnReason !== null) {
-            \trigger_error(
-                "Experimental feature '{$name}' was withdrawn ({$withdrawnReason}) and no longer exists. "
-                . 'Remove it from psalm.xml.',
-                \E_USER_DEPRECATED,
-            );
+            $notices[] = "Experimental feature '{$name}' was withdrawn ({$withdrawnReason}) and no longer exists. "
+                . 'Remove it from psalm.xml.';
 
             return null;
         }

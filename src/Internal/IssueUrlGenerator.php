@@ -97,6 +97,7 @@ final class IssueUrlGenerator
             '- configDirectories: ' . self::formatConfigDirectories($pluginConfig->configDirectories),
             '- experimentalAll: ' . self::formatBool($pluginConfig->experimentalAll),
             '- experimentalFeatures: ' . self::formatExperimentalFeatures($pluginConfig->experimentalFeatures),
+            '- experimentalNotices: ' . self::formatExperimentalNotices($pluginConfig->experimentalNotices),
         ];
     }
 
@@ -115,6 +116,24 @@ final class IssueUrlGenerator
         }
 
         return '[' . \implode(', ', \array_map(static fn(ExperimentalFeature $feature): string => $feature->value, $features)) . ']';
+    }
+
+    /**
+     * Render experimentalNotices for the bug-report body. No sanitisation needed — these are
+     * static, hardcoded deprecation-style messages (a childless <experimental/>, a graduated
+     * or withdrawn feature name), never filesystem paths or user-supplied data.
+     *
+     * @param list<string> $notices
+     *
+     * @psalm-pure
+     */
+    private static function formatExperimentalNotices(array $notices): string
+    {
+        if ($notices === []) {
+            return '[]';
+        }
+
+        return '[' . \implode('; ', $notices) . ']';
     }
 
     /**

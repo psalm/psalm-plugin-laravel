@@ -72,12 +72,19 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * One line per run naming every active experimental feature, so CI logs record exactly
-     * which non-stable analysis ran. Silent when nothing is enabled — the common case. Runs
-     * before the try block so it still surfaces if boot fails afterward.
+     * Surfaces `<experimental>` parse notices (a childless element, a graduated/withdrawn
+     * feature name) via `Progress::warning()`, then — when any feature is active — one line
+     * naming every enabled feature, so CI logs record exactly which non-stable analysis ran.
+     * Runs before the try block so both still surface if boot fails afterward. Silent under
+     * `--no-progress` (Psalm's `VoidProgress` makes `warning()`/`write()` no-ops there),
+     * matching every other `$output->warning()` call in this class.
      */
     private function reportActiveExperiments(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
     {
+        foreach ($pluginConfig->experimentalNotices as $notice) {
+            $output->warning($notice);
+        }
+
         $active = $pluginConfig->experimentalAll ? ExperimentalFeature::cases() : $pluginConfig->experimentalFeatures;
 
         if ($active === []) {

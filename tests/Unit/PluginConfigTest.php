@@ -56,6 +56,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->experimentalAll);
         $this->assertSame([], $config->experimentalFeatures);
         $this->assertFalse($config->isExperimentEnabled(ExperimentalFeature::ModelToArrayShape));
+        $this->assertSame([], $config->experimentalNotices);
     }
 
     #[Test]
@@ -131,6 +132,7 @@ final class PluginConfigTest extends TestCase
 
         $this->assertFalse($config->experimentalAll);
         $this->assertSame([], $config->experimentalFeatures);
+        $this->assertSame([], $config->experimentalNotices);
     }
 
     #[Test]
@@ -145,6 +147,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->experimentalAll);
         $this->assertSame([ExperimentalFeature::ModelToArrayShape], $config->experimentalFeatures);
         $this->assertTrue($config->isExperimentEnabled(ExperimentalFeature::ModelToArrayShape));
+        $this->assertSame([], $config->experimentalNotices);
     }
 
     #[Test]
@@ -232,15 +235,22 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    #[IgnoreDeprecations]
-    public function experimental_present_but_empty_triggers_deprecation_and_enables_nothing(): void
+    public function experimental_present_but_empty_collects_a_notice_and_enables_nothing(): void
     {
+        // No #[IgnoreDeprecations]: this notice is collected into experimentalNotices, not
+        // raised via trigger_error() — trigger_error(E_USER_DEPRECATED) here would be turned
+        // into a thrown exception by Psalm's own CLI error handler during a real run, crashing
+        // the whole analysis instead of emitting a soft notice.
         $xml = new \SimpleXMLElement('<pluginClass><experimental /></pluginClass>');
 
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->experimentalAll);
         $this->assertSame([], $config->experimentalFeatures);
+        $this->assertSame(
+            ['<experimental /> has no effect: it has no <feature> children and no all="true" attribute. Remove it, or see docs/config.md for how to enable a specific feature.'],
+            $config->experimentalNotices,
+        );
     }
 
     #[Test]
