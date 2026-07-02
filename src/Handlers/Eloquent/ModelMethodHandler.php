@@ -26,24 +26,27 @@ use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
- * Handles static method calls on Eloquent Models that are forwarded to Builder via __callStatic.
+ * Handles Eloquent Model calls whose return types depend on the model's query builder.
  *
  * Responsibilities:
  * 1. Method existence — confirms magic methods exist (suppresses UndefinedMagicMethod)
  * 2. Method visibility — confirms magic methods are public
  * 3. Method params — provides parameter definitions for argument checking
- * 4. Return types — proxies calls to Builder<TModel> for type inference
+ * 4. Return types — proxies forwarded calls to Builder<TModel> for type inference, and
+ *    substitutes custom builders for Model::query() plus the real instance methods that
+ *    construct builders through newEloquentBuilder()
  *
  * Existence, visibility, params, and return type providers for concrete Model subclasses are
  * registered dynamically per-model by {@see ModelRegistrationHandler} because Psalm's
  * provider lookup requires exact class name matching — a handler registered for Model::class
  * is not consulted for concrete subclasses like App\Models\User.
  *
- * The getClassLikeNames() registration for Model::class handles `Model::query()` only when
- * a custom Eloquent builder is registered for the called model. For plain models (base
- * `Builder`), `query()` is intentionally deferred to the stub at
- * `stubs/common/Database/Eloquent/Model.phpstub` whose `@return Builder<static>` is the only
- * way to preserve the `&static` intersection through Psalm's template binding (see #799).
+ * The getClassLikeNames() registration for Model::class handles `Model::query()` and the
+ * real instance builder-construction methods only when a custom Eloquent builder is registered
+ * for the called model. For plain models (base `Builder`), these methods are intentionally
+ * deferred to the stubs at
+ * `stubs/common/Database/Eloquent/Model.phpstub` whose `static`/`$this` annotations preserve
+ * model-specific template binding through Psalm's type expansion (see #799).
  * `__callStatic` is similarly proxied for methods resolvable through the single-hop mixin
  * chain.
  *
@@ -52,6 +55,24 @@ use Psalm\Type\Union;
  */
 final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 {
+    /**
+     * Real Model methods that construct a fresh Eloquent builder directly or indirectly
+     * through newEloquentBuilder(), so custom builder declarations apply to their return type.
+     *
+     * @var array<lowercase-string, true>
+     */
+    private const INSTANCE_QUERY_CONSTRUCTION_METHODS = [
+        'neweloquentbuilder' => true,
+        'newquery' => true,
+        'newmodelquery' => true,
+        'newquerywithoutrelationships' => true,
+        'newquerywithoutscopes' => true,
+        'newquerywithoutscope' => true,
+        'newqueryforrestoration' => true,
+    ];
+
+    private const REGISTER_GLOBAL_SCOPES = 'registerglobalscopes';
+
     /**
      * Cache for isUnresolvedBuilderMethod results.
      *
@@ -152,11 +173,24 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         string $modelClass,
         Codebase $codebase,
     ): Type\Atomic\TNamedObject {
+        return self::builderTypeWithModelType(
+            $builderClass,
+            new Union([new Type\Atomic\TNamedObject($modelClass)]),
+            $codebase,
+        );
+    }
+
+    /**
+     * @psalm-mutation-free
+     */
+    private static function builderTypeWithModelType(
+        string $builderClass,
+        Union $modelType,
+        Codebase $codebase,
+    ): Type\Atomic\TNamedObject {
         // Non-custom builders (base Builder) always have the TModel template param.
         if ($builderClass === Builder::class) {
-            return new Type\Atomic\TGenericObject($builderClass, [
-                new Union([new Type\Atomic\TNamedObject($modelClass)]),
-            ]);
+            return new Type\Atomic\TGenericObject($builderClass, [$modelType]);
         }
 
         // Custom builders: check if they declare their own template params.
@@ -167,12 +201,81 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         if ($storage->template_types !== null && $storage->template_types !== []) {
-            return new Type\Atomic\TGenericObject($builderClass, [
-                new Union([new Type\Atomic\TNamedObject($modelClass)]),
-            ]);
+            return new Type\Atomic\TGenericObject($builderClass, [$modelType]);
         }
 
         return new Type\Atomic\TNamedObject($builderClass);
+    }
+
+    /** @psalm-mutation-free */
+    private static function builderTemplateAllowsStaticModel(
+        string $builderClass,
+        Codebase $codebase,
+    ): bool {
+        if ($builderClass === Builder::class) {
+            return true;
+        }
+
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($builderClass));
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        return $storage->template_types !== null
+            && $storage->template_types !== []
+            && ($storage->template_covariants[0] ?? false);
+    }
+
+    /**
+     * Build the builder return type for instance methods whose stubs use `$this`.
+     *
+     * @psalm-mutation-free
+     */
+    private static function instanceBuilderType(
+        string $builderClass,
+        string $modelClass,
+        Codebase $codebase,
+    ): Type\Atomic\TNamedObject {
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($modelClass));
+            $isStatic = !$storage->final && self::builderTemplateAllowsStaticModel($builderClass, $codebase);
+        } catch (\InvalidArgumentException) {
+            $isStatic = false;
+        }
+
+        return self::builderTypeWithModelType(
+            $builderClass,
+            new Union([new Type\Atomic\TNamedObject($modelClass, is_static: $isStatic)]),
+            $codebase,
+        );
+    }
+
+    private static function registerGlobalScopesReturnType(
+        MethodReturnTypeProviderEvent $event,
+        string $modelClass,
+        Codebase $codebase,
+    ): ?Union {
+        $source = $event->getSource();
+
+        if (!$source instanceof StatementsAnalyzer) {
+            return null;
+        }
+
+        $builderClass = self::getBuilderClassForModel($modelClass);
+
+        if ($builderClass === Builder::class) {
+            return null;
+        }
+
+        $arg = $event->getCallArgs()[0] ?? null;
+
+        if ($arg === null) {
+            return new Union([self::instanceBuilderType($builderClass, $modelClass, $codebase)]);
+        }
+
+        return $source->node_data->getType($arg->value)
+            ?? new Union([self::instanceBuilderType($builderClass, $modelClass, $codebase)]);
     }
 
     /**
@@ -580,8 +683,27 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        $methodName = $event->getMethodNameLowercase();
+
+        if ($methodName === self::REGISTER_GLOBAL_SCOPES) {
+            return self::registerGlobalScopesReturnType($event, $called_fq_classlike_name, $codebase);
+        }
+
+        if (isset(self::INSTANCE_QUERY_CONSTRUCTION_METHODS[$methodName])) {
+            $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
+
+            // For models without a custom builder, defer to the stub's
+            // `@return Builder<$this>` annotation so Psalm keeps the existing
+            // instance-specific model template behavior.
+            if ($builderClass === Builder::class) {
+                return null;
+            }
+
+            return new Union([self::instanceBuilderType($builderClass, $called_fq_classlike_name, $codebase)]);
+        }
+
         // Model::query()
-        if ($event->getMethodNameLowercase() === 'query') {
+        if ($methodName === 'query') {
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
             // For models without a custom builder, defer to the stub's
@@ -594,11 +716,11 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
                 return null;
             }
 
-            return new Union([self::builderType($builderClass, $called_fq_classlike_name, $codebase)]);
+            return new Union([self::instanceBuilderType($builderClass, $called_fq_classlike_name, $codebase)]);
         }
 
         // proxy to builder object
-        if ($event->getMethodNameLowercase() === '__callstatic') {
+        if ($methodName === '__callstatic') {
             $called_method_name_lowercase = $event->getCalledMethodNameLowercase();
 
             if ($called_method_name_lowercase === null) {
