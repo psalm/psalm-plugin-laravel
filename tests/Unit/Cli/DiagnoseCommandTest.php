@@ -7,6 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Cli;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Cli\Diagnose\Diagnostics;
 use Psalm\LaravelPlugin\Cli\Diagnose\Report;
 use Psalm\LaravelPlugin\Cli\Diagnose\TipsProvider;
@@ -22,6 +23,53 @@ use Symfony\Component\Console\Tester\CommandTester;
 #[CoversClass(TipsProvider::class)]
 final class DiagnoseCommandTest extends TestCase
 {
+    private string $originalCwd;
+
+    /** @var array<string, mixed> */
+    private array $originalApplicationProviderState;
+
+    private ?string $scratchDir = null;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $cwd = \getcwd();
+        $this->assertIsString($cwd, 'Could not resolve the current working directory.');
+        $this->originalCwd = $cwd;
+        // Only collect_reads_enabled_experimental_features_from_the_projects_psalm_xml()
+        // chdir()s and boots for real, but snapshotting/resetting here for every test keeps
+        // this file order-independent regardless of which test runs first — mirrors
+        // ApplicationProviderConfigPathTest's "a previous test that booted from a different
+        // cwd cannot leak its state into this one" defense.
+        $this->originalApplicationProviderState = [
+            'app' => $this->reflectApplicationProviderProperty('app')->getValue(),
+            'booted' => $this->reflectApplicationProviderProperty('booted')->getValue(),
+            'bootMode' => $this->reflectApplicationProviderProperty('bootMode')->getValue(),
+            'bootPath' => $this->reflectApplicationProviderProperty('bootPath')->getValue(),
+            'bootstrapError' => $this->reflectApplicationProviderProperty('bootstrapError')->getValue(),
+        ];
+        $this->reflectApplicationProviderProperty('app')->setValue(null, null);
+        $this->reflectApplicationProviderProperty('booted')->setValue(null, false);
+        $this->reflectApplicationProviderProperty('bootMode')->setValue(null, null);
+        $this->reflectApplicationProviderProperty('bootPath')->setValue(null, null);
+        $this->reflectApplicationProviderProperty('bootstrapError')->setValue(null, null);
+    }
+
+    protected function tearDown(): void
+    {
+        \chdir($this->originalCwd);
+        foreach ($this->originalApplicationProviderState as $property => $value) {
+            $this->reflectApplicationProviderProperty($property)->setValue(null, $value);
+        }
+
+        if ($this->scratchDir !== null) {
+            $this->removeRecursively($this->scratchDir);
+            $this->scratchDir = null;
+        }
+
+        parent::tearDown();
+    }
+
     #[Test]
     public function fixture_report_includes_versions_and_boot_sections(): void
     {
@@ -230,10 +278,10 @@ final class DiagnoseCommandTest extends TestCase
     #[Test]
     public function collect_reads_enabled_experimental_features_from_the_projects_psalm_xml(): void
     {
-        $scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
-        $this->assertTrue(\mkdir($scratchDir), "Could not create scratch dir {$scratchDir}");
+        $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
+        $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
         \file_put_contents(
-            $scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml',
+            $this->scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml',
             '<?xml version="1.0"?>'
             . '<psalm xmlns="https://getpsalm.org/schema/config">'
             . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
@@ -242,21 +290,35 @@ final class DiagnoseCommandTest extends TestCase
             . '</psalm>',
         );
 
-        $originalCwd = \getcwd();
-        $this->assertIsString($originalCwd, 'Could not resolve the current working directory.');
-
-        try {
-            $this->assertTrue(\chdir($scratchDir));
-            $report = (new Diagnostics())->collect();
-        } finally {
-            \chdir($originalCwd);
-            \unlink($scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
-            \rmdir($scratchDir);
-        }
+        $this->assertTrue(\chdir($this->scratchDir));
+        $report = (new Diagnostics())->collect();
 
         $this->assertSame(['modelToArrayShape'], $report->experimentalFeaturesEnabled);
     }
 
+    private function reflectApplicationProviderProperty(string $name): \ReflectionProperty
+    {
+        return new \ReflectionProperty(ApplicationProvider::class, $name);
+    }
+
+    private function removeRecursively(string $path): void
+    {
+        if (!\is_dir($path)) {
+            return;
+        }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        /** @var \SplFileInfo $entry */
+        foreach ($iterator as $entry) {
+            $entry->isDir() ? \rmdir($entry->getPathname()) : \unlink($entry->getPathname());
+        }
+
+        \rmdir($path);
+    }
 
     private function testerFor(Diagnostics $diagnostics, ?TipsProvider $tipsProvider = null): CommandTester
     {

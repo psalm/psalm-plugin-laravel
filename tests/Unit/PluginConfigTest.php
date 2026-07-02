@@ -224,6 +224,20 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function closest_by_levenshtein_prefers_the_nearer_of_several_candidates(): void
+    {
+        // With only one live ExperimentalFeature case today, driving the "did you mean" logic
+        // through fromXml() alone never gives it a second candidate to prefer over the first —
+        // see closestByLevenshtein()'s docblock. Reflection on this specific pure, generic
+        // algorithm (unrelated to fromXml()'s own XML-parsing business logic) is how the
+        // multi-candidate comparison gets real coverage without waiting for a second feature.
+        $method = new \ReflectionMethod(PluginConfig::class, 'closestByLevenshtein');
+
+        $this->assertSame('sunday', $method->invoke(null, 'sundy', ['monday', 'sunday', 'tuesday']));
+        $this->assertSame('only', $method->invoke(null, 'anything', ['only']));
+    }
+
+    #[Test]
     public function experimental_feature_missing_name_attribute_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><experimental><feature /></experimental></pluginClass>');

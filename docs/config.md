@@ -235,6 +235,8 @@ For early adopters who accept more churn between releases in exchange for trying
 
 If a feature name graduates to stable or is withdrawn, keeping it in `<experimental>` produces a deprecation notice on the next run instead of an error (a plugin upgrade never breaks an existing psalm.xml this way). Remove the entry once you see the notice.
 
+When any feature is enabled, the plugin prints a line naming it on every run (`Laravel plugin: experimental features enabled: modelToArrayShape`), so CI logs record exactly which non-stable analysis ran. This line, along with any deprecation notice above, is suppressed under `--no-progress`.
+
 ## Cache directory
 
 **default**: `<psalm-cache-dir>/plugin-laravel` (inside Psalm's project-specific cache directory)

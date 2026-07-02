@@ -85,7 +85,7 @@ final class Plugin implements PluginEntryPointInterface
             $output->warning($notice);
         }
 
-        $active = $pluginConfig->experimentalAll ? ExperimentalFeature::cases() : $pluginConfig->experimentalFeatures;
+        $active = $pluginConfig->activeExperimentalFeatures();
 
         if ($active === []) {
             return;

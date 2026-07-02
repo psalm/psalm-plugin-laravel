@@ -166,6 +166,38 @@ final class IssueUrlGeneratorTest extends TestCase
         );
         $this->assertStringContainsString('- cachePath:', $body);
         $this->assertStringContainsString('- failOnInternalError: false', $body);
+        $this->assertStringContainsString('- experimentalAll: false', $body);
+        $this->assertStringContainsString('- experimentalFeatures: []', $body);
+        $this->assertStringContainsString('- experimentalNotices: []', $body);
+    }
+
+    #[Test]
+    public function body_renders_enabled_experimental_features(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental><feature name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+        $config = PluginConfig::fromXml($xml);
+
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $config));
+
+        $this->assertStringContainsString('- experimentalAll: false', $body);
+        $this->assertStringContainsString('- experimentalFeatures: [modelToArrayShape]', $body);
+        $this->assertStringContainsString('- experimentalNotices: []', $body);
+    }
+
+    #[Test]
+    public function body_renders_experimental_notices(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental /></pluginClass>');
+        $config = PluginConfig::fromXml($xml);
+
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $config));
+
+        $this->assertStringContainsString(
+            '- experimentalNotices: [<experimental /> has no effect: it has no <feature> children and no all="true" attribute. Remove it, or see docs/config.md for how to enable a specific feature.]',
+            $body,
+        );
     }
 
     #[Test]

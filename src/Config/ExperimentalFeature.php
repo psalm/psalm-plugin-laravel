@@ -27,7 +27,7 @@ enum ExperimentalFeature: string
      *
      * @var array<non-empty-string, non-empty-string>
      */
-    public const GRADUATED = [];
+    private const GRADUATED = [];
 
     /**
      * Feature names that were withdrawn without stabilizing.
@@ -36,7 +36,7 @@ enum ExperimentalFeature: string
      *
      * @var array<non-empty-string, non-empty-string>
      */
-    public const WITHDRAWN = [];
+    private const WITHDRAWN = [];
 
     /**
      * Plugin version $name graduated to stable in, or null if it never graduated.

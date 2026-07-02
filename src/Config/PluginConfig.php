@@ -113,7 +113,22 @@ final readonly class PluginConfig
      */
     public function isExperimentEnabled(ExperimentalFeature $feature): bool
     {
-        return $this->experimentalAll || \in_array($feature, $this->experimentalFeatures, true);
+        return \in_array($feature, $this->activeExperimentalFeatures(), true);
+    }
+
+    /**
+     * Every experimental feature actually active: every case when `all="true"`, otherwise
+     * the named subset. Single source of truth for what `all` resolves to, shared by
+     * {@see self::isExperimentEnabled()} and by callers that need the resolved list itself
+     * (e.g. `Plugin::reportActiveExperiments()`).
+     *
+     * @return list<ExperimentalFeature>
+     *
+     * @psalm-mutation-free
+     */
+    public function activeExperimentalFeatures(): array
+    {
+        return $this->experimentalAll ? ExperimentalFeature::cases() : $this->experimentalFeatures;
     }
 
     /**
@@ -279,15 +294,33 @@ final readonly class PluginConfig
      */
     private static function nearestExperimentalFeatureName(string $name): string
     {
-        $cases = ExperimentalFeature::cases();
-        $closest = $cases[0]->value;
-        $closestDistance = \levenshtein($name, $closest);
+        return self::closestByLevenshtein(
+            $name,
+            \array_map(static fn(ExperimentalFeature $case): string => $case->value, ExperimentalFeature::cases()),
+        );
+    }
 
-        foreach ($cases as $case) {
-            $distance = \levenshtein($name, $case->value);
+    /**
+     * Closest string in $haystack to $needle by edit distance. Generic on purpose — separated
+     * from {@see self::nearestExperimentalFeatureName()} so the actual "pick the closer of two
+     * candidates" comparison is unit-testable with a synthetic multi-candidate list. With only
+     * one live {@see ExperimentalFeature} case today, that comparison never has a second
+     * candidate to prefer over the first when driven through `fromXml()` alone.
+     *
+     * @param non-empty-list<string> $haystack
+     *
+     * @psalm-pure
+     */
+    private static function closestByLevenshtein(string $needle, array $haystack): string
+    {
+        $closest = $haystack[0];
+        $closestDistance = \levenshtein($needle, $closest);
+
+        foreach ($haystack as $candidate) {
+            $distance = \levenshtein($needle, $candidate);
 
             if ($distance < $closestDistance) {
-                $closest = $case->value;
+                $closest = $candidate;
                 $closestDistance = $distance;
             }
         }
