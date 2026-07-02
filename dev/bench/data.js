@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782954270339,
+  "lastUpdate": 1782980175428,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7935,6 +7935,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 27.51,
             "range": "± 0.05",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2464cdafd91bc3336af3acfbf85e7cf121c653c8",
+          "message": "fix: infer custom builders for model instance queries (#1207)",
+          "timestamp": "2026-07-02T10:13:40+02:00",
+          "tree_id": "06d79325d719740e9948427d4083622939422b74",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2464cdafd91bc3336af3acfbf85e7cf121c653c8"
+        },
+        "date": 1782980174158,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.56,
+            "range": "± 0.33",
             "unit": "s"
           },
           {
