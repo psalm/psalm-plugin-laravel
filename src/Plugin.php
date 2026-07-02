@@ -389,6 +389,13 @@ final class Plugin implements PluginEntryPointInterface
         // the issueHandlers config (PublicModelScope / PublicModelAccessor).
         require_once __DIR__ . '/Handlers/Rules/PublicScopeAccessorVisibilityHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\PublicScopeAccessorVisibilityHandler::class);
+
+        // Flag an Eloquent `$appends` entry with no backing accessor / class cast (#694) — a runtime
+        // BadMethodCallException on toArray()/toJson(). Reads ModelMetadataRegistry, so it MUST be
+        // registered AFTER ModelRegistrationHandler (warm-up); AfterCodebasePopulated handlers run in
+        // registration order. Enabled by default; silence via the issueHandlers config.
+        require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedAttributeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedAttributeHandler::class);
     }
 
     /**
