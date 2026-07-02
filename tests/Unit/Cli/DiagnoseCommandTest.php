@@ -378,6 +378,32 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame([], $report->experimentalFeaturesEnabled);
     }
 
+    #[Test]
+    public function collect_treats_an_invalid_all_value_as_false_instead_of_throwing(): void
+    {
+        // PluginConfig::fromXml() throws InvalidArgumentException on all="banana" (a real
+        // config mistake). readEnabledExperimentalFeatures() must not — same leniency
+        // rationale as the unrecognized-feature-name test above. Pairs the malformed all
+        // with a valid <feature> sibling to also confirm the reader still falls through to
+        // reading children once the bad all attribute is ignored, rather than short-circuiting.
+        $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
+        $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
+        \file_put_contents(
+            $this->scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml',
+            '<?xml version="1.0"?>'
+            . '<psalm xmlns="https://getpsalm.org/schema/config">'
+            . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
+            . '<experimental all="banana"><feature name="modelToArrayShape" /></experimental>'
+            . '</pluginClass></plugins>'
+            . '</psalm>',
+        );
+
+        $this->assertTrue(\chdir($this->scratchDir));
+        $report = (new Diagnostics())->collect();
+
+        $this->assertSame(['modelToArrayShape'], $report->experimentalFeaturesEnabled);
+    }
+
     private function reflectApplicationProviderProperty(string $name): \ReflectionProperty
     {
         return new \ReflectionProperty(ApplicationProvider::class, $name);
