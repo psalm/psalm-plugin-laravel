@@ -261,6 +261,24 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function experimental_all_true_still_validates_unknown_feature_names(): void
+    {
+        // <feature> children are documented as "redundant but harmless" once all="true" is
+        // set — but resolveExperimentalFeatureName() runs unconditionally inside the <feature>
+        // loop regardless of $all, so a typo must still throw. Guards against a future
+        // "short-circuit the loop when $all is true" refactor silently turning this into a
+        // no-op validation path.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental all="true"><feature name="modelToArayShape" /></experimental></pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/Unknown experimental feature 'modelToArayShape'/");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
     public function experimental_feature_missing_name_attribute_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><experimental><feature /></experimental></pluginClass>');
