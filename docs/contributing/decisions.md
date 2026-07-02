@@ -22,7 +22,7 @@ Decisions made during development of the plugin. Contributors should follow thes
 
 **Decision:** Prefer deriving types from Psalm's `ClassLikeStorage` and source code analysis. Use runtime reflection (booting the Laravel app via Testbench) only when the needed information is unavailable statically.
 
-**Currently runtime:** Model table names (`getTable()`), model casts (`getCasts()`), container bindings, facade alias resolution.
+**Currently runtime:** Model table names (`getTable()`), model casts (`getCasts()`), container bindings, facade alias resolution, macro discovery (`Macroable::$macros` reflection).
 
 **Currently static:** Relationships, accessors, migration schema parsing, stub overrides.
 
@@ -51,7 +51,7 @@ The plugin should respect that consistently across all handlers rather than over
 
 **Decision:** `registerWriteTypesForMethods` (which registers `pseudo_property_set_types` for relationship properties, legacy mutators, and new-style `Attribute` accessors) runs for all models regardless of the `modelProperties` config. Only `registerWriteTypesForColumns` (migration-inferred columns) is gated behind `useMigrations`.
 
-**Why:** Accessor and relationship properties are discovered from the model's own method signatures — they don't depend on migration files. A user with `columnFallback="none"` still expects `$user->roles = $collection` to work when `sealAllProperties` is enabled. This is consistent with the read-side handlers, which are also unconditional (see below).
+**Why:** Accessor and relationship properties are discovered from the model's own method signatures — they don't depend on migration files. A user with `columnFallback="none"` still expects `$user->roles = $collection` to work when Psalm's own `sealAllProperties` option is enabled. This is consistent with the read-side handlers, which are also unconditional (see below).
 
 **See:** [#446](https://github.com/psalm/psalm-plugin-laravel/issues/446)
 
@@ -224,7 +224,7 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Decision:** When a new feature has a strictness spectrum (e.g. sealed properties, migration inference), the default should be the least disruptive option. Stricter modes are opt-in via config.
 
-**Example:** `sealAllProperties="false"` by default. `columnFallback="migrations"` (migration inference) by default.
+**Example:** `columnFallback="migrations"` (migration inference) is the default because it only adds property types; stricter behavior (such as Psalm's `sealAllProperties`) stays opt-in on the Psalm side.
 
 **Why:** Users who install or upgrade the plugin should not be greeted with a wall of new errors. The plugin should improve analysis incrementally. Users who want stricter checking can enable it when they're ready.
 

@@ -105,6 +105,18 @@ final class RequestFileTest
             unset($f);
         }
     }
+
+    /**
+     * The real body is data_get($this->allFiles(), $key, $default), which returns
+     * $default verbatim when the dotted key does not resolve. A non-null $default's
+     * own type must appear in the return union, not just a bare `null`.
+     */
+    public function nonNullDefaultTypeIsThreadedThrough(Request $request): void
+    {
+        $r = $request->file('avatar', 'no-file-uploaded');
+        /** @psalm-check-type-exact $r = 'no-file-uploaded'|UploadedFile|array<array-key, UploadedFile> */;
+        unset($r);
+    }
 }
 ?>
 --EXPECTF--

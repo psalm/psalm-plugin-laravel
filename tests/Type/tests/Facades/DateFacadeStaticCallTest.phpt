@@ -20,9 +20,10 @@ $_today = Date::today();
 $_parse = Date::parse('2024-01-01');
 /** @psalm-check-type-exact $_parse = \Illuminate\Support\Carbon */
 
-// Call with scalar args — exercises checkMethodArgs against the synthesised params.
-$_create = Date::create(2024, 1, 1);
-/** @psalm-check-type-exact $_create = \Illuminate\Support\Carbon|null */
+// create()'s nullability flips between Laravel 11 (non-null) and 12+ (Carbon|null) in
+// the facade's own `@method` tag, so it's asserted separately in DateFacadeCreateL11Test.phpt
+// / DateFacadeCreateL12Test.phpt instead of here. It still exercises checkMethodArgs
+// against the synthesised params there.
 
 // Call with an object arg.
 $_instance = Date::instance(new \DateTime());
