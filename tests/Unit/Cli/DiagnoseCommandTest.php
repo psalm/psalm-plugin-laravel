@@ -229,6 +229,12 @@ final class DiagnoseCommandTest extends TestCase
         $sorted = $report->loadedProviders;
         \sort($sorted);
         $this->assertSame($sorted, $report->loadedProviders);
+        // This repo's own psalm.xml has no <plugins> element (self-analysis doesn't need to
+        // load itself as a plugin) — the one real-world case findPluginClassElement()'s
+        // isset($xml->plugins) guard exists for (see its docblock). Asserting the value here,
+        // not just relying on phpunit.xml.dist's failOnWarning to catch a regressed guard as a
+        // bare "foreach() argument must be..." warning, gives a directly diagnostic failure.
+        $this->assertSame([], $report->experimentalFeaturesEnabled);
     }
 
     #[Test]
