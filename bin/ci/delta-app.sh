@@ -344,7 +344,15 @@ run_side() {
     exit_code=0
     (
         cd "$app_dir"
-        php -d memory_limit="$MEM" vendor/bin/psalm -c psalm.xml \
+        # error_reporting excludes E_DEPRECATED: some Psalm versions crash with an
+        # uncaught RuntimeException when their OWN internals (not the analyzed app)
+        # trigger a PHP deprecation notice on a newer PHP (e.g. dynamic property
+        # creation on Psalm\Internal\Analyzer\StatementsAnalyzer). That is a Psalm
+        # bug, not something this plugin can fix, but a deprecation notice should
+        # never turn "no report for this app" into a false Crashed row. PHP's INI
+        # parser evaluates E_* constant expressions for error_reporting specifically.
+        php -d memory_limit="$MEM" -d error_reporting="E_ALL & ~E_DEPRECATED" \
+            vendor/bin/psalm -c psalm.xml \
             --no-cache --no-diff --no-progress --no-suggestions --monochrome \
             ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
             --report="${issues_file}" >"$out_txt" 2>"$err_txt"
