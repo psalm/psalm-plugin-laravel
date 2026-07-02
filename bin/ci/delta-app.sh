@@ -160,6 +160,19 @@ configure_plugin_repo() {
             $d["minimum-stability"] = "dev";
             $d["prefer-stable"] = true;
             $d["require-dev"]["psalm/plugin-laravel"] = "*";
+            // minimum-stability=dev above is only needed for the dev-branch
+            // path repo install above; it also makes vimeo/psalm eligible to
+            // resolve to its dev-master branch instead of a tagged beta, which
+            // is a problem because dev-master is a rolling branch that can be
+            // transiently broken (e.g. a bad merge dropping a typed property,
+            // producing a dynamic-property deprecation that the Psalm error
+            // handler escalates into an uncaught crash). Pin vimeo/psalm to at
+            // least beta stability, reusing the floor constraint declared in
+            // the plugin composer.json, so this one package still resolves to
+            // a tagged release regardless of the relaxed root stability.
+            $plugin_composer = json_decode(file_get_contents($argv[2] . "/composer.json"), true, 512, JSON_THROW_ON_ERROR);
+            $psalm_constraint = trim(explode("||", $plugin_composer["require"]["vimeo/psalm"] ?? "^7.0.0-beta19")[0]);
+            $d["require-dev"]["vimeo/psalm"] = $psalm_constraint . "@beta";
             // Relax a pinned PHP constraint (e.g. "8.3.*" -> "^8.3") so install
             // does not fail on the runner PHP; analysis runs under the real binary.
             $php = $d["require"]["php"] ?? "";
@@ -344,14 +357,7 @@ run_side() {
     exit_code=0
     (
         cd "$app_dir"
-        # error_reporting excludes E_DEPRECATED: some Psalm versions crash with an
-        # uncaught RuntimeException when their OWN internals (not the analyzed app)
-        # trigger a PHP deprecation notice on a newer PHP (e.g. dynamic property
-        # creation on Psalm\Internal\Analyzer\StatementsAnalyzer). That is a Psalm
-        # bug, not something this plugin can fix, but a deprecation notice should
-        # never turn "no report for this app" into a false Crashed row. PHP's INI
-        # parser evaluates E_* constant expressions for error_reporting specifically.
-        php -d memory_limit="$MEM" -d error_reporting="E_ALL & ~E_DEPRECATED" \
+        php -d memory_limit="$MEM" \
             vendor/bin/psalm -c psalm.xml \
             --no-cache --no-diff --no-progress --no-suggestions --monochrome \
             ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
