@@ -8,6 +8,8 @@ use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
@@ -41,6 +43,14 @@ final class Plugin implements PluginEntryPointInterface
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
             FacadeMapProvider::init($output);
+
+            // Reset + arm the model-metadata registry. reset() clears any stale cache entries and
+            // builder statics left from a previous bootstrap in the same process (mirrors the
+            // ModelMethodHandler::init / MethodForwardingHandler::init reset convention); init()
+            // captures the Progress handle for deferred warm-up warnings. The actual per-model
+            // warm-up runs later, in ModelRegistrationHandler's AfterCodebasePopulated pass.
+            ModelMetadataRegistryBuilder::reset();
+            ModelMetadataRegistry::init($output);
 
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled
@@ -122,6 +132,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelToArrayShapeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
