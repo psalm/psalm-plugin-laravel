@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782926079776,
+  "lastUpdate": 1782954270339,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7900,6 +7900,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.64,
             "range": "± 0.57",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ebf9aa7b67149baa878c5bd7812f864d60781a9d",
+          "message": "feat(stubs): narrow getCasts()/getTouchedRelations(), fix Request::route()/file() defaults (#1205)\n\nAdd array<string, string> and list<string> return types for\nHasAttributes::getCasts() and HasRelationships::getTouchedRelations(),\nborrowed from Larastan and validated against Laravel source.\n\nFix two independent bugs in Request.phpstub found while doing that\ncomparison: route()'s TDefault template was wrongly constrained to\n`of object`, false-positiving on any non-object default; file()'s\n$default was silently dropped from the return type instead of being\nthreaded through, unlike the real data_get()-based implementation.",
+          "timestamp": "2026-07-02T03:01:55+02:00",
+          "tree_id": "0b631e6aa2af1b2577193d1fff1de57e52d729a2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ebf9aa7b67149baa878c5bd7812f864d60781a9d"
+        },
+        "date": 1782954269532,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.51,
+            "range": "± 0.05",
             "unit": "s"
           },
           {
