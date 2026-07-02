@@ -16,7 +16,6 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastShape;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TArray;
@@ -33,19 +32,19 @@ use Psalm\Type\Union;
  * {@see HasAttributes::attributesToArray()}. The Psalm wiring lives in {@see ModelToArrayShapeHandler}.
  *
  * Shape (`getArrayableItems` order): keys = schema columns + `$appends`, intersect `$visible` (when
- * non-empty), minus `$hidden`. Column values via {@see ModelPropertyHandler::resolveColumnType()},
- * overridden for casts that serialize divergently ({@see serializedCastType()}); append values via the
- * accessor type mapped to its serialized form ({@see serializedAppendType()}), else `mixed`.
+ * non-empty), minus `$hidden`. A column value is the accessor's serialized type when one backs the
+ * column (Laravel applies mutators before casts — {@see serializedAppendType()}), else a divergent
+ * cast's serialized type ({@see serializedCastType()}), else the read type
+ * ({@see ModelPropertyHandler::resolveColumnType()}); `$appends` resolve via their accessor, else `mixed`.
+ * `$appends`/`$hidden`/`$visible` include their `#[Appends]`/`#[Hidden]`/`#[Visible]` PHP-attribute config
+ * (merged at warm-up by {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder}).
  *
  * OPEN shape, every key optional: query-dependent keys (aggregate/`selectRaw` aliases, `setAttribute`,
  * relations) and partial loads / runtime visibility changes mean no key is guaranteed and unknown keys
  * must not false-positive.
  *
- * Not modeled: `#[Appends]`/`#[Hidden]`/`#[Visible]` PHP-attribute config (skipped at warm-up, so the
- * shape may carry a `#[Hidden]` key); a real column with an accessor (keeps its cast/schema type, not
- * the accessor's serialized type — Laravel applies mutators before casts); runtime mutators
- * (`makeHidden`/`append`/…); divergent casts other than date/backed-enum (kept at read-type);
- * collection element shapes past one level.
+ * Not modeled: runtime mutators (`makeHidden`/`append`/…); divergent casts other than date/backed-enum
+ * (kept at read-type); collection element shapes past one level.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/923
  * @internal
@@ -112,8 +111,12 @@ final class ModelSerializationShapeBuilder
     }
 
     /**
-     * Serialized column type: the date/backed-enum override when it applies, else the read type
-     * ({@see ModelPropertyHandler::resolveColumnType}).
+     * Serialized column type, precedence class-cast > accessor > date/backed-enum cast > read type,
+     * mirroring {@see HasAttributes::mutateAttributeForArray()} (isClassCastable before the accessor) and
+     * the mutator-before-other-casts order of {@see HasAttributes::attributesToArray()}. A class cast
+     * keeps the read type (class-cast serialization is not modeled); else an accessor serializes via
+     * {@see serializedAppendType()}; else a divergent cast via {@see serializedCastType()}; else the read
+     * type ({@see ModelPropertyHandler::resolveColumnType()}).
      *
      * @param class-string<Model> $modelClass
      */
@@ -125,6 +128,22 @@ final class ModelSerializationShapeBuilder
         ColumnInfo $columnInfo,
     ): Union {
         $cast = $metadata->casts()[$columnName] ?? null;
+
+        // A class cast (CastsAttributes/Castable) wins over a get accessor: mutateAttributeForArray()
+        // applies isClassCastable() BEFORE the accessor. We don't model class-cast serialization, so such
+        // a column keeps its read type whether or not it also has an accessor (the same as a class-cast
+        // column without one).
+        $hasClassCast = $cast instanceof CastInfo && $cast->shape->isClassCastable();
+
+        // Otherwise the accessor wins over the (primitive/date/enum) cast and schema: Laravel applies
+        // mutators before those casts and skips the cast for a mutated key.
+        if (!$hasClassCast) {
+            $accessor = $metadata->accessor($columnName);
+            if ($accessor instanceof AccessorInfo) {
+                return self::serializedAppendType($codebase, $accessor);
+            }
+        }
+
         if ($cast instanceof CastInfo) {
             $serialized = self::serializedCastType($codebase, $cast, $columnInfo);
             if ($serialized instanceof Union) {
@@ -185,22 +204,15 @@ final class ModelSerializationShapeBuilder
 
     /**
      * Append value type: the accessor return type mapped to its serialized form
-     * ({@see serializedAppendType()}), or `mixed` when no statically known accessor backs the key. Keyed
-     * by the separator-collapsed lowercase identity, so `full_name`/`fullName`/`fullname` all resolve.
+     * ({@see serializedAppendType()}), or `mixed` when no statically known accessor backs the key.
      */
     private static function appendValueType(Codebase $codebase, ModelMetadata $metadata, string $appendName): Union
     {
-        $key = EloquentModelMethods::accessorPropertyKey($appendName);
-        if ($key === null) {
-            return Type::getMixed();
-        }
+        $accessor = $metadata->accessor($appendName);
 
-        $accessor = $metadata->accessors()[$key] ?? null;
-        if (!$accessor instanceof AccessorInfo) {
-            return Type::getMixed();
-        }
-
-        return self::serializedAppendType($codebase, $accessor);
+        return $accessor instanceof AccessorInfo
+            ? self::serializedAppendType($codebase, $accessor)
+            : Type::getMixed();
     }
 
     /**
