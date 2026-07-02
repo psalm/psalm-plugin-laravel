@@ -18,19 +18,19 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\CustomBuilderMethodHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CustomTypeDetector;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\Progress\VoidProgress;
 
 /**
- * Tests custom builder detection in ModelRegistrationHandler.
+ * Tests custom builder detection in CustomTypeDetector.
  *
  * Priority matches Laravel's Model::newEloquentBuilder():
  * 1. newEloquentBuilder() override (bypasses everything when present)
  * 2. #[UseEloquentBuilder] attribute (checked first in base method)
  * 3. protected static string $builder property (fallback)
  */
-#[CoversClass(ModelRegistrationHandler::class)]
+#[CoversClass(CustomTypeDetector::class)]
 final class CustomBuilderDetectionTest extends TestCase
 {
     #[\Override]
@@ -117,7 +117,7 @@ final class CustomBuilderDetectionTest extends TestCase
     private function callResolveBuilderFromMethodOverride(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveBuilderFromMethodOverride');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveBuilderFromMethodOverride');
 
         return $method->invoke(null, $reflection);
     }
@@ -128,7 +128,7 @@ final class CustomBuilderDetectionTest extends TestCase
     private function callResolveBuilderFromStaticProperty(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveBuilderFromStaticProperty');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveBuilderFromStaticProperty');
 
         return $method->invoke(null, $reflection);
     }
@@ -145,7 +145,7 @@ final class CustomBuilderDetectionTest extends TestCase
         $progressRef = new \ReflectionProperty(Codebase::class, 'progress');
         $progressRef->setValue($codebase, new VoidProgress());
 
-        $builderClass = ModelRegistrationHandler::resolveCustomBuilderClass($codebase, $className);
+        $builderClass = CustomTypeDetector::resolveCustomBuilderClass($codebase, $className);
         if ($builderClass !== null) {
             ModelMethodHandler::registerCustomBuilder($className, $builderClass);
         }
