@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastsMethodParser;
@@ -173,8 +172,8 @@ final class ModelMetadataRegistryBuilder
         // Custom builder / collection detection is reflection-based (abstract bases included). Warm-up
         // is the SINGLE detection pass: registerHandlersForModel() (run AFTER warmUp) reads these off
         // ModelMetadata and owns hook registration — no second reflection per model (Gotcha 8).
-        $customBuilder = ModelRegistrationHandler::resolveCustomBuilderClass($codebase, $modelFqcn);
-        $customCollection = ModelRegistrationHandler::resolveCustomCollectionClass($codebase, $modelFqcn);
+        $customBuilder = CustomTypeDetector::resolveCustomBuilderClass($codebase, $modelFqcn);
+        $customCollection = CustomTypeDetector::resolveCustomCollectionClass($codebase, $modelFqcn);
 
         // §6.3 step 2: an abstract base cannot be instantiated (newInstanceWithoutConstructor()
         // throws \Error, not \ReflectionException). Its instance-derived fields (schema, casts,

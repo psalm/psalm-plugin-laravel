@@ -17,18 +17,18 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\CustomCollectionHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CustomTypeDetector;
 use Psalm\Progress\VoidProgress;
 
 /**
- * Tests custom collection detection in ModelRegistrationHandler.
+ * Tests custom collection detection in CustomTypeDetector.
  *
  * Priority matches Laravel's HasCollection::newCollection():
  * 1. newCollection() override (bypasses everything when present)
  * 2. #[CollectedBy] attribute (checked first in base method, walks parent chain)
  * 3. protected static string $collectionClass property (fallback)
  */
-#[CoversClass(ModelRegistrationHandler::class)]
+#[CoversClass(CustomTypeDetector::class)]
 final class CustomCollectionDetectionTest extends TestCase
 {
     #[\Override]
@@ -129,7 +129,7 @@ final class CustomCollectionDetectionTest extends TestCase
     private function callResolveCollectionFromAttribute(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveCollectionFromAttribute');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveCollectionFromAttribute');
         $codebase = $this->createCodebase();
 
         return $method->invoke(null, $reflection, $codebase);
@@ -141,7 +141,7 @@ final class CustomCollectionDetectionTest extends TestCase
     private function callResolveCollectionFromMethodOverride(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveCollectionFromMethodOverride');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveCollectionFromMethodOverride');
 
         return $method->invoke(null, $reflection);
     }
@@ -152,7 +152,7 @@ final class CustomCollectionDetectionTest extends TestCase
     private function callResolveCollectionFromStaticProperty(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveCollectionFromStaticProperty');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveCollectionFromStaticProperty');
 
         return $method->invoke(null, $reflection);
     }
@@ -164,7 +164,7 @@ final class CustomCollectionDetectionTest extends TestCase
      */
     private function resolveAndRegisterCollection(string $className): void
     {
-        $collectionClass = ModelRegistrationHandler::resolveCustomCollectionClass($this->createCodebase(), $className);
+        $collectionClass = CustomTypeDetector::resolveCustomCollectionClass($this->createCodebase(), $className);
         if ($collectionClass !== null) {
             CustomCollectionHandler::registerCustomCollection($className, $collectionClass);
         }
