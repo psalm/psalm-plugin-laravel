@@ -17,6 +17,7 @@ use App\Models\Mechanic;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 
 /**
  * Tests that models with custom query builders return the correct builder type
@@ -35,6 +36,37 @@ function test_query_returns_custom_builder(): void
 {
     $_result = WorkOrder::query();
     /** @psalm-check-type-exact $_result = WorkOrderBuilder<WorkOrder> */
+}
+
+/** Instance query-construction methods return the custom builder too. */
+function test_instance_query_construction_methods_return_custom_builder(WorkOrder $workOrder, QueryBuilder $query): void
+{
+    $_newEloquentBuilder = $workOrder->newEloquentBuilder($query);
+    /** @psalm-check-type-exact $_newEloquentBuilder = WorkOrderBuilder<WorkOrder> */
+
+    $_newQuery = $workOrder->newQuery();
+    /** @psalm-check-type-exact $_newQuery = WorkOrderBuilder<WorkOrder> */
+
+    $_newModelQuery = $workOrder->newModelQuery();
+    /** @psalm-check-type-exact $_newModelQuery = WorkOrderBuilder<WorkOrder> */
+
+    $_globalScopes = $workOrder->registerGlobalScopes($workOrder->newModelQuery());
+    /** @psalm-check-type-exact $_globalScopes = WorkOrderBuilder<WorkOrder> */
+
+    $_withoutRelationships = $workOrder->newQueryWithoutRelationships();
+    /** @psalm-check-type-exact $_withoutRelationships = WorkOrderBuilder<WorkOrder> */
+
+    $_withoutScopes = $workOrder->newQueryWithoutScopes();
+    /** @psalm-check-type-exact $_withoutScopes = WorkOrderBuilder<WorkOrder> */
+
+    $_withoutScope = $workOrder->newQueryWithoutScope('soft_deleting');
+    /** @psalm-check-type-exact $_withoutScope = WorkOrderBuilder<WorkOrder> */
+
+    $_forRestoration = $workOrder->newQueryForRestoration(1);
+    /** @psalm-check-type-exact $_forRestoration = WorkOrderBuilder<WorkOrder> */
+
+    $_customMethod = $workOrder->newQuery()->whereCompleted();
+    /** @psalm-check-type-exact $_customMethod = WorkOrderBuilder<WorkOrder> */
 }
 
 /** Custom builder methods are accessible via query(). */
@@ -300,6 +332,13 @@ function test_new_eloquent_builder_query(): void
     /** @psalm-check-type-exact $_result = VehicleBuilder<Vehicle> */
 }
 
+/** Vehicle::newQuery() returns the custom builder via newEloquentBuilder() override. */
+function test_new_eloquent_builder_instance_new_query(Vehicle $vehicle): void
+{
+    $_result = $vehicle->newQuery();
+    /** @psalm-check-type-exact $_result = VehicleBuilder<Vehicle> */
+}
+
 /** Custom builder methods work via query() on newEloquentBuilder model. */
 function test_new_eloquent_builder_custom_method(): void
 {
@@ -337,6 +376,20 @@ function test_scope_on_new_eloquent_builder_via_query(): void
 function test_static_builder_property_query(): void
 {
     $_result = Mechanic::query();
+    /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
+}
+
+/** Mechanic::newQuery() returns the custom builder via static $builder property. */
+function test_static_builder_property_instance_new_query(Mechanic $mechanic): void
+{
+    $_result = $mechanic->newQuery();
+    /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
+}
+
+/** Mechanic::newEloquentBuilder() returns the custom builder via static $builder property. */
+function test_static_builder_property_instance_new_eloquent_builder(Mechanic $mechanic, QueryBuilder $query): void
+{
+    $_result = $mechanic->newEloquentBuilder($query);
     /** @psalm-check-type-exact $_result = MechanicBuilder<Mechanic> */
 }
 
@@ -378,6 +431,20 @@ function test_nonexistent_method_on_custom_builder_model(): void
 function test_non_template_builder_query(): void
 {
     $_result = Invoice::query();
+    /** @psalm-check-type-exact $_result = InvoiceBuilder */
+}
+
+/** Non-template builder: newQuery() returns plain InvoiceBuilder. */
+function test_non_template_builder_instance_new_query(Invoice $invoice): void
+{
+    $_result = $invoice->newQuery();
+    /** @psalm-check-type-exact $_result = InvoiceBuilder */
+}
+
+/** Non-template builder: newEloquentBuilder() returns plain InvoiceBuilder. */
+function test_non_template_builder_instance_new_eloquent_builder(Invoice $invoice, QueryBuilder $query): void
+{
+    $_result = $invoice->newEloquentBuilder($query);
     /** @psalm-check-type-exact $_result = InvoiceBuilder */
 }
 

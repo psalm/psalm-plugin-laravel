@@ -55,20 +55,33 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * Refs: https://github.com/psalm/psalm-plugin-laravel/issues/925,
      *       https://github.com/psalm/psalm-plugin-laravel/issues/1134
      *
+     * $default's type is threaded through the non-null-$key branch: the real body is
+     * data_get($this->allFiles(), $key, $default), which returns $default verbatim when
+     * the dotted key does not resolve.
+     *
+     * @template TDefault
+     *
      * @param  string|null  $key
-     * @param  mixed  $default
-     * @return ($key is null ? array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>> : \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>|null)
+     * @param  TDefault  $default
+     * @return ($key is null ? array<string, \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>> : \Illuminate\Http\UploadedFile|array<\Illuminate\Http\UploadedFile>|TDefault)
      */
     public function file($key = null, $default = null) {}
 
     /**
      * Get the route handling the request.
      *
-     * @template TDefault of object
+     * $default is not constrained to object: Laravel accepts any type as the fallback
+     * value (route()->parameter() returns it verbatim when the named parameter is
+     * unbound), so `of object` false-positived on ordinary scalar/null defaults.
+     * The no-arg branch stays non-nullable Route, matching Laravel's own docblock and
+     * the existing RequestTest.phpt lock-in; the with-args branch already carried a
+     * bare `null` (kept, now also covering the object-parameter-binding case below).
+     *
+     * @template TDefault
      *
      * @param string|null $param
      * @param TDefault $default
-     * @psalm-return ($param is null ? \Illuminate\Routing\Route : TDefault|string|null)
+     * @psalm-return ($param is null ? \Illuminate\Routing\Route : TDefault|object|string|null)
      *
      * @psalm-taint-source input
      */

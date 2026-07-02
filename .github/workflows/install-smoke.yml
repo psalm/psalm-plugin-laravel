@@ -1,13 +1,16 @@
 name: Install smoke test
 
-# Executes the README quickstart verbatim against a fresh Laravel project on
-# each supported OS: install the plugin from this checkout, then
-# `psalm-laravel init`, `analyze`, and `diagnose`. Complements
-# test-laravel-app.yml (which is Ubuntu-only and covers a PHP x Laravel
-# compatibility matrix on a heavily scaffolded app) by covering OS-specific
-# install/configuration behavior on a minimal one — the class of bug fixed in
-# #1189, where a Windows proc_open() launcher regression could pass every
-# Ubuntu-only check.
+# Executes the README quickstart verbatim on each supported OS: install the
+# plugin from this checkout, then `psalm-laravel init`, `analyze`, and
+# `diagnose`. Runs against two target kinds (matrix `kind`): a fresh Laravel
+# `app`, and a real Laravel `package` (socialite) whose src/-autoload config path
+# and Testbench plugin-boot fallback the app flow never exercises (#1198).
+#
+# Complements test-laravel-app.yml (which is Ubuntu-only and covers a PHP x
+# Laravel compatibility matrix on a heavily scaffolded app) by covering
+# OS-specific install/configuration behavior on minimal targets — the class of
+# bug fixed in #1189, where a Windows proc_open() launcher regression could pass
+# every Ubuntu-only check.
 
 on:
   workflow_dispatch:
@@ -19,6 +22,7 @@ on:
       - bin/ci/install-smoke.php
       - src/Cli/**
       - src/Plugin.php
+      - src/Bootstrap/ApplicationProvider.php
       - .github/workflows/install-smoke.yml
   push:
     branches: [master]
@@ -29,6 +33,7 @@ on:
       - bin/ci/install-smoke.php
       - src/Cli/**
       - src/Plugin.php
+      - src/Bootstrap/ApplicationProvider.php
       - .github/workflows/install-smoke.yml
 
 # Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
@@ -41,7 +46,14 @@ permissions:
 
 jobs:
   install-smoke:
-    name: Install smoke (${{ matrix.name }})
+    # The `app` rows keep #1197's exact job names ("Install smoke (Ubuntu)" etc.)
+    # so any branch-protection check keyed on them stays valid; `package` rows
+    # append " / package". Explicit include rows (rather than an os x kind
+    # cross-product) keep `runs-on: ${{ matrix.runner }}` statically resolvable to
+    # a concrete Blacksmith label — lint-workflows.yml's octoscan step ignores the
+    # runner-label warning by label, which a nested `matrix.os.runner` would turn
+    # into an unresolvable expression and trip as a self-hosted-runner alert.
+    name: Install smoke (${{ matrix.name }}${{ matrix.kind == 'package' && ' / package' || '' }})
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -49,10 +61,22 @@ jobs:
         include:
           - name: Ubuntu
             runner: blacksmith-2vcpu-ubuntu-2404
+            kind: app
+          - name: Ubuntu
+            runner: blacksmith-2vcpu-ubuntu-2404
+            kind: package
           - name: Windows
             runner: blacksmith-2vcpu-windows-2025
+            kind: app
+          - name: Windows
+            runner: blacksmith-2vcpu-windows-2025
+            kind: package
           - name: macOS
             runner: blacksmith-6vcpu-macos-15
+            kind: app
+          - name: macOS
+            runner: blacksmith-6vcpu-macos-15
+            kind: package
     runs-on: ${{ matrix.runner }}
     steps:
       # NOTE: step-security/harden-runner is intentionally NOT used here.
@@ -93,13 +117,14 @@ jobs:
         # write concerns.
         env:
           APP_DIR: ${{ runner.temp }}/psalm-install-smoke
+          PROJECT_KIND: ${{ matrix.kind }}
         run: php bin/ci/install-smoke.php
 
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: install-smoke-${{ matrix.name }}
+          name: install-smoke-${{ matrix.name }}-${{ matrix.kind }}
           path: |
             install-smoke.log
             ${{ runner.temp }}/psalm-install-smoke/composer.json

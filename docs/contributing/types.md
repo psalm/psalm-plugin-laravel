@@ -28,6 +28,7 @@ Psalm docs (deep links):
 | `numeric`                              | `TNumeric`          | `int\|float\|numeric-string`                                       |
 | `array-key`                            | `TArrayKey`         | `int\|string`                                                      |
 | `mixed`                                | `TMixed`            | Top type                                                           |
+| `iterable`                             |                     | `array\|Traversable`; accepts generics: `iterable<TKey, TValue>`   |
 | `never`                                | `TNever`            | Bottom type. Aliases: `no-return`, `never-return`, `never-returns` |
 | `object`                               | `TObject`           | Any object                                                         |
 | `resource`                             | `TResource`         |                                                                    |
@@ -222,7 +223,7 @@ Foo&Bar                 // intersection (must satisfy both)
 
 `@var`, `@param`, `@return`, `@property`, `@property-read`, `@property-write`, `@method`, `@throws`, `@deprecated`, `@internal`, `@mixin`
 
-All of the above also accept a `@psalm-` prefix (e.g. `@psalm-param`) for advanced type syntax that phpDocumentor can't parse. PHPStan prefix (`@phpstan-param`, etc.) is also recognized.
+The type-carrying tags (`@var`, `@param`, `@return`, `@property*`, `@method`) also accept a `@psalm-` prefix (e.g. `@psalm-param`) for advanced type syntax that phpDocumentor can't parse. PHPStan prefix (`@phpstan-param`, etc.) is also recognized. `@psalm-throws`, `@psalm-deprecated`, and `@psalm-mixin` do NOT exist — Psalm rejects unknown `@psalm-*` tags with `Unrecognised annotation` (see `DocComment::PSALM_ANNOTATIONS`).
 
 ### Assertions
 
@@ -234,6 +235,7 @@ All of the above also accept a `@psalm-` prefix (e.g. `@psalm-param`) for advanc
 | `@psalm-assert-if-true !Type $param`  | Function returns `true`   |
 | `@psalm-assert-if-false Type $param`  | Function returns `false`  |
 | `@psalm-assert-if-false !Type $param` | Function returns `false`  |
+| `@psalm-assert-untainted $param`      | Function returns normally (taint analysis: marks param untainted) |
 
 Negated assertions (`!Type`) assert the param is **not** of the given type. Common examples: `!null`, `!false`, `!string`.
 
@@ -340,4 +342,4 @@ Negated assertions (`!Type`) assert the param is **not** of the given type. Comm
 | `@psalm-taint-specialize`            | Track taint per-instance or per-call                      |
 | `@psalm-flow ($param) -> return`     | Define explicit taint flow path                           |
 
-Taint types: `html`, `sql`, `shell`, `file`, `cookie`, `header`, `redirect`, `ldap`, `ssrf`, `user_secret`, `system_secret`, `callable`, `eval`, `unserialize`, `include`, `text`, `crypto` (and custom ones).
+Taint kinds: `html`, `has_quotes`, `sql`, `shell`, `file`, `cookie`, `header`, `ldap`, `ssrf`, `xpath`, `sleep`, `extract`, `user_secret`, `system_secret`, `callable`, `eval`, `unserialize`, `include`, `llm_prompt`, plus the aliases `input` / `tainted` / `input_except_sleep` — see `Psalm\Type\TaintKind::TAINT_NAMES`. Arbitrary custom kind names are also accepted (they report as `TaintedCustom`). Full table with attack vectors: [Taint Analysis](taint-analysis.md#taint-kinds).

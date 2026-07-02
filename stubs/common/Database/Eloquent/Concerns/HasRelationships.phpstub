@@ -6,6 +6,11 @@ trait HasRelationships
 {
 
     /**
+     * @return list<string>
+     */
+    public function getTouchedRelations() {}
+
+    /**
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      * @psalm-param class-string<TRelatedModel> $related
      *
