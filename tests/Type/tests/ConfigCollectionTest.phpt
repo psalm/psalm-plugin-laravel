@@ -1,3 +1,11 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+// Skip on Laravel < 12: Repository::collection() was added in Laravel 12 and
+// doesn't exist on the real class on Laravel 11, so ConfigRepositoryMethodHandler
+// declines to register a return type there (see collectionMethodExists()) and
+// the asserted narrowing never fires.
+\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.0.0');
 --FILE--
 <?php declare(strict_types=1);
 

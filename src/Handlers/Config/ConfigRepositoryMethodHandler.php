@@ -55,9 +55,24 @@ final class ConfigRepositoryMethodHandler implements MethodReturnTypeProviderInt
 
         return match ($event->getMethodNameLowercase()) {
             'get' => ConfigKeyResolver::resolveFromCallArgs($event->getCallArgs(), $nodeTypeProvider),
-            'collection' => ConfigKeyResolver::resolveCollectionFromCallArgs($event->getCallArgs(), $nodeTypeProvider),
+            'collection' => self::collectionMethodExists()
+                ? ConfigKeyResolver::resolveCollectionFromCallArgs($event->getCallArgs(), $nodeTypeProvider)
+                : null,
             default => null,
         };
+    }
+
+    /**
+     * `Repository::collection()` was added in Laravel 12; on Laravel 11 the
+     * real method doesn't exist. Without this guard, registering a return
+     * type for 'collection' regardless of version makes Psalm try to fetch
+     * params for a nonexistent method and crash with `Cannot get method
+     * params for ...Repository::collection` (same crash class documented
+     * below for the params provider).
+     */
+    private static function collectionMethodExists(): bool
+    {
+        return method_exists(\Illuminate\Config\Repository::class, 'collection');
     }
 
     /**
