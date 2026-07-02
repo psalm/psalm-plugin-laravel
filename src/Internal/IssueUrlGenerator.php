@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use Composer\InstalledVersions;
+use Psalm\LaravelPlugin\Config\ExperimentalFeature;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 
 /** @internal */
@@ -94,7 +95,26 @@ final class IssueUrlGenerator
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
             '- configDirectories: ' . self::formatConfigDirectories($pluginConfig->configDirectories),
+            '- experimentalAll: ' . self::formatBool($pluginConfig->experimentalAll),
+            '- experimentalFeatures: ' . self::formatExperimentalFeatures($pluginConfig->experimentalFeatures),
         ];
+    }
+
+    /**
+     * Render experimentalFeatures for the bug-report body. No sanitisation needed unlike
+     * cachePath/configDirectories — these are fixed enum values, never filesystem paths.
+     *
+     * @param list<ExperimentalFeature> $features
+     *
+     * @psalm-pure
+     */
+    private static function formatExperimentalFeatures(array $features): string
+    {
+        if ($features === []) {
+            return '[]';
+        }
+
+        return '[' . \implode(', ', \array_map(static fn(ExperimentalFeature $feature): string => $feature->value, $features)) . ']';
     }
 
     /**

@@ -30,6 +30,9 @@ Full config example:
         <findOctaneIncompatibleBinding value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
+        <experimental>
+            <feature name="modelToArrayShape" />
+        </experimental>
     </pluginClass>
 </plugins>
 ```
@@ -201,6 +204,36 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 ```xml
 <findOctaneIncompatibleBinding value="true" />
 ```
+
+## `experimental`
+
+**default**: no experimental features enabled
+
+Gates rules and handlers that are not yet stable behind an explicit opt-in. This gives new analysis a real-world testing period without exposing every user to churn.
+
+Experimental features may change behavior, change name, or be removed in any release. They are exempt from semver, so read the linked tracking issue before enabling one in CI.
+
+Current features:
+
+- `modelToArrayShape` (tracks [#923](https://github.com/psalm/psalm-plugin-laravel/issues/923)): infers a precise array shape for `Model::toArray()` and `attributesToArray()` from `$appends` and column types, instead of the generic `array<string, mixed>`.
+
+### Enabling a specific feature
+
+```xml
+<experimental>
+    <feature name="modelToArrayShape" />
+</experimental>
+```
+
+### Enabling every experimental feature
+
+For early adopters who accept more churn between releases in exchange for trying everything.
+
+```xml
+<experimental all="true" />
+```
+
+If a feature name graduates to stable or is withdrawn, keeping it in `<experimental>` produces a deprecation notice on the next run instead of an error (a plugin upgrade never breaks an existing psalm.xml this way). Remove the entry once you see the notice.
 
 ## Cache directory
 

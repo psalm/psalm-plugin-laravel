@@ -7,6 +7,8 @@ namespace Psalm\LaravelPlugin\Cli\Diagnose;
 use Composer\InstalledVersions;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Config\ExperimentalFeature;
+use Psalm\LaravelPlugin\Plugin;
 
 /**
  * Collects runtime introspection data about the plugin's resolved state.
@@ -63,6 +65,7 @@ class Diagnostics
             bootstrapErrors: $bootstrapErrors,
             hardFailures: $hardFailures,
             loadedProviders: $this->collectLoadedProviders(),
+            experimentalFeaturesEnabled: $this->readEnabledExperimentalFeatures($projectRoot),
         );
     }
 
@@ -120,6 +123,109 @@ class Diagnostics
      */
     private function readPsalmXmlPhpVersion(string $projectRoot): ?string
     {
+        $xml = $this->loadPsalmXml($projectRoot);
+        if (!$xml instanceof \SimpleXMLElement) {
+            return null;
+        }
+
+        $attr = $xml['phpVersion'] ?? null;
+        if (!$attr instanceof \SimpleXMLElement) {
+            return null;
+        }
+
+        $value = (string) $attr;
+        return $value === '' ? null : $value;
+    }
+
+    /**
+     * Feature values from every `<experimental>` entry enabled in the user's psalm.xml,
+     * resolved against {@see ExperimentalFeature}. Unlike `PluginConfig::fromXml()`, this
+     * never throws or emits a deprecation notice for an unrecognized/graduated/withdrawn
+     * name — diagnose describes what is currently live, not every mistake in psalm.xml; a
+     * real Psalm run is what surfaces a config error. `all="true"` resolves to every case
+     * regardless of `<feature>` children.
+     *
+     * @return list<non-empty-string>
+     */
+    private function readEnabledExperimentalFeatures(?string $projectRoot): array
+    {
+        if ($projectRoot === null) {
+            return [];
+        }
+
+        $xml = $this->loadPsalmXml($projectRoot);
+        if (!$xml instanceof \SimpleXMLElement) {
+            return [];
+        }
+
+        $pluginClass = $this->findPluginClassElement($xml);
+        if (!$pluginClass instanceof \SimpleXMLElement || !isset($pluginClass->experimental)) {
+            return [];
+        }
+
+        /** @psalm-var \SimpleXMLElement $experimental */
+        $experimental = $pluginClass->experimental;
+
+        if ((string) ($experimental['all'] ?? 'false') === 'true') {
+            return \array_map(static fn(ExperimentalFeature $case): string => $case->value, ExperimentalFeature::cases());
+        }
+
+        $enabled = [];
+
+        /** @psalm-var iterable<\SimpleXMLElement> $children */
+        $children = $experimental->feature;
+
+        foreach ($children as $node) {
+            $feature = ExperimentalFeature::tryFrom((string) ($node['name'] ?? ''));
+
+            if ($feature !== null && !\in_array($feature->value, $enabled, true)) {
+                $enabled[] = $feature->value;
+            }
+        }
+
+        return $enabled;
+    }
+
+    /**
+     * Find this plugin's `<pluginClass>` among possibly several `<plugins>` entries.
+     *
+     * The `isset()` guard matters, not just an `instanceof` check: chaining a second
+     * dynamic-property access off an already-absent SimpleXML proxy (no `<plugins>` at all,
+     * e.g. this repo's own self-analysis psalm.xml) degrades `->pluginClass` to real `null`
+     * instead of another empty-but-iterable proxy — foreach() on that warns at runtime even
+     * though Psalm's stub types the chain as non-nullable. Off a genuinely-present (if
+     * childless) `<plugins>`, the same chain is always safely iterable.
+     */
+    private function findPluginClassElement(\SimpleXMLElement $xml): ?\SimpleXMLElement
+    {
+        if (!isset($xml->plugins)) {
+            return null;
+        }
+
+        $plugins = $xml->plugins;
+
+        /** @psalm-var iterable<\SimpleXMLElement> $pluginClasses */
+        $pluginClasses = $plugins->pluginClass;
+
+        foreach ($pluginClasses as $node) {
+            $class = \ltrim((string) ($node['class'] ?? ''), '\\');
+
+            if ($class === \ltrim(Plugin::class, '\\')) {
+                return $node;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Load `<projectRoot>/psalm.xml` as a SimpleXMLElement, or null if it does not exist or is
+     * malformed. Shared by every diagnose fact read directly off the user's psalm.xml (PHP
+     * version, active experimental features) instead of `Config::getConfigForPath()` — see
+     * {@see resolveAnalysisPhpVersion()} for why.
+     */
+    private function loadPsalmXml(string $projectRoot): ?\SimpleXMLElement
+    {
         $path = $projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml';
         if (!\is_file($path)) {
             return null;
@@ -137,17 +243,7 @@ class Diagnostics
         \libxml_clear_errors();
         \libxml_use_internal_errors($previous);
 
-        if (!$xml instanceof \SimpleXMLElement) {
-            return null;
-        }
-
-        $attr = $xml['phpVersion'] ?? null;
-        if (!$attr instanceof \SimpleXMLElement) {
-            return null;
-        }
-
-        $value = (string) $attr;
-        return $value === '' ? null : $value;
+        return $xml instanceof \SimpleXMLElement ? $xml : null;
     }
 
     private function safePrettyVersion(string $package): ?string

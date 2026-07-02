@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Cli;
 use Psalm\LaravelPlugin\Cli\Diagnose\Diagnostics;
 use Psalm\LaravelPlugin\Cli\Diagnose\Report;
 use Psalm\LaravelPlugin\Cli\Diagnose\TipsProvider;
+use Psalm\LaravelPlugin\Config\ExperimentalFeature;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -128,6 +129,7 @@ final class DiagnoseCommand extends Command
         }
 
         $this->renderProviders($io, $report->loadedProviders, $listProviders);
+        $this->renderExperimentalFeatures($io, $report->experimentalFeaturesEnabled);
 
         if ($tips !== []) {
             $io->writeln('<info>Tips</info>');
@@ -164,6 +166,24 @@ final class DiagnoseCommand extends Command
         }
 
         $io->newLine();
+    }
+
+    /**
+     * @param list<string> $enabled {@see Report::$experimentalFeaturesEnabled}
+     */
+    private function renderExperimentalFeatures(SymfonyStyle $io, array $enabled): void
+    {
+        if ($enabled === []) {
+            $available = \count(ExperimentalFeature::cases());
+            $this->renderSection($io, 'Experimental', [
+                'Enabled' => "none ({$available} available, see docs/config.md)",
+            ]);
+            return;
+        }
+
+        $this->renderSection($io, 'Experimental', [
+            'Enabled' => \implode(', ', $enabled),
+        ]);
     }
 
     /**

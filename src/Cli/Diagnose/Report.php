@@ -22,6 +22,7 @@ final readonly class Report
      * @param list<string> $bootstrapErrors
      * @param list<string> $hardFailures
      * @param list<string> $loadedProviders Service provider class names the booted kernel registered, sorted. Empty when boot failed.
+     * @param list<non-empty-string> $experimentalFeaturesEnabled `Psalm\LaravelPlugin\Config\ExperimentalFeature` values active per psalm.xml. Empty when none are.
      */
     public function __construct(
         public ?string $pluginVersion,
@@ -35,5 +36,6 @@ final readonly class Report
         public array $bootstrapErrors,
         public array $hardFailures,
         public array $loadedProviders,
+        public array $experimentalFeaturesEnabled,
     ) {}
 }

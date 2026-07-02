@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin;
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Config\ExperimentalFeature;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
@@ -31,6 +32,7 @@ final class Plugin implements PluginEntryPointInterface
     {
         $pluginConfig = PluginConfig::fromXml($config);
         $output = $this->getProgress($registration);
+        $this->reportActiveExperiments($pluginConfig, $output);
 
         try {
             ApplicationProvider::bootApp();
@@ -67,6 +69,27 @@ final class Plugin implements PluginEntryPointInterface
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
+    }
+
+    /**
+     * One line per run naming every active experimental feature, so CI logs record exactly
+     * which non-stable analysis ran. Silent when nothing is enabled — the common case. Runs
+     * before the try block so it still surfaces if boot fails afterward.
+     */
+    private function reportActiveExperiments(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
+    {
+        $active = $pluginConfig->experimentalAll ? ExperimentalFeature::cases() : $pluginConfig->experimentalFeatures;
+
+        if ($active === []) {
+            return;
+        }
+
+        $names = \implode(', ', \array_map(
+            static fn(ExperimentalFeature $feature): string => $feature->value,
+            $active,
+        ));
+
+        $output->write("Laravel plugin: experimental features enabled: {$names}\n");
     }
 
     private function registerStubs(
@@ -141,6 +164,10 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
         if ($pluginConfig->shouldUseMigrations()) {
             Handlers\Eloquent\ModelRegistrationHandler::enableMigrations();
+        }
+
+        if ($pluginConfig->isExperimentEnabled(ExperimentalFeature::ModelToArrayShape)) {
+            Handlers\Eloquent\ModelRegistrationHandler::enableModelToArrayShape();
         }
 
         $registration->registerHooksFromClass(Handlers\Eloquent\CastContractUserDefinedHandler::class);

@@ -9,11 +9,13 @@ use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\ColumnFallback;
+use Psalm\LaravelPlugin\Config\ExperimentalFeature;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Plugin;
 
 #[CoversClass(PluginConfig::class)]
 #[CoversClass(ColumnFallback::class)]
+#[CoversClass(ExperimentalFeature::class)]
 #[CoversClass(Plugin::class)]
 final class PluginConfigTest extends TestCase
 {
@@ -51,6 +53,9 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->resolveDynamicWhereClauses);
         $this->assertTrue($config->resolveConfigReturnTypes);
         $this->assertSame([], $config->configDirectories);
+        $this->assertFalse($config->experimentalAll);
+        $this->assertSame([], $config->experimentalFeatures);
+        $this->assertFalse($config->isExperimentEnabled(ExperimentalFeature::ModelToArrayShape));
     }
 
     #[Test]
@@ -115,6 +120,138 @@ final class PluginConfigTest extends TestCase
         $this->expectExceptionMessageMatches('/<configDirectory> requires a non-empty `name` attribute/');
 
         PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function experimental_absent_element_enables_nothing(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass />');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->experimentalAll);
+        $this->assertSame([], $config->experimentalFeatures);
+    }
+
+    #[Test]
+    public function experimental_named_feature_enables_only_that_feature(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental><feature name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->experimentalAll);
+        $this->assertSame([ExperimentalFeature::ModelToArrayShape], $config->experimentalFeatures);
+        $this->assertTrue($config->isExperimentEnabled(ExperimentalFeature::ModelToArrayShape));
+    }
+
+    #[Test]
+    public function experimental_all_true_enables_every_case(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental all="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->experimentalAll);
+
+        foreach (ExperimentalFeature::cases() as $case) {
+            $this->assertTrue($config->isExperimentEnabled($case));
+        }
+    }
+
+    #[Test]
+    public function experimental_all_and_named_feature_combine(): void
+    {
+        // <feature> children are redundant once all="true" is set, but harmless — the
+        // config object still records them, isExperimentEnabled() just short-circuits on $all.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental all="true"><feature name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->experimentalAll);
+        $this->assertSame([ExperimentalFeature::ModelToArrayShape], $config->experimentalFeatures);
+    }
+
+    #[Test]
+    public function experimental_duplicate_feature_names_dedupe(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental>'
+            . '<feature name="modelToArrayShape" />'
+            . '<feature name="modelToArrayShape" />'
+            . '</experimental>'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertSame([ExperimentalFeature::ModelToArrayShape], $config->experimentalFeatures);
+    }
+
+    #[Test]
+    public function experimental_invalid_all_value_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental all="banana" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid experimental all value 'banana'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function experimental_unknown_feature_name_throws_with_valid_list_and_suggestion(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental><feature name="modelToArayShape" /></experimental></pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches(
+            "/Unknown experimental feature 'modelToArayShape'\\. Did you mean 'modelToArrayShape'\\? "
+            . "Valid values: 'modelToArrayShape'\\./",
+        );
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function experimental_feature_missing_name_attribute_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental><feature /></experimental></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/<feature> requires a non-empty `name` attribute/');
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    #[IgnoreDeprecations]
+    public function experimental_present_but_empty_triggers_deprecation_and_enables_nothing(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->experimentalAll);
+        $this->assertSame([], $config->experimentalFeatures);
+    }
+
+    #[Test]
+    public function experimental_graduated_and_withdrawn_maps_are_empty_today(): void
+    {
+        // No feature has graduated or been withdrawn yet — ExperimentalFeature::ModelToArrayShape
+        // is the first ever experimental feature. This locks in today's "always null" behavior;
+        // the graduated/withdrawn deprecation-notice branches in PluginConfig get real coverage
+        // the moment a future PR actually adds an entry to one of these maps.
+        $this->assertNull(ExperimentalFeature::graduatedIn('modelToArrayShape'));
+        $this->assertNull(ExperimentalFeature::withdrawnBecause('modelToArrayShape'));
     }
 
     #[Test]

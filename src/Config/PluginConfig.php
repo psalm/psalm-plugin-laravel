@@ -18,6 +18,7 @@ final readonly class PluginConfig
 {
     /**
      * @param list<string> $configDirectories
+     * @param list<ExperimentalFeature> $experimentalFeatures
      *
      * @psalm-mutation-free
      */
@@ -40,6 +41,8 @@ final readonly class PluginConfig
         public ?bool $findOctaneIncompatibleBinding,
         public string $cachePath,
         public bool $failOnInternalError,
+        public bool $experimentalAll,
+        public array $experimentalFeatures,
     ) {}
 
     public static function fromXml(?\SimpleXMLElement $config): self
@@ -67,6 +70,7 @@ final readonly class PluginConfig
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
+        $experimental = self::xmlExperimentalFeatures($config);
 
         return new self(
             modelPropertiesColumnFallback: $columnFallback,
@@ -80,6 +84,8 @@ final readonly class PluginConfig
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),
             failOnInternalError: $failOnInternalError,
+            experimentalAll: $experimental['all'],
+            experimentalFeatures: $experimental['features'],
         );
     }
 
@@ -87,6 +93,15 @@ final readonly class PluginConfig
     public function shouldUseMigrations(): bool
     {
         return $this->modelPropertiesColumnFallback === ColumnFallback::Migrations;
+    }
+
+    /**
+     * Whether $feature is enabled, either by name or via `<experimental all="true" />`.
+     * @psalm-mutation-free
+     */
+    public function isExperimentEnabled(ExperimentalFeature $feature): bool
+    {
+        return $this->experimentalAll || \in_array($feature, $this->experimentalFeatures, true);
     }
 
     /**
@@ -125,6 +140,146 @@ final readonly class PluginConfig
         }
 
         return $values;
+    }
+
+    /**
+     * Parse `<experimental all="true">` / `<experimental><feature name="..."/></experimental>`.
+     *
+     * Absent element → nothing enabled, no notice (the common case). `all="true"` enables
+     * every case in {@see ExperimentalFeature}; `<feature>` children are unioned with it
+     * (redundant but harmless once `all` is set). Present-but-childless with no `all`
+     * attribute is very likely a mistake, so it gets a deprecation-style notice rather than
+     * silently doing nothing. Duplicate `<feature>` names dedupe silently.
+     *
+     * @return array{all: bool, features: list<ExperimentalFeature>}
+     */
+    private static function xmlExperimentalFeatures(?\SimpleXMLElement $config): array
+    {
+        // <experimental> has no attribute of its own to lean on when childless (unlike
+        // xmlOptionalBoolAttr's `value`), so isset() is the only reliable "is it actually
+        // there" signal — accessing a missing child via -> returns an empty proxy that also
+        // satisfies `instanceof SimpleXMLElement`.
+        if (!$config instanceof \SimpleXMLElement || !isset($config->experimental)) {
+            return ['all' => false, 'features' => []];
+        }
+
+        /** @psalm-var \SimpleXMLElement $element */
+        $element = $config->experimental;
+
+        $allValue = (string) ($element['all'] ?? 'false');
+
+        if (!\in_array($allValue, ['true', 'false'], true)) {
+            throw new \InvalidArgumentException(
+                "Invalid experimental all value '{$allValue}'. Valid values: 'true', 'false'.",
+            );
+        }
+
+        $all = $allValue === 'true';
+
+        /** @psalm-var iterable<\SimpleXMLElement> $children */
+        $children = $element->feature;
+
+        $features = [];
+        $sawChild = false;
+
+        foreach ($children as $node) {
+            $sawChild = true;
+            $name = (string) ($node['name'] ?? '');
+
+            if ($name === '') {
+                throw new \InvalidArgumentException(
+                    '<feature> requires a non-empty `name` attribute, e.g. <feature name="modelToArrayShape" />.',
+                );
+            }
+
+            $feature = self::resolveExperimentalFeatureName($name);
+
+            if ($feature instanceof \Psalm\LaravelPlugin\Config\ExperimentalFeature && !\in_array($feature, $features, true)) {
+                $features[] = $feature;
+            }
+        }
+
+        if (!$all && !$sawChild) {
+            \trigger_error(
+                '<experimental /> has no effect: it has no <feature> children and no all="true" attribute. '
+                . 'Remove it, or see docs/config.md for how to enable a specific feature.',
+                \E_USER_DEPRECATED,
+            );
+        }
+
+        return ['all' => $all, 'features' => $features];
+    }
+
+    /**
+     * Classify one `<feature name="...">` value. A live case is returned as-is. A
+     * graduated or withdrawn name emits a deprecation notice and returns null — dropped,
+     * not rejected, so upgrading the plugin never turns a previously-valid psalm.xml into
+     * a hard failure. Any other name throws, listing every valid name plus a nearest-match
+     * hint for typos.
+     */
+    private static function resolveExperimentalFeatureName(string $name): ?ExperimentalFeature
+    {
+        $feature = ExperimentalFeature::tryFrom($name);
+
+        if ($feature !== null) {
+            return $feature;
+        }
+
+        $graduatedVersion = ExperimentalFeature::graduatedIn($name);
+
+        if ($graduatedVersion !== null) {
+            \trigger_error(
+                "Experimental feature '{$name}' graduated to stable in v{$graduatedVersion} and no longer needs "
+                . '<experimental>. Remove it from psalm.xml.',
+                \E_USER_DEPRECATED,
+            );
+
+            return null;
+        }
+
+        $withdrawnReason = ExperimentalFeature::withdrawnBecause($name);
+
+        if ($withdrawnReason !== null) {
+            \trigger_error(
+                "Experimental feature '{$name}' was withdrawn ({$withdrawnReason}) and no longer exists. "
+                . 'Remove it from psalm.xml.',
+                \E_USER_DEPRECATED,
+            );
+
+            return null;
+        }
+
+        $valid = \implode(', ', \array_map(
+            static fn(ExperimentalFeature $case): string => "'{$case->value}'",
+            ExperimentalFeature::cases(),
+        ));
+
+        throw new \InvalidArgumentException(
+            "Unknown experimental feature '{$name}'. Did you mean '" . self::nearestExperimentalFeatureName($name)
+            . "'? Valid values: {$valid}.",
+        );
+    }
+
+    /**
+     * Closest valid feature name by edit distance, for a "did you mean" hint on typos.
+     * @psalm-pure
+     */
+    private static function nearestExperimentalFeatureName(string $name): string
+    {
+        $cases = ExperimentalFeature::cases();
+        $closest = $cases[0]->value;
+        $closestDistance = \levenshtein($name, $closest);
+
+        foreach ($cases as $case) {
+            $distance = \levenshtein($name, $case->value);
+
+            if ($distance < $closestDistance) {
+                $closest = $case->value;
+                $closestDistance = $distance;
+            }
+        }
+
+        return $closest;
     }
 
     /**

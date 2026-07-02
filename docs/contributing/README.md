@@ -175,7 +175,17 @@ The table below maps each hook to the handlers using it. Source of truth: `Plugi
 There are two ways to register:
 
 1. **Class-level** (most handlers): implement the interface, register via `$registration->registerHooksFromClass(MyHandler::class)` in `Plugin::registerHandlers()`
-2. **Closure-level** (model property handlers): register via `$providers->property_type_provider->registerClosure(...)` — used by `ModelRegistrationHandler` to bind property handlers per-model after codebase is populated
+2. **Closure-level** (model property handlers): register via `$providers->property_type_provider->registerClosure(...)` — used by `ModelRegistrationHandler` to bind property handlers per-model after codebase is populated. Some closure-level handlers are additionally gated behind `<experimental>` (see [Configuration](../config.md#experimental)) instead of a plain config flag. `ModelToArrayShapeHandler` is the first example: `ModelRegistrationHandler::enableModelToArrayShape()` toggles a static flag that guards its `registerClosure()` call, mirroring the existing `enableMigrations()` pattern used for `columnFallback=migrations`.
+
+### Experimental features
+
+Rules or handlers that are not yet stable enough for every user to run unconditionally are gated behind `<experimental>` (see [Configuration](../config.md#experimental)) instead of a plain on/off config flag. The registry lives in `src/Config/ExperimentalFeature.php`.
+
+Lifecycle:
+
+1. **Introduce**: add a case to `ExperimentalFeature`, default off. Gate the registration on `PluginConfig::isExperimentEnabled(ExperimentalFeature::YourCase)`. Document the feature under [Configuration](../config.md#experimental) and note its experimental status in the handler's docblock.
+2. **Stabilize**: remove the case from `ExperimentalFeature`, add its value to the `GRADUATED` map (value: the plugin version it stabilized in), and make its registration unconditional. Requesting the old name in `<experimental>` then produces a deprecation notice instead of an error, so an existing psalm.xml keeps working until the user removes the entry. Keep the notice for at least one minor release, then drop the `GRADUATED` entry at the next major.
+3. **Withdraw**: same mechanics as stabilizing, but add the value to `WITHDRAWN` instead (value: a short reason) and do not make the registration unconditional. Used when a feature turns out to be the wrong approach rather than simply not yet stable.
 
 See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Annotations](types.md) for a quick reference of all supported types and annotations, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 

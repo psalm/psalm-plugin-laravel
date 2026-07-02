@@ -1,3 +1,5 @@
+--ARGS--
+--no-progress --no-diff --config=./tests/Type/psalm-with-model-to-array-shape.xml
 --FILE--
 <?php declare(strict_types=1);
 
@@ -8,6 +10,10 @@ use Carbon\CarbonInterface;
 
 /**
  * Real serialized shape for attributesToArray()/toArray(), driven by $appends.
+ *
+ * Requires <experimental><feature name="modelToArrayShape" /></experimental> (see
+ * psalm-with-model-to-array-shape.xml) — the feature is off by default. See
+ * ToArrayShapeDisabledTest.phpt for the default (off) behavior.
  *
  * The harness runs no migrations, so SerializableModel has no schema and its shape comes entirely from
  * $appends — asserting the handler's real (non-mixed) output end-to-end. The appends pin each

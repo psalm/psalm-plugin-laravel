@@ -11,6 +11,7 @@ use Psalm\LaravelPlugin\Cli\Diagnose\Diagnostics;
 use Psalm\LaravelPlugin\Cli\Diagnose\Report;
 use Psalm\LaravelPlugin\Cli\Diagnose\TipsProvider;
 use Psalm\LaravelPlugin\Cli\DiagnoseCommand;
+use Psalm\LaravelPlugin\Config\ExperimentalFeature;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -51,6 +52,7 @@ final class DiagnoseCommandTest extends TestCase
             bootstrapErrors: ['synthetic'],
             hardFailures: ['Application boot failed: synthetic'],
             loadedProviders: [],
+            experimentalFeaturesEnabled: $base->experimentalFeaturesEnabled,
         );
 
         $tester = $this->testerFor($this->fixtureProvider($failing));
@@ -79,6 +81,7 @@ final class DiagnoseCommandTest extends TestCase
             bootstrapErrors: ['Call to a member function bar() on null in config/app.php:42'],
             hardFailures: [],
             loadedProviders: $base->loadedProviders,
+            experimentalFeaturesEnabled: $base->experimentalFeaturesEnabled,
         );
 
         $tester = $this->testerFor($this->fixtureProvider($warned));
@@ -180,6 +183,80 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame($sorted, $report->loadedProviders);
     }
 
+    #[Test]
+    public function experimental_section_shows_none_available_when_nothing_enabled(): void
+    {
+        $tester = $this->testerFor($this->fixtureProvider($this->okReport()));
+
+        $exit = $tester->execute([]);
+        $display = $tester->getDisplay();
+
+        $this->assertSame(Command::SUCCESS, $exit, $display);
+        $this->assertStringContainsString('Experimental', $display);
+        $available = \count(ExperimentalFeature::cases());
+        $this->assertStringContainsString("none ({$available} available, see docs/config.md)", $display);
+    }
+
+    #[Test]
+    public function experimental_section_lists_enabled_features(): void
+    {
+        $base = $this->okReport();
+        $withExperiment = new Report(
+            pluginVersion: $base->pluginVersion,
+            psalmVersion: $base->psalmVersion,
+            laravelVersion: $base->laravelVersion,
+            phpRuntimeVersion: $base->phpRuntimeVersion,
+            phpAnalysisVersion: $base->phpAnalysisVersion,
+            phpAnalysisSource: $base->phpAnalysisSource,
+            bootMode: $base->bootMode,
+            bootPath: $base->bootPath,
+            bootstrapErrors: $base->bootstrapErrors,
+            hardFailures: $base->hardFailures,
+            loadedProviders: $base->loadedProviders,
+            experimentalFeaturesEnabled: ['modelToArrayShape'],
+        );
+
+        $tester = $this->testerFor($this->fixtureProvider($withExperiment));
+
+        $exit = $tester->execute([]);
+        $display = $tester->getDisplay();
+
+        $this->assertSame(Command::SUCCESS, $exit, $display);
+        $this->assertStringContainsString('Experimental', $display);
+        $this->assertStringContainsString('modelToArrayShape', $display);
+        $this->assertStringNotContainsString('available, see docs/config.md', $display);
+    }
+
+    #[Test]
+    public function collect_reads_enabled_experimental_features_from_the_projects_psalm_xml(): void
+    {
+        $scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
+        $this->assertTrue(\mkdir($scratchDir), "Could not create scratch dir {$scratchDir}");
+        \file_put_contents(
+            $scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml',
+            '<?xml version="1.0"?>'
+            . '<psalm xmlns="https://getpsalm.org/schema/config">'
+            . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
+            . '<experimental><feature name="modelToArrayShape" /></experimental>'
+            . '</pluginClass></plugins>'
+            . '</psalm>',
+        );
+
+        $originalCwd = \getcwd();
+        $this->assertIsString($originalCwd, 'Could not resolve the current working directory.');
+
+        try {
+            $this->assertTrue(\chdir($scratchDir));
+            $report = (new Diagnostics())->collect();
+        } finally {
+            \chdir($originalCwd);
+            \unlink($scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+            \rmdir($scratchDir);
+        }
+
+        $this->assertSame(['modelToArrayShape'], $report->experimentalFeaturesEnabled);
+    }
+
 
     private function testerFor(Diagnostics $diagnostics, ?TipsProvider $tipsProvider = null): CommandTester
     {
@@ -237,6 +314,7 @@ final class DiagnoseCommandTest extends TestCase
                 'Illuminate\\Auth\\AuthServiceProvider',
                 'Illuminate\\Database\\DatabaseServiceProvider',
             ],
+            experimentalFeaturesEnabled: [],
         );
     }
 }

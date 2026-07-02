@@ -53,10 +53,18 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 {
     private static bool $useMigrations = false;
 
+    private static bool $modelToArrayShapeEnabled = false;
+
     /** @psalm-external-mutation-free */
     public static function enableMigrations(): void
     {
         self::$useMigrations = true;
+    }
+
+    /** @psalm-external-mutation-free */
+    public static function enableModelToArrayShape(): void
+    {
+        self::$modelToArrayShapeEnabled = true;
     }
 
     #[\Override]
@@ -256,8 +264,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // See https://github.com/psalm/psalm-plugin-laravel/issues/931
         $methods->return_type_provider->registerClosure($className, ModelAttributeSubsetHandler::getReturnType(...));
         // attributesToArray()/toArray() precise array-shape inference (columns + $appends, honoring
-        // $hidden/$visible). See https://github.com/psalm/psalm-plugin-laravel/issues/923
-        $methods->return_type_provider->registerClosure($className, ModelToArrayShapeHandler::getReturnType(...));
+        // $hidden/$visible). Experimental — see https://github.com/psalm/psalm-plugin-laravel/issues/923
+        // and the modelToArrayShape entry in docs/config.md.
+        if (self::$modelToArrayShapeEnabled) {
+            $methods->return_type_provider->registerClosure($className, ModelToArrayShapeHandler::getReturnType(...));
+        }
 
         // Registration order matters — the first non-null result wins.
 

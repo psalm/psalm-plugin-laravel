@@ -1,6 +1,7 @@
 <?php
 
 use Rector\CodeQuality\Rector\FunctionLike\SimplifyUselessVariableRector;
+use Rector\CodeQuality\Rector\Isset_\IssetOnPropertyObjectToPropertyExistsRector;
 use Rector\CodingStyle\Rector\Assign\SplitDoubleAssignRector;
 use Rector\CodingStyle\Rector\Encapsed\EncapsedStringsToSprintfRector;
 use Rector\CodingStyle\Rector\If_\NullableCompareToNullRector;
@@ -42,4 +43,12 @@ return RectorConfig::configure()
         // Too permissive for unit tests: `assertNotInstanceOf` passes for null, scalars, arrays,
         // and unrelated objects — losing the precise null-only intent.
         AssertEmptyNullableObjectToAssertInstanceofRector::class,
+        // Rewrites `isset($obj->prop)` to `property_exists($obj, 'prop') || $obj->prop === null`.
+        // Runtime-equivalent for SimpleXMLElement's magic __isset (verified), but Psalm's type
+        // narrower has special-case support for isset() on a dynamic property and none for the
+        // property_exists()-based form, so the rewrite silently turns every such guard back into
+        // a MixedAssignment/MixedPropertyFetch source. Every isset($xml->child) check in
+        // PluginConfig/Diagnostics that detects a missing <experimental>/<plugins> element
+        // depends on staying isset().
+        IssetOnPropertyObjectToPropertyExistsRector::class,
     ]);
