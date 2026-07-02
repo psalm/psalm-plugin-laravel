@@ -353,6 +353,31 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame(['modelToArrayShape'], $report->experimentalFeaturesEnabled);
     }
 
+    #[Test]
+    public function collect_silently_drops_an_unrecognized_feature_name(): void
+    {
+        // readEnabledExperimentalFeatures()'s own docblock states this is deliberately
+        // different from PluginConfig::fromXml() (which throws on the same input): diagnose
+        // describes what is currently live, not every mistake in psalm.xml, so it must never
+        // throw on a typo it's precisely meant to help a user debug.
+        $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
+        $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
+        \file_put_contents(
+            $this->scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml',
+            '<?xml version="1.0"?>'
+            . '<psalm xmlns="https://getpsalm.org/schema/config">'
+            . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
+            . '<experimental><feature name="doesNotExist" /></experimental>'
+            . '</pluginClass></plugins>'
+            . '</psalm>',
+        );
+
+        $this->assertTrue(\chdir($this->scratchDir));
+        $report = (new Diagnostics())->collect();
+
+        $this->assertSame([], $report->experimentalFeaturesEnabled);
+    }
+
     private function reflectApplicationProviderProperty(string $name): \ReflectionProperty
     {
         return new \ReflectionProperty(ApplicationProvider::class, $name);
