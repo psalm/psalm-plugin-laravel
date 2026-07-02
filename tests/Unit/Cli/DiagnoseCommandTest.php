@@ -296,6 +296,57 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame(['modelToArrayShape'], $report->experimentalFeaturesEnabled);
     }
 
+    #[Test]
+    public function collect_reads_all_true_experimental_from_the_projects_psalm_xml(): void
+    {
+        // A functionally distinct code path from the named-<feature> test above
+        // (readEnabledExperimentalFeatures()'s all="true" branch maps every
+        // ExperimentalFeature::cases() instead of reading <feature> children) that
+        // happens to look identical today because only one case exists.
+        $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
+        $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
+        \file_put_contents(
+            $this->scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml',
+            '<?xml version="1.0"?>'
+            . '<psalm xmlns="https://getpsalm.org/schema/config">'
+            . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
+            . '<experimental all="true" />'
+            . '</pluginClass></plugins>'
+            . '</psalm>',
+        );
+
+        $this->assertTrue(\chdir($this->scratchDir));
+        $report = (new Diagnostics())->collect();
+
+        $this->assertSame(['modelToArrayShape'], $report->experimentalFeaturesEnabled);
+    }
+
+    #[Test]
+    public function collect_finds_this_plugins_pluginclass_among_several_siblings(): void
+    {
+        // findPluginClassElement() must skip a non-matching <pluginClass> (e.g. a sister
+        // Psalm plugin registered in the same <plugins> block) and locate this plugin's own.
+        $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
+        $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
+        \file_put_contents(
+            $this->scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml',
+            '<?xml version="1.0"?>'
+            . '<psalm xmlns="https://getpsalm.org/schema/config">'
+            . '<plugins>'
+            . '<pluginClass class="Psalm\\PhpUnitPlugin\\Plugin" />'
+            . '<pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
+            . '<experimental><feature name="modelToArrayShape" /></experimental>'
+            . '</pluginClass>'
+            . '</plugins>'
+            . '</psalm>',
+        );
+
+        $this->assertTrue(\chdir($this->scratchDir));
+        $report = (new Diagnostics())->collect();
+
+        $this->assertSame(['modelToArrayShape'], $report->experimentalFeaturesEnabled);
+    }
+
     private function reflectApplicationProviderProperty(string $name): \ReflectionProperty
     {
         return new \ReflectionProperty(ApplicationProvider::class, $name);

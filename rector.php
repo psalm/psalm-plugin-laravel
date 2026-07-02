@@ -43,7 +43,7 @@ return RectorConfig::configure()
         // Too permissive for unit tests: `assertNotInstanceOf` passes for null, scalars, arrays,
         // and unrelated objects — losing the precise null-only intent.
         AssertEmptyNullableObjectToAssertInstanceofRector::class,
-        // Rewrites `isset($obj->prop)` to `property_exists($obj, 'prop') || $obj->prop === null`.
+        // Rewrites `isset($obj->prop)` to `property_exists($obj, 'prop') && $obj->prop !== null`.
         // Runtime-equivalent for SimpleXMLElement's magic __isset (verified), but Psalm's type
         // narrower has special-case support for isset() on a dynamic property and none for the
         // property_exists()-based form, so the rewrite silently turns every such guard back into
