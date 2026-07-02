@@ -139,36 +139,47 @@ Create the handler class in the appropriate `src/Handlers/` subdirectory, then r
 
 Psalm processes code in phases. Each hook fires at a specific phase and has different data available.
 Analysis hooks are hot paths — they fire on every matching expression. Scanning hooks fire once per class or once total.
+Source of truth for which handler implements which hook: `Plugin::registerHandlers()` plus each handler's `implements` clause.
 
-The table below maps each hook to the handlers using it. Source of truth: `Plugin::registerHandlers()` plus each handler's `implements` clause. Handlers marked `*` are registered conditionally (config flag or package detection).
+```mermaid
+flowchart TD
+    subgraph P1["Phase 1 — Scanning (per class/trait/interface)"]
+        A1["AfterClassLikeVisitInterface"]
+    end
 
-**Phase 1 — Scanning** (per class/trait/interface; `ClassLikeStorage` has direct parent only):
+    subgraph P2["Phase 2 — Codebase populated (fires once)"]
+        B1["AfterCodebasePopulatedInterface"]
+    end
 
-| Hook | Handlers |
-|---|---|
-| `AfterClassLikeVisitInterface` | ContainerHandler, SuppressHandler, GuardTaintHandler, EncrypterTaintHandler, AppFacadeRegistrationHandler |
+    subgraph P3["Phase 3 — Analysis (hot path, per file)"]
+        direction TB
+        C1["BeforeFileAnalysisInterface"] --> C2
 
-**Phase 2 — Codebase populated** (fires once; full parent chains resolved):
+        subgraph LOOP["repeats per statement / expression"]
+            direction TB
+            C2["BeforeStatementAnalysisInterface"] --> C3["BeforeExpressionAnalysisInterface"]
+            C3 --> C4["Type/taint providers on the matched expression:
+            FunctionReturnTypeProviderInterface
+            MethodReturnTypeProviderInterface
+            MethodParamsProviderInterface
+            MethodExistenceProviderInterface
+            MethodVisibilityProviderInterface
+            property existence/type/visibility providers
+            AddTaintsInterface / RemoveTaintsInterface"]
+            C4 --> C5["AfterExpressionAnalysisInterface"]
+            C5 --> C6["AfterMethodCallAnalysisInterface"]
+        end
 
-| Hook | Handlers |
-|---|---|
-| `AfterCodebasePopulatedInterface` | ModelRegistrationHandler, SuppressHandler, ContractMethodBridgeHandler, CastContractUserDefinedHandler, BuilderSubclassQueryMixinHandler, MacroHandler, FormRequestPropertyHandler, AppFacadeRegistrationHandler, PublicScopeAccessorVisibilityHandler |
+        C6 --> C7["AfterFunctionLikeAnalysisInterface"]
+        C7 --> C8["AfterFileAnalysisInterface"]
+    end
 
-**Phase 3 — Analysis** (hot path):
+    subgraph P4["Phase 4 — Run complete (fires once)"]
+        D1["AfterAnalysisInterface"]
+    end
 
-| Hook | Handlers |
-|---|---|
-| `FunctionReturnTypeProviderInterface` | ContainerHandler, AuthFunctionHandler, CacheHandler, NowTodayHandler, PathHandler, LiteralHandler, EnvHandler, TranslationKeyHandler, NoEnvOutsideConfigHandler, ConfigHelperHandler\*, MissingViewHandler\* |
-| `MethodReturnTypeProviderInterface` | OffsetHandler, ContainerHandler, AuthMethodHandler, GuardHandler, RequestHandler, StorageHandler, ModelFactoryMethodTypeProvider, FactoryCountTypeProvider, ModelBuilderMixinHandler, MethodForwardingHandler, ModelMethodHandler, BuilderScopeHandler, BuilderPluckHandler, BuilderAggregateHandler, CustomCollectionHandler, CollectionFilterHandler, CollectionFlattenHandler, CollectionPluckHandler, CollectionValuesAllHandler, HigherOrderCollectionProxyHandler, ConditionableWhenHandler, TappableTapHandler, CommandArgumentHandler, ValidatedTypeHandler, PathHandler, AppFacadeMakeHandler, DateFacadeHandler, ConfigRepositoryMethodHandler\*, MissingViewHandler\* |
-| `MethodParamsProviderInterface` | OffsetHandler, AuthMethodHandler, StorageHandler, MethodForwardingHandler, BuilderScopeHandler, HigherOrderCollectionProxyHandler, AppFacadeMakeHandler, DateFacadeHandler, ConfigRepositoryMethodHandler\* |
-| `MethodExistenceProviderInterface`, `MethodVisibilityProviderInterface` | OffsetHandler |
-| Property providers (existence / type / visibility) | per-model closures registered by ModelRegistrationHandler |
-| `AddTaintsInterface`, `RemoveTaintsInterface` | ValidationTaintHandler |
-| `AfterExpressionAnalysisInterface` | ModelMakeHandler, DispatchableHandler, TimingUnsafeComparisonHandler, UndefinedBuilderMethodHandler, ConsoleClosureScopeHandler, InlineValidateRulesCollector, ImplicitQueryBuilderCallHandler\* |
-| `AfterMethodCallAnalysisInterface` | HigherOrderCollectionProxyHandler, OctaneIncompatibleBindingHandler\* |
-| `Before{File,Statement,Expression}AnalysisInterface` | ConsoleClosureScopeHandler, InlineValidateRulesCollector (statement + expression) |
-| `AfterFunctionLikeAnalysisInterface`, `AfterFileAnalysisInterface` | ValidationTaintHandler, InlineValidateRulesCollector (function-like only) |
-| `AfterAnalysisInterface` | StatsHandler |
+    P1 --> P2 --> P3 --> P4
+```
 
 ### Registering handlers
 
