@@ -238,6 +238,29 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function graduated_or_withdrawn_notice_covers_both_branches_with_synthetic_data(): void
+    {
+        // Same rationale as closestByLevenshtein's reflection test: ExperimentalFeature::GRADUATED
+        // and ::WITHDRAWN are genuinely empty today, so this helper can never observe a non-null
+        // version/reason through fromXml() alone. graduatedOrWithdrawnNotice() takes the resolved
+        // version/reason as parameters instead of looking them up itself specifically so this
+        // branch gets real coverage now, ahead of any feature actually graduating or being withdrawn.
+        $method = new \ReflectionMethod(PluginConfig::class, 'graduatedOrWithdrawnNotice');
+
+        $this->assertSame(
+            "Experimental feature 'oldFeature' graduated to stable in v4.2.0 and no longer needs "
+            . '<experimental>. Remove it from psalm.xml.',
+            $method->invoke(null, 'oldFeature', '4.2.0', null),
+        );
+        $this->assertSame(
+            "Experimental feature 'droppedFeature' was withdrawn (turned out unsound) and no longer exists. "
+            . 'Remove it from psalm.xml.',
+            $method->invoke(null, 'droppedFeature', null, 'turned out unsound'),
+        );
+        $this->assertNull($method->invoke(null, 'liveFeature', null, null));
+    }
+
+    #[Test]
     public function experimental_feature_missing_name_attribute_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><experimental><feature /></experimental></pluginClass>');
@@ -276,6 +299,27 @@ final class PluginConfigTest extends TestCase
         // the moment a future PR actually adds an entry to one of these maps.
         $this->assertNull(ExperimentalFeature::graduatedIn('modelToArrayShape'));
         $this->assertNull(ExperimentalFeature::withdrawnBecause('modelToArrayShape'));
+    }
+
+    #[Test]
+    public function graduated_and_withdrawn_names_never_overlap_a_live_case_or_each_other(): void
+    {
+        // Lifecycle invariant (see ExperimentalFeature's class docblock): each name lives in
+        // exactly one of {live case, GRADUATED, WITHDRAWN}. Nothing in the type system enforces
+        // this — resolveExperimentalFeatureName() checks tryFrom() first, so a name left as both
+        // a live case AND a GRADUATED/WITHDRAWN entry would silently never produce the
+        // deprecation notice. Locking this in now, ahead of the first real graduation/withdrawal.
+        $graduated = (new \ReflectionClassConstant(ExperimentalFeature::class, 'GRADUATED'))->getValue();
+        $withdrawn = (new \ReflectionClassConstant(ExperimentalFeature::class, 'WITHDRAWN'))->getValue();
+
+        $this->assertIsArray($graduated);
+        $this->assertIsArray($withdrawn);
+        $this->assertSame([], \array_intersect_key($graduated, $withdrawn), 'A name cannot be both graduated and withdrawn.');
+
+        foreach (ExperimentalFeature::cases() as $case) {
+            $this->assertArrayNotHasKey($case->value, $graduated, "Live case '{$case->value}' must not also appear in GRADUATED.");
+            $this->assertArrayNotHasKey($case->value, $withdrawn, "Live case '{$case->value}' must not also appear in WITHDRAWN.");
+        }
     }
 
     #[Test]
@@ -669,5 +713,88 @@ final class PluginConfigTest extends TestCase
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);
         $this->assertSame(['app/Config', 'packages/*/config'], $config->configDirectories);
+    }
+
+    #[Test]
+    public function report_active_experiments_writes_the_active_features_line(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental><feature name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+        $config = PluginConfig::fromXml($xml);
+        $progress = $this->spyProgress();
+
+        (new \ReflectionMethod(Plugin::class, 'reportActiveExperiments'))->invoke(new Plugin(), $config, $progress);
+
+        $this->assertSame(
+            ["Laravel plugin: experimental features enabled: modelToArrayShape\n"],
+            $progress->writes,
+        );
+    }
+
+    #[Test]
+    public function report_active_experiments_writes_nothing_when_no_features_are_active(): void
+    {
+        $config = PluginConfig::fromXml(null);
+        $progress = $this->spyProgress();
+
+        (new \ReflectionMethod(Plugin::class, 'reportActiveExperiments'))->invoke(new Plugin(), $config, $progress);
+
+        $this->assertSame([], $progress->writes);
+    }
+
+    #[Test]
+    public function report_active_experiments_forwards_notices_as_warnings(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental /></pluginClass>');
+        $config = PluginConfig::fromXml($xml);
+        $progress = $this->spyProgress();
+
+        (new \ReflectionMethod(Plugin::class, 'reportActiveExperiments'))->invoke(new Plugin(), $config, $progress);
+
+        // Progress::warning() delegates to write() with a "Warning: " prefix and a trailing EOL —
+        // confirms the notice is actually forwarded through that channel, not silently dropped.
+        $this->assertSame(
+            ['Warning: <experimental /> has no effect: it has no <feature> children and no all="true" attribute. '
+                . 'Remove it, or see docs/config.md for how to enable a specific feature.' . \PHP_EOL],
+            $progress->writes,
+        );
+    }
+
+    /**
+     * Minimal concrete Progress that records every write() call (including the ones warning()
+     * delegates to) instead of writing to STDERR, so reportActiveExperiments()'s actual output
+     * is directly assertable.
+     */
+    private function spyProgress(): \Psalm\Progress\Progress
+    {
+        return new class extends \Psalm\Progress\Progress {
+            /** @var list<string> */
+            public array $writes = [];
+
+            #[\Override]
+            public function debug(string $message): void {}
+
+            #[\Override]
+            public function startPhase(\Psalm\Progress\Phase $phase, int $threads = 1): void {}
+
+            #[\Override]
+            public function expand(int $number_of_tasks): void {}
+
+            #[\Override]
+            public function taskDone(int $level): void {}
+
+            #[\Override]
+            public function finish(): void {}
+
+            #[\Override]
+            public function alterFileDone(string $file_name): void {}
+
+            #[\Override]
+            public function write(string $message): void
+            {
+                $this->writes[] = $message;
+            }
+        };
     }
 }

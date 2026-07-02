@@ -119,9 +119,10 @@ final class IssueUrlGenerator
     }
 
     /**
-     * Render experimentalNotices for the bug-report body. No sanitisation needed — these are
-     * static, hardcoded deprecation-style messages (a childless <experimental/>, a graduated
-     * or withdrawn feature name), never filesystem paths or user-supplied data.
+     * Render experimentalNotices for the bug-report body. No sanitisation needed — the
+     * graduated/withdrawn notices embed the user's own `<feature name="...">` value, but that
+     * is a short config-vocabulary string, never a filesystem path, so it carries none of
+     * cachePath/configDirectories' leak risk.
      *
      * @param list<string> $notices
      *

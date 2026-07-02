@@ -175,7 +175,7 @@ The table below maps each hook to the handlers using it. Source of truth: `Plugi
 There are two ways to register:
 
 1. **Class-level** (most handlers): implement the interface, register via `$registration->registerHooksFromClass(MyHandler::class)` in `Plugin::registerHandlers()`
-2. **Closure-level** (model property handlers): register via `$providers->property_type_provider->registerClosure(...)` — used by `ModelRegistrationHandler` to bind property handlers per-model after codebase is populated. Some closure-level handlers are additionally gated behind `<experimental>` (see [Configuration](../config.md#experimental)) instead of a plain config flag. `ModelToArrayShapeHandler` is the first example: `ModelRegistrationHandler::enableModelToArrayShape()` toggles a static flag that guards its `registerClosure()` call, mirroring the existing `enableMigrations()` pattern used for `columnFallback=migrations`.
+2. **Closure-level** (model property and method handlers): register via `$providers->property_type_provider->registerClosure(...)` or `$methods->return_type_provider->registerClosure(...)` — used by `ModelRegistrationHandler` to bind property and method handlers per-model after codebase is populated. Some closure-level handlers are additionally gated behind `<experimental>` (see [Configuration](../config.md#experimental)) instead of a plain config flag. `ModelToArrayShapeHandler` is the first example: it registers on `$methods->return_type_provider`, and `ModelRegistrationHandler::enableModelToArrayShape()` toggles a static flag that guards its `registerClosure()` call, mirroring the existing `enableMigrations()` pattern used for `columnFallback=migrations`.
 
 ### Experimental features
 

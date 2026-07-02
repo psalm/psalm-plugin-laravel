@@ -259,20 +259,14 @@ final readonly class PluginConfig
             return $feature;
         }
 
-        $graduatedVersion = ExperimentalFeature::graduatedIn($name);
+        $notice = self::graduatedOrWithdrawnNotice(
+            $name,
+            ExperimentalFeature::graduatedIn($name),
+            ExperimentalFeature::withdrawnBecause($name),
+        );
 
-        if ($graduatedVersion !== null) {
-            $notices[] = "Experimental feature '{$name}' graduated to stable in v{$graduatedVersion} and no longer "
-                . 'needs <experimental>. Remove it from psalm.xml.';
-
-            return null;
-        }
-
-        $withdrawnReason = ExperimentalFeature::withdrawnBecause($name);
-
-        if ($withdrawnReason !== null) {
-            $notices[] = "Experimental feature '{$name}' was withdrawn ({$withdrawnReason}) and no longer exists. "
-                . 'Remove it from psalm.xml.';
+        if ($notice !== null) {
+            $notices[] = $notice;
 
             return null;
         }
@@ -286,6 +280,31 @@ final readonly class PluginConfig
             "Unknown experimental feature '{$name}'. Did you mean '" . self::nearestExperimentalFeatureName($name)
             . "'? Valid values: {$valid}.",
         );
+    }
+
+    /**
+     * Notice text for a graduated or withdrawn feature name, or null for neither. Takes the
+     * already-resolved version/reason as parameters instead of looking them up itself, so it
+     * is directly unit-testable with synthetic values: {@see ExperimentalFeature::GRADUATED}
+     * and {@see ExperimentalFeature::WITHDRAWN} are genuinely empty today (no feature has ever
+     * graduated or been withdrawn), so driving this through `fromXml()` alone can never
+     * exercise either branch. Mirrors {@see self::closestByLevenshtein()}'s same rationale.
+     *
+     * @psalm-pure
+     */
+    private static function graduatedOrWithdrawnNotice(string $name, ?string $graduatedVersion, ?string $withdrawnReason): ?string
+    {
+        if ($graduatedVersion !== null) {
+            return "Experimental feature '{$name}' graduated to stable in v{$graduatedVersion} and no longer "
+                . 'needs <experimental>. Remove it from psalm.xml.';
+        }
+
+        if ($withdrawnReason !== null) {
+            return "Experimental feature '{$name}' was withdrawn ({$withdrawnReason}) and no longer exists. "
+                . 'Remove it from psalm.xml.';
+        }
+
+        return null;
     }
 
     /**
