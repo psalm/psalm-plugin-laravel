@@ -24,6 +24,7 @@ Full config example:
         <resolveDynamicWhereClauses value="false" />
         <resolveConfigReturnTypes value="false" />
         <reportImplicitQueryBuilderCalls value="true" />
+        <findUndefinedRelations value="true" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
@@ -106,6 +107,20 @@ See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
 
 ```xml
 <reportImplicitQueryBuilderCalls value="true" />
+```
+
+## `findUndefinedRelations`
+
+**default**: `false`
+
+When enabled, the plugin validates relation-name strings passed to `with()`, `without()`, `has()`, `whereHas()`, `load()`, `loadCount()`, and similar methods against the resolved model, reporting [UndefinedRelation](issues/UndefinedRelation.md) when the name does not resolve to a relationship. It handles dot-notation, array, keyed-closure, and `:columns` select syntaxes. It is opt-in because relations can be registered at runtime (via `Model::resolveRelationUsing()` or package macros) in ways static analysis cannot see.
+
+See [UndefinedRelation](issues/UndefinedRelation.md) for details.
+
+### Example
+
+```xml
+<findUndefinedRelations value="true" />
 ```
 
 ## `configDirectory`

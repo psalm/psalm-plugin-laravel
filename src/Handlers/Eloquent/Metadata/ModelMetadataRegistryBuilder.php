@@ -4,6 +4,14 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Metadata;
 
+use Illuminate\Database\Eloquent\Attributes\Appends;
+use Illuminate\Database\Eloquent\Attributes\Connection;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Guarded;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Table;
+use Illuminate\Database\Eloquent\Attributes\Unguarded;
+use Illuminate\Database\Eloquent\Attributes\Visible;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -209,6 +217,7 @@ final class ModelMetadataRegistryBuilder
             $modelFqcn,
             $storage,
             $instance,
+            $reflection,
             $customBuilder,
             $customCollection,
         );
@@ -218,6 +227,7 @@ final class ModelMetadataRegistryBuilder
      * Concrete path: derive instance-backed fields via Laravel's public getters.
      *
      * @param class-string<Model>                   $modelFqcn
+     * @param \ReflectionClass<Model>               $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null    $customBuilder
      * @param class-string<\Illuminate\Database\Eloquent\Collection>|null $customCollection
      * @return ModelMetadata<Model>
@@ -227,6 +237,7 @@ final class ModelMetadataRegistryBuilder
         string $modelFqcn,
         ClassLikeStorage $storage,
         Model $instance,
+        \ReflectionClass $reflection,
         ?string $customBuilder,
         ?string $customCollection,
     ): ModelMetadata {
@@ -240,6 +251,13 @@ final class ModelMetadataRegistryBuilder
         if ($traits->hasUuids || $traits->hasUlids) {
             self::flipUsesUniqueIds($instance);
         }
+
+        // Apply the class-level PHP-attribute config (#[Hidden]/#[Visible]/#[Appends]/#[Fillable]/
+        // #[Guarded]/#[Connection]/#[Table]) that Model::__construct() would set via initializeTraits() /
+        // initializeModelAttributes() — both skipped by newInstanceWithoutConstructor(). Mutating the
+        // instance here (like flipUsesUniqueIds above) lets the getters below AND computeSchema()'s
+        // getTable() see the runtime state.
+        self::applyClassAttributeConfig($codebase, $reflection, $instance);
 
         $tableSchema = self::computeSchema($instance);
 
@@ -260,16 +278,10 @@ final class ModelMetadataRegistryBuilder
             fqcn: $modelFqcn,
             primaryKey: self::computePrimaryKey($instance, $traits),
             traits: $traits,
-            // NB: PHP-attribute config (#[Fillable] / #[Guarded] / #[Connection] / #[Table] /
-            // #[Appends] / #[Hidden] / #[Visible] / etc.) is NOT applied here —
-            // newInstanceWithoutConstructor() skips Model::initializeTraits() and
-            // initializeModelAttributes(), so these getters reflect property declarations only.
-            // The #[Appends]/#[Hidden]/#[Visible] gap surfaces in #923's serialized shape (a #[Hidden]
-            // column may leak in); a future phase wiring those serialization consumers must run the
-            // initializers first.
-            //
-            // Preserve case — Laravel's isFillable / isGuarded / getHidden / getVisible do exact-string
-            // comparisons, so lowercasing would diverge from runtime semantics.
+            // PHP-attribute config (#[Fillable]/#[Guarded]/#[Connection]/#[Table]/#[Appends]/#[Hidden]/
+            // #[Visible]) was merged onto $instance by applyClassAttributeConfig() above, so these getters
+            // now see it. Case is preserved — Laravel's isFillable / isGuarded / getHidden / getVisible do
+            // exact-string comparisons, so lowercasing would diverge from runtime semantics.
             fillable: self::filterStringList($instance->getFillable()),
             // asArray() guards Laravel's `$guarded = false` ("guard nothing") idiom — getGuarded()
             // then returns a bool, not an array, and would TypeError filterStringList()'s array param,
@@ -500,7 +512,14 @@ final class ModelMetadataRegistryBuilder
         }
 
         [$getType, $hasMutator, $setType] = $attribute;
-        self::insertAccessor($accessors, new AttributeAccessorInfo($property, $getType, $methodStorage, $hasMutator));
+
+        // Laravel treats a modern Attribute as a read accessor (getMutatedAttributes(), property read)
+        // only when `get` is callable; a set-only `Attribute<never, TSet>` is a mutator alone. A `never`
+        // TGet is that signal — skip the accessor insert so it can't override a serialized column/append
+        // type or resolve a magic property read.
+        if (!$getType->isNever()) {
+            self::insertAccessor($accessors, new AttributeAccessorInfo($property, $getType, $methodStorage, $hasMutator));
+        }
 
         if ($hasMutator) {
             self::insertMutator($mutators, new AttributeMutatorInfo($property, $methodStorage, $property, $setType));
@@ -1243,6 +1262,200 @@ final class ModelMetadataRegistryBuilder
         }
 
         $property->setValue($instance, true);
+    }
+
+    /**
+     * Apply the class-level PHP-attribute config that {@see Model}::__construct() sets via
+     * `initializeTraits()` / `initializeModelAttributes()` — both skipped by
+     * `newInstanceWithoutConstructor()`. Mutates `$instance` (like {@see flipUsesUniqueIds()}) so every
+     * downstream getter, and {@see computeSchema()}'s `getTable()`, sees the runtime state.
+     *
+     * Per-attribute semantics mirror Laravel exactly: `#[Hidden]`/`#[Visible]`/`#[Appends]`/`#[Fillable]`
+     * union-merge into the property list; `#[Guarded]`/`#[Unguarded]` only replace the default `['*']`;
+     * `#[Connection]`/`#[Table]` fill a null.
+     *
+     * Known gap (NOT applied): `#[Table]`'s `key` / `keyType` / `incrementing` sub-overrides and
+     * `#[WithoutIncrementing]`. Laravel's `initializeModelAttributes()` feeds these into the primary key
+     * (`primaryKey ← $table->key` when still `'id'`, etc.), but {@see computePrimaryKey()} reads only the
+     * raw `getKeyName()`/`getKeyType()`/`getIncrementing()` defaults and never consults `#[Table]`, so an
+     * attribute-declared PK is not picked up. Deferred as a separate PK-path change; the table NAME (the
+     * serialization-relevant part) IS applied. (Timestamps are moot — the registry stores no such field.)
+     *
+     * The attribute classes exist from Laravel 13.0; on older lines `getAttributes()` matches nothing and
+     * every branch no-ops (so the plugin stays correct across the 12.4+ support range).
+     *
+     * @param \ReflectionClass<Model> $reflection
+     */
+    private static function applyClassAttributeConfig(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
+    {
+        // Union-merge, mirroring mergeHidden() / mergeVisible() / mergeAppends() / mergeFillable().
+        $instance->mergeHidden(self::classAttribute($codebase, $reflection, Hidden::class)?->columns ?? []);
+        $instance->mergeVisible(self::classAttribute($codebase, $reflection, Visible::class)?->columns ?? []);
+        $instance->mergeAppends(self::classAttribute($codebase, $reflection, Appends::class)?->columns ?? []);
+        $instance->mergeFillable(self::classAttribute($codebase, $reflection, Fillable::class)?->columns ?? []);
+
+        self::applyGuardedAttribute($codebase, $reflection, $instance);
+        self::applyConnectionAttribute($codebase, $reflection, $instance);
+        self::applyTableAttribute($codebase, $reflection, $instance);
+    }
+
+    /**
+     * `#[Guarded]` / `#[Unguarded]` only replace the default `['*']` denylist, mirroring
+     * {@see \Illuminate\Database\Eloquent\Concerns\GuardsAttributes::initializeGuardsAttributes()}:
+     * `#[Unguarded]` guards nothing; else the `#[Guarded]` columns (`columns ?? ['*']`, so a present-but-
+     * empty `#[Guarded]` also guards nothing); absent → keep `['*']`.
+     *
+     * @param \ReflectionClass<Model> $reflection
+     */
+    private static function applyGuardedAttribute(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
+    {
+        if ($instance->getGuarded() !== ['*']) {
+            return;
+        }
+
+        if (self::classAttribute($codebase, $reflection, Unguarded::class) !== null) {
+            $instance->guard([]);
+
+            return;
+        }
+
+        // Presence (not non-empty) gates the replace: a present `#[Guarded()]` with no columns sets [],
+        // matching Laravel's `columns ?? ['*']` where an empty array is non-null. Absent → keep `['*']`.
+        $guarded = self::classAttribute($codebase, $reflection, Guarded::class);
+        if ($guarded !== null) {
+            $instance->guard($guarded->columns);
+        }
+    }
+
+    /**
+     * `#[Connection(name:)]` fills a null `$connection`, mirroring `initializeModelAttributes()`'s `??=`.
+     * The name is normalized to a string before storing, matching `Model::getConnectionName()`'s
+     * `enum_value()` (BackedEnum → backing value, UnitEnum → case name). This is deliberately stronger
+     * than storing the raw enum: the registry's `connection` field is `?string`, and an int-backed enum
+     * would make `getConnectionName()` return an `int` that TypeErrors the `?string` parameter under
+     * `strict_types`, dropping the whole model via warmUp()'s catch.
+     *
+     * @param \ReflectionClass<Model> $reflection
+     */
+    private static function applyConnectionAttribute(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
+    {
+        if ($instance->getConnectionName() !== null) {
+            return;
+        }
+
+        $name = self::classAttribute($codebase, $reflection, Connection::class)?->name;
+        if ($name === null) {
+            return;
+        }
+
+        $instance->setConnection(match (true) {
+            \is_string($name) => $name,
+            $name instanceof \BackedEnum => (string) $name->value,
+            default => $name->name,
+        });
+    }
+
+    /**
+     * `#[Table(name:)]` sets the table, mirroring the `$declaresTable` branch of
+     * `initializeModelAttributes()`: a `#[Table]` declared DIRECTLY on the concrete class (Laravel's
+     * non-recursive `getAttributes()` check) AND no own `$table` property overwrites the table; otherwise
+     * the resolved (ancestor-walked) name only fills a still-null table (`??=`). Feeds
+     * {@see computeSchema()}'s migration lookup.
+     *
+     * Known-gap: a `key`/`keyType`-only `#[Table]` (null name) does NOT clear an inherited `$table`
+     * default the way Laravel's force-branch does (`$this->table = $table->name ?? null`). That sits
+     * inside the same exotic, deferred scenario as the `key`/`keyType`/`incrementing` PK sub-overrides
+     * (see {@see applyClassAttributeConfig()}), so it is left untouched rather than half-applied.
+     *
+     * @param \ReflectionClass<Model> $reflection
+     */
+    private static function applyTableAttribute(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
+    {
+        $name = self::classAttribute($codebase, $reflection, Table::class)?->name;
+        if ($name === null) {
+            return;
+        }
+
+        // Force-set only on a DIRECT concrete-class attribute (non-recursive, no own $table property);
+        // otherwise `??=` fills a still-null table with the resolved name.
+        $forceSet = !self::declaresOwnProperty($reflection, 'table') && $reflection->getAttributes(Table::class) !== [];
+        if ($forceSet || self::rawTableIsNull($instance)) {
+            $instance->setTable($name);
+        }
+    }
+
+    /**
+     * True when the concrete class itself declares `$name` (not inherited) — mirrors the `$declaresTable`
+     * check in `initializeModelAttributes()`.
+     *
+     * @param \ReflectionClass<Model> $reflection
+     * @psalm-pure
+     */
+    private static function declaresOwnProperty(\ReflectionClass $reflection, string $name): bool
+    {
+        if (!$reflection->hasProperty($name)) {
+            return false;
+        }
+
+        return $reflection->getProperty($name)->getDeclaringClass()->getName() === $reflection->getName();
+    }
+
+    /**
+     * Whether the raw `$table` property is still null (so a `#[Table]` may fill it). Reads the property,
+     * not `getTable()`, which always derives a non-null name from the class.
+     */
+    private static function rawTableIsNull(Model $instance): bool
+    {
+        try {
+            $property = new \ReflectionProperty($instance, 'table');
+        } catch (\ReflectionException) {
+            return true;
+        }
+
+        // A typed-uninitialized `$table` (non-idiomatic) has no value to read; treat it as null so a
+        // `#[Table]` may fill it, and avoid the \Error that getValue() throws on an uninitialized typed prop.
+        if (!$property->isInitialized($instance)) {
+            return true;
+        }
+
+        // Consume the mixed value inline (=== null) so it never binds to a local — keeps coverage at 100%.
+        return $property->getValue($instance) === null;
+    }
+
+    /**
+     * Resolve a class-level attribute the way {@see Model}::resolveClassAttribute() does: walk the class
+     * up its parents, return the first ancestor's first instance of `$attributeClass` (no cross-ancestor
+     * merge), or null. A throwing `newInstance()` (malformed attribute args) is swallowed to a null so a
+     * single bad attribute degrades that one field rather than aborting the whole model's warm-up; this
+     * is deliberately broader than Laravel's own `catch (Exception)`, since a static-analysis pass must
+     * never crash where the runtime constructor would. The swallow leaves a debug breadcrumb, like the
+     * file's other reflection catches ({@see compute()}, {@see warmUp()}).
+     *
+     * @template T of object
+     * @param \ReflectionClass<object> $reflection
+     * @param class-string<T>          $attributeClass
+     * @return T|null
+     */
+    private static function classAttribute(Codebase $codebase, \ReflectionClass $reflection, string $attributeClass): ?object
+    {
+        for ($current = $reflection; $current !== false; $current = $current->getParentClass()) {
+            $attributes = $current->getAttributes($attributeClass);
+            if ($attributes === []) {
+                continue;
+            }
+
+            try {
+                return $attributes[0]->newInstance();
+            } catch (\Throwable $throwable) {
+                $codebase->progress->debug(
+                    "Laravel plugin: ModelMetadataRegistry could not instantiate {$attributeClass} on '{$current->getName()}': {$throwable->getMessage()}\n",
+                );
+
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /**

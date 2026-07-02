@@ -336,6 +336,20 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
 
+        // Opt-in: validate relation-name strings passed to with()/load()/has()/
+        // whereHas()/... against the resolved model. Off by default — on large apps,
+        // relations can be added in ways static analysis cannot see (runtime
+        // Model::resolveRelationUsing(), package macros), so this registers only when
+        // the user asks for it. RelationResolver depends on RelationMethodParser, so
+        // both collaborators are loaded explicitly here (psalm.phar may not have the
+        // project PSR-4 autoloader registered).
+        if ($pluginConfig->findUndefinedRelations) {
+            require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
+            require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
+            require_once __DIR__ . '/Handlers/Rules/UndefinedRelationHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\UndefinedRelationHandler::class);
+        }
+
         // Opt-in: forbid Laravel's __callStatic/__call magic forwarding on models and require
         // the explicit Model::query()->... entry point. Off by default — the forwarding is
         // idiomatic Laravel, so this only registers when the user asks for it.
@@ -381,6 +395,13 @@ final class Plugin implements PluginEntryPointInterface
         // the issueHandlers config (PublicModelScope / PublicModelAccessor).
         require_once __DIR__ . '/Handlers/Rules/PublicScopeAccessorVisibilityHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\PublicScopeAccessorVisibilityHandler::class);
+
+        // Flag an Eloquent `$appends` entry with no backing accessor / class cast (#694) — a runtime
+        // BadMethodCallException on toArray()/toJson(). Reads ModelMetadataRegistry, so it MUST be
+        // registered AFTER ModelRegistrationHandler (warm-up); AfterCodebasePopulated handlers run in
+        // registration order. Enabled by default; silence via the issueHandlers config.
+        require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedAttributeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedAttributeHandler::class);
     }
 
     /**

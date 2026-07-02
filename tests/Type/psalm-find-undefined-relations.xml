@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<psalm
+    autoloader="./macro-fixtures.php"
+    disableSuppressAll="true"
+    ensureArrayStringOffsetsExist="true"
+    errorLevel="1"
+    findUnusedBaselineEntry="true"
+    findUnusedPsalmSuppress="true"
+    findUnusedVariablesAndParams="true"
+    memoizeMethodCallResults="true"
+    reportMixedIssues="true"
+    runTaintAnalysis="false"
+    sealAllMethods="true"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config ../../vendor/vimeo/psalm/config.xsd"
+>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <failOnInternalError value="true" />
+            <resolveDynamicWhereClauses value="true" />
+            <!-- The rule under test. Isolated in its own config so the direct-on-model
+                 calls in the relation fixtures do not also trip reportImplicitQueryBuilderCalls
+                 from the shared opt-in config. -->
+            <findUndefinedRelations value="true" />
+        </pluginClass>
+    </plugins>
+    <stubs>
+        <file name="./macro-fixtures-class.phpstub" />
+    </stubs>
+    <issueHandlers>
+        <MissingPureAnnotation errorLevel="info" />
+        <PluginIssue name="NoEnvOutsideConfig" errorLevel="info" />
+    </issueHandlers>
+</psalm>

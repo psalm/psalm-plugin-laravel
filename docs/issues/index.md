@@ -19,5 +19,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [PublicModelAccessor](PublicModelAccessor.md) — `public` legacy `getXxxAttribute()` / `setXxxAttribute()` accessor or mutator, a pure convention nit (reported at error level 1)
 - [ImplicitQueryBuilderCall](ImplicitQueryBuilderCall.md) — a query builder or local scope method called directly on a model instead of through an explicit `query()` entry point (opt-in)
 - [UnknownModelAttribute](UnknownModelAttribute.md) — a typo'd key passed to a model's `create()` / `fill()` / `update()` that matches no known attribute
+- [UnresolvableAppendedAttribute](UnresolvableAppendedAttribute.md) — an Eloquent `$appends` entry with no backing accessor or class cast, a runtime `BadMethodCallException` on `toArray()` / `toJson()`
+- [UndefinedRelation](UndefinedRelation.md) — a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods does not resolve to a relationship on the model (opt-in)
 
 Each issue page explains what it detects, why it matters, and how to fix it.

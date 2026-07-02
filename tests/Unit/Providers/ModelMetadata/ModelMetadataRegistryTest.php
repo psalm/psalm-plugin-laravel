@@ -15,7 +15,9 @@ use App\Models\UlidModel;
 use App\Models\UnguardedModel;
 use App\Models\UuidModel;
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -62,9 +64,14 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
 #[CoversClass(ModelMetadataRegistryBuilder::class)]
@@ -163,6 +170,148 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertInstanceOf(ModelMetadata::class, $metadata, 'warm-up must not fail on $guarded = false');
         // `$guarded = false` means guard nothing → empty list (not the base default ['*']).
         $this->assertSame([], $metadata->guarded);
+    }
+
+    #[Test]
+    public function class_attributes_are_merged_at_warm_up(): void
+    {
+        // newInstanceWithoutConstructor() skips initializeTraits()/initializeModelAttributes(), so the
+        // PHP-attribute config is missed unless applyClassAttributeConfig() replays it. The #[*] classes
+        // only exist from Laravel 13.0, below which this fixture is never loaded.
+        if (!class_exists(Hidden::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AttributeConfiguredModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AttributeConfiguredModel::class);
+
+        $metadata = ModelMetadataRegistry::for(AttributeConfiguredModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+
+        // #[Hidden]/#[Visible]/#[Appends]/#[Fillable] union-merge into the $property baseline.
+        $this->assertSame(['prop_hidden', 'attr_hidden'], $metadata->hidden);
+        $this->assertSame(['prop_visible', 'attr_visible'], $metadata->visible);
+        $this->assertSame(['prop_append', 'attr_append'], $metadata->appends);
+        $this->assertSame(['prop_fillable', 'attr_fillable'], $metadata->fillable);
+
+        // #[Guarded] replaces the default ['*'] denylist; #[Connection] fills the null connection.
+        $this->assertSame(['attr_guarded'], $metadata->guarded);
+        $this->assertSame('attr_connection', $metadata->connection);
+    }
+
+    #[Test]
+    public function table_attribute_redirects_the_schema_lookup(): void
+    {
+        // #[Table('attr_table')] must drive computeSchema()'s getTable() lookup: the seeded column only
+        // surfaces if the attribute table name reached the schema aggregator.
+        if (!class_exists(Table::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $schema = SchemaStateProvider::getSchema();
+        $this->assertInstanceOf(SchemaAggregator::class, $schema);
+        $schemaTable = new SchemaTable();
+        $schemaTable->setColumn(new SchemaColumn('flagged', SchemaColumn::TYPE_BOOL));
+
+        $schema->setTable('attr_table', $schemaTable);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AttributeConfiguredModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AttributeConfiguredModel::class);
+
+        $metadata = ModelMetadataRegistry::for(AttributeConfiguredModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertTrue($metadata->schema()->has('flagged'), '#[Table] name must reach computeSchema()');
+    }
+
+    #[Test]
+    public function unguarded_attribute_empties_the_guard_list(): void
+    {
+        if (!class_exists(Hidden::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(UnguardedAttributeModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, UnguardedAttributeModel::class);
+
+        $metadata = ModelMetadataRegistry::for(UnguardedAttributeModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        // #[Unguarded] replaces the default ['*'] denylist with [] (guard nothing) — distinct from the
+        // $guarded = false idiom that guarded_false_idiom_does_not_crash_warm_up covers.
+        $this->assertSame([], $metadata->guarded);
+    }
+
+    #[Test]
+    public function an_explicit_property_wins_over_a_matching_attribute(): void
+    {
+        if (!class_exists(Hidden::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        // Seed the table under the model's OWN $table name; if #[Table] wrongly overrode it, getTable()
+        // would look the column up under 'attr_table' and miss it.
+        $schema = SchemaStateProvider::getSchema();
+        $this->assertInstanceOf(SchemaAggregator::class, $schema);
+        $schemaTable = new SchemaTable();
+        $schemaTable->setColumn(new SchemaColumn('own_col', SchemaColumn::TYPE_STRING));
+
+        $schema->setTable('own_table', $schemaTable);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AttributeOverriddenByPropertyModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AttributeOverriddenByPropertyModel::class);
+
+        $metadata = ModelMetadataRegistry::for(AttributeOverriddenByPropertyModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        // Explicit $guarded is no longer ['*'], so #[Guarded] does not replace it.
+        $this->assertSame(['own_guard'], $metadata->guarded);
+        // Own $table wins over #[Table], so the schema resolves under 'own_table'.
+        $this->assertTrue($metadata->schema()->has('own_col'), 'own $table must win over #[Table]');
+    }
+
+    #[Test]
+    public function inherited_attributes_resolve_through_the_ancestor_walk(): void
+    {
+        if (!class_exists(Hidden::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AttributeConfiguredChild::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AttributeConfiguredChild::class);
+
+        $metadata = ModelMetadataRegistry::for(AttributeConfiguredChild::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        // #[Hidden]/#[Appends] declared on the abstract base resolve on the concrete child via the
+        // classAttribute() parent walk (mirroring Model::resolveClassAttribute()).
+        $this->assertSame(['base_hidden'], $metadata->hidden);
+        $this->assertSame(['base_append'], $metadata->appends);
+    }
+
+    #[Test]
+    public function an_int_backed_enum_connection_is_normalized_to_a_string(): void
+    {
+        if (!class_exists(Hidden::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(EnumConnectionModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, EnumConnectionModel::class);
+
+        $metadata = ModelMetadataRegistry::for(EnumConnectionModel::class);
+        // The model must survive warm-up: an un-normalized int connection would TypeError the ?string
+        // field and drop the whole entry. The connection resolves to the enum's stringified backing value.
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertSame('1', $metadata->connection);
     }
 
     #[Test]
@@ -324,6 +473,24 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertInstanceOf(AttributeAccessorInfo::class, $accessor);
         $this->assertFalse($accessor->hasMutator);
         $this->assertArrayNotHasKey('displayname', $metadata->mutators());
+    }
+
+    #[Test]
+    public function set_only_attribute_is_not_a_read_accessor(): void
+    {
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(Customer::class);
+        // Attribute<never, string>: TGet=never (Attribute::set(...) with no get). Laravel excludes it from
+        // getMutatedAttributes(), so it must NOT be a read accessor — else it would override a serialized
+        // column/append type or resolve a magic property read. It IS still a mutator (the set side).
+        $this->defineAppearingMethod($storage, 'writeOnly', $this->attributeReturn(Type::getNever(), Type::getString()));
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+        $metadata = $this->metadataFor(Customer::class);
+
+        $this->assertNull($metadata->accessor('write_only'), 'set-only Attribute is not a read accessor');
+        $this->assertArrayNotHasKey('writeonly', $metadata->accessors());
+        $this->assertInstanceOf(AttributeMutatorInfo::class, $metadata->mutators()['writeonly'] ?? null);
     }
 
     #[Test]
