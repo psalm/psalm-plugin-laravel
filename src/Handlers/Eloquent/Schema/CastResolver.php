@@ -40,7 +40,7 @@ final class CastResolver
      * @param string $cast Raw cast value from `$casts` / `casts()` (may include parameters: `Money:USD`).
      * @param bool $nullable Whether the underlying column is nullable.
      * @param Union|null $originalType The column's intrinsic mapped Psalm type without nullability
-     *     applied (typically from {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler::mapColumnBaseType}).
+     *     applied (typically from {@see ColumnTypeMapper::mapBaseType}).
      *     Used as the read type for {@see CastsInboundAttributes} (write-only contracts whose
      *     read path is a passthrough of the column's mapped type). Pass `null` when the column
      *     type is unknown; CastsInboundAttributes will then fall back to `mixed`.

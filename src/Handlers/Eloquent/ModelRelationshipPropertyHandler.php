@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
@@ -166,29 +168,28 @@ final class ModelRelationshipPropertyHandler
             }
         }
 
-        // Tier 2: Parse the method body AST to find the related model class-string.
-        // This handles both non-generic return types (e.g. plain BelongsTo) and methods
-        // with no return type at all (e.g. public function image() { return $this->morphOne(...); }).
-        $parsed = RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name);
-        if ($parsed !== null) {
-            // When relatedModel is null (morphTo — polymorphic), the AST can't determine
-            // the related type. Before falling back to ?Model, check if the method's
-            // docblock has generic annotations that narrow TRelatedModel.
-            // This handles annotations like @return MorphTo<User|Post, $this> where
-            // getMethodReturnType() resolves $this and loses the generic params.
-            if ($parsed['relatedModel'] === null) {
+        // Tier 2: the registry's pre-parsed OWN-CLASS relation (the precomputed equivalent of
+        // RelationMethodParser::parse() — identical own-class resolution). Handles non-generic return
+        // types (plain BelongsTo) and untyped methods (public function image() { return $this->morphOne(...); }).
+        $relation = self::registryRelation($fq_classlike_name, $property_name);
+        if ($relation instanceof RelationInfo) {
+            // When relatedModel is null (morphTo — polymorphic), the AST can't determine the related
+            // type. Before falling back to ?Model, check the method docblock for generics that narrow
+            // TRelatedModel — e.g. @return MorphTo<User|Post, $this>, where getMethodReturnType()
+            // resolves $this and loses the generic params.
+            if ($relation->relatedModel === null) {
                 $docblockResult = self::resolveFromDocblockGenerics(
                     $codebase,
                     $fq_classlike_name,
                     $property_name,
-                    $parsed['relationClass'],
+                    $relation->relationClass,
                 );
                 if ($docblockResult instanceof Union) {
                     return $docblockResult;
                 }
             }
 
-            return self::buildPropertyType($parsed['relationClass'], self::relatedModelType($parsed['relatedModel']));
+            return self::buildPropertyType($relation->relationClass, self::relatedModelType($relation->relatedModel));
         }
 
         // Tier 3: Fall back using the declared relation class with bounded type (?Model / Collection<int, Model>).
@@ -394,11 +395,11 @@ final class ModelRelationshipPropertyHandler
                 }
             }
 
-            // No return type declared — check method body for relationship factory calls.
+            // No return type declared — check the registry's pre-parsed relations for a factory call.
             // This handles cases like: public function image() { return $this->morphOne(...); }
             if (
                 !$return_type instanceof Union
-                && RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name) !== null
+                && self::registryRelation($fq_classlike_name, $property_name) instanceof RelationInfo
             ) {
                 self::$relationExistsCache[$key] = true;
                 return true;
@@ -407,5 +408,22 @@ final class ModelRelationshipPropertyHandler
 
         self::$relationExistsCache[$key] = false;
         return false;
+    }
+
+    /**
+     * The registry's OWN-CLASS relation entry for $property_name on $fq_classlike_name — the
+     * pre-computed equivalent of RelationMethodParser::parse($codebase, $fq_classlike_name,
+     * $property_name). The parser is itself own-class (it resolves a factory call only in the
+     * receiver's own body), so the map matches it name-for-name; an inherited / trait-hosted relation
+     * is absent from both, and this handler's getMethodReturnType tiers cover those.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function registryRelation(string $fq_classlike_name, string $property_name): ?RelationInfo
+    {
+        // Registered per concrete/abstract Model subclass, so the receiver is a Model class-string at
+        // runtime — same narrowing the sibling registry-reading handlers apply.
+        /** @var class-string<Model> $fq_classlike_name */
+        return ModelMetadataRegistry::for($fq_classlike_name)?->relations()[\strtolower($property_name)] ?? null;
     }
 }

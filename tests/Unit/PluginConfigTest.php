@@ -44,6 +44,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+        $this->assertFalse($config->findUndefinedRelations);
         // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
         // explicit true/false in XML overrides the auto-detection.
         $this->assertNull($config->findOctaneIncompatibleBinding);
@@ -247,6 +248,37 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+    }
+
+    #[Test]
+    public function find_undefined_relations_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUndefinedRelations value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUndefinedRelations);
+    }
+
+    #[Test]
+    public function find_undefined_relations_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUndefinedRelations value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUndefinedRelations);
+    }
+
+    #[Test]
+    public function invalid_find_undefined_relations_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUndefinedRelations value="maybe" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findUndefinedRelations value 'maybe'");
+
+        PluginConfig::fromXml($xml);
     }
 
     #[Test]
@@ -459,6 +491,7 @@ final class PluginConfigTest extends TestCase
             . '<failOnInternalError value="true" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findUndefinedRelations value="true" />'
             . '<configDirectory name="app/Config" />'
             . '<configDirectory name="packages/*/config" />'
             . '</pluginClass>',
@@ -471,6 +504,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->findUndefinedRelations);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);
         $this->assertSame(['app/Config', 'packages/*/config'], $config->configDirectories);

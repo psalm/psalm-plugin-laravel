@@ -17,18 +17,18 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\CustomCollectionHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CustomTypeDetector;
 use Psalm\Progress\VoidProgress;
 
 /**
- * Tests custom collection detection in ModelRegistrationHandler.
+ * Tests custom collection detection in CustomTypeDetector.
  *
  * Priority matches Laravel's HasCollection::newCollection():
  * 1. newCollection() override (bypasses everything when present)
  * 2. #[CollectedBy] attribute (checked first in base method, walks parent chain)
  * 3. protected static string $collectionClass property (fallback)
  */
-#[CoversClass(ModelRegistrationHandler::class)]
+#[CoversClass(CustomTypeDetector::class)]
 final class CustomCollectionDetectionTest extends TestCase
 {
     #[\Override]
@@ -41,7 +41,7 @@ final class CustomCollectionDetectionTest extends TestCase
     #[Test]
     public function it_registers_custom_collection_for_model_with_collected_by_attribute(): void
     {
-        $this->callDetectCustomCollection(WorkOrder::class);
+        $this->resolveAndRegisterCollection(WorkOrder::class);
 
         $this->assertSame(WorkOrderCollection::class, $this->getRegisteredCollection(WorkOrder::class));
     }
@@ -49,7 +49,7 @@ final class CustomCollectionDetectionTest extends TestCase
     #[Test]
     public function it_registers_custom_collection_for_model_with_new_collection_override(): void
     {
-        $this->callDetectCustomCollection(Part::class);
+        $this->resolveAndRegisterCollection(Part::class);
 
         $this->assertSame(PartCollection::class, $this->getRegisteredCollection(Part::class));
     }
@@ -57,7 +57,7 @@ final class CustomCollectionDetectionTest extends TestCase
     #[Test]
     public function it_registers_custom_collection_for_model_with_collection_class_property(): void
     {
-        $this->callDetectCustomCollection(DamageReport::class);
+        $this->resolveAndRegisterCollection(DamageReport::class);
 
         $this->assertSame(DamageReportCollection::class, $this->getRegisteredCollection(DamageReport::class));
     }
@@ -65,7 +65,7 @@ final class CustomCollectionDetectionTest extends TestCase
     #[Test]
     public function it_does_not_register_collection_for_model_without_custom_collection(): void
     {
-        $this->callDetectCustomCollection(Customer::class);
+        $this->resolveAndRegisterCollection(Customer::class);
 
         $this->assertNull($this->getRegisteredCollection(Customer::class));
     }
@@ -74,7 +74,7 @@ final class CustomCollectionDetectionTest extends TestCase
     public function it_handles_non_existent_class_gracefully(): void
     {
         // Should not throw — the ReflectionException is caught and logged.
-        $this->callDetectCustomCollection('NonExistent\\FakeModelClass');
+        $this->resolveAndRegisterCollection('NonExistent\\FakeModelClass');
 
         $this->assertEmpty($this->getCollectionMap());
     }
@@ -84,7 +84,7 @@ final class CustomCollectionDetectionTest extends TestCase
     {
         // CollectedByParentModel has #[CollectedBy(WorkOrderCollection::class)],
         // CollectedByChildModel extends it without its own attribute — should inherit.
-        $this->callDetectCustomCollection(Fixtures\CollectedByChildModel::class);
+        $this->resolveAndRegisterCollection(Fixtures\CollectedByChildModel::class);
 
         $this->assertSame(WorkOrderCollection::class, $this->getRegisteredCollection(Fixtures\CollectedByChildModel::class));
     }
@@ -129,7 +129,7 @@ final class CustomCollectionDetectionTest extends TestCase
     private function callResolveCollectionFromAttribute(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveCollectionFromAttribute');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveCollectionFromAttribute');
         $codebase = $this->createCodebase();
 
         return $method->invoke(null, $reflection, $codebase);
@@ -141,7 +141,7 @@ final class CustomCollectionDetectionTest extends TestCase
     private function callResolveCollectionFromMethodOverride(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveCollectionFromMethodOverride');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveCollectionFromMethodOverride');
 
         return $method->invoke(null, $reflection);
     }
@@ -152,18 +152,22 @@ final class CustomCollectionDetectionTest extends TestCase
     private function callResolveCollectionFromStaticProperty(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveCollectionFromStaticProperty');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveCollectionFromStaticProperty');
 
         return $method->invoke(null, $reflection);
     }
 
     /**
-     * Call the private detectCustomCollection method via reflection.
+     * Resolve a model's custom collection and register it — the resolve→registerCustomCollection sink
+     * registerHandlersForModel() uses on the warm-up-failure fallback (the warm path reads the
+     * already-resolved class off the registry; resolution itself is what this asserts).
      */
-    private function callDetectCustomCollection(string $className): void
+    private function resolveAndRegisterCollection(string $className): void
     {
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'detectCustomCollection');
-        $method->invoke(null, $this->createCodebase(), $className);
+        $collectionClass = CustomTypeDetector::resolveCustomCollectionClass($this->createCodebase(), $className);
+        if ($collectionClass !== null) {
+            CustomCollectionHandler::registerCustomCollection($className, $collectionClass);
+        }
     }
 
     private function createCodebase(): Codebase

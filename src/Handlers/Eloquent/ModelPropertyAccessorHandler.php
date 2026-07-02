@@ -4,26 +4,37 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
-use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AccessorInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
 use Psalm\Type;
 
+/**
+ * Resolves READ access to Eloquent accessor properties — legacy `getXxxAttribute()` and
+ * `Attribute::make()`-style — from the pre-computed accessor map on {@see ModelMetadataRegistry}.
+ *
+ * The registry map is full-callable (an accessor's declaring class may be the model, a trait, or
+ * any inherited user ancestor — matching `Codebase::methodExists()`'s inheritance-aware resolution)
+ * and is warmed once during `AfterCodebasePopulated`. So this handler no longer scans the codebase
+ * per property access; it looks up the snake_case property key. Attribute-style accessors win over
+ * legacy for the same key (the map bakes that precedence in), preserving the prior "new-style first"
+ * type resolution.
+ *
+ * Read-mode only. Write access (legacy `setXxxAttribute`, `Attribute::make(set:)`) is registered as
+ * `pseudo_property_set_types` by {@see ModelRegistrationHandler}; that path is untouched here.
+ *
+ * @internal
+ */
 final class ModelPropertyAccessorHandler
 {
-    /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
+    /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property". */
     private static array $nativePropertyCache = [];
-
-    /** @var array<string, bool> Cache for legacyAccessorExists() keyed by "class::property" */
-    private static array $legacyAccessorCache = [];
-
-    /** @var array<string, bool> Cache for newStyleAccessorExists() keyed by "class::property" */
-    private static array $newStyleAccessorCache = [];
-
-    /** @var array<string, Type\Union> Cache for getNewStyleAccessorType() keyed by "class::property" */
-    private static array $accessorTypeCache = [];
 
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
@@ -33,27 +44,14 @@ final class ModelPropertyAccessorHandler
             return null;
         }
 
-        if (self::hasNativeProperty($event->getFqClasslikeName(), $event->getPropertyName())) {
-            return null;
-        }
+        // Registered per concrete/abstract Model subclass, so the receiver FQCN is a model class-string
+        // at runtime — same narrowing ModelPropertyHandler applies for its registry reads.
+        /** @var class-string<Model> $fqcn */
+        $fqcn = $event->getFqClasslikeName();
 
-        $codebase = $source->getCodebase();
-
-        // Defer to user @property PHPDoc
-        $classStorage = $codebase->classlike_storage_provider->get($event->getFqClasslikeName());
-        if (isset($classStorage->pseudo_property_get_types['$' . $event->getPropertyName()])) {
-            return null;
-        }
-
-        if (self::legacyAccessorExists($codebase, $event->getFqClasslikeName(), $event->getPropertyName())) {
-            return true;
-        }
-
-        if (self::newStyleAccessorExists($codebase, $event->getFqClasslikeName(), $event->getPropertyName())) {
-            return true;
-        }
-
-        return null;
+        return self::resolveAccessor($source->getCodebase(), $fqcn, $event->getPropertyName()) instanceof AccessorInfo
+            ? true
+            : null;
     }
 
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
@@ -62,27 +60,13 @@ final class ModelPropertyAccessorHandler
             return null;
         }
 
-        if (self::hasNativeProperty($event->getFqClasslikeName(), $event->getPropertyName())) {
-            return null;
-        }
+        /** @var class-string<Model> $fqcn */
+        $fqcn = $event->getFqClasslikeName();
 
-        $codebase = $event->getSource()->getCodebase();
-
-        // Defer to user @property PHPDoc
-        $classStorage = $codebase->classlike_storage_provider->get($event->getFqClasslikeName());
-        if (isset($classStorage->pseudo_property_get_types['$' . $event->getPropertyName()])) {
-            return null;
-        }
-
-        if (self::legacyAccessorExists($codebase, $event->getFqClasslikeName(), $event->getPropertyName())) {
-            return true;
-        }
-
-        if (self::newStyleAccessorExists($codebase, $event->getFqClasslikeName(), $event->getPropertyName())) {
-            return true;
-        }
-
-        return null;
+        return self::resolveAccessor($event->getSource()->getCodebase(), $fqcn, $event->getPropertyName())
+            instanceof AccessorInfo
+            ? true
+            : null;
     }
 
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Type\Union
@@ -93,38 +77,45 @@ final class ModelPropertyAccessorHandler
             return null;
         }
 
-        // skip for real properties like $hidden, $casts
-        if (self::hasNativeProperty($event->getFqClasslikeName(), $event->getPropertyName())) {
+        /** @var class-string<Model> $fqcn */
+        $fqcn = $event->getFqClasslikeName();
+
+        return self::resolveAccessor($source->getCodebase(), $fqcn, $event->getPropertyName())?->returnType;
+    }
+
+    /**
+     * Look up the winning accessor for a property, honoring the two pre-registry deferral guards:
+     * a real declared PHP property (e.g. `$casts`) and a user `@property` PHPDoc both defer to Psalm.
+     *
+     * The property name is normalized through the SAME key the builder keys accessors by
+     * ({@see EloquentModelMethods::accessorPropertyKey()} — separators stripped, lowercased), so a
+     * `firstName(): Attribute` accessor resolves via `$model->first_name`, `$model->firstName`,
+     * `$model->fullname`, and an acronym `apiURL()` via `$model->api_url` alike — reproducing Laravel's
+     * separator-collapsing, case-insensitive `Str::camel` / `Str::studly` resolution (and the
+     * pre-registry handler's own `str_replace('_', '')` + case-insensitive `methodExists` matching).
+     *
+     * @param class-string<Model> $fqcn
+     * @psalm-external-mutation-free
+     */
+    private static function resolveAccessor(Codebase $codebase, string $fqcn, string $propertyName): ?AccessorInfo
+    {
+        if (self::hasNativeProperty($fqcn, $propertyName)) {
             return null;
         }
 
-        $codebase = $source->getCodebase();
-        $fq_classlike_name = $event->getFqClasslikeName();
-        $property_name = $event->getPropertyName();
-
-        // Defer to user @property PHPDoc
-        $classStorage = $codebase->classlike_storage_provider->get($fq_classlike_name);
-        if (isset($classStorage->pseudo_property_get_types['$' . $property_name])) {
+        // Defer to user @property PHPDoc.
+        $classStorage = $codebase->classlike_storage_provider->get($fqcn);
+        if (isset($classStorage->pseudo_property_get_types['$' . $propertyName])) {
             return null;
         }
 
-        // Check new-style Attribute accessor first (takes priority)
-        if (self::newStyleAccessorExists($codebase, $fq_classlike_name, $property_name)) {
-            return self::getNewStyleAccessorType($codebase, $fq_classlike_name, $property_name);
+        $metadata = ModelMetadataRegistry::for($fqcn);
+        if (!$metadata instanceof ModelMetadata) {
+            return null;
         }
 
-        // Fall back to legacy getXxxAttribute accessor
-        if (self::legacyAccessorExists($codebase, $fq_classlike_name, $property_name)) {
-            $attributeGetterName = 'get' . \str_replace('_', '', $property_name) . 'Attribute';
-            return (
-                $codebase->getMethodReturnType(
-                    "{$fq_classlike_name}::{$attributeGetterName}",
-                    $fq_classlike_name,
-                ) ?: Type::getMixed()
-            );
-        }
-
-        return null;
+        // {@see ModelMetadata::accessor()} owns the separator-collapsed keying convention.
+        return $metadata->accessor($propertyName);
     }
 
     /** @psalm-external-mutation-free */
@@ -136,118 +127,6 @@ final class ModelPropertyAccessorHandler
             return self::$nativePropertyCache[$key];
         }
 
-        $result = \property_exists($fqcn, $property_name);
-        self::$nativePropertyCache[$key] = $result;
-
-        return $result;
-    }
-
-    private static function legacyAccessorExists(
-        Codebase $codebase,
-        string $fq_classlike_name,
-        string $property_name,
-    ): bool {
-        $key = $fq_classlike_name . '::' . $property_name;
-
-        if (\array_key_exists($key, self::$legacyAccessorCache)) {
-            return self::$legacyAccessorCache[$key];
-        }
-
-        $result = $codebase->methodExists(
-            $fq_classlike_name . '::get' . \str_replace('_', '', $property_name) . 'Attribute',
-        );
-        self::$legacyAccessorCache[$key] = $result;
-
-        return $result;
-    }
-
-    /**
-     * Check for new-style Attribute accessor: a method named in camelCase that returns Attribute.
-     *
-     * For property 'first_name', checks for method 'firstName()' returning Attribute<TGet, TSet>.
-     */
-    private static function newStyleAccessorExists(
-        Codebase $codebase,
-        string $fq_classlike_name,
-        string $property_name,
-    ): bool {
-        $key = $fq_classlike_name . '::' . $property_name;
-
-        if (\array_key_exists($key, self::$newStyleAccessorCache)) {
-            return self::$newStyleAccessorCache[$key];
-        }
-
-        $methodName = self::propertyToCamelCase($property_name);
-        $method = $fq_classlike_name . '::' . $methodName;
-
-        if ($codebase->methodExists($method)) {
-            $returnType = $codebase->getMethodReturnType($method, $fq_classlike_name);
-            if ($returnType instanceof \Psalm\Type\Union) {
-                foreach ($returnType->getAtomicTypes() as $type) {
-                    // TGenericObject extends TNamedObject, so this catches both
-                    if ($type instanceof Type\Atomic\TNamedObject && \is_a($type->value, Attribute::class, true)) {
-                        self::$newStyleAccessorCache[$key] = true;
-                        return true;
-                    }
-                }
-            }
-        }
-
-        self::$newStyleAccessorCache[$key] = false;
-        return false;
-    }
-
-    /**
-     * Extract TGet from the Attribute<TGet, TSet> return type of a new-style accessor.
-     */
-    private static function getNewStyleAccessorType(
-        Codebase $codebase,
-        string $fq_classlike_name,
-        string $property_name,
-    ): Type\Union {
-        $key = $fq_classlike_name . '::' . $property_name;
-
-        if (\array_key_exists($key, self::$accessorTypeCache)) {
-            return self::$accessorTypeCache[$key];
-        }
-
-        $methodName = self::propertyToCamelCase($property_name);
-        $method = $fq_classlike_name . '::' . $methodName;
-
-        $returnType = $codebase->getMethodReturnType($method, $fq_classlike_name);
-        if (!$returnType instanceof \Psalm\Type\Union) {
-            $result = Type::getMixed();
-            self::$accessorTypeCache[$key] = $result;
-            return $result;
-        }
-
-        foreach ($returnType->getAtomicTypes() as $type) {
-            // TGet is the first template parameter
-            if (
-                $type instanceof Type\Atomic\TGenericObject
-                && \is_a($type->value, Attribute::class, true)
-                && isset($type->type_params[0])
-            ) {
-                self::$accessorTypeCache[$key] = $type->type_params[0];
-                return $type->type_params[0];
-            }
-        }
-
-        $result = Type::getMixed();
-        self::$accessorTypeCache[$key] = $result;
-        return $result;
-    }
-
-    /**
-     * Convert snake_case property name to camelCase method name.
-     *
-     * 'first_name' → 'firstName'
-     * 'email_verified_at' → 'emailVerifiedAt'
-     *
-     * @psalm-pure
-     */
-    private static function propertyToCamelCase(string $property_name): string
-    {
-        return \lcfirst(\str_replace('_', '', \ucwords($property_name, '_')));
+        return self::$nativePropertyCache[$key] = \property_exists($fqcn, $property_name);
     }
 }

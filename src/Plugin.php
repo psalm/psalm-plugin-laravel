@@ -8,6 +8,8 @@ use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
@@ -41,6 +43,14 @@ final class Plugin implements PluginEntryPointInterface
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
             FacadeMapProvider::init($output);
+
+            // Reset + arm the model-metadata registry. reset() clears any stale cache entries and
+            // builder statics left from a previous bootstrap in the same process (mirrors the
+            // ModelMethodHandler::init / MethodForwardingHandler::init reset convention); init()
+            // captures the Progress handle for deferred warm-up warnings. The actual per-model
+            // warm-up runs later, in ModelRegistrationHandler's AfterCodebasePopulated pass.
+            ModelMetadataRegistryBuilder::reset();
+            ModelMetadataRegistry::init($output);
 
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled
@@ -122,6 +132,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelToArrayShapeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
@@ -309,6 +320,12 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
 
+        // Flags unknown attribute keys passed to mass-assignment methods (create/forceCreate/fill/
+        // forceFill/update) — the #699 typo case. Always on, but self-silences on any model whose
+        // column schema is unknown (migrations disabled), so it never floods.
+        require_once __DIR__ . '/Handlers/Rules/UnknownModelAttributeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UnknownModelAttributeHandler::class);
+
         // Detects timing-unsafe comparisons of secret-tainted values (CWE-208).
         // The hook is a no-op outside `--taint-analysis` runs (early-exits when
         // taint_flow_graph is null), so per-expression overhead in normal analysis
@@ -318,6 +335,20 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
+
+        // Opt-in: validate relation-name strings passed to with()/load()/has()/
+        // whereHas()/... against the resolved model. Off by default — on large apps,
+        // relations can be added in ways static analysis cannot see (runtime
+        // Model::resolveRelationUsing(), package macros), so this registers only when
+        // the user asks for it. RelationResolver depends on RelationMethodParser, so
+        // both collaborators are loaded explicitly here (psalm.phar may not have the
+        // project PSR-4 autoloader registered).
+        if ($pluginConfig->findUndefinedRelations) {
+            require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
+            require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
+            require_once __DIR__ . '/Handlers/Rules/UndefinedRelationHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\UndefinedRelationHandler::class);
+        }
 
         // Opt-in: forbid Laravel's __callStatic/__call magic forwarding on models and require
         // the explicit Model::query()->... entry point. Off by default — the forwarding is
@@ -364,6 +395,13 @@ final class Plugin implements PluginEntryPointInterface
         // the issueHandlers config (PublicModelScope / PublicModelAccessor).
         require_once __DIR__ . '/Handlers/Rules/PublicScopeAccessorVisibilityHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\PublicScopeAccessorVisibilityHandler::class);
+
+        // Flag an Eloquent `$appends` entry with no backing accessor / class cast (#694) — a runtime
+        // BadMethodCallException on toArray()/toJson(). Reads ModelMetadataRegistry, so it MUST be
+        // registered AFTER ModelRegistrationHandler (warm-up); AfterCodebasePopulated handlers run in
+        // registration order. Enabled by default; silence via the issueHandlers config.
+        require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedAttributeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedAttributeHandler::class);
     }
 
     /**
