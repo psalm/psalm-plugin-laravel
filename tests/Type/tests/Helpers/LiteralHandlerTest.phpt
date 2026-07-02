@@ -82,14 +82,10 @@ function literal_result_is_assignable_to_stdclass(): stdClass
     return consume_stdclass(literal(a: 1, b: 'x'));
 }
 
-/**
- * Unpacking depends on runtime array contents, which the handler cannot resolve,
- * so it bails to the reflected (mixed) type rather than guessing a shape.
- */
-function literal_unpack_falls_back_to_reflected_type(array $arr): void
-{
-    $_r = literal(...$arr);
-    /** @psalm-check-type-exact $_r = mixed */
-}
+// Unpacking depends on runtime array contents, which the handler cannot resolve, so
+// it bails to the reflected type instead of guessing a shape. That reflected type is
+// Laravel's own `@return` tag on literal()'s real declaration, which differs by
+// version (`\stdClass` on Laravel 11, `mixed` on 12+) — asserted separately in
+// LiteralUnpackFallbackL11Test.phpt / LiteralUnpackFallbackL12Test.phpt.
 ?>
 --EXPECTF--
