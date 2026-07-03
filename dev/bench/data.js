@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782980175428,
+  "lastUpdate": 1783079251199,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -7975,6 +7975,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "059b87039082070171220f4b7250b280790891da",
+          "message": "Merge pull request #1214 from alies-dev/fix/init-monorepo-ignore-overlap-1213\n\nStop `init` ignoring `packages/` and disabling analysis on monorepos",
+          "timestamp": "2026-07-03T13:44:41+02:00",
+          "tree_id": "f7eb77cd0fc69bf4a764a663c7aa8e04b2e77ab5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/059b87039082070171220f4b7250b280790891da"
+        },
+        "date": 1783079250596,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.54,
+            "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
             "unit": "MB"
           }
         ]
