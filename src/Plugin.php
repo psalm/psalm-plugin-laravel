@@ -107,6 +107,11 @@ final class Plugin implements PluginEntryPointInterface
         // taint `.phpstub` would break `app('encrypter')->getKey()`. Keep the taint in a handler.
         require_once __DIR__ . '/Handlers/Encryption/EncrypterTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Encryption\EncrypterTaintHandler::class);
+        // Removes the `sql` taint from a where-family `$column` when it is a keyed-MAP literal
+        // (`where(['col' => $v])` binds each value), killing the #734/#733 false positive while the
+        // string-form `@psalm-taint-sink sql $column` stub still fires. See the handler docblock.
+        require_once __DIR__ . '/Handlers/Eloquent/WhereColumnTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\WhereColumnTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Filesystem/StorageHandler.php';
         $registration->registerHooksFromClass(Handlers\Filesystem\StorageHandler::class);

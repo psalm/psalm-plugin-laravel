@@ -315,6 +315,8 @@ Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argumen
 
 The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, and `orHaving()`.
 
+The keyed-**map** array form `where(['col' => $value])` is a false positive under the plain sink: `Builder::addArrayOfWheres()` binds each value and uses only the (literal) key as the column, so a tainted value is never interpolated (#734/#733). `Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler` removes the `sql` taint for exactly that shape (a `TKeyedArray` with all-string keys) — see its docblock. Do **not** "fix" it by dropping the sink (the string form is a real vector) or by adding `@psalm-taint-specialize` to these stubs — the latter silently breaks the non-SQL `@psalm-flow` on the value positions (see the specialize note below).
+
 ### Pattern for find-family methods
 
 ```php
