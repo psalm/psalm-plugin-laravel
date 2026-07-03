@@ -25,3 +25,15 @@ There are 2 main ways how it does it:
     - [Laravel Magic Call Patterns](contributing/laravel-magic-call-patterns.md) — how `__call`/`__callStatic` chains resolve, and how Psalm sees them
     - [Taint Analysis](contributing/taint-analysis.md) — authoring taint stubs
     - [Types](contributing/types.md) — Psalm types and annotations (incl. internal/hidden)
+
+## Troubleshooting
+
+### `composer require` fails with a PHP platform conflict
+
+If Composer reports that `vimeo/psalm` needs `php ~8.3.16` (or `~8.4.3`, `~8.5.0`) while your project has a lower `config.platform.php` pinned (for example `8.3.0`), raise the platform patch level:
+
+```json
+"config": { "platform": { "php": "8.3.16" } }
+```
+
+Psalm intentionally excludes PHP 8.3.0 through 8.3.15 because of Fiber and JIT bugs in those early patch releases. Staying on the same minor version is enough. Your `require.php` constraint does not need to change.
