@@ -75,3 +75,7 @@ Unparseable = "Unparseable"
 # word here to cover every compound, current and future.
 Encrypter = "Encrypter"
 encrypter = "encrypter"
+# `addArrayOfWheres` is Laravel's real `Illuminate\Database\Query\Builder` method; it
+# appears in WhereColumnTaintHandler's docblock and the where-family taint docs/tests.
+# typos tokenizes the `Wheres` sub-word and flags it as a typo of "Whereas".
+Wheres = "Wheres"
