@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783527294341,
+  "lastUpdate": 1783530418808,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8045,6 +8045,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "01af2ccc49daf7470a05d348b582736858ea1131",
+          "message": "Fix false `UndefinedMagicMethod` on custom builder subclass methods lost through a fluent chain (#1219)\n\n* fix(eloquent): keep custom builder subclass through static chain #1216\n\nA method on a custom Eloquent builder subclass was reported as a false\nUndefinedMagicMethod when reached through a fluent chain (koel's\nArtistBuilder->accessible()->when(...)->withRatingSubquery()): the\nintermediate collapsed from the concrete subclass to its abstract\ngeneric parent.\n\nRoot cause is upstream (vimeo/psalm): TypeExpander::expandNamedObject()\nrebuilds a native `: static` return on a generic class into a\nTGenericObject without carrying is_static, destroying late-static\nbinding. A docblock `@return static` sidesteps the buggy branch.\n\nBuilderNativeStaticReturnTypeHandler compensates at population time by\nrewriting native `: static` returns on Builder subclasses into the\ndocblock `@return static` form. `self` returns are left untouched\n(not late-static-bound). Retire once the upstream drop is fixed.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* test(eloquent): slim builder-chain coverage, compact docs #1216\n\nThe unit subprocess test and its BuilderSubclassChain fixture project\nduplicated coverage: the application test suite already analyzes the\nsame inside-builder-body chain (tests/Application/app/Builders/\nArtistBuilder.php sits under its <projectFiles>, errorLevel 1, not\nbaselined), so the regression fails there without the handler. The\nphpt keeps the external-call-site steps and edge-case guards; its\nredundant baseline/intermediate steps are folded into the chain step.\nHandler and fixture docblocks compacted, keeping the upstream root\ncause and retire condition.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-07-08T19:04:03+02:00",
+          "tree_id": "0e42def640f73f81c85c259a78d5e3f31e0d8efa",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/01af2ccc49daf7470a05d348b582736858ea1131"
+        },
+        "date": 1783530418237,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.16,
+            "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
             "unit": "MB"
           }
         ]
