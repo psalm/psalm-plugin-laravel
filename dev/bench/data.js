@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783552524512,
+  "lastUpdate": 1783554713636,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8150,6 +8150,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6ac778910edcab43b833ee9e28f96adeaf59cb12",
+          "message": "feat(collection): type collect()/make() for arbitrary inputs #808 (#1225)\n\nLaravel's getArrayableItems() accepts scalar|UnitEnum|null via\nArr::wrap() and any object via Arr::from() (Jsonable, JsonSerializable,\nplain DTOs), but the stubs declared only Arrayable|iterable|null, so\ncollect(now()), collect(new DateTime) and Collection::make($scalar)\nraised false InvalidArgument.\n\n- widen collect()/make() stub params; make() is widened on the\n  EnumeratesValues trait, its true declaring location (re-declaring on\n  Collection breaks return precision for direct Collection::make())\n- add CollectHandler + CollectionMakeHandler return-type providers with\n  a shared CollectionInputTypeResolver adding precision only where the\n  stub templates cannot: scalar/enum -> static<0, T>, explicit null ->\n  static<never, never>; every other input defers to stub template\n  inference, which binds arrayish inputs precisely and soundly falls\n  back to Collection<array-key, mixed> for arbitrary objects\n- raise the supported floor to Laravel ^12.14 || ^13.3: 12.14 made\n  Arr::wrap()'s enum-first handling unconditional (and added WeakMap\n  support), 13.3 added make()'s trailing ...$args variadic - the bump\n  removes all version gates from the implementation\n- bare Generator to LazyCollection::make() throws at runtime but is not\n  type-expressible (iterable subsumes Generator); pinned as a known\n  limitation test\n- @psalm-flow taint on collect() evaluated and withheld: specialize\n  experiments gave conflicting pooling results, kept out per the\n  false-positive-averse policy\n\nCloses #808",
+          "timestamp": "2026-07-09T01:48:59+02:00",
+          "tree_id": "265da9b25c9ac4c866a7ae9f4a9085c0dc64e414",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6ac778910edcab43b833ee9e28f96adeaf59cb12"
+        },
+        "date": 1783554712447,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.5,
+            "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
             "unit": "MB"
           }
         ]
