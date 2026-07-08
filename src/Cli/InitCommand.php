@@ -42,8 +42,16 @@ final class InitCommand extends Command
     /** Conventional Laravel entry-point files. Only emitted if present. */
     private const LARAVEL_APP_FILES = ['public/index.php', 'artisan'];
 
-    /** Ignore-target candidates. Only emitted if present on disk. */
-    private const IGNORE_DIRS = ['bootstrap/cache', 'storage', 'vendor', 'packages', 'nova-components'];
+    /**
+     * Ignore-target candidates. Only emitted if present on disk.
+     *
+     * Deliberately excludes `packages/` and `nova-components/`: `<ignoreFiles>`
+     * only subtracts from `<projectFiles>`, and init never emits a projectFiles
+     * root that contains them — so ignoring them is inert for app layouts and
+     * actively disables analysis on monorepos whose PSR-4 source lives under
+     * `packages/*\/src` (scanned for reflection, never analysed). See #1213.
+     */
+    private const IGNORE_DIRS = ['bootstrap/cache', 'storage', 'vendor'];
 
     /** One indent level. Matches the template heredoc's per-nesting whitespace. */
     private const TAB = '    ';

@@ -123,6 +123,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderNativeStaticReturnTypeHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
         // even when migrations are disabled (the @property branch still applies).
@@ -135,6 +136,7 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\CastContractUserDefinedHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.

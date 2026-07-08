@@ -372,6 +372,32 @@ final class InitCommandTest extends TestCase
     }
 
     #[Test]
+    public function monorepo_package_source_is_not_swallowed_by_the_packages_ignore(): void
+    {
+        // Monorepo layout: PSR-4 source lives under packages/*/src. 'packages' is
+        // no longer an ignore candidate, so it must not appear in <ignoreFiles>;
+        // otherwise it would remove the whole source tree from ANALYSIS (Psalm
+        // still scans it for reflection) — a silent zero-issue run. Genuine
+        // ignores like vendor/ are still emitted. See #1213.
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\Core\\' => 'packages/core/src']]]),
+        );
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'packages' . \DIRECTORY_SEPARATOR . 'core' . \DIRECTORY_SEPARATOR . 'src', 0o777, true);
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'vendor');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="packages/core/src"/>', $contents);
+        // The overlapping ignore is dropped; the non-overlapping one survives.
+        $this->assertStringNotContainsString('<directory name="packages"/>', $contents);
+        $this->assertStringContainsString('<directory name="vendor"/>', $contents);
+    }
+
+    #[Test]
     public function detects_laravel_app_layout_when_artisan_present(): void
     {
         // Presence of artisan selects the Laravel-app branch (detectLaravelAppRoots):
