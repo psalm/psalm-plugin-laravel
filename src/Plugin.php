@@ -33,6 +33,15 @@ final class Plugin implements PluginEntryPointInterface
         try {
             ApplicationProvider::bootApp();
 
+            // bootstrap() failures are swallowed inside ApplicationProvider (crash
+            // resistance: one bad config file must not disable the plugin for the
+            // whole run). Surface them here so a degraded boot is visible in a normal
+            // psalm run rather than only via `psalm-laravel diagnose` (#1096).
+            $bootstrapError = ApplicationProvider::getBootstrapError();
+            if ($bootstrapError instanceof \Throwable) {
+                InternalErrorReporter::reportDegradedBoot($bootstrapError, $output, $pluginConfig);
+            }
+
             if ($pluginConfig->shouldUseMigrations()) {
                 $this->buildSchema($pluginConfig);
             }
