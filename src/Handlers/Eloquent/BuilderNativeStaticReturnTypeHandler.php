@@ -30,6 +30,13 @@ use Psalm\Type\Union;
  * {@see BuilderSubclassQueryMixinHandler}), which also catches abstract intermediate builders no
  * model references directly.
  *
+ * 3.x (Psalm 6) port of the master handler (#1219). The bug reproduces identically on Psalm 6
+ * (verified: without this handler the chain collapses to `FavoriteableBuilder<Model>` and the subclass
+ * method surfaces as UndefinedMagicMethod). The only delta is spelling the docblock-static with a named
+ * argument: Psalm 6's `TNamedObject` 3rd constructor parameter is `$definite_class`, where Psalm 7 had
+ * `is_static_resolved`. The named form (`from_docblock: true`, everything else default) is identical
+ * across both majors and avoids a misleading positional argument.
+ *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1216
  */
 final class BuilderNativeStaticReturnTypeHandler implements AfterCodebasePopulatedInterface
@@ -77,7 +84,7 @@ final class BuilderNativeStaticReturnTypeHandler implements AfterCodebasePopulat
                     static fn(Atomic $atomic): Atomic => self::isNativeStaticReturn($atomic)
                         // The docblock `@return static` representation: value='static',
                         // from_docblock=true (mirrors how TypeParser stores `@return static`).
-                        ? new TNamedObject('static', false, false, [], true)
+                        ? new TNamedObject('static', from_docblock: true)
                         : $atomic,
                     $atomics,
                 ));

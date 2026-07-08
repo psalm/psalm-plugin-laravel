@@ -57,7 +57,7 @@ You can read more about how the plugin's taint analysis works and what vulnerabi
 ### Step 1: Install
 
 ```bash
-composer require --dev psalm/plugin-laravel:^3.8
+composer require --dev "psalm/plugin-laravel:^3.14"
 ```
 
 ### Step 2: Generate a Laravel-tailored `psalm.xml`

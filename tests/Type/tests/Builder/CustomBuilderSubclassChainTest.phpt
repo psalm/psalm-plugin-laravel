@@ -1,3 +1,9 @@
+--SKIPIF--
+<?php
+require getcwd() . '/vendor/autoload.php';
+// #[UseEloquentBuilder] (used by the scanned App\Models\Artist) is Laravel 12.19+; the attribute
+// class does not exist on Laravel 11, so the asserted output cannot be produced there.
+\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.19.0');
 --FILE--
 <?php declare(strict_types=1);
 
