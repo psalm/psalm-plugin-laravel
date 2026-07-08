@@ -137,6 +137,11 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
+        // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
+        // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
+        // argument nodes recorded by its Before-expression hook. See the handler docblock.
+        require_once __DIR__ . '/Handlers/Eloquent/WhereColumnTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\WhereColumnTaintHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelFactoryMethodTypeProvider::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryCountTypeProvider::class);
 
