@@ -60,7 +60,7 @@ Since [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta,
 
 ```bash
 composer config minimum-stability dev && composer config prefer-stable true
-composer require --dev psalm/plugin-laravel:^4.8
+composer require --dev psalm/plugin-laravel:^4.14
 ```
 
 ### Step 2: Generate a Laravel-tailored `psalm.xml`
