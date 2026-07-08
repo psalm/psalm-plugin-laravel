@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783079251199,
+  "lastUpdate": 1783527294341,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8010,6 +8010,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e30c04fdbae055d45cd73b698e6344d269a6144f",
+          "message": "Merge pull request #1220 from psalm/worktree-1217-index-definition-magic-methods\n\nResolve false `UndefinedMagicMethod` on `IndexDefinition` modifiers (DB migrations)",
+          "timestamp": "2026-07-08T18:11:31+02:00",
+          "tree_id": "f40b1eb6a84e733b2ae4caca2a29ce3b4f166e61",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e30c04fdbae055d45cd73b698e6344d269a6144f"
+        },
+        "date": 1783527293127,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.61,
+            "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
             "unit": "MB"
           }
         ]
