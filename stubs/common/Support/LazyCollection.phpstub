@@ -66,6 +66,35 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     public static function empty() {}
 
     /**
+     * Create a new collection instance if the value isn't one already.
+     *
+     * Keeps the closure-generator and self<...> branches from Laravel's own docblock (they give
+     * template binding for the lazy-generator construction form for free) and widens with
+     * `scalar|UnitEnum|object` to cover the same runtime-accepted inputs as `Collection::make()` -
+     * `EnumeratesValues::getArrayableItems()` routes `null|scalar|UnitEnum` through `Arr::wrap()`
+     * and any other object through `Arr::from()` (see issue #808). Precision for what
+     * TMakeKey/TMakeValue resolve to in those cases comes from `CollectionMakeHandler`,
+     * not this docblock.
+     *
+     * @template TMakeKey of array-key
+     * @template TMakeValue
+     *
+     * `...$args` is claimed unconditionally: it's real since Laravel 13.3.0 (now the 13.x floor
+     * - see composer.json), and on the 12.x floor (12.14+) PHP silently ignores excess call-site
+     * arguments beyond the native parameter list, so the wider claim is harmless there too.
+     *
+     * Known limitation: a bare (non-closure) `Generator` passed directly - e.g. `make($generator)` -
+     * type-checks clean here via the `iterable<TMakeKey, TMakeValue>` branch, but Laravel's runtime
+     * throws `InvalidArgumentException` for it (only the closure-returning-a-generator form is
+     * accepted). `iterable` can't be narrowed to "Traversable minus Generator" in Psalm's type
+     * algebra, and Laravel's own docblock has the same imprecision.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TMakeKey, TMakeValue>|iterable<TMakeKey, TMakeValue>|(\Closure(): \Generator<TMakeKey, TMakeValue, mixed, void>)|self<TMakeKey, TMakeValue>|scalar|\UnitEnum|object|null  $items
+     * @return static<TMakeKey, TMakeValue>
+     */
+    public static function make($items = [], ...$args) {}
+
+    /**
      * Get one or a specified number of items randomly from the collection.
      *
      * No argument → a single random element (TValue). With $number → a
