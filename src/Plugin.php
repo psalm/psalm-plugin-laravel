@@ -216,10 +216,17 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderAggregateHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\CustomCollectionHandler::class);
 
+        require_once __DIR__ . '/Handlers/Collections/CollectHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\CollectHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionFilterHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionFilterHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionFlattenHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionFlattenHandler::class);
+        // CollectionInputTypeResolver is a plain collaborator (no hooks) shared by
+        // CollectHandler and CollectionMakeHandler, so it is require_once'd but not registered.
+        require_once __DIR__ . '/Handlers/Collections/CollectionInputTypeResolver.php';
+        require_once __DIR__ . '/Handlers/Collections/CollectionMakeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\CollectionMakeHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionPluckHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionValuesAllHandler.php';
