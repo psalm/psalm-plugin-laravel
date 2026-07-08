@@ -57,7 +57,7 @@ MacroFixtureBag::macro(
      * @param positive-int $count
      * @return non-empty-string
      */
-    static function (int $count) {
+    static function (int $count): string {
         return \str_repeat('x', $count);
     },
 );
