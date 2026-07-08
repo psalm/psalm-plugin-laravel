@@ -8,15 +8,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Abstract intermediate builder in a two-level custom-builder hierarchy.
- *
- * Follows the minimal reproduction shape from issue #1216, reduced from koel's
- * App\Builders\FavoriteableBuilder: an abstract generic parent that declares a
- * `static`-returning fluent method, extended by concrete per-model builders that bind the
- * template to a concrete model (e.g. ArtistBuilder extends FavoriteableBuilder<Artist>).
- *
- * (Real koel names that parent method `withFavoriteStatus()`; this fixture calls it
- * `accessible()`, matching the issue's minimal-repro naming.)
+ * Abstract generic parent in a two-level custom-builder hierarchy: declares a `static`-returning
+ * fluent method, extended by concrete per-model builders that bind the template
+ * (minimal reproduction shape from issue #1216).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1216
  *

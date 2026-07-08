@@ -13,35 +13,22 @@ use Psalm\Type\Union;
 
 /**
  * Rewrites a native `: static` return (no docblock `@return`) on Eloquent\Builder subclasses into
- * the docblock `@return static` representation, so late-static-binding survives when the method is
- * reached through a fluent chain.
+ * the docblock `@return static` form, so late static binding survives a fluent chain and subclass
+ * methods don't surface as false UndefinedMagicMethod (#1216).
  *
- * Symptom: a method declared on a concrete custom builder (e.g. `ArtistBuilder::withPublicRating()`)
- * surfaces as a false UndefinedMagicMethod when reached via `->accessible()->when(...)->...`, because
- * the intermediate collapses from the concrete `ArtistBuilder` to its abstract generic parent.
+ * Upstream Psalm bug (vimeo/psalm #5752 / #4406): `TypeExpander::expandNamedObject()` rebuilds a
+ * native `: static` on a GENERIC declaring class into a `TGenericObject` without carrying
+ * `is_static`, collapsing the chain to `Parent<bound>`. The docblock form
+ * (`TNamedObject('static', from_docblock: true)`) skips that rebuild and resolves to the concrete
+ * receiver, so the two spellings — identical in semantics — diverge in inference. Rewriting native
+ * to docblock can only make `static` resolve more precisely, never widen it. `signature_return_type`
+ * stays native (it feeds MethodComparator). `: self` is not late-static-bound and must NOT be
+ * rewritten. Retire once TypeExpander carries `is_static` through the rebuild
+ * (cf. ConsoleClosureScopeHandler, another auto-retiring upstream stopgap).
  *
- * Upstream layer: the collapse is a vimeo/psalm design limitation, not a Laravel one — the correct
- * fix belongs in Psalm. `Internal\Type\TypeExpander::expandNamedObject()` rebuilds a native `: static`
- * return (stored as `TNamedObject(value=<declaring class>, is_static=true)`) into a fresh
- * `TGenericObject(<declaring class>, [template bounds])` WITHOUT carrying `is_static`, destroying the
- * late-static binding so the type collapses to `Parent<bound>`. A docblock `@return static` is stored
- * instead as `TNamedObject(value='static', from_docblock=true)`; that form skips the generic-collapse
- * branch (`classOrInterfaceExists('static')` is false), so `static` resolves to the concrete receiver.
- * Only native `: static` with NO docblock, on a GENERIC declaring class, is affected. See
- * vimeo/psalm #5752 / #4406 ("class-level templates and static should not mix").
- *
- * Compensating plugin layer: at population time we replace the native-`static` atomic with the
- * docblock-`static` atomic on the method's effective `return_type`. `signature_return_type` is left
- * native (it feeds MethodComparator, and the working docblock-`static` case keeps a native signature).
- * Semantics-preserving: native `: static` and `@return static` denote the same type; the rewrite can
- * only make `static` resolve to the concrete receiver, never widen it. `self` returns are NOT touched
- * — `: self` is not late-static-bound and resolves fine on the concrete child. Retire this handler
- * once the upstream TypeExpander carries `is_static` through that rebuild (cf. ConsoleClosureScopeHandler,
- * another auto-retiring stopgap for an upstream Psalm gap).
- *
- * Scoped broad to every class that transitively extends Eloquent\Builder (matches
- * {@see BuilderSubclassQueryMixinHandler} and the #1140 precedent), which also catches abstract
- * intermediate builders that declare the `static`-returning method but no model references directly.
+ * Scoped to every class transitively extending Eloquent\Builder (matches
+ * {@see BuilderSubclassQueryMixinHandler}), which also catches abstract intermediate builders no
+ * model references directly.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1216
  */

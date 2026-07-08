@@ -7,16 +7,8 @@ namespace App\Builders;
 use App\Models\Artist;
 
 /**
- * Concrete custom builder that binds the abstract parent's template to a concrete model.
- *
- * Follows the minimal reproduction shape from issue #1216, reduced from koel's
- * App\Builders\ArtistBuilder: `extends FavoriteableBuilder<Artist>` (so the class itself is
- * non-generic), with its own fluent methods reached through a chain routed via the abstract
- * parent's `static`-returning method and Laravel's `Conditionable::when()`.
- *
- * (In real koel the parent's `static`-returning method is `withFavoriteStatus()` and koel's
- * `accessible()` lives on this child; the issue's minimal shape names the parent method
- * `accessible()` to keep the repro small. This fixture follows that shape.)
+ * Concrete custom builder binding the abstract parent's template to a concrete model
+ * (minimal reproduction shape from issue #1216).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1216
  *
@@ -25,11 +17,16 @@ use App\Models\Artist;
 class ArtistBuilder extends FavoriteableBuilder
 {
     /**
-     * Public entry point that chains through the abstract parent's `accessible()` (returns
-     * `static`) and `Conditionable::when()` (returns `$this`) before calling a method declared
-     * on THIS concrete subclass. The intermediate type must stay ArtistBuilder, not collapse to
-     * the abstract parent FavoriteableBuilder, or `withRatingSubquery()` is a false
-     * UndefinedMagicMethod.
+     * Chains through the abstract parent's `accessible()` (returns `static`) and
+     * `Conditionable::when()` (returns `$this`) before calling a PRIVATE method declared on THIS
+     * concrete subclass. The intermediate type must stay ArtistBuilder, not collapse to the
+     * abstract parent, or `withRatingSubquery()` is a false UndefinedMagicMethod.
+     *
+     * This INSIDE-builder-body chain is the regression guard the type test cannot provide:
+     * psalm-tester passes the phpt snippet as an explicit file argument, so referenced classes
+     * are only reflected, never analyzed — method bodies here ARE analyzed because the
+     * application test's <projectFiles> covers app/. Issue #1216's real-world error site was
+     * exactly such an in-body chain.
      */
     public function withUserContext(): self
     {
