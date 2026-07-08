@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783530418808,
+  "lastUpdate": 1783540149148,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8080,6 +8080,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1107,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1e03b356ee45fb9b948de3ff6080b53d7f49d1c4",
+          "message": "fix(taint): where() keyed-map form no longer flags TaintedSql #734 (#1221)\n\nThe `@psalm-taint-sink sql $column` on the where family fired on the\nkeyed-map form (`where(['status_id' => $userValue])`), whose values are\nPDO-bound by `Builder::addArrayOfWheres()` while only the literal keys\nbecome columns, a false positive (confirmed in pixelfed and monica).\n\nA stub cannot express a type-conditional sink, and AddRemoveTaintsEvent\ncarries no method id, so the earlier unscoped RemoveTaints strip (#1218)\nsilently removed the sql taint from every sealed string-key map,\ncausing confirmed false negatives on real injections. Instead,\nWhereColumnTaintHandler records the first-argument node of where-family\ncalls (where/orWhere/whereNot/orWhereNot/firstWhere) in a\nBefore-expression hook and strips only those exact nodes when typed as\na sealed all-string-key TKeyedArray. Stubs stay byte-identical: the\nstring form, whole-array input, list forms, whereAll/having maps, and\nnon-SQL @psalm-flow propagation all still report.\n\nSupersedes #1218. References #733 (firstWhere, duplicate).\n\nCloses #734",
+          "timestamp": "2026-07-08T21:46:03+02:00",
+          "tree_id": "0cbffe69f877d93ec52859daf2740fe0934e9554",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1e03b356ee45fb9b948de3ff6080b53d7f49d1c4"
+        },
+        "date": 1783540147829,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.62,
+            "range": "± 0.4",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
             "unit": "MB"
           }
         ]
