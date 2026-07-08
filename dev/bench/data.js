@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783540149148,
+  "lastUpdate": 1783552524512,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8115,6 +8115,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0d2374d85d118e063f9c89bca8908e35a127355b",
+          "message": "fix: surface swallowed bootstrap() failures #1096 (#1226)\n\nA bootstrap() throw (e.g. a bad config/*.php) was stashed inside\nApplicationProvider and never surfaced: the plugin ran degraded\n(no providers, reduced inference) while psalm reported a clean run,\neven with failOnInternalError=true. Only diagnose revealed it.\n\n- warn by default: error message + classifier hint + degraded-mode\n  notice pointing at psalm-laravel diagnose\n- failOnInternalError=true: rethrow through the existing\n  InternalErrorReporter escalation path so the run fails\n- crash resistance unchanged: the swallow stays in\n  ApplicationProvider; analysis continues when not opted in",
+          "timestamp": "2026-07-09T01:12:29+02:00",
+          "tree_id": "4f5c1685c486bedb9729acabd591da2c63eba679",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0d2374d85d118e063f9c89bca8908e35a127355b"
+        },
+        "date": 1783552523967,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.87,
+            "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1107,
             "unit": "MB"
           }
         ]
