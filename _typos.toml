@@ -37,11 +37,6 @@ extend-ignore-re = [
     # tests/Type/psalm-with-optin-custom-issues.xml — fixture filename
     # ("opt-in" mashed into one word); renaming would churn many test refs.
     "optin",
-    # PluginConfigTest (#1203): deliberately typo'd experimental feature name
-    # (Aray vs Array) that ExperimentalFeature::tryFrom() must reject, so the
-    # unknown-name error path (with its Levenshtein "did you mean" hint) is
-    # exercised.
-    "modelToArayShape",
 ]
 
 [default.extend-identifiers]

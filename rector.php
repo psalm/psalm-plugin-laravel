@@ -47,8 +47,10 @@ return RectorConfig::configure()
         // Runtime-equivalent for SimpleXMLElement's magic __isset (verified), but Psalm's type
         // narrower has special-case support for isset() on a dynamic property and none for the
         // property_exists()-based form, so the rewrite silently turns every such guard back into
-        // a MixedAssignment/MixedPropertyFetch source. Every isset($xml->child) check in
-        // PluginConfig/Diagnostics that detects a missing <experimental>/<plugins> element
-        // depends on staying isset().
-        IssetOnPropertyObjectToPropertyExistsRector::class,
+        // a MixedAssignment/MixedPropertyFetch source. Scoped to the two files whose
+        // isset($xml->child) checks detect a missing <experimental>/<plugins> element.
+        IssetOnPropertyObjectToPropertyExistsRector::class => [
+            __DIR__ . '/src/Config/PluginConfig.php',
+            __DIR__ . '/src/Cli/Diagnose/Diagnostics.php',
+        ],
     ]);
