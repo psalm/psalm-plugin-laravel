@@ -12,10 +12,23 @@
  * because `never` is the bottom type (subtype of everything), and methods like `merge()` / `push()` are
  * stubbed to widen generics on their return so fluent chains propagate concrete types.
  *
+ * Laravel's runtime accepts far more than array/iterable/Arrayable: `EnumeratesValues::getArrayableItems()`
+ * routes `null|scalar|UnitEnum` through `Arr::wrap()` and any other object (including plain DTOs,
+ * `JsonSerializable`, `Jsonable`, `WeakMap`, `DateTime`) through `Arr::from()`. The `scalar|UnitEnum|object`
+ * branches below widen the param to match so those inputs don't trip a false-positive `InvalidArgument`
+ * (see issue #808). Precision for what TKey/TValue resolve to in those cases comes from
+ * `CollectHandler`, not from this docblock.
+ *
  * @template TKey of array-key
  * @template TValue
  *
- * @param  \Illuminate\Contracts\Support\Arrayable<TKey, TValue>|iterable<TKey, TValue>|null  $value
+ * No `@psalm-flow` here: `($value) -> return` was evaluated and deliberately withheld.
+ * Experiments on whether `@psalm-taint-specialize` prevents cross-call-site taint pooling through
+ * the shared TValue template slot produced conflicting results across repeated runs, so per the
+ * project's false-positive-averse policy the annotation is left out pending a clean-room
+ * investigation (tracked in issue #808 follow-ups).
+ *
+ * @param  \Illuminate\Contracts\Support\Arrayable<TKey, TValue>|iterable<TKey, TValue>|scalar|\UnitEnum|object|null  $value
  * @psalm-return \Illuminate\Support\Collection<TKey, TValue>
  */
 function collect($value = []) {}

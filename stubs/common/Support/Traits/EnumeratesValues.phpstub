@@ -1,0 +1,51 @@
+<?php
+
+namespace Illuminate\Support\Traits;
+
+/**
+ * @template TKey of array-key
+ * @template-covariant TValue
+ */
+trait EnumeratesValues
+{
+    // Same namespace as Illuminate\Conditionable\Traits\Conditionable's declared `namespace
+    // Illuminate\Support\Traits;` (its directory doesn't match its namespace), so this is
+    // unqualified in Laravel source too - copied verbatim.
+    use Conditionable;
+
+    /**
+     * Create a new collection instance if the value isn't one already.
+     *
+     * Widened here (not on \Illuminate\Support\Collection) because a re-declaration on Collection
+     * breaks return-type precision for DIRECT `Collection::make()` calls. Verified by a
+     * controlled experiment (issue #808 round-2 review): moving this widened signature to
+     * Collection.phpstub instead of the trait causes `Collection::make(null)`, `Collection::
+     * make('str')`, `Collection::make($enumCase)`, and `Collection::make($plainDto)` to collapse
+     * from their precise narrowed types (e.g. `Collection<0, 'str'>&static`) down to the stub's
+     * widened-but-unbound fallback (`Collection<array-key, mixed>`, no `&static`) - because once
+     * Collection self-declares `make()`, `declaring_method_id === method_id` for calls on
+     * Collection itself, so `ExistingAtomicStaticCallAnalyzer` skips the declaring-class fallback
+     * lookup entirely and only tries the called class (`Collection::class`, not registered - see
+     * CollectionMakeHandler). Subclass calls (`EloquentCollection::make()`,
+     * `WorkOrderCollection::make()`) were NOT affected by that experiment - they still dispatched
+     * to the handler correctly with both the argument check and the return-type narrowing intact,
+     * confirmed via direct handler instrumentation. Keeping the trait-level declaration avoids the
+     * direct-call regression while keeping every dispatch path working.
+     *
+     * `scalar|UnitEnum|object` widens past Laravel's own `Arrayable|iterable|null` docblock because
+     * `EnumeratesValues::getArrayableItems()` routes `null|scalar|UnitEnum` through `Arr::wrap()`
+     * and any other object through `Arr::from()` (see issue #808). Precision for what
+     * TMakeKey/TMakeValue resolve to in those cases comes from `CollectionMakeHandler`.
+     *
+     * @template TMakeKey of array-key
+     * @template TMakeValue
+     *
+     * `...$args` is claimed unconditionally: it's real since Laravel 13.3.0 (now the 13.x floor
+     * - see composer.json), and on the 12.x floor (12.14+) PHP silently ignores excess call-site
+     * arguments beyond the native parameter list, so the wider claim is harmless there too.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TMakeKey, TMakeValue>|iterable<TMakeKey, TMakeValue>|scalar|\UnitEnum|object|null  $items
+     * @return static<TMakeKey, TMakeValue>
+     */
+    public static function make($items = [], ...$args) {}
+}
