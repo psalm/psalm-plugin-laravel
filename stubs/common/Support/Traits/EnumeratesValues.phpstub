@@ -33,16 +33,18 @@ trait EnumeratesValues
      * direct-call regression while keeping every dispatch path working.
      *
      * `scalar|UnitEnum|object` widens past Laravel's own `Arrayable|iterable|null` docblock because
-     * `EnumeratesValues::getArrayableItems()` routes `null|scalar|UnitEnum` through `Arr::wrap()`
-     * and any other object through `Arr::from()` (see issue #808). Precision for what
-     * TMakeKey/TMakeValue resolve to in those cases comes from `CollectionMakeHandler`.
+     * `EnumeratesValues::getArrayableItems()` accepts all of them (see issue #808). The routing
+     * differs by version but the accepted set does not: 12.14+ sends `null|scalar|UnitEnum` through
+     * `Arr::wrap()` and every other object through `Arr::from()`, while 11.35-12.13 run a `match`
+     * ladder whose `default => (array) $items` arm casts the same inputs. Precision for what
+     * TMakeKey/TMakeValue resolve to comes from `CollectionMakeHandler`.
      *
      * @template TMakeKey of array-key
      * @template TMakeValue
      *
-     * `...$args` is claimed unconditionally: it's real since Laravel 13.3.0 (now the 13.x floor
-     * - see composer.json), and on the 12.x floor (12.14+) PHP silently ignores excess call-site
-     * arguments beyond the native parameter list, so the wider claim is harmless there too.
+     * `...$args` is claimed unconditionally: it's real since Laravel 13.3.0, and below that PHP
+     * silently ignores excess call-site arguments beyond a userland parameter list, so the wider
+     * claim is harmless on the 11.x and 12.x lines this branch also supports.
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<TMakeKey, TMakeValue>|iterable<TMakeKey, TMakeValue>|scalar|\UnitEnum|object|null  $items
      * @return static<TMakeKey, TMakeValue>

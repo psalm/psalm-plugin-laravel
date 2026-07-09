@@ -80,6 +80,8 @@ final class InternalErrorReporterTest extends TestCase
      */
     private function collectingProgress(): Progress
     {
+        // Psalm 6's Progress is fully concrete (no abstract members), so only the one
+        // method under test needs overriding. Psalm 7 makes six of them abstract.
         return new class extends Progress {
             /** @var list<string> */
             public array $warnings = [];
@@ -89,24 +91,6 @@ final class InternalErrorReporterTest extends TestCase
             {
                 $this->warnings[] = $message;
             }
-
-            #[\Override]
-            public function debug(string $message): void {}
-
-            #[\Override]
-            public function startPhase(\Psalm\Progress\Phase $phase, int $threads = 1): void {}
-
-            #[\Override]
-            public function expand(int $number_of_tasks): void {}
-
-            #[\Override]
-            public function taskDone(int $level): void {}
-
-            #[\Override]
-            public function finish(): void {}
-
-            #[\Override]
-            public function alterFileDone(string $file_name): void {}
         };
     }
 }
