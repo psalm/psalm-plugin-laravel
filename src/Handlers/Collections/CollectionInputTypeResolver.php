@@ -25,8 +25,9 @@ use Psalm\Type\Union;
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/808
  * @internal
  *
- * @psalm-external-mutation-free (not @psalm-immutable / @psalm-mutation-free: resolve() caches
- * invariant Unions in static properties, see $neverUnion/$literalZeroKeyUnion).
+ * Not marked mutation-free: Psalm 6's {@see Codebase::classImplements()} is not annotated
+ * mutation-free (it is in Psalm 7), so claiming purity here trips ImpureMethodCall on this run.
+ * resolve() also caches invariant Unions in static properties, see $neverUnion/$literalZeroKeyUnion.
  */
 final class CollectionInputTypeResolver
 {
@@ -40,7 +41,6 @@ final class CollectionInputTypeResolver
 
     /**
      * @return array{Union, Union}|null [TKey, TValue]
-     * @psalm-external-mutation-free
      */
     public static function resolve(?Union $argType, Codebase $codebase): ?array
     {
