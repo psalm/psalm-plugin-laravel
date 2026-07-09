@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Config\ExperimentalFeature;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeMutatorInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CustomTypeDetector;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
@@ -53,7 +54,8 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 {
     private static bool $useMigrations = false;
 
-    private static bool $modelToArrayShapeEnabled = false;
+    /** @var list<\Psalm\LaravelPlugin\Config\ExperimentalFeature> */
+    private static array $experimentalFeatures = [];
 
     /** @psalm-external-mutation-free */
     public static function enableMigrations(): void
@@ -61,10 +63,13 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         self::$useMigrations = true;
     }
 
-    /** @psalm-external-mutation-free */
-    public static function enableModelToArrayShape(): void
+    /**
+     * @param list<\Psalm\LaravelPlugin\Config\ExperimentalFeature> $features
+     * @psalm-external-mutation-free
+     */
+    public static function setExperimentalFeatures(array $features): void
     {
-        self::$modelToArrayShapeEnabled = true;
+        self::$experimentalFeatures = $features;
     }
 
     #[\Override]
@@ -266,7 +271,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
         // attributesToArray()/toArray() precise array-shape inference (columns + $appends, honoring
         // $hidden/$visible). Experimental — see https://github.com/psalm/psalm-plugin-laravel/issues/923
         // and the modelToArrayShape entry in docs/config.md.
-        if (self::$modelToArrayShapeEnabled) {
+        if (\in_array(ExperimentalFeature::ModelToArrayShape, self::$experimentalFeatures, true)) {
             $methods->return_type_provider->registerClosure($className, ModelToArrayShapeHandler::getReturnType(...));
         }
 

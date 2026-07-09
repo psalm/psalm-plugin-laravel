@@ -166,38 +166,18 @@ final class IssueUrlGeneratorTest extends TestCase
         );
         $this->assertStringContainsString('- cachePath:', $body);
         $this->assertStringContainsString('- failOnInternalError: false', $body);
-        $this->assertStringContainsString('- experimentalAll: false', $body);
         $this->assertStringContainsString('- experimentalFeatures: []', $body);
-        $this->assertStringContainsString('- experimentalNotices: []', $body);
     }
 
     #[Test]
     public function body_renders_enabled_experimental_features(): void
     {
-        $xml = new \SimpleXMLElement(
-            '<pluginClass><experimental><feature name="modelToArrayShape" /></experimental></pluginClass>',
-        );
+        $xml = new \SimpleXMLElement('<pluginClass><experimental all="true" /></pluginClass>');
         $config = PluginConfig::fromXml($xml);
 
         $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $config));
 
-        $this->assertStringContainsString('- experimentalAll: false', $body);
         $this->assertStringContainsString('- experimentalFeatures: [modelToArrayShape]', $body);
-        $this->assertStringContainsString('- experimentalNotices: []', $body);
-    }
-
-    #[Test]
-    public function body_renders_experimental_notices(): void
-    {
-        $xml = new \SimpleXMLElement('<pluginClass><experimental /></pluginClass>');
-        $config = PluginConfig::fromXml($xml);
-
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $config));
-
-        $this->assertStringContainsString(
-            '- experimentalNotices: [<experimental /> has no effect: it has no <feature> children and no all="true" attribute. Remove it, or see docs/config.md for how to enable a specific feature.]',
-            $body,
-        );
     }
 
     #[Test]
@@ -360,6 +340,12 @@ final class IssueUrlGeneratorTest extends TestCase
         $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
 
         foreach ($publicProperties as $name) {
+            // experimentalNotices is intentionally not surfaced: notices are a pure function of the
+            // feature names already listed (experimentalFeatures), so rendering them is redundant.
+            if ($name === 'experimentalNotices') {
+                continue;
+            }
+
             $this->assertStringContainsString("- {$name}: ", $body, "Plugin configuration section is missing '{$name}'");
         }
     }

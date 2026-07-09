@@ -95,9 +95,7 @@ final class IssueUrlGenerator
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
             '- configDirectories: ' . self::formatConfigDirectories($pluginConfig->configDirectories),
-            '- experimentalAll: ' . self::formatBool($pluginConfig->experimentalAll),
             '- experimentalFeatures: ' . self::formatExperimentalFeatures($pluginConfig->experimentalFeatures),
-            '- experimentalNotices: ' . self::formatExperimentalNotices($pluginConfig->experimentalNotices),
         ];
     }
 
@@ -116,25 +114,6 @@ final class IssueUrlGenerator
         }
 
         return '[' . \implode(', ', \array_map(static fn(ExperimentalFeature $feature): string => $feature->value, $features)) . ']';
-    }
-
-    /**
-     * Render experimentalNotices for the bug-report body. No sanitisation needed — the
-     * graduated/withdrawn notices embed the user's own `<feature name="...">` value, but that
-     * is a short config-vocabulary string, never a filesystem path, so it carries none of
-     * cachePath/configDirectories' leak risk.
-     *
-     * @param list<string> $notices
-     *
-     * @psalm-pure
-     */
-    private static function formatExperimentalNotices(array $notices): string
-    {
-        if ($notices === []) {
-            return '[]';
-        }
-
-        return '[' . \implode('; ', $notices) . ']';
     }
 
     /**

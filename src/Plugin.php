@@ -85,7 +85,7 @@ final class Plugin implements PluginEntryPointInterface
             $output->warning($notice);
         }
 
-        $active = $pluginConfig->activeExperimentalFeatures();
+        $active = $pluginConfig->experimentalFeatures;
 
         if ($active === []) {
             return;
@@ -173,9 +173,7 @@ final class Plugin implements PluginEntryPointInterface
             Handlers\Eloquent\ModelRegistrationHandler::enableMigrations();
         }
 
-        if ($pluginConfig->isExperimentEnabled(ExperimentalFeature::ModelToArrayShape)) {
-            Handlers\Eloquent\ModelRegistrationHandler::enableModelToArrayShape();
-        }
+        Handlers\Eloquent\ModelRegistrationHandler::setExperimentalFeatures($pluginConfig->experimentalFeatures);
 
         $registration->registerHooksFromClass(Handlers\Eloquent\CastContractUserDefinedHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);

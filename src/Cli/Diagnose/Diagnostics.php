@@ -143,7 +143,7 @@ class Diagnostics
      * never throws or emits a deprecation notice for an unrecognized/graduated/withdrawn
      * name — diagnose describes what is currently live, not every mistake in psalm.xml; a
      * real Psalm run is what surfaces a config error. `all="true"` resolves to every case
-     * regardless of `<feature>` children.
+     * minus the recognized `<exclude name>` children; otherwise the recognized `<feature name>` children.
      *
      * @return list<non-empty-string>
      */
@@ -166,24 +166,13 @@ class Diagnostics
         /** @psalm-var \SimpleXMLElement $experimental */
         $experimental = $pluginClass->experimental;
 
-        if ((string) ($experimental['all'] ?? 'false') === 'true') {
-            return \array_map(static fn(ExperimentalFeature $case): string => $case->value, ExperimentalFeature::cases());
-        }
-
-        $enabled = [];
-
-        /** @psalm-var iterable<\SimpleXMLElement> $children */
-        $children = $experimental->feature;
-
-        foreach ($children as $node) {
-            $feature = ExperimentalFeature::tryFrom((string) ($node['name'] ?? ''));
-
-            if ($feature !== null && !\in_array($feature->value, $enabled, true)) {
-                $enabled[] = $feature->value;
-            }
-        }
-
-        return $enabled;
+        // Lenient resolution (all="true" → every case minus recognized <exclude> names; otherwise
+        // the recognized <feature> names), the read-only twin of PluginConfig's strict parser. Must
+        // stay in lockstep with ExperimentalFeature::resolveLenient() — the implementation both consult.
+        return \array_map(
+            static fn(ExperimentalFeature $case): string => $case->value,
+            ExperimentalFeature::resolveLenient($experimental),
+        );
     }
 
     /**
@@ -219,19 +208,24 @@ class Diagnostics
     }
 
     /**
-     * Load `<projectRoot>/psalm.xml` as a SimpleXMLElement, or null if it does not exist or is
-     * malformed. Shared by every diagnose fact read directly off the user's psalm.xml (PHP
-     * version, active experimental features) instead of `Config::getConfigForPath()` — see
+     * Load the project's Psalm config (`psalm.xml`, falling back to `psalm.xml.dist` like Psalm
+     * itself does) as a SimpleXMLElement, or null if neither exists or the file is malformed.
+     * Shared by every diagnose fact read directly off the user's config (PHP version, active
+     * experimental features) instead of `Config::getConfigForPath()` — see
      * {@see resolveAnalysisPhpVersion()} for why.
      */
     private function loadPsalmXml(string $projectRoot): ?\SimpleXMLElement
     {
-        $path = $projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        if (!\is_file($path)) {
-            return null;
+        $contents = false;
+
+        foreach (['psalm.xml', 'psalm.xml.dist'] as $candidate) {
+            $path = $projectRoot . \DIRECTORY_SEPARATOR . $candidate;
+            if (\is_file($path)) {
+                $contents = \file_get_contents($path);
+                break;
+            }
         }
 
-        $contents = \file_get_contents($path);
         if ($contents === false) {
             return null;
         }

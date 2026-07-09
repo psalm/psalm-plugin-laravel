@@ -217,7 +217,9 @@ Current features:
 
 - `modelToArrayShape` (tracks [#923](https://github.com/psalm/psalm-plugin-laravel/issues/923)): infers a precise array shape for `Model::toArray()` and `attributesToArray()` from `$appends` and column types, instead of the generic `array<string, mixed>`.
 
-### Enabling a specific feature
+### Enabling specific features
+
+List each feature by name. Use this form to opt into a specific feature while staying unaffected by future experiments.
 
 ```xml
 <experimental>
@@ -227,17 +229,47 @@ Current features:
 
 ### Enabling every experimental feature
 
-For early adopters who accept more churn between releases in exchange for trying everything.
+Enables all current experimental features at once. Use this form as an early adopter who accepts more churn between releases in exchange for trying everything.
 
 ```xml
 <experimental all="true" />
 ```
 
-If a feature name graduates to stable or is withdrawn, keeping it in `<experimental>` produces a deprecation notice on the next run instead of an error (a plugin upgrade never breaks an existing psalm.xml this way). Remove the entry once you see the notice.
+### Enabling everything except some features
 
-An `<experimental>` element with no `<feature>` children and no `all="true"` attribute also produces a notice, since it has no effect. This is usually a leftover from an incomplete edit; remove the element or add a `<feature>`/`all="true"`.
+Enables every experimental feature except the excluded ones. Use this form to switch off a feature that misbehaves on your codebase while keeping the rest.
 
-When any feature is enabled, the plugin prints a line naming it on every run (`Laravel plugin: experimental features enabled: modelToArrayShape`), so CI logs record exactly which non-stable analysis ran. This line, along with any deprecation notice above, is suppressed under `--no-progress`.
+```xml
+<experimental all="true">
+    <exclude name="modelToArrayShape" />
+</experimental>
+```
+
+### Upgrade exposure
+
+The two forms differ in how a plugin upgrade affects you:
+
+- With `all="true"`, upgrading the plugin can enable newly introduced experiments automatically. Use `<exclude>` to turn off any that misbehave.
+- With granular `<feature>` entries, new experiments stay off until you name them.
+
+### Configuration errors
+
+The two forms are mutually exclusive:
+
+- A `<feature>` child under `all="true"` is an error (it is redundant, since `all="true"` already enables everything).
+- An `<exclude>` child without `all="true"` is an error (there is nothing to exclude from in granular mode).
+
+An unknown feature or exclude name is also an error, listing the valid names and a "did you mean" hint when a close match exists.
+
+### Retired feature names
+
+If a feature name graduates to stable or is withdrawn, keeping it in `<experimental>` produces a notice on the next run instead of an error, so a plugin upgrade never breaks an existing psalm.xml. Remove the entry once you see the notice.
+
+An `<experimental>` element with no `<feature>` children and no `all="true"` attribute also produces a notice, since it has no effect. This is usually a leftover from an incomplete edit. Remove the element, or add a `<feature>` child or `all="true"`.
+
+### Enabled-features banner
+
+When any feature is enabled, the plugin prints one line naming the active features on runs with progress output (`Laravel plugin: experimental features enabled: modelToArrayShape`). Running with `--no-progress` (common in CI) suppresses this line along with the notices described above, so do not rely on it to record which non-stable analysis ran.
 
 ## Cache directory
 

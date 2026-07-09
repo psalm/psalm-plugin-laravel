@@ -53,7 +53,6 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->resolveDynamicWhereClauses);
         $this->assertTrue($config->resolveConfigReturnTypes);
         $this->assertSame([], $config->configDirectories);
-        $this->assertFalse($config->experimentalAll);
         $this->assertSame([], $config->experimentalFeatures);
         $this->assertFalse($config->isExperimentEnabled(ExperimentalFeature::ModelToArrayShape));
         $this->assertSame([], $config->experimentalNotices);
@@ -130,53 +129,23 @@ final class PluginConfigTest extends TestCase
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertFalse($config->experimentalAll);
         $this->assertSame([], $config->experimentalFeatures);
         $this->assertSame([], $config->experimentalNotices);
     }
 
     #[Test]
-    public function experimental_named_feature_enables_only_that_feature(): void
+    public function experimental_granular_named_feature_enables_only_that_feature(): void
     {
+        // Granular mode (no all attribute): only the named <feature> is enabled.
         $xml = new \SimpleXMLElement(
             '<pluginClass><experimental><feature name="modelToArrayShape" /></experimental></pluginClass>',
         );
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertFalse($config->experimentalAll);
         $this->assertSame([ExperimentalFeature::ModelToArrayShape], $config->experimentalFeatures);
         $this->assertTrue($config->isExperimentEnabled(ExperimentalFeature::ModelToArrayShape));
         $this->assertSame([], $config->experimentalNotices);
-    }
-
-    #[Test]
-    public function experimental_all_true_enables_every_case(): void
-    {
-        $xml = new \SimpleXMLElement('<pluginClass><experimental all="true" /></pluginClass>');
-
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertTrue($config->experimentalAll);
-
-        foreach (ExperimentalFeature::cases() as $case) {
-            $this->assertTrue($config->isExperimentEnabled($case));
-        }
-    }
-
-    #[Test]
-    public function experimental_all_and_named_feature_combine(): void
-    {
-        // <feature> children are redundant once all="true" is set, but harmless — the
-        // config object still records them, isExperimentEnabled() just short-circuits on $all.
-        $xml = new \SimpleXMLElement(
-            '<pluginClass><experimental all="true"><feature name="modelToArrayShape" /></experimental></pluginClass>',
-        );
-
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertTrue($config->experimentalAll);
-        $this->assertSame([ExperimentalFeature::ModelToArrayShape], $config->experimentalFeatures);
     }
 
     #[Test]
@@ -197,6 +166,111 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function experimental_all_true_enables_every_case(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental all="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        // all="true" is resolved to every case at parse time — experimentalFeatures IS cases().
+        $this->assertSame(ExperimentalFeature::cases(), $config->experimentalFeatures);
+        $this->assertSame([], $config->experimentalNotices);
+
+        foreach (ExperimentalFeature::cases() as $case) {
+            $this->assertTrue($config->isExperimentEnabled($case));
+        }
+    }
+
+    #[Test]
+    public function experimental_all_true_with_exclude_disables_that_feature(): void
+    {
+        // Excluding the only live case leaves an empty (but legitimate) enabled list — no notice.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental all="true"><exclude name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertSame([], $config->experimentalFeatures);
+        $this->assertFalse($config->isExperimentEnabled(ExperimentalFeature::ModelToArrayShape));
+        $this->assertSame([], $config->experimentalNotices);
+    }
+
+    #[Test]
+    public function experimental_duplicate_excludes_dedupe(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental all="true">'
+            . '<exclude name="modelToArrayShape" />'
+            . '<exclude name="modelToArrayShape" />'
+            . '</experimental>'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        // Both excludes name the only case, so the enabled list is empty either way — the point
+        // is that the duplicate is tolerated rather than mishandled.
+        $this->assertSame([], $config->experimentalFeatures);
+    }
+
+    #[Test]
+    public function experimental_feature_under_all_true_throws(): void
+    {
+        // Mode exclusivity: <feature> is redundant under all="true"; the parser rejects it rather
+        // than silently ignoring it.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental all="true"><feature name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/<feature> is redundant under <experimental all="true">/');
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function experimental_exclude_without_all_true_throws(): void
+    {
+        // Mode exclusivity: <exclude> only makes sense under all="true".
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental><exclude name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/<exclude> requires <experimental all="true">/');
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function experimental_unexpected_child_element_under_all_true_throws(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental all="true"><include name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/Unexpected <include> element under <experimental all="true">/');
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function experimental_unexpected_child_element_in_granular_mode_throws(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental><include name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/Unexpected <include> element under <experimental>/');
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
     public function experimental_invalid_all_value_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><experimental all="banana" /></pluginClass>');
@@ -208,15 +282,53 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function experimental_unknown_feature_name_throws_with_valid_list_and_suggestion(): void
+    public function experimental_unknown_exclude_name_close_to_a_valid_one_throws_with_a_suggestion(): void
     {
+        // "modelToArrayShapes" is edit-distance 1 from the real "modelToArrayShape", so the
+        // gated "Did you mean" hint fires on the exclude name.
         $xml = new \SimpleXMLElement(
-            '<pluginClass><experimental><feature name="modelToArayShape" /></experimental></pluginClass>',
+            '<pluginClass><experimental all="true"><exclude name="modelToArrayShapes" /></experimental></pluginClass>',
         );
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessageMatches(
-            "/Unknown experimental feature 'modelToArayShape'\\. Did you mean 'modelToArrayShape'\\? "
+            "/Unknown experimental feature 'modelToArrayShapes'\\. Did you mean 'modelToArrayShape'\\? "
+            . "Valid values: 'modelToArrayShape'\\./",
+        );
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function experimental_unknown_exclude_name_far_from_any_valid_one_omits_the_suggestion(): void
+    {
+        // "foo" is nowhere near any real feature name, so no misleading "Did you mean" hint —
+        // but the valid-values list is still shown so the user can self-correct.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental all="true"><exclude name="foo" /></experimental></pluginClass>',
+        );
+
+        try {
+            PluginConfig::fromXml($xml);
+            $this->fail('Expected InvalidArgumentException for an unknown exclude name.');
+        } catch (\InvalidArgumentException $invalidArgumentException) {
+            $this->assertStringContainsString("Unknown experimental feature 'foo'.", $invalidArgumentException->getMessage());
+            $this->assertStringContainsString("Valid values: 'modelToArrayShape'.", $invalidArgumentException->getMessage());
+            $this->assertStringNotContainsString('Did you mean', $invalidArgumentException->getMessage());
+        }
+    }
+
+    #[Test]
+    public function experimental_unknown_feature_name_close_to_a_valid_one_throws_with_a_suggestion(): void
+    {
+        // Same gated "Did you mean" hint, now on a granular <feature> name.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental><feature name="modelToArrayShapes" /></experimental></pluginClass>',
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches(
+            "/Unknown experimental feature 'modelToArrayShapes'\\. Did you mean 'modelToArrayShape'\\? "
             . "Valid values: 'modelToArrayShape'\\./",
         );
 
@@ -238,42 +350,22 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function graduated_or_withdrawn_notice_covers_both_branches_with_synthetic_data(): void
+    public function retirement_notice_returns_null_for_a_name_that_was_never_a_feature(): void
     {
-        // Same rationale as closestByLevenshtein's reflection test: ExperimentalFeature::GRADUATED
-        // and ::WITHDRAWN are genuinely empty today, so this helper can never observe a non-null
-        // version/reason through fromXml() alone. graduatedOrWithdrawnNotice() takes the resolved
-        // version/reason as parameters instead of looking them up itself specifically so this
-        // branch gets real coverage now, ahead of any feature actually graduating or being withdrawn.
-        $method = new \ReflectionMethod(PluginConfig::class, 'graduatedOrWithdrawnNotice');
-
-        $this->assertSame(
-            "Experimental feature 'oldFeature' graduated to stable in v4.2.0 and no longer needs "
-            . '<experimental>. Remove it from psalm.xml.',
-            $method->invoke(null, 'oldFeature', '4.2.0', null),
-        );
-        $this->assertSame(
-            "Experimental feature 'droppedFeature' was withdrawn (turned out unsound) and no longer exists. "
-            . 'Remove it from psalm.xml.',
-            $method->invoke(null, 'droppedFeature', null, 'turned out unsound'),
-        );
-        $this->assertNull($method->invoke(null, 'liveFeature', null, null));
+        // RETIRED is genuinely empty today (no feature has graduated or been withdrawn yet), so
+        // every lookup returns null. The moment a future PR adds an entry, resolveExperimentalFeatureName()
+        // surfaces that notice instead of throwing.
+        $this->assertNull(ExperimentalFeature::retirementNotice('neverExisted'));
+        $this->assertNull(ExperimentalFeature::retirementNotice('modelToArrayShape'));
     }
 
     #[Test]
-    public function experimental_all_true_still_validates_unknown_feature_names(): void
+    public function experimental_exclude_missing_name_attribute_throws(): void
     {
-        // <feature> children are documented as "redundant but harmless" once all="true" is
-        // set — but resolveExperimentalFeatureName() runs unconditionally inside the <feature>
-        // loop regardless of $all, so a typo must still throw. Guards against a future
-        // "short-circuit the loop when $all is true" refactor silently turning this into a
-        // no-op validation path.
-        $xml = new \SimpleXMLElement(
-            '<pluginClass><experimental all="true"><feature name="modelToArayShape" /></experimental></pluginClass>',
-        );
+        $xml = new \SimpleXMLElement('<pluginClass><experimental all="true"><exclude /></experimental></pluginClass>');
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches("/Unknown experimental feature 'modelToArayShape'/");
+        $this->expectExceptionMessageMatches('/<exclude> requires a non-empty `name` attribute/');
 
         PluginConfig::fromXml($xml);
     }
@@ -290,7 +382,7 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function experimental_present_but_empty_collects_a_notice_and_enables_nothing(): void
+    public function experimental_childless_collects_a_notice_and_enables_nothing(): void
     {
         // No #[IgnoreDeprecations]: this notice is collected into experimentalNotices, not
         // raised via trigger_error() — trigger_error(E_USER_DEPRECATED) here would be turned
@@ -300,44 +392,85 @@ final class PluginConfigTest extends TestCase
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertFalse($config->experimentalAll);
         $this->assertSame([], $config->experimentalFeatures);
         $this->assertSame(
-            ['<experimental /> has no effect: it has no <feature> children and no all="true" attribute. Remove it, or see docs/config.md for how to enable a specific feature.'],
+            ['<experimental> has no effect: it has no <feature> children and no all="true" attribute. '
+                . 'Enable specific features with <feature name="..." />, or all of them with '
+                . '<experimental all="true" />. See docs/config.md.'],
             $config->experimentalNotices,
         );
     }
 
     #[Test]
-    public function experimental_graduated_and_withdrawn_maps_are_empty_today(): void
+    public function experimental_all_false_with_feature_children_enables_granularly(): void
     {
-        // No feature has graduated or been withdrawn yet — ExperimentalFeature::ModelToArrayShape
-        // is the first ever experimental feature. This locks in today's "always null" behavior;
-        // the graduated/withdrawn deprecation-notice branches in PluginConfig get real coverage
-        // the moment a future PR actually adds an entry to one of these maps.
-        $this->assertNull(ExperimentalFeature::graduatedIn('modelToArrayShape'));
-        $this->assertNull(ExperimentalFeature::withdrawnBecause('modelToArrayShape'));
+        // all="false" is just granular mode spelled out — the <feature> children still enable.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental all="false"><feature name="modelToArrayShape" /></experimental></pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertSame([ExperimentalFeature::ModelToArrayShape], $config->experimentalFeatures);
+        $this->assertSame([], $config->experimentalNotices);
     }
 
     #[Test]
-    public function graduated_and_withdrawn_names_never_overlap_a_live_case_or_each_other(): void
+    public function retired_names_never_overlap_a_live_case(): void
     {
         // Lifecycle invariant (see ExperimentalFeature's class docblock): each name lives in
-        // exactly one of {live case, GRADUATED, WITHDRAWN}. Nothing in the type system enforces
-        // this — resolveExperimentalFeatureName() checks tryFrom() first, so a name left as both
-        // a live case AND a GRADUATED/WITHDRAWN entry would silently never produce the
-        // deprecation notice. Locking this in now, ahead of the first real graduation/withdrawal.
-        $graduated = (new \ReflectionClassConstant(ExperimentalFeature::class, 'GRADUATED'))->getValue();
-        $withdrawn = (new \ReflectionClassConstant(ExperimentalFeature::class, 'WITHDRAWN'))->getValue();
+        // exactly one of {live case, RETIRED}. Nothing in the type system enforces this —
+        // resolveExperimentalFeatureName() checks tryFrom() first, so a name left as both a live
+        // case AND a RETIRED entry would silently never produce the retirement notice. Locking
+        // this in now, ahead of the first real graduation/withdrawal.
+        $retired = (new \ReflectionClassConstant(ExperimentalFeature::class, 'RETIRED'))->getValue();
 
-        $this->assertIsArray($graduated);
-        $this->assertIsArray($withdrawn);
-        $this->assertSame([], \array_intersect_key($graduated, $withdrawn), 'A name cannot be both graduated and withdrawn.');
+        $this->assertIsArray($retired);
 
         foreach (ExperimentalFeature::cases() as $case) {
-            $this->assertArrayNotHasKey($case->value, $graduated, "Live case '{$case->value}' must not also appear in GRADUATED.");
-            $this->assertArrayNotHasKey($case->value, $withdrawn, "Live case '{$case->value}' must not also appear in WITHDRAWN.");
+            $this->assertArrayNotHasKey($case->value, $retired, "Live case '{$case->value}' must not also appear in RETIRED.");
         }
+    }
+
+    #[Test]
+    public function resolve_lenient_all_true_applies_excludes(): void
+    {
+        // Read-only twin of fromXml()'s strict parser, but never throws: all="true" resolves to
+        // every case; unrecognized exclude names are ignored rather than rejected.
+        $allTrue = new \SimpleXMLElement('<experimental all="true" />');
+        $this->assertSame(ExperimentalFeature::cases(), ExperimentalFeature::resolveLenient($allTrue));
+
+        $excludeUnknown = new \SimpleXMLElement(
+            '<experimental all="true"><exclude name="doesNotExist" /></experimental>',
+        );
+        $this->assertSame(ExperimentalFeature::cases(), ExperimentalFeature::resolveLenient($excludeUnknown));
+
+        $excludeKnown = new \SimpleXMLElement(
+            '<experimental all="true"><exclude name="modelToArrayShape" /></experimental>',
+        );
+        $this->assertSame([], ExperimentalFeature::resolveLenient($excludeKnown));
+    }
+
+    #[Test]
+    public function resolve_lenient_granular_reads_feature_children(): void
+    {
+        // Granular mode: recognized <feature> names, deduped; unknown names ignored (never thrown).
+        $granular = new \SimpleXMLElement(
+            '<experimental>'
+            . '<feature name="modelToArrayShape" />'
+            . '<feature name="doesNotExist" />'
+            . '<feature name="modelToArrayShape" />'
+            . '</experimental>',
+        );
+        $this->assertSame([ExperimentalFeature::ModelToArrayShape], ExperimentalFeature::resolveLenient($granular));
+
+        // Mode-mismatched children are ignored rather than throwing: an <exclude> in granular mode
+        // (or a <feature> under all="true") is simply not read.
+        $childless = new \SimpleXMLElement('<experimental />');
+        $this->assertSame([], ExperimentalFeature::resolveLenient($childless));
+
+        $excludeWithoutAll = new \SimpleXMLElement('<experimental><exclude name="modelToArrayShape" /></experimental>');
+        $this->assertSame([], ExperimentalFeature::resolveLenient($excludeWithoutAll));
     }
 
     #[Test]
@@ -736,9 +869,7 @@ final class PluginConfigTest extends TestCase
     #[Test]
     public function report_active_experiments_writes_the_active_features_line(): void
     {
-        $xml = new \SimpleXMLElement(
-            '<pluginClass><experimental><feature name="modelToArrayShape" /></experimental></pluginClass>',
-        );
+        $xml = new \SimpleXMLElement('<pluginClass><experimental all="true" /></pluginClass>');
         $config = PluginConfig::fromXml($xml);
         $progress = $this->spyProgress();
 
@@ -773,8 +904,9 @@ final class PluginConfigTest extends TestCase
         // Progress::warning() delegates to write() with a "Warning: " prefix and a trailing EOL —
         // confirms the notice is actually forwarded through that channel, not silently dropped.
         $this->assertSame(
-            ['Warning: <experimental /> has no effect: it has no <feature> children and no all="true" attribute. '
-                . 'Remove it, or see docs/config.md for how to enable a specific feature.' . \PHP_EOL],
+            ['Warning: <experimental> has no effect: it has no <feature> children and no all="true" attribute. '
+                . 'Enable specific features with <feature name="..." />, or all of them with '
+                . '<experimental all="true" />. See docs/config.md.' . \PHP_EOL],
             $progress->writes,
         );
     }

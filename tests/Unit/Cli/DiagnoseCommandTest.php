@@ -282,8 +282,10 @@ final class DiagnoseCommandTest extends TestCase
     }
 
     #[Test]
-    public function collect_reads_enabled_experimental_features_from_the_projects_psalm_xml(): void
+    public function collect_applies_an_exclude_under_all_true_from_the_projects_psalm_xml(): void
     {
+        // all="true" with the only case excluded leaves the enabled list empty — diagnose reports
+        // exactly what Psalm would actually run.
         $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
         $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
         \file_put_contents(
@@ -291,7 +293,30 @@ final class DiagnoseCommandTest extends TestCase
             '<?xml version="1.0"?>'
             . '<psalm xmlns="https://getpsalm.org/schema/config">'
             . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
-            . '<experimental><feature name="modelToArrayShape" /></experimental>'
+            . '<experimental all="true"><exclude name="modelToArrayShape" /></experimental>'
+            . '</pluginClass></plugins>'
+            . '</psalm>',
+        );
+
+        $this->assertTrue(\chdir($this->scratchDir));
+        $report = (new Diagnostics())->collect();
+
+        $this->assertSame([], $report->experimentalFeaturesEnabled);
+    }
+
+    #[Test]
+    public function collect_falls_back_to_psalm_xml_dist_when_psalm_xml_is_absent(): void
+    {
+        // Psalm itself reads psalm.xml.dist when psalm.xml is missing; diagnose must match so it
+        // reports the same config Psalm actually analyzes with. Only psalm.xml.dist is written here.
+        $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
+        $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
+        \file_put_contents(
+            $this->scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist',
+            '<?xml version="1.0"?>'
+            . '<psalm xmlns="https://getpsalm.org/schema/config">'
+            . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
+            . '<experimental all="true" />'
             . '</pluginClass></plugins>'
             . '</psalm>',
         );
@@ -305,10 +330,6 @@ final class DiagnoseCommandTest extends TestCase
     #[Test]
     public function collect_reads_all_true_experimental_from_the_projects_psalm_xml(): void
     {
-        // A functionally distinct code path from the named-<feature> test above
-        // (readEnabledExperimentalFeatures()'s all="true" branch maps every
-        // ExperimentalFeature::cases() instead of reading <feature> children) that
-        // happens to look identical today because only one case exists.
         $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
         $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
         \file_put_contents(
@@ -354,12 +375,11 @@ final class DiagnoseCommandTest extends TestCase
     }
 
     #[Test]
-    public function collect_silently_drops_an_unrecognized_feature_name(): void
+    public function collect_ignores_an_unrecognized_exclude_name(): void
     {
-        // readEnabledExperimentalFeatures()'s own docblock states this is deliberately
-        // different from PluginConfig::fromXml() (which throws on the same input): diagnose
-        // describes what is currently live, not every mistake in psalm.xml, so it must never
-        // throw on a typo it's precisely meant to help a user debug.
+        // readEnabledExperimentalFeatures() is deliberately more lenient than PluginConfig::fromXml()
+        // (which throws on an unknown exclude name): diagnose describes what is currently live, not
+        // every mistake in psalm.xml, so an unknown exclude is ignored — the feature stays enabled.
         $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
         $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
         \file_put_contents(
@@ -367,33 +387,7 @@ final class DiagnoseCommandTest extends TestCase
             '<?xml version="1.0"?>'
             . '<psalm xmlns="https://getpsalm.org/schema/config">'
             . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
-            . '<experimental><feature name="doesNotExist" /></experimental>'
-            . '</pluginClass></plugins>'
-            . '</psalm>',
-        );
-
-        $this->assertTrue(\chdir($this->scratchDir));
-        $report = (new Diagnostics())->collect();
-
-        $this->assertSame([], $report->experimentalFeaturesEnabled);
-    }
-
-    #[Test]
-    public function collect_treats_an_invalid_all_value_as_false_instead_of_throwing(): void
-    {
-        // PluginConfig::fromXml() throws InvalidArgumentException on all="banana" (a real
-        // config mistake). readEnabledExperimentalFeatures() must not — same leniency
-        // rationale as the unrecognized-feature-name test above. Pairs the malformed all
-        // with a valid <feature> sibling to also confirm the reader still falls through to
-        // reading children once the bad all attribute is ignored, rather than short-circuiting.
-        $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
-        $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
-        \file_put_contents(
-            $this->scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml',
-            '<?xml version="1.0"?>'
-            . '<psalm xmlns="https://getpsalm.org/schema/config">'
-            . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
-            . '<experimental all="banana"><feature name="modelToArrayShape" /></experimental>'
+            . '<experimental all="true"><exclude name="doesNotExist" /></experimental>'
             . '</pluginClass></plugins>'
             . '</psalm>',
         );
@@ -402,6 +396,30 @@ final class DiagnoseCommandTest extends TestCase
         $report = (new Diagnostics())->collect();
 
         $this->assertSame(['modelToArrayShape'], $report->experimentalFeaturesEnabled);
+    }
+
+    #[Test]
+    public function collect_treats_an_invalid_all_value_as_disabled_instead_of_throwing(): void
+    {
+        // PluginConfig::fromXml() throws InvalidArgumentException on all="banana" (a real config
+        // mistake). readEnabledExperimentalFeatures() must not — same leniency rationale as the
+        // unrecognized-exclude test above. Anything that isn't literally all="true" enables nothing.
+        $this->scratchDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . \uniqid('psalm-laravel-diagnose-', true);
+        $this->assertTrue(\mkdir($this->scratchDir), "Could not create scratch dir {$this->scratchDir}");
+        \file_put_contents(
+            $this->scratchDir . \DIRECTORY_SEPARATOR . 'psalm.xml',
+            '<?xml version="1.0"?>'
+            . '<psalm xmlns="https://getpsalm.org/schema/config">'
+            . '<plugins><pluginClass class="Psalm\\LaravelPlugin\\Plugin">'
+            . '<experimental all="banana"><exclude name="modelToArrayShape" /></experimental>'
+            . '</pluginClass></plugins>'
+            . '</psalm>',
+        );
+
+        $this->assertTrue(\chdir($this->scratchDir));
+        $report = (new Diagnostics())->collect();
+
+        $this->assertSame([], $report->experimentalFeaturesEnabled);
     }
 
     private function reflectApplicationProviderProperty(string $name): \ReflectionProperty

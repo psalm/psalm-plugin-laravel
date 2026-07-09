@@ -42,7 +42,6 @@ final readonly class PluginConfig
         public ?bool $findOctaneIncompatibleBinding,
         public string $cachePath,
         public bool $failOnInternalError,
-        public bool $experimentalAll,
         public array $experimentalFeatures,
         /**
          * Non-fatal messages collected while parsing `<experimental>` (a childless element with
@@ -95,7 +94,6 @@ final readonly class PluginConfig
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),
             failOnInternalError: $failOnInternalError,
-            experimentalAll: $experimental['all'],
             experimentalFeatures: $experimental['features'],
             experimentalNotices: $experimental['notices'],
         );
@@ -108,27 +106,14 @@ final readonly class PluginConfig
     }
 
     /**
-     * Whether $feature is enabled, either by name or via `<experimental all="true" />`.
+     * Whether $feature is in the resolved experimental feature list. `all="true"` is already
+     * expanded to every case at parse time (see {@see self::xmlExperimentalFeatures()}), so
+     * $experimentalFeatures is the single source of truth here.
      * @psalm-mutation-free
      */
     public function isExperimentEnabled(ExperimentalFeature $feature): bool
     {
-        return \in_array($feature, $this->activeExperimentalFeatures(), true);
-    }
-
-    /**
-     * Every experimental feature actually active: every case when `all="true"`, otherwise
-     * the named subset. Single source of truth for what `all` resolves to, shared by
-     * {@see self::isExperimentEnabled()} and by callers that need the resolved list itself
-     * (e.g. `Plugin::reportActiveExperiments()`).
-     *
-     * @return list<ExperimentalFeature>
-     *
-     * @psalm-mutation-free
-     */
-    public function activeExperimentalFeatures(): array
-    {
-        return $this->experimentalAll ? ExperimentalFeature::cases() : $this->experimentalFeatures;
+        return \in_array($feature, $this->experimentalFeatures, true);
     }
 
     /**
@@ -170,13 +155,21 @@ final readonly class PluginConfig
     }
 
     /**
-     * Parse `<experimental all="true">` / `<experimental><feature name="..."/></experimental>`.
+     * Parse `<experimental>`. Two mutually-exclusive forms, selected by the `all` attribute:
      *
-     * Absent element → nothing enabled, no notice (the common case). `all="true"` enables
-     * every case in {@see ExperimentalFeature}; `<feature>` children are unioned with it
-     * (redundant but harmless once `all` is set). Present-but-childless with no `all`
-     * attribute is very likely a mistake, so it collects a deprecation-style notice rather
-     * than silently doing nothing. Duplicate `<feature>` names dedupe silently.
+     *   - Absent element → nothing enabled, no notice (the common case).
+     *   - `all="true"` → every case in {@see ExperimentalFeature} minus the recognized
+     *     `<exclude name="...">` children (for features that misbehave on a given codebase).
+     *     Only `<exclude>` children are allowed here; a `<feature>` child throws (it is redundant),
+     *     and any other element throws too. Excluding every case (empty result) is legitimate.
+     *   - No `all` / `all="false"` → granular mode: only the named `<feature name="...">` children
+     *     are enabled. Only `<feature>` children are allowed; an `<exclude>` child throws (it needs
+     *     `all="true"`), and any other element throws too. Childless in this mode has no effect and
+     *     collects a deprecation-style notice.
+     *
+     * In both modes an unknown `<feature>`/`<exclude>` name throws (with a nearest-match hint when a
+     * valid name is close), a retired name collects its notice and is dropped (so an upgrade never
+     * hard-fails an existing psalm.xml), an empty name throws, and duplicate names dedupe silently.
      *
      * Notices are collected into the return value rather than raised via
      * `trigger_error(E_USER_DEPRECATED)`: Psalm's CLI installs an error handler that turns
@@ -185,7 +178,9 @@ final readonly class PluginConfig
      * hard-failure a "soft" notice is supposed to avoid. `Plugin::__invoke()` surfaces the
      * collected messages via `Progress::warning()` once `$output` is available instead.
      *
-     * @return array{all: bool, features: list<ExperimentalFeature>, notices: list<string>}
+     * Must stay in lockstep with ExperimentalFeature::resolveLenient(), the lenient reader diagnose uses.
+     *
+     * @return array{features: list<ExperimentalFeature>, notices: list<string>}
      */
     private static function xmlExperimentalFeatures(?\SimpleXMLElement $config): array
     {
@@ -194,31 +189,86 @@ final readonly class PluginConfig
         // there" signal — accessing a missing child via -> returns an empty proxy that also
         // satisfies `instanceof SimpleXMLElement`.
         if (!$config instanceof \SimpleXMLElement || !isset($config->experimental)) {
-            return ['all' => false, 'features' => [], 'notices' => []];
+            return ['features' => [], 'notices' => []];
         }
 
         /** @psalm-var \SimpleXMLElement $element */
         $element = $config->experimental;
 
-        $allValue = (string) ($element['all'] ?? 'false');
-
-        if (!\in_array($allValue, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException(
-                "Invalid experimental all value '{$allValue}'. Valid values: 'true', 'false'.",
-            );
-        }
-
-        $all = $allValue === 'true';
+        $all = self::boolFromString((string) ($element['all'] ?? 'false'), 'experimental all');
 
         /** @psalm-var iterable<\SimpleXMLElement> $children */
-        $children = $element->feature;
+        $children = $element->children();
 
-        $features = [];
         $notices = [];
+
+        if ($all) {
+            // all="true": every case minus the recognized <exclude> names. Only <exclude> is allowed.
+            $excluded = [];
+
+            foreach ($children as $node) {
+                $childName = $node->getName();
+
+                if ($childName === 'feature') {
+                    throw new \InvalidArgumentException(
+                        '<feature> is redundant under <experimental all="true">, which already enables every '
+                        . 'experimental feature. Use <exclude name="..." /> to turn one off, or drop all="true" '
+                        . 'to opt in to features individually.',
+                    );
+                }
+
+                if ($childName !== 'exclude') {
+                    throw new \InvalidArgumentException(
+                        "Unexpected <{$childName}> element under <experimental all=\"true\">. "
+                        . 'Only <exclude name="..." /> children are allowed.',
+                    );
+                }
+
+                $name = (string) ($node['name'] ?? '');
+
+                if ($name === '') {
+                    throw new \InvalidArgumentException(
+                        '<exclude> requires a non-empty `name` attribute, e.g. <exclude name="modelToArrayShape" />.',
+                    );
+                }
+
+                $feature = self::resolveExperimentalFeatureName($name, $notices);
+
+                if ($feature instanceof ExperimentalFeature && !\in_array($feature, $excluded, true)) {
+                    $excluded[] = $feature;
+                }
+            }
+
+            $features = \array_values(\array_filter(
+                ExperimentalFeature::cases(),
+                static fn(ExperimentalFeature $case): bool => !\in_array($case, $excluded, true),
+            ));
+
+            return ['features' => $features, 'notices' => $notices];
+        }
+
+        // Granular mode (no all / all="false"): only the named <feature> children. Only <feature> is allowed.
+        $features = [];
         $sawChild = false;
 
         foreach ($children as $node) {
             $sawChild = true;
+            $childName = $node->getName();
+
+            if ($childName === 'exclude') {
+                throw new \InvalidArgumentException(
+                    '<exclude> requires <experimental all="true">. Without all="true", list the features you '
+                    . 'want with <feature name="..." /> instead.',
+                );
+            }
+
+            if ($childName !== 'feature') {
+                throw new \InvalidArgumentException(
+                    "Unexpected <{$childName}> element under <experimental>. "
+                    . 'Only <feature name="..." /> children are allowed (or use <experimental all="true" />).',
+                );
+            }
+
             $name = (string) ($node['name'] ?? '');
 
             if ($name === '') {
@@ -234,20 +284,22 @@ final readonly class PluginConfig
             }
         }
 
-        if (!$all && !$sawChild) {
-            $notices[] = '<experimental /> has no effect: it has no <feature> children and no all="true" attribute. '
-                . 'Remove it, or see docs/config.md for how to enable a specific feature.';
+        if (!$sawChild) {
+            $notices[] = '<experimental> has no effect: it has no <feature> children and no all="true" attribute. '
+                . 'Enable specific features with <feature name="..." />, or all of them with '
+                . '<experimental all="true" />. See docs/config.md.';
         }
 
-        return ['all' => $all, 'features' => $features, 'notices' => $notices];
+        return ['features' => $features, 'notices' => $notices];
     }
 
     /**
-     * Classify one `<feature name="...">` value. A live case is returned as-is. A graduated
-     * or withdrawn name appends a deprecation-style notice to $notices and returns null —
-     * dropped, not rejected, so upgrading the plugin never turns a previously-valid
-     * psalm.xml into a hard failure. Any other name throws, listing every valid name plus a
-     * nearest-match hint for typos.
+     * Classify one `<feature name="...">` / `<exclude name="...">` value (both name the same
+     * feature vocabulary). A live case is returned as-is. A retired (graduated or withdrawn) name
+     * appends its notice to $notices and returns null — dropped, not rejected, so upgrading the
+     * plugin never turns a previously-valid psalm.xml into a hard failure. Any other name throws,
+     * listing every valid name plus a nearest-match hint when a valid name is actually close (an
+     * arbitrary typo gets no misleading suggestion).
      *
      * @param list<string> $notices
      */
@@ -259,11 +311,7 @@ final readonly class PluginConfig
             return $feature;
         }
 
-        $notice = self::graduatedOrWithdrawnNotice(
-            $name,
-            ExperimentalFeature::graduatedIn($name),
-            ExperimentalFeature::withdrawnBecause($name),
-        );
+        $notice = ExperimentalFeature::retirementNotice($name);
 
         if ($notice !== null) {
             $notices[] = $notice;
@@ -271,60 +319,28 @@ final readonly class PluginConfig
             return null;
         }
 
-        $valid = \implode(', ', \array_map(
-            static fn(ExperimentalFeature $case): string => "'{$case->value}'",
+        $validNames = \array_map(
+            static fn(ExperimentalFeature $case): string => $case->value,
             ExperimentalFeature::cases(),
-        ));
+        );
+        $valid = \implode(', ', \array_map(static fn(string $candidate): string => "'{$candidate}'", $validNames));
+
+        $nearest = self::closestByLevenshtein($name, $validNames);
+        $hint = \levenshtein($name, $nearest) <= \max(2, (int) (\strlen($nearest) / 3))
+            ? " Did you mean '{$nearest}'?"
+            : '';
 
         throw new \InvalidArgumentException(
-            "Unknown experimental feature '{$name}'. Did you mean '" . self::nearestExperimentalFeatureName($name)
-            . "'? Valid values: {$valid}.",
+            "Unknown experimental feature '{$name}'.{$hint} Valid values: {$valid}.",
         );
     }
 
     /**
-     * Notice text for a graduated or withdrawn feature name, or null for neither. Takes the
-     * already-resolved version/reason as parameters instead of looking them up itself, so it
-     * is directly unit-testable with synthetic values: {@see ExperimentalFeature::GRADUATED}
-     * and {@see ExperimentalFeature::WITHDRAWN} are genuinely empty today (no feature has ever
-     * graduated or been withdrawn), so driving this through `fromXml()` alone can never
-     * exercise either branch. Mirrors {@see self::closestByLevenshtein()}'s same rationale.
-     *
-     * @psalm-pure
-     */
-    private static function graduatedOrWithdrawnNotice(string $name, ?string $graduatedVersion, ?string $withdrawnReason): ?string
-    {
-        if ($graduatedVersion !== null) {
-            return "Experimental feature '{$name}' graduated to stable in v{$graduatedVersion} and no longer "
-                . 'needs <experimental>. Remove it from psalm.xml.';
-        }
-
-        if ($withdrawnReason !== null) {
-            return "Experimental feature '{$name}' was withdrawn ({$withdrawnReason}) and no longer exists. "
-                . 'Remove it from psalm.xml.';
-        }
-
-        return null;
-    }
-
-    /**
-     * Closest valid feature name by edit distance, for a "did you mean" hint on typos.
-     * @psalm-pure
-     */
-    private static function nearestExperimentalFeatureName(string $name): string
-    {
-        return self::closestByLevenshtein(
-            $name,
-            \array_map(static fn(ExperimentalFeature $case): string => $case->value, ExperimentalFeature::cases()),
-        );
-    }
-
-    /**
-     * Closest string in $haystack to $needle by edit distance. Generic on purpose — separated
-     * from {@see self::nearestExperimentalFeatureName()} so the actual "pick the closer of two
-     * candidates" comparison is unit-testable with a synthetic multi-candidate list. With only
-     * one live {@see ExperimentalFeature} case today, that comparison never has a second
-     * candidate to prefer over the first when driven through `fromXml()` alone.
+     * Closest string in $haystack to $needle by edit distance, for the "did you mean" hint on
+     * typos. A separate testable helper on purpose: with only one live {@see ExperimentalFeature}
+     * case today, the "pick the closer of two candidates" comparison never has a second candidate
+     * to prefer over the first when driven through `fromXml()` alone, so it is unit-tested directly
+     * with a synthetic multi-candidate list.
      *
      * @param non-empty-list<string> $haystack
      *
@@ -375,11 +391,7 @@ final readonly class PluginConfig
 
         $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
 
-        if (!\in_array($value, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
-        }
-
-        return $value === 'true';
+        return self::boolFromString($value, $name);
     }
 
     /**
@@ -407,8 +419,20 @@ final readonly class PluginConfig
 
         $value = (string) $element['value'];
 
+        return self::boolFromString($value, $name);
+    }
+
+    /**
+     * Validate and convert a `'true'`/`'false'` XML attribute string to bool. Shared by
+     * {@see self::xmlBoolAttr()}, {@see self::xmlOptionalBoolAttr()}, and the `<experimental all>`
+     * attribute so the accepted-values error message stays identical across all three.
+     *
+     * @psalm-pure
+     */
+    private static function boolFromString(string $value, string $what): bool
+    {
         if (!\in_array($value, ['true', 'false'], true)) {
-            throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
+            throw new \InvalidArgumentException("Invalid {$what} value '{$value}'. Valid values: 'true', 'false'.");
         }
 
         return $value === 'true';

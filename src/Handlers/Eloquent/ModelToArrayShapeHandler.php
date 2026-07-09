@@ -20,10 +20,11 @@ use Psalm\Type\Union;
  * {@see ModelSerializationShapeBuilder}. Registered per concrete Model class by
  * {@see ModelRegistrationHandler} (Psalm's provider lookup is exact-class).
  *
- * Experimental — the `getReturnType()` closure registration in {@see ModelRegistrationHandler}
- * is gated behind `<experimental><feature name="modelToArrayShape" /></experimental>`
- * (`Psalm\LaravelPlugin\Config\ExperimentalFeature::ModelToArrayShape`, see docs/config.md);
- * off by default. This class itself carries no gate — it is inert unless registered.
+ * Experimental — the `getReturnType()` closure registration in {@see ModelRegistrationHandler} is
+ * gated behind `<experimental>`: either `<feature name="modelToArrayShape" />` or `all="true"`
+ * (unless turned off with `<exclude name="modelToArrayShape" />`). See
+ * `Psalm\LaravelPlugin\Config\ExperimentalFeature::ModelToArrayShape` and docs/config.md. Off by
+ * default. This class itself carries no gate — it is inert unless registered.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/923
  * @internal
