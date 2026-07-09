@@ -87,13 +87,13 @@ jobs:
       fail-fast: true
       matrix:
         php: [ 8.5, 8.4, 8.3, 8.2 ]
-        laravel: [ ^13.0, ^12.4, ^11.35 ]
+        laravel: [ ^13.3, ^12.14, ^11.35 ]
         dependencies: [ highest ]
         exclude:
           - php: 8.5
             laravel: ^11.35
           - php: 8.2
-            laravel: ^13.0
+            laravel: ^13.3
     name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
