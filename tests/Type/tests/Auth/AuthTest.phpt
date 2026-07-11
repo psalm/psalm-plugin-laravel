@@ -102,19 +102,11 @@ function _diAuthManager(\Illuminate\Auth\AuthManager $authManager): void {
     $_amChainedLogin = $authManager->guard('web')->loginUsingId(1);
     /** @psalm-check-type-exact $_amChainedLogin = \Illuminate\Foundation\Auth\User|false */
 
-    // Registration-order guard: 'nonexistent-guard' has no configured driver, so
-    // guard('nonexistent-guard') itself falls back to the stub's Guard|StatefulGuard
-    // interface union (see the guard()-only assertion below) — meaning ->user()
-    // chained on it dispatches through the Guard/StatefulGuard INTERFACE
-    // registration, not a concrete SessionGuard/TokenGuard registration. Both
-    // GuardHandler and AuthMethodHandler are registered on that interface; Psalm
-    // takes the first non-null answer in registration order (Plugin::registerHandlers()).
-    // This pins GuardHandler's chain-aware fallback as the actual answer for that
-    // dispatch — if AuthMethodHandler were ever registered before GuardHandler
-    // again, this call would still resolve (both answer non-null here), so this
-    // guard is necessarily weaker than a value-distinguishing test; the single
-    // configured user provider ('users') means every guard maps to the same
-    // Authenticatable, so the two handlers' fallbacks coincide in this fixture.
+    // Registration-order path: an unknown guard name falls back to the
+    // Guard|StatefulGuard interface union, so ->user() dispatches through the
+    // interface registration shared by GuardHandler and AuthMethodHandler.
+    // Weak guard: with a single user provider both handlers' fallbacks coincide,
+    // so this pins the dispatch path, not the winner (see Plugin.php ordering note).
     $_amChainedUnknownGuardUser = $authManager->guard('nonexistent-guard')->user();
     /** @psalm-check-type-exact $_amChainedUnknownGuardUser = \Illuminate\Foundation\Auth\User|null */
 

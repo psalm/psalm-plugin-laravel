@@ -6,23 +6,15 @@ namespace App;
 use Illuminate\Contracts\Container\Container;
 
 /**
- * Policy flip, pinned intentionally (#1230): Container is an
- * `Illuminate\Contracts\*` interface, so the dynamic walk resolves it via the
- * booted container and bridges its concrete-only wrap() — no
- * UndefinedInterfaceMethod. Under the old allow-list this raised (Container
- * wasn't listed); the dynamic walk supersedes that decision.
+ * Policy flip, pinned intentionally (#1230): the dynamic walk bridges Container's
+ * concrete-only wrap(). Under the old allow-list this raised UndefinedInterfaceMethod.
  */
 function container_contract_bridges(Container $container): void
 {
     $container->wrap(static fn(): null => null);
 }
 
-/**
- * Guard: namespace-scoped, not a blind interface walk. A user-land interface
- * outside `Illuminate\Contracts\*` is never offered to the container's make() —
- * MyRepository declares no methods, so a call on it must still raise
- * UndefinedInterfaceMethod, proving the namespace gate holds.
- */
+// Namespace gate: a user-land interface outside Illuminate\Contracts never bridges.
 interface MyRepository
 {
 }

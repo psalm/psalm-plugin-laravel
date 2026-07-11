@@ -98,14 +98,10 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Application/ContractMethodBridgeHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\ContractMethodBridgeHandler::class);
 
-        // Order matters: Psalm's MethodReturnTypeProvider dispatch returns the first
-        // non-null answer in REGISTRATION order. Both handlers below register on
-        // Guard/StatefulGuard; GuardHandler's chain-aware logic (traces ->guard('name')
-        // receivers, safe union-of-all-guards fallback) must win user()/loginUsingId()/
-        // onceUsingId() there, so it has to register BEFORE AuthMethodHandler's blanket
-        // default-guard answer for those same method names. AuthMethodHandler still owns
-        // authenticate()/getUser()/getLastAttempted()/logoutOtherDevices(), which
-        // GuardHandler never answers, so ordering doesn't affect those.
+        // Order matters: both register on Guard/StatefulGuard and Psalm dispatches
+        // first-non-null in registration order. GuardHandler's chain-aware logic must
+        // win user()/loginUsingId()/onceUsingId() over AuthMethodHandler's blanket
+        // default-guard answer.
         require_once __DIR__ . '/Handlers/Auth/GuardHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/AuthMethodHandler.php';
