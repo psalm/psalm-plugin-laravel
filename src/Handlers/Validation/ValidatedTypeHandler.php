@@ -22,8 +22,9 @@ use Psalm\Type\Union;
  * - FormRequest::safe([...])         → partial array shape for specified keys
  * - Request::validate([...])         → array shape from inline rules argument
  * - ValidatedInput::input('field')   → single field type (via generic TRequest parameter)
- * - $this->input()/$this->integer() (or $request->...) → single field type,
- *   gated on presence (see {@see resolveSelfAccessorRule})
+ * - ValidatedInput::integer('field') → int component, same integer-cast gate stack
+ * - $this->input()/$this->integer()/$this->boolean() (or $request->...) →
+ *   single field type, gated on presence (see {@see resolveSelfAccessorRule})
  *
  * ValidatedInput is generic: ValidatedInput<TRequest of FormRequest>. When safe() returns
  * ValidatedInput<static>, the template parameter carries the concrete FormRequest class,
@@ -80,6 +81,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             'validate' => self::resolveInlineValidate($event),
             'input' => self::resolveSelfInput($event),
             'integer' => self::resolveSelfInteger($event),
+            'boolean' => self::resolveSelfBoolean($event),
             default => null,
         };
     }
@@ -145,8 +147,54 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Shared prefix for resolveSelfInput()/resolveSelfInteger(): resolves
-     * the rule-covered field for `$this->...`/`$request->...`.
+     * $this->boolean('field') → TTrue/TFalse literal, when the field's rules
+     * unconditionally require `accepted` or `declined` (#1234 follow-up item 6).
+     *
+     * Sound because boolean() is `filter_var(..., FILTER_VALIDATE_BOOLEAN)`:
+     * every value Laravel's `accepted` rule admits (yes/on/1/"1"/true/"true")
+     * filters to true, and every `declined`-admitted value (no/off/0/"0"/
+     * false/"false") filters to false — see
+     * `Illuminate\Validation\Concerns\ValidatesAttributes::validateAccepted()`
+     * / `validateDeclined()`. `accepted_if`/`declined_if` are conditional and
+     * never set {@see ResolvedRule::$hasAcceptedRule}/`$hasDeclinedRule` (see
+     * {@see \Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer::resolveRuleSegments()}),
+     * so they fall through here too.
+     *
+     * Nullable bail (same rationale as resolveSelfInteger()):
+     * `filter_var(null, FILTER_VALIDATE_BOOLEAN) = false`, which falls
+     * outside a claimed literal `true`.
+     *
+     * Falls through to plain `bool` when the field is unknown, absent-
+     * capable, nullable, or has no unconditional accepted/declined rule.
+     */
+    private static function resolveSelfBoolean(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $resolved = self::resolveSelfAccessorRule($event);
+
+        if ($resolved === null) {
+            return null;
+        }
+
+        [$rule] = $resolved;
+
+        if ($rule->type->isNullable()) {
+            return null;
+        }
+
+        if ($rule->hasAcceptedRule && !$rule->hasDeclinedRule) {
+            return Type::getTrue();
+        }
+
+        if ($rule->hasDeclinedRule && !$rule->hasAcceptedRule) {
+            return Type::getFalse();
+        }
+
+        return null;
+    }
+
+    /**
+     * Shared prefix for resolveSelfInput()/resolveSelfInteger()/resolveSelfBoolean():
+     * resolves the rule-covered field for `$this->...`/`$request->...`.
      *
      * Presence gate: narrows only when the rule unconditionally guarantees
      * the field exists (required/present/accepted/declined, no `sometimes`)

@@ -21,6 +21,8 @@ final readonly class ResolvedRule
      * @param bool  $required          Whether 'required' (or similar presence rule) was present
      * @param bool  $hasIntegerRule    Whether an explicit 'integer' rule was present
      * @param bool  $excluded          Whether an exclude/exclude_if/exclude_unless/exclude_with/exclude_without rule was present
+     * @param bool  $hasAcceptedRule   Whether an explicit unconditional 'accepted' rule was present (not accepted_if)
+     * @param bool  $hasDeclinedRule   Whether an explicit unconditional 'declined' rule was present (not declined_if)
      */
     public function __construct(
         public Union $type,
@@ -30,6 +32,8 @@ final readonly class ResolvedRule
         public bool $required = false,
         public bool $hasIntegerRule = false,
         public bool $excluded = false,
+        public bool $hasAcceptedRule = false,
+        public bool $hasDeclinedRule = false,
     ) {}
 
     /**

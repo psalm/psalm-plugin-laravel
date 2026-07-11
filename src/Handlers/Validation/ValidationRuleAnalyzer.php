@@ -262,6 +262,11 @@ final class ValidationRuleAnalyzer
         $hasIntegerRule = false;
         // exclude* rule present — see guaranteesPresence()'s docblock.
         $excluded = false;
+        // Explicit unconditional 'accepted'/'declined' rule only (not the
+        // _if variants) — gates boolean()'s literal-precision narrowing in
+        // ValidatedTypeHandler::resolveSelfBoolean(). #1234 follow-up item 6.
+        $hasAcceptedRule = false;
+        $hasDeclinedRule = false;
 
         foreach ($segments as $segment) {
             $segment = \trim($segment);
@@ -300,6 +305,17 @@ final class ValidationRuleAnalyzer
             // Keep in sync with Laravel's validation rules in Illuminate\Validation\Concerns\ValidatesAttributes.
             if (\in_array($ruleName, ['required', 'present', 'accepted', 'declined'], true)) {
                 $required = true;
+            }
+
+            // Bare 'accepted'/'declined' only — accepted_if/declined_if are
+            // conditional, so the literal they'd otherwise authorize isn't
+            // guaranteed either way.
+            if ($ruleName === 'accepted') {
+                $hasAcceptedRule = true;
+            }
+
+            if ($ruleName === 'declined') {
+                $hasDeclinedRule = true;
             }
 
             // exclude/exclude_if/exclude_unless/exclude_with/exclude_without —
@@ -345,7 +361,17 @@ final class ValidationRuleAnalyzer
             $type = Type::combineUnionTypes($type, Type::getNull());
         }
 
-        return new ResolvedRule($type, $removedTaints, $nullable, $sometimes, $required, $hasIntegerRule, $excluded);
+        return new ResolvedRule(
+            $type,
+            $removedTaints,
+            $nullable,
+            $sometimes,
+            $required,
+            $hasIntegerRule,
+            $excluded,
+            $hasAcceptedRule,
+            $hasDeclinedRule,
+        );
     }
 
     /**
