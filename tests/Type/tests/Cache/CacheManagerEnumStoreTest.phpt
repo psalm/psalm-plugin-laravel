@@ -17,8 +17,10 @@ enum CacheStore
 }
 
 /**
- * Laravel 13.5.0 widened store()/driver()/memo() to accept a \UnitEnum name, so
- * passing an enum case must not raise an InvalidArgument error.
+ * Laravel 13.5.0 widened store()/driver()/memo() to accept a \UnitEnum name. The
+ * handler supplies no params of its own here: the real manager call defers to
+ * reflection and the facade call copies the version's own @method params, so the
+ * enum case is accepted without a hardcoded signature. See issue #1230.
  */
 function enum_store_accepts_enum(CacheManager $manager): void
 {
