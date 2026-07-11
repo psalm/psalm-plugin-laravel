@@ -33,6 +33,26 @@ use Psalm\Type;
  *
  * Subsequent calls on the returned Guard instance (e.g. `Auth::guard('web')->user()`) are
  * narrowed by {@see \Psalm\LaravelPlugin\Handlers\Auth\GuardHandler}.
+ *
+ * Guard / StatefulGuard are ALSO registered directly (not just via AuthManager/Factory): since
+ * {@see \Psalm\LaravelPlugin\Handlers\Application\ContractMethodBridgeHandler} (#1230) bridges
+ * every scanned `Illuminate\Contracts\*` interface to its container-resolved concrete, Guard's
+ * declaring_method_ids gain authenticate()/getUser()/getLastAttempted()/logoutOtherDevices() from
+ * the resolved concrete (e.g. SessionGuard). `AuthManager`'s `@mixin Guard`/`@mixin StatefulGuard`
+ * then resolves these AS REAL methods instead of routing through `__call`, which bypasses the
+ * missing-method path this handler previously relied on and collapses the return type to the
+ * bridged concrete's native `Authenticatable` signature — losing the `AuthConfigAnalyzer`-narrowed
+ * concrete user model. Registering Guard/StatefulGuard here directly restores that narrowing
+ * regardless of which path Psalm takes to resolve the call.
+ *
+ * Registration order constraint (see {@see \Psalm\LaravelPlugin\Plugin::registerHandlers()}):
+ * this handler's `user()`/`loginUsingId()`/`onceUsingId()` arms answer unconditionally from the
+ * DEFAULT guard, with no awareness of a `->guard('name')` receiver chain. GuardHandler's answer
+ * for those same three methods on Guard/StatefulGuard IS chain-aware (and falls back to a safe
+ * union of all guards when it isn't). Psalm's return-type dispatch takes the first non-null
+ * answer in registration order, so GuardHandler MUST be registered before this handler — swapping
+ * that order silently collapses every `->guard('name')->user()` call to the default guard's
+ * model, even for a non-default named guard.
  */
 final class AuthMethodHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
@@ -40,10 +60,12 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
 
     /**
      * Register for the Auth facade, the concrete AuthManager (common DI target), the
-     * Factory contract (DI by interface), AND any root-namespace alias that proxies
-     * to AuthManager. {@see getMethodReturnType} is class-agnostic and narrows
-     * uniformly across all surfaces; {@see getMethodParams} has one carve-out for
-     * `guard()` on non-facade receivers (see that method's docblock).
+     * Factory contract (DI by interface), the Guard/StatefulGuard contracts (see class
+     * docblock — needed once the dynamic contract bridge makes these methods resolvable
+     * on Guard/StatefulGuard directly), AND any root-namespace alias that proxies to
+     * AuthManager. {@see getMethodReturnType} is class-agnostic and narrows uniformly
+     * across all surfaces; {@see getMethodParams} has one carve-out for `guard()` on
+     * non-facade receivers (see that method's docblock).
      *
      * The `FacadeMapProvider::getFacadeClasses()` lookup is critical: Psalm dispatches
      * `MethodReturnTypeProvider` hooks by exact class name, so a `use Auth;` import
@@ -69,6 +91,8 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
             \Illuminate\Support\Facades\Auth::class,
             \Illuminate\Auth\AuthManager::class,
             \Illuminate\Contracts\Auth\Factory::class,
+            \Illuminate\Contracts\Auth\Guard::class,
+            \Illuminate\Contracts\Auth\StatefulGuard::class,
             ...FacadeMapProvider::getFacadeClasses(\Illuminate\Auth\AuthManager::class),
         ];
     }

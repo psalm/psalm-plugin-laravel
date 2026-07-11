@@ -11,10 +11,11 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Application\ContractMethodBridgeHandler;
 
 /**
- * Unit guard for the resolution gate in {@see ContractMethodBridgeHandler}.
- * A throwing / unbound / non-object / wrong-concrete binding must NOT count as
- * fulfilled — that's what stops the handler bridging methods onto a contract the
- * app doesn't back with the mapped concrete.
+ * Unit guard for the resolution seam in {@see ContractMethodBridgeHandler}.
+ * A throwing / unbound / non-object binding must resolve to null — that's what
+ * stops the handler bridging methods onto a contract the app can't back with a
+ * real concrete. A successful resolution must return the exact resolved
+ * class-string, since that string drives the subsequent storage lookup.
  */
 #[CoversClass(ContractMethodBridgeHandler::class)]
 final class ContractMethodBridgeHandlerTest extends TestCase
@@ -27,7 +28,7 @@ final class ContractMethodBridgeHandlerTest extends TestCase
             throw new \RuntimeException('cannot build');
         });
 
-        $this->assertFalse(ContractMethodBridgeHandler::containerResolvesConcrete($container, 'service', \stdClass::class));
+        $this->assertNull(ContractMethodBridgeHandler::resolveConcreteClass($container, 'service'));
     }
 
     #[Test]
@@ -37,7 +38,7 @@ final class ContractMethodBridgeHandlerTest extends TestCase
 
         // make() on an unbound, non-instantiable abstract throws inside the handler
         // and is swallowed — nothing gets widened.
-        $this->assertFalse(ContractMethodBridgeHandler::containerResolvesConcrete($container, 'not.bound', \stdClass::class));
+        $this->assertNull(ContractMethodBridgeHandler::resolveConcreteClass($container, 'not.bound'));
     }
 
     #[Test]
@@ -46,24 +47,15 @@ final class ContractMethodBridgeHandlerTest extends TestCase
         $container = new Container();
         $container->instance('scalar', 'a string, not an object');
 
-        $this->assertFalse(ContractMethodBridgeHandler::containerResolvesConcrete($container, 'scalar', \stdClass::class));
+        $this->assertNull(ContractMethodBridgeHandler::resolveConcreteClass($container, 'scalar'));
     }
 
     #[Test]
-    public function it_rejects_an_object_of_the_wrong_concrete(): void
+    public function it_returns_the_exact_class_string_of_the_resolved_object(): void
     {
         $container = new Container();
         $container->instance('contract', new \stdClass());
 
-        $this->assertFalse(ContractMethodBridgeHandler::containerResolvesConcrete($container, 'contract', Container::class));
-    }
-
-    #[Test]
-    public function it_accepts_an_object_of_the_expected_concrete(): void
-    {
-        $container = new Container();
-        $container->instance('contract', new \stdClass());
-
-        $this->assertTrue(ContractMethodBridgeHandler::containerResolvesConcrete($container, 'contract', \stdClass::class));
+        $this->assertSame(\stdClass::class, ContractMethodBridgeHandler::resolveConcreteClass($container, 'contract'));
     }
 }

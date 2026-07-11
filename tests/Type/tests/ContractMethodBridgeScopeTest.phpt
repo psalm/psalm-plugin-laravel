@@ -6,15 +6,31 @@ namespace App;
 use Illuminate\Contracts\Container\Container;
 
 /**
- * Guard: allow-list scoped, not a blind contract walk. The Container contract is
- * off the allow-list (and is a parent of the Application contract), so its
- * concrete-only wrap() must still raise UndefinedInterfaceMethod — proving methods
- * don't leak onto arbitrary contracts. #1108.
+ * Policy flip, pinned intentionally (#1230): Container is an
+ * `Illuminate\Contracts\*` interface, so the dynamic walk resolves it via the
+ * booted container and bridges its concrete-only wrap() — no
+ * UndefinedInterfaceMethod. Under the old allow-list this raised (Container
+ * wasn't listed); the dynamic walk supersedes that decision.
  */
-function scope_guard(Container $container): void
+function container_contract_bridges(Container $container): void
 {
     $container->wrap(static fn(): null => null);
 }
+
+/**
+ * Guard: namespace-scoped, not a blind interface walk. A user-land interface
+ * outside `Illuminate\Contracts\*` is never offered to the container's make() —
+ * MyRepository declares no methods, so a call on it must still raise
+ * UndefinedInterfaceMethod, proving the namespace gate holds.
+ */
+interface MyRepository
+{
+}
+
+function scope_guard(MyRepository $repository): void
+{
+    $repository->find(1);
+}
 ?>
 --EXPECTF--
-UndefinedInterfaceMethod on line %d: Method Illuminate\Contracts\Container\Container::wrap does not exist
+UndefinedInterfaceMethod on line %d: Method App\MyRepository::find does not exist

@@ -98,12 +98,20 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Application/ContractMethodBridgeHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\ContractMethodBridgeHandler::class);
 
+        // Order matters: Psalm's MethodReturnTypeProvider dispatch returns the first
+        // non-null answer in REGISTRATION order. Both handlers below register on
+        // Guard/StatefulGuard; GuardHandler's chain-aware logic (traces ->guard('name')
+        // receivers, safe union-of-all-guards fallback) must win user()/loginUsingId()/
+        // onceUsingId() there, so it has to register BEFORE AuthMethodHandler's blanket
+        // default-guard answer for those same method names. AuthMethodHandler still owns
+        // authenticate()/getUser()/getLastAttempted()/logoutOtherDevices(), which
+        // GuardHandler never answers, so ordering doesn't affect those.
+        require_once __DIR__ . '/Handlers/Auth/GuardHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/AuthMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\AuthMethodHandler::class);
         require_once __DIR__ . '/Handlers/Auth/AuthFunctionHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\AuthFunctionHandler::class);
-        require_once __DIR__ . '/Handlers/Auth/GuardHandler.php';
-        $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
         // Taint source/escape for the concrete guards. Lives in a handler, not a
