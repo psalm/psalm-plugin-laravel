@@ -154,8 +154,8 @@ final class InitCommand extends Command
 
         $composer = $this->readComposerJson($cwd);
         $hasPhpunitPlugin = $this->composerHasPackage($composer, 'psalm/plugin-phpunit');
-        [$directories, $files] = $this->detectSourceRoots($cwd, $composer, $hasPhpunitPlugin);
-        $ignores = $this->detectIgnoreDirs($cwd, $composer);
+        [$directories, $files, $directoryCandidates] = $this->detectSourceRoots($cwd, $composer, $hasPhpunitPlugin);
+        $ignores = $this->detectIgnoreDirs($cwd, $composer, $hasPhpunitPlugin, $directoryCandidates);
 
         $contents = \strtr(self::PSALM_XML_TEMPLATE, [
             '{{LEVEL}}' => $level,
@@ -166,7 +166,17 @@ final class InitCommand extends Command
             return Command::FAILURE;
         }
 
-        $this->reportSuccess($io, $cwd, $targetPath, $existingPath !== null, $level, $directories, $files);
+        $this->reportSuccess(
+            $io,
+            $cwd,
+            $targetPath,
+            $existingPath !== null,
+            $level,
+            $directories,
+            $files,
+            $directoryCandidates,
+            $hasPhpunitPlugin,
+        );
         return Command::SUCCESS;
     }
 
@@ -238,6 +248,7 @@ final class InitCommand extends Command
     /**
      * @param list<string> $directories
      * @param list<string> $files
+     * @param list<SourceRootCandidate> $directoryCandidates
      */
     private function reportSuccess(
         SymfonyStyle $io,
@@ -247,6 +258,8 @@ final class InitCommand extends Command
         string $level,
         array $directories,
         array $files,
+        array $directoryCandidates,
+        bool $hasPhpunitPlugin,
     ): void {
         $io->success(\sprintf(
             '%s %s.',
@@ -262,7 +275,12 @@ final class InitCommand extends Command
 
         // Mirror inline XML hint when tests/ exists but isn't scanned,
         // usually because psalm/plugin-phpunit isn't installed.
-        if (!\in_array('tests', $directories, true) && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')) {
+        $projectRoot = $this->canonicalProjectRoot($cwd);
+        $tests = SourceRootCandidate::resolve($projectRoot, 'tests');
+        if ($tests instanceof \Psalm\LaravelPlugin\Cli\SourceRootCandidate
+            && !$this->hasRoot($tests, $directoryCandidates)
+            && (!$hasPhpunitPlugin || !$this->hasCoveringRoot($tests, $directoryCandidates))
+        ) {
             $io->writeln('');
             $io->writeln(
                 '<comment>Note:</comment> tests/ dir skipped. To scan it: <info>composer require --dev psalm/plugin-phpunit</info> and add tests dir to <projectFiles>',
@@ -271,7 +289,8 @@ final class InitCommand extends Command
 
         // Path-repo monorepos not enumerated in root composer autoload can't be
         // auto-detected; warn loudly so a packages/ tree isn't left silently unanalysed. #1224
-        if (\is_dir($cwd . \DIRECTORY_SEPARATOR . 'packages') && !$this->hasRootUnder('packages', $directories)) {
+        $packages = SourceRootCandidate::resolve($projectRoot, 'packages');
+        if ($packages instanceof \Psalm\LaravelPlugin\Cli\SourceRootCandidate && !$this->hasOverlappingRoot($packages, $directoryCandidates)) {
             $io->writeln('');
             $io->writeln(
                 '<comment>Note:</comment> packages/ exists but no source root under it is scanned. If this is a monorepo, add each package source dir (e.g. packages/*/src) to <projectFiles> — otherwise Psalm analyses almost nothing.',
@@ -288,30 +307,51 @@ final class InitCommand extends Command
      * which is what surfaces the monorepo packages/*\/src the app branch misses. See #1224.
      *
      * @param ComposerJson|null $composer
-     * @return array{0: list<string>, 1: list<string>} [directories, files]
+     * @return array{0: list<string>, 1: list<string>, 2: list<SourceRootCandidate>}
+     *     [clean directories, files, resolved directory candidates]
      */
     private function detectSourceRoots(string $cwd, ?array $composer, bool $hasPhpunitPlugin): array
     {
+        $projectRoot = $this->canonicalProjectRoot($cwd);
         $isLaravelApp = \is_file($cwd . \DIRECTORY_SEPARATOR . 'artisan');
 
         [$conventional, $files] = $isLaravelApp
-            ? $this->detectLaravelAppRoots($cwd)
-            : $this->detectPackageConventions($cwd);
+            ? $this->detectLaravelAppRoots($projectRoot)
+            : $this->detectPackageConventions($projectRoot);
+        $composerRoots = $this->detectComposerRoots($projectRoot, $composer);
+
+        // Package layout last resort: src/ is independent of other conventions.
+        // A config/ directory must not hide it when Composer contributed no usable
+        // production root.
+        if (!$isLaravelApp && $composerRoots === []) {
+            $src = SourceRootCandidate::resolve($projectRoot, 'src');
+            if ($src instanceof \Psalm\LaravelPlugin\Cli\SourceRootCandidate) {
+                $conventional[] = $src;
+            }
+        }
 
         // Exact canonical dedupe only. A nested root (e.g. mapped database/factories
         // under database/) is kept: Psalm keys files by path, so redundancy costs a
         // little traversal, never double analysis, and never suppresses a real root.
-        $directories = [];
-        foreach ([...$conventional, ...$this->detectComposerRoots($cwd, $composer)] as $dir) {
-            if (!\in_array($dir, $directories, true)) {
-                $directories[] = $dir;
+        $directoryCandidates = [];
+        foreach ([...$conventional, ...$composerRoots] as $candidate) {
+            if (!$this->hasRoot($candidate, $directoryCandidates)) {
+                $directoryCandidates[] = $candidate;
             }
         }
 
-        // Package layout last resort: scan src/ when nothing else was found.
-        if (!$isLaravelApp && $directories === [] && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'src')) {
-            $directories[] = 'src';
+        $tests = SourceRootCandidate::resolve($projectRoot, 'tests');
+        if (!$hasPhpunitPlugin && $tests instanceof \Psalm\LaravelPlugin\Cli\SourceRootCandidate) {
+            $directoryCandidates = \array_values(\array_filter(
+                $directoryCandidates,
+                static fn(SourceRootCandidate $candidate): bool => !$candidate->isWithin($tests),
+            ));
         }
+
+        $directories = \array_map(
+            static fn(SourceRootCandidate $candidate): string => $candidate->cleanPath,
+            $directoryCandidates,
+        );
 
         // Ultimate fallback so the template still validates.
         if ($directories === [] && $files === []) {
@@ -322,24 +362,26 @@ final class InitCommand extends Command
         // Scanning tests/ without psalm/plugin-phpunit floods output with PHPUnit-magic
         // false positives, so opt in only when the plugin is already wired up.
         if ($hasPhpunitPlugin
-            && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')
-            && !\in_array('tests', $directories, true)
+            && ($tests = SourceRootCandidate::resolve($projectRoot, 'tests')) instanceof \Psalm\LaravelPlugin\Cli\SourceRootCandidate
+            && !$this->hasRoot($tests, $directoryCandidates)
         ) {
-            $directories[] = 'tests';
+            $directoryCandidates[] = $tests;
+            $directories[] = $tests->cleanPath;
         }
 
-        return [$directories, $files];
+        return [$directories, $files, $directoryCandidates];
     }
 
     /**
-     * @return array{0: list<string>, 1: list<string>}
+     * @return array{0: list<SourceRootCandidate>, 1: list<string>}
      */
     private function detectLaravelAppRoots(string $cwd): array
     {
         $directories = [];
         foreach (self::LARAVEL_APP_DIRS as $dir) {
-            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $dir)) {
-                $directories[] = $dir;
+            $candidate = SourceRootCandidate::resolve($cwd, $dir);
+            if ($candidate instanceof \Psalm\LaravelPlugin\Cli\SourceRootCandidate) {
+                $directories[] = $candidate;
             }
         }
 
@@ -357,13 +399,15 @@ final class InitCommand extends Command
      * Conventional roots for a non-artisan package: config/ only. The composer map
      * (detectComposerRoots) and the src/ fallback are handled by the pipeline.
      *
-     * @return array{0: list<string>, 1: list<string>}
+     * @return array{0: list<SourceRootCandidate>, 1: list<string>}
+     * @psalm-impure Filesystem state determines which conventional roots exist.
      */
     private function detectPackageConventions(string $cwd): array
     {
         $directories = [];
-        if (\is_dir($cwd . \DIRECTORY_SEPARATOR . 'config')) {
-            $directories[] = 'config';
+        $config = SourceRootCandidate::resolve($cwd, 'config');
+        if ($config instanceof \Psalm\LaravelPlugin\Cli\SourceRootCandidate) {
+            $directories[] = $config;
         }
 
         return [$directories, []];
@@ -371,19 +415,21 @@ final class InitCommand extends Command
 
     /**
      * On-disk source roots from the root composer autoload.psr-4 map — the shared
-     * contributor for both layouts (paths canonicalised by extractComposerAutoloadDirs).
+     * contributor for both layouts. Candidate resolution canonicalises through the
+     * filesystem without changing symlink-plus-`..` semantics.
      * Reads only autoload.psr-4; test dirs live in autoload-dev, opt-in via plugin-phpunit.
      * Emits the exact mapped src roots, so each package's vendor/ and tests/ stay out.
      *
      * @param ComposerJson|null $composer
-     * @return list<string>
+     * @return list<SourceRootCandidate>
      */
     private function detectComposerRoots(string $cwd, ?array $composer): array
     {
         $roots = [];
         foreach ($this->extractComposerAutoloadDirs($composer) as $dir) {
-            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $dir) && !\in_array($dir, $roots, true)) {
-                $roots[] = $dir;
+            $candidate = SourceRootCandidate::resolve($cwd, $dir);
+            if ($candidate instanceof \Psalm\LaravelPlugin\Cli\SourceRootCandidate && !$this->hasRoot($candidate, $roots)) {
+                $roots[] = $candidate;
             }
         }
 
@@ -396,10 +442,15 @@ final class InitCommand extends Command
      * right path.
      *
      * @param ComposerJson|null $composer
+     * @param list<SourceRootCandidate> $directoryCandidates
      * @return list<string>
      */
-    private function detectIgnoreDirs(string $cwd, ?array $composer): array
-    {
+    private function detectIgnoreDirs(
+        string $cwd,
+        ?array $composer,
+        bool $hasPhpunitPlugin,
+        array $directoryCandidates,
+    ): array {
         $vendorDir = $this->resolveVendorDir($composer);
 
         $present = [];
@@ -409,6 +460,16 @@ final class InitCommand extends Command
             if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $candidate) && !\in_array($candidate, $present, true)) {
                 $present[] = $candidate;
             }
+        }
+
+        $projectRoot = $this->canonicalProjectRoot($cwd);
+        $tests = SourceRootCandidate::resolve($projectRoot, 'tests');
+        if (!$hasPhpunitPlugin
+            && $tests instanceof \Psalm\LaravelPlugin\Cli\SourceRootCandidate
+            && $this->hasCoveringRoot($tests, $directoryCandidates)
+            && !\in_array($tests->cleanPath, $present, true)
+        ) {
+            $present[] = $tests->cleanPath;
         }
 
         return $present;
@@ -482,11 +543,9 @@ final class InitCommand extends Command
     }
 
     /**
-     * Extract `autoload.psr-4` directories from composer.json. Order preserved,
-     * duplicates removed, each path canonicalised (leading `./` and `.`/`..`
-     * segments collapsed) so downstream containment/dedup compare like-for-like —
-     * e.g. `./app` dedupes against `app`, and `app/../packages/x` is not misread
-     * as covered by `app`. A leading `..` that escapes the root is kept.
+     * Extract raw `autoload.psr-4` directories from composer.json in declaration
+     * order. Filesystem resolution and canonical deduplication happen afterwards,
+     * when the project root is available.
      *
      * @param ComposerJson|null $composer
      * @return list<string>
@@ -500,26 +559,7 @@ final class InitCommand extends Command
         foreach ($psr4 as $paths) {
             $items = \is_string($paths) ? [$paths] : $paths;
             foreach ($items as $candidate) {
-                $segments = [];
-                foreach (\explode('/', $candidate) as $segment) {
-                    if ($segment === '' || $segment === '.') {
-                        continue;
-                    }
-
-                    if ($segment === '..' && $segments !== [] && $segments[\array_key_last($segments)] !== '..') {
-                        \array_pop($segments);
-                        continue;
-                    }
-
-                    $segments[] = $segment;
-                }
-
-                $dir = \implode('/', $segments);
-                if ($dir === '' || \in_array($dir, $dirs, true)) {
-                    continue;
-                }
-
-                $dirs[] = $dir;
+                $dirs[] = $candidate;
             }
         }
 
@@ -527,21 +567,61 @@ final class InitCommand extends Command
     }
 
     /**
-     * True when at least one detected root lives under $prefix. Lets reportSuccess()
-     * warn when a packages/ dir exists yet nothing beneath it is scanned.
+     * True when a detected root is equal to, above, or below the supplied directory.
+     * This captures both a precise package root and a broader root that already scans it.
      *
-     * @param list<string> $directories
-     * @psalm-pure
+     * @param list<SourceRootCandidate> $directories
+     * @psalm-mutation-free
      */
-    private function hasRootUnder(string $prefix, array $directories): bool
+    private function hasOverlappingRoot(SourceRootCandidate $directory, array $directories): bool
     {
         foreach ($directories as $dir) {
-            if (\str_starts_with($dir . '/', $prefix . '/')) {
+            if ($dir->isWithin($directory) || $directory->isWithin($dir)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * @param list<SourceRootCandidate> $directories
+     * @psalm-mutation-free
+     */
+    private function hasCoveringRoot(SourceRootCandidate $candidate, array $directories): bool
+    {
+        foreach ($directories as $directory) {
+            if ($candidate->isWithin($directory)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<SourceRootCandidate> $directories
+     * @psalm-mutation-free
+     */
+    private function hasRoot(SourceRootCandidate $candidate, array $directories): bool
+    {
+        foreach ($directories as $directory) {
+            if ($candidate->isSame($directory)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function canonicalProjectRoot(string $cwd): string
+    {
+        $canonical = \realpath($cwd);
+        if ($canonical === false || !\is_dir($canonical)) {
+            throw new \RuntimeException(\sprintf('Project root does not exist: %s', $cwd));
+        }
+
+        return $canonical;
     }
 
     /**

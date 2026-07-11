@@ -8,14 +8,19 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Cli\InitCommand;
+use Psalm\LaravelPlugin\Cli\SourceRootCandidate;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
 
 #[CoversClass(InitCommand::class)]
+#[CoversClass(SourceRootCandidate::class)]
 final class InitCommandTest extends TestCase
 {
     private string $tempDir;
+
+    /** @var list<string> */
+    private array $externalPaths = [];
 
     protected function setUp(): void
     {
@@ -28,6 +33,9 @@ final class InitCommandTest extends TestCase
     protected function tearDown(): void
     {
         $this->removeRecursively($this->tempDir);
+        foreach ($this->externalPaths as $path) {
+            $this->removeRecursively($path);
+        }
     }
 
     private function removeRecursively(string $path): void
@@ -434,6 +442,369 @@ final class InitCommandTest extends TestCase
     }
 
     #[Test]
+    public function empty_composer_root_emits_the_project_root(): void
+    {
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => '']]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertSame(1, \substr_count($contents, '<directory name="."/>'));
+    }
+
+    #[Test]
+    public function dot_composer_root_emits_the_project_root(): void
+    {
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => '.']]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertSame(1, \substr_count($contents, '<directory name="."/>'));
+    }
+
+    #[Test]
+    public function project_root_mapping_ignores_tests_without_phpunit_plugin(): void
+    {
+        $this->makeDir('tests');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => '.']]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="."/>', $contents);
+        $this->assertStringContainsString('<ignoreFiles allowMissingFiles="true">', $contents);
+        $this->assertStringContainsString('<directory name="tests"/>', $contents);
+        $this->assertStringContainsString('tests/ dir skipped', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function project_root_mapping_scans_tests_with_phpunit_plugin(): void
+    {
+        $this->makeDir('tests');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode([
+                'autoload' => ['psr-4' => ['Acme\\' => '.']],
+                'require-dev' => ['psalm/plugin-phpunit' => '^0.1'],
+            ]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="."/>', $contents);
+        $this->assertStringContainsString('<directory name="tests"/>', $contents);
+        $this->assertStringNotContainsString('<ignoreFiles allowMissingFiles="true">', $contents);
+        $this->assertStringNotContainsString('tests/ dir skipped', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function project_root_mapping_counts_as_packages_coverage(): void
+    {
+        $this->makeDir('packages/acme/src');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => '.']]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringNotContainsString(
+            'packages/ exists but no source root under it is scanned',
+            $tester->getDisplay(),
+        );
+    }
+
+    #[Test]
+    public function absolute_composer_root_inside_project_is_emitted_relative(): void
+    {
+        $this->makeDir('lib');
+        $absoluteRoot = $this->tempDir . \DIRECTORY_SEPARATOR . 'lib';
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => $absoluteRoot]]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="lib"/>', $contents);
+        $this->assertStringNotContainsString(\htmlspecialchars($absoluteRoot, \ENT_QUOTES | \ENT_XML1, 'UTF-8'), $contents);
+    }
+
+    #[Test]
+    public function absolute_composer_root_outside_project_stays_canonical_and_valid_xml(): void
+    {
+        $outside = $this->makeExternalDir('Outside & Source');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => $outside]]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $escapedOutside = \htmlspecialchars((string) \realpath($outside), \ENT_QUOTES | \ENT_XML1, 'UTF-8');
+        $this->assertStringContainsString('<directory name="' . $escapedOutside . '"/>', $contents);
+        $this->assertNotFalse(\simplexml_load_string($contents));
+    }
+
+    #[Test]
+    public function package_src_fallback_is_not_suppressed_by_config(): void
+    {
+        $this->makeDir('config');
+        $this->makeDir('src');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => 'missing']]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $configPosition = \strpos($contents, '<directory name="config"/>');
+        $srcPosition = \strpos($contents, '<directory name="src"/>');
+        $this->assertIsInt($configPosition);
+        $this->assertIsInt($srcPosition);
+        $this->assertLessThan($srcPosition, $configPosition);
+    }
+
+    #[Test]
+    public function composer_roots_are_exactly_deduplicated_by_canonical_path(): void
+    {
+        $this->makeDir('src');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => ['src', './src/']]]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertSame(1, \substr_count($contents, '<directory name="src"/>'));
+    }
+
+    #[Test]
+    public function composer_alias_is_deduplicated_against_conventional_root(): void
+    {
+        \file_put_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'artisan', "#!/usr/bin/env php\n");
+        $this->makeDir('app');
+        $this->makeSymlink(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'app',
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'source-alias',
+        );
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['App\\' => 'source-alias']]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertSame(1, \substr_count($contents, '<directory name="app"/>'));
+        $this->assertStringNotContainsString('source-alias', $contents);
+    }
+
+    #[Test]
+    public function symlink_followed_by_parent_segment_uses_filesystem_resolution(): void
+    {
+        $outside = $this->makeExternalDir('symlink-parent');
+        $nested = $outside . \DIRECTORY_SEPARATOR . 'nested';
+        \mkdir($nested);
+        $this->makeSymlink($nested, $this->tempDir . \DIRECTORY_SEPARATOR . 'linked');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => 'linked/..']]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $escapedOutside = \htmlspecialchars((string) \realpath($outside), \ENT_QUOTES | \ENT_XML1, 'UTF-8');
+        $this->assertStringContainsString('<directory name="' . $escapedOutside . '"/>', $contents);
+        $this->assertStringNotContainsString('<directory name="."/>', $contents);
+    }
+
+    #[Test]
+    public function package_warning_uses_canonical_path_reached_through_symlink(): void
+    {
+        $this->makeDir('packages/acme/src');
+        $this->makeSymlink(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'packages' . \DIRECTORY_SEPARATOR . 'acme' . \DIRECTORY_SEPARATOR . 'src',
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'package-alias',
+        );
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => './package-alias']]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $this->assertStringContainsString('packages/acme/src', (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml'));
+        $this->assertStringNotContainsString('packages/ exists but no source root under it is scanned', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function filesystem_identity_handles_case_variants_when_supported(): void
+    {
+        $this->makeDir('packages/acme/src');
+        if (!\is_dir($this->tempDir . \DIRECTORY_SEPARATOR . 'PACKAGES' . \DIRECTORY_SEPARATOR . 'ACME' . \DIRECTORY_SEPARATOR . 'SRC')) {
+            $this->markTestSkipped('The filesystem is case-sensitive, so equivalent case variants cannot be exercised.');
+        }
+
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => [
+                'packages/acme/src',
+                'PACKAGES/ACME/SRC',
+            ]]]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertSame(1, \substr_count($contents, '<directory name="packages/acme/src"/>'));
+        $this->assertStringNotContainsString('PACKAGES/ACME/SRC', $contents);
+        $this->assertStringNotContainsString('packages/ exists but no source root under it is scanned', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function canonical_paths_deduplicate_non_ascii_case_variants_when_supported(): void
+    {
+        $this->makeDir('packages/Äcme/src');
+        if (!\is_dir($this->tempDir . \DIRECTORY_SEPARATOR . 'packages' . \DIRECTORY_SEPARATOR . 'äCME' . \DIRECTORY_SEPARATOR . 'SRC')) {
+            $this->markTestSkipped('The filesystem does not resolve the non-ASCII case variant equivalently.');
+        }
+
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => [
+                'packages/Äcme/src',
+                'packages/äCME/SRC',
+            ]]]], \JSON_UNESCAPED_UNICODE),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertSame(1, \substr_count($contents, '<directory name="packages/Äcme/src"/>'));
+        $this->assertStringNotContainsString('packages/äCME/SRC', $contents);
+        $this->assertStringNotContainsString('packages/ exists but no source root under it is scanned', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function scanned_external_tests_symlink_does_not_report_tests_as_skipped(): void
+    {
+        $outside = $this->makeExternalDir('external-tests');
+        $this->makeSymlink($outside, $this->tempDir . \DIRECTORY_SEPARATOR . 'tests');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['require-dev' => ['psalm/plugin-phpunit' => '^0.1']]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $escapedOutside = \htmlspecialchars((string) \realpath($outside), \ENT_QUOTES | \ENT_XML1, 'UTF-8');
+        $this->assertStringContainsString('<directory name="' . $escapedOutside . '"/>', $contents);
+        $this->assertStringNotContainsString('tests/ dir skipped', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function preserves_nested_roots_and_conventional_then_composer_order(): void
+    {
+        \file_put_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'artisan', "#!/usr/bin/env php\n");
+        $this->makeDir('app');
+        $this->makeDir('config');
+        $this->makeDir('database/factories');
+        $this->makeDir('z-source');
+        $this->makeDir('a-source');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => [
+                'Z\\' => 'z-source',
+                'A\\' => 'a-source',
+                'Factories\\' => 'database/factories',
+            ]]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $expected = ['app', 'config', 'database', 'z-source', 'a-source', 'database/factories'];
+        $lastPosition = -1;
+        foreach ($expected as $directory) {
+            $position = \strpos($contents, '<directory name="' . $directory . '"/>');
+            $this->assertIsInt($position, \sprintf('Expected %s in generated XML.', $directory));
+            $this->assertGreaterThan($lastPosition, $position);
+            $lastPosition = $position;
+        }
+    }
+
+    #[Test]
+    public function missing_composer_directories_are_skipped(): void
+    {
+        $this->makeDir('src');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => [
+                'Missing\\' => 'does-not-exist',
+                'Present\\' => 'src',
+            ]]]),
+        );
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringNotContainsString('does-not-exist', $contents);
+        $this->assertStringContainsString('<directory name="src"/>', $contents);
+    }
+
+    #[Test]
     public function escapes_xml_special_chars_in_emitted_paths(): void
     {
         // A path with XML-special chars must be escaped, or init reports success while
@@ -467,6 +838,25 @@ final class InitCommandTest extends TestCase
         $path = $this->tempDir . \DIRECTORY_SEPARATOR . \str_replace('/', \DIRECTORY_SEPARATOR, $relative);
         if (! \is_dir($path) && ! \mkdir($path, 0o777, true) && ! \is_dir($path)) {
             throw new \RuntimeException(\sprintf('Failed to create directory %s', $path));
+        }
+    }
+
+    private function makeExternalDir(string $suffix): string
+    {
+        $path = $this->tempDir . '-' . $suffix;
+        if (!\mkdir($path) && !\is_dir($path)) {
+            throw new \RuntimeException(\sprintf('Failed to create directory %s', $path));
+        }
+
+        $this->externalPaths[] = $path;
+
+        return $path;
+    }
+
+    private function makeSymlink(string $target, string $link): void
+    {
+        if (!\function_exists('symlink') || !@\symlink($target, $link)) {
+            $this->markTestSkipped('The platform or filesystem does not permit creating symbolic links.');
         }
     }
 
