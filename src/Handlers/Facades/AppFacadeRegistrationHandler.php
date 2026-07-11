@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Facades;
 use Illuminate\Support\Facades\Facade;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
@@ -149,13 +150,17 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                     // warning (not debug) — debug is a no-op in the default progress, and a user
                     // facade silently losing method resolution is exactly the class of failure
                     // issue #787 was filed to fix. Match ModelRegistrationHandler's convention.
-                    $progress->warning(
+                    WarningReporter::emit(
+                        $progress,
                         "Laravel plugin: skipping facade '{$storage->name}': class could not be loaded by autoloader",
                     );
                     continue;
                 }
             } catch (\Error|\Exception $error) {
-                $progress->warning("Laravel plugin: skipping facade '{$storage->name}': {$error->getMessage()}");
+                WarningReporter::emit(
+                    $progress,
+                    "Laravel plugin: skipping facade '{$storage->name}': {$error->getMessage()}",
+                );
                 continue;
             }
 
@@ -212,9 +217,13 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
         try {
             if (!\is_subclass_of($facadeClass, Facade::class)) {
                 self::$failedFacades[$facadeClass] = true;
-                $progress?->warning(
-                    "Laravel plugin: skipping facade '{$facadeClass}': not a subclass of " . Facade::class,
-                );
+                if ($progress instanceof \Psalm\Progress\Progress) {
+                    WarningReporter::emit(
+                        $progress,
+                        "Laravel plugin: skipping facade '{$facadeClass}': not a subclass of " . Facade::class,
+                    );
+                }
+
                 return null;
             }
 
@@ -225,18 +234,26 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
 
             if ($rootClass === null) {
                 self::$failedFacades[$facadeClass] = true;
-                $progress?->warning(
-                    "Laravel plugin: skipping facade '{$facadeClass}': getFacadeRoot() returned a non-object value",
-                );
+                if ($progress instanceof \Psalm\Progress\Progress) {
+                    WarningReporter::emit(
+                        $progress,
+                        "Laravel plugin: skipping facade '{$facadeClass}': getFacadeRoot() returned a non-object value",
+                    );
+                }
+
                 return null;
             }
 
             return $rootClass;
         } catch (\Throwable $throwable) {
             self::$failedFacades[$facadeClass] = true;
-            $progress?->warning(
-                "Laravel plugin: getFacadeRoot() failed for '{$facadeClass}': {$throwable->getMessage()}",
-            );
+            if ($progress instanceof \Psalm\Progress\Progress) {
+                WarningReporter::emit(
+                    $progress,
+                    "Laravel plugin: getFacadeRoot() failed for '{$facadeClass}': {$throwable->getMessage()}",
+                );
+            }
+
             return null;
         }
     }

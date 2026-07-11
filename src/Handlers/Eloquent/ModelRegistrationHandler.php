@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -90,13 +91,15 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             // reflection works in property handlers (e.g. getTable(), getCasts())
             try {
                 if (!\class_exists($storage->name, true)) {
-                    $codebase->progress->warning(
+                    WarningReporter::emit(
+                        $codebase->progress,
                         "Laravel plugin: skipping model '{$storage->name}': class could not be loaded by autoloader",
                     );
                     continue;
                 }
             } catch (\Error|\Exception $error) {
-                $codebase->progress->warning(
+                WarningReporter::emit(
+                    $codebase->progress,
                     "Laravel plugin: skipping model '{$storage->name}': {$error->getMessage()}",
                 );
                 continue;

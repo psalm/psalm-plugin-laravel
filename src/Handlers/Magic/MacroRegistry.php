@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Magic;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\Ast\CachedClosureTypeFactory;
 use Psalm\LaravelPlugin\Internal\Ast\ClosureTypeFactory;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\Progress\Progress;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\FunctionLikeStorage;
@@ -147,7 +148,8 @@ final class MacroRegistry
                 // `\Error`, not `ReflectionException`. Catch broadly so a single bad
                 // class — including one whose static initialiser throws — cannot
                 // abort discovery for the rest.
-                $progress->warning(
+                WarningReporter::emit(
+                    $progress,
                     "Laravel plugin: MacroRegistry could not read \$macros on {$className}: {$exception->getMessage()}",
                 );
                 continue;
@@ -616,7 +618,8 @@ final class MacroRegistry
             // malformed `static $macros` shapes (see the array branch above), and
             // any other engine error. Mirrors the broad catch in `init()`: a single
             // bad callable should not abort the whole discovery pass.
-            $progress->warning(
+            WarningReporter::emit(
+                $progress,
                 "Laravel plugin: MacroRegistry could not reflect callable for {$declaringClass}::{$name}: {$throwable->getMessage()}",
             );
         }

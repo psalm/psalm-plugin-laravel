@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Stubs;
 
 use Illuminate\Foundation\AliasLoader;
 use Illuminate\Support\Facades\Facade;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 
 /**
  * Maps Laravel service classes to their facade and root alias class names.
@@ -189,7 +190,8 @@ final class FacadeMapProvider
                     continue;
                 }
             } catch (\Throwable $e) {
-                $progress->warning(
+                WarningReporter::emit(
+                    $progress,
                     "Laravel plugin: FacadeMapProvider could not load multi-target concrete {$concrete}: {$e->getMessage()}",
                 );
                 continue;
@@ -213,7 +215,7 @@ final class FacadeMapProvider
                     if (!\class_exists($facadeClass)) {
                         $message = "Laravel plugin: FacadeMapProvider skipped multi-target facade {$facadeClass}: class not found\n";
                         if ($isCanonicalFqcn) {
-                            $progress->warning(\rtrim($message));
+                            WarningReporter::emit($progress, \rtrim($message));
                         } else {
                             $progress->debug($message);
                         }
@@ -221,7 +223,8 @@ final class FacadeMapProvider
                         continue;
                     }
                 } catch (\Throwable $e) {
-                    $progress->warning(
+                    WarningReporter::emit(
+                        $progress,
                         "Laravel plugin: FacadeMapProvider could not load multi-target facade {$facadeClass}: {$e->getMessage()}",
                     );
                     continue;

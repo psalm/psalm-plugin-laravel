@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Encryption;
 
 use Illuminate\Encryption\Encrypter;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -119,7 +120,8 @@ final class EncrypterTaintHandler implements AfterClassLikeVisitInterface
         $method_storage = $storage->methods[$method] ?? null;
 
         if ($method_storage === null) {
-            $event->getCodebase()->progress->warning(
+            WarningReporter::emit(
+                $event->getCodebase()->progress,
                 "Laravel plugin: {$storage->name}::{$method}() not found — encrypter taint annotation skipped. "
                 . 'The Laravel method signature may have changed; please report this against psalm-plugin-laravel.',
             );

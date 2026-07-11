@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Stubs;
 
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\Progress\Progress;
 
 /**
@@ -12,7 +13,7 @@ use Psalm\Progress\Progress;
  * Splits responsibility from {@see \Psalm\LaravelPlugin\Plugin}: filesystem
  * traversal and version-directory selection live in this utility so they can
  * be exercised by unit tests without booting the plugin, while warning
- * reporting still uses Psalm's {@see Progress} output interface.
+ * reporting still follows the plugin-wide {@see WarningReporter} policy.
  *
  * @internal
  */
@@ -66,7 +67,8 @@ final class StubFileFinder
             // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories.
             // Return whatever stubs were collected before the error — partial results from
             // readable subdirectories are better than none.
-            $output->warning(
+            WarningReporter::emit(
+                $output,
                 "Laravel plugin: error scanning stub directory '{$directory}': {$unexpectedValueException->getMessage()}",
             );
         }

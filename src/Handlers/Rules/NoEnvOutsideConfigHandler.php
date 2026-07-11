@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\LaravelPlugin\Issues\NoEnvOutsideConfig;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
@@ -87,7 +88,8 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
         self::$configDirectories = \array_values(\array_unique($resolved));
 
         if ($directories !== [] && self::$configDirectories === [] && $progress instanceof \Psalm\Progress\Progress) {
-            $progress->warning(
+            WarningReporter::emit(
+                $progress,
                 'Laravel plugin: NoEnvOutsideConfig has no resolvable config directories — '
                 . "every env() call will be flagged. Inputs: '"
                 . \implode("', '", $directories)

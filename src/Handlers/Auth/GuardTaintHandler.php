@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Auth;
 
 use Illuminate\Auth\SessionGuard;
 use Illuminate\Auth\TokenGuard;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -85,7 +86,8 @@ final class GuardTaintHandler implements AfterClassLikeVisitInterface
         $method_storage = $storage->methods[$method] ?? null;
 
         if ($method_storage === null) {
-            $event->getCodebase()->progress->warning(
+            WarningReporter::emit(
+                $event->getCodebase()->progress,
                 "Laravel plugin: {$storage->name}::{$method}() not found — guard taint annotation skipped. "
                 . 'The Laravel method signature may have changed; please report this against psalm-plugin-laravel.',
             );

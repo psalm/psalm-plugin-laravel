@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 use Illuminate\Foundation\Application;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\Progress\Progress;
 
 /**
@@ -67,7 +68,7 @@ final class MigrationSchemaBuilder
             try {
                 $aggregator->addStatements($this->codebase->getStatementsForFile($file));
             } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-                $progress->warning("Laravel plugin: skipping migration '{$file}': {$e->getMessage()}");
+                WarningReporter::emit($progress, "Laravel plugin: skipping migration '{$file}': {$e->getMessage()}");
             }
         }
 
@@ -83,12 +84,12 @@ final class MigrationSchemaBuilder
         } else {
             $writeFailure = $this->cache->getWriteFailureReason();
             $detail = $writeFailure !== null ? ": {$writeFailure}" : ' — check directory permissions';
-            $progress->warning("Laravel plugin: parsed migration schema (cache write failed{$detail})");
+            WarningReporter::emit($progress, "Laravel plugin: parsed migration schema (cache write failed{$detail})");
         }
 
         $readFailure = $this->cache->getReadFailureReason();
         if ($readFailure !== null) {
-            $progress->warning("Laravel plugin: {$readFailure}");
+            WarningReporter::emit($progress, "Laravel plugin: {$readFailure}");
         }
     }
 
@@ -151,7 +152,7 @@ final class MigrationSchemaBuilder
                 $sql = \file_get_contents($file);
 
                 if ($sql === false) {
-                    $progress->warning("Laravel plugin: could not read SQL schema dump '{$file}'");
+                    WarningReporter::emit($progress, "Laravel plugin: could not read SQL schema dump '{$file}'");
                     continue;
                 }
 
@@ -159,7 +160,10 @@ final class MigrationSchemaBuilder
             } catch (\RuntimeException $exception) {
                 // SqlSchemaParser is pure string processing and shouldn't throw.
                 // This catch is a safety net for unexpected runtime issues (e.g. memory).
-                $progress->warning("Laravel plugin: skipping SQL schema dump '{$file}': {$exception->getMessage()}");
+                WarningReporter::emit(
+                    $progress,
+                    "Laravel plugin: skipping SQL schema dump '{$file}': {$exception->getMessage()}",
+                );
             }
         }
     }
@@ -177,7 +181,8 @@ final class MigrationSchemaBuilder
         try {
             $iterator = new \DirectoryIterator($directory);
         } catch (\UnexpectedValueException $unexpectedValueException) {
-            $progress->warning(
+            WarningReporter::emit(
+                $progress,
                 "Laravel plugin: could not read schema directory '{$directory}': {$unexpectedValueException->getMessage()}",
             );
             return [];
@@ -217,7 +222,7 @@ final class MigrationSchemaBuilder
         $defaultDirectory = $this->app->databasePath('migrations');
 
         if (!$this->app->bound('migrator')) {
-            $progress->warning($this->migratorUnavailableWarning());
+            WarningReporter::emit($progress, $this->migratorUnavailableWarning());
 
             return [$defaultDirectory];
         }
@@ -267,7 +272,8 @@ final class MigrationSchemaBuilder
                 \FilesystemIterator::SKIP_DOTS,
             ));
         } catch (\UnexpectedValueException $unexpectedValueException) {
-            $progress->warning(
+            WarningReporter::emit(
+                $progress,
                 "Laravel plugin: could not read migration directory '{$directory}': {$unexpectedValueException->getMessage()}",
             );
             return [];
@@ -289,7 +295,8 @@ final class MigrationSchemaBuilder
             }
         } catch (\UnexpectedValueException $unexpectedValueException) {
             // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories
-            $progress->warning(
+            WarningReporter::emit(
+                $progress,
                 "Laravel plugin: error scanning migration directory '{$directory}': {$unexpectedValueException->getMessage()}",
             );
         }

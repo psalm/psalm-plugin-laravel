@@ -10,6 +10,7 @@ use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
@@ -429,7 +430,8 @@ final class Plugin implements PluginEntryPointInterface
             // Only warn when the user explicitly opted into missing translation detection —
             // without it, they just lose the bonus type narrowing, which isn't worth a warning
             if ($reportMissing) {
-                $output->warning(
+                WarningReporter::emit(
+                    $output,
                     'Laravel plugin: findMissingTranslations is enabled but the translator service is not bound. '
                     . 'The MissingTranslation check will be skipped.',
                 );
@@ -442,7 +444,8 @@ final class Plugin implements PluginEntryPointInterface
 
         if (!$translator instanceof \Illuminate\Translation\Translator) {
             if ($reportMissing) {
-                $output->warning(
+                WarningReporter::emit(
+                    $output,
                     'Laravel plugin: findMissingTranslations is enabled but the translator is not an instance of '
                     . 'Illuminate\Translation\Translator. The MissingTranslation check will be skipped.',
                 );
@@ -473,7 +476,8 @@ final class Plugin implements PluginEntryPointInterface
             $factory = $app->make('view');
 
             if (!$factory instanceof \Illuminate\View\Factory) {
-                $output->warning(
+                WarningReporter::emit(
+                    $output,
                     'Laravel plugin: findMissingViews is enabled but the view factory is not a standard instance. '
                     . 'The MissingView check will be skipped.',
                 );
@@ -483,7 +487,8 @@ final class Plugin implements PluginEntryPointInterface
 
             $finder = $factory->getFinder();
         } else {
-            $output->warning(
+            WarningReporter::emit(
+                $output,
                 'Laravel plugin: findMissingViews is enabled but the view finder service is not bound. '
                 . 'The MissingView check will be skipped.',
             );
@@ -492,7 +497,8 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         if (!$finder instanceof \Illuminate\View\FileViewFinder) {
-            $output->warning(
+            WarningReporter::emit(
+                $output,
                 'Laravel plugin: findMissingViews is enabled but the view finder is not an instance of '
                 . 'Illuminate\View\FileViewFinder. The MissingView check will be skipped.',
             );

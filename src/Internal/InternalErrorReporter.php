@@ -8,7 +8,7 @@ use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\Progress\Progress;
 
 /**
- * Surfaces a plugin-initialisation failure as a {@see Progress::warning()} pair —
+ * Surfaces a plugin-initialisation failure as a warning pair —
  * one for the original error, one with a pre-filled issue-tracker URL so users
  * can report it with environment details attached.
  *
@@ -22,14 +22,14 @@ final class InternalErrorReporter
     /** @throws \Throwable when {@see PluginConfig::$failOnInternalError} is on */
     public static function report(\Throwable $throwable, Progress $output, PluginConfig $pluginConfig): void
     {
-        $output->warning("Laravel plugin error on initialisation: {$throwable->getMessage()}");
+        WarningReporter::emit($output, "Laravel plugin error on initialisation: {$throwable->getMessage()}");
 
         // Best-effort classification: tells the user whether the failure
         // looks like an app-level config issue, a plugin bug, a Laravel
         // framework problem, or a Testbench fallback issue.
         $hint = InternalErrorClassifier::hint($throwable);
         if ($hint !== null) {
-            $output->warning("Laravel plugin: {$hint}");
+            WarningReporter::emit($output, "Laravel plugin: {$hint}");
         }
 
         // URL generation is best-effort — a secondary failure here (e.g. a
@@ -41,13 +41,17 @@ final class InternalErrorReporter
         try {
             $url = IssueUrlGenerator::generate($throwable, $pluginConfig);
         } catch (\Throwable $urlGenerationFailure) {
-            $output->warning(
+            WarningReporter::emit(
+                $output,
                 "Laravel plugin failed to build a detailed report URL: {$urlGenerationFailure->getMessage()}",
             );
             $url = 'https://github.com/psalm/psalm-plugin-laravel/issues';
         }
 
-        $output->warning('Laravel plugin has been disabled for this run, please report about this issue: ' . $url);
+        WarningReporter::emit(
+            $output,
+            'Laravel plugin has been disabled for this run, please report about this issue: ' . $url,
+        );
 
         if ($pluginConfig->failOnInternalError) {
             throw $throwable;
@@ -74,14 +78,18 @@ final class InternalErrorReporter
             throw $throwable;
         }
 
-        $output->warning("Laravel plugin: application bootstrap failed partway: {$throwable->getMessage()}");
+        WarningReporter::emit(
+            $output,
+            "Laravel plugin: application bootstrap failed partway: {$throwable->getMessage()}",
+        );
 
         $hint = InternalErrorClassifier::hint($throwable);
         if ($hint !== null) {
-            $output->warning("Laravel plugin: {$hint}");
+            WarningReporter::emit($output, "Laravel plugin: {$hint}");
         }
 
-        $output->warning(
+        WarningReporter::emit(
+            $output,
             'Laravel plugin is running in degraded mode: service providers never booted, so '
             . 'model, facade and container inference is reduced. '
             . 'Run `vendor/bin/psalm-laravel diagnose` for details.',

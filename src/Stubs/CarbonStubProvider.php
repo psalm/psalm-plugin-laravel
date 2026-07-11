@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Stubs;
 
 use Composer\InstalledVersions;
 use Composer\Semver\VersionParser;
+use Psalm\LaravelPlugin\Internal\WarningReporter;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\Progress\Progress;
 
@@ -75,7 +76,8 @@ final class CarbonStubProvider
                 // is silently dropped. Downstream code then sees MissingDependency. See #922.
                 $registration->addStubFile($realPath);
             } else {
-                $output->warning(
+                WarningReporter::emit(
+                    $output,
                     "Laravel plugin: Carbon lazy stub not found at '{$stub}'. "
                     . 'CarbonPeriod / Translator / MessageFormatterMapper types may not resolve.',
                 );
