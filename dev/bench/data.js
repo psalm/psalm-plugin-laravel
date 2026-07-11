@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783802476563,
+  "lastUpdate": 1783812223238,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8285,6 +8285,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.1,
             "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7964974dd1fc9c04a911595be2655499e316751c",
+          "message": "Fix: `UndefinedInterfaceMethod` for `Cache::driver()->flexible()` (stub+handler) (#1233)\n\n* fix(cache): narrow manager returns to concrete Repository #1230\n\nCacheManager::store()/driver()/memo() docblock the Cache Repository\ncontract, but at runtime every built-in store is wrapped by\nrepository() and memo() wraps in a MemoizedStore, so the value is\nalways the concrete Illuminate\\Cache\\Repository. Resolving against\nthe interface hid concrete-only methods (flexible(), tags(),\nMacroable) behind UndefinedInterfaceMethod.\n\n- stubs/common + stubs/13.5.0 narrow the instance path; 13.5.0\n  mirrors Laravel widening the name params to UnitEnum|string|null\n- the facade static path needs CacheFacadeHandler because vendor\n  @method static tags shadow real methods added by a redeclaring\n  stub; the paired params provider is mandatory or pseudo-method\n  calls fatal with \"Cannot get method params\"\n\nCloses #1230\n\n* docs: compact stub and handler comments\n\n* refactor(cache): replace CacheManager stubs with handler-only narrowing #1230\n\nParams defer to reflection for real manager calls, so Laravel's 13.5.0\nUnitEnum widening needs no duplicated version-dir signature; the facade\npseudo-method path keeps copying the canonical @method params. Both\nproviders share one real-vs-pseudo discriminator (methodExists without\npseudo) so the narrowing also covers CacheManager subclasses.",
+          "timestamp": "2026-07-12T01:20:41+02:00",
+          "tree_id": "fceaf0cb75f528a5910438b8e0d1f624ad066a46",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7964974dd1fc9c04a911595be2655499e316751c"
+        },
+        "date": 1783812222326,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.1,
+            "range": "± 0.1",
             "unit": "s"
           },
           {
