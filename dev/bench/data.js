@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783795145980,
+  "lastUpdate": 1783798480160,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8215,6 +8215,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 34.16,
             "range": "± 0.22",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "def5bfb95aa1b74b80da7a26db096dff3d1b9b5d",
+          "message": "feat(validation): narrow numeric range from min/max rules #1234 (#1237)\n\nNarrow integer fields from min/max/between/size/gt/gte/lt/lte rule\nparams (e.g. integer|min:1 infers int<1, max>) and dispatch integer()\nself-accessor reads through the rule-derived type, so accurate\ndocblocks like @return positive-int no longer trip\nMoreSpecificReturnType.\n\n- range applies only when the field also carries integer/numeric:\n  min/max/size are overloaded (string length, array count, file size)\n- bounds require integer-literal params; gt/gte/lt/lte may reference\n  other fields, so non-literal params contribute no bound\n- integer() narrows only for present, non-nullable fields: an absent\n  or null value casts to Laravel's rule-independent default 0\n- float()/boolean() gain regression coverage only (no Psalm range\n  type for float; bool has no narrowing target)\n- safe()->integer() keeps the plain stub type (ValidatedInput\n  dispatch handles input() only) - deliberate scope boundary\n\nCloses #1234",
+          "timestamp": "2026-07-11T21:31:46+02:00",
+          "tree_id": "f4b0eec63c77b23065428c010070995dbe3d1fee",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/def5bfb95aa1b74b80da7a26db096dff3d1b9b5d"
+        },
+        "date": 1783798478967,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.64,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
