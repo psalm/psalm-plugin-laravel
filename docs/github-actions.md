@@ -20,7 +20,7 @@ This writes `.github/workflows/psalm.yml`, copied verbatim from the plugin's bun
 A single Psalm job that, in one run, produces three outcomes:
 
 * **Inline annotations.** Psalm auto-selects the GitHub format on stdout when it detects Actions, so findings appear on the PR's Files changed tab.
-* **SARIF upload.** Results go to the Security tab (Code Scanning) via `github/codeql-action/upload-sarif`.
+* **SARIF upload.** Results go to the Security tab (Code Scanning) via `github/codeql-action/upload-sarif`. The step is skipped on fork and Dependabot pull requests, where GitHub caps the `GITHUB_TOKEN` at read-only and the upload would fail. Those PRs are still gated by the annotations and the failing step below.
 * **Failing gate.** A final step reads the SARIF and fails the build on any error-level finding.
 
 The run is a plain `./vendor/bin/psalm`, no `--taint-analysis` flag. Psalm 7 enables taint analysis by default, so one run covers both type and taint analysis and reports both. On Psalm 6.x the flag is required (and switches Psalm to a taint-only mode), which is why a separate template targets that version.
