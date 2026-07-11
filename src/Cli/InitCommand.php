@@ -45,11 +45,9 @@ final class InitCommand extends Command
     /**
      * Ignore-target candidates. Only emitted if present on disk.
      *
-     * Deliberately excludes `packages/` and `nova-components/`: `<ignoreFiles>`
-     * only subtracts from `<projectFiles>`, and init never emits a projectFiles
-     * root that contains them — so ignoring them is inert for app layouts and
-     * actively disables analysis on monorepos whose PSR-4 source lives under
-     * `packages/*\/src` (scanned for reflection, never analysed). See #1213.
+     * Excludes `packages/` and `nova-components/`: ignoring `packages/` would
+     * subtract the `packages/*\/src` roots detectComposerRoots() emits on
+     * monorepos, disabling their analysis. See #1213, #1224.
      */
     private const IGNORE_DIRS = ['bootstrap/cache', 'storage', 'vendor'];
 
@@ -271,23 +269,49 @@ final class InitCommand extends Command
             );
         }
 
+        // Path-repo monorepos not enumerated in root composer autoload can't be
+        // auto-detected; warn loudly so a packages/ tree isn't left silently unanalysed. #1224
+        if (\is_dir($cwd . \DIRECTORY_SEPARATOR . 'packages') && !$this->hasRootUnder('packages', $directories)) {
+            $io->writeln('');
+            $io->writeln(
+                '<comment>Note:</comment> packages/ exists but no source root under it is scanned. If this is a monorepo, add each package source dir (e.g. packages/*/src) to <projectFiles> — otherwise Psalm analyses almost nothing.',
+            );
+        }
+
         $io->writeln('');
         $io->writeln('Next step: run <info>vendor/bin/psalm-laravel analyze</info>');
     }
 
     /**
-     * Resolve scannable roots from project layout. Splits into Laravel-app vs
-     * package mode based on the presence of artisan. Falls back to the Laravel
-     * default if both branches produce empty results.
+     * Resolve scannable roots additively: the branch (by artisan) adds conventional
+     * roots; the root composer autoload.psr-4 map always adds its on-disk source roots —
+     * which is what surfaces the monorepo packages/*\/src the app branch misses. See #1224.
      *
      * @param ComposerJson|null $composer
      * @return array{0: list<string>, 1: list<string>} [directories, files]
      */
     private function detectSourceRoots(string $cwd, ?array $composer, bool $hasPhpunitPlugin): array
     {
-        [$directories, $files] = \is_file($cwd . \DIRECTORY_SEPARATOR . 'artisan')
+        $isLaravelApp = \is_file($cwd . \DIRECTORY_SEPARATOR . 'artisan');
+
+        [$conventional, $files] = $isLaravelApp
             ? $this->detectLaravelAppRoots($cwd)
-            : $this->detectPackageRoots($cwd, $composer);
+            : $this->detectPackageConventions($cwd);
+
+        // Exact canonical dedupe only. A nested root (e.g. mapped database/factories
+        // under database/) is kept: Psalm keys files by path, so redundancy costs a
+        // little traversal, never double analysis, and never suppresses a real root.
+        $directories = [];
+        foreach ([...$conventional, ...$this->detectComposerRoots($cwd, $composer)] as $dir) {
+            if (!\in_array($dir, $directories, true)) {
+                $directories[] = $dir;
+            }
+        }
+
+        // Package layout last resort: scan src/ when nothing else was found.
+        if (!$isLaravelApp && $directories === [] && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'src')) {
+            $directories[] = 'src';
+        }
 
         // Ultimate fallback so the template still validates.
         if ($directories === [] && $files === []) {
@@ -330,29 +354,40 @@ final class InitCommand extends Command
     }
 
     /**
-     * @param ComposerJson|null $composer
+     * Conventional roots for a non-artisan package: config/ only. The composer map
+     * (detectComposerRoots) and the src/ fallback are handled by the pipeline.
+     *
      * @return array{0: list<string>, 1: list<string>}
      */
-    private function detectPackageRoots(string $cwd, ?array $composer): array
+    private function detectPackageConventions(string $cwd): array
     {
         $directories = [];
-        foreach ($this->extractComposerAutoloadDirs($composer) as $dir) {
-            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $dir) && !\in_array($dir, $directories, true)) {
-                $directories[] = $dir;
-            }
-        }
-
-        // Package configs commonly live in config/ even without an artisan entrypoint.
-        if (\is_dir($cwd . \DIRECTORY_SEPARATOR . 'config') && !\in_array('config', $directories, true)) {
+        if (\is_dir($cwd . \DIRECTORY_SEPARATOR . 'config')) {
             $directories[] = 'config';
         }
 
-        // Last-resort fallback when composer.json is missing or has no PSR-4 mapping.
-        if ($directories === [] && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'src')) {
-            $directories[] = 'src';
+        return [$directories, []];
+    }
+
+    /**
+     * On-disk source roots from the root composer autoload.psr-4 map — the shared
+     * contributor for both layouts (paths canonicalised by extractComposerAutoloadDirs).
+     * Reads only autoload.psr-4; test dirs live in autoload-dev, opt-in via plugin-phpunit.
+     * Emits the exact mapped src roots, so each package's vendor/ and tests/ stay out.
+     *
+     * @param ComposerJson|null $composer
+     * @return list<string>
+     */
+    private function detectComposerRoots(string $cwd, ?array $composer): array
+    {
+        $roots = [];
+        foreach ($this->extractComposerAutoloadDirs($composer) as $dir) {
+            if (\is_dir($cwd . \DIRECTORY_SEPARATOR . $dir) && !\in_array($dir, $roots, true)) {
+                $roots[] = $dir;
+            }
         }
 
-        return [$directories, []];
+        return $roots;
     }
 
     /**
@@ -448,7 +483,10 @@ final class InitCommand extends Command
 
     /**
      * Extract `autoload.psr-4` directories from composer.json. Order preserved,
-     * duplicates removed, trailing slashes stripped.
+     * duplicates removed, each path canonicalised (leading `./` and `.`/`..`
+     * segments collapsed) so downstream containment/dedup compare like-for-like —
+     * e.g. `./app` dedupes against `app`, and `app/../packages/x` is not misread
+     * as covered by `app`. A leading `..` that escapes the root is kept.
      *
      * @param ComposerJson|null $composer
      * @return list<string>
@@ -462,11 +500,21 @@ final class InitCommand extends Command
         foreach ($psr4 as $paths) {
             $items = \is_string($paths) ? [$paths] : $paths;
             foreach ($items as $candidate) {
-                if ($candidate === '') {
-                    continue;
+                $segments = [];
+                foreach (\explode('/', $candidate) as $segment) {
+                    if ($segment === '' || $segment === '.') {
+                        continue;
+                    }
+
+                    if ($segment === '..' && $segments !== [] && $segments[\array_key_last($segments)] !== '..') {
+                        \array_pop($segments);
+                        continue;
+                    }
+
+                    $segments[] = $segment;
                 }
 
-                $dir = \rtrim($candidate, '/');
+                $dir = \implode('/', $segments);
                 if ($dir === '' || \in_array($dir, $dirs, true)) {
                     continue;
                 }
@@ -476,6 +524,24 @@ final class InitCommand extends Command
         }
 
         return $dirs;
+    }
+
+    /**
+     * True when at least one detected root lives under $prefix. Lets reportSuccess()
+     * warn when a packages/ dir exists yet nothing beneath it is scanned.
+     *
+     * @param list<string> $directories
+     * @psalm-pure
+     */
+    private function hasRootUnder(string $prefix, array $directories): bool
+    {
+        foreach ($directories as $dir) {
+            if (\str_starts_with($dir . '/', $prefix . '/')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -493,6 +559,13 @@ final class InitCommand extends Command
         // children at two, ignoreFiles' grandchildren at three.
         $itemIndent = self::TAB . self::TAB;
         $ignoreItemIndent = $itemIndent . self::TAB;
+
+        // Escape before interpolating into attributes: a path may contain XML-special
+        // chars (e.g. `packages/Foo & Bar/src`) that would otherwise break parsing.
+        $escape = static fn(string $value): string => \htmlspecialchars($value, \ENT_QUOTES | \ENT_XML1, 'UTF-8');
+        $directories = \array_map($escape, $directories);
+        $files = \array_map($escape, $files);
+        $ignores = \array_map($escape, $ignores);
 
         $lines = [];
         foreach ($directories as $dir) {
