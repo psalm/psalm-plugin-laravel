@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783554713636,
+  "lastUpdate": 1783795145980,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8180,6 +8180,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.5,
             "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "95b113e8f8c805f92ebad5f05ced192789bcc82f",
+          "message": "fix(cli): init adds monorepo package sources to projectFiles #1224 (#1235)\n\nApp monorepos (bagisto, unopim) ship an artisan entrypoint, so init picked\nthe Laravel-app branch and emitted only the conventional app dirs. Their\nreal source lives under packages/*/*/src (Webkul), mapped in the ROOT\ncomposer autoload but never listed — Psalm reflection-scanned it yet\nanalysed nothing, a silently near-empty first run. (Package monorepos like\nlunar have no artisan and already flow through the package branch.)\n\ndetectSourceRoots() is now one additive pipeline: the branch (by artisan\npresence) contributes only conventional roots, and the root composer\nautoload.psr-4 map always contributes its on-disk source roots via the\nshared detectComposerRoots(). The merge is exact-canonical dedupe only — a\nnested root (e.g. a mapped database/factories under database) is kept, since\nPsalm keys project files by path (a little repeated traversal, never double\nanalysis) and lexical parent/child suppression could drop a genuinely\ndistinct root. Reads only autoload.psr-4; test dirs live in autoload-dev and\nremain opt-in via psalm/plugin-phpunit.\n\nPath-repository monorepos that map package source only in each package's own\ncomposer.json can't be auto-detected from the root map; reportSuccess() warns\nwhen packages/ exists but no scanned root falls under it, so that residual\ncase fails loudly instead of as a green empty run.\n\nHardening: composer PSR-4 paths are canonicalised once (leading ./ and .\n/.. dot segments collapsed) before dedup, is_dir checks, and the warning;\nemitted attribute values are XML-escaped at the render boundary so a path\nwith special chars can't yield an unparseable psalm.xml.",
+          "timestamp": "2026-07-11T20:36:02+02:00",
+          "tree_id": "19b7a919e34ff75ac9d2f90fbc28414cee030b6f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/95b113e8f8c805f92ebad5f05ced192789bcc82f"
+        },
+        "date": 1783795145432,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.16,
+            "range": "± 0.22",
             "unit": "s"
           },
           {
