@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783798480160,
+  "lastUpdate": 1783802476563,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8250,6 +8250,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.64,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b6f4ce6ae0524f16525d8f05fe5255de56e2435d",
+          "message": "Narrow `safe()->integer()` and `boolean()` from validation rules (#1239)\n\n* feat(validation): narrow safe()->integer() to rule-derived range #1234\n\nresolveValidatedInputMethod() only narrowed input() on ValidatedInput,\nleaving safe()->integer() at plain int even when the field's rules\nalready infer a numeric range (#1237). Reuses the same integer-cast\ngate stack (explicit integer rule, guaranteed presence, non-nullable)\nvia a new resolveValidatedInputInteger(), so the two accessors agree.\n\n* feat(validation): narrow boolean() to literal for accepted/declined #1234\n\nboolean() always returned plain bool even when the field's rules\nunconditionally require `accepted` or `declined`. filter_var(...,\nFILTER_VALIDATE_BOOLEAN) maps every value each rule admits to exactly\none literal, so ResolvedRule now tracks the bare (non-conditional)\nrule via hasAcceptedRule/hasDeclinedRule, and resolveSelfBoolean()\nnarrows to TTrue/TFalse under the same presence/nullable gates #1237\nalready established for integer().",
+          "timestamp": "2026-07-11T22:38:32+02:00",
+          "tree_id": "c053c3049b34909b3c601fe272e0b68c0d5ae060",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b6f4ce6ae0524f16525d8f05fe5255de56e2435d"
+        },
+        "date": 1783802475713,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.1,
+            "range": "± 0.04",
             "unit": "s"
           },
           {
