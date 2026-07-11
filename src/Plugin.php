@@ -329,10 +329,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
-        // Cache facade static calls (`Cache::store()`, `Cache::driver()`, `Cache::memo()`)
-        // narrowed to the concrete Repository. getClassLikeNames() reads FacadeMapProvider
-        // for the `\Cache` alias, so it relies on init() having run above.
-        // See https://github.com/psalm/psalm-plugin-laravel/issues/1230.
+        // Cache::store()/driver()/memo() narrowed to the concrete Repository (#1230).
+        // Reads FacadeMapProvider, so it relies on init() having run above.
         require_once __DIR__ . '/Handlers/Facades/CacheFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\CacheFacadeHandler::class);
 

@@ -8,10 +8,8 @@ use Illuminate\Cache\Repository;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * CacheManager::store()/driver()/memo() document the Repository contract but
- * always return the concrete \Illuminate\Cache\Repository at runtime, so
- * concrete-only methods such as flexible() must resolve without an
- * UndefinedInterfaceMethod error. See issue #1230.
+ * store()/driver()/memo() are narrowed to the concrete Repository, so
+ * concrete-only methods like flexible() resolve without errors (#1230).
  */
 function issue_repro(): array
 {
