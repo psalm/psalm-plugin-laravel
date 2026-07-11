@@ -329,6 +329,12 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
+        // CacheManager::store()/driver()/memo() narrowed to the concrete Repository, on
+        // both the real-manager and `Cache` facade paths (#1230). getClassLikeNames()
+        // reads FacadeMapProvider for the `\Cache` alias, so it relies on init() above.
+        require_once __DIR__ . '/Handlers/Cache/CacheManagerReturnTypeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Cache\CacheManagerReturnTypeHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
 
