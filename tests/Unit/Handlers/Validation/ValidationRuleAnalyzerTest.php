@@ -375,10 +375,10 @@ final class ValidationRuleAnalyzerTest extends TestCase
     #[Test]
     public function array_format_rules_resolve_correctly(): void
     {
-        // Simulates ['required', 'integer', 'max:100']
+        // Simulates ['required', 'integer', 'max:100'] — max:100 narrows (#1234).
         $rule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'integer', 'max:100']);
 
-        $this->assertSame('int|numeric-string', $rule->type->getId());
+        $this->assertSame('int<min, 100>|numeric-string', $rule->type->getId());
         $this->assertSame(TaintKind::ALL_INPUT, $rule->removedTaints);
     }
 
@@ -666,5 +666,401 @@ final class ValidationRuleAnalyzerTest extends TestCase
         ];
 
         $this->assertSame($exactRule, ValidationRuleAnalyzer::lookupRuleByKey($rules, 'items.0'));
+    }
+
+    // --- Numeric range narrowing (#1234) ---
+
+    #[Test]
+    public function integer_with_min_narrows_to_int_range(): void
+    {
+        $rule = $this->resolve('integer|min:1');
+
+        $this->assertSame('int<1, max>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_min_zero_narrows_to_int_range(): void
+    {
+        $rule = $this->resolve('integer|min:0');
+
+        $this->assertSame('int<0, max>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_max_narrows_to_int_range(): void
+    {
+        $rule = $this->resolve('integer|max:10');
+
+        $this->assertSame('int<min, 10>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_between_narrows_to_int_range(): void
+    {
+        $rule = $this->resolve('integer|between:0,24');
+
+        $this->assertSame('int<0, 24>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_size_narrows_to_literal_int(): void
+    {
+        // Collapsed [N, N] → TLiteralInt, not TIntRange(N, N).
+        $rule = $this->resolve('integer|size:5');
+
+        $this->assertSame('5|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_gt_narrows_to_int_range(): void
+    {
+        // gt:0 exclusive → inclusive range starts one above.
+        $rule = $this->resolve('integer|gt:0');
+
+        $this->assertSame('int<1, max>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_gte_narrows_to_int_range(): void
+    {
+        $rule = $this->resolve('integer|gte:0');
+
+        $this->assertSame('int<0, max>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_lt_narrows_to_int_range(): void
+    {
+        // lt:100 exclusive → inclusive range ends one below.
+        $rule = $this->resolve('integer|lt:100');
+
+        $this->assertSame('int<min, 99>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_lte_narrows_to_int_range(): void
+    {
+        $rule = $this->resolve('integer|lte:100');
+
+        $this->assertSame('int<min, 100>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_min_and_max_narrows_to_int_range(): void
+    {
+        $rule = $this->resolve('integer|min:1|max:10');
+
+        $this->assertSame('int<1, 10>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function numeric_with_min_narrows_only_the_int_component(): void
+    {
+        // float/numeric-string siblings untouched — only int gets ranged.
+        $rule = $this->resolve('numeric|min:1');
+
+        $this->assertSame('float|int<1, max>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function string_with_min_is_not_narrowed(): void
+    {
+        // Gate: no integer/numeric rule — 'min' contributes nothing.
+        $rule = $this->resolve('string|min:3');
+
+        $this->assertSame('string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function min_alone_contributes_no_type(): void
+    {
+        // No type-bearing rule at all — 'min' never narrows on its own.
+        $rule = $this->resolve('min:1');
+
+        $this->assertTrue($rule->type->isMixed());
+    }
+
+    #[Test]
+    public function integer_with_conflicting_min_max_skips_narrowing(): void
+    {
+        // min:5|max:3 — impossible interval, keep un-ranged.
+        $rule = $this->resolve('integer|min:5|max:3');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_non_integer_min_param_skips_narrowing(): void
+    {
+        // min:1.5 is not an integer literal — contributes no bound.
+        $rule = $this->resolve('integer|min:1.5');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_gt_field_reference_skips_narrowing(): void
+    {
+        // gt/gte/lt/lte can reference a field name — only literals narrow.
+        $rule = $this->resolve('integer|gt:other_field');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_negative_min_narrows_to_int_range(): void
+    {
+        $rule = $this->resolve('integer|min:-5');
+
+        $this->assertSame('int<-5, max>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function range_narrowing_is_order_independent(): void
+    {
+        $ruleA = $this->resolve('min:1|integer');
+        $ruleB = $this->resolve('integer|min:1');
+
+        $this->assertSame($ruleA->type->getId(), $ruleB->type->getId());
+        $this->assertSame('int<1, max>|numeric-string', $ruleA->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_malformed_between_single_param_skips_narrowing(): void
+    {
+        $rule = $this->resolve('integer|between:5');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_malformed_between_three_params_skips_narrowing(): void
+    {
+        $rule = $this->resolve('integer|between:1,2,3');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_between_non_integer_component_skips_narrowing(): void
+    {
+        $rule = $this->resolve('integer|between:1,abc');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_gt_php_int_max_skips_bound(): void
+    {
+        // No representable N+1 at PHP_INT_MAX — bound dropped.
+        $rule = $this->resolve('integer|gt:' . \PHP_INT_MAX);
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function integer_with_lt_php_int_min_skips_bound(): void
+    {
+        $rule = $this->resolve('integer|lt:' . \PHP_INT_MIN);
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function multiple_min_rules_keep_the_larger_bound(): void
+    {
+        $rule = $this->resolve('integer|min:1|min:5');
+
+        $this->assertSame('int<5, max>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function multiple_max_rules_keep_the_smaller_bound(): void
+    {
+        $rule = $this->resolve('integer|max:10|max:3');
+
+        $this->assertSame('int<min, 3>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function pre_existing_literal_ints_are_not_widened_by_an_unrelated_range_gate(): void
+    {
+        // Regression guard for the exact-class fix (TLiteralInt/TIntRange
+        // extend TInt — see applyNumericRangeNarrowing()). Uses boolean+min,
+        // not the originally-suggested in:1,2,3, since `in:` never yields
+        // TLiteralInt.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['boolean', 'numeric', 'min:0']);
+
+        $this->assertSame('0|1|bool', $rule->type->getId());
+    }
+
+    #[Test]
+    public function pre_existing_literal_int_from_accepted_rule_is_not_widened(): void
+    {
+        // Same guard via 'accepted' — single literal, not a pair.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['accepted', 'integer', 'min:1']);
+
+        $this->assertSame('1|true', $rule->type->getId());
+    }
+
+    #[Test]
+    public function bare_integer_atom_still_narrows_when_no_prior_literal_exists(): void
+    {
+        // Contrast: bare TInt (no prior literal) still narrows normally.
+        $rule = $this->resolve('integer|min:1');
+
+        $this->assertSame('int<1, max>|numeric-string', $rule->type->getId());
+    }
+
+    // --- Explicit integer-rule tracking for integer() casts (#1237) ---
+
+    #[Test]
+    public function integer_rule_sets_has_integer_rule_flag(): void
+    {
+        $rule = $this->resolve('integer|min:1');
+
+        $this->assertTrue($rule->hasIntegerRule);
+    }
+
+    #[Test]
+    public function numeric_rule_alone_does_not_set_has_integer_rule_flag(): void
+    {
+        // Analyzer-level type narrowing (validated()/input()) is unaffected —
+        // raw values aren't cast there, so the range stays sound. Only the
+        // handler-level integer() cast needs this flag (see
+        // ValidatedTypeHandler::resolveSelfInteger()): (int) "0.5" = 0 falls
+        // outside int<1, max>, so 'numeric' alone must not authorize the cast.
+        $rule = $this->resolve('numeric|min:1');
+
+        $this->assertFalse($rule->hasIntegerRule);
+        $this->assertSame('float|int<1, max>|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function accepted_rule_alone_does_not_set_has_integer_rule_flag(): void
+    {
+        // (int) "yes" = 0 — the TLiteralInt(1) in accepted's type is not an
+        // authoritative cast target on its own.
+        $rule = $this->resolve('accepted');
+
+        $this->assertFalse($rule->hasIntegerRule);
+    }
+
+    #[Test]
+    public function accepted_with_explicit_integer_sets_has_integer_rule_flag(): void
+    {
+        // accepted|integer IS sound (intersection {1, '1', true} → 1) —
+        // the flag follows the explicit 'integer' rule regardless of which
+        // rule won the type slot.
+        $rule = $this->resolve('accepted|integer');
+
+        $this->assertTrue($rule->hasIntegerRule);
+    }
+
+    // --- exclude* rules defeat the presence guarantee (#1237) ---
+
+    #[Test]
+    public function exclude_rule_defeats_presence_guarantee(): void
+    {
+        $rule = $this->resolve('exclude|required|integer|min:1');
+
+        $this->assertTrue($rule->excluded);
+        $this->assertFalse($rule->guaranteesPresence());
+    }
+
+    #[Test]
+    public function exclude_if_rule_defeats_presence_guarantee(): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['exclude_if:other,value', 'required', 'string']);
+
+        $this->assertFalse($rule->guaranteesPresence());
+    }
+
+    #[Test]
+    public function exclude_unless_rule_defeats_presence_guarantee(): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['exclude_unless:other,value', 'required', 'string']);
+
+        $this->assertFalse($rule->guaranteesPresence());
+    }
+
+    #[Test]
+    public function exclude_with_rule_defeats_presence_guarantee(): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['exclude_with:other', 'required', 'string']);
+
+        $this->assertFalse($rule->guaranteesPresence());
+    }
+
+    #[Test]
+    public function exclude_without_rule_defeats_presence_guarantee(): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['exclude_without:other', 'required', 'string']);
+
+        $this->assertFalse($rule->guaranteesPresence());
+    }
+
+    #[Test]
+    public function required_without_exclude_still_guarantees_presence(): void
+    {
+        // Contrast: the new exclude gate must not regress the existing feature.
+        $rule = $this->resolve('required|string');
+
+        $this->assertFalse($rule->excluded);
+        $this->assertTrue($rule->guaranteesPresence());
+    }
+
+    // --- Overflow-safe int-literal params (#1237) ---
+
+    #[Test]
+    public function min_beyond_php_int_max_contributes_no_bound(): void
+    {
+        // (int) "9223372036854775808" (PHP_INT_MAX + 1) silently saturates
+        // to PHP_INT_MAX via the cast instead of erroring — round-trip
+        // rejection catches what the earlier exact-PHP_INT_MAX guard doesn't.
+        $rule = $this->resolve('integer|min:9223372036854775808');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function max_beyond_php_int_max_contributes_no_bound(): void
+    {
+        $rule = $this->resolve('integer|max:9223372036854775808');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function gt_beyond_php_int_max_contributes_no_bound(): void
+    {
+        $rule = $this->resolve('integer|gt:9223372036854775808');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function lt_beyond_php_int_max_contributes_no_bound(): void
+    {
+        $rule = $this->resolve('integer|lt:9223372036854775808');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function min_beyond_php_int_min_contributes_no_bound(): void
+    {
+        $rule = $this->resolve('integer|min:-9223372036854775809');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
+    }
+
+    #[Test]
+    public function leading_zero_param_contributes_no_bound(): void
+    {
+        // Documented, acceptable precision loss — see intLiteralParam().
+        $rule = $this->resolve('integer|min:007');
+
+        $this->assertSame('int|numeric-string', $rule->type->getId());
     }
 }
