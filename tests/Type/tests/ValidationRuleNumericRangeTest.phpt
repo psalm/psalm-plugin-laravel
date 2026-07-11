@@ -10,6 +10,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * on integer()/float()/boolean() accessors — see
  * ValidationRuleAnalyzer::applyNumericRangeNarrowing() and
  * ValidatedTypeHandler::resolveSelfInteger().
+ *
+ * #1234 follow-up item 1: the same gate stack on safe()->integer() — see
+ * ValidatedTypeHandler::resolveValidatedInputInteger().
  */
 class NumericRangeRequest extends FormRequest
 {
@@ -121,10 +124,24 @@ function fromController(NumericRangeRequest $request): void
     $_ageRange = $request->integer('age_range');
     /** @psalm-check-type-exact $_ageRange = int<0, 24> */
 
-    // Deliberate scope boundary: resolveValidatedInputMethod() only narrows
-    // 'input' on ValidatedInput — integer()/float()/boolean() there is a follow-up.
+    // safe()->integer() (#1234 follow-up item 1) — same gate stack as the
+    // live Request's integer(), applied to ValidatedInput's rules lookup.
     $_portionsSafe = $request->safe()->integer('portions');
-    /** @psalm-check-type-exact $_portionsSafe = int */
+    /** @psalm-check-type-exact $_portionsSafe = int<1, max> */
+
+    // Optional field (no `required`) — ValidatedInput::integer() would fall
+    // back to its own $default (0) if the field is absent from safe() output.
+    $_quantitySafe = $request->safe()->integer('quantity');
+    /** @psalm-check-type-exact $_quantitySafe = int */
+
+    // Nullable field — (int) null = 0, outside int<18, max>.
+    $_ageSafe = $request->safe()->integer('age');
+    /** @psalm-check-type-exact $_ageSafe = int */
+
+    // numeric|gt:0, no explicit `integer` rule — (int) "0.5" = 0 would
+    // escape the inferred int<1, max>.
+    $_discountSafe = $request->safe()->integer('discount');
+    /** @psalm-check-type-exact $_discountSafe = int */
 }
 
 /**
@@ -162,6 +179,10 @@ function fromControllerExcluded(ExcludedFieldRequest $request): void
     // notwithstanding.
     $_all = $request->validated();
     /** @psalm-check-type-exact $_all = array{legacy_id?: int<1, max>|numeric-string, name: string} */
+
+    // Excluded field — same gate applies to safe()->integer() (#1234 follow-up item 1).
+    $_legacyIdSafe = $request->safe()->integer('legacy_id');
+    /** @psalm-check-type-exact $_legacyIdSafe = int */
 }
 ?>
 --EXPECTF--

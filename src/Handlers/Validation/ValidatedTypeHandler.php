@@ -355,19 +355,25 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * ValidatedInput::input('field'), ::str('field'), etc. → resolve via TRequest template.
+     * ValidatedInput::input('field'), ::integer('field'), ::str('field'), etc.
+     * → resolve via TRequest template.
      *
      * When safe() returns ValidatedInput<StoreUserRequest>, Psalm carries the template
      * parameter. We extract it here to look up the FormRequest's rules.
+     *
+     * float()/boolean() get no arm here: no float-range type exists to narrow
+     * to, and ValidatedInput's boolean() has no literal-precision case —
+     * ValidatedInput can only be built from already-validated data, so
+     * there's no separate "unvalidated read" surface to cover.
      */
     private static function resolveValidatedInputMethod(MethodReturnTypeProviderEvent $event): ?Union
     {
         $methodName = $event->getMethodNameLowercase();
 
-        // Only narrow input() — it returns the raw value, so the validation rule type applies.
-        // str()/string() always return Stringable, collect() always returns Collection,
-        // regardless of the validation rule — let those fall through to the stub return type.
-        if ($methodName !== 'input') {
+        // str()/string() always return Stringable, collect() always returns
+        // Collection, regardless of the validation rule — let those fall
+        // through to the stub return type.
+        if ($methodName !== 'input' && $methodName !== 'integer') {
             return null;
         }
 
@@ -396,7 +402,49 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        if ($methodName === 'integer') {
+            return self::resolveValidatedInputInteger($rules, $callArgs, $event);
+        }
+
         return self::resolveFieldType($rules, $callArgs, $event);
+    }
+
+    /**
+     * ValidatedInput::integer('field') → int component, mirroring
+     * {@see resolveSelfInteger()}'s gate stack (explicit `integer` rule +
+     * guaranteed presence + non-nullable).
+     *
+     * Presence still needs an explicit check here even though ValidatedInput
+     * only ever holds validated data: an optional (non-`required`) field's
+     * rule is satisfied by the field being entirely ABSENT from validated()
+     * output, in which case ValidatedInput::integer() falls back to its own
+     * `$default` (0) — the same "(int) $default = 0 escapes the range"
+     * hazard {@see resolveSelfAccessorRule()} guards against for the live
+     * Request, just reached via a missing array key instead of a raw null.
+     *
+     * @param array<string, ResolvedRule> $rules
+     * @param list<\PhpParser\Node\Arg> $callArgs
+     */
+    private static function resolveValidatedInputInteger(
+        array $rules,
+        array $callArgs,
+        MethodReturnTypeProviderEvent $event,
+    ): ?Union {
+        $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
+        $firstArgType = $nodeTypeProvider->getType($callArgs[0]->value);
+
+        if (!$firstArgType instanceof Union || !$firstArgType->isSingleStringLiteral()) {
+            return null;
+        }
+
+        $key = $firstArgType->getSingleStringLiteral()->value;
+        $rule = $rules[$key] ?? null;
+
+        if ($rule === null || !$rule->guaranteesPresence() || !$rule->hasIntegerRule || $rule->type->isNullable()) {
+            return null;
+        }
+
+        return self::extractIntComponent($rule->type);
     }
 
     /**
