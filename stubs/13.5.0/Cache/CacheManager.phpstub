@@ -1,0 +1,38 @@
+<?php
+
+namespace Illuminate\Cache;
+
+use Illuminate\Contracts\Cache\Factory as FactoryContract;
+
+/**
+ * Laravel 13.5.0 widened the store()/driver()/memo() name parameter to accept a
+ * \UnitEnum. The concrete-Repository return narrowing carries over unchanged; see
+ * stubs/common/Cache/CacheManager.phpstub for the rationale and issue #1230.
+ *
+ * Class declaration mirrors Laravel's source. Psalm wipes the reflected
+ * class_implements list when a stub re-declares the class, so the clause must be
+ * repeated verbatim or callers typed on the contract break.
+ *
+ * @mixin \Illuminate\Cache\Repository
+ * @mixin \Illuminate\Contracts\Cache\LockProvider
+ */
+class CacheManager implements FactoryContract
+{
+    /**
+     * @param  \UnitEnum|string|null  $name
+     * @return \Illuminate\Cache\Repository
+     */
+    public function store($name = null) {}
+
+    /**
+     * @param  \UnitEnum|string|null  $driver
+     * @return \Illuminate\Cache\Repository
+     */
+    public function driver($driver = null) {}
+
+    /**
+     * @param  \UnitEnum|string|null  $driver
+     * @return \Illuminate\Cache\Repository
+     */
+    public function memo($driver = null) {}
+}

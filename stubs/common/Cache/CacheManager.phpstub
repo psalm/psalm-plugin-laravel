@@ -1,0 +1,44 @@
+<?php
+
+namespace Illuminate\Cache;
+
+use Illuminate\Contracts\Cache\Factory as FactoryContract;
+
+/**
+ * store(), driver() and memo() document a \Illuminate\Contracts\Cache\Repository
+ * return, but at runtime the value is the concrete \Illuminate\Cache\Repository:
+ * built-in drivers are wrapped by repository() and memo() wraps in a MemoizedStore.
+ * Custom Cache::extend() drivers return whatever the creator produces; nothing
+ * enforces the concrete class, but Laravel's docs direct extension creators to
+ * return Cache::repository(...), so a custom driver is concrete by convention.
+ * Narrowing the return to the concrete class follows that convention (as Larastan
+ * does) and restores the concrete-only surface the interface hides: flexible(),
+ * tags() and the Macroable helpers. See issue #1230.
+ *
+ * Class declaration mirrors Laravel's source. Psalm wipes the reflected
+ * class_implements list when a stub re-declares the class, so the clause must be
+ * repeated verbatim or callers typed on the contract break.
+ *
+ * @mixin \Illuminate\Cache\Repository
+ * @mixin \Illuminate\Contracts\Cache\LockProvider
+ */
+class CacheManager implements FactoryContract
+{
+    /**
+     * @param  string|null  $name
+     * @return \Illuminate\Cache\Repository
+     */
+    public function store($name = null) {}
+
+    /**
+     * @param  string|null  $driver
+     * @return \Illuminate\Cache\Repository
+     */
+    public function driver($driver = null) {}
+
+    /**
+     * @param  string|null  $driver
+     * @return \Illuminate\Cache\Repository
+     */
+    public function memo($driver = null) {}
+}
