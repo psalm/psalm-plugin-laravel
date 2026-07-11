@@ -1010,6 +1010,65 @@ final class ValidationRuleAnalyzerTest extends TestCase
         $this->assertTrue($rule->guaranteesPresence());
     }
 
+    // --- Explicit accepted/declined-rule tracking for boolean() literal precision (#1234 follow-up item 6) ---
+
+    #[Test]
+    public function accepted_rule_sets_has_accepted_rule_flag(): void
+    {
+        $rule = $this->resolve('required|accepted');
+
+        $this->assertTrue($rule->hasAcceptedRule);
+        $this->assertFalse($rule->hasDeclinedRule);
+    }
+
+    #[Test]
+    public function declined_rule_sets_has_declined_rule_flag(): void
+    {
+        $rule = $this->resolve('required|declined');
+
+        $this->assertTrue($rule->hasDeclinedRule);
+        $this->assertFalse($rule->hasAcceptedRule);
+    }
+
+    #[Test]
+    public function accepted_if_rule_does_not_set_has_accepted_rule_flag(): void
+    {
+        // Conditional — the runtime shape depends on a value we can't
+        // evaluate statically, so the literal isn't guaranteed either way.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['accepted_if:plan,pro']);
+
+        $this->assertFalse($rule->hasAcceptedRule);
+    }
+
+    #[Test]
+    public function declined_if_rule_does_not_set_has_declined_rule_flag(): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['declined_if:plan,free']);
+
+        $this->assertFalse($rule->hasDeclinedRule);
+    }
+
+    #[Test]
+    public function plain_boolean_rule_does_not_set_either_flag(): void
+    {
+        $rule = $this->resolve('required|boolean');
+
+        $this->assertFalse($rule->hasAcceptedRule);
+        $this->assertFalse($rule->hasDeclinedRule);
+    }
+
+    #[Test]
+    public function accepted_and_declined_together_set_both_flags(): void
+    {
+        // Contradictory in practice (no value satisfies both), but the
+        // analyzer just reports what rules are present — resolveSelfBoolean()'s
+        // mutual-exclusion guard is what decides not to narrow, not this flag.
+        $rule = $this->resolve('required|accepted|declined');
+
+        $this->assertTrue($rule->hasAcceptedRule);
+        $this->assertTrue($rule->hasDeclinedRule);
+    }
+
     // --- Overflow-safe int-literal params (#1237) ---
 
     #[Test]
