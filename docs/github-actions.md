@@ -20,7 +20,7 @@ This writes `.github/workflows/psalm.yml`, copied verbatim from the plugin's bun
 Two jobs that run in parallel:
 
 * **Type analysis.** A plain `./vendor/bin/psalm` run. Psalm auto-selects the GitHub annotation format on stdout when it detects Actions, so findings appear on the PR's Files changed tab. With no report written, Psalm exits non-zero on findings and fails the job directly.
-* **Taint analysis.** A `./vendor/bin/psalm --taint-analysis` run that writes SARIF, uploads it to the Security tab (Code Scanning) via `github/codeql-action/upload-sarif`, and fails the build on any error-level finding. When Psalm writes a report during taint analysis inside Actions it exits 0 even on findings, so a final step reads the SARIF and fails CI from it.
+* **Taint analysis.** A `./vendor/bin/psalm --taint-analysis` run that writes SARIF. When Psalm writes a report during taint analysis inside Actions it exits 0 even on findings, so a final step reads the SARIF and fails CI from it. Results also upload to the Security tab (Code Scanning) via `github/codeql-action/upload-sarif`, skipped on fork and Dependabot pull requests where GitHub caps the `GITHUB_TOKEN` at read-only and the upload would fail — those PRs are still gated by the annotations and the failing step.
 
 Two jobs are required on Psalm 6.x because `--taint-analysis` switches Psalm to a taint-only mode that skips type analysis, so a single run cannot cover both. (Psalm 7 enables taint by default and the `master` branch ships a single-job template instead.)
 

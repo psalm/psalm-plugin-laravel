@@ -389,10 +389,17 @@ function validator(array $data = [], array $rules = [], array $messages = [], ar
 /**
  * Get the evaluated view contents for the given view.
  *
+ * Branches on argument count (func_num_args() is 0), not on $view's value —
+ * `view(null)` still returns a View, matching Laravel's own helper. The contract
+ * returns here are the sound fallback; MissingViewHandler narrows the zero-arg
+ * form to the app's resolved factory class (any scanned class qualifies) and the
+ * argument-supplied form to `\Illuminate\View\View`, the latter only when that
+ * resolved factory is the stock `\Illuminate\View\Factory`.
+ *
  * @param  string|null  $view
  * @param  \Illuminate\Contracts\Support\Arrayable<string, mixed>|array<string, mixed>  $data
  * @param  array<string, mixed>  $mergeData
- * @return ($view is null ? \Illuminate\Contracts\View\Factory : (\Illuminate\View\View|\Illuminate\Contracts\View\View))
+ * @return (func_num_args() is 0 ? \Illuminate\Contracts\View\Factory : \Illuminate\Contracts\View\View)
  */
 function view($view = null, $data = [], $mergeData = []) {}
 

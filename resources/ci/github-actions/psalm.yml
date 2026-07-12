@@ -90,7 +90,13 @@ jobs:
       - name: Run Psalm (taint analysis)
         run: ./vendor/bin/psalm --taint-analysis --ignore-baseline --report=psalm.sarif --report-show-info=false
 
+      # Skipped on fork and Dependabot PRs: GitHub caps their GITHUB_TOKEN at read-only, so the upload
+      # would fail with "Resource not accessible by integration" despite `security-events: write` above.
+      # The "Fail on Psalm findings" step below still runs — findings block those PRs via annotations + exit code.
       - name: Upload SARIF to GitHub Code Scanning
+        if: >-
+          github.actor != 'dependabot[bot]' &&
+          (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           sarif_file: psalm.sarif

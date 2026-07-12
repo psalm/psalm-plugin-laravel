@@ -9,6 +9,7 @@ use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
+use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
@@ -21,6 +22,9 @@ use Psalm\Type\Union;
  * - FormRequest::safe([...])         → partial array shape for specified keys
  * - Request::validate([...])         → array shape from inline rules argument
  * - ValidatedInput::input('field')   → single field type (via generic TRequest parameter)
+ * - ValidatedInput::integer('field') → int component, same integer-cast gate stack
+ * - $this->input()/$this->integer()/$this->boolean() (or $request->...) →
+ *   single field type, gated on presence (see {@see resolveSelfAccessorRule})
  *
  * ValidatedInput is generic: ValidatedInput<TRequest of FormRequest>. When safe() returns
  * ValidatedInput<static>, the template parameter carries the concrete FormRequest class,
@@ -53,6 +57,9 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             // resolveSelfInput dispatch below never fires for
             // `$this->input(...)` inside a FormRequest subclass. See #1015.
             \Illuminate\Http\Concerns\InteractsWithInput::class,
+            // Same #1015 reasoning — integer()/float()/boolean()/string()/str()
+            // also live on a trait, not FormRequest/Request directly.
+            \Illuminate\Support\Traits\InteractsWithData::class,
         ];
     }
 
@@ -73,50 +80,133 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             'safe' => self::resolveSafe($event),
             'validate' => self::resolveInlineValidate($event),
             'input' => self::resolveSelfInput($event),
+            'integer' => self::resolveSelfInteger($event),
+            'boolean' => self::resolveSelfBoolean($event),
             default => null,
         };
     }
 
     /**
-     * FormRequest subclass::input('field') → rule type, when the field's rule
-     * guarantees presence (required / present / accepted / declined).
+     * $this->input('field') → rule type, via {@see resolveSelfAccessorRule()}.
+     * Covers `$this->input(...)` inside the FormRequest itself (also
+     * prepareForValidation/withValidator/etc.) — see #1015.
      *
-     * Covers `$this->input(...)` called inside the FormRequest itself
-     * (prepareForValidation, passedValidation, withValidator, custom helpers)
-     * — the controller-side narrowing already flows through `validated()` and
-     * `safe()->input()`. See issue #1015.
-     *
-     * Soundness window: only fields with an unconditional presence rule
-     * (required / present / accepted / declined, and only when `sometimes`
-     * is absent) narrow — the field is guaranteed to exist post-validation,
-     * matching the validated() trade-off. Optional fields, `sometimes|required`,
-     * and conditional-presence siblings (required_if, present_with, …) fall
-     * through to the stub's mixed return. Mirrors the `required`-gated
-     * `setPossiblyUndefined` branch in {@see buildUnionFromTree}.
-     *
-     * Pre-validation unsoundness (deliberate, documented): reads in
-     * prepareForValidation() / authorize() / rules() callbacks run BEFORE
-     * the validator has constrained the value, so `required|integer` does
-     * not yet imply the runtime value is `int|numeric-string`. This narrowing
-     * matches the existing validated()-style "trust the rule" precedent for
-     * analysis precision; downstream consumers in pre-validation contexts
-     * (notably `header()` sinks) carry the same residual false-negative
-     * surface that the controller-side narrowing has always had.
-     *
-     * Inheritance gate: `getRulesForCalledClass` only resolves `rules()`
-     * via the codebase classlike storage, so a custom Request subclass
-     * (or other unrelated class) that happens to define `rules()` could in
-     * principle slip through. We require the called class to actually
-     * extend `FormRequest` to keep the narrowing scoped to the framework
-     * contract it models.
-     *
-     * The taint flow for the narrowed expression is restored in
-     * {@see ValidatedFieldReadResolver} — Psalm drops
-     * the stub's @psalm-taint-source when a return-type override fires,
-     * so the taint handler explicitly re-emits ALL_INPUT for `input()` on
-     * a FormRequest caller.
+     * Taint is restored in {@see ValidatedFieldReadResolver} (the stub's
+     * @psalm-taint-source is dropped when a return-type override fires).
+     * integer() needs none: it was never a taint source.
      */
     private static function resolveSelfInput(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $resolved = self::resolveSelfAccessorRule($event);
+
+        if ($resolved === null) {
+            return null;
+        }
+
+        [, $rules] = $resolved;
+
+        return self::resolveFieldType($rules, $event->getCallArgs(), $event);
+    }
+
+    /**
+     * $this->integer('field') → int component (TIntRange/TLiteralInt/TInt),
+     * via {@see resolveSelfAccessorRule()} for presence + rules() lookup.
+     * $default is never unioned in — with presence guaranteed it's never
+     * consulted, unlike validated($key, $default).
+     *
+     * Nullable bail (kept out of the shared helper): (int) null = 0, which
+     * can fall outside the range even with presence guaranteed — unlike
+     * input(), where null is a legitimately valid raw return value.
+     *
+     * Explicit-integer gate: only narrows when the field's rule includes a
+     * literal `integer` — (int) projects float/string atomics onto int, so
+     * e.g. `accepted` alone (TLiteralInt(1) in its type) or `numeric` (any
+     * float) would otherwise infer a value the cast can't actually produce
+     * ((int) "yes" = 0, (int) "0.5" = 0). Only `integer` forces the raw
+     * value to already be int-formatted, making the cast lossless.
+     *
+     * Falls through to plain `int` when the field is unknown, absent-
+     * capable, nullable, has no explicit `integer` rule, or has no int
+     * component.
+     */
+    private static function resolveSelfInteger(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $resolved = self::resolveSelfAccessorRule($event);
+
+        if ($resolved === null) {
+            return null;
+        }
+
+        [$rule] = $resolved;
+
+        if (!$rule->hasIntegerRule || $rule->type->isNullable()) {
+            return null;
+        }
+
+        return self::extractIntComponent($rule->type);
+    }
+
+    /**
+     * $this->boolean('field') → TTrue/TFalse literal, when the field's rules
+     * unconditionally require `accepted` or `declined` (#1234 follow-up item 6).
+     *
+     * Sound because boolean() is `filter_var(..., FILTER_VALIDATE_BOOLEAN)`:
+     * every value Laravel's `accepted` rule admits (yes/on/1/"1"/true/"true")
+     * filters to true, and every `declined`-admitted value (no/off/0/"0"/
+     * false/"false") filters to false — see
+     * `Illuminate\Validation\Concerns\ValidatesAttributes::validateAccepted()`
+     * / `validateDeclined()`. `accepted_if`/`declined_if` are conditional and
+     * never set {@see ResolvedRule::$hasAcceptedRule}/`$hasDeclinedRule` (see
+     * {@see \Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer::resolveRuleSegments()}),
+     * so they fall through here too.
+     *
+     * Nullable bail (same rationale as resolveSelfInteger()):
+     * `filter_var(null, FILTER_VALIDATE_BOOLEAN) = false`, which falls
+     * outside a claimed literal `true`.
+     *
+     * Falls through to plain `bool` when the field is unknown, absent-
+     * capable, nullable, or has no unconditional accepted/declined rule.
+     */
+    private static function resolveSelfBoolean(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $resolved = self::resolveSelfAccessorRule($event);
+
+        if ($resolved === null) {
+            return null;
+        }
+
+        [$rule] = $resolved;
+
+        if ($rule->type->isNullable()) {
+            return null;
+        }
+
+        if ($rule->hasAcceptedRule && !$rule->hasDeclinedRule) {
+            return Type::getTrue();
+        }
+
+        if ($rule->hasDeclinedRule && !$rule->hasAcceptedRule) {
+            return Type::getFalse();
+        }
+
+        return null;
+    }
+
+    /**
+     * Shared prefix for resolveSelfInput()/resolveSelfInteger()/resolveSelfBoolean():
+     * resolves the rule-covered field for `$this->...`/`$request->...`.
+     *
+     * Presence gate: narrows only when the rule unconditionally guarantees
+     * the field exists (required/present/accepted/declined, no `sometimes`)
+     * — an absent field's fallback default isn't derived from the rule.
+     *
+     * Pre-validation caveat (applies to every caller): reads before the
+     * validator runs (prepareForValidation() etc.) trust the rule anyway,
+     * same tradeoff as validated().
+     *
+     * @return array{0: ResolvedRule, 1: array<string, ResolvedRule>}|null
+     */
+    private static function resolveSelfAccessorRule(MethodReturnTypeProviderEvent $event): ?array
     {
         $callArgs = $event->getCallArgs();
 
@@ -124,10 +214,8 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // Cheap literal-key check first — dynamic-key call sites are common and
-        // skipping the rules() AST walk for them avoids a per-expression hit
-        // (extractRulesFromClass walks parent_class via classlike storage; not
-        // free even after the per-class memoization).
+        // Cheap literal-key check first — avoids the rules() AST walk for
+        // the common dynamic-key case.
         $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
         $firstArgType = $nodeTypeProvider->getType($callArgs[0]->value);
 
@@ -135,10 +223,34 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // Inheritance gate: limit narrowing to genuine FormRequest subclasses.
-        // InteractsWithInput is also used by plain Request and by user-authored
-        // traits that pair an unrelated `rules()` method with the trait — none
-        // of those should be narrowed under the FormRequest validation contract.
+        $rules = self::getRulesForSelfAccessor($event);
+
+        if ($rules === null) {
+            return null;
+        }
+
+        $key = $firstArgType->getSingleStringLiteral()->value;
+        $rule = $rules[$key] ?? null;
+
+        // sometimes|required: field can be absent even when required.
+        if ($rule === null || !$rule->guaranteesPresence()) {
+            return null;
+        }
+
+        return [$rule, $rules];
+    }
+
+    /**
+     * rules() for a self-accessor call site, called from
+     * {@see resolveSelfAccessorRule()}.
+     *
+     * Inheritance gate: InteractsWithInput/InteractsWithData are also used
+     * by plain Request — only narrow genuine FormRequest subclasses.
+     *
+     * @return array<string, ResolvedRule>|null
+     */
+    private static function getRulesForSelfAccessor(MethodReturnTypeProviderEvent $event): ?array
+    {
         $calledClass = $event->getCalledFqClasslikeName();
 
         if ($calledClass === null) {
@@ -163,30 +275,33 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // `classExtends` succeeded above (no UnpopulatedClasslikeException), so
-        // Psalm has metadata for `$calledClass`. Narrow to `class-string` here
-        // since `getCalledFqClasslikeName()` is typed as plain `string`.
+        // classExtends succeeded, so Psalm has metadata; narrow to class-string.
         /** @var class-string $calledClass */
-        $rules = ValidationRuleAnalyzer::getRulesForFormRequest($calledClass);
+        return ValidationRuleAnalyzer::getRulesForFormRequest($calledClass);
+    }
 
-        if ($rules === null) {
+    /**
+     * Int-family atomics (TIntRange/TLiteralInt/TInt) only; drops numeric-
+     * string/float siblings, mirroring what (int) cares about. Null (→
+     * plain `int` stub) when there's no int component.
+     *
+     * @psalm-pure
+     */
+    private static function extractIntComponent(Union $type): ?Union
+    {
+        $intAtomics = [];
+
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TInt) {
+                $intAtomics[] = $atomic;
+            }
+        }
+
+        if ($intAtomics === []) {
             return null;
         }
 
-        $key = $firstArgType->getSingleStringLiteral()->value;
-        $rule = $rules[$key] ?? null;
-
-        // Bail when the field has no rule or the rule does not guarantee
-        // presence. Laravel's `sometimes|required` means "if the field is
-        // present it must be valid", so the field can still be legitimately
-        // absent at the input() call site — same treatment {@see buildUnionFromTree}
-        // gives the validated() output (marks the field possibly_undefined
-        // when `sometimes || !required`).
-        if ($rule === null || !$rule->guaranteesPresence()) {
-            return null;
-        }
-
-        return self::resolveFieldType($rules, $callArgs, $event);
+        return new Union($intAtomics);
     }
 
     /**
@@ -288,19 +403,25 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * ValidatedInput::input('field'), ::str('field'), etc. → resolve via TRequest template.
+     * ValidatedInput::input('field'), ::integer('field'), ::str('field'), etc.
+     * → resolve via TRequest template.
      *
      * When safe() returns ValidatedInput<StoreUserRequest>, Psalm carries the template
      * parameter. We extract it here to look up the FormRequest's rules.
+     *
+     * float()/boolean() get no arm here: no float-range type exists to narrow
+     * to, and ValidatedInput's boolean() has no literal-precision case —
+     * ValidatedInput can only be built from already-validated data, so
+     * there's no separate "unvalidated read" surface to cover.
      */
     private static function resolveValidatedInputMethod(MethodReturnTypeProviderEvent $event): ?Union
     {
         $methodName = $event->getMethodNameLowercase();
 
-        // Only narrow input() — it returns the raw value, so the validation rule type applies.
-        // str()/string() always return Stringable, collect() always returns Collection,
-        // regardless of the validation rule — let those fall through to the stub return type.
-        if ($methodName !== 'input') {
+        // str()/string() always return Stringable, collect() always returns
+        // Collection, regardless of the validation rule — let those fall
+        // through to the stub return type.
+        if ($methodName !== 'input' && $methodName !== 'integer') {
             return null;
         }
 
@@ -329,7 +450,49 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        if ($methodName === 'integer') {
+            return self::resolveValidatedInputInteger($rules, $callArgs, $event);
+        }
+
         return self::resolveFieldType($rules, $callArgs, $event);
+    }
+
+    /**
+     * ValidatedInput::integer('field') → int component, mirroring
+     * {@see resolveSelfInteger()}'s gate stack (explicit `integer` rule +
+     * guaranteed presence + non-nullable).
+     *
+     * Presence still needs an explicit check here even though ValidatedInput
+     * only ever holds validated data: an optional (non-`required`) field's
+     * rule is satisfied by the field being entirely ABSENT from validated()
+     * output, in which case ValidatedInput::integer() falls back to its own
+     * `$default` (0) — the same "(int) $default = 0 escapes the range"
+     * hazard {@see resolveSelfAccessorRule()} guards against for the live
+     * Request, just reached via a missing array key instead of a raw null.
+     *
+     * @param array<string, ResolvedRule> $rules
+     * @param list<\PhpParser\Node\Arg> $callArgs
+     */
+    private static function resolveValidatedInputInteger(
+        array $rules,
+        array $callArgs,
+        MethodReturnTypeProviderEvent $event,
+    ): ?Union {
+        $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
+        $firstArgType = $nodeTypeProvider->getType($callArgs[0]->value);
+
+        if (!$firstArgType instanceof Union || !$firstArgType->isSingleStringLiteral()) {
+            return null;
+        }
+
+        $key = $firstArgType->getSingleStringLiteral()->value;
+        $rule = $rules[$key] ?? null;
+
+        if ($rule === null || !$rule->guaranteesPresence() || !$rule->hasIntegerRule || $rule->type->isNullable()) {
+            return null;
+        }
+
+        return self::extractIntComponent($rule->type);
     }
 
     /**
@@ -484,7 +647,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
                 }
 
                 $fieldType = $child->rule->type;
-                if ($child->rule->sometimes || !$child->rule->required) {
+                if (!$child->rule->guaranteesPresence()) {
                     $fieldType = $fieldType->setPossiblyUndefined(true);
                 }
 
@@ -496,7 +659,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
             $nested = self::buildUnionFromTree($child);
 
             if ($nested instanceof Union) {
-                if ($child->rule !== null && ($child->rule->sometimes || !$child->rule->required)) {
+                if ($child->rule !== null && !$child->rule->guaranteesPresence()) {
                     $nested = $nested->setPossiblyUndefined(true);
                 }
 
