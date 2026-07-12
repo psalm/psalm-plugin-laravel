@@ -14,6 +14,7 @@ use Psalm\LaravelPlugin\Issues\MissingTranslation;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNonEmptyArray;
 use Psalm\Type\Union;
 
@@ -32,8 +33,16 @@ use Psalm\Type\Union;
  * Namespaced package keys (e.g., 'package::file.key') are skipped
  * since packages may not have their translations published.
  *
- * Falls back to the stub conditional return type for edge cases
- * like __() with no args (null) or trans() with no args (Translator).
+ * A bare `trans()` call (no args) hits Laravel's `is_null($key)` branch, which
+ * returns `app('translator')` — the very binding this handler captured at
+ * plugin boot (see init()). That resolved binding is narrowed to its concrete
+ * class rather than left on the `Translator` contract of the vendor docblock's
+ * conditional return (trans() is deliberately not stubbed), as long as the
+ * codebase Psalm scanned actually declares it (an app could bind a subclass
+ * Psalm never scanned). `__()` shares the `is_null($key)` structure, but its
+ * null-key branch returns `$key` (null) instead of the translator, so a bare
+ * `__()` keeps its stub fallback. `trans(null)` (an explicit null key) also
+ * stays on the vendor conditional — only the truly zero-arg call is narrowed.
  *
  * The findMissingTranslations config option controls only whether
  * MissingTranslation issues are emitted — type narrowing is always
@@ -58,12 +67,16 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
      */
     private static array $resolvedKeys = [];
 
+    /** @var array<class-string, Union> cache of the zero-arg trans() concrete union, keyed by resolved translator class (Psalm 7 unions are immutable) */
+    private static array $zeroArgTransUnions = [];
+
     /** @psalm-external-mutation-free */
     public static function init(Translator $translator, bool $reportMissing): void
     {
         self::$translator = $translator;
         self::$reportMissing = $reportMissing;
         self::$resolvedKeys = [];
+        self::$zeroArgTransUnions = [];
     }
 
     /**
@@ -83,8 +96,10 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         $callArgs = $event->getCallArgs();
 
         if ($callArgs === []) {
-            // __() returns null, trans() returns Translator — handled by stubs
-            return null;
+            // A truly zero-arg call — never reachable for `trans(...$args)`, whose
+            // spread produces one Arg node regardless of the spread array's runtime
+            // size, so no separate unpack check is needed here.
+            return self::resolveZeroArgTransType($event);
         }
 
         // Try to resolve literal string keys precisely via the Translator
@@ -118,6 +133,33 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         // Non-string args (e.g. __(null)) — handled by stubs
         return null;
+    }
+
+    /**
+     * Narrow a bare `trans()` call to the concrete resolved Translator class.
+     *
+     * Only `trans` is eligible — `__()` returns null for a bare call, so its
+     * zero-arg form stays on its stub fallback. `Plugin::initTranslationKeyHandler()`
+     * already guarantees `self::$translator` is a real `\Illuminate\Translation\Translator`
+     * before init() runs, so the narrowed class is the actual resolved concrete
+     * (normally `Illuminate\Translation\Translator`, possibly an app subclass).
+     */
+    private static function resolveZeroArgTransType(FunctionReturnTypeProviderEvent $event): ?Union
+    {
+        if ($event->getFunctionId() !== 'trans' || !self::$translator instanceof Translator) {
+            return null;
+        }
+
+        $class = self::$translator::class;
+
+        if (!$event->getStatementsSource()->getCodebase()->classExists($class)) {
+            // The app may bind a Translator subclass Psalm never scanned — fall
+            // back to the vendor docblock's contract-typed conditional instead
+            // of naming an unknown class.
+            return null;
+        }
+
+        return self::$zeroArgTransUnions[$class] ??= new Union([new TNamedObject($class)]);
     }
 
     /**

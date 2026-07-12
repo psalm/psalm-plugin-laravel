@@ -7,6 +7,12 @@
 view('nonexistent');
 view('emails.welcom');
 
+// A trailing spread must not swallow the diagnostic — the literal first
+// argument is still checkable (only a leading spread hides it)
+/** @psalm-var list<array<string, mixed>> $spreadData */
+$spreadData = [];
+view('missing-with-spread', ...$spreadData);
+
 // No arguments — returns factory, should not emit
 view();
 
@@ -34,6 +40,7 @@ function test_factory_make(\Illuminate\View\Factory $factory): void {
 --EXPECTF--
 MissingView on line %d: View 'nonexistent' not found in any of the registered view paths
 MissingView on line %d: View 'emails.welcom' not found in any of the registered view paths
+MissingView on line %d: View 'missing-with-spread' not found in any of the registered view paths
 MissingView on line %d: View 'nonexistent-direct' not found in any of the registered view paths
 MissingView on line %d: View 'nonexistent-facade' not found in any of the registered view paths
 MissingView on line %d: View 'nonexistent-fqcn' not found in any of the registered view paths

@@ -629,4 +629,48 @@ class Builder implements BuilderContract
      * @return int<0, max>
      */
     public function getCountForPagination($columns = ['*']) {}
+
+    /**
+     * Paginate the given query into a simple paginator.
+     *
+     * Vendor declares these returns as the ungenerified concrete (paginate())
+     * or the Pagination contracts (simplePaginate()/cursorPaginate()); Query\Builder
+     * rows always hydrate as stdClass (see get()/cursor() above), so all three are
+     * narrowed here to the concrete Pagination classes with `<int, \stdClass>`.
+     * Eloquent\Builder's own stub models the model-typed equivalent (`<int, TModel>`).
+     *
+     * @param  int|\Closure  $perPage
+     * @param  string|\Illuminate\Contracts\Database\Query\Expression|array<string|\Illuminate\Contracts\Database\Query\Expression>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @param  \Closure|int|null  $total
+     * @return \Illuminate\Pagination\LengthAwarePaginator<int, \stdClass>
+     */
+    public function paginate($perPage = 15, $columns = ['*'], $pageName = 'page', $page = null, $total = null) {}
+
+    /**
+     * Get a paginator only supporting simple next and previous links.
+     *
+     * This is more efficient on larger data-sets, etc.
+     *
+     * @param  int  $perPage
+     * @param  string|\Illuminate\Contracts\Database\Query\Expression|array<string|\Illuminate\Contracts\Database\Query\Expression>  $columns
+     * @param  string  $pageName
+     * @param  int|null  $page
+     * @return \Illuminate\Pagination\Paginator<int, \stdClass>
+     */
+    public function simplePaginate($perPage = 15, $columns = ['*'], $pageName = 'page', $page = null) {}
+
+    /**
+     * Get a paginator only supporting simple next and previous links.
+     *
+     * This is more efficient on larger data-sets, etc.
+     *
+     * @param  int|null  $perPage
+     * @param  string|\Illuminate\Contracts\Database\Query\Expression|array<string|\Illuminate\Contracts\Database\Query\Expression>  $columns
+     * @param  string  $cursorName
+     * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
+     * @return \Illuminate\Pagination\CursorPaginator<int, \stdClass>
+     */
+    public function cursorPaginate($perPage = 15, $columns = ['*'], $cursorName = 'cursor', $cursor = null) {}
 }
