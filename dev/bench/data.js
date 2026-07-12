@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783812223238,
+  "lastUpdate": 1783854315416,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8320,6 +8320,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.1,
             "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ced43f157cf1391b6b3453aae0f31585ff61619a",
+          "message": "Narrow stable Laravel producer returns to concrete implementations (#1240)\n\n* feat: narrow stable Laravel producer returns to concrete implementations\n\nKnown producers declare a contract return but their framework\nimplementation always constructs one stable concrete, so calling a\nconcrete-only method (Password::broker()->createToken(),\nview('x')->fragment(), DB::table()->paginate()->linkCollection())\nraised a false UndefinedInterfaceMethod.\n\nNarrow by provenance, never by conformance:\n- ProducerReturnTypeHandler maps PasswordBrokerManager::broker() and\n  View\\Factory::make()/file()/first() (plus facades + root aliases) to\n  their concrete, gated by a real-vs-pseudo discriminator, a drift guard\n  on the declared contract, and a paired params provider for the facade\n  pseudo-method path.\n- view()/trans() narrow via their existing handlers by argument count,\n  to the app's boot-resolved binding (view()'s argument-supplied form\n  only for the stock Factory).\n- Query\\Builder pagination is stub-typed to the concrete paginators with\n  stdClass rows.\n\nContract FQCNs are never registered and interface storage is never\nmutated, so bare contract-typed values keep the contract-only surface\n(negative tests prove UndefinedInterfaceMethod still fires).\n\n* docs: document producer return narrowing policy\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix: address review — spread soundness, drift guard, facade, lifecycle\n\n- view()/trans() leading spread now returns the sound union of both\n  func_num_args() branches instead of a bare concrete: an empty spread\n  runs the zero-arg branch (factory / translator) at runtime, so pinning\n  the argument-supplied concrete was unsound. Corrects the test that\n  pinned the wrong result and adds the trans() case.\n- MissingViewHandler hardcodes the canonical View facade so the\n  missing-view diagnostic still fires under a trimmed alias registry\n  before ProducerReturnTypeHandler narrows (Auth-handler precedent).\n- Drift guard replaces only the contract atomic, preserving siblings, so\n  a future Contract|null is not silently flattened to non-null.\n- Rebuild app-dependent statics on each plugin init (family index reset,\n  view-factory class always overwritten) for reused processes.\n- require_once the view handler before its first static touch (psalm.phar\n  autoloader may be absent in the init phase).\n- Replace the empty-subclass pin with a real viewInstance() override and\n  correct the soundness note: a substitute implementation yields a false\n  negative always, and a false positive for a non-Macroable producer\n  (View's __call masks it; PasswordBroker would exhibit it).\n\n* refactor: resolve view binding once, tighten narrowing docs + test\n\n- Resolve the 'view' binding a single time in __invoke() and thread it\n  into both init paths, instead of resolving twice when 'view.finder' is\n  absent.\n- decisions.md: zero-arg view()/trans() narrow to the resolved binding\n  only when it is the framework class or a subclass, not \"whatever class\"\n  it resolved to.\n- Exercise CustomView::badge() so the documented __call masking of the\n  false-positive direction is actually asserted.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix(ci): restore rector-stripped narrowing docblocks as @psalm-return\n\nThe style: auto-fix workflow ran rector, which stripped docblocks that\nare narrower than the native return type — @return self<TModel> over\nnative ': self' on the custom builder fixtures, and @return\nlowercase-string over ': string' on extractCalledMethodName. Removing\nthem collapsed WorkOrderBuilder<TModel> to <Model> (type-test failure)\nand dropped the lowercase-string proof feeding a @param lowercase-string\ncall site (Psalm ArgumentTypeCoercion).\n\nRestore each with the @psalm- prefix, which rector ignores (verified: a\nlocal rector run no longer strips them), so the next auto-fix pass can't\nre-break them.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-07-12T13:02:05+02:00",
+          "tree_id": "28363cb6a728b8b4f28b05b9c38f81ba51d67c90",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ced43f157cf1391b6b3453aae0f31585ff61619a"
+        },
+        "date": 1783854314937,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.02,
+            "range": "± 0.09",
             "unit": "s"
           },
           {
