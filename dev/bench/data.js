@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783854315416,
+  "lastUpdate": 1783866062417,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8355,6 +8355,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.02,
             "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8dea3f79a652d95c35ca4f15eb4274a42580383d",
+          "message": "Fix whereDate two-argument overload (#1247)",
+          "timestamp": "2026-07-12T16:18:26+02:00",
+          "tree_id": "c4e7c2dcdf55a37891f54e8293fbf0a09afc164e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8dea3f79a652d95c35ca4f15eb4274a42580383d"
+        },
+        "date": 1783866061536,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.64,
+            "range": "± 0.02",
             "unit": "s"
           },
           {
