@@ -119,6 +119,7 @@ final class PluginInvocationStateTest extends TestCase
         $call->setAttribute('startFilePos', 0);
         $call->setAttribute('endFilePos', 10);
         $call->args = $viewName === null ? [] : [new Arg(new String_($viewName))];
+
         $event = new FunctionReturnTypeProviderEvent(
             $source,
             $function,
@@ -189,10 +190,7 @@ final class InvocationStateViewFactory extends Factory
     }
 }
 
-final class InvocationStateUnsupportedViewFactory
-{
-    public function __construct(Dispatcher $events) {}
-}
+final class InvocationStateUnsupportedViewFactory {}
 
 final class InvocationStateNoTranslatorApplication extends \Illuminate\Foundation\Application
 {

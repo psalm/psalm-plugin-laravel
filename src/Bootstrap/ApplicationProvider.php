@@ -80,7 +80,7 @@ final class ApplicationProvider
         /** @psalm-suppress ImpureMethodCall framework global reset */
         \Illuminate\Foundation\AliasLoader::getInstance()->setAliases([]);
         /** @psalm-suppress ImpureMethodCall framework global reset */
-        \Illuminate\Container\Container::setInstance(null);
+        \Illuminate\Container\Container::setInstance();
     }
 
     /**
