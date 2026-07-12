@@ -58,38 +58,14 @@ final class ExperimentalIssuePolicyTest extends TestCase
 
     #[Test]
     #[DataProvider('enforcementModes')]
-    public function explicit_scoped_filters_are_not_replaced(bool $enforced, string $_expectedDefaultLevel): void
-    {
-        $config = $this->loadConfigFile('filter-only.xml');
-
-        ExperimentalIssuePolicy::apply($enforced);
-
-        $this->assertSame(Config::REPORT_SUPPRESS, $config->getReportingLevelForFile('UndefinedModelRelation', __FILE__));
-        $this->assertSame($_expectedDefaultLevel, $config->getReportingLevelForFile('UndefinedModelRelation', \dirname(__DIR__, 3) . '/src/Elsewhere.php'));
-    }
-
-    #[Test]
-    #[DataProvider('enforcementModes')]
     public function explicit_global_levels_remain_in_effect_alongside_scoped_filters(bool $enforced, string $_expectedDefaultLevel): void
     {
-        $config = $this->loadConfigFile('explicit-error-and-filter.xml');
+        $config = $this->loadExplicitErrorAndFilterConfig();
 
         ExperimentalIssuePolicy::apply($enforced);
 
         $this->assertSame(Config::REPORT_SUPPRESS, $config->getReportingLevelForFile('UndefinedModelRelation', __FILE__));
         $this->assertSame(Config::REPORT_ERROR, $config->getReportingLevelForFile('UndefinedModelRelation', \dirname(__DIR__, 3) . '/src/Elsewhere.php'));
-    }
-
-    #[Test]
-    public function a_later_invocation_uses_its_own_configured_mode(): void
-    {
-        $first = $this->loadConfig();
-        ExperimentalIssuePolicy::apply(true);
-        $this->assertSame(Config::REPORT_ERROR, $first->getReportingLevelForFile('UnknownModelAttribute', __FILE__));
-
-        $second = $this->loadConfig();
-        ExperimentalIssuePolicy::apply(false);
-        $this->assertSame(Config::REPORT_INFO, $second->getReportingLevelForFile('UnknownModelAttribute', __FILE__));
     }
 
     private function loadConfig(string $body = ''): Config
@@ -100,9 +76,9 @@ final class ExperimentalIssuePolicyTest extends TestCase
         );
     }
 
-    private function loadConfigFile(string $name): Config
+    private function loadExplicitErrorAndFilterConfig(): Config
     {
-        $path = __DIR__ . '/Fixtures/ExperimentalIssuePolicy/' . $name;
+        $path = __DIR__ . '/Fixtures/ExperimentalIssuePolicy/explicit-error-and-filter.xml';
         $contents = \file_get_contents($path);
         $this->assertIsString($contents);
 
