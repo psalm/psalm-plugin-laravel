@@ -564,6 +564,8 @@ final class InlineValidateRulesCollector implements
                 $existing[$field]->nullable,
                 $existing[$field]->sometimes,
                 $existing[$field]->required,
+                $existing[$field]->hasIntegerRule,
+                $existing[$field]->excluded,
             );
         }
 

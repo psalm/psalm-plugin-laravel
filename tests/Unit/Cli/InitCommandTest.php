@@ -308,6 +308,32 @@ final class InitCommandTest extends TestCase
     }
 
     #[Test]
+    public function monorepo_package_source_is_not_swallowed_by_the_packages_ignore(): void
+    {
+        // Monorepo layout: PSR-4 source lives under packages/*/src. 'packages' is
+        // no longer an ignore candidate, so it must not appear in <ignoreFiles>;
+        // otherwise it would remove the whole source tree from ANALYSIS (Psalm
+        // still scans it for reflection) — a silent zero-issue run. Genuine
+        // ignores like vendor/ are still emitted. See #1213.
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\Core\\' => 'packages/core/src']]]),
+        );
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'packages' . \DIRECTORY_SEPARATOR . 'core' . \DIRECTORY_SEPARATOR . 'src', 0o777, true);
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'vendor');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="packages/core/src"/>', $contents);
+        // The overlapping ignore is dropped; the non-overlapping one survives.
+        $this->assertStringNotContainsString('<directory name="packages"/>', $contents);
+        $this->assertStringContainsString('<directory name="vendor"/>', $contents);
+    }
+
+    #[Test]
     public function detects_laravel_app_layout_when_artisan_present(): void
     {
         // Presence of artisan selects the Laravel-app branch (detectLaravelAppRoots):
@@ -344,6 +370,104 @@ final class InitCommandTest extends TestCase
         $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
         $this->assertStringContainsString('<directory name="src"/>', $contents);
         $this->assertStringNotContainsString('<file name="artisan"/>', $contents);
+    }
+
+    #[Test]
+    public function monorepo_app_layout_adds_nested_package_source_roots(): void
+    {
+        // #1224: a Webkul-stack monorepo (bagisto, unopim) ships artisan, so init picks
+        // the Laravel-app branch. Its packages/*/*/src source (mapped in root composer
+        // autoload) must now surface in <projectFiles> alongside the app dirs.
+        \file_put_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'artisan', "#!/usr/bin/env php\n");
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'app');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => [
+                'App\\' => 'app/',
+                'Webkul\\Admin\\' => 'packages/Webkul/Admin/src',
+                'Webkul\\Core\\' => 'packages/Webkul/Core/src',
+            ]]]),
+        );
+        $this->makeDir('packages/Webkul/Admin/src');
+        $this->makeDir('packages/Webkul/Core/src');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="app"/>', $contents);
+        $this->assertStringContainsString('<file name="artisan"/>', $contents);
+        $this->assertStringContainsString('<directory name="packages/Webkul/Admin/src"/>', $contents);
+        $this->assertStringContainsString('<directory name="packages/Webkul/Core/src"/>', $contents);
+        // Exact src roots, never the whole packages/ tree (which would pull in vendor/).
+        $this->assertStringNotContainsString('<directory name="packages"/>', $contents);
+    }
+
+    #[Test]
+    public function canonicalises_dot_segments_in_composer_paths(): void
+    {
+        // Paths are canonicalised once: `./packages/x` and `app/../packages/x` emit as
+        // clean `packages/x`, keeping output tidy and the packages/ warning (which
+        // matches on canonical paths) correct. See #1224.
+        \file_put_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'artisan', "#!/usr/bin/env php\n");
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'app');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => [
+                'A\\' => './packages/one/src',
+                'B\\' => 'app/../packages/two/src',
+            ]]]),
+        );
+        $this->makeDir('packages/one/src');
+        $this->makeDir('packages/two/src');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('<directory name="packages/one/src"/>', $contents);
+        $this->assertStringContainsString('<directory name="packages/two/src"/>', $contents);
+        $this->assertStringNotContainsString('name="./packages', $contents);
+        $this->assertStringNotContainsString('/../', $contents);
+    }
+
+    #[Test]
+    public function escapes_xml_special_chars_in_emitted_paths(): void
+    {
+        // A path with XML-special chars must be escaped, or init reports success while
+        // writing an unparseable psalm.xml.
+        \file_put_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'artisan', "#!/usr/bin/env php\n");
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'app');
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['autoload' => ['psr-4' => ['Acme\\' => 'packages/Foo & Bar/src']]]),
+        );
+        $this->makeDir('packages/Foo & Bar/src');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertStringContainsString('packages/Foo &amp; Bar/src', $contents);
+        $previous = \libxml_use_internal_errors(true);
+        try {
+            $this->assertNotFalse(\simplexml_load_string($contents), 'Generated psalm.xml must be well-formed.');
+        } finally {
+            \libxml_clear_errors();
+            \libxml_use_internal_errors($previous);
+        }
+    }
+
+    /** Create a nested directory tree under the temp dir (POSIX-style path). */
+    private function makeDir(string $relative): void
+    {
+        $path = $this->tempDir . \DIRECTORY_SEPARATOR . \str_replace('/', \DIRECTORY_SEPARATOR, $relative);
+        if (! \is_dir($path) && ! \mkdir($path, 0o777, true) && ! \is_dir($path)) {
+            throw new \RuntimeException(\sprintf('Failed to create directory %s', $path));
+        }
     }
 
     private function makeTester(): CommandTester
