@@ -488,10 +488,10 @@ final class PluginConfigTest extends TestCase
             . '<modelProperties columnFallback="none" />'
             . '<resolveDynamicWhereClauses value="false" />'
             . '<resolveConfigReturnTypes value="false" />'
-            . '<failOnInternalError value="true" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
             . '<experimental value="true" />'
+            . '<failOnInternalError value="true" />'
             . '<configDirectory name="app/Config" />'
             . '<configDirectory name="packages/*/config" />'
             . '</pluginClass>',

@@ -169,7 +169,7 @@ class Diagnostics
         }
 
         foreach ($pluginClasses as $pluginClass) {
-            if ((string) $pluginClass['class'] !== Plugin::class) {
+            if (!$this->isPluginClass((string) $pluginClass['class'])) {
                 continue;
             }
 
@@ -181,6 +181,12 @@ class Diagnostics
         }
 
         return false;
+    }
+
+    /** @psalm-pure */
+    private function isPluginClass(string $class): bool
+    {
+        return \strtolower(\ltrim($class, '\\')) === \strtolower(Plugin::class);
     }
 
     /**
@@ -196,7 +202,7 @@ class Diagnostics
 
             $contents = \file_get_contents($path);
             if ($contents === false) {
-                continue;
+                return null;
             }
 
             // Toggle libxml's internal error buffer so a malformed config never
@@ -209,6 +215,10 @@ class Diagnostics
             if ($xml instanceof \SimpleXMLElement) {
                 return [$xml, $source];
             }
+
+            // Psalm selects the first existing configuration filename. A malformed
+            // psalm.xml must not make diagnose silently read psalm.xml.dist instead.
+            return null;
         }
 
         return null;

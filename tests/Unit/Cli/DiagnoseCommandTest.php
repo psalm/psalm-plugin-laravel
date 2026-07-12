@@ -77,6 +77,8 @@ final class DiagnoseCommandTest extends TestCase
 
         $this->assertTrue($diagnostics->experimentalIssueEnforcementFor($fixtures . '/PsalmXml'));
         $this->assertFalse($diagnostics->experimentalIssueEnforcementFor($fixtures . '/PsalmXmlDist'));
+        $this->assertTrue($diagnostics->experimentalIssueEnforcementFor($fixtures . '/PsalmXmlAlternatePluginClass'));
+        $this->assertFalse($diagnostics->experimentalIssueEnforcementFor($fixtures . '/MalformedPsalmXmlWithDist'));
     }
 
     #[Test]

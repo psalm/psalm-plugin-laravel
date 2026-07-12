@@ -24,10 +24,10 @@ Full config example:
         <resolveDynamicWhereClauses value="false" />
         <resolveConfigReturnTypes value="false" />
         <reportImplicitQueryBuilderCalls value="true" />
-        <experimental value="true" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
+        <experimental value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
     </pluginClass>
@@ -108,23 +108,6 @@ See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
 ```xml
 <reportImplicitQueryBuilderCalls value="true" />
 ```
-
-## `experimental`
-
-**default**: `false`
-
-```xml
-<experimental value="true" />
-```
-
-The plugin registers its handlers and type inference normally in every mode. This option only changes the default reporting level for experimental plugin issues:
-
-- `UnknownModelAttribute`
-- `UndefinedModelRelation`
-
-With the default `false`, these are advisory `info` findings. Setting `value="true"` promotes their default level to `error`. Explicit Psalm [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) always take precedence, including `error`, `info`, `suppress`, and scoped filters.
-
-Experimental issue behaviour may change before graduation. Model serialization array-shape inference (`ModelToArrayShapeHandler`) is a stable v4.15 enhancement and is always active; it is not controlled by this setting. `UnresolvableAppendedModelAttribute` is also stable and remains an error by default in both modes.
 
 ## `configDirectory`
 
@@ -230,6 +213,23 @@ Environment variable to override the cache location.
 ```bash
 PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
 ```
+
+## `experimental`
+
+**default**: `false`
+
+```xml
+<experimental value="true" />
+```
+
+The plugin registers its handlers and type inference normally in every mode. This option only changes the default reporting level for experimental plugin issues:
+
+- `UnknownModelAttribute`
+- `UndefinedModelRelation`
+
+With the default `false`, these are advisory `info` findings. Setting `value="true"` promotes their default level to `error`. Explicit Psalm [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) always take precedence, including `error`, `info`, `suppress`, and scoped filters.
+
+Experimental issue behaviour may change before graduation. Model serialization array-shape inference (`ModelToArrayShapeHandler`) is a stable v4.15 enhancement and is always active; it is not controlled by this setting. `UnresolvableAppendedModelAttribute` is also stable and remains an error by default in both modes.
 
 ## `failOnInternalError`
 
