@@ -397,8 +397,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
 
-        // RelationResolver depends on RelationMethodParser. Keep the explicit loads paired with
-        // registration: Psalm's phar bootstrap does not guarantee the project PSR-4 autoloader.
+        // RelationResolver depends on RelationMethodParser. Load both collaborators and the handler
+        // before registration: registerHooksFromClass() requires the handler to be preloaded.
         require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
         require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
         require_once __DIR__ . '/Handlers/Rules/UndefinedModelRelationHandler.php';
