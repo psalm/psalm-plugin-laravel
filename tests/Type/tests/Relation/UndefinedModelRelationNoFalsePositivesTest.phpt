@@ -1,5 +1,5 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm-find-undefined-model-relations.xml
+--no-progress --no-diff --config=./tests/Type/psalm-experimental-issues.xml
 --FILE--
 <?php declare(strict_types=1);
 

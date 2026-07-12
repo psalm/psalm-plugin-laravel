@@ -11,6 +11,7 @@ use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
+use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
@@ -30,6 +31,10 @@ final class Plugin implements PluginEntryPointInterface
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
         $pluginConfig = PluginConfig::fromXml($config);
+        require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
+        require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
+        require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
+        ExperimentalIssuePolicy::apply($pluginConfig->experimental);
         $output = $this->getProgress($registration);
 
         try {
@@ -358,8 +363,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
 
         // Flags unknown attribute keys passed to mass-assignment methods (create/forceCreate/fill/
-        // forceFill/update) — the #699 typo case. Always on, but self-silences on any model whose
-        // column schema is unknown (migrations disabled), so it never floods.
+        // forceFill/update) — the #699 typo case. It is always registered and self-silences on any
+        // model whose column schema is unknown (migrations disabled), so it never floods.
         require_once __DIR__ . '/Handlers/Rules/UnknownModelAttributeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UnknownModelAttributeHandler::class);
 
@@ -373,19 +378,12 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
 
-        // Opt-in: validate relation-name strings passed to with()/load()/has()/
-        // whereHas()/... against the resolved model. Off by default — on large apps,
-        // relations can be added in ways static analysis cannot see (runtime
-        // Model::resolveRelationUsing(), package macros), so this registers only when
-        // the user asks for it. RelationResolver depends on RelationMethodParser, so
-        // both collaborators are loaded explicitly here (psalm.phar may not have the
-        // project PSR-4 autoloader registered).
-        if ($pluginConfig->findUndefinedRelations) {
-            require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
-            require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
-            require_once __DIR__ . '/Handlers/Rules/UndefinedModelRelationHandler.php';
-            $registration->registerHooksFromClass(Handlers\Rules\UndefinedModelRelationHandler::class);
-        }
+        // RelationResolver depends on RelationMethodParser. Keep the explicit loads paired with
+        // registration: Psalm's phar bootstrap does not guarantee the project PSR-4 autoloader.
+        require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
+        require_once __DIR__ . '/Handlers/Rules/UndefinedModelRelationHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UndefinedModelRelationHandler::class);
 
         // Opt-in: forbid Laravel's __callStatic/__call magic forwarding on models and require
         // the explicit Model::query()->... entry point. Off by default — the forwarding is

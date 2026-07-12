@@ -49,6 +49,7 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
         $this->assertCount(1, $findings, "Expected exactly one UnresolvableAppendedModelAttribute finding, got:\n{$joined}");
         $this->assertStringContainsString('UnbackedAppendModel', $messages[0]);
         $this->assertStringContainsString("'avatar_url'", $messages[0]);
+        $this->assertSame('error', $findings[0]['severity']);
 
         // The controls must never appear (assertCount(1) already implies this; spelled out for a clear
         // failure message if one regresses).
@@ -58,7 +59,7 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
     }
 
     /**
-     * @return list<array{type: string, message: string}>
+     * @return list<array{type: string, message: string, severity: string}>
      */
     private function runPsalmAndCollectAppendFindings(): array
     {
@@ -83,12 +84,16 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
 
         $findings = [];
         foreach ($decoded as $finding) {
-            if (!\is_array($finding) || !isset($finding['type'], $finding['message'])) {
+            if (!\is_array($finding) || !isset($finding['type'], $finding['message'], $finding['severity'])) {
                 continue;
             }
 
             if ($finding['type'] === 'UnresolvableAppendedModelAttribute') {
-                $findings[] = ['type' => $finding['type'], 'message' => (string) $finding['message']];
+                $findings[] = [
+                    'type' => $finding['type'],
+                    'message' => (string) $finding['message'],
+                    'severity' => (string) $finding['severity'],
+                ];
             }
         }
 

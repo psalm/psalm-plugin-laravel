@@ -19,10 +19,7 @@
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <failOnInternalError value="true" />
             <resolveDynamicWhereClauses value="true" />
-            <!-- The rule under test. Isolated in its own config so the direct-on-model
-                 calls in the relation fixtures do not also trip reportImplicitQueryBuilderCalls
-                 from the shared opt-in config. -->
-            <findUndefinedRelations value="true" />
+            <experimental value="true" />
         </pluginClass>
     </plugins>
     <stubs>

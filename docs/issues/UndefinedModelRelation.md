@@ -6,7 +6,7 @@ nav_order: 11
 
 # UndefinedModelRelation
 
-A relation name passed to an eager-loading or relationship-query method does not resolve to a method on the model. Opt-in. See [How to enable](#how-to-enable).
+A relation name passed to an eager-loading or relationship-query method does not resolve to a method on the model. See [Reporting level](#reporting-level).
 
 ## Why it matters
 
@@ -62,20 +62,26 @@ To keep false positives near zero, the rule reports only when no method (real or
 
 The `withCount()` / `withSum()` aggregate family is not covered by this first pass.
 
-## How to enable
+## Reporting level
 
-This rule is opt-in. Enable it in `psalm.xml`:
+The handler always runs. Without an explicit issue handler, it is reported as `info` by default. Promote that default to an error in `psalm.xml`:
 
 ```xml
 <pluginClass class="Psalm\LaravelPlugin\Plugin">
-    <findUndefinedRelations value="true" />
+    <experimental value="true" />
 </pluginClass>
 ```
 
-Once enabled, silence it for a specific area via `issueHandlers`:
+Any explicit `<PluginIssue>` entry owns this issue's complete reporting policy. The plugin leaves both its base level and scoped filters unchanged, regardless of `<experimental>`. When using scoped filters, specify the desired base level explicitly:
 
 ```xml
 <issueHandlers>
-    <PluginIssue name="UndefinedModelRelation" errorLevel="suppress" />
+    <PluginIssue name="UndefinedModelRelation" errorLevel="info">
+        <errorLevel type="suppress">
+            <directory name="legacy" />
+        </errorLevel>
+    </PluginIssue>
 </issueHandlers>
 ```
+
+Without the outer `errorLevel="info"`, Psalm uses its normal implicit fallback of `error` outside the scoped filter.

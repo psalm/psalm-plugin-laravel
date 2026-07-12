@@ -87,11 +87,11 @@ final class IssueUrlGenerator
             '- resolveDynamicWhereClauses: ' . self::formatBool($pluginConfig->resolveDynamicWhereClauses),
             '- resolveConfigReturnTypes: ' . self::formatBool($pluginConfig->resolveConfigReturnTypes),
             '- reportImplicitQueryBuilderCalls: ' . self::formatBool($pluginConfig->reportImplicitQueryBuilderCalls),
-            '- findUndefinedRelations: ' . self::formatBool($pluginConfig->findUndefinedRelations),
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
+            '- experimental: ' . self::formatBool($pluginConfig->experimental),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
             '- configDirectories: ' . self::formatConfigDirectories($pluginConfig->configDirectories),
         ];

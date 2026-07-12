@@ -27,7 +27,6 @@ final readonly class PluginConfig
         public bool $resolveDynamicWhereClauses,
         public bool $resolveConfigReturnTypes,
         public bool $reportImplicitQueryBuilderCalls,
-        public bool $findUndefinedRelations,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         /**
@@ -39,6 +38,7 @@ final readonly class PluginConfig
          */
         public ?bool $findOctaneIncompatibleBinding,
         public string $cachePath,
+        public bool $experimental,
         public bool $failOnInternalError,
     ) {}
 
@@ -59,10 +59,10 @@ final readonly class PluginConfig
         }
 
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
+        $experimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
-        $findUndefinedRelations = self::xmlBoolAttr($config?->findUndefinedRelations, 'findUndefinedRelations');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
@@ -74,11 +74,11 @@ final readonly class PluginConfig
             resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
             resolveConfigReturnTypes: $resolveConfigReturnTypes,
             reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
-            findUndefinedRelations: $findUndefinedRelations,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),
+            experimental: $experimental,
             failOnInternalError: $failOnInternalError,
         );
     }
