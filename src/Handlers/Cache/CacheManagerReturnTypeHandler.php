@@ -125,12 +125,16 @@ final class CacheManagerReturnTypeHandler implements MethodReturnTypeProviderInt
      * discriminator both providers share; `methodExists()` excludes pseudo-methods by
      * default (its `$with_pseudo` flag stays false).
      *
+     * Psalm 6's `Internal\Codebase\Methods::methodExists()` takes the `MethodIdentifier`
+     * as its first argument (no leading `$codebase`, unlike Psalm 7); the public
+     * `Codebase::methodExists()` wrapper always passes `with_pseudo: true`, so this bypass
+     * is required either way.
+     *
      * @param lowercase-string $methodNameLower
      */
     private static function isRealMethod(Codebase $codebase, string $fqClassName, string $methodNameLower): bool
     {
         return $codebase->methods->methodExists(
-            $codebase,
             new MethodIdentifier($fqClassName, $methodNameLower),
         );
     }

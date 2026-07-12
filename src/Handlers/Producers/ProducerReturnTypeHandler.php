@@ -256,11 +256,16 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
      * so the event still reports the producer's own FQCN). False means a facade
      * `@method` pseudo-tag.
      *
+     * Psalm 6's `Internal\Codebase\Methods::methodExists()` takes the `MethodIdentifier`
+     * as its first argument (no leading `$codebase`, unlike Psalm 7); the public
+     * `Codebase::methodExists()` wrapper always passes `with_pseudo: true`, so this bypass
+     * is required either way.
+     *
      * @param lowercase-string $methodNameLower
      */
     private static function isRealMethod(Codebase $codebase, string $fqClasslikeName, string $methodNameLower): bool
     {
-        return $codebase->methods->methodExists($codebase, new MethodIdentifier($fqClasslikeName, $methodNameLower));
+        return $codebase->methods->methodExists(new MethodIdentifier($fqClasslikeName, $methodNameLower));
     }
 
     /**
