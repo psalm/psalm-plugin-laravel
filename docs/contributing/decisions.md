@@ -253,7 +253,7 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 ### Provenance may narrow, conformance never widens
 
-**Decision:** A stable producer (a framework method that hard-constructs one concrete with no supported extension point) narrows its declared contract return to that concrete. `ProducerReturnTypeHandler` holds the reviewed mapping (`PasswordBrokerManager::broker()`, `View\Factory::make()/file()/first()`, plus facades and root aliases). `view()`/`trans()` narrow via their existing handlers: zero-arg forms narrow to whatever class the binding resolved to at plugin boot (a scanned subclass counts); the argument-supplied `view('name')` form additionally requires the stock `Illuminate\View\Factory`. `Query\Builder` pagination is stub-narrowed (`stdClass` rows).
+**Decision:** A stable producer (a framework method that hard-constructs one concrete with no supported extension point) narrows its declared contract return to that concrete. `ProducerReturnTypeHandler` holds the reviewed mapping (`PasswordBrokerManager::broker()`, `View\Factory::make()/file()/first()`, plus facades and root aliases). `view()`/`trans()` narrow via their existing handlers: zero-arg forms narrow to the resolved binding when it is the framework class or a subclass (`Illuminate\View\Factory` / `Illuminate\Translation\Translator`), else fall back to the contract; the argument-supplied `view('name')` form additionally requires the exact stock `Illuminate\View\Factory`. `Query\Builder` pagination is stub-narrowed (`stdClass` rows).
 
 **Why:** Laravel declares contracts where runtime always yields one concrete, so concrete-only calls like `Password::broker()->createToken()` report false `UndefinedInterfaceMethod`.
 

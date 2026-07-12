@@ -57,6 +57,12 @@ final class OverridingFactory extends \Illuminate\View\Factory {
 function _factorySubclassBoundary(OverridingFactory $factory): void {
     $_view = $factory->make('welcome');
     /** @psalm-check-type-exact $_view = \Illuminate\View\View */
+
+    // The false-positive direction is masked here: badge() is a CustomView-only
+    // method, but the narrowed stock View is Macroable, so its __call resolves the
+    // unknown method (to a View) instead of raising UndefinedMethod.
+    $_masked = $_view->badge();
+    /** @psalm-check-type-exact $_masked = \Illuminate\View\View */
 }
 ?>
 --EXPECTF--

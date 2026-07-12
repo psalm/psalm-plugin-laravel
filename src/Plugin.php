@@ -55,13 +55,17 @@ final class Plugin implements PluginEntryPointInterface
             // of whether findMissingTranslations is enabled
             $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations);
 
+            // Resolve the 'view' binding once and share it: the diagnostic init
+            // (finder fallback) and the always-on view() narrowing both need it.
+            $viewFactory = $this->resolveViewFactory(ApplicationProvider::getApp(), $output);
+
             if ($pluginConfig->findMissingViews) {
-                $this->initMissingViewHandler($output);
+                $this->initMissingViewHandler($output, $viewFactory);
             }
 
             // Always called — provides type narrowing for the view() helper regardless
             // of whether findMissingViews is enabled (same split as translations above).
-            $this->initViewFactoryHandler($output);
+            $this->initViewFactoryHandler($viewFactory);
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
@@ -484,32 +488,27 @@ final class Plugin implements PluginEntryPointInterface
      * Uses the app's FileViewFinder which reflects config('view.paths') plus
      * any paths added by service providers during bootstrap.
      */
-    private function initMissingViewHandler(\Psalm\Progress\Progress $output): void
+    private function initMissingViewHandler(\Psalm\Progress\Progress $output, ?\Illuminate\View\Factory $factory): void
     {
         $app = ApplicationProvider::getApp();
 
-        // Prefer the dedicated view.finder binding; fall back to the Factory's finder
-        // (ApplicationProvider may bind 'view' without registering 'view.finder')
+        // Prefer the dedicated view.finder binding; fall back to the pre-resolved
+        // Factory's finder (ApplicationProvider may bind 'view' without 'view.finder').
         if ($app->bound('view.finder')) {
             /** @var \Illuminate\View\FileViewFinder $finder */
             $finder = $app->make('view.finder');
-        } elseif ($app->bound('view')) {
-            $factory = $this->resolveViewFactory($app, $output);
-
-            if (!$factory instanceof \Illuminate\View\Factory) {
-                // Null covers both "resolved to a non-standard implementation" and
-                // "the binding threw" (resolveViewFactory swallows the throw to a
-                // --debug line rather than disabling the whole plugin). Keep the
-                // warning accurate for both and point at --debug for the real cause.
-                $output->warning(
-                    'Laravel plugin: findMissingViews is enabled but the view factory could not be resolved to a '
-                    . 'standard instance (run with --debug for the underlying cause). The MissingView check will be skipped.',
-                );
-
-                return;
-            }
-
+        } elseif ($factory instanceof \Illuminate\View\Factory) {
             $finder = $factory->getFinder();
+        } elseif ($app->bound('view')) {
+            // 'view' is bound but resolveViewFactory() returned null: the binding
+            // threw (swallowed to a --debug line rather than disabling the plugin)
+            // or resolved to a non-standard implementation.
+            $output->warning(
+                'Laravel plugin: findMissingViews is enabled but the view factory could not be resolved to a '
+                . 'standard instance (run with --debug for the underlying cause). The MissingView check will be skipped.',
+            );
+
+            return;
         } else {
             $output->warning(
                 'Laravel plugin: findMissingViews is enabled but the view finder service is not bound. '
@@ -546,24 +545,22 @@ final class Plugin implements PluginEntryPointInterface
      * process. Null falls back to the stub's contract type. Unlike
      * initMissingViewHandler(), no warning is emitted: this is bonus type narrowing,
      * not an opt-in diagnostic.
+     *
+     * @psalm-external-mutation-free
      */
-    private function initViewFactoryHandler(\Psalm\Progress\Progress $output): void
+    private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
     {
-        $factory = $this->resolveViewFactory(ApplicationProvider::getApp(), $output);
-
         // Load the handler before its first static touch: __invoke() runs before
         // registerHandlers() (where the paired require_once lives), and under
         // psalm.phar the plugin's PSR-4 autoloader may not be registered yet.
         require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
-        Handlers\Views\MissingViewHandler::initViewFactory(
-            $factory instanceof \Illuminate\View\Factory ? $factory::class : null,
-        );
+        Handlers\Views\MissingViewHandler::initViewFactory($factory instanceof \Illuminate\View\Factory ? $factory::class : null);
     }
 
     /**
-     * Single call site for `$app->make('view')`, shared by initMissingViewHandler()
-     * (opt-in diagnostics) and initViewFactoryHandler() (always-on type narrowing) so
-     * both read the exact same resolution instead of each resolving it independently.
+     * Single call site for `$app->make('view')`, resolved once in __invoke() and
+     * shared by initMissingViewHandler() (opt-in diagnostics) and
+     * initViewFactoryHandler() (always-on type narrowing).
      */
     private function resolveViewFactory(Application $app, \Psalm\Progress\Progress $output): ?\Illuminate\View\Factory
     {
