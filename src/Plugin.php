@@ -32,6 +32,8 @@ final class Plugin implements PluginEntryPointInterface
     {
         $pluginConfig = PluginConfig::fromXml($config);
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
+        require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
+        require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
         $output = $this->getProgress($registration);
 

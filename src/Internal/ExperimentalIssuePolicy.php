@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use Psalm\Config;
+use Psalm\Issue\PluginIssue;
+use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
+use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
 
 /**
  * Applies the default reporting policy for plugin diagnostics that are still
@@ -16,10 +19,10 @@ use Psalm\Config;
  */
 final class ExperimentalIssuePolicy
 {
-    /** @var list<non-empty-string> */
-    private const ISSUE_TYPES = [
-        'UnknownModelAttribute',
-        'UndefinedModelRelation',
+    /** @var list<class-string<PluginIssue>> */
+    private const ISSUES = [
+        UnknownModelAttribute::class,
+        UndefinedModelRelation::class,
     ];
 
     /** @psalm-external-mutation-free */
@@ -28,11 +31,11 @@ final class ExperimentalIssuePolicy
         $level = $enforced ? Config::REPORT_ERROR : Config::REPORT_INFO;
         $config = Config::getInstance();
 
-        foreach (self::ISSUE_TYPES as $issueType) {
+        foreach (self::ISSUES as $issueClass) {
             // Psalm has already parsed issueHandlers when it invokes plugins. The
             // safe setter deliberately preserves a project's error level and any
             // scoped filters instead of replacing them with this default.
-            $config->safeSetCustomErrorLevel($issueType, $level);
+            $config->safeSetCustomErrorLevel($issueClass::getIssueType(), $level);
         }
     }
 }
