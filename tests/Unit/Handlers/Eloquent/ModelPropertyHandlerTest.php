@@ -122,6 +122,7 @@ final class ModelPropertyHandlerTest extends TestCase
         $schema = new SchemaAggregator();
         $table = new SchemaTable();
         $table->setColumn(new SchemaColumn('flagged', SchemaColumn::TYPE_BOOL));
+
         $schema->setTable('attr_table', $table);
         SchemaStateProvider::setSchema($schema);
 

@@ -40,7 +40,7 @@ final class ExperimentalIssuePolicy
     {
         $level = $enforced ? Config::REPORT_ERROR : Config::REPORT_INFO;
         $config = Config::getInstance();
-        if (self::$installedDefaults === null) {
+        if (!self::$installedDefaults instanceof \WeakMap) {
             /** @var \WeakMap<Config, array<string, IssueHandler>> $installedDefaults */
             $installedDefaults = new \WeakMap();
             self::$installedDefaults = $installedDefaults;
