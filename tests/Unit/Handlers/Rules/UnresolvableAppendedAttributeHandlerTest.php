@@ -74,11 +74,10 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
     #[Test]
     public function collects_every_cast_key_regardless_of_shape(): void
     {
-        // Any declared cast counts as backing, not only class casts: the registry's CastShape describes
-        // the inferred type, not Laravel's isClassCastable() branch (a first-party Castable such as
-        // AsCollection::class is shape Primitive), so the rule cannot tell them apart. Counting any cast
-        // keeps it false-positive-free — a flagged entry then provably has no cast at all. This pins that
-        // a shape filter is NOT reintroduced.
+        // Any declared cast counts as backing, regardless of shape — counting any cast keeps this
+        // false-positive-free (a flagged entry then provably has no cast at all), and the enum values
+        // below are otherwise arbitrary stand-ins for "some shape". This pins that a shape filter is
+        // NOT reintroduced.
         $casts = [
             'address' => $this->cast(CastShape::CustomCastsAttributes, 'address'),
             'tags' => $this->cast(CastShape::AsCollection, 'tags'),

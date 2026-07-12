@@ -1143,8 +1143,6 @@ final class ModelMetadataRegistryBuilder
             \in_array($baseLower, ['date', 'datetime', 'custom_datetime', 'immutable_date', 'immutable_datetime', 'immutable_custom_datetime'], true)
         ) {
             $shape = CastShape::DateTime;
-        } elseif ($baseLower === 'collection') {
-            $shape = CastShape::AsCollection;
         } elseif (self::looksLikeClassName($base) && self::isEnumClass($base)) {
             /** @var class-string $base */
             $shape = CastShape::BackedEnum;
@@ -1157,7 +1155,16 @@ final class ModelMetadataRegistryBuilder
             // the authoritative path for $psalmType and keeps its existing autoload
             // behavior for backwards compatibility with pre-registry resolution.
             && \class_exists($base, false)
-            && \is_a($base, \Illuminate\Contracts\Database\Eloquent\CastsAttributes::class, true)
+            // Castable (AsCollection, AsArrayObject, AsStringable, AsEnumCollection, ...) alongside
+            // CastsAttributes: both are class-castable per Model::isClassCastable(), but a Castable
+            // itself implements neither CastsAttributes nor CastsInboundAttributes directly — only the
+            // instance its castUsing() returns does — so checking CastsAttributes alone missed every
+            // framework Castable wrapper (and any user Castable-only class), wrongly classifying them
+            // Primitive and letting an accessor on the same column win over the class cast.
+            && (
+                \is_a($base, \Illuminate\Contracts\Database\Eloquent\CastsAttributes::class, true)
+                || \is_a($base, \Illuminate\Contracts\Database\Eloquent\Castable::class, true)
+            )
         ) {
             /** @var class-string $base */
             $shape = CastShape::CustomCastsAttributes;
