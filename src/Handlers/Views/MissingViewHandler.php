@@ -64,6 +64,12 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     private static array $narrowedUnions = [];
 
     /**
+     * Cached leading-spread union. Keyed on nothing — it is the same two contracts
+     * every time and is app-independent, so it never needs resetting.
+     */
+    private static ?Union $spreadUnion = null;
+
+    /**
      * @param list<string> $viewPaths Absolute paths to view directories (from config('view.paths'))
      * @param list<string> $extensions File extensions without leading dot (from FileViewFinder::getExtensions())
      * @psalm-external-mutation-free
@@ -82,12 +88,14 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     /**
      * Record the booted app's resolved view-factory class for view() helper narrowing.
      *
-     * Always called regardless of findMissingViews — this is type narrowing, not a diagnostic.
+     * Always called (regardless of findMissingViews) with the resolved class or null,
+     * so a re-invocation in a reused process overwrites — never leaks — a prior app's
+     * binding. Null disables the narrowing and the stub's contract fallback applies.
      *
-     * @param class-string $class
+     * @param class-string|null $class
      * @psalm-external-mutation-free
      */
-    public static function initViewFactory(string $class): void
+    public static function initViewFactory(?string $class): void
     {
         self::$factoryClass = $class;
     }
@@ -108,12 +116,16 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     {
         $callArgs = $event->getCallArgs();
 
-        // view(...$args) — a LEADING spread hides both the argument count (so neither
-        // side of Laravel's `func_num_args() === 0` split is decidable) and the view
-        // name. A trailing spread (`view('x', ...$data)`) hides neither: the count is
-        // provably >= 1, so the diagnostic and the narrowing below still apply.
+        // view(...$args) — a LEADING spread hides the argument count, so
+        // func_num_args() could be 0 (an empty spread runs the zero-arg branch and
+        // returns the factory) or not (returns a View). Return the sound union of
+        // both contracts rather than defer to the stub, whose func_num_args()
+        // conditional collapses a spread to the View branch — wrong for an empty
+        // spread, and it would falsely accept a concrete-only call. A trailing
+        // spread (`view('x', ...$data)`) hides neither the count (provably >= 1)
+        // nor the name, so the diagnostic and narrowing below still apply.
         if ($callArgs !== [] && $callArgs[0]->unpack) {
-            return null;
+            return self::spreadReturn();
         }
 
         if ($callArgs === []) {
@@ -180,8 +192,29 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     }
 
     /**
-     * Register for Factory (direct usage) plus any facades/aliases that
-     * proxy to it (View, \Illuminate\Support\Facades\View).
+     * Sound return for a leading-spread view() call of unknown cardinality: the
+     * union of both func_num_args() branches, on the contracts so no concrete-only
+     * call is falsely accepted regardless of which branch runs.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function spreadReturn(): Union
+    {
+        return self::$spreadUnion ??= new Union([
+            new TNamedObject(\Illuminate\Contracts\View\Factory::class),
+            new TNamedObject(\Illuminate\Contracts\View\View::class),
+        ]);
+    }
+
+    /**
+     * Register for Factory (direct usage), the canonical View facade, plus any
+     * root aliases that proxy to it.
+     *
+     * The canonical facade is hardcoded (not left to FacadeMapProvider) so the
+     * missing-view diagnostic still fires on `\Illuminate\Support\Facades\View::make()`
+     * in apps that trim their alias registry — otherwise ProducerReturnTypeHandler,
+     * which does hardcode that facade, would answer the return type first and this
+     * handler's diagnostic would never run. Matches the Auth handlers' convention.
      *
      * @inheritDoc
      * @psalm-external-mutation-free
@@ -189,7 +222,11 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [Factory::class, ...FacadeMapProvider::getFacadeClasses(Factory::class)];
+        return \array_values(\array_unique([
+            Factory::class,
+            \Illuminate\Support\Facades\View::class,
+            ...FacadeMapProvider::getFacadeClasses(Factory::class),
+        ]));
     }
 
     /** @inheritDoc */

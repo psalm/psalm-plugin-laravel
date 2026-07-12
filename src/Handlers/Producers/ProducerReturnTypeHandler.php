@@ -35,9 +35,14 @@ use Psalm\Type\Union;
  *    `Factory::viewInstance()` hard-constructs `new \Illuminate\View\View(...)`.
  *    viewInstance() is protected, so a Factory subclass overriding it while
  *    inheriting make() still narrows to the stock View here — the same accepted
- *    bounded trade-off as CacheManager's nonconforming custom creator: at worst
- *    a pathological custom View flips a contract-level false positive into a
- *    false negative; it can never introduce a new false positive.
+ *    bounded trade-off as CacheManager's nonconforming custom creator. If an app
+ *    substitutes a different implementation this can produce a false negative (a
+ *    stock-only method resolves though the substitute lacks it) and, for a producer
+ *    whose stock concrete is not Macroable, a false positive (a substitute-only
+ *    method flagged undefined; the stock View's __call masks this for the View
+ *    family, but PasswordBroker would exhibit it). We accept it because every
+ *    standard app returns the stock concrete and a substitute is rare; a caller
+ *    that hits it can suppress at the call site.
  *
  * A handler (not a stub) is required for the facade paths: a facade's
  * `@method static` pseudo-tags shadow any real method a redeclaring stub
@@ -89,8 +94,19 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
      */
     private static ?array $classToFamily = null;
 
-    /** @var array<class-string, Union> cache of concrete return unions (Psalm 7 unions are immutable) */
-    private static array $concreteUnions = [];
+    /**
+     * Drop the reverse index so it rebuilds from FacadeMapProvider on the next
+     * lookup. Called once per plugin invocation because a reused process (Psalm's
+     * language server, or back-to-back analyses) can boot a different app whose
+     * alias registry differs. Must run before the handler's providers are
+     * registered so getClassLikeNames() and resolveFamily() agree.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function reset(): void
+    {
+        self::$classToFamily = null;
+    }
 
     /**
      * @inheritDoc
@@ -128,14 +144,7 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
         $codebase = $event->getSource()->getCodebase();
 
         if (self::isRealMethod($codebase, $event->getFqClasslikeName(), $methodNameLower)) {
-            // Drift guard: only narrow while the producer's own declared return
-            // type still names the contract we verified against source.
-            if (!self::unionNamesContract(
-                self::realReturnType($codebase, $event->getFqClasslikeName(), $methodNameLower),
-                $family['contract'],
-            )) {
-                return null;
-            }
+            $declared = self::realReturnType($codebase, $event->getFqClasslikeName(), $methodNameLower);
         } else {
             // Pseudo path (facade/alias static call). The params-provider invariant
             // below is mandatory — see getMethodParams().
@@ -143,15 +152,15 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
                 return null;
             }
 
-            if (!self::unionNamesContract(
-                self::pseudoReturnType($codebase, $family['facade'], $methodNameLower),
-                $family['contract'],
-            )) {
-                return null;
-            }
+            $declared = self::pseudoReturnType($codebase, $family['facade'], $methodNameLower);
         }
 
-        return self::concreteUnion($family['concrete']);
+        // Drift guard + narrowing in one step: replace only the contract atomic
+        // with the concrete, preserving any siblings. Returns null (no narrowing)
+        // if the declared return no longer names the contract we verified against
+        // source. Replacing the whole union would silently drop a future
+        // `Contract|null` down to a non-null concrete.
+        return self::narrowContract($declared, $family['contract'], $family['concrete']);
     }
 
     /**
@@ -297,28 +306,36 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
         }
     }
 
-    /** @psalm-mutation-free */
-    private static function unionNamesContract(?Union $union, string $expectedContract): bool
+    /**
+     * Return a copy of the declared union with the expected-contract atomic swapped
+     * for the concrete, leaving every other atomic in place. Null when the declared
+     * union is absent or does not name the contract — the drift guard: if Laravel's
+     * signature changed out from under us, we narrow nothing rather than override a
+     * declaration we never verified.
+     *
+     * @param class-string $expectedContract
+     * @param class-string $concrete
+     * @psalm-mutation-free
+     */
+    private static function narrowContract(?Union $declared, string $expectedContract, string $concrete): ?Union
     {
-        if (!$union instanceof \Psalm\Type\Union) {
-            return false;
+        if (!$declared instanceof Union) {
+            return null;
         }
 
-        foreach ($union->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && \strtolower($atomic->value) === \strtolower($expectedContract)) {
-                return true;
+        $expectedContractLc = \strtolower($expectedContract);
+        $atomics = [];
+        $matched = false;
+
+        foreach ($declared->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNamedObject && \strtolower($atomic->value) === $expectedContractLc) {
+                $atomics[] = new TNamedObject($concrete);
+                $matched = true;
+            } else {
+                $atomics[] = $atomic;
             }
         }
 
-        return false;
-    }
-
-    /**
-     * @param class-string $concreteFqcn
-     * @psalm-external-mutation-free
-     */
-    private static function concreteUnion(string $concreteFqcn): Union
-    {
-        return self::$concreteUnions[$concreteFqcn] ??= new Union([new TNamedObject($concreteFqcn)]);
+        return $matched ? new Union($atomics) : null;
     }
 }

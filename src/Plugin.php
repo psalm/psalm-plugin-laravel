@@ -400,6 +400,10 @@ final class Plugin implements PluginEntryPointInterface
         // issue on View::make(). Reads FacadeMapProvider, so it relies on init() (above)
         // having already run.
         require_once __DIR__ . '/Handlers/Producers/ProducerReturnTypeHandler.php';
+        // Rebuild the family index from this invocation's FacadeMapProvider aliases
+        // (a reused process may have booted a different app). Must precede registration
+        // so the reverse index and getClassLikeNames() agree.
+        Handlers\Producers\ProducerReturnTypeHandler::reset();
         $registration->registerHooksFromClass(Handlers\Producers\ProducerReturnTypeHandler::class);
 
         // Flag `public` Eloquent scopes / legacy accessors (Laravel's convention is `protected` — they
@@ -537,18 +541,23 @@ final class Plugin implements PluginEntryPointInterface
      * Resolve the booted app's view factory class and hand it to MissingViewHandler
      * so the view() helper can narrow past the stub's contract fallback.
      *
-     * Silently no-ops when 'view' isn't bound, throws on resolution, or resolves to
-     * a non-standard implementation — the stub's contract-typed fallback still
-     * applies, it just isn't narrowed further. Unlike initMissingViewHandler(), no
-     * warning is emitted: this is bonus type narrowing, not an opt-in diagnostic.
+     * Passes the resolved class or null (unbound / threw / non-standard) so the
+     * handler always overwrites — never leaks — a prior app's binding in a reused
+     * process. Null falls back to the stub's contract type. Unlike
+     * initMissingViewHandler(), no warning is emitted: this is bonus type narrowing,
+     * not an opt-in diagnostic.
      */
     private function initViewFactoryHandler(\Psalm\Progress\Progress $output): void
     {
         $factory = $this->resolveViewFactory(ApplicationProvider::getApp(), $output);
 
-        if ($factory instanceof \Illuminate\View\Factory) {
-            Handlers\Views\MissingViewHandler::initViewFactory($factory::class);
-        }
+        // Load the handler before its first static touch: __invoke() runs before
+        // registerHandlers() (where the paired require_once lives), and under
+        // psalm.phar the plugin's PSR-4 autoloader may not be registered yet.
+        require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
+        Handlers\Views\MissingViewHandler::initViewFactory(
+            $factory instanceof \Illuminate\View\Factory ? $factory::class : null,
+        );
     }
 
     /**

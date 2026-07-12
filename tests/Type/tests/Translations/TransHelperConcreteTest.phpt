@@ -23,5 +23,13 @@ $_literal = trans('any.literal.key');
 // plugin narrows by argument count only).
 $_nullKey = trans(null);
 /** @psalm-check-type-exact $_nullKey = \Illuminate\Contracts\Translation\Translator */
+
+// A leading spread hides the argument count: an empty spread returns the
+// translator, a non-empty one returns the lookup result. The sound union keeps
+// the translator possibility that the vendor conditional would otherwise drop.
+/** @psalm-var list{0?: string} $keys */
+$keys = [];
+$_transSpread = trans(...$keys);
+/** @psalm-check-type-exact $_transSpread = \Illuminate\Contracts\Translation\Translator|string */
 ?>
 --EXPECTF--

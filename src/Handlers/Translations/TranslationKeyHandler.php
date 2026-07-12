@@ -96,10 +96,24 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         $callArgs = $event->getCallArgs();
 
         if ($callArgs === []) {
-            // A truly zero-arg call — never reachable for `trans(...$args)`, whose
-            // spread produces one Arg node regardless of the spread array's runtime
-            // size, so no separate unpack check is needed here.
             return self::resolveZeroArgTransType($event);
+        }
+
+        // A LEADING spread hides the argument count: an empty spread runs Laravel's
+        // is_null($key) branch (`trans()` -> translator, `__()` -> null), a non-empty
+        // one runs the key lookup. Return the sound union of both branches so the
+        // zero-arg possibility is not silently dropped (`trans(...$maybeEmpty)` could
+        // be the translator at runtime). The lookup side stays `string`, matching the
+        // handler's deliberate string-not-array choice for dynamic keys below.
+        if ($callArgs[0]->unpack) {
+            if ($event->getFunctionId() === 'trans') {
+                return Type::combineUnionTypes(
+                    new Union([new TNamedObject(\Illuminate\Contracts\Translation\Translator::class)]),
+                    Type::getString(),
+                );
+            }
+
+            return Type::combineUnionTypes(Type::getString(), Type::getNull());
         }
 
         // Try to resolve literal string keys precisely via the Translator

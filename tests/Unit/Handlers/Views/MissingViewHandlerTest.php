@@ -246,6 +246,20 @@ final class MissingViewHandlerTest extends TestCase
         return $result;
     }
 
+    #[Test]
+    public function registers_the_canonical_view_facade_even_without_alias_resolution(): void
+    {
+        // FacadeMapProvider is not initialized here, so getFacadeClasses() returns [].
+        // This mirrors an app that trims its alias registry: the canonical facade must
+        // still be registered (hardcoded), or ProducerReturnTypeHandler would answer the
+        // return type first and the missing-view diagnostic would never fire on
+        // \Illuminate\Support\Facades\View::make().
+        $this->assertContains(
+            \Illuminate\Support\Facades\View::class,
+            MissingViewHandler::getClassLikeNames(),
+        );
+    }
+
     // --- View::make() (MethodReturnTypeProvider) tests ---
 
     #[Test]

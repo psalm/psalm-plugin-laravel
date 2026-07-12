@@ -16,13 +16,45 @@ function _bareContractView(\Illuminate\Contracts\View\View $view): void {
     $view->fragment('x');
 }
 
-// Intent pin for the accepted bounded trade-off (see ProducerReturnTypeHandler
-// docblock): a Factory subclass that inherits make() narrows to the stock View
-// even though a protected viewInstance() override could construct a different
-// implementation — Psalm reports the declaring class for inherited methods.
-final class SubFactory extends \Illuminate\View\Factory {}
+// Accepted bounded trade-off (see ProducerReturnTypeHandler docblock), demonstrated
+// with a REAL override rather than an empty subclass. OverridingFactory replaces the
+// protected viewInstance() with a non-stock View but inherits make(); Psalm reports
+// the declaring Factory for the inherited call, so make() still narrows to the stock
+// \Illuminate\View\View even though the runtime value is a CustomView.
+//
+// For View the observable consequence is a false NEGATIVE only: a stock-only method
+// resolves although CustomView may not implement it. The false-positive direction
+// (a CustomView-only method flagged undefined) does not manifest here because the
+// stock \Illuminate\View\View is Macroable, so its __call resolves any unknown method
+// to mixed. A producer whose stock concrete is not Macroable (e.g. PasswordBroker)
+// would exhibit the false positive too.
+final class CustomView implements \Illuminate\Contracts\View\View {
+    #[\Override]
+    public function name(): string { return 'x'; }
 
-function _factorySubclassPin(SubFactory $factory): void {
+    /**
+     * @param array<array-key, mixed>|string $key
+     * @param mixed $value
+     */
+    #[\Override]
+    public function with($key, $value = null): static { return $this; }
+
+    /** @return array<string, mixed> */
+    #[\Override]
+    public function getData(): array { return []; }
+
+    #[\Override]
+    public function render(?callable $callback = null): string { return ''; }
+
+    public function badge(): string { return 'b'; }
+}
+
+final class OverridingFactory extends \Illuminate\View\Factory {
+    #[\Override]
+    protected function viewInstance($view, $path, $data): CustomView { return new CustomView(); }
+}
+
+function _factorySubclassBoundary(OverridingFactory $factory): void {
     $_view = $factory->make('welcome');
     /** @psalm-check-type-exact $_view = \Illuminate\View\View */
 }

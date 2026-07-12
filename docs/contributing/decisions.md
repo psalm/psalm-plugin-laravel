@@ -261,7 +261,7 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - Key on the producing expression, never the contract: contract FQCNs are never registered, interface storage never modified. Bare contract-typed values (params, properties, mocks, custom impls) keep the contract-only surface.
 - Drift guard: each rule requires the declared return to still name the expected contract, else it disables itself.
 - New mappings need source verification across supported Laravel versions plus positive and negative tests.
-- Disclosed gap: producer internals like `Factory::viewInstance()` are protected, so a producer subclass inheriting the mapped method but overriding the construction still narrows to the stock concrete. Accepted (matches the Cache manager precedent): worst case turns a contract-level false positive into a false negative, never a new false positive.
+- Disclosed gap: producer internals like `Factory::viewInstance()` are protected, so a producer subclass inheriting the mapped method but overriding the construction still narrows to the stock concrete. Accepted (matches the Cache manager precedent). A substitute implementation yields a false negative (a stock-only method resolves though the substitute lacks it), plus a false positive (a substitute-only method flagged undefined) when the stock concrete is not Macroable. The View concrete's `__call` masks the false positive; a non-Macroable producer such as PasswordBroker would exhibit it. Standard apps return the stock concrete, and a call site that hits the gap can suppress locally.
 - Excluded: driver-variant surfaces (Auth guards, Hash, Queue, Broadcast, Redis, Filesystem) where the concrete depends on runtime config.
 
 ## Third-Party Package Support

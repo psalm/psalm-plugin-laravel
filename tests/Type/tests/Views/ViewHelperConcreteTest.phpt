@@ -32,11 +32,13 @@ $trailing = [];
 $_viewTrailingSpread = view('welcome', ...$trailing);
 /** @psalm-check-type-exact $_viewTrailingSpread = \Illuminate\View\View */
 
-// A leading spread hides the argument count, so neither side of Laravel's
-// func_num_args() === 0 split is decidable — no narrowing, stub fallback only.
+// A leading spread hides the argument count: an empty spread returns the factory,
+// a non-empty one returns a View. The result is the sound union of both contracts,
+// NOT a bare View — otherwise a concrete-only call would be falsely accepted on
+// what is actually the factory at runtime.
 /** @psalm-var list{0?: string} $args */
 $args = [];
 $_viewLeadingSpread = view(...$args);
-/** @psalm-check-type-exact $_viewLeadingSpread = \Illuminate\Contracts\View\View */
+/** @psalm-check-type-exact $_viewLeadingSpread = \Illuminate\Contracts\View\Factory|\Illuminate\Contracts\View\View */
 ?>
 --EXPECTF--
