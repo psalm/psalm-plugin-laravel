@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783895555891,
+  "lastUpdate": 1783897939135,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8430,6 +8430,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1109,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9f9a3c43d51547444cc22c8d4dc27b0d35a131dc",
+          "message": "Merge pull request #1253 from psalm/fix/undefined-relation-autoload-crash\n\nfix: stop UndefinedModelRelationHandler autoloading receiver classes",
+          "timestamp": "2026-07-13T01:09:07+02:00",
+          "tree_id": "c9d552fdca196f3438d656de71cadc4269a56a00",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9f9a3c43d51547444cc22c8d4dc27b0d35a131dc"
+        },
+        "date": 1783897937935,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.62,
+            "range": "± 0.51",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
