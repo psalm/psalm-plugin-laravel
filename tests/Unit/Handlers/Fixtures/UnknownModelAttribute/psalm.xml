@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    autoloader="autoload.php"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+>
+    <projectFiles>
+        <directory name="app" />
+    </projectFiles>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin" />
+    </plugins>
+    <issueHandlers>
+        <!-- Force the rule to a hard error so it is reported regardless of the global level. -->
+        <PluginIssue name="UnknownModelAttribute" errorLevel="error" />
+    </issueHandlers>
+</psalm>

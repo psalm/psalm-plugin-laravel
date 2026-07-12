@@ -24,6 +24,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
+use Psalm\Progress\VoidProgress;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
@@ -41,9 +42,8 @@ use Psalm\Type\Union;
  *     (production warm-up, during `AfterCodebasePopulated`).
  *   - `tests/Unit/` fixtures via {@see self::overrideForTesting()} / {@see self::reset()}.
  *
- * Phase 1 scope: computes schema + casts + traits + primary-key + cheap scalar fields.
- * Accessors / mutators / relations / scopes / morph alias / custom builder / custom
- * collection are left for Phase 2 PRs per the design doc §7.
+ * Computes schema + casts + traits + primary-key + cheap scalar fields, plus accessors,
+ * mutators, relations, scopes, morph alias, and custom builder/collection detection.
  *
  * @psalm-api
  * @internal
@@ -94,10 +94,20 @@ final class ModelMetadataRegistryBuilder
         try {
             $metadata = self::compute($codebase, $modelFqcn);
         } catch (\Throwable $throwable) {
-            // Safety net: warm-up must never crash the plugin. Log and skip this model.
-            $codebase->progress->warning(
-                "Laravel plugin: ModelMetadataRegistry warm-up failed for '{$modelFqcn}': {$throwable->getMessage()} at {$throwable->getFile()}:{$throwable->getLine()}",
-            );
+            // Safety net: warm-up must never crash the plugin. Log and skip this model — but a
+            // dropped model silently disables every registry-backed handler and rule for it
+            // (BuilderScopeHandler, ModelPropertyAccessorHandler, UnknownModelAttribute, ...), so
+            // the failure must reach the user. Progress::warning() writes to STDERR by default, but
+            // VoidProgress (selected by --no-progress, a common quiet-CI flag) makes write() a total
+            // no-op, silently swallowing the warning rather than merely hiding a progress bar. Write
+            // directly to STDERR in that case so the failure is never fully invisible.
+            $message = "Laravel plugin: ModelMetadataRegistry warm-up failed for '{$modelFqcn}': {$throwable->getMessage()} at {$throwable->getFile()}:{$throwable->getLine()}";
+
+            $codebase->progress->warning($message);
+
+            if ($codebase->progress instanceof VoidProgress) {
+                \fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
+            }
 
             return;
         }
@@ -1133,8 +1143,6 @@ final class ModelMetadataRegistryBuilder
             \in_array($baseLower, ['date', 'datetime', 'custom_datetime', 'immutable_date', 'immutable_datetime', 'immutable_custom_datetime'], true)
         ) {
             $shape = CastShape::DateTime;
-        } elseif ($baseLower === 'collection') {
-            $shape = CastShape::AsCollection;
         } elseif (self::looksLikeClassName($base) && self::isEnumClass($base)) {
             /** @var class-string $base */
             $shape = CastShape::BackedEnum;
@@ -1147,7 +1155,16 @@ final class ModelMetadataRegistryBuilder
             // the authoritative path for $psalmType and keeps its existing autoload
             // behavior for backwards compatibility with pre-registry resolution.
             && \class_exists($base, false)
-            && \is_a($base, \Illuminate\Contracts\Database\Eloquent\CastsAttributes::class, true)
+            // Castable (AsCollection, AsArrayObject, AsStringable, AsEnumCollection, ...) alongside
+            // CastsAttributes: both are class-castable per Model::isClassCastable(), but a Castable
+            // itself implements neither CastsAttributes nor CastsInboundAttributes directly — only the
+            // instance its castUsing() returns does — so checking CastsAttributes alone missed every
+            // framework Castable wrapper (and any user Castable-only class), wrongly classifying them
+            // Primitive and letting an accessor on the same column win over the class cast.
+            && (
+                \is_a($base, \Illuminate\Contracts\Database\Eloquent\CastsAttributes::class, true)
+                || \is_a($base, \Illuminate\Contracts\Database\Eloquent\Castable::class, true)
+            )
         ) {
             /** @var class-string $base */
             $shape = CastShape::CustomCastsAttributes;

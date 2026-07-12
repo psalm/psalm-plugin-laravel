@@ -170,8 +170,11 @@ final class ModelSerializationShapeBuilder
     }
 
     /**
-     * Backing scalar of a backed-enum cast from the enum's Psalm storage; null when the target or its
-     * backing type is unresolved (best-effort).
+     * Serialized scalar of an enum cast from the enum's Psalm storage; null when the target is
+     * unresolved (best-effort). Mirrors `HasAttributes::getStorableEnumValue()` /
+     * `Illuminate\Support\enum_value()`: a `BackedEnum` serializes to its backing value, while a plain
+     * (non-backed) `UnitEnum` serializes to its case `->name` — both, not just the backed case, despite
+     * {@see CastShape::BackedEnum} covering both under one shape.
      *
      * @psalm-mutation-free
      */
@@ -187,13 +190,16 @@ final class ModelSerializationShapeBuilder
             return null;
         }
 
+        if (!$enumStorage->is_enum) {
+            return null;
+        }
+
         $backing = match ($enumStorage->enum_type) {
             'int' => new TInt(),
-            'string' => new TString(),
-            default => null,
+            'string', null => new TString(),
         };
 
-        return $backing instanceof Atomic ? self::scalarOrNull($backing, $columnInfo->nullable) : null;
+        return self::scalarOrNull($backing, $columnInfo->nullable);
     }
 
     /** @psalm-pure */
@@ -225,18 +231,22 @@ final class ModelSerializationShapeBuilder
         $isModern = $accessor instanceof AttributeAccessorInfo;
 
         $changed = false;
-        $atomics = [];
+        $combined = null;
         foreach ($accessor->returnType->getAtomicTypes() as $atomic) {
             $mapped = self::serializedAtomic($codebase, $atomic, $isModern);
             if ($mapped !== $atomic) {
                 $changed = true;
             }
 
-            $atomics[] = $mapped;
+            // `Type::combineUnionTypes()`, not `new Union($atomics)`: two mapped atomics can both be
+            // `TArray` (e.g. a `Collection|array` accessor) and `TArray::getKey()` returns the same
+            // literal `'array'` regardless of type params, so keying by getKey() would silently drop
+            // one arm instead of merging their value types.
+            $combined = Type::combineUnionTypes($combined, new Union([$mapped]), $codebase);
         }
 
-        // One-for-one with the (non-empty) source atomics, so non-empty here.
-        return $changed ? new Union($atomics) : $accessor->returnType;
+        // One-for-one with the (non-empty) source atomics, so non-null here.
+        return $changed ? $combined : $accessor->returnType;
     }
 
     /**
@@ -284,7 +294,7 @@ final class ModelSerializationShapeBuilder
         $arrayable = new Union([new TNamedObject(Arrayable::class)]);
 
         $changed = false;
-        $atomics = [];
+        $combined = null;
         foreach ($value->getAtomicTypes() as $atomic) {
             $mapped = $atomic instanceof TNamedObject
                 && UnionTypeComparator::isContainedBy($codebase, new Union([$atomic]), $arrayable)
@@ -294,10 +304,13 @@ final class ModelSerializationShapeBuilder
                 $changed = true;
             }
 
-            $atomics[] = $mapped;
+            // Type::combineUnionTypes(), not new Union($atomics): a source union with more than one
+            // Arrayable-implementing atomic maps every one of them to the same TArray::getKey()
+            // literal 'array', so keying by getKey() would silently drop all but the last mapped atomic.
+            $combined = Type::combineUnionTypes($combined, new Union([$mapped]), $codebase);
         }
 
-        // One-for-one with the (non-empty) source atomics, so non-empty here.
-        return $changed ? new Union($atomics) : $value;
+        // One-for-one with the (non-empty) source atomics, so non-null here.
+        return $changed ? $combined : $value;
     }
 }

@@ -58,6 +58,11 @@ final class MissingViewHandlerTest extends TestCase
     protected function setUp(): void
     {
         MissingViewHandler::init([self::$fixtureDir], ['blade.php', 'php', 'css', 'html']);
+
+        // Reset the view() helper narrowing state so each test starts from "no
+        // factory class resolved" — narrowing tests below opt in explicitly via
+        // MissingViewHandler::initViewFactory().
+        (new \ReflectionProperty(MissingViewHandler::class, 'factoryClass'))->setValue(null, null);
     }
 
     #[Test]
@@ -193,6 +198,68 @@ final class MissingViewHandlerTest extends TestCase
         $this->assertNotInstanceOf(Union::class, MissingViewHandler::getFunctionReturnType($event));
     }
 
+    // --- view() helper concrete narrowing (narrowedHelperReturn) ---
+    //
+    // A phpt type test cannot cover the nonstandard-binding fallback (the plugin
+    // boots one shared Testbench app whose 'view' binding is always the standard
+    // Factory) so the branch decision is unit-tested directly here instead.
+
+    #[Test]
+    public function narrows_zero_arg_to_the_resolved_factory_class(): void
+    {
+        MissingViewHandler::initViewFactory(\Illuminate\View\Factory::class);
+
+        $this->assertSame(\Illuminate\View\Factory::class, $this->invokeNarrowedHelperReturn(0));
+    }
+
+    #[Test]
+    public function narrows_zero_arg_to_null_when_no_factory_class_resolved(): void
+    {
+        $this->assertNull($this->invokeNarrowedHelperReturn(0));
+    }
+
+    #[Test]
+    public function narrows_argument_supplied_to_view_for_the_stock_factory(): void
+    {
+        MissingViewHandler::initViewFactory(\Illuminate\View\Factory::class);
+
+        $this->assertSame(\Illuminate\View\View::class, $this->invokeNarrowedHelperReturn(1));
+    }
+
+    #[Test]
+    public function narrows_argument_supplied_to_null_for_a_factory_subclass(): void
+    {
+        // A subclass may override viewInstance() to construct a different View
+        // implementation, so the arg-supplied branch must not narrow.
+        MissingViewHandler::initViewFactory(CustomViewFactoryStub::class);
+
+        $this->assertNull($this->invokeNarrowedHelperReturn(1));
+    }
+
+    private function invokeNarrowedHelperReturn(int $argCount): ?string
+    {
+        $method = new \ReflectionMethod(MissingViewHandler::class, 'narrowedHelperReturn');
+
+        /** @var string|null $result */
+        $result = $method->invoke(null, $argCount);
+
+        return $result;
+    }
+
+    #[Test]
+    public function registers_the_canonical_view_facade_even_without_alias_resolution(): void
+    {
+        // FacadeMapProvider is not initialized here, so getFacadeClasses() returns [].
+        // This mirrors an app that trims its alias registry: the canonical facade must
+        // still be registered (hardcoded), or ProducerReturnTypeHandler would answer the
+        // return type first and the missing-view diagnostic would never fire on
+        // \Illuminate\Support\Facades\View::make().
+        $this->assertContains(
+            \Illuminate\Support\Facades\View::class,
+            MissingViewHandler::getClassLikeNames(),
+        );
+    }
+
     // --- View::make() (MethodReturnTypeProvider) tests ---
 
     #[Test]
@@ -321,3 +388,10 @@ final class MissingViewHandlerTest extends TestCase
         );
     }
 }
+
+/**
+ * Stand-in for an app-provided \Illuminate\View\Factory subclass — never
+ * instantiated, only referenced by class-string, so its constructor
+ * requirements don't matter here.
+ */
+final class CustomViewFactoryStub extends \Illuminate\View\Factory {}

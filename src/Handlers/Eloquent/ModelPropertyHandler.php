@@ -256,7 +256,11 @@ final class ModelPropertyHandler
             }
 
             $tableName = $instance->getTable();
-        } catch (\ReflectionException) {
+        } catch (\Throwable) {
+            // getTable() is a user-overridable Model method (not just reflection), so it can throw
+            // anything — not only \ReflectionException. This runs during AfterCodebasePopulated,
+            // outside ModelMetadataRegistryBuilder::warmUp()'s own try/catch, so an uncaught
+            // \Throwable here crashes the entire Psalm run rather than just dropping this model.
             return self::$tableNameCache[$fqClasslikeName] = null;
         }
 

@@ -33,6 +33,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\SerializedIntStatus;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\SerializedPlainStatus;
 
 /**
  * Unit coverage for {@see ModelSerializationShapeBuilder}. The COLUMN shape can't be a `.phpt` (the
@@ -60,6 +61,9 @@ final class ModelSerializationShapeBuilderTest extends TestCase
         $this->classLikeStorageProvider->create(WorkOrder::class);
         // Storage for the backed-enum target; the backing type is seeded per-test via seedEnumBacking().
         $this->classLikeStorageProvider->create(SerializedIntStatus::class);
+        // Storage for the plain (non-backed) enum target; is_enum=true, enum_type stays null, mirroring
+        // real Psalm reflection of a genuinely non-backed enum.
+        $this->classLikeStorageProvider->create(SerializedPlainStatus::class)->is_enum = true;
 
         $this->codebase = $this->makeCodebase();
     }
@@ -202,6 +206,21 @@ final class ModelSerializationShapeBuilderTest extends TestCase
         $this->override(
             columns: ['status' => $this->col('status', SchemaColumn::TYPE_STRING)],
             casts: ['status' => $this->enumCast('status')],
+        );
+
+        $this->assertSame('array{status?: string, ...<string, mixed>}', (string) $this->build());
+    }
+
+    #[Test]
+    public function a_plain_non_backed_enum_cast_serializes_to_its_case_name(): void
+    {
+        // is_enum=true, enum_type=null — a genuinely non-backed UnitEnum, not an unresolved backed
+        // one. HasAttributes::getStorableEnumValue() / enum_value() serializes it to ->name (string).
+        $enumType = new Union([new TNamedObject(SerializedPlainStatus::class)]);
+
+        $this->override(
+            columns: ['status' => $this->col('status', SchemaColumn::TYPE_STRING)],
+            casts: ['status' => new CastInfo('status', CastShape::BackedEnum, SerializedPlainStatus::class, $enumType, null)],
         );
 
         $this->assertSame('array{status?: string, ...<string, mixed>}', (string) $this->build());
@@ -356,7 +375,12 @@ final class ModelSerializationShapeBuilderTest extends TestCase
 
     private function seedEnumBacking(string $backingType): void
     {
-        $this->classLikeStorageProvider->get(SerializedIntStatus::class)->enum_type = $backingType;
+        $storage = $this->classLikeStorageProvider->get(SerializedIntStatus::class);
+        // Both flags: a real backed enum, once scanned, always carries is_enum=true alongside its
+        // enum_type — the synthetic storage otherwise defaults is_enum=false, which
+        // backedEnumValueType() reads as "not yet resolved" (see the unresolved-backing test below).
+        $storage->is_enum = true;
+        $storage->enum_type = $backingType;
     }
 
     /**

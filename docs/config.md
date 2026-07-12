@@ -116,9 +116,9 @@ See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
 
 **default**: `false`
 
-When enabled, the plugin validates relation-name strings passed to `with()`, `without()`, `has()`, `whereHas()`, `load()`, `loadCount()`, and similar methods against the resolved model, reporting [UndefinedRelation](issues/UndefinedRelation.md) when the name does not resolve to a relationship. It handles dot-notation, array, keyed-closure, and `:columns` select syntaxes. It is opt-in because relations can be registered at runtime (via `Model::resolveRelationUsing()` or package macros) in ways static analysis cannot see.
+When enabled, the plugin validates relation-name strings passed to `with()`, `without()`, `has()`, `whereHas()`, `load()`, `loadCount()`, and similar methods against the resolved model, reporting [UndefinedModelRelation](issues/UndefinedModelRelation.md) when the name does not resolve to a relationship. It handles dot-notation, array, keyed-closure, and `:columns` select syntaxes. It is opt-in because relations can be registered at runtime (via `Model::resolveRelationUsing()` or package macros) in ways static analysis cannot see.
 
-See [UndefinedRelation](issues/UndefinedRelation.md) for details.
+See [UndefinedModelRelation](issues/UndefinedModelRelation.md) for details.
 
 ### Example
 
@@ -303,6 +303,8 @@ PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
 
 When the plugin encounters an internal error (e.g. failing to boot the Laravel app or generate stubs), it prints a warning and disables itself for that run.
 Set this to `true` to throw the exception instead.
+
+This also covers partial boots. When the app's `bootstrap()` throws partway (for example, a `config/*.php` file that calls `parse_url(env('UNSET'))`), the plugin normally keeps running in a degraded mode (service providers never booted, so model, facade and container inference is reduced) and prints a warning about it. With `failOnInternalError` enabled, that swallowed bootstrap failure fails the run instead of degrading silently.
 
 **Recommended for CI.** Without this, a misconfigured environment causes the plugin to silently disable itself — your pipeline passes but without any plugin analysis.
 With `failOnInternalError`, the Psalm run fails immediately, so you know the plugin isn't working.

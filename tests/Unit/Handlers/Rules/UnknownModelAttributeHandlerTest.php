@@ -109,12 +109,14 @@ final class UnknownModelAttributeHandlerTest extends TestCase
     }
 
     #[Test]
-    public function ignores_a_static_call_with_an_unresolved_class_name(): void
+    public function ignores_a_static_call_through_an_unresolvable_special_class_name(): void
     {
-        // The Name carries no 'resolvedName' attribute, so the receiver is not a known model and the
-        // call is skipped — even though it clears the earlier argument guards with a literal array.
+        // `parent::` is a special class name resolveClassName() deliberately does not resolve (only
+        // `self`/`static` are — a static call through the parent class is rare and getFQCLN() would
+        // point at the wrong class), so the call is skipped before any Codebase lookup — even though
+        // it clears the earlier argument guards with a literal array.
         $call = $this->positioned(new StaticCall(
-            new Name('App\\Models\\User'),
+            new Name('parent'),
             new Identifier('fill'),
             [new Arg(new Array_([]))],
         ));

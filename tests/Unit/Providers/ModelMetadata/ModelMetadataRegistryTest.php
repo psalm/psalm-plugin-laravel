@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -67,6 +68,7 @@ use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
@@ -664,6 +666,52 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame(CastShape::DateTime, $casts['archived_at']->shape);
         // And the default 'deleted_at' key must not appear for this model.
         $this->assertArrayNotHasKey('deleted_at', $casts);
+    }
+
+    #[Test]
+    public function bare_collection_cast_string_classifies_as_primitive_not_class_castable(): void
+    {
+        // The legacy `'collection'` cast string is listed in Laravel's own
+        // HasAttributes::$primitiveCastTypes, so Model::isClassCastable() returns false for it —
+        // an accessor on the same column must win over it during serialization. #1201 review finding:
+        // this used to classify as a distinct (class-castable) shape, wrongly letting the cast win.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(CollectionCastVariantsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, CollectionCastVariantsModel::class);
+
+        $metadata = ModelMetadataRegistry::for(CollectionCastVariantsModel::class);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
+
+        $shape = $metadata->casts()['legacy_tags']->shape;
+        $this->assertSame(CastShape::Primitive, $shape);
+        $this->assertFalse($shape->isClassCastable());
+    }
+
+    #[Test]
+    public function as_collection_class_cast_classifies_as_class_castable(): void
+    {
+        // AsCollection implements Castable, not CastsAttributes directly (only the instance its
+        // castUsing() returns does), so a detector checking CastsAttributes alone misses it and every
+        // other framework Castable wrapper — wrongly letting an accessor on the same column win over
+        // the class cast during serialization, the inverse of the bare-string bug above.
+        //
+        // classifyCast() deliberately checks `class_exists($base, false)` (no autoload) to avoid eager
+        // file includes during warm-up, so force AsCollection into memory first — matching a real app
+        // boot, where the framework class is normally already loaded by the time warm-up reaches it.
+        \class_exists(AsCollection::class);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(CollectionCastVariantsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, CollectionCastVariantsModel::class);
+
+        $metadata = ModelMetadataRegistry::for(CollectionCastVariantsModel::class);
+        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
+
+        $shape = $metadata->casts()['modern_tags']->shape;
+        $this->assertSame(CastShape::CustomCastsAttributes, $shape);
+        $this->assertTrue($shape->isClassCastable());
     }
 
     #[Test]
