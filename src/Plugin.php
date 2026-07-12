@@ -564,13 +564,13 @@ final class Plugin implements PluginEntryPointInterface
 
         try {
             $factory = $app->make('view');
-        } catch (\Throwable $e) {
+        } catch (\Throwable $throwable) {
             // A throwing 'view' binding (e.g. a closure needing runtime-only state a
             // degraded boot never prepared) must degrade this one feature, not escape
             // to __invoke()'s outer catch and disable the whole plugin — the same
             // per-probe policy FacadeMapProvider::init() applies to facade roots.
             // Keep the real cause reachable for --debug runs.
-            $output->debug("Laravel plugin: resolving the 'view' binding threw: {$e->getMessage()}\n");
+            $output->debug("Laravel plugin: resolving the 'view' binding threw: {$throwable->getMessage()}\n");
 
             return null;
         }
