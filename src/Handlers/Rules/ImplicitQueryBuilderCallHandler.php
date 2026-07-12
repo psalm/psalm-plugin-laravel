@@ -18,6 +18,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Issues\ImplicitQueryBuilderCall;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
+use Psalm\StatementsSource;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -120,7 +121,7 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         $codebase = $event->getCodebase();
 
         $modelClass = $expr instanceof StaticCall
-            ? self::staticReceiverModel($expr, $codebase)
+            ? self::staticReceiverModel($expr, $event->getStatementsSource(), $codebase)
             : self::instanceReceiverModel($expr, $event, $codebase);
 
         if ($modelClass === null) {
@@ -148,25 +149,46 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
 
     /**
      * Resolve the model FQCN named on the left of a static call, or null when the receiver
-     * is not a (resolvable) Eloquent model.
+     * is not a (resolvable) Eloquent model. `self` and `static` are special class names Psalm's
+     * name resolver does not rewrite to an FQCN, so they are resolved against the enclosing class
+     * explicitly, or the idiomatic `static::where(...)` inside a model method silently bypasses
+     * this rule. Mirrors {@see UndefinedRelationHandler::resolveClassName()}.
      *
      * @return class-string<Model>|null
      */
-    private static function staticReceiverModel(StaticCall $expr, Codebase $codebase): ?string
+    private static function staticReceiverModel(StaticCall $expr, StatementsSource $source, Codebase $codebase): ?string
     {
-        // Only named class references (`User::`, and `self`/`static`/`parent` which the name
-        // resolver rewrites to a concrete FQCN); dynamic `$class::method()` is not known here.
         if (!$expr->class instanceof Name) {
             return null;
         }
 
-        $className = $expr->class->getAttribute('resolvedName');
+        $className = self::resolveClassName($expr->class, $source);
 
-        if (!\is_string($className) || !self::isModelSubclass($className, $codebase)) {
+        if ($className === null || !self::isModelSubclass($className, $codebase)) {
             return null;
         }
 
         return $className;
+    }
+
+    /**
+     * Resolve a `Name` class reference to an FQCN. `self` / `static` resolve to the enclosing class;
+     * `parent` is not resolved. Mirrors {@see UndefinedRelationHandler::resolveClassName()}.
+     */
+    private static function resolveClassName(Name $class, StatementsSource $source): ?string
+    {
+        if ($class->isSpecialClassName()) {
+            return match ($class->toLowerString()) {
+                'self', 'static' => $source->getFQCLN(),
+                default => null,
+            };
+        }
+
+        // Psalm's name resolver stores the FQCN as a string on this attribute.
+        /** @psalm-var ?string $resolved */
+        $resolved = $class->getAttribute('resolvedName');
+
+        return \is_string($resolved) ? $resolved : $class->toString();
     }
 
     /**
