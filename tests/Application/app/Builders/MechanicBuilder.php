@@ -17,9 +17,6 @@ use Illuminate\Database\Eloquent\Model;
  */
 class MechanicBuilder extends Builder
 {
-    /**
-     * @return self<TModel>
-     */
     public function whereCertified(): self
     {
         return $this->where('certified', true);
