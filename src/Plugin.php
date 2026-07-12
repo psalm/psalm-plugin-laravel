@@ -36,6 +36,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
         $output = $this->getProgress($registration);
+        $this->loadInitializationHandlers();
 
         try {
             ApplicationProvider::bootApp();
@@ -89,6 +90,24 @@ final class Plugin implements PluginEntryPointInterface
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
+    }
+
+    /**
+     * Centralize the explicit source-order loads for handlers initialized before
+     * registration, including optional configuration branches.
+     *
+     * This is not an autoloader bootstrap: PluginConfig has already been loaded
+     * before this method runs, and normal static calls can use Composer autoloading.
+     * The registration-adjacent require_once calls remain necessary because Psalm's
+     * registration API deliberately refuses to autoload handler classes.
+     *
+     * @psalm-suppress MissingPureAnnotation require_once changes process-wide load state.
+     */
+    private function loadInitializationHandlers(): void
+    {
+        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
+        require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
+        require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
     }
 
     private function registerStubs(
@@ -378,8 +397,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
 
-        // RelationResolver depends on RelationMethodParser. Keep the explicit loads paired with
-        // registration: Psalm's phar bootstrap does not guarantee the project PSR-4 autoloader.
+        // RelationResolver depends on RelationMethodParser. Load both collaborators and the handler
+        // before registration: registerHooksFromClass() requires the handler to be preloaded.
         require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
         require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
         require_once __DIR__ . '/Handlers/Rules/UndefinedModelRelationHandler.php';
@@ -413,7 +432,9 @@ final class Plugin implements PluginEntryPointInterface
         // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler
         // always returns null (it only emits an issue), so the chain continues to EnvHandler for
         // type narrowing. Reversing the order would silently suppress the NoEnvOutsideConfig issue.
-        // (require_once for the handler ran in initNoEnvOutsideConfigHandler() before this method.)
+        // The initialization helper establishes the earlier static-init source order;
+        // repeat the idempotent require_once because Psalm requires this class to be loaded.
+        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\NoEnvOutsideConfigHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/EnvHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\EnvHandler::class);
@@ -471,7 +492,6 @@ final class Plugin implements PluginEntryPointInterface
             $directories = [ApplicationProvider::getApp()->configPath()];
         }
 
-        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         Handlers\Rules\NoEnvOutsideConfigHandler::init($directories, $output);
     }
 
@@ -586,10 +606,6 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
     {
-        // Load the handler before its first static touch: __invoke() runs before
-        // registerHandlers() (where the paired require_once lives), and under
-        // psalm.phar the plugin's PSR-4 autoloader may not be registered yet.
-        require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
         Handlers\Views\MissingViewHandler::initViewFactory($factory instanceof \Illuminate\View\Factory ? $factory::class : null);
     }
 
