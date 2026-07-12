@@ -34,8 +34,9 @@ $maybeKey = rand(0, 1) ? 'key' : null;
 $_nullable = __($maybeKey);
 /** @psalm-check-type-exact $_nullable = null|string */
 
-// trans() with no args returns the Translator instance
+// trans() with no args narrows to the concrete resolved Translator
+// (TranslationKeyHandler's zero-arg narrowing, not the stub's contract fallback)
 $_translator = trans();
-/** @psalm-check-type-exact $_translator = \Illuminate\Contracts\Translation\Translator */
+/** @psalm-check-type-exact $_translator = \Illuminate\Translation\Translator */
 ?>
 --EXPECTF--

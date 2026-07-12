@@ -55,9 +55,17 @@ final class Plugin implements PluginEntryPointInterface
             // of whether findMissingTranslations is enabled
             $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations);
 
+            // Resolve the 'view' binding once and share it: the diagnostic init
+            // (finder fallback) and the always-on view() narrowing both need it.
+            $viewFactory = $this->resolveViewFactory(ApplicationProvider::getApp(), $output);
+
             if ($pluginConfig->findMissingViews) {
-                $this->initMissingViewHandler($output);
+                $this->initMissingViewHandler($output, $viewFactory);
             }
+
+            // Always called — provides type narrowing for the view() helper regardless
+            // of whether findMissingViews is enabled (same split as translations above).
+            $this->initViewFactoryHandler($viewFactory);
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
@@ -381,12 +389,26 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Helpers/EnvHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\EnvHandler::class);
 
-        // Unlike TranslationKeyHandler (which always runs for type narrowing),
-        // MissingViewHandler provides no type information — skip entirely when disabled
-        if ($pluginConfig->findMissingViews) {
-            require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
-            $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
-        }
+        // Always registered (like TranslationKeyHandler): the view() helper's type
+        // narrowing runs regardless of findMissingViews — only the MissingView
+        // diagnostic itself is opt-in, gated internally by self::$enabled
+        // (set only when initMissingViewHandler() ran, i.e. findMissingViews is true).
+        require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
+        $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
+
+        // Must come AFTER MissingViewHandler: MissingViewHandler's method provider on
+        // Factory/View-facade make() always returns null after emitting its diagnostic,
+        // but Psalm dispatches return-type providers in registration order and stops at
+        // the first non-null result. Registering the narrowing provider first would let
+        // it answer before MissingViewHandler runs, silently dropping the MissingView
+        // issue on View::make(). Reads FacadeMapProvider, so it relies on init() (above)
+        // having already run.
+        require_once __DIR__ . '/Handlers/Producers/ProducerReturnTypeHandler.php';
+        // Rebuild the family index from this invocation's FacadeMapProvider aliases
+        // (a reused process may have booted a different app). Must precede registration
+        // so the reverse index and getClassLikeNames() agree.
+        Handlers\Producers\ProducerReturnTypeHandler::reset();
+        $registration->registerHooksFromClass(Handlers\Producers\ProducerReturnTypeHandler::class);
 
         // Flag `public` Eloquent scopes / legacy accessors (Laravel's convention is `protected` — they
         // are dispatched indirectly, never called by name). Enabled by default; silence per project via
@@ -466,28 +488,27 @@ final class Plugin implements PluginEntryPointInterface
      * Uses the app's FileViewFinder which reflects config('view.paths') plus
      * any paths added by service providers during bootstrap.
      */
-    private function initMissingViewHandler(\Psalm\Progress\Progress $output): void
+    private function initMissingViewHandler(\Psalm\Progress\Progress $output, ?\Illuminate\View\Factory $factory): void
     {
         $app = ApplicationProvider::getApp();
 
-        // Prefer the dedicated view.finder binding; fall back to the Factory's finder
-        // (ApplicationProvider may bind 'view' without registering 'view.finder')
+        // Prefer the dedicated view.finder binding; fall back to the pre-resolved
+        // Factory's finder (ApplicationProvider may bind 'view' without 'view.finder').
         if ($app->bound('view.finder')) {
             /** @var \Illuminate\View\FileViewFinder $finder */
             $finder = $app->make('view.finder');
-        } elseif ($app->bound('view')) {
-            $factory = $app->make('view');
-
-            if (!$factory instanceof \Illuminate\View\Factory) {
-                $output->warning(
-                    'Laravel plugin: findMissingViews is enabled but the view factory is not a standard instance. '
-                    . 'The MissingView check will be skipped.',
-                );
-
-                return;
-            }
-
+        } elseif ($factory instanceof \Illuminate\View\Factory) {
             $finder = $factory->getFinder();
+        } elseif ($app->bound('view')) {
+            // 'view' is bound but resolveViewFactory() returned null: the binding
+            // threw (swallowed to a --debug line rather than disabling the plugin)
+            // or resolved to a non-standard implementation.
+            $output->warning(
+                'Laravel plugin: findMissingViews is enabled but the view factory could not be resolved to a '
+                . 'standard instance (run with --debug for the underlying cause). The MissingView check will be skipped.',
+            );
+
+            return;
         } else {
             $output->warning(
                 'Laravel plugin: findMissingViews is enabled but the view finder service is not bound. '
@@ -513,6 +534,58 @@ final class Plugin implements PluginEntryPointInterface
         $extensions = $finder->getExtensions();
 
         Handlers\Views\MissingViewHandler::init($paths, $extensions);
+    }
+
+    /**
+     * Resolve the booted app's view factory class and hand it to MissingViewHandler
+     * so the view() helper can narrow past the stub's contract fallback.
+     *
+     * Passes the resolved class or null (unbound / threw / non-standard) so the
+     * handler always overwrites — never leaks — a prior app's binding in a reused
+     * process. Null falls back to the stub's contract type. Unlike
+     * initMissingViewHandler(), no warning is emitted: this is bonus type narrowing,
+     * not an opt-in diagnostic.
+     *
+     * @psalm-external-mutation-free
+     */
+    private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
+    {
+        // Load the handler before its first static touch: __invoke() runs before
+        // registerHandlers() (where the paired require_once lives), and under
+        // psalm.phar the plugin's PSR-4 autoloader may not be registered yet.
+        require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
+        Handlers\Views\MissingViewHandler::initViewFactory($factory instanceof \Illuminate\View\Factory ? $factory::class : null);
+    }
+
+    /**
+     * Single call site for `$app->make('view')`, resolved once in __invoke() and
+     * shared by initMissingViewHandler() (opt-in diagnostics) and
+     * initViewFactoryHandler() (always-on type narrowing).
+     */
+    private function resolveViewFactory(Application $app, \Psalm\Progress\Progress $output): ?\Illuminate\View\Factory
+    {
+        if (!$app->bound('view')) {
+            return null;
+        }
+
+        try {
+            $factory = $app->make('view');
+        } catch (\Throwable $throwable) {
+            // A throwing 'view' binding (e.g. a closure needing runtime-only state a
+            // degraded boot never prepared) must degrade this one feature, not escape
+            // to __invoke()'s outer catch and disable the whole plugin — the same
+            // per-probe policy FacadeMapProvider::init() applies to facade roots.
+            // Keep the real cause reachable for --debug runs.
+            $output->debug("Laravel plugin: resolving the 'view' binding threw: {$throwable->getMessage()}\n");
+
+            return null;
+        }
+
+        if (!$factory instanceof \Illuminate\View\Factory) {
+            return null;
+        }
+
+        return $factory;
     }
 
     private function buildSchema(PluginConfig $pluginConfig): void
