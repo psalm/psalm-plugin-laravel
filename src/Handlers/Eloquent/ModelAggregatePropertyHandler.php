@@ -91,7 +91,6 @@ final class ModelAggregatePropertyHandler
         self::$pseudoPropertyCache = [];
         self::$suffixCache = [];
         self::$relationMethodCache = [];
-        self::$typeCache = [];
     }
 
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool

@@ -18,10 +18,17 @@ final class ApplicationProviderInvocationResetTest extends TestCase
         ApplicationProvider::reset();
         ApplicationProvider::bootApp();
         $first = ApplicationProvider::getApp();
+        $oldAlias = 'PsalmLaravelPluginOldInvocationAlias' . \str_replace('.', '', \uniqid('', true));
+        $loader = \Illuminate\Foundation\AliasLoader::getInstance();
+        $loader->alias($oldAlias, \stdClass::class);
+        $loader->register();
 
         ApplicationProvider::reset();
 
         $this->assertNull(\Illuminate\Support\Facades\Facade::getFacadeApplication());
+        $this->assertNotSame($first, \Illuminate\Container\Container::getInstance());
+        $this->assertArrayNotHasKey($oldAlias, \Illuminate\Foundation\AliasLoader::getInstance()->getAliases());
+        $this->assertFalse(\class_exists($oldAlias));
 
         ApplicationProvider::bootApp();
 

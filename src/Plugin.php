@@ -126,6 +126,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
         require_once __DIR__ . '/Handlers/Eloquent/Schema/SchemaStateProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
         require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         require_once __DIR__ . '/Handlers/Facades/FacadeMethodHandler.php';
@@ -171,6 +172,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
         Handlers\Eloquent\ModelRegistrationHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
+        Handlers\Eloquent\Support\RelationResolver::reset();
         SchemaStateProvider::reset();
         Handlers\Facades\AppFacadeRegistrationHandler::reset();
         Handlers\Facades\DateFacadeHandler::reset();

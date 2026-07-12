@@ -74,9 +74,13 @@ final class ApplicationProvider
         \Illuminate\Support\Facades\Facade::clearResolvedInstances();
         /** @psalm-suppress ImpureMethodCall framework global reset */
         \Illuminate\Support\Facades\Facade::setFacadeApplication(null);
+        // Keep the one registered loader and clear its aliases. Replacing the
+        // singleton leaves its bound load() closure on PHP's autoload stack, so a
+        // name that belonged only to the previous application could still resolve.
         /** @psalm-suppress ImpureMethodCall framework global reset */
-        /** @psalm-suppress NullArgument Laravel permits clearing the singleton with null */
-        \Illuminate\Foundation\AliasLoader::setInstance(null);
+        \Illuminate\Foundation\AliasLoader::getInstance()->setAliases([]);
+        /** @psalm-suppress ImpureMethodCall framework global reset */
+        \Illuminate\Container\Container::setInstance(null);
     }
 
     /**
