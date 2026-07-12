@@ -12,8 +12,9 @@ use Psalm\LaravelPlugin\Plugin;
 /**
  * Source-order guard for the deliberately explicit handler loading convention.
  *
- * A realistic missing-autoloader fixture is not possible: booting Laravel needs
- * Composer's autoloader. Keep this test close to the ordering invariant instead.
+ * This is deliberately a source-order test, not an autoloader test: PluginConfig
+ * is already referenced before the initialization helper runs. Keep the check
+ * close to the ordering invariant instead.
  */
 #[CoversClass(Plugin::class)]
 final class PluginInitializationHandlerLoadingTest extends TestCase

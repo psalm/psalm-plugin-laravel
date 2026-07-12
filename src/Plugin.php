@@ -93,13 +93,13 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * Load every handler that Plugin::__invoke() initializes before any optional
-     * configuration branch can touch it. Psalm's plugin loader does not guarantee
-     * this package's PSR-4 autoloader is active at invocation time.
+     * Centralize the explicit source-order loads for handlers initialized before
+     * registration, including optional configuration branches.
      *
-     * The registration-adjacent require_once calls remain in registerHandlers():
-     * they document the handler/registration pairing, and require_once is
-     * intentionally idempotent.
+     * This is not an autoloader bootstrap: PluginConfig has already been loaded
+     * before this method runs, and normal static calls can use Composer autoloading.
+     * The registration-adjacent require_once calls remain necessary because Psalm's
+     * registration API deliberately refuses to autoload handler classes.
      *
      * @psalm-suppress MissingPureAnnotation require_once changes process-wide load state.
      */
@@ -432,8 +432,8 @@ final class Plugin implements PluginEntryPointInterface
         // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler
         // always returns null (it only emits an issue), so the chain continues to EnvHandler for
         // type narrowing. Reversing the order would silently suppress the NoEnvOutsideConfig issue.
-        // The initialization helper loads the handler before its earlier static init() call;
-        // repeat the idempotent require_once here to keep the registration pairing explicit.
+        // The initialization helper establishes the earlier static-init source order;
+        // repeat the idempotent require_once because Psalm requires this class to be loaded.
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\NoEnvOutsideConfigHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/EnvHandler.php';
