@@ -14,6 +14,7 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
@@ -64,6 +65,11 @@ use Psalm\Type\Union;
  *
  * The `withCount()` / `withSum()` family (relation + ` as alias` aggregate
  * sub-selects) is intentionally out of scope for this first pass.
+ *
+ * **No autoloading class checks.** Ancestry is resolved via {@see isClassOrSubclassOf()} /
+ * {@see concreteModel()} off Psalm's reflection, never `\is_a($class, X::class, true)` — that
+ * autoloads $class, and a deprecation raised while loading crashes the whole run (Psalm's error
+ * handler turns it into an exception).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/643
  * @see https://github.com/larastan/larastan RelationExistenceRule — Larastan's analogue
@@ -232,7 +238,7 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
      * skipped.
      *
      * @return ?class-string<Model>
-     * @psalm-mutation-free
+     * @psalm-external-mutation-free
      */
     private static function resolveModelFromType(Codebase $codebase, Union $type): ?string
     {
@@ -264,29 +270,56 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
      * model as their first generic parameter; a `Model` atomic is the model itself.
      *
      * @return ?class-string<Model>
-     * @psalm-mutation-free
+     * @psalm-external-mutation-free
      */
     private static function modelFromAtomic(Codebase $codebase, Atomic $atomic): ?string
     {
         if ($atomic instanceof TGenericObject) {
-            if (\is_a($atomic->value, EloquentBuilder::class, true) || \is_a($atomic->value, Relation::class, true)) {
+            if (
+                self::isClassOrSubclassOf($codebase, $atomic->value, EloquentBuilder::class)
+                || self::isClassOrSubclassOf($codebase, $atomic->value, Relation::class)
+            ) {
                 $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null);
 
                 return $model !== null ? self::concreteModel($codebase, $model) : null;
             }
 
-            if (\is_a($atomic->value, Model::class, true)) {
+            if (self::isClassOrSubclassOf($codebase, $atomic->value, Model::class)) {
                 return self::concreteModel($codebase, $atomic->value);
             }
 
             return null;
         }
 
-        if ($atomic instanceof TNamedObject && \is_a($atomic->value, Model::class, true)) {
+        if ($atomic instanceof TNamedObject && self::isClassOrSubclassOf($codebase, $atomic->value, Model::class)) {
             return self::concreteModel($codebase, $atomic->value);
         }
 
         return null;
+    }
+
+    /**
+     * $class is $ancestor or a subclass, without autoloading (unlike `\is_a(..., true)` — see class
+     * docblock). classExtends() is non-reflexive → identity checked first. All ancestors here
+     * (Builder, Relation, Model) are classes, so classExtends() alone suffices, no classImplements().
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function isClassOrSubclassOf(Codebase $codebase, string $class, string $ancestor): bool
+    {
+        if (\strtolower($class) === \strtolower($ancestor)) {
+            return true;
+        }
+
+        if (!$codebase->classExists($class)) {
+            return false;
+        }
+
+        try {
+            return $codebase->classExtends($class, $ancestor);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return false;
+        }
     }
 
     /**
@@ -296,17 +329,22 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
      * them would be a false positive.
      *
      * @return ?class-string<Model>
-     * @psalm-mutation-free
+     * @psalm-external-mutation-free
      */
     private static function concreteModel(Codebase $codebase, string $fqcn): ?string
     {
-        if (!\is_a($fqcn, Model::class, true) || $fqcn === Model::class) {
+        // classExtends() non-reflexive → already excludes Model itself; no autoload.
+        if (!$codebase->classExists($fqcn)) {
             return null;
         }
 
         try {
+            if (!$codebase->classExtends($fqcn, Model::class)) {
+                return null;
+            }
+
             $storage = $codebase->classlike_storage_provider->get($fqcn);
-        } catch (\InvalidArgumentException) {
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
             return null;
         }
 
