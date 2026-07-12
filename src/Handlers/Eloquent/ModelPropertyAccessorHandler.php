@@ -36,6 +36,12 @@ final class ModelPropertyAccessorHandler
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property". */
     private static array $nativePropertyCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$nativePropertyCache = [];
+    }
+
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         $source = $event->getSource();

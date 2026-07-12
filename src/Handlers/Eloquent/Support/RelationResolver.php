@@ -45,6 +45,13 @@ final class RelationResolver
     /** @var array<string, ?string> Cache for relatedModel() keyed by "class::lowername" */
     private static array $relatedModelCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$methodExistsCache = [];
+        self::$relatedModelCache = [];
+    }
+
     /**
      * Whether a method with this name exists on the model — either a real
      * method (including inherited / trait methods) or a `@method` pseudo-method.

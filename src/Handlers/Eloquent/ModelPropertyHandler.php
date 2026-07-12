@@ -287,6 +287,13 @@ final class ModelPropertyHandler
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
     private static array $nativePropertyCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$tableNameCache = [];
+        self::$nativePropertyCache = [];
+    }
+
     /**
      * Uses property_exists() instead of Reflection — cheaper and avoids exception overhead
      * on the non-existence path. Cached because this fires up to 3× per property access

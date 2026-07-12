@@ -64,6 +64,12 @@ final class RelationMethodParser
      */
     private static array $cache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$cache = [];
+    }
+
     /** @var list<string> Types that should not be resolved as class names in generic params */
     private const NON_CLASS_TYPES = [
         'static',

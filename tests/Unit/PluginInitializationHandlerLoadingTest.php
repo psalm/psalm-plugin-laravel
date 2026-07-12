@@ -27,11 +27,26 @@ final class PluginInitializationHandlerLoadingTest extends TestCase
         $this->assertIsString($source);
 
         $loadCall = \strpos($source, '$this->loadInitializationHandlers();');
+        $resetCall = \strpos($source, '$this->resetInvocationState();');
         $try = \strpos($source, '        try {');
 
         $this->assertIsInt($loadCall);
+        $this->assertIsInt($resetCall);
         $this->assertIsInt($try);
         $this->assertLessThan($try, $loadCall);
+        $this->assertLessThan($try, $resetCall);
+        $this->assertLessThan($resetCall, $loadCall);
+
+        $resetMethod = $this->methodBody($source, 'resetInvocationState');
+        foreach ([
+            'ApplicationProvider::reset()',
+            'FacadeMapProvider::reset()',
+            'Handlers\\Translations\\TranslationKeyHandler::reset()',
+            'Handlers\\Views\\MissingViewHandler::reset()',
+            'Handlers\\Eloquent\\Metadata\\ModelMetadataRegistryBuilder::reset()',
+        ] as $reset) {
+            $this->assertStringContainsString($reset, $resetMethod);
+        }
 
         $loadMethod = $this->methodBody($source, 'loadInitializationHandlers');
         foreach ([

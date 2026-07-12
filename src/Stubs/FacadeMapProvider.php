@@ -91,6 +91,12 @@ final class FacadeMapProvider
     /** @var array<lowercase-string, list<class-string>> service class → facade + alias classes */
     private static array $serviceToFacades = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$serviceToFacades = [];
+    }
+
     /**
      * Build the map from the booted Laravel app's alias registry.
      *

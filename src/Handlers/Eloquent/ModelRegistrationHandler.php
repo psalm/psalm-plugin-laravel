@@ -54,6 +54,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     private static bool $useMigrations = false;
 
     /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$useMigrations = false;
+    }
+
+    /** @psalm-external-mutation-free */
     public static function enableMigrations(): void
     {
         self::$useMigrations = true;
