@@ -9,8 +9,6 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
@@ -193,28 +191,24 @@ final class ModelPropertyHandler
     /**
      * Resolve all migration-inferred columns for a model.
      *
-     * Reads {@see SchemaStateProvider} directly (not the registry): the sole caller is
+     * Reads the warmed registry: the sole caller is
      * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler::registerWriteTypesForColumns()},
-     * which runs DURING `AfterCodebasePopulated` — interleaved with the registry warm-up
-     * for the same loop — so the registry entry for this model may not exist yet. It only
-     * needs the column NAMES (write types are registered as `mixed`), so the schema-state
-     * read is sufficient and avoids a warm-up ordering dependency.
+     * which runs after the model's registry entry has been warmed. Using that snapshot is
+     * important because warm-up applies Laravel's runtime model configuration, including
+     * Laravel 13's `#[Table]` attribute, before resolving the table schema.
      *
-     * @return array<string, SchemaColumn>
+     * @param class-string<Model> $fqClasslikeName
+     * @return array<non-empty-string, ColumnInfo>
+     * @psalm-external-mutation-free
      */
     public static function resolveAllColumns(string $fqClasslikeName): array
     {
-        $schema = SchemaStateProvider::getSchema();
-        if (!$schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator) {
+        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
+        if (!$metadata instanceof ModelMetadata) {
             return [];
         }
 
-        $tableName = self::resolveTableName($fqClasslikeName);
-        if ($tableName === null || !isset($schema->tables[$tableName])) {
-            return [];
-        }
-
-        return $schema->tables[$tableName]->columns;
+        return $metadata->schema()->all();
     }
 
     /**
@@ -229,42 +223,6 @@ final class ModelPropertyHandler
         }
 
         return $metadata->schema()->has($propertyName);
-    }
-
-    /** @var array<string, ?string> model class → table name cache (used only by resolveAllColumns). */
-    private static array $tableNameCache = [];
-
-    private static function resolveTableName(string $fqClasslikeName): ?string
-    {
-        if (\array_key_exists($fqClasslikeName, self::$tableNameCache)) {
-            return self::$tableNameCache[$fqClasslikeName];
-        }
-
-        if (!\is_a($fqClasslikeName, Model::class, true)) {
-            return self::$tableNameCache[$fqClasslikeName] = null;
-        }
-
-        try {
-            $reflection = new \ReflectionClass($fqClasslikeName);
-            if ($reflection->isAbstract()) {
-                return self::$tableNameCache[$fqClasslikeName] = null;
-            }
-
-            $instance = $reflection->newInstanceWithoutConstructor();
-            if (!$instance instanceof Model) {
-                return self::$tableNameCache[$fqClasslikeName] = null;
-            }
-
-            $tableName = $instance->getTable();
-        } catch (\Throwable) {
-            // getTable() is a user-overridable Model method (not just reflection), so it can throw
-            // anything — not only \ReflectionException. This runs during AfterCodebasePopulated,
-            // outside ModelMetadataRegistryBuilder::warmUp()'s own try/catch, so an uncaught
-            // \Throwable here crashes the entire Psalm run rather than just dropping this model.
-            return self::$tableNameCache[$fqClasslikeName] = null;
-        }
-
-        return self::$tableNameCache[$fqClasslikeName] = $tableName;
     }
 
     /**
@@ -290,7 +248,6 @@ final class ModelPropertyHandler
     /** @psalm-external-mutation-free */
     public static function reset(): void
     {
-        self::$tableNameCache = [];
         self::$nativePropertyCache = [];
     }
 

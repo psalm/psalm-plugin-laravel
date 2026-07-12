@@ -81,7 +81,6 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
     private const RELATION_NAME_METHODS = [
         // Eager loading
         'with' => true,
-        'without' => true,
         // Relationship existence queries
         'has' => true,
         'orhas' => true,

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use Psalm\Config;
+use Psalm\Config\IssueHandler;
 use Psalm\Issue\PluginIssue;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
@@ -25,18 +26,58 @@ final class ExperimentalIssuePolicy
         UndefinedModelRelation::class,
     ];
 
+    /**
+     * Handlers installed by this policy, keyed weakly by the Psalm config they belong to.
+     * Retaining the actual handler object lets a later plugin invocation distinguish its
+     * own default from an explicit handler that the project owns.
+     *
+     * @var \WeakMap<Config, array<string, IssueHandler>>|null
+     */
+    private static ?\WeakMap $installedDefaults = null;
+
     /** @psalm-external-mutation-free */
     public static function apply(bool $enforced): void
     {
         $level = $enforced ? Config::REPORT_ERROR : Config::REPORT_INFO;
         $config = Config::getInstance();
+        if (self::$installedDefaults === null) {
+            /** @var \WeakMap<Config, array<string, IssueHandler>> $installedDefaults */
+            $installedDefaults = new \WeakMap();
+            self::$installedDefaults = $installedDefaults;
+        } else {
+            $installedDefaults = self::$installedDefaults;
+        }
+
+        /** @var array<string, IssueHandler> $installedForConfig */
+        $installedForConfig = isset($installedDefaults[$config]) ? $installedDefaults[$config] : [];
 
         foreach (self::ISSUES as $issueClass) {
-            // Psalm has already parsed issueHandlers before invoking plugins. The
-            // safe setter applies our default only when the project has no handler
-            // for this issue. Any explicit PluginIssue entry owns the complete
-            // reporting policy, including its base level and scoped filters.
-            $config->safeSetCustomErrorLevel($issueClass::getIssueType(), $level);
+            $issueType = $issueClass::getIssueType();
+            $currentHandler = $config->getIssueHandlers()[$issueType] ?? null;
+
+            if (
+                isset($installedForConfig[$issueType])
+                && $installedForConfig[$issueType] === $currentHandler
+            ) {
+                // A second Plugin invocation against the same Config must refresh
+                // the default when `experimental` flips. Replacing the handler is
+                // safe here because object identity proves this is still ours.
+                $config->setCustomErrorLevel($issueType, $level);
+                $installedForConfig[$issueType] = $config->getIssueHandlers()[$issueType];
+                continue;
+            }
+
+            if ($currentHandler instanceof IssueHandler) {
+                // Psalm parsed an explicit PluginIssue handler (or another caller
+                // replaced ours). It owns both the base level and scoped filters.
+                unset($installedForConfig[$issueType]);
+                continue;
+            }
+
+            $config->setCustomErrorLevel($issueType, $level);
+            $installedForConfig[$issueType] = $config->getIssueHandlers()[$issueType];
         }
+
+        $installedDefaults[$config] = $installedForConfig;
     }
 }

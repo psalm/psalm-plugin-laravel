@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent;
 
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Attributes\Table;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -13,6 +14,7 @@ use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
@@ -20,6 +22,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Progress\VoidProgress;
 use Psalm\StatementsSource;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 
 /**
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/446
@@ -30,6 +33,7 @@ use Psalm\StatementsSource;
  * handler and is exercised directly against {@see ColumnInfo}.
  */
 #[CoversClass(ModelPropertyHandler::class)]
+#[CoversClass(ModelRegistrationHandler::class)]
 final class ModelPropertyHandlerTest extends TestCase
 {
     private ClassLikeStorageProvider $classLikeStorageProvider;
@@ -106,6 +110,33 @@ final class ModelPropertyHandlerTest extends TestCase
         $this->assertArrayHasKey('published_at', $columns);
         $this->assertArrayHasKey('status', $columns);
         $this->assertCount(4, $columns);
+    }
+
+    #[Test]
+    public function table_attribute_columns_are_registered_for_property_writes(): void
+    {
+        if (!\class_exists(Table::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $schema = new SchemaAggregator();
+        $table = new SchemaTable();
+        $table->setColumn(new SchemaColumn('flagged', SchemaColumn::TYPE_BOOL));
+        $schema->setTable('attr_table', $table);
+        SchemaStateProvider::setSchema($schema);
+
+        $storage = $this->classLikeStorageProvider->create(AttributeConfiguredModel::class);
+        ModelMetadataRegistryBuilder::warmUp($this->codebase, AttributeConfiguredModel::class);
+
+        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'registerWriteTypesForColumns');
+        $method->invoke(null, $storage, AttributeConfiguredModel::class);
+
+        $this->assertArrayHasKey(
+            '$flagged',
+            $storage->pseudo_property_set_types,
+            'A migration-backed #[Table] column must be recognized as a writable magic property.',
+        );
+        $this->assertTrue($storage->pseudo_property_set_types['$flagged']->isMixed());
     }
 
     /**

@@ -454,6 +454,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
      * Populates pseudo_property_set_types on the model's ClassLikeStorage for each
      * migration-inferred column that doesn't already have a user-defined @property-write.
      *
+     * @param class-string<Model> $className
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/446
      */
     private static function registerWriteTypesForColumns(ClassLikeStorage $storage, string $className): void

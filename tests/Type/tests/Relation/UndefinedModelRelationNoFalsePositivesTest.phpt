@@ -25,6 +25,9 @@ Customer::with('vehicles:id,name');              // select syntax
 Customer::with(['vehicles' => function (Relation $query): void {
     $query->getResults();
 }]);                                             // array (keyed/closure)
+// without() only removes keys from the current eager-load map. Laravel accepts
+// an absent/non-relation key as a no-op, so it must not be relation-validated.
+Customer::without('not_a_relation');
 Customer::query()->whereHas('workOrders');
 Customer::query()->has('vehicles');
 Customer::doesntHave('vehicles');

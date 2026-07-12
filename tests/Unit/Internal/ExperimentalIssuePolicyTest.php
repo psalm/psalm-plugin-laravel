@@ -72,6 +72,46 @@ final class ExperimentalIssuePolicyTest extends TestCase
         $this->assertSame(Config::REPORT_INFO, $config->getReportingLevelForFile('UndefinedModelRelation', \dirname(__DIR__, 3) . '/src/Elsewhere.php'));
     }
 
+    /** @return iterable<string, array{bool, bool, 'error'|'info'}> */
+    public static function enforcementFlips(): iterable
+    {
+        yield 'advisory to enforced' => [false, true, Config::REPORT_ERROR];
+        yield 'enforced to advisory' => [true, false, Config::REPORT_INFO];
+    }
+
+    #[Test]
+    #[DataProvider('enforcementFlips')]
+    public function plugin_defaults_follow_sequential_invocations_on_the_same_config(
+        bool $initial,
+        bool $subsequent,
+        string $expectedLevel,
+    ): void {
+        $config = $this->loadConfig();
+
+        ExperimentalIssuePolicy::apply($initial);
+        ExperimentalIssuePolicy::apply($subsequent);
+
+        foreach (['UnknownModelAttribute', 'UndefinedModelRelation'] as $issueType) {
+            $this->assertSame($expectedLevel, $config->getReportingLevelForFile($issueType, __FILE__));
+        }
+    }
+
+    #[Test]
+    public function an_explicit_handler_stays_unchanged_across_sequential_invocations(): void
+    {
+        $config = $this->loadConfig(
+            '<issueHandlers><PluginIssue name="UndefinedModelRelation" errorLevel="info">'
+            . '<errorLevel type="suppress"><directory name="tests/Unit/Internal" /></errorLevel>'
+            . '</PluginIssue></issueHandlers>',
+        );
+
+        ExperimentalIssuePolicy::apply(false);
+        ExperimentalIssuePolicy::apply(true);
+
+        $this->assertSame(Config::REPORT_SUPPRESS, $config->getReportingLevelForFile('UndefinedModelRelation', __FILE__));
+        $this->assertSame(Config::REPORT_INFO, $config->getReportingLevelForFile('UndefinedModelRelation', \dirname(__DIR__, 3) . '/src/Elsewhere.php'));
+    }
+
     private function loadConfig(string $body = ''): Config
     {
         return Config::loadFromXML(
