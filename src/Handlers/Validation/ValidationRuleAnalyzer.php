@@ -123,6 +123,13 @@ final class ValidationRuleAnalyzer
      */
     private static array $classTaintCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$cache = [];
+        self::$classTaintCache = [];
+    }
+
     /**
      * Get resolved rules for a FormRequest subclass by reading its rules() method from AST.
      *

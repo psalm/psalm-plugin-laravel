@@ -50,6 +50,13 @@ final class FacadeMethodHandler
      */
     private static array $pseudoMethodCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$methodCache = [];
+        self::$pseudoMethodCache = [];
+    }
+
     /** @param class-string $rootClass */
     public static function doesMethodExist(MethodExistenceProviderEvent $event, string $rootClass): ?bool
     {

@@ -22,6 +22,12 @@ final class ProxyMethodReturnTypeProvider
      */
     private static array $cache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$cache = [];
+    }
+
     /**
      * Psalm struggles with saying "this method returns whatever class X with the same method returns. This performs
      * a fake method call to get the analyzed proxy method return type

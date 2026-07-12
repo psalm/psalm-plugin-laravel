@@ -36,6 +36,12 @@ final class GuardClassResolver
      */
     private static array $union_cache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$union_cache = [];
+    }
+
     public static function resolve(string $guardName): ?Type\Union
     {
         $fqcn = AuthConfigAnalyzer::instance()->getGuardFQCN($guardName);

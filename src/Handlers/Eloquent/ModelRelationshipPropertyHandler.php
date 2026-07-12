@@ -40,6 +40,15 @@ final class ModelRelationshipPropertyHandler
     /** @var array<string, bool> Cache for hasUserPseudoProperty() keyed by "class::$property" */
     private static array $pseudoPropertyCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$relationExistsCache = [];
+        self::$methodReturnTypeCache = [];
+        self::$propertyTypeCache = [];
+        self::$pseudoPropertyCache = [];
+    }
+
     /**
      * Relation classes that return a collection of models when accessed as a property.
      * All other Relation subclasses return a single nullable model (?TRelatedModel).

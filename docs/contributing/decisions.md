@@ -28,6 +28,12 @@ Decisions made during development of the plugin. Contributors should follow thes
 
 **Why:** Runtime reflection requires booting a real Laravel app, which adds startup cost, can fail in misconfigured projects, and couples the plugin to the user's environment. Static inference is faster, more predictable, and works in CI without a running app. But some Laravel conventions (dynamic table names, programmatic casts, container bindings) are only knowable at runtime.
 
+## Plugin invocation state
+
+**Decision:** Mutable static state derived from the Laravel application, plugin XML, aliases, filesystem, Psalm Codebase, or files under analysis must have an explicit idempotent `reset()` and be reset by `Plugin::resetInvocationState()` before boot or any optional initialization branch.
+
+**Why:** Psalm can reuse a PHP process (notably in the language server). An `init()` call is not a substitute: an optional feature may be disabled or a service may be absent on the next invocation, leaving a previous application's state live. App-independent immutable values may survive only when the owning class documents why their meaning cannot vary between applications or Codebases. Event-handler scratch state may instead use a reliable file/function lifecycle hook, with that lifecycle documented beside the cache.
+
 ## Eloquent Model
 
 ### `@property` PHPDoc takes priority over plugin inference

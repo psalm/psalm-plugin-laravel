@@ -37,6 +37,7 @@ final class Plugin implements PluginEntryPointInterface
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
         $output = $this->getProgress($registration);
         $this->loadInitializationHandlers();
+        $this->resetInvocationState();
 
         try {
             ApplicationProvider::bootApp();
@@ -108,6 +109,83 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
+        require_once __DIR__ . '/Handlers/Application/ContainerResolver.php';
+        require_once __DIR__ . '/Handlers/Auth/AuthConfigAnalyzer.php';
+        require_once __DIR__ . '/Handlers/Auth/GuardClassResolver.php';
+        require_once __DIR__ . '/Handlers/Console/CommandDefinitionAnalyzer.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Metadata/ModelMetadataRegistry.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Metadata/ModelMetadataRegistryBuilder.php';
+        require_once __DIR__ . '/Handlers/Eloquent/CustomBuilderMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/CustomCollectionHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelAggregatePropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelRelationReturnTypeHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Schema/SchemaStateProvider.php';
+        require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
+        require_once __DIR__ . '/Handlers/Facades/FacadeMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Helpers/NowTodayHandler.php';
+        require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
+        require_once __DIR__ . '/Handlers/Magic/MacroRegistry.php';
+        require_once __DIR__ . '/Handlers/Producers/ProducerReturnTypeHandler.php';
+        require_once __DIR__ . '/Handlers/Config/ConfigKeyResolver.php';
+        require_once __DIR__ . '/Handlers/Filesystem/StorageHandler.php';
+        require_once __DIR__ . '/Handlers/Validation/FormRequestPropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Validation/ValidationRuleAnalyzer.php';
+        require_once __DIR__ . '/Internal/ProxyMethodReturnTypeProvider.php';
+        require_once __DIR__ . '/Stubs/FacadeMapProvider.php';
+    }
+
+    /**
+     * Reset all plugin-owned state whose meaning depends on the previous Laravel
+     * application, XML configuration, filesystem, aliases, or Psalm Codebase.
+     *
+     * This deliberately precedes boot and every optional initialization branch:
+     * `init()` may be skipped, so it cannot be responsible for overwriting a
+     * previous invocation's state.
+     *
+     * @psalm-external-mutation-free
+     */
+    private function resetInvocationState(): void
+    {
+        ApplicationProvider::reset();
+        FacadeMapProvider::reset();
+        Handlers\Application\ContainerResolver::reset();
+        Handlers\Auth\AuthConfigAnalyzer::reset();
+        Handlers\Auth\GuardClassResolver::reset();
+        Handlers\Config\ConfigKeyResolver::reset();
+        Handlers\Console\CommandDefinitionAnalyzer::reset();
+        Handlers\Eloquent\CustomBuilderMethodHandler::reset();
+        Handlers\Eloquent\CustomCollectionHandler::reset();
+        Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::reset();
+        Handlers\Eloquent\ModelAggregatePropertyHandler::reset();
+        Handlers\Eloquent\ModelFactoryMethodTypeProvider::reset();
+        Handlers\Eloquent\ModelPropertyAccessorHandler::reset();
+        Handlers\Eloquent\ModelPropertyHandler::reset();
+        Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
+        Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
+        Handlers\Eloquent\ModelRegistrationHandler::reset();
+        Handlers\Eloquent\RelationMethodParser::reset();
+        SchemaStateProvider::reset();
+        Handlers\Facades\AppFacadeRegistrationHandler::reset();
+        Handlers\Facades\DateFacadeHandler::reset();
+        Handlers\Facades\FacadeMethodHandler::reset();
+        Handlers\Helpers\NowTodayHandler::reset();
+        Handlers\Jobs\DispatchableHandler::reset();
+        Handlers\Magic\MacroRegistry::reset();
+        Handlers\Producers\ProducerReturnTypeHandler::reset();
+        Handlers\Rules\NoEnvOutsideConfigHandler::reset();
+        Handlers\Translations\TranslationKeyHandler::reset();
+        Handlers\Filesystem\StorageHandler::reset();
+        Handlers\Validation\FormRequestPropertyHandler::reset();
+        Handlers\Validation\ValidationRuleAnalyzer::reset();
+        Handlers\Views\MissingViewHandler::reset();
+        Internal\ProxyMethodReturnTypeProvider::reset();
     }
 
     private function registerStubs(

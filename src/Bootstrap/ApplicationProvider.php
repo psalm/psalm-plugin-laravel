@@ -56,6 +56,30 @@ final class ApplicationProvider
     }
 
     /**
+     * Forget the Laravel application and framework globals from a previous plugin
+     * invocation. This must run before the next boot: a failed or optional init
+     * path must not keep resolving services or aliases from the old application.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function reset(): void
+    {
+        self::$app = null;
+        self::$bootMode = null;
+        self::$bootPath = null;
+        self::$bootstrapError = null;
+        self::$booted = false;
+
+        /** @psalm-suppress ImpureMethodCall framework global reset */
+        \Illuminate\Support\Facades\Facade::clearResolvedInstances();
+        /** @psalm-suppress ImpureMethodCall framework global reset */
+        \Illuminate\Support\Facades\Facade::setFacadeApplication(null);
+        /** @psalm-suppress ImpureMethodCall framework global reset */
+        /** @psalm-suppress NullArgument Laravel permits clearing the singleton with null */
+        \Illuminate\Foundation\AliasLoader::setInstance(null);
+    }
+
+    /**
      * Throwable raised during eager Laravel bootstrap (LoadConfiguration etc.).
      * Null when no bootstrap was attempted yet, or when bootstrap succeeded.
      *

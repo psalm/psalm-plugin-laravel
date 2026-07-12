@@ -72,8 +72,8 @@ final class ConfigKeyResolver
     }
 
     /**
-     * Test-only. The booted Repository is immutable for the Psalm process
-     * lifetime, so production never invalidates.
+     * The repository is owned by the current booted application, so every plugin
+     * invocation drops the singleton before booting the next application.
      *
      * @psalm-api
      * @psalm-external-mutation-free

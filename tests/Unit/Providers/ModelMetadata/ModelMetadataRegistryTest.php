@@ -338,6 +338,8 @@ final class ModelMetadataRegistryTest extends TestCase
     #[Test]
     public function reset_clears_cached_metadata(): void
     {
+        $progress = new VoidProgress();
+        ModelMetadataRegistry::init($progress);
         ModelMetadataRegistryBuilder::overrideForTesting(
             WorkOrder::class,
             $this->makeStubMetadata(WorkOrder::class),
@@ -346,6 +348,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::reset();
 
         $this->assertNull(ModelMetadataRegistry::for(WorkOrder::class));
+        $this->assertNull(ModelMetadataRegistry::getProgress());
     }
 
     #[Test]
