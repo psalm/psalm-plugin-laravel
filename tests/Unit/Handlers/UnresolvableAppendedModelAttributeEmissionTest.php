@@ -49,6 +49,7 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
         $this->assertCount(1, $findings, "Expected exactly one UnresolvableAppendedModelAttribute finding, got:\n{$joined}");
         $this->assertStringContainsString('UnbackedAppendModel', $messages[0]);
         $this->assertStringContainsString("'avatar_url'", $messages[0]);
+        $this->assertSame('error', $findings[0]['severity']);
 
         // The controls must never appear (assertCount(1) already implies this; spelled out for a clear
         // failure message if one regresses).
@@ -57,10 +58,19 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
         }
     }
 
+    #[Test]
+    public function experimental_enforcement_does_not_change_the_stable_issue_level(): void
+    {
+        $findings = $this->runPsalmAndCollectAppendFindings('psalm-experimental.xml');
+
+        $this->assertCount(1, $findings);
+        $this->assertSame('error', $findings[0]['severity']);
+    }
+
     /**
-     * @return list<array{type: string, message: string}>
+     * @return list<array{type: string, message: string, severity: string}>
      */
-    private function runPsalmAndCollectAppendFindings(): array
+    private function runPsalmAndCollectAppendFindings(string $config = 'psalm.xml'): array
     {
         $projectRoot = \dirname(__DIR__, 3);
         $fixtureDir = __DIR__ . '/Fixtures/UnresolvableAppendedModelAttribute';
@@ -69,7 +79,7 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
+            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
             $fixtureDir,
         );
         $process->setTimeout(300);
@@ -83,12 +93,16 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
 
         $findings = [];
         foreach ($decoded as $finding) {
-            if (!\is_array($finding) || !isset($finding['type'], $finding['message'])) {
+            if (!\is_array($finding) || !isset($finding['type'], $finding['message'], $finding['severity'])) {
                 continue;
             }
 
             if ($finding['type'] === 'UnresolvableAppendedModelAttribute') {
-                $findings[] = ['type' => $finding['type'], 'message' => (string) $finding['message']];
+                $findings[] = [
+                    'type' => $finding['type'],
+                    'message' => (string) $finding['message'],
+                    'severity' => (string) $finding['severity'],
+                ];
             }
         }
 

@@ -138,6 +138,16 @@ require getcwd() . '/vendor/autoload.php';
 Handlers implement Psalm event interfaces to override type inference.
 Create the handler class in the appropriate `src/Handlers/` subdirectory, then register it in `Plugin::registerHandlers()`.
 
+### Experimental issue lifecycle
+
+Experimental status changes an issue's default severity, never whether its handler or type inference runs. Keep the policy list in `ExperimentalIssuePolicy` as the single source of truth.
+
+1. Introduce an experimental issue: register its handler normally, add its issue type to that internal list, and let the policy default it to `info` (or `error` when `<experimental value="true" />` is configured).
+2. Graduate an issue: remove it from the internal list; it becomes a normal stable error.
+3. Withdraw an issue: remove its handler and issue class.
+
+Do not add user-facing feature names or handler-registration gates. Psalm `issueHandlers` remains the mechanism for per-issue overrides.
+
 ### Psalm hooks used by the plugin
 
 Psalm processes code in phases. Each hook fires at a specific phase and has different data available.

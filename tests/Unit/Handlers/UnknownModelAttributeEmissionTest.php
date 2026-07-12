@@ -47,12 +47,22 @@ final class UnknownModelAttributeEmissionTest extends TestCase
         $this->assertStringContainsString("'nmae'", $joined, 'static::create() with a typo must be flagged.');
         $this->assertStringContainsString("'unknown_col'", $joined, 'self::create() with a typo must be flagged.');
         $this->assertStringContainsString("'bad_key'", $joined, 'A plain external Model::create() with a typo must be flagged.');
+        $this->assertSame(['info', 'info', 'info'], \array_column($findings, 'severity'));
+    }
+
+    #[Test]
+    public function experimental_enforcement_promotes_the_same_findings_to_errors(): void
+    {
+        $findings = $this->runPsalmAndCollectFindings('psalm-experimental.xml');
+
+        $this->assertCount(3, $findings);
+        $this->assertSame(['error', 'error', 'error'], \array_column($findings, 'severity'));
     }
 
     /**
-     * @return list<array{type: string, message: string}>
+     * @return list<array{type: string, message: string, severity: string}>
      */
-    private function runPsalmAndCollectFindings(): array
+    private function runPsalmAndCollectFindings(string $config = 'psalm.xml'): array
     {
         $projectRoot = \dirname(__DIR__, 3);
         $fixtureDir = __DIR__ . '/Fixtures/UnknownModelAttribute';
@@ -61,7 +71,7 @@ final class UnknownModelAttributeEmissionTest extends TestCase
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
+            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--show-info=true', '--output-format=json'],
             $fixtureDir,
         );
         $process->setTimeout(300);
@@ -75,12 +85,16 @@ final class UnknownModelAttributeEmissionTest extends TestCase
 
         $findings = [];
         foreach ($decoded as $finding) {
-            if (!\is_array($finding) || !isset($finding['type'], $finding['message'])) {
+            if (!\is_array($finding) || !isset($finding['type'], $finding['message'], $finding['severity'])) {
                 continue;
             }
 
             if ($finding['type'] === 'UnknownModelAttribute') {
-                $findings[] = ['type' => $finding['type'], 'message' => (string) $finding['message']];
+                $findings[] = [
+                    'type' => $finding['type'],
+                    'message' => (string) $finding['message'],
+                    'severity' => (string) $finding['severity'],
+                ];
             }
         }
 

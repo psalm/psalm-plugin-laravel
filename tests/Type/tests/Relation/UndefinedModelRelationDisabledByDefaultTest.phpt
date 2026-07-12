@@ -4,8 +4,8 @@
 use App\Models\Customer;
 
 /**
- * The rule is opt-in. Under the default config (no <findUndefinedRelations />),
- * a typo'd relation name must NOT be reported. Empty EXPECTF asserts silence.
+ * The handler is always registered. Under the default configuration (no
+ * <experimental /> element), its default reporting level is advisory info.
  * See https://github.com/psalm/psalm-plugin-laravel/issues/643
  */
 Customer::with('nonExistentRelation');

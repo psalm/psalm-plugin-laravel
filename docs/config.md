@@ -24,7 +24,7 @@ Full config example:
         <resolveDynamicWhereClauses value="false" />
         <resolveConfigReturnTypes value="false" />
         <reportImplicitQueryBuilderCalls value="true" />
-        <findUndefinedRelations value="true" />
+        <experimental value="true" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
@@ -109,19 +109,22 @@ See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
 <reportImplicitQueryBuilderCalls value="true" />
 ```
 
-## `findUndefinedRelations`
+## `experimental`
 
 **default**: `false`
 
-When enabled, the plugin validates relation-name strings passed to `with()`, `without()`, `has()`, `whereHas()`, `load()`, `loadCount()`, and similar methods against the resolved model, reporting [UndefinedModelRelation](issues/UndefinedModelRelation.md) when the name does not resolve to a relationship. It handles dot-notation, array, keyed-closure, and `:columns` select syntaxes. It is opt-in because relations can be registered at runtime (via `Model::resolveRelationUsing()` or package macros) in ways static analysis cannot see.
-
-See [UndefinedModelRelation](issues/UndefinedModelRelation.md) for details.
-
-### Example
-
 ```xml
-<findUndefinedRelations value="true" />
+<experimental value="true" />
 ```
+
+The plugin registers its handlers and type inference normally in every mode. This option only changes the default reporting level for experimental plugin issues:
+
+- `UnknownModelAttribute`
+- `UndefinedModelRelation`
+
+With the default `false`, these are advisory `info` findings. Setting `value="true"` promotes their default level to `error`. Explicit Psalm [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) always take precedence, including `error`, `info`, `suppress`, and scoped filters.
+
+Experimental issue behaviour may change before graduation. Model serialization array-shape inference (`ModelToArrayShapeHandler`) is a stable v4.15 enhancement and is always active; it is not controlled by this setting. `UnresolvableAppendedModelAttribute` is also stable and remains an error by default in both modes.
 
 ## `configDirectory`
 

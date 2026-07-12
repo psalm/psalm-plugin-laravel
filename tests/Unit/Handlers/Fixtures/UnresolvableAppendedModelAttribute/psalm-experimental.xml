@@ -9,6 +9,8 @@
         <directory name="app" />
     </projectFiles>
     <plugins>
-        <pluginClass class="Psalm\LaravelPlugin\Plugin" />
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <experimental value="true" />
+        </pluginClass>
     </plugins>
 </psalm>

@@ -18,8 +18,8 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [PublicModelScope](PublicModelScope.md) — `public` `#[Scope]` Eloquent query scope, whose static call is a runtime fatal (reported at error levels 1 to 4)
 - [PublicModelAccessor](PublicModelAccessor.md) — `public` legacy `getXxxAttribute()` / `setXxxAttribute()` accessor or mutator, a pure convention nit (reported at error level 1)
 - [ImplicitQueryBuilderCall](ImplicitQueryBuilderCall.md) — a query builder or local scope method called directly on a model instead of through an explicit `query()` entry point (opt-in)
-- [UnknownModelAttribute](UnknownModelAttribute.md) — a typo'd key passed to a model's `create()` / `fill()` / `update()` that matches no known attribute
+- [UnknownModelAttribute](UnknownModelAttribute.md) — an experimental advisory for a typo'd key passed to a model's `create()` / `fill()` / `update()` that matches no known attribute
 - [UnresolvableAppendedModelAttribute](UnresolvableAppendedModelAttribute.md) — an Eloquent `$appends` entry with no backing accessor or class cast, a runtime `BadMethodCallException` on `toArray()` / `toJson()`
-- [UndefinedModelRelation](UndefinedModelRelation.md) — a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods does not resolve to a relationship on the model (opt-in)
+- [UndefinedModelRelation](UndefinedModelRelation.md) — an experimental advisory for a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods that does not resolve to a relationship on the model
 
 Each issue page explains what it detects, why it matters, and how to fix it.

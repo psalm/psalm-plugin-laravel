@@ -6,7 +6,7 @@ nav_order: 11
 
 # UndefinedModelRelation
 
-A relation name passed to an eager-loading or relationship-query method does not resolve to a method on the model. Opt-in. See [How to enable](#how-to-enable).
+A relation name passed to an eager-loading or relationship-query method does not resolve to a method on the model. It is registered by default as an experimental advisory; see [Reporting level](#reporting-level).
 
 ## Why it matters
 
@@ -62,17 +62,17 @@ To keep false positives near zero, the rule reports only when no method (real or
 
 The `withCount()` / `withSum()` aggregate family is not covered by this first pass.
 
-## How to enable
+## Reporting level
 
-This rule is opt-in. Enable it in `psalm.xml`:
+The handler always runs. By default this experimental issue is reported as `info`. Promote its default to an error in `psalm.xml`:
 
 ```xml
 <pluginClass class="Psalm\LaravelPlugin\Plugin">
-    <findUndefinedRelations value="true" />
+    <experimental value="true" />
 </pluginClass>
 ```
 
-Once enabled, silence it for a specific area via `issueHandlers`:
+Explicit `issueHandlers` configuration always takes precedence, including scoped filters. For example, silence it for a specific area:
 
 ```xml
 <issueHandlers>
