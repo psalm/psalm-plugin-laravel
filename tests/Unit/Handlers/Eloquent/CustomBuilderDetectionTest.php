@@ -18,19 +18,19 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\CustomBuilderMethodHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CustomTypeDetector;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\Progress\VoidProgress;
 
 /**
- * Tests custom builder detection in ModelRegistrationHandler.
+ * Tests custom builder detection in CustomTypeDetector.
  *
  * Priority matches Laravel's Model::newEloquentBuilder():
  * 1. newEloquentBuilder() override (bypasses everything when present)
  * 2. #[UseEloquentBuilder] attribute (checked first in base method)
  * 3. protected static string $builder property (fallback)
  */
-#[CoversClass(ModelRegistrationHandler::class)]
+#[CoversClass(CustomTypeDetector::class)]
 final class CustomBuilderDetectionTest extends TestCase
 {
     #[\Override]
@@ -47,7 +47,7 @@ final class CustomBuilderDetectionTest extends TestCase
     #[Test]
     public function it_registers_custom_builder_for_model_with_attribute(): void
     {
-        $this->callDetectCustomBuilder(WorkOrder::class);
+        $this->resolveAndRegisterBuilder(WorkOrder::class);
 
         $this->assertSame(WorkOrderBuilder::class, $this->getRegisteredBuilder(WorkOrder::class));
     }
@@ -55,7 +55,7 @@ final class CustomBuilderDetectionTest extends TestCase
     #[Test]
     public function it_does_not_register_builder_for_model_without_attribute(): void
     {
-        $this->callDetectCustomBuilder(Customer::class);
+        $this->resolveAndRegisterBuilder(Customer::class);
 
         $this->assertNull($this->getRegisteredBuilder(Customer::class));
     }
@@ -63,7 +63,7 @@ final class CustomBuilderDetectionTest extends TestCase
     #[Test]
     public function it_registers_custom_builder_for_model_with_new_eloquent_builder_override(): void
     {
-        $this->callDetectCustomBuilder(Vehicle::class);
+        $this->resolveAndRegisterBuilder(Vehicle::class);
 
         $this->assertSame(VehicleBuilder::class, $this->getRegisteredBuilder(Vehicle::class));
     }
@@ -71,7 +71,7 @@ final class CustomBuilderDetectionTest extends TestCase
     #[Test]
     public function it_registers_custom_builder_for_model_with_static_builder_property(): void
     {
-        $this->callDetectCustomBuilder(Mechanic::class);
+        $this->resolveAndRegisterBuilder(Mechanic::class);
 
         $this->assertSame(MechanicBuilder::class, $this->getRegisteredBuilder(Mechanic::class));
     }
@@ -80,7 +80,7 @@ final class CustomBuilderDetectionTest extends TestCase
     public function it_handles_non_existent_class_gracefully(): void
     {
         // Should not throw — the ReflectionException is caught and logged.
-        $this->callDetectCustomBuilder('NonExistent\\FakeModelClass');
+        $this->resolveAndRegisterBuilder('NonExistent\\FakeModelClass');
 
         $this->assertEmpty($this->getCustomBuilderMap());
     }
@@ -117,7 +117,7 @@ final class CustomBuilderDetectionTest extends TestCase
     private function callResolveBuilderFromMethodOverride(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveBuilderFromMethodOverride');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveBuilderFromMethodOverride');
 
         return $method->invoke(null, $reflection);
     }
@@ -128,23 +128,27 @@ final class CustomBuilderDetectionTest extends TestCase
     private function callResolveBuilderFromStaticProperty(string $className): ?string
     {
         $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'resolveBuilderFromStaticProperty');
+        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveBuilderFromStaticProperty');
 
         return $method->invoke(null, $reflection);
     }
 
     /**
-     * Call the private detectCustomBuilder method via reflection.
+     * Resolve a model's custom builder and register it — the resolve→registerCustomBuilder sink
+     * registerHandlersForModel() uses on the warm-up-failure fallback (the warm path reads the
+     * already-resolved class off the registry; resolution itself is what this asserts).
      */
-    private function callDetectCustomBuilder(string $className): void
+    private function resolveAndRegisterBuilder(string $className): void
     {
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
 
         $progressRef = new \ReflectionProperty(Codebase::class, 'progress');
         $progressRef->setValue($codebase, new VoidProgress());
 
-        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'detectCustomBuilder');
-        $method->invoke(null, $codebase, $className);
+        $builderClass = CustomTypeDetector::resolveCustomBuilderClass($codebase, $className);
+        if ($builderClass !== null) {
+            ModelMethodHandler::registerCustomBuilder($className, $builderClass);
+        }
     }
 
     /**

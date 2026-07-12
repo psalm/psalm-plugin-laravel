@@ -16,6 +16,19 @@ use Psalm\Progress\VoidProgress;
 #[CoversClass(FacadeMapProvider::class)]
 final class FacadeMapProviderTest extends TestCase
 {
+    #[Test]
+    public function reset_discards_the_previous_application_alias_map(): void
+    {
+        ApplicationProvider::bootApp();
+        FacadeMapProvider::init(new VoidProgress());
+
+        $this->assertNotEmpty(FacadeMapProvider::getFacadeClasses(\Illuminate\Routing\Router::class));
+
+        FacadeMapProvider::reset();
+
+        $this->assertSame([], FacadeMapProvider::getFacadeClasses(\Illuminate\Routing\Router::class));
+    }
+
     /**
      * Reproduces issue #745: the mateffy/laravel-introspect package publishes
      * a self-referential alias via composer.json:

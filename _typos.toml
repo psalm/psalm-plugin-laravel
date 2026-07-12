@@ -18,6 +18,10 @@ extend-exclude = [
 extend-ignore-re = [
     # README + MissingProperty fixtures: simulated typo'd Eloquent attribute
     "siteSettinsg",
+    # UnknownModelAttribute (#699) fixtures: the canonical deliberately typo'd
+    # mass-assignment key the rule flags (nmae vs name). Reuse this token for any
+    # future attribute-typo fixture instead of adding new entries here.
+    "nmae",
     # MissingView fixture: deliberately mistyped Blade template name
     "emails\\.welcom",
     # MissingTranslation fixture: deliberately mistyped translation key

@@ -8,7 +8,10 @@ use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
+use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
@@ -28,7 +31,13 @@ final class Plugin implements PluginEntryPointInterface
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
         $pluginConfig = PluginConfig::fromXml($config);
+        require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
+        require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
+        require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
+        ExperimentalIssuePolicy::apply($pluginConfig->experimental);
         $output = $this->getProgress($registration);
+        $this->loadInitializationHandlers();
+        $this->resetInvocationState();
 
         try {
             ApplicationProvider::bootApp();
@@ -50,6 +59,14 @@ final class Plugin implements PluginEntryPointInterface
             // Handlers use FacadeMapProvider::getFacadeClasses() in getClassLikeNames()
             // to also register for facade/alias classes that proxy to their service.
             FacadeMapProvider::init($output);
+
+            // Reset + arm the model-metadata registry. reset() clears any stale cache entries and
+            // builder statics left from a previous bootstrap in the same process (mirrors the
+            // ModelMethodHandler::init / MethodForwardingHandler::init reset convention); init()
+            // captures the Progress handle for deferred warm-up warnings. The actual per-model
+            // warm-up runs later, in ModelRegistrationHandler's AfterCodebasePopulated pass.
+            ModelMetadataRegistryBuilder::reset();
+            ModelMetadataRegistry::init($output);
 
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled
@@ -74,6 +91,103 @@ final class Plugin implements PluginEntryPointInterface
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
+    }
+
+    /**
+     * Centralize the explicit source-order loads for handlers initialized before
+     * registration, including optional configuration branches.
+     *
+     * This is not an autoloader bootstrap: PluginConfig has already been loaded
+     * before this method runs, and normal static calls can use Composer autoloading.
+     * The registration-adjacent require_once calls remain necessary because Psalm's
+     * registration API deliberately refuses to autoload handler classes.
+     *
+     * @psalm-suppress MissingPureAnnotation require_once changes process-wide load state.
+     */
+    private function loadInitializationHandlers(): void
+    {
+        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
+        require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
+        require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
+        require_once __DIR__ . '/Handlers/Application/ContainerResolver.php';
+        require_once __DIR__ . '/Handlers/Auth/AuthConfigAnalyzer.php';
+        require_once __DIR__ . '/Handlers/Auth/GuardClassResolver.php';
+        require_once __DIR__ . '/Handlers/Console/CommandDefinitionAnalyzer.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Metadata/ModelMetadataRegistry.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Metadata/ModelMetadataRegistryBuilder.php';
+        require_once __DIR__ . '/Handlers/Eloquent/CustomBuilderMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/CustomCollectionHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelAggregatePropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelRelationReturnTypeHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Schema/SchemaStateProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
+        require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
+        require_once __DIR__ . '/Handlers/Facades/FacadeMethodHandler.php';
+        require_once __DIR__ . '/Handlers/Helpers/NowTodayHandler.php';
+        require_once __DIR__ . '/Handlers/Jobs/DispatchableHandler.php';
+        require_once __DIR__ . '/Handlers/Magic/MacroRegistry.php';
+        require_once __DIR__ . '/Handlers/Producers/ProducerReturnTypeHandler.php';
+        require_once __DIR__ . '/Handlers/Config/ConfigKeyResolver.php';
+        require_once __DIR__ . '/Handlers/Filesystem/StorageHandler.php';
+        require_once __DIR__ . '/Handlers/Validation/FormRequestPropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Validation/ValidationRuleAnalyzer.php';
+        require_once __DIR__ . '/Internal/ProxyMethodReturnTypeProvider.php';
+        require_once __DIR__ . '/Stubs/FacadeMapProvider.php';
+    }
+
+    /**
+     * Reset all plugin-owned state whose meaning depends on the previous Laravel
+     * application, XML configuration, filesystem, aliases, or Psalm Codebase.
+     *
+     * This deliberately precedes boot and every optional initialization branch:
+     * `init()` may be skipped, so it cannot be responsible for overwriting a
+     * previous invocation's state.
+     *
+     * @psalm-external-mutation-free
+     */
+    private function resetInvocationState(): void
+    {
+        ApplicationProvider::reset();
+        FacadeMapProvider::reset();
+        Handlers\Application\ContainerResolver::reset();
+        Handlers\Auth\AuthConfigAnalyzer::reset();
+        Handlers\Auth\GuardClassResolver::reset();
+        Handlers\Config\ConfigKeyResolver::reset();
+        Handlers\Console\CommandDefinitionAnalyzer::reset();
+        Handlers\Eloquent\CustomBuilderMethodHandler::reset();
+        Handlers\Eloquent\CustomCollectionHandler::reset();
+        Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::reset();
+        Handlers\Eloquent\ModelAggregatePropertyHandler::reset();
+        Handlers\Eloquent\ModelFactoryMethodTypeProvider::reset();
+        Handlers\Eloquent\ModelPropertyAccessorHandler::reset();
+        Handlers\Eloquent\ModelPropertyHandler::reset();
+        Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
+        Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
+        Handlers\Eloquent\ModelRegistrationHandler::reset();
+        Handlers\Eloquent\RelationMethodParser::reset();
+        Handlers\Eloquent\Support\RelationResolver::reset();
+        SchemaStateProvider::reset();
+        Handlers\Facades\AppFacadeRegistrationHandler::reset();
+        Handlers\Facades\DateFacadeHandler::reset();
+        Handlers\Facades\FacadeMethodHandler::reset();
+        Handlers\Helpers\NowTodayHandler::reset();
+        Handlers\Jobs\DispatchableHandler::reset();
+        Handlers\Magic\MacroRegistry::reset();
+        Handlers\Producers\ProducerReturnTypeHandler::reset();
+        Handlers\Rules\NoEnvOutsideConfigHandler::reset();
+        Handlers\Translations\TranslationKeyHandler::reset();
+        Handlers\Filesystem\StorageHandler::reset();
+        Handlers\Validation\FormRequestPropertyHandler::reset();
+        Handlers\Validation\ValidationRuleAnalyzer::reset();
+        Handlers\Views\MissingViewHandler::reset();
+        Internal\ProxyMethodReturnTypeProvider::reset();
     }
 
     private function registerStubs(
@@ -139,6 +253,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelToArrayShapeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderNativeStaticReturnTypeHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
@@ -346,6 +461,12 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
 
+        // Flags unknown attribute keys passed to mass-assignment methods (create/forceCreate/fill/
+        // forceFill/update) — the #699 typo case. It is always registered and self-silences on any
+        // model whose column schema is unknown (migrations disabled), so it never floods.
+        require_once __DIR__ . '/Handlers/Rules/UnknownModelAttributeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UnknownModelAttributeHandler::class);
+
         // Detects timing-unsafe comparisons of secret-tainted values (CWE-208).
         // The hook is a no-op outside `--taint-analysis` runs (early-exits when
         // taint_flow_graph is null), so per-expression overhead in normal analysis
@@ -355,6 +476,13 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/UndefinedBuilderMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UndefinedBuilderMethodHandler::class);
+
+        // RelationResolver depends on RelationMethodParser. Load both collaborators and the handler
+        // before registration: registerHooksFromClass() requires the handler to be preloaded.
+        require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
+        require_once __DIR__ . '/Handlers/Rules/UndefinedModelRelationHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UndefinedModelRelationHandler::class);
 
         // Opt-in: forbid Laravel's __callStatic/__call magic forwarding on models and require
         // the explicit Model::query()->... entry point. Off by default — the forwarding is
@@ -384,7 +512,9 @@ final class Plugin implements PluginEntryPointInterface
         // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler
         // always returns null (it only emits an issue), so the chain continues to EnvHandler for
         // type narrowing. Reversing the order would silently suppress the NoEnvOutsideConfig issue.
-        // (require_once for the handler ran in initNoEnvOutsideConfigHandler() before this method.)
+        // The initialization helper establishes the earlier static-init source order;
+        // repeat the idempotent require_once because Psalm requires this class to be loaded.
+        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\NoEnvOutsideConfigHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/EnvHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\EnvHandler::class);
@@ -415,6 +545,13 @@ final class Plugin implements PluginEntryPointInterface
         // the issueHandlers config (PublicModelScope / PublicModelAccessor).
         require_once __DIR__ . '/Handlers/Rules/PublicScopeAccessorVisibilityHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\PublicScopeAccessorVisibilityHandler::class);
+
+        // Flag an Eloquent `$appends` entry with no backing accessor / class cast (#694) — a runtime
+        // BadMethodCallException on toArray()/toJson(). Reads ModelMetadataRegistry, so it MUST be
+        // registered AFTER ModelRegistrationHandler (warm-up); AfterCodebasePopulated handlers run in
+        // registration order. Enabled by default; silence via the issueHandlers config.
+        require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedModelAttributeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedModelAttributeHandler::class);
     }
 
     /**
@@ -435,7 +572,6 @@ final class Plugin implements PluginEntryPointInterface
             $directories = [ApplicationProvider::getApp()->configPath()];
         }
 
-        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         Handlers\Rules\NoEnvOutsideConfigHandler::init($directories, $output);
     }
 
@@ -550,10 +686,6 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
     {
-        // Load the handler before its first static touch: __invoke() runs before
-        // registerHandlers() (where the paired require_once lives), and under
-        // psalm.phar the plugin's PSR-4 autoloader may not be registered yet.
-        require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
         Handlers\Views\MissingViewHandler::initViewFactory($factory instanceof \Illuminate\View\Factory ? $factory::class : null);
     }
 

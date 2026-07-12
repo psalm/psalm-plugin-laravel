@@ -71,6 +71,16 @@ final class TranslationKeyHandlerTest extends TestCase
         $this->assertSame(['__', 'trans'], TranslationKeyHandler::getFunctionIds());
     }
 
+    #[Test]
+    public function reset_forgets_the_translator_and_resolved_keys(): void
+    {
+        $this->assertInstanceOf(Union::class, TranslationKeyHandler::getFunctionReturnType($this->createEvent('auth.failed')));
+
+        TranslationKeyHandler::reset();
+
+        $this->assertNotInstanceOf(Union::class, TranslationKeyHandler::getFunctionReturnType($this->createEvent('auth.failed')));
+    }
+
     /**
      * @return iterable<string, array{string}>
      */

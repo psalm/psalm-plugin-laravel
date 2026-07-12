@@ -153,6 +153,20 @@ final class MissingViewHandlerTest extends TestCase
     }
 
     #[Test]
+    public function reset_disables_diagnostics_and_view_factory_narrowing(): void
+    {
+        MissingViewHandler::initViewFactory(CustomViewFactoryStub::class);
+        MissingViewHandler::reset();
+
+        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getFunctionReturnType(
+            $this->createFunctionEvent('nonexistent'),
+        ));
+
+        $method = new \ReflectionMethod(MissingViewHandler::class, 'narrowedHelperReturn');
+        $this->assertNull($method->invoke(null, 0));
+    }
+
+    #[Test]
     public function skips_no_arguments(): void
     {
         $source = $this->createStub(StatementsSource::class);

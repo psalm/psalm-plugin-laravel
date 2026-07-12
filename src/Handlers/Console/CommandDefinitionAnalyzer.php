@@ -27,6 +27,12 @@ final class CommandDefinitionAnalyzer
     /** @var array<string, InputDefinition|null> */
     private static array $cache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$cache = [];
+    }
+
     /**
      * Get the InputDefinition for a command class by reading its $signature from the AST.
      *

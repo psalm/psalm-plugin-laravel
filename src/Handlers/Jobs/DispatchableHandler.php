@@ -61,6 +61,12 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
      */
     private static array $dispatchableCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$dispatchableCache = [];
+    }
+
     /** @inheritDoc */
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
