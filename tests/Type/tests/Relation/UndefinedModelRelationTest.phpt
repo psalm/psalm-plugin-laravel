@@ -20,6 +20,10 @@ Customer::has('missingHasRelation');
 // Instance builder call.
 Customer::query()->with('typoWith');
 
+// without() still accepts relationship names; an unknown key is usually a typo
+// even though Laravel treats removing an absent eager-load key as a no-op.
+Customer::without('typoWithout');
+
 // whereHas on a builder.
 Customer::query()->whereHas('typoWhereHas');
 
@@ -62,6 +66,7 @@ function undefined_relations_on_model_instance(Customer $c): void
 UndefinedModelRelation on line %d: Relation 'nonExistentRelation' is not defined on App\Models\Customer.
 UndefinedModelRelation on line %d: Relation 'missingHasRelation' is not defined on App\Models\Customer.
 UndefinedModelRelation on line %d: Relation 'typoWith' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoWithout' is not defined on App\Models\Customer.
 UndefinedModelRelation on line %d: Relation 'typoWhereHas' is not defined on App\Models\Customer.
 UndefinedModelRelation on line %d: Relation 'typoWhereRelation' is not defined on App\Models\Customer.
 UndefinedModelRelation on line %d: Relation 'typoOnVehicle' is not defined on App\Models\Vehicle.
