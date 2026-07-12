@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783866062417,
+  "lastUpdate": 1783895555891,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8395,6 +8395,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "358965cadda4d2d030a985a05d32ca881f4e4229",
+          "message": "Merge pull request #1201 from psalm/4.15\n\n[v4.15] — `ModelMetadataRegistry`",
+          "timestamp": "2026-07-13T00:29:22+02:00",
+          "tree_id": "45439ea341326167755e48feff29c82227fe24f7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/358965cadda4d2d030a985a05d32ca881f4e4229"
+        },
+        "date": 1783895554681,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.2,
+            "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1109,
             "unit": "MB"
           }
         ]
