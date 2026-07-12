@@ -25,12 +25,12 @@ use Psalm\Issue\PluginIssue;
  * keeps this always-on rule free of false positives at the cost of a rare missed primitive-cast column.
  *
  * Enabled by default. Silence per project via
- * `<PluginIssue name="UnresolvableAppendedAttribute" errorLevel="suppress" />` in psalm.xml's
- * issueHandlers, or with an inline `@psalm-suppress UnresolvableAppendedAttribute` on the model.
+ * `<PluginIssue name="UnresolvableAppendedModelAttribute" errorLevel="suppress" />` in psalm.xml's
+ * issueHandlers, or with an inline `@psalm-suppress UnresolvableAppendedModelAttribute` on the model.
  */
-final class UnresolvableAppendedAttribute extends PluginIssue
+final class UnresolvableAppendedModelAttribute extends PluginIssue
 {
-    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UnresolvableAppendedAttribute/';
+    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UnresolvableAppendedModelAttribute/';
 
     // A genuine runtime fatal (BadMethodCallException on toArray()/toJson()), so report it across the
     // strict-to-moderate levels like the other real-bug rules (PublicModelScope, NoEnvOutsideConfig).

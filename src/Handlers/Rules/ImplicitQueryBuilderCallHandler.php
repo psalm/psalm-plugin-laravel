@@ -152,7 +152,7 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
      * is not a (resolvable) Eloquent model. `self` and `static` are special class names Psalm's
      * name resolver does not rewrite to an FQCN, so they are resolved against the enclosing class
      * explicitly, or the idiomatic `static::where(...)` inside a model method silently bypasses
-     * this rule. Mirrors {@see UndefinedRelationHandler::resolveClassName()}.
+     * this rule. Mirrors {@see UndefinedModelRelationHandler::resolveClassName()}.
      *
      * @return class-string<Model>|null
      */
@@ -173,7 +173,7 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
 
     /**
      * Resolve a `Name` class reference to an FQCN. `self` / `static` resolve to the enclosing class;
-     * `parent` is not resolved. Mirrors {@see UndefinedRelationHandler::resolveClassName()}.
+     * `parent` is not resolved. Mirrors {@see UndefinedModelRelationHandler::resolveClassName()}.
      */
     private static function resolveClassName(Name $class, StatementsSource $source): ?string
     {

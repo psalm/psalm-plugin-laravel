@@ -21,7 +21,7 @@ use Symfony\Component\Process\Process;
  * methods, which a name-resolution bug once let bypass the rule silently (no FQCN rewrite for
  * `self`/`static`, unlike a plain class reference).
  *
- * Like {@see UnresolvableAppendedAttributeEmissionTest}, this forks a real `vendor/bin/psalm` (it
+ * Like {@see UnresolvableAppendedModelAttributeEmissionTest}, this forks a real `vendor/bin/psalm` (it
  * boots Laravel via the plugin, ~6s) because the emission cannot be observed in-process. It lives in
  * tests/Unit for proximity to the handler it guards.
  */

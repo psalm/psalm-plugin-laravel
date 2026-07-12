@@ -1,10 +1,10 @@
 ---
-title: UndefinedRelation
+title: UndefinedModelRelation
 parent: Custom Issues
 nav_order: 11
 ---
 
-# UndefinedRelation
+# UndefinedModelRelation
 
 A relation name passed to an eager-loading or relationship-query method does not resolve to a method on the model. Opt-in. See [How to enable](#how-to-enable).
 
@@ -43,8 +43,8 @@ class User extends Model
 }
 
 User::with('posts');      // OK
-User::with('postz');      // UndefinedRelation: Relation 'postz' is not defined on App\Models\User.
-$user->load('comments');  // UndefinedRelation: Relation 'comments' is not defined on App\Models\User.
+User::with('postz');      // UndefinedModelRelation: Relation 'postz' is not defined on App\Models\User.
+$user->load('comments');  // UndefinedModelRelation: Relation 'comments' is not defined on App\Models\User.
 ```
 
 ## How to fix
@@ -76,6 +76,6 @@ Once enabled, silence it for a specific area via `issueHandlers`:
 
 ```xml
 <issueHandlers>
-    <PluginIssue name="UndefinedRelation" errorLevel="suppress" />
+    <PluginIssue name="UndefinedModelRelation" errorLevel="suppress" />
 </issueHandlers>
 ```

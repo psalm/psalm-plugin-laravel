@@ -383,8 +383,8 @@ final class Plugin implements PluginEntryPointInterface
         if ($pluginConfig->findUndefinedRelations) {
             require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
             require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
-            require_once __DIR__ . '/Handlers/Rules/UndefinedRelationHandler.php';
-            $registration->registerHooksFromClass(Handlers\Rules\UndefinedRelationHandler::class);
+            require_once __DIR__ . '/Handlers/Rules/UndefinedModelRelationHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\UndefinedModelRelationHandler::class);
         }
 
         // Opt-in: forbid Laravel's __callStatic/__call magic forwarding on models and require
@@ -451,8 +451,8 @@ final class Plugin implements PluginEntryPointInterface
         // BadMethodCallException on toArray()/toJson(). Reads ModelMetadataRegistry, so it MUST be
         // registered AFTER ModelRegistrationHandler (warm-up); AfterCodebasePopulated handlers run in
         // registration order. Enabled by default; silence via the issueHandlers config.
-        require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedAttributeHandler.php';
-        $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedAttributeHandler::class);
+        require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedModelAttributeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedModelAttributeHandler::class);
     }
 
     /**

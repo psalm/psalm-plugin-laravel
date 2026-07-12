@@ -1,5 +1,5 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm-find-undefined-relations.xml
+--no-progress --no-diff --config=./tests/Type/psalm-find-undefined-model-relations.xml
 --FILE--
 <?php declare(strict_types=1);
 
@@ -59,16 +59,16 @@ function undefined_relations_on_model_instance(Customer $c): void
 }
 ?>
 --EXPECTF--
-UndefinedRelation on line %d: Relation 'nonExistentRelation' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'missingHasRelation' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoWith' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoWhereHas' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoWhereRelation' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoOnVehicle' is not defined on App\Models\Vehicle.
-UndefinedRelation on line %d: Relation 'typoInArray' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoKeyed' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoSelect' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoLoad' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoCount' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoAggregate' is not defined on App\Models\Customer.
-UndefinedRelation on line %d: Relation 'typoOnRelation' is not defined on App\Models\Vehicle.
+UndefinedModelRelation on line %d: Relation 'nonExistentRelation' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'missingHasRelation' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoWith' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoWhereHas' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoWhereRelation' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoOnVehicle' is not defined on App\Models\Vehicle.
+UndefinedModelRelation on line %d: Relation 'typoInArray' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoKeyed' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoSelect' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoLoad' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoCount' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoAggregate' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'typoOnRelation' is not defined on App\Models\Vehicle.

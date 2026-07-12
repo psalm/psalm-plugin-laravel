@@ -17,7 +17,7 @@ use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
-use Psalm\LaravelPlugin\Issues\UndefinedRelation;
+use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\StatementsSource;
@@ -68,7 +68,7 @@ use Psalm\Type\Union;
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/643
  * @see https://github.com/larastan/larastan RelationExistenceRule — Larastan's analogue
  */
-final class UndefinedRelationHandler implements AfterExpressionAnalysisInterface
+final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInterface
 {
     /**
      * Methods whose relation name(s) come from the FIRST argument. That is the
@@ -402,7 +402,7 @@ final class UndefinedRelationHandler implements AfterExpressionAnalysisInterface
 
             if (!RelationResolver::relationMethodExists($codebase, $current, $name)) {
                 IssueBuffer::accepts(
-                    new UndefinedRelation(
+                    new UndefinedModelRelation(
                         "Relation '{$name}' is not defined on {$current}.",
                         new CodeLocation($source, $arg->value),
                     ),

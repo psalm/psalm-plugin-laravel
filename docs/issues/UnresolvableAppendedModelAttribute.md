@@ -1,10 +1,10 @@
 ---
-title: UnresolvableAppendedAttribute
+title: UnresolvableAppendedModelAttribute
 parent: Custom Issues
 nav_order: 11
 ---
 
-# UnresolvableAppendedAttribute
+# UnresolvableAppendedModelAttribute
 
 An Eloquent `$appends` entry that no accessor or class cast backs. Enabled by default; see [How to disable](#how-to-disable).
 
@@ -55,7 +55,7 @@ A declared cast for the attribute also satisfies the rule (a value object backed
 
 ```xml
 <issueHandlers>
-    <PluginIssue name="UnresolvableAppendedAttribute" errorLevel="suppress" />
+    <PluginIssue name="UnresolvableAppendedModelAttribute" errorLevel="suppress" />
 </issueHandlers>
 ```
 
@@ -63,4 +63,4 @@ A declared cast for the attribute also satisfies the rule (a value object backed
 
 The rule reports an entry only when the model has neither an accessor nor a declared cast for it. A plain column or a relation does NOT back an appended attribute: the serialization loop passes `null` as the value and ignores the stored attribute, so appending a column name without a matching accessor throws all the same. An entry removed by `$hidden`, or excluded by a non-empty `$visible`, is not reported, since Eloquent drops it before that loop runs. At runtime only a class cast (not a primitive one) resolves an appended value, but the rule treats any declared cast as backing, a deliberately conservative choice that keeps it free of false positives (the cost is a rare missed case: a built-in-cast column listed in `$appends` with no accessor).
 
-Accessor names are matched the way Eloquent resolves them (case insensitive, with separators stripped), so `full_name`, `fullName`, and `getFullNameAttribute()` all line up. Abstract base classes are validated through their concrete descendants, which carry the complete accessor set (a child can supply the accessor for an attribute a base appends). An accessor the plugin cannot detect statically (for example one synthesized at runtime) can be silenced with an inline `@psalm-suppress UnresolvableAppendedAttribute` on the model.
+Accessor names are matched the way Eloquent resolves them (case-insensitive, with separators stripped), so `full_name`, `fullName`, and `getFullNameAttribute()` all line up. Abstract base classes are validated through their concrete descendants, which carry the complete accessor set (a child can supply the accessor for an attribute a base appends). An accessor the plugin cannot detect statically (for example, one synthesized at runtime) can be silenced with an inline `@psalm-suppress UnresolvableAppendedModelAttribute` on the model.

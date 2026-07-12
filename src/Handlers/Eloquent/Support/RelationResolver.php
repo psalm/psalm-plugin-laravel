@@ -14,7 +14,7 @@ use Psalm\Type\Union;
 
 /**
  * Shared relation lookups for the relation-name validation rule (`with()`,
- * `load()`, `has()`, `whereHas()`, ...). See {@see \Psalm\LaravelPlugin\Handlers\Rules\UndefinedRelationHandler}.
+ * `load()`, `has()`, `whereHas()`, ...). See {@see \Psalm\LaravelPlugin\Handlers\Rules\UndefinedModelRelationHandler}.
  *
  * Two distinct questions are answered here:
  *

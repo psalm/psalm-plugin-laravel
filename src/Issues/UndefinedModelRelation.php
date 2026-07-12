@@ -12,7 +12,7 @@ use Psalm\Issue\PluginIssue;
  * a method on the resolved model. Passing a non-existent relation name is a
  * common source of runtime errors in Laravel applications.
  */
-final class UndefinedRelation extends PluginIssue
+final class UndefinedModelRelation extends PluginIssue
 {
-    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UndefinedRelation/';
+    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UndefinedModelRelation/';
 }

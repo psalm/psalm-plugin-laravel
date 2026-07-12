@@ -11,7 +11,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
-use Psalm\LaravelPlugin\Issues\UnresolvableAppendedAttribute;
+use Psalm\LaravelPlugin\Issues\UnresolvableAppendedModelAttribute;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -25,7 +25,7 @@ use Psalm\Storage\ClassLikeStorage;
  * `BadMethodCallException` on `toArray()` / `toJson()`. Detection counts any declared cast as backing
  * (see {@see backedKeys()} for why), so a flagged entry has neither an accessor nor a cast and is an
  * unconditional fatal. The rationale (and why plain columns / relations do NOT back an appended
- * attribute) lives on {@see UnresolvableAppendedAttribute}.
+ * attribute) lives on {@see UnresolvableAppendedModelAttribute}.
  *
  * Enabled by default: registered unconditionally (see Plugin::registerHandlers()), like
  * {@see PublicScopeAccessorVisibilityHandler}. Silence per project through the issueHandlers config.
@@ -47,7 +47,7 @@ use Psalm\Storage\ClassLikeStorage;
  * carries the complete accessor set (including accessors a child supplies for a base's appended
  * attribute — the template-method pattern). Checking the base directly would false-positive on that.
  */
-final class UnresolvableAppendedAttributeHandler implements AfterCodebasePopulatedInterface
+final class UnresolvableAppendedModelAttributeHandler implements AfterCodebasePopulatedInterface
 {
     /** @inheritDoc */
     #[\Override]
@@ -85,7 +85,7 @@ final class UnresolvableAppendedAttributeHandler implements AfterCodebasePopulat
 
             foreach ($unresolved as $append) {
                 IssueBuffer::accepts(
-                    new UnresolvableAppendedAttribute(self::message($fqcn, $append), $location),
+                    new UnresolvableAppendedModelAttribute(self::message($fqcn, $append), $location),
                     $storage->suppressed_issues,
                 );
             }

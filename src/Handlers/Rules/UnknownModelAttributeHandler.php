@@ -268,7 +268,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
 
     /**
      * Resolve the model FQCN named on the left of a static call, or null when the receiver is not a
-     * (resolvable) Eloquent model. Mirrors {@see UndefinedRelationHandler::resolveClassName()}: `self`
+     * (resolvable) Eloquent model. Mirrors {@see UndefinedModelRelationHandler::resolveClassName()}: `self`
      * and `static` are special class names Psalm's name resolver does not rewrite to an FQCN, so they
      * must be resolved against the enclosing class explicitly, or the idiomatic `static::create([...])`
      * inside a model method silently bypasses this rule.
@@ -292,7 +292,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
 
     /**
      * Resolve a `Name` class reference to an FQCN. `self` / `static` resolve to the enclosing class;
-     * `parent` is not resolved. Mirrors {@see UndefinedRelationHandler::resolveClassName()}.
+     * `parent` is not resolved. Mirrors {@see UndefinedModelRelationHandler::resolveClassName()}.
      */
     private static function resolveClassName(Name $class, StatementsSource $source): ?string
     {

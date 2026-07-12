@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-// Standalone autoloader for the fixture models. UnresolvableAppendedAttributeHandler reads the
+// Standalone autoloader for the fixture models. UnresolvableAppendedModelAttributeHandler reads the
 // ModelMetadataRegistry, which ModelRegistrationHandler warms by reflecting on each model via
 // class_exists($name, autoload: true) — so the fixture classes MUST be loadable in the Psalm
 // subprocess. A dedicated, non-Composer namespace keeps the fixture isolated from the package

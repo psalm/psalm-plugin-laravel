@@ -7,12 +7,12 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedAttributeHandler;
+use Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedModelAttributeHandler;
 use Symfony\Component\Process\Process;
 
 /**
- * End-to-end guard for the actual emission of {@see UnresolvableAppendedAttributeHandler}. The pure
- * verdict is unit-tested in {@see UnresolvableAppendedAttributeHandlerTest}, but that never runs the
+ * End-to-end guard for the actual emission of {@see UnresolvableAppendedModelAttributeHandler}. The pure
+ * verdict is unit-tested in {@see UnresolvableAppendedModelAttributeHandlerTest}, but that never runs the
  * orchestration (warm-up to registry to IssueBuffer): the rule reads the ModelMetadataRegistry, which
  * ModelRegistrationHandler warms only for autoloadable model classes, so a psalm-tester `.phpt`
  * fixture (passed as a file argument, never registered) cannot reach it. This points a real Psalm
@@ -29,8 +29,8 @@ use Symfony\Component\Process\Process;
  * the plugin, ~6s) because the emission cannot be observed in-process. It lives in tests/Unit for
  * proximity to the handler it guards.
  */
-#[CoversClass(UnresolvableAppendedAttributeHandler::class)]
-final class UnresolvableAppendedAttributeEmissionTest extends TestCase
+#[CoversClass(UnresolvableAppendedModelAttributeHandler::class)]
+final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
 {
     #[Test]
     public function it_reports_only_the_unbacked_append(): void
@@ -46,7 +46,7 @@ final class UnresolvableAppendedAttributeEmissionTest extends TestCase
         // Exactly one finding: the unbacked append fires, and the accessor-, cast-, and hidden-backed
         // controls stay silent. assertCount(1) is the regression guard — a change that broke emission,
         // or that flagged a backed/hidden entry, fails here.
-        $this->assertCount(1, $findings, "Expected exactly one UnresolvableAppendedAttribute finding, got:\n{$joined}");
+        $this->assertCount(1, $findings, "Expected exactly one UnresolvableAppendedModelAttribute finding, got:\n{$joined}");
         $this->assertStringContainsString('UnbackedAppendModel', $messages[0]);
         $this->assertStringContainsString("'avatar_url'", $messages[0]);
 
@@ -63,7 +63,7 @@ final class UnresolvableAppendedAttributeEmissionTest extends TestCase
     private function runPsalmAndCollectAppendFindings(): array
     {
         $projectRoot = \dirname(__DIR__, 3);
-        $fixtureDir = __DIR__ . '/Fixtures/UnresolvableAppendedAttribute';
+        $fixtureDir = __DIR__ . '/Fixtures/UnresolvableAppendedModelAttribute';
         $psalmBinary = $projectRoot . '/vendor/bin/psalm';
 
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
@@ -87,7 +87,7 @@ final class UnresolvableAppendedAttributeEmissionTest extends TestCase
                 continue;
             }
 
-            if ($finding['type'] === 'UnresolvableAppendedAttribute') {
+            if ($finding['type'] === 'UnresolvableAppendedModelAttribute') {
                 $findings[] = ['type' => $finding['type'], 'message' => (string) $finding['message']];
             }
         }

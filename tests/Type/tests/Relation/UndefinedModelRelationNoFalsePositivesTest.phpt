@@ -1,5 +1,5 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm-find-undefined-relations.xml
+--no-progress --no-diff --config=./tests/Type/psalm-find-undefined-model-relations.xml
 --FILE--
 <?php declare(strict_types=1);
 
@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
- * UndefinedRelation must stay silent for valid relations (every syntax) and defer
+ * UndefinedModelRelation must stay silent for valid relations (every syntax) and defer
  * whenever the model or the name cannot be resolved with confidence.
  * Empty EXPECTF asserts that nothing is reported.
  * See https://github.com/psalm/psalm-plugin-laravel/issues/643

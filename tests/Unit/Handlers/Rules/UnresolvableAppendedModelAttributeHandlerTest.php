@@ -9,32 +9,32 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastShape;
-use Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedAttributeHandler;
+use Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedModelAttributeHandler;
 use Psalm\Type;
 
 /**
- * Unit coverage for the pure verdict of {@see UnresolvableAppendedAttributeHandler}. The full
+ * Unit coverage for the pure verdict of {@see UnresolvableAppendedModelAttributeHandler}. The full
  * registry-driven path cannot be a phpt fixture: warm-up only loads autoloadable model classes
  * (ModelRegistrationHandler's `class_exists(autoload: true)` gate), and a `.phpt` model is not on the
  * autoloader. So the detection logic is split into the pure, table-testable methods exercised here; the
  * end-to-end emission (warm-up through IssueBuffer) is guarded by
- * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\UnresolvableAppendedAttributeEmissionTest} (a real Psalm
+ * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\UnresolvableAppendedModelAttributeEmissionTest} (a real Psalm
  * subprocess over an autoloadable fixture), and `composer test:app` guards against false positives on a
  * fresh Laravel app.
  */
-#[CoversClass(UnresolvableAppendedAttributeHandler::class)]
-final class UnresolvableAppendedAttributeHandlerTest extends TestCase
+#[CoversClass(UnresolvableAppendedModelAttributeHandler::class)]
+final class UnresolvableAppendedModelAttributeHandlerTest extends TestCase
 {
     #[Test]
     public function flags_an_append_with_no_backing(): void
     {
-        $this->assertSame(['avatar_url'], UnresolvableAppendedAttributeHandler::unresolvedAppends(['avatar_url'], []));
+        $this->assertSame(['avatar_url'], UnresolvableAppendedModelAttributeHandler::unresolvedAppends(['avatar_url'], []));
     }
 
     #[Test]
     public function clears_an_append_backed_by_an_accessor(): void
     {
-        $this->assertSame([], UnresolvableAppendedAttributeHandler::unresolvedAppends(['full_name'], ['fullname' => true]));
+        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends(['full_name'], ['fullname' => true]));
     }
 
     #[Test]
@@ -42,7 +42,7 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
     {
         // full_name / fullName / full-name all collapse to the single accessor identity `fullname`,
         // exactly as Eloquent resolves `$model->full_name` through getFullNameAttribute()/fullName().
-        $this->assertSame([], UnresolvableAppendedAttributeHandler::unresolvedAppends(
+        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends(
             ['full_name', 'fullName', 'full-name'],
             ['fullname' => true],
         ));
@@ -51,7 +51,7 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
     #[Test]
     public function reports_only_the_unbacked_entries_in_declaration_order(): void
     {
-        $this->assertSame(['avatar_url', 'nickname'], UnresolvableAppendedAttributeHandler::unresolvedAppends(
+        $this->assertSame(['avatar_url', 'nickname'], UnresolvableAppendedModelAttributeHandler::unresolvedAppends(
             ['full_name', 'avatar_url', 'nickname'],
             ['fullname' => true],
         ));
@@ -62,13 +62,13 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
     {
         // accessorPropertyKey('__') collapses to empty — there is no sensible accessor name to expect, so
         // it is left alone rather than guessed at.
-        $this->assertSame([], UnresolvableAppendedAttributeHandler::unresolvedAppends(['__'], []));
+        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends(['__'], []));
     }
 
     #[Test]
     public function returns_empty_for_a_model_without_appends(): void
     {
-        $this->assertSame([], UnresolvableAppendedAttributeHandler::unresolvedAppends([], ['x' => true]));
+        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends([], ['x' => true]));
     }
 
     #[Test]
@@ -92,13 +92,13 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
             'age' => true,
             'publishedat' => true,
             'status' => true,
-        ], UnresolvableAppendedAttributeHandler::castKeys($casts));
+        ], UnresolvableAppendedModelAttributeHandler::castKeys($casts));
     }
 
     #[Test]
     public function normalizes_cast_column_keys_to_the_accessor_identity(): void
     {
-        $this->assertSame(['fullname' => true], UnresolvableAppendedAttributeHandler::castKeys([
+        $this->assertSame(['fullname' => true], UnresolvableAppendedModelAttributeHandler::castKeys([
             'full_name' => $this->cast(CastShape::Primitive, 'full_name'),
         ]));
     }
@@ -108,11 +108,11 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
     {
         // The two pure steps composed: a cast on `address` (no column, no accessor) resolves the appended
         // `address`, so it is not flagged.
-        $backed = UnresolvableAppendedAttributeHandler::castKeys([
+        $backed = UnresolvableAppendedModelAttributeHandler::castKeys([
             'address' => $this->cast(CastShape::CustomCastsAttributes, 'address'),
         ]);
 
-        $this->assertSame([], UnresolvableAppendedAttributeHandler::unresolvedAppends(['address'], $backed));
+        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends(['address'], $backed));
     }
 
     #[Test]
@@ -122,7 +122,7 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
         // fatals — it must not be flagged.
         $this->assertSame(
             ['full_name'],
-            UnresolvableAppendedAttributeHandler::serializedAppends(['full_name', 'secret'], ['secret'], []),
+            UnresolvableAppendedModelAttributeHandler::serializedAppends(['full_name', 'secret'], ['secret'], []),
         );
     }
 
@@ -132,7 +132,7 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
         // A non-empty $visible is an allow-list: an append absent from it is dropped before the loop.
         $this->assertSame(
             ['full_name'],
-            UnresolvableAppendedAttributeHandler::serializedAppends(['full_name', 'avatar_url'], [], ['full_name']),
+            UnresolvableAppendedModelAttributeHandler::serializedAppends(['full_name', 'avatar_url'], [], ['full_name']),
         );
     }
 
@@ -141,7 +141,7 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
     {
         $this->assertSame(
             ['full_name', 'avatar_url'],
-            UnresolvableAppendedAttributeHandler::serializedAppends(['full_name', 'avatar_url'], [], []),
+            UnresolvableAppendedModelAttributeHandler::serializedAppends(['full_name', 'avatar_url'], [], []),
         );
     }
 
@@ -150,15 +150,15 @@ final class UnresolvableAppendedAttributeHandlerTest extends TestCase
     {
         // End-to-end of the two pure steps: an unbacked append that is also hidden is filtered out, so
         // unresolvedAppends() never sees it.
-        $serialized = UnresolvableAppendedAttributeHandler::serializedAppends(['avatar_url'], ['avatar_url'], []);
+        $serialized = UnresolvableAppendedModelAttributeHandler::serializedAppends(['avatar_url'], ['avatar_url'], []);
 
-        $this->assertSame([], UnresolvableAppendedAttributeHandler::unresolvedAppends($serialized, []));
+        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends($serialized, []));
     }
 
     #[Test]
     public function message_names_both_accessor_spellings_and_the_attribute(): void
     {
-        $message = UnresolvableAppendedAttributeHandler::message('App\\Models\\User', 'avatar_url');
+        $message = UnresolvableAppendedModelAttributeHandler::message('App\\Models\\User', 'avatar_url');
 
         $this->assertStringContainsString("'avatar_url'", $message);
         $this->assertStringContainsString('App\\Models\\User', $message);

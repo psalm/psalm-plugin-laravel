@@ -21,7 +21,7 @@ use Symfony\Component\Process\Process;
  * the `STDERR` resource constant, which bypasses PHP's output-buffering functions (`ob_start()`
  * does not capture it — verified manually) and so cannot be observed from within the same process;
  * a real subprocess's stderr pipe, unlike an in-process buffer, is unaffected by how the child wrote
- * to it. Like {@see UnresolvableAppendedAttributeEmissionTest}, this forks a real `vendor/bin/psalm`
+ * to it. Like {@see UnresolvableAppendedModelAttributeEmissionTest}, this forks a real `vendor/bin/psalm`
  * (~4s) and lives in tests/Unit for proximity to the code it guards.
  *
  * The fixture also incidentally guards a second, more severe bug this test uncovered: before

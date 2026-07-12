@@ -113,9 +113,9 @@ See [ImplicitQueryBuilderCall](issues/ImplicitQueryBuilderCall.md) for details.
 
 **default**: `false`
 
-When enabled, the plugin validates relation-name strings passed to `with()`, `without()`, `has()`, `whereHas()`, `load()`, `loadCount()`, and similar methods against the resolved model, reporting [UndefinedRelation](issues/UndefinedRelation.md) when the name does not resolve to a relationship. It handles dot-notation, array, keyed-closure, and `:columns` select syntaxes. It is opt-in because relations can be registered at runtime (via `Model::resolveRelationUsing()` or package macros) in ways static analysis cannot see.
+When enabled, the plugin validates relation-name strings passed to `with()`, `without()`, `has()`, `whereHas()`, `load()`, `loadCount()`, and similar methods against the resolved model, reporting [UndefinedModelRelation](issues/UndefinedModelRelation.md) when the name does not resolve to a relationship. It handles dot-notation, array, keyed-closure, and `:columns` select syntaxes. It is opt-in because relations can be registered at runtime (via `Model::resolveRelationUsing()` or package macros) in ways static analysis cannot see.
 
-See [UndefinedRelation](issues/UndefinedRelation.md) for details.
+See [UndefinedModelRelation](issues/UndefinedModelRelation.md) for details.
 
 ### Example
 
