@@ -6,7 +6,7 @@ nav_order: 11
 
 # UndefinedModelRelation
 
-A relation name passed to an eager-loading or relationship-query method does not resolve to a method on the model. It is registered by default as an experimental advisory; see [Reporting level](#reporting-level).
+A relation name passed to an eager-loading or relationship-query method does not resolve to a method on the model. See [Reporting level](#reporting-level).
 
 ## Why it matters
 
@@ -64,7 +64,7 @@ The `withCount()` / `withSum()` aggregate family is not covered by this first pa
 
 ## Reporting level
 
-The handler always runs. By default this experimental issue is reported as `info`. Promote its default to an error in `psalm.xml`:
+The handler always runs. By default this issue is reported as `info`. Promote its default to an error in `psalm.xml`:
 
 ```xml
 <pluginClass class="Psalm\LaravelPlugin\Plugin">
