@@ -19,11 +19,13 @@ use Illuminate\Support\Facades\DB;
  */
 class WorkOrderBuilder extends Builder
 {
+    /** @psalm-return self<TModel> */
     public function whereCompleted(): self
     {
         return $this->where('status', 'completed');
     }
 
+    /** @psalm-return self<TModel> */
     public function wherePending(): self
     {
         return $this->where('status', 'pending');
@@ -31,6 +33,8 @@ class WorkOrderBuilder extends Builder
 
     /**
      * Custom method with parameters — exercises the getMethodParams provider path.
+     *
+     * @psalm-return self<TModel>
      */
     public function whereByMechanic(int $mechanicId): self
     {
@@ -46,6 +50,8 @@ class WorkOrderBuilder extends Builder
      * false-positive UndefinedMagicPropertyFetch.
      *
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/805
+     *
+     * @psalm-return self<TModel>
      */
     public function withFavoriteStatus(int $userId): self
     {

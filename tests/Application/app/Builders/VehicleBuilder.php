@@ -17,11 +17,13 @@ use Illuminate\Database\Eloquent\Model;
  */
 class VehicleBuilder extends Builder
 {
+    /** @psalm-return self<TModel> */
     public function whereElectric(): self
     {
         return $this->where('fuel_type', 'electric');
     }
 
+    /** @psalm-return self<TModel> */
     public function whereByMake(string $make): self
     {
         return $this->where('make', $make);

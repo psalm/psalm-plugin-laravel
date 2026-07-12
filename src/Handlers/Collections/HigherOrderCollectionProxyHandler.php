@@ -491,6 +491,7 @@ final class HigherOrderCollectionProxyHandler implements
      *
      * For `$collection->each->delete()`, returns "delete".
      *
+     * @psalm-return lowercase-string
      * @psalm-mutation-free
      */
     private static function extractCalledMethodName(MethodCall $expr): string
