@@ -249,6 +249,21 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Why:** A method named `posts()` that returns a `HasMany` relation should always be treated as a relationship property, even if a migration column named `posts` also exists. Similarly, an accessor `getFullNameAttribute()` should take priority over a `full_name` column. The order reflects specificity: relationships and accessors are explicit code the developer wrote; columns are inferred from migrations and serve as the fallback.
 
+## Producer Return Narrowing
+
+### Provenance may narrow, conformance never widens
+
+**Decision:** A stable producer (a framework method that hard-constructs one concrete with no supported extension point) narrows its declared contract return to that concrete. `ProducerReturnTypeHandler` holds the reviewed mapping (`PasswordBrokerManager::broker()`, `View\Factory::make()/file()/first()`, plus facades and root aliases). `view()`/`trans()` narrow via their existing handlers: zero-arg forms narrow to whatever class the binding resolved to at plugin boot (a scanned subclass counts); the argument-supplied `view('name')` form additionally requires the stock `Illuminate\View\Factory`. `Query\Builder` pagination is stub-narrowed (`stdClass` rows).
+
+**Why:** Laravel declares contracts where runtime always yields one concrete, so concrete-only calls like `Password::broker()->createToken()` report false `UndefinedInterfaceMethod`.
+
+**Boundaries:**
+- Key on the producing expression, never the contract: contract FQCNs are never registered, interface storage never modified. Bare contract-typed values (params, properties, mocks, custom impls) keep the contract-only surface.
+- Drift guard: each rule requires the declared return to still name the expected contract, else it disables itself.
+- New mappings need source verification across supported Laravel versions plus positive and negative tests.
+- Disclosed gap: producer internals like `Factory::viewInstance()` are protected, so a producer subclass inheriting the mapped method but overriding the construction still narrows to the stock concrete. Accepted (matches the Cache manager precedent): worst case turns a contract-level false positive into a false negative, never a new false positive.
+- Excluded: driver-variant surfaces (Auth guards, Hash, Queue, Broadcast, Redis, Filesystem) where the concrete depends on runtime config.
+
 ## Third-Party Package Support
 
 ### Plugin covers Laravel framework only, not third-party packages
