@@ -88,3 +88,10 @@ apps:
     # composer.json declares a too-low PHP minimum, so Psalm would otherwise
     # analyse against that floor; pin the analysis target explicitly.
     psalm_args: "--php-version=8.0"
+    # composer.json allows psr/simple-cache up to ^3.0, whose CacheInterface::get()
+    # gained native `string $key, mixed $default = null` types. This lib's own
+    # MemoryCacheDeprecated::get() still has an untyped signature, so PHP fatals
+    # on the covariance check the moment the class loads. No composer.lock is
+    # committed for this repo (it's a library), so nothing pins the solve away
+    # from ^3.0 on its own; cap the constraint before the real install.
+    prime: composer require psr/simple-cache:"^1.0||^2.0" --no-update --no-interaction
