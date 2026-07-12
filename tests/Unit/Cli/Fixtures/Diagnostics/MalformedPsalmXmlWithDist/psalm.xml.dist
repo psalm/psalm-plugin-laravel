@@ -1,8 +1,0 @@
-<?xml version="1.0"?>
-<psalm xmlns="https://getpsalm.org/schema/config">
-    <plugins>
-        <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <experimental value="true" />
-        </pluginClass>
-    </plugins>
-</psalm>

@@ -58,19 +58,10 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
         }
     }
 
-    #[Test]
-    public function experimental_enforcement_does_not_change_the_stable_issue_level(): void
-    {
-        $findings = $this->runPsalmAndCollectAppendFindings('psalm-experimental.xml');
-
-        $this->assertCount(1, $findings);
-        $this->assertSame('error', $findings[0]['severity']);
-    }
-
     /**
      * @return list<array{type: string, message: string, severity: string}>
      */
-    private function runPsalmAndCollectAppendFindings(string $config = 'psalm.xml'): array
+    private function runPsalmAndCollectAppendFindings(): array
     {
         $projectRoot = \dirname(__DIR__, 3);
         $fixtureDir = __DIR__ . '/Fixtures/UnresolvableAppendedModelAttribute';
@@ -79,7 +70,7 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
+            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
             $fixtureDir,
         );
         $process->setTimeout(300);

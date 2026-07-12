@@ -32,53 +32,7 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame(Command::SUCCESS, $exit, $display);
         $this->assertStringContainsString('Versions', $display);
         $this->assertStringContainsString('Boot mode', $display);
-        $this->assertStringContainsString('Experimental issue enforcement', $display);
-        $this->assertStringContainsString('disabled', $display);
         $this->assertStringNotContainsString('Hard failures', $display);
-    }
-
-    #[Test]
-    public function experimental_enforcement_is_rendered_when_enabled(): void
-    {
-        $base = $this->okReport();
-        $enabled = new Report(
-            pluginVersion: $base->pluginVersion,
-            psalmVersion: $base->psalmVersion,
-            laravelVersion: $base->laravelVersion,
-            phpRuntimeVersion: $base->phpRuntimeVersion,
-            phpAnalysisVersion: $base->phpAnalysisVersion,
-            phpAnalysisSource: $base->phpAnalysisSource,
-            experimentalIssueEnforcement: true,
-            bootMode: $base->bootMode,
-            bootPath: $base->bootPath,
-            bootstrapErrors: $base->bootstrapErrors,
-            hardFailures: $base->hardFailures,
-            loadedProviders: $base->loadedProviders,
-        );
-
-        $tester = $this->testerFor($this->fixtureProvider($enabled));
-        $tester->execute([]);
-
-        $this->assertStringContainsString('Experimental issue enforcement', $tester->getDisplay());
-        $this->assertStringContainsString('enabled', $tester->getDisplay());
-    }
-
-    #[Test]
-    public function diagnostics_reads_psalm_xml_and_falls_back_to_psalm_xml_dist(): void
-    {
-        $diagnostics = new class extends Diagnostics {
-            public function experimentalIssueEnforcementFor(string $projectRoot): bool
-            {
-                return $this->resolveExperimentalIssueEnforcement($projectRoot);
-            }
-        };
-
-        $fixtures = __DIR__ . '/Fixtures/Diagnostics';
-
-        $this->assertTrue($diagnostics->experimentalIssueEnforcementFor($fixtures . '/PsalmXml'));
-        $this->assertFalse($diagnostics->experimentalIssueEnforcementFor($fixtures . '/PsalmXmlDist'));
-        $this->assertTrue($diagnostics->experimentalIssueEnforcementFor($fixtures . '/PsalmXmlAlternatePluginClass'));
-        $this->assertFalse($diagnostics->experimentalIssueEnforcementFor($fixtures . '/MalformedPsalmXmlWithDist'));
     }
 
     #[Test]
@@ -92,7 +46,6 @@ final class DiagnoseCommandTest extends TestCase
             phpRuntimeVersion: $base->phpRuntimeVersion,
             phpAnalysisVersion: $base->phpAnalysisVersion,
             phpAnalysisSource: $base->phpAnalysisSource,
-            experimentalIssueEnforcement: $base->experimentalIssueEnforcement,
             bootMode: null,
             bootPath: null,
             bootstrapErrors: ['synthetic'],
@@ -121,7 +74,6 @@ final class DiagnoseCommandTest extends TestCase
             phpRuntimeVersion: $base->phpRuntimeVersion,
             phpAnalysisVersion: $base->phpAnalysisVersion,
             phpAnalysisSource: $base->phpAnalysisSource,
-            experimentalIssueEnforcement: $base->experimentalIssueEnforcement,
             bootMode: $base->bootMode,
             bootPath: $base->bootPath,
             bootstrapErrors: ['Call to a member function bar() on null in config/app.php:42'],
@@ -277,7 +229,6 @@ final class DiagnoseCommandTest extends TestCase
             phpRuntimeVersion: '8.4.0',
             phpAnalysisVersion: '8.4.0',
             phpAnalysisSource: 'runtime',
-            experimentalIssueEnforcement: false,
             bootMode: 'bootstrap',
             bootPath: '/app/bootstrap/app.php',
             bootstrapErrors: [],

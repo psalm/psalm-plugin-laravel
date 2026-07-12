@@ -18,7 +18,7 @@ final readonly class Report
 {
     /**
      * @param 'bootstrap'|'testbench_fallback'|null $bootMode
-     * @param 'runtime'|'psalm.xml'|'psalm.xml.dist' $phpAnalysisSource
+     * @param 'runtime'|'psalm.xml' $phpAnalysisSource
      * @param list<string> $bootstrapErrors
      * @param list<string> $hardFailures
      * @param list<string> $loadedProviders Service provider class names the booted kernel registered, sorted. Empty when boot failed.
@@ -30,7 +30,6 @@ final readonly class Report
         public string $phpRuntimeVersion,
         public string $phpAnalysisVersion,
         public string $phpAnalysisSource,
-        public bool $experimentalIssueEnforcement,
         public ?string $bootMode,
         public ?string $bootPath,
         public array $bootstrapErrors,

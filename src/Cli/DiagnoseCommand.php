@@ -97,10 +97,6 @@ final class DiagnoseCommand extends Command
             'Analysis' => $report->phpAnalysisVersion . ' (from ' . $report->phpAnalysisSource . ')',
         ]);
 
-        $this->renderSection($io, 'Experimental issue enforcement', [
-            'Status' => $report->experimentalIssueEnforcement ? 'enabled' : 'disabled',
-        ]);
-
         if ($report->bootMode === null) {
             $this->renderSection($io, 'Boot mode', ['Status' => '<error>FAILED</error>']);
             foreach ($report->bootstrapErrors as $error) {
