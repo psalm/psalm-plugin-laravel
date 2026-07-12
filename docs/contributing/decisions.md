@@ -88,9 +88,9 @@ In practice, the plugin also boots a real Laravel app via Testbench, which requi
 
 **Sister plugins follow the same pattern:** `psalm-plugin-symfony` keeps `require_once` for every handler. `psalm-plugin-phpunit` and `Lctrs/psalm-psr-container-plugin` use `class_exists($fqcn, true)` instead, but each has only one handler — the failure mode is harder to miss.
 
-**How to remove this constraint:** add a CI job that installs `psalm.phar` and runs the plugin against a sample Laravel project ([#895](https://github.com/psalm/psalm-plugin-laravel/issues/895)). Once that job exists and passes consistently, this decision can be revisited and the `require_once` block collapsed.
+**Why PHAR CI does not remove this constraint:** [#895](https://github.com/psalm/psalm-plugin-laravel/issues/895) was closed as not planned. Installing this plugin pulls Psalm into `vendor/`, so running `psalm.phar` creates a dual-Psalm collision in the natural setup. The workaround still registers the project's autoloader, so a green PHAR job would not exercise the missing-autoloader scenario this guard protects.
 
-**Until then:** every new handler added to `Plugin::registerHandlers()` MUST keep its paired `require_once` line.
+**Contributor rule:** every new handler added to `Plugin::registerHandlers()` MUST keep its paired `require_once` line. If `Plugin::__invoke()` or an `init*Handler()` method makes a static call before registration, add that file to `loadInitializationHandlers()` as well—before its first static touch, on every configuration branch.
 
 ### Event-driven model discovery via `AfterCodebasePopulated`
 

@@ -36,6 +36,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
         $output = $this->getProgress($registration);
+        $this->loadInitializationHandlers();
 
         try {
             ApplicationProvider::bootApp();
@@ -89,6 +90,24 @@ final class Plugin implements PluginEntryPointInterface
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
+    }
+
+    /**
+     * Load every handler that Plugin::__invoke() initializes before any optional
+     * configuration branch can touch it. Psalm's plugin loader does not guarantee
+     * this package's PSR-4 autoloader is active at invocation time.
+     *
+     * The registration-adjacent require_once calls remain in registerHandlers():
+     * they document the handler/registration pairing, and require_once is
+     * intentionally idempotent.
+     *
+     * @psalm-suppress MissingPureAnnotation require_once changes process-wide load state.
+     */
+    private function loadInitializationHandlers(): void
+    {
+        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
+        require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
+        require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
     }
 
     private function registerStubs(
@@ -413,7 +432,9 @@ final class Plugin implements PluginEntryPointInterface
         // in registration order and stops at the first non-null return. NoEnvOutsideConfigHandler
         // always returns null (it only emits an issue), so the chain continues to EnvHandler for
         // type narrowing. Reversing the order would silently suppress the NoEnvOutsideConfig issue.
-        // (require_once for the handler ran in initNoEnvOutsideConfigHandler() before this method.)
+        // The initialization helper loads the handler before its earlier static init() call;
+        // repeat the idempotent require_once here to keep the registration pairing explicit.
+        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\NoEnvOutsideConfigHandler::class);
         require_once __DIR__ . '/Handlers/Helpers/EnvHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\EnvHandler::class);
@@ -471,7 +492,6 @@ final class Plugin implements PluginEntryPointInterface
             $directories = [ApplicationProvider::getApp()->configPath()];
         }
 
-        require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         Handlers\Rules\NoEnvOutsideConfigHandler::init($directories, $output);
     }
 
@@ -586,10 +606,6 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
     {
-        // Load the handler before its first static touch: __invoke() runs before
-        // registerHandlers() (where the paired require_once lives), and under
-        // psalm.phar the plugin's PSR-4 autoloader may not be registered yet.
-        require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
         Handlers\Views\MissingViewHandler::initViewFactory($factory instanceof \Illuminate\View\Factory ? $factory::class : null);
     }
 
