@@ -58,14 +58,18 @@ final class ExperimentalIssuePolicyTest extends TestCase
 
     #[Test]
     #[DataProvider('enforcementModes')]
-    public function explicit_global_levels_remain_in_effect_alongside_scoped_filters(bool $enforced, string $_expectedDefaultLevel): void
+    public function explicit_issue_policy_owns_the_base_level_and_scoped_filters(bool $enforced, string $_expectedDefaultLevel): void
     {
-        $config = $this->loadExplicitErrorAndFilterConfig();
+        $config = $this->loadConfig(
+            '<issueHandlers><PluginIssue name="UndefinedModelRelation" errorLevel="info">'
+            . '<errorLevel type="suppress"><directory name="tests/Unit/Internal" /></errorLevel>'
+            . '</PluginIssue></issueHandlers>',
+        );
 
         ExperimentalIssuePolicy::apply($enforced);
 
         $this->assertSame(Config::REPORT_SUPPRESS, $config->getReportingLevelForFile('UndefinedModelRelation', __FILE__));
-        $this->assertSame(Config::REPORT_ERROR, $config->getReportingLevelForFile('UndefinedModelRelation', \dirname(__DIR__, 3) . '/src/Elsewhere.php'));
+        $this->assertSame(Config::REPORT_INFO, $config->getReportingLevelForFile('UndefinedModelRelation', \dirname(__DIR__, 3) . '/src/Elsewhere.php'));
     }
 
     private function loadConfig(string $body = ''): Config
@@ -74,14 +78,5 @@ final class ExperimentalIssuePolicyTest extends TestCase
             \dirname(__DIR__, 3),
             '<?xml version="1.0"?><psalm xmlns="https://getpsalm.org/schema/config">' . $body . '</psalm>',
         );
-    }
-
-    private function loadExplicitErrorAndFilterConfig(): Config
-    {
-        $path = __DIR__ . '/Fixtures/ExperimentalIssuePolicy/explicit-error-and-filter.xml';
-        $contents = \file_get_contents($path);
-        $this->assertIsString($contents);
-
-        return Config::loadFromXML(\dirname($path), $contents, \dirname($path), $path);
     }
 }

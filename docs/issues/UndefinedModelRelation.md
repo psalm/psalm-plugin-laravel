@@ -64,7 +64,7 @@ The `withCount()` / `withSum()` aggregate family is not covered by this first pa
 
 ## Reporting level
 
-The handler always runs. By default this issue is reported as `info`. Promote its default to an error in `psalm.xml`:
+The handler always runs. Without an explicit issue handler, it is reported as `info` by default. Promote that default to an error in `psalm.xml`:
 
 ```xml
 <pluginClass class="Psalm\LaravelPlugin\Plugin">
@@ -72,10 +72,16 @@ The handler always runs. By default this issue is reported as `info`. Promote it
 </pluginClass>
 ```
 
-Explicit `issueHandlers` configuration always takes precedence, including scoped filters. For example, silence it for a specific area:
+Any explicit `<PluginIssue>` entry owns this issue's complete reporting policy. The plugin leaves both its base level and scoped filters unchanged, regardless of `<experimental>`. When using scoped filters, specify the desired base level explicitly:
 
 ```xml
 <issueHandlers>
-    <PluginIssue name="UndefinedModelRelation" errorLevel="suppress" />
+    <PluginIssue name="UndefinedModelRelation" errorLevel="info">
+        <errorLevel type="suppress">
+            <directory name="legacy" />
+        </errorLevel>
+    </PluginIssue>
 </issueHandlers>
 ```
+
+Without the outer `errorLevel="info"`, Psalm uses its normal implicit fallback of `error` outside the scoped filter.

@@ -8,7 +8,7 @@ nav_order: 11
 
 Emitted when an array passed to an Eloquent mass-assignment method names a key that is not a known attribute of the receiving model. This catches typos such as `User::create(['nmae' => $name])`.
 
-This issue is registered by default and reported as an advisory `info` finding. Set `<experimental value="true" />` in the plugin configuration to promote its default to an error. Explicit [issueHandlers](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) configuration always takes precedence.
+This issue is registered by default and reported as an advisory `info` finding. Set `<experimental value="true" />` in the plugin configuration to promote its default to an error. Any explicit `<PluginIssue name="UnknownModelAttribute" ...>` entry takes complete ownership of this issue's reporting level, so experimental enforcement no longer changes it. See [configuration](../config.md#experimental) for scoped-handler guidance.
 
 ## Why this is a problem
 
