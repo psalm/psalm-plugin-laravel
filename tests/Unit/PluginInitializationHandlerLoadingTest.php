@@ -23,27 +23,23 @@ final class PluginInitializationHandlerLoadingTest extends TestCase
     {
         $source = \file_get_contents(\dirname(__DIR__, 2) . '/src/Plugin.php');
 
-        self::assertIsString($source);
+        $this->assertIsString($source);
 
         $loadCall = \strpos($source, '$this->loadInitializationHandlers();');
         $try = \strpos($source, '        try {');
 
-        self::assertIsInt($loadCall);
-        self::assertIsInt($try);
-        self::assertLessThan($try, $loadCall);
+        $this->assertIsInt($loadCall);
+        $this->assertIsInt($try);
+        $this->assertLessThan($try, $loadCall);
 
-        $loadMethod = self::methodBody($source, 'loadInitializationHandlers');
+        $loadMethod = $this->methodBody($source, 'loadInitializationHandlers');
         foreach ([
             '/Handlers/Rules/NoEnvOutsideConfigHandler.php',
             '/Handlers/Translations/TranslationKeyHandler.php',
             '/Handlers/Views/MissingViewHandler.php',
         ] as $handlerFile) {
-            self::assertStringContainsString($handlerFile, $loadMethod);
-            self::assertSame(
-                2,
-                \substr_count($source, $handlerFile),
-                "{$handlerFile} must remain explicitly loaded for both initialization and registration.",
-            );
+            $this->assertStringContainsString($handlerFile, $loadMethod);
+            $this->assertSame(2, \substr_count($source, $handlerFile), "{$handlerFile} must remain explicitly loaded for both initialization and registration.");
         }
 
         foreach ([
@@ -52,19 +48,19 @@ final class PluginInitializationHandlerLoadingTest extends TestCase
             'initMissingViewHandler' => 'Handlers\\Views\\MissingViewHandler::init(',
             'initViewFactoryHandler' => 'Handlers\\Views\\MissingViewHandler::initViewFactory(',
         ] as $method => $staticTouch) {
-            $methodBody = self::methodBody($source, $method);
+            $methodBody = $this->methodBody($source, $method);
 
-            self::assertStringContainsString($staticTouch, $methodBody);
-            self::assertStringNotContainsString('require_once', $methodBody);
+            $this->assertStringContainsString($staticTouch, $methodBody);
+            $this->assertStringNotContainsString('require_once', $methodBody);
         }
     }
 
-    private static function methodBody(string $source, string $method): string
+    private function methodBody(string $source, string $method): string
     {
         $pattern = '/private function ' . \preg_quote($method, '/') . '\\([^)]*\\): void\\n    \\{(.*?)^    \\}/ms';
         $matched = \preg_match($pattern, $source, $matches);
 
-        self::assertSame(1, $matched, "Could not find {$method}() in Plugin.php");
+        $this->assertSame(1, $matched, "Could not find {$method}() in Plugin.php");
 
         return $matches[1];
     }
