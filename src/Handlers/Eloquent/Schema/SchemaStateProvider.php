@@ -19,6 +19,12 @@ final class SchemaStateProvider
     private static ?SchemaAggregator $schema = null;
 
     /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$schema = null;
+    }
+
+    /** @psalm-external-mutation-free */
     public static function setSchema(SchemaAggregator $schema): void
     {
         self::$schema = $schema;

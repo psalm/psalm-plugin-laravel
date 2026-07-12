@@ -36,6 +36,12 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
      */
     private static array $configDirectories = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$configDirectories = [];
+    }
+
     /**
      * Resolve user-provided config directory paths into absolute, glob-expanded paths.
      *

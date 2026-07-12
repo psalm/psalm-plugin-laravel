@@ -11,6 +11,12 @@ final class AuthConfigAnalyzer
 {
     private static ?AuthConfigAnalyzer $instance = null;
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$instance = null;
+    }
+
     /**
      * Memoizes `getGuardFQCN()` so the per-call-site Psalm hook avoids
      * re-walking `auth.guards.<name>.driver` through `Repository::get()`.

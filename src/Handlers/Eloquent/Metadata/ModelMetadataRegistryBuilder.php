@@ -136,9 +136,7 @@ final class ModelMetadataRegistryBuilder
     }
 
     /**
-     * Clear all cached metadata and the captured Progress handle.
-     *
-     * @internal for tests under `tests/Unit/`
+     * Clear all state derived from the current Laravel app and Psalm Codebase.
      * @psalm-external-mutation-free
      */
     public static function reset(): void

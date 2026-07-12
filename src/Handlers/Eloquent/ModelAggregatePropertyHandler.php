@@ -85,6 +85,14 @@ final class ModelAggregatePropertyHandler
      */
     private static array $typeCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$pseudoPropertyCache = [];
+        self::$suffixCache = [];
+        self::$relationMethodCache = [];
+    }
+
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {

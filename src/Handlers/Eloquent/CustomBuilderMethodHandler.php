@@ -58,6 +58,13 @@ final class CustomBuilderMethodHandler
      */
     private static array $traitBuilderMethods = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$builderToModelMap = [];
+        self::$traitBuilderMethods = [];
+    }
+
     /**
      * Register the builder-to-model reverse mapping.
      *
