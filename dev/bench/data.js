@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783904946819,
+  "lastUpdate": 1783905152366,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8495,6 +8495,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.57,
             "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "3137059bc6a2b078f2e4862adc6104ed02a01b5c",
+          "message": "fix(eloquent): skip Model base class and its Facade aliases from registry\n\nLaravel's Facade::defaultAliases() registers 'Eloquent' => Model::class,\nso AliasLoader::load() runs class_alias(Model::class, 'Eloquent') in every\nbooted app. Psalm's alias stub declares \"Eloquent\" as an empty Model\nsubclass, satisfying ModelRegistrationHandler's parent_classes check, but\nat runtime it IS Model itself (class_alias makes them the same class),\nwhich has no parent class. Filter it out via get_parent_class() === false\nso the registry doesn't carry a spurious all-defaults entry for the base\nclass under an alias name.",
+          "timestamp": "2026-07-13T03:09:26+02:00",
+          "tree_id": "e721a264878e21d5602d52c52e3ae5a1dac6af41",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3137059bc6a2b078f2e4862adc6104ed02a01b5c"
+        },
+        "date": 1783905151170,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.72,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
