@@ -10,6 +10,7 @@ use App\Models\AbstractDocument;
 use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\CustomPkUuidModel;
+use App\Models\KeylessPermission;
 use App\Models\SpecializationPivot;
 use App\Models\UlidModel;
 use App\Models\UnguardedModel;
@@ -19,6 +20,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -30,6 +32,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
@@ -57,6 +60,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
+use Psalm\Progress\Progress;
 use Psalm\Progress\VoidProgress;
 use Psalm\Storage\AttributeStorage;
 use Psalm\Storage\ClassLikeStorage;
@@ -66,15 +70,27 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ApplicationIdentifierFailureModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ConfigurableUniqueIdsKeylessUuidModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ConflictingIncrementingKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\IncrementingAwareCastsKeylessModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\NonArrayUniqueIdsDelegatingCastsModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\NullKeyUlidModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\NullKeyUuidModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\OverriddenIncrementingKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableConfiguredPrimaryKeyModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableIdentifierPropertiesWinModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableNonIncrementingKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\WithoutIncrementingKeylessModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
 #[CoversClass(ModelMetadataRegistryBuilder::class)]
@@ -94,6 +110,10 @@ final class ModelMetadataRegistryTest extends TestCase
     #[\Override]
     protected function tearDown(): void
     {
+        ConfigurableUniqueIdsKeylessUuidModel::$uniqueIdColumns = [];
+        NonArrayUniqueIdsDelegatingCastsModel::$uniqueIdColumns = [];
+
+        ApplicationIdentifierFailureModel::$failure = 'null-offset';
         ModelMetadataRegistryBuilder::reset();
     }
 
@@ -173,6 +193,336 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertInstanceOf(ModelMetadata::class, $metadata, 'warm-up must not fail on $guarded = false');
         // `$guarded = false` means guard nothing → empty list (not the base default ['*']).
         $this->assertSame([], $metadata->guarded);
+    }
+
+    #[Test]
+    public function valid_keyless_model_populates_metadata_without_a_configuration_warning(): void
+    {
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(KeylessPermission::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, KeylessPermission::class);
+
+        $this->assertSame([], $progress->warnings);
+
+        $metadata = ModelMetadataRegistry::for(KeylessPermission::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata, 'keyless model warm-up must succeed');
+        $this->assertNull($metadata->primaryKey->name);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+        $this->assertArrayHasKey('allowed', $metadata->casts());
+        $this->assertSame(CastShape::Primitive, $metadata->casts()['allowed']->shape);
+        $this->assertTrue($metadata->casts()['allowed']->psalmType->isBool());
+    }
+
+    #[Test]
+    public function conflicting_keyless_model_warns_once_and_still_populates_metadata(): void
+    {
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(ConflictingIncrementingKeylessModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ConflictingIncrementingKeylessModel::class);
+
+        $this->assertCount(1, $progress->warnings);
+        $this->assertStringContainsString(ConflictingIncrementingKeylessModel::class, $progress->warnings[0]);
+        $this->assertStringContainsString('invalid effective identifier configuration', $progress->warnings[0]);
+        $this->assertStringContainsString('getIncrementing() returns true', $progress->warnings[0]);
+        $this->assertStringContainsString('$primaryKey', $progress->warnings[0]);
+        $this->assertStringContainsString('#[WithoutIncrementing]', $progress->warnings[0]);
+
+        $metadata = ModelMetadataRegistry::for(ConflictingIncrementingKeylessModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata, 'conflicting model warm-up must recover');
+        $this->assertNull($metadata->primaryKey->name);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+        $this->assertArrayHasKey('enabled', $metadata->casts());
+        $this->assertSame(CastShape::Primitive, $metadata->casts()['enabled']->shape);
+        $this->assertTrue($metadata->casts()['enabled']->psalmType->isBool());
+    }
+
+    #[Test]
+    public function delegating_cast_getter_recovers_framework_null_offset_failure_without_mutation(): void
+    {
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(OverriddenIncrementingKeylessModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, OverriddenIncrementingKeylessModel::class);
+
+        $this->assertCount(1, $progress->warnings);
+        $metadata = ModelMetadataRegistry::for(OverriddenIncrementingKeylessModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata, 'base getCasts() must be bypassed narrowly');
+        $this->assertNull($metadata->primaryKey->name);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+        $this->assertArrayHasKey('enabled', $metadata->casts());
+        $this->assertSame(CastShape::Primitive, $metadata->casts()['enabled']->shape);
+        $this->assertArrayNotHasKey('delegated', $metadata->casts(), 'raw-casts fallback must have handled the failure');
+    }
+
+    #[Test]
+    public function custom_cast_getter_observes_original_effective_incrementing_state(): void
+    {
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(IncrementingAwareCastsKeylessModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, IncrementingAwareCastsKeylessModel::class);
+
+        $this->assertCount(1, $progress->warnings);
+        $metadata = ModelMetadataRegistry::for(IncrementingAwareCastsKeylessModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata, 'custom getCasts() must execute unchanged');
+        $this->assertTrue(
+            $metadata->casts()['stateful_value']->psalmType->isInt(),
+            'warning/recovery must not mutate the model state observed by custom getCasts()',
+        );
+    }
+
+    #[Test]
+    public function without_incrementing_attribute_makes_a_keyless_model_valid(): void
+    {
+        if (!class_exists(WithoutIncrementing::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(WithoutIncrementingKeylessModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, WithoutIncrementingKeylessModel::class);
+
+        $this->assertSame([], $progress->warnings);
+        $metadata = ModelMetadataRegistry::for(WithoutIncrementingKeylessModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertNull($metadata->primaryKey->name);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+        $this->assertTrue($metadata->casts()['enabled']->psalmType->isBool());
+    }
+
+    #[Test]
+    public function table_incrementing_attribute_makes_a_keyless_model_valid(): void
+    {
+        if (!class_exists(Table::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(TableNonIncrementingKeylessModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TableNonIncrementingKeylessModel::class);
+
+        $this->assertSame([], $progress->warnings);
+        $metadata = ModelMetadataRegistry::for(TableNonIncrementingKeylessModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertNull($metadata->primaryKey->name);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+        $this->assertTrue($metadata->casts()['enabled']->psalmType->isBool());
+    }
+
+    #[Test]
+    public function table_identifier_attributes_populate_effective_primary_key_metadata(): void
+    {
+        if (!class_exists(Table::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(TableConfiguredPrimaryKeyModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TableConfiguredPrimaryKeyModel::class);
+
+        $this->assertSame([], $progress->warnings);
+        $metadata = ModelMetadataRegistry::for(TableConfiguredPrimaryKeyModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertSame('external_id', $metadata->primaryKey->name);
+        $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+    }
+
+    #[Test]
+    public function table_identifier_attributes_do_not_replace_explicit_key_properties(): void
+    {
+        if (!class_exists(Table::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(TableIdentifierPropertiesWinModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TableIdentifierPropertiesWinModel::class);
+
+        $this->assertSame([], $progress->warnings);
+        $metadata = ModelMetadataRegistry::for(TableIdentifierPropertiesWinModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertSame('property_id', $metadata->primaryKey->name);
+        $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
+        $this->assertFalse($metadata->primaryKey->incrementing, 'Table incrementing still applies independently');
+    }
+
+    /**
+     * @param class-string<Model> $modelFqcn
+     * @param class-string        $traitFqcn
+     */
+    #[DataProvider('nullKeyUniqueIdModels')]
+    #[Test]
+    public function null_key_unique_id_trait_warns_about_missing_columns(
+        string $modelFqcn,
+        string $traitFqcn,
+        string $traitName,
+    ): void {
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage($modelFqcn, [$traitFqcn]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, $modelFqcn);
+
+        $this->assertCount(1, $progress->warnings);
+        $this->assertStringContainsString($traitName, $progress->warnings[0]);
+        $this->assertStringContainsString(
+            'uniqueIds() returns an entry that is not a non-empty string',
+            $progress->warnings[0],
+        );
+        if ($modelFqcn === NullKeyUuidModel::class) {
+            $this->assertStringContainsString(
+                'getKeyName() returns null or empty while getIncrementing() returns true',
+                $progress->warnings[0],
+                'multiple identifier conflicts must be combined into the same warning',
+            );
+        }
+
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertSame([], $metadata->primaryKey->uuidColumns);
+    }
+
+    /**
+     * @return iterable<string, array{class-string<Model>, class-string, non-empty-string}>
+     */
+    public static function nullKeyUniqueIdModels(): iterable
+    {
+        yield 'UUID' => [NullKeyUuidModel::class, HasUuids::class, 'HasUuids'];
+        yield 'ULID' => [NullKeyUlidModel::class, HasUlids::class, 'HasUlids'];
+    }
+
+    #[Test]
+    public function custom_valid_unique_ids_avoids_the_unique_id_warning(): void
+    {
+        ConfigurableUniqueIdsKeylessUuidModel::$uniqueIdColumns = ['external_uuid'];
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(ConfigurableUniqueIdsKeylessUuidModel::class, [HasUuids::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ConfigurableUniqueIdsKeylessUuidModel::class);
+
+        $this->assertSame([], $progress->warnings);
+        $metadata = ModelMetadataRegistry::for(ConfigurableUniqueIdsKeylessUuidModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertSame(['external_uuid'], $metadata->primaryKey->uuidColumns);
+    }
+
+    #[Test]
+    public function deliberate_empty_unique_ids_list_is_valid_and_warning_free(): void
+    {
+        ConfigurableUniqueIdsKeylessUuidModel::$uniqueIdColumns = [];
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(ConfigurableUniqueIdsKeylessUuidModel::class, [HasUuids::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ConfigurableUniqueIdsKeylessUuidModel::class);
+
+        $this->assertSame([], $progress->warnings);
+        $metadata = ModelMetadataRegistry::for(ConfigurableUniqueIdsKeylessUuidModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertSame([], $metadata->primaryKey->uuidColumns);
+    }
+
+    #[Test]
+    public function one_invalid_unique_id_column_is_not_hidden_by_a_valid_column(): void
+    {
+        ConfigurableUniqueIdsKeylessUuidModel::$uniqueIdColumns = ['', 'external_uuid'];
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(ConfigurableUniqueIdsKeylessUuidModel::class, [HasUuids::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ConfigurableUniqueIdsKeylessUuidModel::class);
+
+        $this->assertCount(1, $progress->warnings);
+        $this->assertStringContainsString('uniqueIds() returns an entry', $progress->warnings[0]);
+        $metadata = ModelMetadataRegistry::for(ConfigurableUniqueIdsKeylessUuidModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertSame(['external_uuid'], $metadata->primaryKey->uuidColumns);
+    }
+
+    #[Test]
+    public function non_array_unique_ids_warns_and_populates_from_safe_raw_state(): void
+    {
+        $uniqueIds = new \ReflectionProperty(NonArrayUniqueIdsDelegatingCastsModel::class, 'uniqueIdColumns');
+        $uniqueIds->setValue(null, 'not-an-array');
+
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(NonArrayUniqueIdsDelegatingCastsModel::class, [HasUuids::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, NonArrayUniqueIdsDelegatingCastsModel::class);
+
+        $this->assertCount(1, $progress->warnings);
+        $this->assertStringContainsString('uniqueIds() does not return an array', $progress->warnings[0]);
+        $metadata = ModelMetadataRegistry::for(NonArrayUniqueIdsDelegatingCastsModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata, 'invalid uniqueIds() must not discard metadata');
+        $this->assertSame('id', $metadata->primaryKey->name);
+        $this->assertSame(PrimaryKeyType::Integer, $metadata->primaryKey->type);
+        $this->assertTrue($metadata->primaryKey->incrementing);
+        $this->assertSame([], $metadata->primaryKey->uuidColumns);
+        $this->assertTrue($metadata->casts()['enabled']->psalmType->isBool());
+        $this->assertArrayNotHasKey('delegated', $metadata->casts(), 'precise trait TypeError must use raw casts');
+    }
+
+    #[Test]
+    public function application_null_offset_failure_below_base_get_casts_is_not_recovered(): void
+    {
+        (new \ReflectionProperty(NonArrayUniqueIdsDelegatingCastsModel::class, 'uniqueIdColumns'))
+            ->setValue(null, 'not-an-array');
+        ApplicationIdentifierFailureModel::$failure = 'null-offset';
+
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(ApplicationIdentifierFailureModel::class, [HasUuids::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ApplicationIdentifierFailureModel::class);
+
+        $this->assertCount(2, $progress->warnings, 'identifier conflict and genuine warm-up failure report separately');
+        $this->assertStringContainsString('invalid effective identifier configuration', $progress->warnings[0]);
+        $this->assertStringContainsString('ModelMetadataRegistry warm-up failed', $progress->warnings[1]);
+        $this->assertStringContainsString('Using null as an array offset', $progress->warnings[1]);
+        $this->assertNull(
+            ModelMetadataRegistry::for(ApplicationIdentifierFailureModel::class),
+            'a base getCasts() caller frame must not disguise the application origin',
+        );
+    }
+
+    #[Test]
+    public function application_incrementing_override_type_error_is_not_recovered_as_a_trait_failure(): void
+    {
+        (new \ReflectionProperty(NonArrayUniqueIdsDelegatingCastsModel::class, 'uniqueIdColumns'))
+            ->setValue(null, 'not-an-array');
+        ApplicationIdentifierFailureModel::$failure = 'unique-id-type';
+
+        $progress = $this->collectingProgress();
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(ApplicationIdentifierFailureModel::class, [HasUuids::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ApplicationIdentifierFailureModel::class);
+
+        $this->assertCount(2, $progress->warnings, 'identifier conflict and genuine warm-up failure report separately');
+        $this->assertStringContainsString('uniqueIds() does not return an array', $progress->warnings[0]);
+        $this->assertStringContainsString('ModelMetadataRegistry warm-up failed', $progress->warnings[1]);
+        $this->assertStringContainsString('in_array(): Argument #2', $progress->warnings[1]);
+        $this->assertNull(
+            ModelMetadataRegistry::for(ApplicationIdentifierFailureModel::class),
+            'application override TypeError must not be classified as HasUniqueStringIds failure',
+        );
     }
 
     #[Test]
@@ -1244,16 +1594,51 @@ final class ModelMetadataRegistryTest extends TestCase
     // Helpers
     // ---------------------------------------------------------------------
 
-    private function makeCodebase(): Codebase
+    private function makeCodebase(?Progress $progress = null): Codebase
     {
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
 
         // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
         $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');
-        $progressProperty->setValue($codebase, new VoidProgress());
+        $progressProperty->setValue($codebase, $progress ?? new VoidProgress());
 
         return $codebase;
+    }
+
+    /**
+     * @return Progress&object{warnings: list<string>}
+     */
+    private function collectingProgress(): Progress
+    {
+        return new class extends Progress {
+            /** @var list<string> */
+            public array $warnings = [];
+
+            #[\Override]
+            public function warning(string $message): void
+            {
+                $this->warnings[] = $message;
+            }
+
+            #[\Override]
+            public function debug(string $message): void {}
+
+            #[\Override]
+            public function startPhase(\Psalm\Progress\Phase $phase, int $threads = 1): void {}
+
+            #[\Override]
+            public function expand(int $number_of_tasks): void {}
+
+            #[\Override]
+            public function taskDone(int $level): void {}
+
+            #[\Override]
+            public function finish(): void {}
+
+            #[\Override]
+            public function alterFileDone(string $file_name): void {}
+        };
     }
 
     /**

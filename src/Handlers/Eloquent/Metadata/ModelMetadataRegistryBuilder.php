@@ -12,7 +12,9 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Attributes\Visible;
+use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Concerns\HasUniqueStringIds;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
@@ -47,6 +49,13 @@ use Psalm\Type\Union;
  *
  * @psalm-api
  * @internal
+ * @psalm-type IdentifierSnapshot = array{
+ *     bypassBaseCasts: bool,
+ *     keyName: non-empty-string|null,
+ *     keyType: PrimaryKeyType,
+ *     incrementing: bool,
+ *     uuidColumns: list<non-empty-string>
+ * }
  */
 final class ModelMetadataRegistryBuilder
 {
@@ -267,6 +276,16 @@ final class ModelMetadataRegistryBuilder
         // getTable() see the runtime state.
         self::applyClassAttributeConfig($codebase, $reflection, $instance);
 
+        // Validate the EFFECTIVE identifier configuration after replaying runtime attributes. This
+        // reports contradictory getter/trait results without mutating the analysis instance, so
+        // custom getters and schema discovery keep their runtime semantics.
+        $identifier = self::inspectIdentifierConfiguration(
+            $codebase,
+            $modelFqcn,
+            $instance,
+            $traits,
+        );
+
         $tableSchema = self::computeSchema($instance);
 
         // Method-derived metadata is STORAGE-based (no instance needed), so it is computed the same
@@ -279,12 +298,19 @@ final class ModelMetadataRegistryBuilder
 
         // Casts and appends are each needed twice — as their own field AND as a knownProperties()
         // source — so compute each once into a local rather than re-deriving for the second use.
-        $casts = self::computeCasts($codebase, $modelFqcn, $instance, $traits, $tableSchema);
+        $casts = self::computeCasts(
+            $codebase,
+            $modelFqcn,
+            $instance,
+            $traits,
+            $tableSchema,
+            $identifier['bypassBaseCasts'],
+        );
         $appends = self::filterStringList($instance->getAppends());
 
         return new ModelMetadata(
             fqcn: $modelFqcn,
-            primaryKey: self::computePrimaryKey($instance, $traits),
+            primaryKey: self::computePrimaryKey($identifier),
             traits: $traits,
             // PHP-attribute config (#[Fillable]/#[Guarded]/#[Connection]/#[Table]/#[Appends]/#[Hidden]/
             // #[Visible]) was merged onto $instance by applyClassAttributeConfig() above, so these getters
@@ -314,6 +340,109 @@ final class ModelMetadataRegistryBuilder
             relationsData: $relations,
             knownPropertiesData: self::computeKnownProperties($tableSchema, $casts, $accessors, $mutators, $relations, $appends),
         );
+    }
+
+    /**
+     * Inspect effective getter/trait state after Laravel 13 class attributes have been replayed.
+     * uniqueIds() is captured before UUID/ULID virtual getters: when its return is not an array those
+     * getters would TypeError, so the snapshot falls back to effective raw properties while preserving
+     * safe partial metadata. Callers must not mutate the instance, because custom getters and schema
+     * discovery should observe real runtime state.
+     *
+     * @param class-string<Model> $modelFqcn
+     * @psalm-return IdentifierSnapshot
+     */
+    private static function inspectIdentifierConfiguration(
+        Codebase $codebase,
+        string $modelFqcn,
+        Model $instance,
+        TraitFlags $traits,
+    ): array {
+        $keyName = self::asNonEmptyString($instance->getKeyName());
+        $uniqueIdsUsable = true;
+        $invalidUniqueIdColumns = false;
+        $uuidColumns = [];
+
+        if ($traits->hasUuids || $traits->hasUlids) {
+            [$uniqueIdsUsable, $invalidUniqueIdColumns, $uuidColumns] = self::inspectUniqueIdColumns(
+                $instance->uniqueIds(),
+            );
+        }
+
+        if ($uniqueIdsUsable) {
+            $effectiveKeyType = self::asNonEmptyString($instance->getKeyType()) ?? 'int';
+            $effectiveIncrementing = $instance->getIncrementing();
+        } else {
+            $effectiveKeyType = self::rawKeyType($instance);
+            $effectiveIncrementing = self::rawIncrementing($instance);
+        }
+
+        $incrementingWithoutKey = $keyName === null && $effectiveIncrementing;
+        $reasons = [];
+
+        if ($incrementingWithoutKey) {
+            $reasons[] = 'getKeyName() returns null or empty while getIncrementing() returns true';
+        }
+
+        if (!$uniqueIdsUsable) {
+            $reasons[] = ($traits->hasUuids ? 'HasUuids' : 'HasUlids')
+                . ' is active while uniqueIds() does not return an array';
+        } elseif ($invalidUniqueIdColumns) {
+            $reasons[] = ($traits->hasUuids ? 'HasUuids' : 'HasUlids')
+                . ' is active while uniqueIds() returns an entry that is not a non-empty string';
+        }
+
+        if ($reasons !== []) {
+            $message = "Laravel plugin: Eloquent model '{$modelFqcn}' has invalid effective identifier configuration: "
+                . \implode('; ', $reasons)
+                . '. Make the effective Eloquent configuration coherent: provide a non-empty key via '
+                . '$primaryKey, getKeyName(), or #[Table(key: ...)], disable incrementing via $incrementing, '
+                . 'getIncrementing(), #[WithoutIncrementing], or #[Table(incrementing: false)], and ensure '
+                . 'uniqueIds() returns either an empty array or only non-empty column names when using '
+                . 'HasUuids or HasUlids.';
+
+            $codebase->progress->warning($message);
+            if ($codebase->progress instanceof VoidProgress) {
+                \fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
+            }
+        }
+
+        return [
+            'bypassBaseCasts' => $incrementingWithoutKey || !$uniqueIdsUsable,
+            'keyName' => $keyName,
+            'keyType' => $effectiveKeyType === 'string' ? PrimaryKeyType::String : PrimaryKeyType::Integer,
+            'incrementing' => $keyName !== null && $effectiveIncrementing,
+            'uuidColumns' => $uuidColumns,
+        ];
+    }
+
+    /**
+     * @return array{bool, bool, list<non-empty-string>}
+     * @psalm-pure
+     */
+    private static function inspectUniqueIdColumns(mixed $uniqueIds): array
+    {
+        if (!\is_array($uniqueIds)) {
+            return [false, true, []];
+        }
+
+        $columns = self::filterStringList($uniqueIds);
+
+        return [true, \count($columns) !== \count($uniqueIds), $columns];
+    }
+
+    private static function rawKeyType(Model $instance): string
+    {
+        $property = new \ReflectionProperty(Model::class, 'keyType');
+
+        return self::asNonEmptyString($property->getValue($instance)) ?? 'int';
+    }
+
+    private static function rawIncrementing(Model $instance): bool
+    {
+        $property = new \ReflectionProperty(Model::class, 'incrementing');
+
+        return self::asBool($property->getValue($instance), true);
     }
 
     /**
@@ -879,31 +1008,19 @@ final class ModelMetadataRegistryBuilder
     }
 
     /**
-     * Compute primary-key info from a model instance.
+     * Build primary-key metadata from the cached identifier snapshot. No model getter is called here;
+     * in particular, an invalid non-array uniqueIds() cannot re-trigger the trait TypeError.
      *
-     * HasUuids / HasUlids override `getKeyType()` / `getIncrementing()` / `uniqueIds()`
-     * by reading `$this->usesUniqueIds`. The caller in `computeForInstance()` has already flipped
-     * that flag for UUID/ULID models, so the instance getters return the runtime-correct
-     * values here (including any user override of `uniqueIds()` returning multiple cols).
+     * @param IdentifierSnapshot $identifier
+     * @psalm-pure
      */
-    private static function computePrimaryKey(Model $instance, TraitFlags $traits): PrimaryKeyInfo
+    private static function computePrimaryKey(array $identifier): PrimaryKeyInfo
     {
-        /** @var non-empty-string $keyName */
-        $keyName = $instance->getKeyName();
-
-        $keyType = $instance->getKeyType();
-        $type = $keyType === 'string' ? PrimaryKeyType::String : PrimaryKeyType::Integer;
-
-        $uuidColumns = [];
-        if ($traits->hasUuids || $traits->hasUlids) {
-            $uuidColumns = self::filterStringList($instance->uniqueIds());
-        }
-
         return new PrimaryKeyInfo(
-            name: $keyName,
-            type: $type,
-            incrementing: $instance->getIncrementing(),
-            uuidColumns: $uuidColumns,
+            name: $identifier['keyName'],
+            type: $identifier['keyType'],
+            incrementing: $identifier['incrementing'],
+            uuidColumns: $identifier['uuidColumns'],
         );
     }
 
@@ -920,7 +1037,9 @@ final class ModelMetadataRegistryBuilder
      */
     private static function computePrimaryKeyFromDefaults(array $defaults): PrimaryKeyInfo
     {
-        $keyName = self::asNonEmptyString($defaults['primaryKey'] ?? null) ?? 'id';
+        $keyName = \array_key_exists('primaryKey', $defaults)
+            ? self::asNonEmptyString($defaults['primaryKey'])
+            : 'id';
         $type = self::asNonEmptyString($defaults['keyType'] ?? null) === 'string'
             ? PrimaryKeyType::String
             : PrimaryKeyType::Integer;
@@ -928,7 +1047,7 @@ final class ModelMetadataRegistryBuilder
         return new PrimaryKeyInfo(
             name: $keyName,
             type: $type,
-            incrementing: self::asBool($defaults['incrementing'] ?? null, true),
+            incrementing: $keyName !== null && self::asBool($defaults['incrementing'] ?? null, true),
             uuidColumns: [],
         );
     }
@@ -1020,6 +1139,7 @@ final class ModelMetadataRegistryBuilder
         Model $instance,
         TraitFlags $traits,
         TableSchema $schema,
+        bool $bypassBaseIncrementingCast,
     ): array {
         $merged = [];
 
@@ -1031,12 +1151,15 @@ final class ModelMetadataRegistryBuilder
             $merged[self::resolveDeletedAtColumn($instance)] = 'datetime';
         }
 
-        // 2. $instance->getCasts() walks inheritance + merges $this->casts and static::casts().
+        // 2. $instance->getCasts() normally supplies the raw $casts property. In the one invalid
+        //    state where the effective key is absent but incrementing is true, Laravel's base method
+        //    would call virtual getIncrementing() and use the absent key as an array offset. Bypass
+        //    that inherited base implementation. Custom/intermediate overrides execute first; only
+        //    exact framework failures caused by their parent delegation fall back to the raw map.
         //    The caller already flipped $usesUniqueIds on HasUuids/HasUlids models, so
         //    getIncrementing() / getKeyType() return the correct UUID/ULID values here
         //    and getCasts() no longer injects a bogus [keyName => 'int'] entry.
-        /** @var array<string, string> $instanceCasts */
-        $instanceCasts = $instance->getCasts();
+        $instanceCasts = self::instanceCasts($instance, $bypassBaseIncrementingCast);
         $merged = \array_merge($merged, $instanceCasts);
 
         // 3. casts() method (AST-parsed) overrides #2 when both declare the same key.
@@ -1069,6 +1192,153 @@ final class ModelMetadataRegistryBuilder
             // Preserve original-case column keys to match Eloquent's case-sensitive
             // attribute semantics (callers pass the property name as written).
             $result[$columnName] = self::buildCastInfo($codebase, $columnName, $castString, $nullable, $originalType);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function instanceCasts(Model $instance, bool $bypassBaseIncrementingCast): array
+    {
+        $getCasts = new \ReflectionMethod($instance, 'getCasts');
+        if (!$bypassBaseIncrementingCast) {
+            /** @var array<string, string> */
+            return $instance->getCasts();
+        }
+
+        if ($getCasts->getDeclaringClass()->getName() !== Model::class) {
+            try {
+                /** @var array<string, string> */
+                return $instance->getCasts();
+            } catch (\Throwable $throwable) {
+                if (!self::isRecoverableFrameworkCastFailure($throwable)) {
+                    throw $throwable;
+                }
+            }
+        }
+
+        return self::rawInstanceCasts($instance);
+    }
+
+    private static function isRecoverableFrameworkCastFailure(\Throwable $throwable): bool
+    {
+        return self::isFrameworkNullArrayOffsetFailure($throwable)
+            || self::isFrameworkUniqueIdsTypeFailure($throwable);
+    }
+
+    private static function isFrameworkNullArrayOffsetFailure(\Throwable $throwable): bool
+    {
+        return \str_contains($throwable->getMessage(), 'Using null as an array offset')
+            && self::failureOriginatesInMethod($throwable, Model::class, 'getCasts');
+    }
+
+    private static function isFrameworkUniqueIdsTypeFailure(\Throwable $throwable): bool
+    {
+        if (
+            !$throwable instanceof \TypeError
+            || !\str_contains(
+                $throwable->getMessage(),
+                'in_array(): Argument #2 ($haystack) must be of type array',
+            )
+        ) {
+            return false;
+        }
+
+        return self::failureOriginatesInMethod($throwable, HasUniqueStringIds::class, 'getIncrementing')
+            || self::failureOriginatesInMethod($throwable, HasUniqueStringIds::class, 'getKeyType');
+    }
+
+    /**
+     * @param class-string $className
+     */
+    private static function failureOriginatesInMethod(
+        \Throwable $throwable,
+        string $className,
+        string $methodName,
+    ): bool {
+        try {
+            $method = new \ReflectionMethod($className, $methodName);
+        } catch (\ReflectionException) {
+            return false;
+        }
+
+        $methodFile = $method->getFileName();
+        $startLine = $method->getStartLine();
+        $endLine = $method->getEndLine();
+        if (!\is_string($methodFile) || !\is_int($startLine) || !\is_int($endLine)) {
+            return false;
+        }
+
+        $methodFile = \str_replace('\\', '/', $methodFile);
+        $location = self::failureOrigin($throwable);
+
+        return \str_replace('\\', '/', $location['file']) === $methodFile
+            && $location['line'] >= $startLine
+            && $location['line'] <= $endLine;
+    }
+
+    /**
+     * Resolve one authoritative origin coordinate. Psalm's ErrorHandler embeds the original file/line
+     * in its RuntimeException message, which takes precedence. Native throwables use getFile/getLine.
+     * Only a wrapper with no embedded coordinate may use the first non-wrapper trace frame; arbitrary
+     * caller frames are never candidates.
+     *
+     * @return array{file: string, line: int}
+     * @psalm-mutation-free
+     */
+    private static function failureOrigin(\Throwable $throwable): array
+    {
+        $matches = [];
+        if (
+            \str_starts_with($throwable->getMessage(), 'PHP Error: ')
+            && \preg_match(
+                '~ in (.+\.php):(\d+)(?: for command with CLI args|$)~',
+                $throwable->getMessage(),
+                $matches,
+            ) === 1
+        ) {
+            return ['file' => $matches[1], 'line' => (int) $matches[2]];
+        }
+
+        $native = ['file' => $throwable->getFile(), 'line' => $throwable->getLine()];
+        if (!\str_ends_with(\str_replace('\\', '/', $native['file']), '/Psalm/Internal/ErrorHandler.php')) {
+            return $native;
+        }
+
+        foreach ($throwable->getTrace() as $frame) {
+            if (
+                isset($frame['file'], $frame['line'])
+                && !\str_ends_with(
+                    \str_replace('\\', '/', $frame['file']),
+                    '/Psalm/Internal/ErrorHandler.php',
+                )
+            ) {
+                return ['file' => $frame['file'], 'line' => $frame['line']];
+            }
+        }
+
+        return $native;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function rawInstanceCasts(Model $instance): array
+    {
+        // The base method would synthesize an incrementing-key cast before returning this property.
+        // Read the protected raw map directly instead, leaving the instance and virtual getters intact.
+        $casts = (new \ReflectionProperty($instance, 'casts'))->getValue($instance);
+        if (!\is_array($casts)) {
+            return [];
+        }
+
+        $result = [];
+        foreach (\array_keys($casts) as $column) {
+            if (\is_string($column) && \is_string($casts[$column])) {
+                $result[$column] = $casts[$column];
+            }
         }
 
         return $result;
@@ -1287,14 +1557,8 @@ final class ModelMetadataRegistryBuilder
      *
      * Per-attribute semantics mirror Laravel exactly: `#[Hidden]`/`#[Visible]`/`#[Appends]`/`#[Fillable]`
      * union-merge into the property list; `#[Guarded]`/`#[Unguarded]` only replace the default `['*']`;
-     * `#[Connection]`/`#[Table]` fill a null.
-     *
-     * Known gap (NOT applied): `#[Table]`'s `key` / `keyType` / `incrementing` sub-overrides and
-     * `#[WithoutIncrementing]`. Laravel's `initializeModelAttributes()` feeds these into the primary key
-     * (`primaryKey ← $table->key` when still `'id'`, etc.), but {@see computePrimaryKey()} reads only the
-     * raw `getKeyName()`/`getKeyType()`/`getIncrementing()` defaults and never consults `#[Table]`, so an
-     * attribute-declared PK is not picked up. Deferred as a separate PK-path change; the table NAME (the
-     * serialization-relevant part) IS applied. (Timestamps are moot — the registry stores no such field.)
+     * `#[Connection]`/`#[Table]` configure connection/table and primary-key defaults; and
+     * `#[WithoutIncrementing]` wins over `#[Table(incrementing:)]`.
      *
      * The attribute classes exist from Laravel 13.0; on older lines `getAttributes()` matches nothing and
      * every branch no-ops (so the plugin stays correct across the 12.4+ support range).
@@ -1329,7 +1593,10 @@ final class ModelMetadataRegistryBuilder
 
         self::applyGuardedAttribute($codebase, $reflection, $instance);
         self::applyConnectionAttribute($codebase, $reflection, $instance);
-        self::applyTableAttribute($codebase, $reflection, $instance);
+
+        $table = self::classAttribute($codebase, $reflection, Table::class);
+        self::applyTableAttribute($reflection, $instance, $table);
+        self::applyIdentifierAttributes($codebase, $reflection, $instance, $table);
     }
 
     /**
@@ -1395,16 +1662,18 @@ final class ModelMetadataRegistryBuilder
      * the resolved (ancestor-walked) name only fills a still-null table (`??=`). Feeds
      * {@see computeSchema()}'s migration lookup.
      *
-     * Known-gap: a `key`/`keyType`-only `#[Table]` (null name) does NOT clear an inherited `$table`
-     * default the way Laravel's force-branch does (`$this->table = $table->name ?? null`). That sits
-     * inside the same exotic, deferred scenario as the `key`/`keyType`/`incrementing` PK sub-overrides
-     * (see {@see applyClassAttributeConfig()}), so it is left untouched rather than half-applied.
+     * Known gap: a PK-only `#[Table]` (null name) does not clear an inherited `$table` default through
+     * Laravel's force branch (`$this->table = $table->name ?? null`). The PK options themselves are
+     * still replayed by {@see applyIdentifierAttributes()}.
      *
      * @param \ReflectionClass<Model> $reflection
      */
-    private static function applyTableAttribute(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
-    {
-        $name = self::classAttribute($codebase, $reflection, Table::class)?->name;
+    private static function applyTableAttribute(
+        \ReflectionClass $reflection,
+        Model $instance,
+        ?Table $table,
+    ): void {
+        $name = $table?->name;
         if ($name === null) {
             return;
         }
@@ -1414,6 +1683,40 @@ final class ModelMetadataRegistryBuilder
         $forceSet = !self::declaresOwnProperty($reflection, 'table') && $reflection->getAttributes(Table::class) !== [];
         if ($forceSet || self::rawTableIsNull($instance)) {
             $instance->setTable($name);
+        }
+    }
+
+    /**
+     * Replay the identifier portion of Laravel 13's `initializeModelAttributes()`: Table key/keyType
+     * only replace the framework defaults, while WithoutIncrementing has precedence over Table's
+     * incrementing option. Attribute lookups safely return null on Laravel 12, where these classes do
+     * not exist, so the raw model defaults remain unchanged.
+     *
+     * @param \ReflectionClass<Model> $reflection
+     */
+    private static function applyIdentifierAttributes(
+        Codebase $codebase,
+        \ReflectionClass $reflection,
+        Model $instance,
+        ?Table $table,
+    ): void {
+        $tableKey = $table?->key;
+        $primaryKey = new \ReflectionProperty(Model::class, 'primaryKey');
+        if ($primaryKey->getValue($instance) === 'id' && $tableKey !== null) {
+            $primaryKey->setValue($instance, $tableKey);
+        }
+
+        $tableKeyType = $table?->keyType;
+        $keyType = new \ReflectionProperty(Model::class, 'keyType');
+        if ($keyType->getValue($instance) === 'int' && $tableKeyType !== null) {
+            $keyType->setValue($instance, $tableKeyType);
+        }
+
+        $incrementing = new \ReflectionProperty(Model::class, 'incrementing');
+        if (self::classAttribute($codebase, $reflection, WithoutIncrementing::class) !== null) {
+            $incrementing->setValue($instance, false);
+        } elseif (($tableIncrementing = $table?->incrementing) !== null) {
+            $incrementing->setValue($instance, $tableIncrementing);
         }
     }
 
