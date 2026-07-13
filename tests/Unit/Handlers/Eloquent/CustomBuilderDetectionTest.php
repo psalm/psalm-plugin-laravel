@@ -11,6 +11,7 @@ use App\Models\Customer;
 use App\Models\Mechanic;
 use App\Models\Vehicle;
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -47,6 +48,10 @@ final class CustomBuilderDetectionTest extends TestCase
     #[Test]
     public function it_registers_custom_builder_for_model_with_attribute(): void
     {
+        if (!class_exists(UseEloquentBuilder::class)) {
+            self::markTestSkipped('The UseEloquentBuilder attribute is unavailable on this Laravel version.');
+        }
+
         $this->resolveAndRegisterBuilder(WorkOrder::class);
 
         $this->assertSame(WorkOrderBuilder::class, $this->getRegisteredBuilder(WorkOrder::class));
