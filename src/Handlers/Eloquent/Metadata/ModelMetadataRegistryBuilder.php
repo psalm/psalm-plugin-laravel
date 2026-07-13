@@ -1304,10 +1304,28 @@ final class ModelMetadataRegistryBuilder
     private static function applyClassAttributeConfig(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
     {
         // Union-merge, mirroring mergeHidden() / mergeVisible() / mergeAppends() / mergeFillable().
-        $instance->mergeHidden(self::classAttribute($codebase, $reflection, Hidden::class)?->columns ?? []);
-        $instance->mergeVisible(self::classAttribute($codebase, $reflection, Visible::class)?->columns ?? []);
-        $instance->mergeAppends(self::classAttribute($codebase, $reflection, Appends::class)?->columns ?? []);
-        $instance->mergeFillable(self::classAttribute($codebase, $reflection, Fillable::class)?->columns ?? []);
+        // These four configuration attributes only exist from Laravel 13. On Laravel 12.14–12.24,
+        // mergeHidden() / mergeVisible() / mergeAppends() are unavailable (mergeFillable() exists), so
+        // calling the absent helpers with empty fallbacks crashes warm-up. An absent attribute has nothing to replay.
+        $hidden = self::classAttribute($codebase, $reflection, Hidden::class);
+        if ($hidden !== null) {
+            $instance->mergeHidden($hidden->columns);
+        }
+
+        $visible = self::classAttribute($codebase, $reflection, Visible::class);
+        if ($visible !== null) {
+            $instance->mergeVisible($visible->columns);
+        }
+
+        $appends = self::classAttribute($codebase, $reflection, Appends::class);
+        if ($appends !== null) {
+            $instance->mergeAppends($appends->columns);
+        }
+
+        $fillable = self::classAttribute($codebase, $reflection, Fillable::class);
+        if ($fillable !== null) {
+            $instance->mergeFillable($fillable->columns);
+        }
 
         self::applyGuardedAttribute($codebase, $reflection, $instance);
         self::applyConnectionAttribute($codebase, $reflection, $instance);

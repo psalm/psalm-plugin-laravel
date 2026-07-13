@@ -18,6 +18,7 @@ use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
+use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -172,6 +173,25 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertInstanceOf(ModelMetadata::class, $metadata, 'warm-up must not fail on $guarded = false');
         // `$guarded = false` means guard nothing → empty list (not the base default ['*']).
         $this->assertSame([], $metadata->guarded);
+    }
+
+    #[Test]
+    public function model_without_class_attributes_survives_warm_up_on_laravel_12(): void
+    {
+        // Regression for #1254: Laravel 12.14 has none of the four configuration attributes, while
+        // mergeHidden()/mergeVisible()/mergeAppends() are also unavailable. Attribute replay must be
+        // a no-op instead of calling one of those missing helpers with an empty list.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(ScalarFieldsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ScalarFieldsModel::class);
+
+        $metadata = ModelMetadataRegistry::for(ScalarFieldsModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata, 'Laravel 12 model warm-up must succeed');
+        $this->assertSame(['Password'], $metadata->hidden);
+        $this->assertSame(['Name', 'EMAIL'], $metadata->visible);
+        $this->assertSame(['FullName'], $metadata->appends);
+        $this->assertSame(['Name', 'EMAIL'], $metadata->fillable);
     }
 
     #[Test]
@@ -939,7 +959,7 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function custom_builder_and_collection_classes_are_populated(): void
+    public function custom_builder_and_collection_classes_follow_available_attributes(): void
     {
         // WorkOrder declares #[UseEloquentBuilder(WorkOrderBuilder)] and #[CollectedBy(WorkOrderCollection)].
         // The registry records both via the pure resolvers shared with ModelRegistrationHandler.
@@ -950,7 +970,12 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $metadata = ModelMetadataRegistry::for(WorkOrder::class);
         $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
-        $this->assertSame(WorkOrderBuilder::class, $metadata->customBuilder);
+        if (class_exists(UseEloquentBuilder::class)) {
+            $this->assertSame(WorkOrderBuilder::class, $metadata->customBuilder);
+        } else {
+            $this->assertNull($metadata->customBuilder);
+        }
+
         $this->assertSame(WorkOrderCollection::class, $metadata->customCollection);
     }
 
