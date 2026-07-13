@@ -110,6 +110,17 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 continue;
             }
 
+            // Laravel registers 'Eloquent' => Model::class in Facade::defaultAliases(), so
+            // AliasLoader::load() runs `class_alias(Model::class, 'Eloquent')` in every booted app.
+            // Psalm's alias stub declares "Eloquent" as an empty Model subclass (satisfying the
+            // parent_classes check above), but at runtime it IS Model — class_alias makes them the
+            // same class, which has no parent. A real model always has Model (or an app base class)
+            // as its runtime parent, so this is a reliable way to filter out the base class and any
+            // alias of it without hardcoding alias names.
+            if (\get_parent_class($storage->name) === false) {
+                continue;
+            }
+
             // Warm the registry FIRST (idempotent, never throws) for every model — concrete and
             // abstract bases alike (#1058), not migration-gated (ModelPropertyAccessorHandler reads
             // accessors()/mutators() unconditionally). Must precede registerHandlersForModel so the
