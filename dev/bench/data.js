@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783897939135,
+  "lastUpdate": 1783904946819,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8460,6 +8460,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 33.62,
             "range": "± 0.51",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9ddabb02bbb38cc27d34445f94d9e23682b861fa",
+          "message": "Merge pull request #1257 from psalm/agent/fix-laravel-12-metadata-warmup\n\nFix Laravel 12 metadata registry warm-up",
+          "timestamp": "2026-07-13T03:06:17+02:00",
+          "tree_id": "5c2e874a231d59aad9ca5bd97a44c191664cbee6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9ddabb02bbb38cc27d34445f94d9e23682b861fa"
+        },
+        "date": 1783904945949,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.57,
+            "range": "± 0.1",
             "unit": "s"
           },
           {
