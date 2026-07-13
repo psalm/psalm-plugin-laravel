@@ -34,8 +34,11 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
+use Psalm\Internal\Codebase\ClassLikes;
+use Psalm\Internal\Codebase\Methods;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
+use Psalm\Internal\Provider\FileReferenceProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeAccessorInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeMutatorInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeScopeInfo;
@@ -44,19 +47,27 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyAccessorInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyMutatorInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyScopeInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\MetadataSectionState;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataCompleteness;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataSection;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataSectionStatus;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyType;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PropertyOrigin;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TableSchema;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TraitFlags;
+use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
+use Psalm\LaravelPlugin\Handlers\Rules\UnknownModelAttributeHandler;
+use Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedModelAttributeHandler;
+use Psalm\Progress\Progress;
 use Psalm\Progress\VoidProgress;
 use Psalm\Storage\AttributeStorage;
 use Psalm\Storage\ClassLikeStorage;
@@ -70,10 +81,16 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CompleteEmptySchemaModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ThrowingCastsModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ThrowingCustomTypesModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ThrowingPrimaryKeyModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ThrowingRuntimeConfigurationModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ThrowingSchemaModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
@@ -87,6 +104,7 @@ final class ModelMetadataRegistryTest extends TestCase
     protected function setUp(): void
     {
         ModelMetadataRegistryBuilder::reset();
+        RelationMethodParser::reset();
         SchemaStateProvider::setSchema(new SchemaAggregator());
         $this->classLikeStorageProvider = new ClassLikeStorageProvider();
     }
@@ -95,6 +113,7 @@ final class ModelMetadataRegistryTest extends TestCase
     protected function tearDown(): void
     {
         ModelMetadataRegistryBuilder::reset();
+        RelationMethodParser::reset();
     }
 
     // ---------------------------------------------------------------------
@@ -173,6 +192,237 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertInstanceOf(ModelMetadata::class, $metadata, 'warm-up must not fail on $guarded = false');
         // `$guarded = false` means guard nothing → empty list (not the base default ['*']).
         $this->assertSame([], $metadata->guarded);
+    }
+
+    #[Test]
+    public function schema_status_distinguishes_complete_empty_unavailable_and_failed(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(CompleteEmptySchemaModel::class);
+        $this->seedSchema('complete_empty_schema_models', []);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, CompleteEmptySchemaModel::class);
+        $completeEmpty = $this->metadataFor(CompleteEmptySchemaModel::class);
+        $this->assertSame([], $completeEmpty->schema()->all());
+        $this->assertSame(
+            MetadataSectionState::Complete,
+            $completeEmpty->sectionStatus(ModelMetadataSection::Schema)->state,
+        );
+        $this->assertFalse(
+            $completeEmpty->casts()['flag']->psalmType->isNullable(),
+            'A parsed complete-empty schema remains authoritative rather than conservatively nullable',
+        );
+
+        ModelMetadataRegistryBuilder::reset();
+        SchemaStateProvider::setSchema(new SchemaAggregator());
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(CompleteEmptySchemaModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, CompleteEmptySchemaModel::class);
+        $unavailable = $this->metadataFor(CompleteEmptySchemaModel::class);
+        $this->assertSame([], $unavailable->schema()->all());
+        $this->assertSame(
+            MetadataSectionState::Unavailable,
+            $unavailable->sectionStatus(ModelMetadataSection::Schema)->state,
+        );
+        $this->assertArrayHasKey('flag', $unavailable->casts(), 'Cast inventory survives unavailable schema');
+        $this->assertTrue(
+            $unavailable->casts()['flag']->psalmType->isNullable(),
+            'Unknown schema nullability must conservatively include null',
+        );
+        $this->assertTrue(
+            $unavailable->casts()['code']->psalmType->hasMixed(),
+            'Inbound cast without an authoritative column type must remain mixed',
+        );
+        $this->assertTrue($unavailable->casts()['code']->psalmType->isNullable());
+
+        ModelMetadataRegistryBuilder::reset();
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(ThrowingSchemaModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ThrowingSchemaModel::class);
+        $failed = $this->metadataFor(ThrowingSchemaModel::class);
+        $this->assertSame([], $failed->schema()->all());
+        $this->assertSame(
+            MetadataSectionState::Failed,
+            $failed->sectionStatus(ModelMetadataSection::Schema)->state,
+        );
+        $this->assertArrayHasKey('flag', $failed->casts(), 'Cast inventory survives failed schema');
+        $this->assertTrue(
+            $failed->casts()['flag']->psalmType->isNullable(),
+            'Failed schema lookup must conservatively include null',
+        );
+        $this->assertTrue(
+            $failed->casts()['code']->psalmType->hasMixed(),
+            'Inbound cast after schema failure must not invent an original column type',
+        );
+        $this->assertTrue($failed->casts()['code']->psalmType->isNullable());
+    }
+
+    #[Test]
+    public function runtime_configuration_failure_preserves_static_cast_and_primary_key_sections(): void
+    {
+        $codebase = $this->makeCodebase(withMethodServices: true);
+        $this->registerStaticSignals(ThrowingRuntimeConfigurationModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ThrowingRuntimeConfigurationModel::class);
+        $metadata = $this->metadataFor(ThrowingRuntimeConfigurationModel::class);
+
+        $this->assertStaticSignals($metadata);
+        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
+        $this->assertSame(MetadataSectionState::Unavailable, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+        $this->assertArrayHasKey('flag', $metadata->casts());
+    }
+
+    #[Test]
+    public function schema_failure_preserves_runtime_static_cast_and_primary_key_sections(): void
+    {
+        $codebase = $this->makeCodebase(withMethodServices: true);
+        $this->registerStaticSignals(ThrowingSchemaModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ThrowingSchemaModel::class);
+        $metadata = $this->metadataFor(ThrowingSchemaModel::class);
+
+        $this->assertStaticSignals($metadata);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
+        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+    }
+
+    #[Test]
+    public function casts_failure_preserves_runtime_static_schema_and_primary_key_sections(): void
+    {
+        $this->seedSchema('throwing_casts_models', [new SchemaColumn('flag', SchemaColumn::TYPE_BOOL)]);
+        $codebase = $this->makeCodebase(withMethodServices: true);
+        $this->registerStaticSignals(ThrowingCastsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ThrowingCastsModel::class);
+        $metadata = $this->metadataFor(ThrowingCastsModel::class);
+
+        $this->assertStaticSignals($metadata);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
+        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+        $this->assertTrue($metadata->schema()->has('flag'));
+    }
+
+    #[Test]
+    public function primary_key_failure_preserves_every_other_section(): void
+    {
+        $this->seedSchema('throwing_primary_key_models', [new SchemaColumn('flag', SchemaColumn::TYPE_BOOL)]);
+        $codebase = $this->makeCodebase(withMethodServices: true);
+        $this->registerStaticSignals(ThrowingPrimaryKeyModel::class, [HasUuids::class]);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ThrowingPrimaryKeyModel::class);
+        $metadata = $this->metadataFor(ThrowingPrimaryKeyModel::class);
+
+        $this->assertStaticSignals($metadata);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
+        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+    }
+
+    #[Test]
+    public function custom_type_failure_preserves_all_non_custom_sections(): void
+    {
+        $this->seedSchema('throwing_custom_types_models', [new SchemaColumn('flag', SchemaColumn::TYPE_BOOL)]);
+        $codebase = $this->makeCodebase(withMethodServices: true);
+        $this->registerStaticSignals(ThrowingCustomTypesModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ThrowingCustomTypesModel::class);
+        $metadata = $this->metadataFor(ThrowingCustomTypesModel::class);
+
+        $this->assertStaticSignals($metadata);
+        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::CustomTypes)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+    }
+
+    #[Test]
+    public function relation_infrastructure_failure_preserves_storage_and_runtime_sections(): void
+    {
+        $codebase = $this->makeCodebase(withMethodServices: true);
+        $storage = $this->registerStorage(CompleteEmptySchemaModel::class);
+        $this->defineAppearingMethod($storage, 'getStaticLabelAttribute', Type::getString());
+        $this->defineAppearingMethod(
+            $storage,
+            'scopePublished',
+            Type::getMixed(),
+            params: [$this->queryParam()],
+        );
+        // No parser cache/source location is supplied for this declared Relation method. Strict
+        // relation parsing must fail this section rather than silently claim a complete-empty map.
+        $this->defineAppearingMethod($storage, 'orders', new Union([new TNamedObject(HasMany::class)]));
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, CompleteEmptySchemaModel::class);
+        $metadata = $this->metadataFor(CompleteEmptySchemaModel::class);
+
+        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::Relations)->state);
+        $this->assertSame([], $metadata->relations());
+        $this->assertArrayHasKey('staticlabel', $metadata->accessors());
+        $this->assertArrayHasKey('published', $metadata->scopes());
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::StorageMethods)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
+        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
+    }
+
+    #[Test]
+    public function negative_consumers_require_only_their_relevant_sections(): void
+    {
+        $healthy = $this->makeStubMetadata(WorkOrder::class);
+        $this->assertTrue(UnknownModelAttributeHandler::canEvaluate($healthy));
+        $this->assertTrue(UnresolvableAppendedModelAttributeHandler::canEvaluate($healthy));
+
+        $schemaUnavailable = ModelMetadataCompleteness::allComplete()->withStatus(
+            ModelMetadataSection::Schema,
+            ModelMetadataSectionStatus::unavailable('no parsed table'),
+        );
+        $schemaIncomplete = $this->makeStubMetadata(WorkOrder::class, completeness: $schemaUnavailable);
+        $this->assertFalse(UnknownModelAttributeHandler::canEvaluate($schemaIncomplete));
+        $this->assertTrue(UnresolvableAppendedModelAttributeHandler::canEvaluate($schemaIncomplete));
+
+        $relationsUnavailable = ModelMetadataCompleteness::allComplete()->withStatus(
+            ModelMetadataSection::Relations,
+            ModelMetadataSectionStatus::unavailable('AST unavailable'),
+        );
+        $relationsIncomplete = $this->makeStubMetadata(WorkOrder::class, completeness: $relationsUnavailable);
+        $this->assertFalse(UnknownModelAttributeHandler::canEvaluate($relationsIncomplete));
+        $this->assertTrue(UnresolvableAppendedModelAttributeHandler::canEvaluate($relationsIncomplete));
+
+        foreach ([ModelMetadataSection::RuntimeConfiguration, ModelMetadataSection::Casts, ModelMetadataSection::StorageMethods] as $section) {
+            $incomplete = $this->makeStubMetadata(
+                WorkOrder::class,
+                completeness: ModelMetadataCompleteness::allComplete()->withStatus(
+                    $section,
+                    ModelMetadataSectionStatus::unavailable('injected consumer-gate failure'),
+                ),
+            );
+            $this->assertFalse(UnknownModelAttributeHandler::canEvaluate($incomplete));
+            $this->assertFalse(UnresolvableAppendedModelAttributeHandler::canEvaluate($incomplete));
+        }
+    }
+
+    #[Test]
+    public function a_failed_section_warns_once_and_repeated_warm_up_is_silent(): void
+    {
+        $progress = $this->createMock(Progress::class);
+        $progress->expects($this->once())
+            ->method('warning')
+            ->with($this->stringContains("ModelMetadataRegistry schema failed for '" . ThrowingSchemaModel::class . "'"));
+        $codebase = $this->makeCodebase(progress: $progress);
+        $this->registerStorage(ThrowingSchemaModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ThrowingSchemaModel::class);
+        ModelMetadataRegistryBuilder::warmUp($codebase, ThrowingSchemaModel::class);
+
+        $this->assertInstanceOf(ModelMetadata::class, ModelMetadataRegistry::for(ThrowingSchemaModel::class));
     }
 
     #[Test]
@@ -1244,16 +1494,72 @@ final class ModelMetadataRegistryTest extends TestCase
     // Helpers
     // ---------------------------------------------------------------------
 
-    private function makeCodebase(): Codebase
+    private function makeCodebase(bool $withMethodServices = false, ?Progress $progress = null): Codebase
     {
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
 
+        if ($withMethodServices) {
+            $classLikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
+            (new \ReflectionProperty(ClassLikes::class, 'classlike_storage_provider'))
+                ->setValue($classLikes, $this->classLikeStorageProvider);
+            $fileReferenceProvider = (new \ReflectionClass(FileReferenceProvider::class))->newInstanceWithoutConstructor();
+            $codebase->methods = new Methods($this->classLikeStorageProvider, $fileReferenceProvider, $classLikes);
+        }
+
         // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
         $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');
-        $progressProperty->setValue($codebase, new VoidProgress());
+        $progressProperty->setValue($codebase, $progress ?? $this->createStub(Progress::class));
 
         return $codebase;
+    }
+
+    /**
+     * Give a model one storage accessor, scope, and cached AST relation so isolation tests prove all
+     * three positive-inference sources survive failures in unrelated sections.
+     *
+     * @param class-string<Model> $fqcn
+     * @param list<class-string> $traits
+     */
+    private function registerStaticSignals(string $fqcn, array $traits = []): void
+    {
+        $storage = $this->registerStorage($fqcn, $traits);
+        $this->defineAppearingMethod($storage, 'getStaticLabelAttribute', Type::getString());
+        $this->defineAppearingMethod(
+            $storage,
+            'scopePublished',
+            Type::getMixed(),
+            params: [$this->queryParam()],
+        );
+        $this->defineAppearingMethod($storage, 'orders', new Union([new TNamedObject(HasMany::class)]));
+
+        $cacheProperty = new \ReflectionProperty(RelationMethodParser::class, 'cache');
+        /** @var array<string, mixed> $cache */
+        $cache = $cacheProperty->getValue();
+        $cache[$fqcn . '::orders|strict'] = [
+            'relationClass' => HasMany::class,
+            'relatedModel' => WorkOrder::class,
+            'intermediateModel' => null,
+            'pivotModel' => null,
+            'accessor' => null,
+        ];
+        $cacheProperty->setValue(null, $cache);
+    }
+
+    /** @param ModelMetadata<Model> $metadata */
+    private function assertStaticSignals(ModelMetadata $metadata): void
+    {
+        $this->assertArrayHasKey('staticlabel', $metadata->accessors());
+        $this->assertArrayHasKey('published', $metadata->scopes());
+        $this->assertArrayHasKey('orders', $metadata->relations());
+        $this->assertSame(
+            MetadataSectionState::Complete,
+            $metadata->sectionStatus(ModelMetadataSection::StorageMethods)->state,
+        );
+        $this->assertSame(
+            MetadataSectionState::Complete,
+            $metadata->sectionStatus(ModelMetadataSection::Relations)->state,
+        );
     }
 
     /**
@@ -1378,8 +1684,11 @@ final class ModelMetadataRegistryTest extends TestCase
      * @param array<non-empty-lowercase-string, RelationInfo> $relations
      * @return ModelMetadata<Model>
      */
-    private function makeStubMetadata(string $fqcn, array $relations = []): ModelMetadata
-    {
+    private function makeStubMetadata(
+        string $fqcn,
+        array $relations = [],
+        ?ModelMetadataCompleteness $completeness = null,
+    ): ModelMetadata {
         return new ModelMetadata(
             fqcn: $fqcn,
             primaryKey: new PrimaryKeyInfo('id', PrimaryKeyType::Integer, incrementing: true, uuidColumns: []),
@@ -1411,6 +1720,7 @@ final class ModelMetadataRegistryTest extends TestCase
             scopesData: [],
             relationsData: $relations,
             knownPropertiesData: [],
+            completenessData: $completeness,
         );
     }
 }

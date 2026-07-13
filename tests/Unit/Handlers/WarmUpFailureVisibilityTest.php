@@ -56,7 +56,7 @@ final class WarmUpFailureVisibilityTest extends TestCase
         $stderr = $process->getErrorOutput();
 
         $this->assertStringContainsString(
-            "Laravel plugin: ModelMetadataRegistry warm-up failed for 'KnownAttributeFixture\\Models\\WarmUpCrashModel'",
+            "Laravel plugin: ModelMetadataRegistry schema failed for 'KnownAttributeFixture\\Models\\WarmUpCrashModel'",
             $stderr,
             "The warm-up failure warning must reach stderr even under --no-progress.\nFull stderr:\n{$stderr}",
         );

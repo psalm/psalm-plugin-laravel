@@ -18,6 +18,7 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataSection;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
@@ -112,10 +113,10 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return null;
         }
 
-        // Completeness gate: the unknown-key verdict is only sound when the model's columns are
-        // known. With migrations disabled (or the table unparsed) schema() is empty, so the known
-        // set lacks its column origins and every real column would look unknown — skip the model.
-        if ($metadata->schema()->all() === []) {
+        // A negative verdict is sound only when every registry source that can establish an
+        // attribute name was evaluated completely. Complete-empty schema is authoritative; an
+        // unavailable provider/table or a failed section is not.
+        if (!self::canEvaluate($metadata)) {
             return null;
         }
 
@@ -163,6 +164,23 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
         }
 
         return null;
+    }
+
+    /**
+     * Whether every registry source that could make an attribute known is authoritative.
+     *
+     * @internal public for focused consumer-policy tests
+     * @psalm-mutation-free
+     */
+    public static function canEvaluate(ModelMetadata $metadata): bool
+    {
+        return $metadata->isComplete(
+            ModelMetadataSection::Schema,
+            ModelMetadataSection::RuntimeConfiguration,
+            ModelMetadataSection::Casts,
+            ModelMetadataSection::StorageMethods,
+            ModelMetadataSection::Relations,
+        );
     }
 
     /**

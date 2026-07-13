@@ -131,15 +131,19 @@ final class RelationMethodParser
      *         an explicit `->using(Pivot::class)` / `->as('alias')` chain mutation was
      *         detected with a statically resolvable argument.
      */
-    public static function parse(Codebase $codebase, string $className, string $methodName): ?array
-    {
-        $cacheKey = $className . '::' . $methodName;
+    public static function parse(
+        Codebase $codebase,
+        string $className,
+        string $methodName,
+        bool $failOnInfrastructureError = false,
+    ): ?array {
+        $cacheKey = $className . '::' . $methodName . ($failOnInfrastructureError ? '|strict' : '');
 
         if (\array_key_exists($cacheKey, self::$cache)) {
             return self::$cache[$cacheKey];
         }
 
-        $result = self::doParse($codebase, $className, $methodName);
+        $result = self::doParse($codebase, $className, $methodName, $failOnInfrastructureError);
         self::$cache[$cacheKey] = $result;
 
         return $result;
@@ -148,9 +152,13 @@ final class RelationMethodParser
     /**
      * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
-    private static function doParse(Codebase $codebase, string $className, string $methodName): ?array
-    {
-        $context = self::findClassMethodWithStatements($codebase, $className, $methodName);
+    private static function doParse(
+        Codebase $codebase,
+        string $className,
+        string $methodName,
+        bool $failOnInfrastructureError,
+    ): ?array {
+        $context = self::findClassMethodWithStatements($codebase, $className, $methodName, $failOnInfrastructureError);
         if ($context === null) {
             return null;
         }
@@ -165,7 +173,7 @@ final class RelationMethodParser
         // searches the file by `$className`, so a successful lookup means the method body
         // lives in `$className` itself — `self::class` and (conservatively) `static::class`
         // both resolve to `$className`. See {@see resolveClassConstFetch} for the trade-off.
-        $parentClass = self::resolveParentClass($codebase, $className);
+        $parentClass = self::resolveParentClass($codebase, $className, $failOnInfrastructureError);
 
         return self::parseMethodBody($classMethod->stmts, $className, $parentClass);
     }
@@ -177,11 +185,18 @@ final class RelationMethodParser
      * fail-soft style — a missing parent yields null and the handler defers, rather than
      * crashing the analysis run.
      */
-    private static function resolveParentClass(Codebase $codebase, string $className): ?string
-    {
+    private static function resolveParentClass(
+        Codebase $codebase,
+        string $className,
+        bool $failOnInfrastructureError,
+    ): ?string {
         try {
             $storage = $codebase->classlike_storage_provider->get($className);
         } catch (\InvalidArgumentException $invalidArgumentException) {
+            if ($failOnInfrastructureError) {
+                throw $invalidArgumentException;
+            }
+
             $codebase->progress->debug(
                 "Laravel plugin: could not resolve parent class for {$className}: {$invalidArgumentException->getMessage()}\n",
             );
@@ -438,7 +453,7 @@ final class RelationMethodParser
      */
     public static function extractDocblockRelatedModelType(Codebase $codebase, string $className, string $methodName): ?Union
     {
-        $context = self::findClassMethodWithStatements($codebase, $className, $methodName);
+        $context = self::findClassMethodWithStatements($codebase, $className, $methodName, false);
         if ($context === null) {
             return null;
         }
@@ -469,8 +484,12 @@ final class RelationMethodParser
      *
      * @return ?array{classMethod: PhpParser\Node\Stmt\ClassMethod, fileStmts: list<PhpParser\Node\Stmt>}
      */
-    private static function findClassMethodWithStatements(Codebase $codebase, string $className, string $methodName): ?array
-    {
+    private static function findClassMethodWithStatements(
+        Codebase $codebase,
+        string $className,
+        string $methodName,
+        bool $failOnInfrastructureError,
+    ): ?array {
         $methodId = $className . '::' . $methodName;
         $methodIdentifier = MethodIdentifier::wrap($methodId);
 
@@ -481,12 +500,20 @@ final class RelationMethodParser
         // Falling through to getStorage() and catching the resulting UnexpectedValueException
         // for each cold miss adds a real cost per (class, method) pair on first analysis.
         if (!$codebase->methods->hasStorage($methodIdentifier)) {
+            if ($failOnInfrastructureError) {
+                throw new \UnexpectedValueException("Psalm has no method storage for {$methodId}");
+            }
+
             return null;
         }
 
         try {
             $methodStorage = $codebase->methods->getStorage($methodIdentifier);
         } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+            if ($failOnInfrastructureError) {
+                throw $e;
+            }
+
             $codebase->progress->debug(
                 "Laravel plugin: could not get method storage for {$methodId}: {$e->getMessage()}\n",
             );
@@ -495,12 +522,20 @@ final class RelationMethodParser
 
         $location = $methodStorage->location;
         if (!$location instanceof \Psalm\CodeLocation) {
+            if ($failOnInfrastructureError) {
+                throw new \UnexpectedValueException("Psalm has no source location for {$methodId}");
+            }
+
             return null;
         }
 
         try {
             $stmts = $codebase->getStatementsForFile($location->file_path);
         } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
+            if ($failOnInfrastructureError) {
+                throw $e;
+            }
+
             $codebase->progress->debug(
                 "Laravel plugin: could not get statements for {$location->file_path}: {$e->getMessage()}\n",
             );
@@ -509,6 +544,10 @@ final class RelationMethodParser
 
         $classMethod = self::findMethod($stmts, $className, $methodName);
         if (!$classMethod instanceof PhpParser\Node\Stmt\ClassMethod) {
+            if ($failOnInfrastructureError) {
+                throw new \UnexpectedValueException("Psalm's source AST has no method node for {$methodId}");
+            }
+
             return null;
         }
 

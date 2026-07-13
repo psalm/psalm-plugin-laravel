@@ -28,7 +28,7 @@ final class CastsMethodParser
      *
      * @return array<string, string> Map of property name → cast string
      */
-    public static function parse(Codebase $codebase, string $modelClass): array
+    public static function parse(Codebase $codebase, string $modelClass, bool $failOnInfrastructureError = false): array
     {
         $methodId = $modelClass . '::casts';
 
@@ -38,7 +38,11 @@ final class CastsMethodParser
 
         try {
             $methodStorage = $codebase->methods->getStorage(MethodIdentifier::wrap($methodId));
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException $exception) {
+            if ($failOnInfrastructureError) {
+                throw $exception;
+            }
+
             return [];
         }
 
@@ -51,7 +55,11 @@ final class CastsMethodParser
 
         try {
             $stmts = $codebase->getStatementsForFile($filePath);
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException $exception) {
+            if ($failOnInfrastructureError) {
+                throw $exception;
+            }
+
             return [];
         }
 

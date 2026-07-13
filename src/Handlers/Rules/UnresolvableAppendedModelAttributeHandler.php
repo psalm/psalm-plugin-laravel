@@ -10,6 +10,7 @@ use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataSection;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 use Psalm\LaravelPlugin\Issues\UnresolvableAppendedModelAttribute;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
@@ -56,7 +57,9 @@ final class UnresolvableAppendedModelAttributeHandler implements AfterCodebasePo
         $provider = $event->getCodebase()->classlike_storage_provider;
 
         foreach (ModelMetadataRegistry::all() as $fqcn => $metadata) {
-            if ($metadata->appends === [] || !$provider->has($fqcn)) {
+            // This is a negative verdict: a missing backing accessor/cast is conclusive only when
+            // the appends/visibility configuration and both backing sources are complete.
+            if (!self::canEvaluate($metadata) || $metadata->appends === [] || !$provider->has($fqcn)) {
                 continue;
             }
 
@@ -90,6 +93,21 @@ final class UnresolvableAppendedModelAttributeHandler implements AfterCodebasePo
                 );
             }
         }
+    }
+
+    /**
+     * Whether appends/visibility and every possible backing source are authoritative.
+     *
+     * @internal public for focused consumer-policy tests
+     * @psalm-mutation-free
+     */
+    public static function canEvaluate(ModelMetadata $metadata): bool
+    {
+        return $metadata->isComplete(
+            ModelMetadataSection::RuntimeConfiguration,
+            ModelMetadataSection::Casts,
+            ModelMetadataSection::StorageMethods,
+        );
     }
 
     /**

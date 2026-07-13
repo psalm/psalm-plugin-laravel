@@ -38,11 +38,18 @@ final class CustomTypeDetector
      * @param class-string<Model> $className
      * @return class-string<Builder>|null The custom builder class, or null if using base Builder.
      */
-    public static function resolveCustomBuilderClass(Codebase $codebase, string $className): ?string
-    {
+    public static function resolveCustomBuilderClass(
+        Codebase $codebase,
+        string $className,
+        bool $failOnError = false,
+    ): ?string {
         try {
             $reflection = new \ReflectionClass($className);
         } catch (\ReflectionException $reflectionException) {
+            if ($failOnError) {
+                throw $reflectionException;
+            }
+
             $codebase->progress->debug(
                 "Laravel plugin: could not reflect model '{$className}' for custom builder detection: {$reflectionException->getMessage()}\n",
             );
@@ -55,7 +62,7 @@ final class CustomTypeDetector
 
         // 2. #[UseEloquentBuilder] attribute — checked first in the base newEloquentBuilder().
         if ($builderClass === null) {
-            $builderClass = self::resolveBuilderFromAttribute($reflection, $codebase);
+            $builderClass = self::resolveBuilderFromAttribute($reflection, $codebase, $failOnError);
         }
 
         // 3. Fall back to static $builder property.
@@ -71,6 +78,10 @@ final class CustomTypeDetector
         try {
             $isValid = \is_subclass_of($builderClass, Builder::class, true);
         } catch (\Error|\Exception $error) {
+            if ($failOnError) {
+                throw $error;
+            }
+
             $codebase->progress->debug(
                 "Laravel plugin: model '{$className}' builder '{$builderClass}' failed autoloading: {$error->getMessage()}\n",
             );
@@ -98,8 +109,15 @@ final class CustomTypeDetector
      *
      * @return class-string|null
      */
-    private static function resolveBuilderFromAttribute(\ReflectionClass $reflection, Codebase $codebase): ?string
-    {
+    private static function resolveBuilderFromAttribute(
+        \ReflectionClass $reflection,
+        Codebase $codebase,
+        bool $failOnError = false,
+    ): ?string {
+        if (!\class_exists(UseEloquentBuilder::class)) {
+            return null;
+        }
+
         $attributes = $reflection->getAttributes(UseEloquentBuilder::class);
         if ($attributes === []) {
             return null;
@@ -108,6 +126,10 @@ final class CustomTypeDetector
         try {
             return $attributes[0]->newInstance()->builderClass;
         } catch (\Error $error) {
+            if ($failOnError) {
+                throw $error;
+            }
+
             $codebase->progress->debug(
                 "Laravel plugin: #[UseEloquentBuilder] on '{$reflection->getName()}' failed to instantiate: {$error->getMessage()}\n",
             );
@@ -189,11 +211,18 @@ final class CustomTypeDetector
      * @param class-string<Model> $className
      * @return class-string<EloquentCollection>|null
      */
-    public static function resolveCustomCollectionClass(Codebase $codebase, string $className): ?string
-    {
+    public static function resolveCustomCollectionClass(
+        Codebase $codebase,
+        string $className,
+        bool $failOnError = false,
+    ): ?string {
         try {
             $reflection = new \ReflectionClass($className);
         } catch (\ReflectionException $reflectionException) {
+            if ($failOnError) {
+                throw $reflectionException;
+            }
+
             $codebase->progress->debug(
                 "Laravel plugin: could not reflect model '{$className}' for custom collection detection: {$reflectionException->getMessage()}\n",
             );
@@ -206,7 +235,7 @@ final class CustomTypeDetector
 
         // 2. #[CollectedBy] attribute — checked first in the base newCollection().
         if ($collectionClass === null) {
-            $collectionClass = self::resolveCollectionFromAttribute($reflection, $codebase);
+            $collectionClass = self::resolveCollectionFromAttribute($reflection, $codebase, $failOnError);
         }
 
         // 3. Fall back to static $collectionClass property.
@@ -223,6 +252,10 @@ final class CustomTypeDetector
         try {
             $isValid = \is_subclass_of($collectionClass, EloquentCollection::class, true);
         } catch (\Error|\Exception $error) {
+            if ($failOnError) {
+                throw $error;
+            }
+
             $codebase->progress->debug(
                 "Laravel plugin: model '{$className}' collection '{$collectionClass}' failed autoloading: {$error->getMessage()}\n",
             );
@@ -254,14 +287,25 @@ final class CustomTypeDetector
      *
      * @return class-string|null
      */
-    private static function resolveCollectionFromAttribute(\ReflectionClass $reflection, Codebase $codebase): ?string
-    {
+    private static function resolveCollectionFromAttribute(
+        \ReflectionClass $reflection,
+        Codebase $codebase,
+        bool $failOnError = false,
+    ): ?string {
+        if (!\class_exists(CollectedBy::class)) {
+            return null;
+        }
+
         $attributes = $reflection->getAttributes(CollectedBy::class);
         if ($attributes !== []) {
             try {
                 /** @psalm-var class-string */
                 return $attributes[0]->newInstance()->collectionClass;
             } catch (\Error $error) {
+                if ($failOnError) {
+                    throw $error;
+                }
+
                 $codebase->progress->debug(
                     "Laravel plugin: #[CollectedBy] on '{$reflection->getName()}' failed to instantiate: {$error->getMessage()}\n",
                 );
@@ -278,7 +322,7 @@ final class CustomTypeDetector
             && $parentClass->getName() !== Model::class
             && $parentClass->isSubclassOf(Model::class)
         ) {
-            return self::resolveCollectionFromAttribute($parentClass, $codebase);
+            return self::resolveCollectionFromAttribute($parentClass, $codebase, $failOnError);
         }
 
         return null;

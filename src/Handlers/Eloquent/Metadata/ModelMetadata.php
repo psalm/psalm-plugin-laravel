@@ -27,6 +27,8 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
  */
 final readonly class ModelMetadata
 {
+    private ModelMetadataCompleteness $completenessData;
+
     /**
      * Attribute-name fields (`fillable` / `guarded` / `appends` / `hidden` / `visible`) preserve the
      * exact case the user declared — Eloquent's `isFillable` / `isGuarded` / `getHidden` / `getVisible`
@@ -72,7 +74,24 @@ final readonly class ModelMetadata
         private array $scopesData,
         private array $relationsData,
         private array $knownPropertiesData,
-    ) {}
+        ?ModelMetadataCompleteness $completenessData = null,
+    ) {
+        // Hand-built healthy fixtures stay concise. Production construction always passes the
+        // explicit section map produced by ModelMetadataRegistryBuilder.
+        $this->completenessData = $completenessData ?? ModelMetadataCompleteness::allComplete();
+    }
+
+    /** @psalm-mutation-free */
+    public function sectionStatus(ModelMetadataSection $section): ModelMetadataSectionStatus
+    {
+        return $this->completenessData->status($section);
+    }
+
+    /** @psalm-mutation-free */
+    public function isComplete(ModelMetadataSection ...$sections): bool
+    {
+        return $this->completenessData->isComplete(...$sections);
+    }
 
     public function schema(): TableSchema
     {
