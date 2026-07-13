@@ -168,8 +168,8 @@ final class ModelMetadataRegistryBuilder
 
         $storage = $storageProvider->get($modelFqcn);
 
-        /** @var array<non-empty-string, ModelMetadataSectionStatus> $statuses */
-        $statuses = [];
+        /** @var list<ModelMetadataSection> $incomplete */
+        $incomplete = [];
 
         // Storage-derived metadata is computed first and independently of reflection/runtime probes.
         // It therefore survives a throwing model getter, malformed attribute, schema lookup, or cast.
@@ -177,23 +177,21 @@ final class ModelMetadataRegistryBuilder
             $codebase,
             $modelFqcn,
             ModelMetadataSection::StorageMethods,
-            $statuses,
+            $incomplete,
             static fn(): array => self::computeMethodMetadata($storage, $storageProvider),
             [[], [], []],
         );
         [$accessors, $mutators, $scopes] = $methodMetadata;
 
         if (!self::codebaseMethodsInitialized($codebase)) {
-            $statuses[ModelMetadataSection::Relations->value] = ModelMetadataSectionStatus::unavailable(
-                'Psalm method/AST services are not initialized',
-            );
+            $incomplete[] = ModelMetadataSection::Relations;
             $relations = [];
         } else {
             $relations = self::computeSection(
                 $codebase,
                 $modelFqcn,
                 ModelMetadataSection::Relations,
-                $statuses,
+                $incomplete,
                 static fn(): array => self::computeRelations($codebase, $modelFqcn, $storage),
                 [],
             );
@@ -201,9 +199,8 @@ final class ModelMetadataRegistryBuilder
 
         try {
             $reflection = new \ReflectionClass($modelFqcn);
-            $statuses[ModelMetadataSection::Reflection->value] = ModelMetadataSectionStatus::complete();
         } catch (\Throwable $throwable) {
-            $statuses[ModelMetadataSection::Reflection->value] = ModelMetadataSectionStatus::failed($throwable);
+            $incomplete[] = ModelMetadataSection::Reflection;
             self::warnSectionFailure($codebase, $modelFqcn, ModelMetadataSection::Reflection, $throwable);
 
             return self::computeWithoutReflection(
@@ -213,7 +210,7 @@ final class ModelMetadataRegistryBuilder
                 $mutators,
                 $scopes,
                 $relations,
-                $statuses,
+                $incomplete,
             );
         }
 
@@ -225,7 +222,7 @@ final class ModelMetadataRegistryBuilder
             $codebase,
             $modelFqcn,
             ModelMetadataSection::CustomTypes,
-            $statuses,
+            $incomplete,
             static fn(): array => [
                 CustomTypeDetector::resolveCustomBuilderClass($codebase, $modelFqcn, failOnError: true),
                 CustomTypeDetector::resolveCustomCollectionClass($codebase, $modelFqcn, failOnError: true),
@@ -249,7 +246,7 @@ final class ModelMetadataRegistryBuilder
                 $mutators,
                 $scopes,
                 $relations,
-                $statuses,
+                $incomplete,
             );
         }
 
@@ -264,7 +261,7 @@ final class ModelMetadataRegistryBuilder
             $mutators,
             $scopes,
             $relations,
-            $statuses,
+            $incomplete,
         );
     }
 
@@ -279,7 +276,7 @@ final class ModelMetadataRegistryBuilder
      * @param array<non-empty-lowercase-string, MutatorInfo> $mutators
      * @param array<non-empty-lowercase-string, ScopeInfo> $scopes
      * @param array<non-empty-lowercase-string, RelationInfo> $relations
-     * @param array<non-empty-string, ModelMetadataSectionStatus> $statuses
+     * @param list<ModelMetadataSection> $incomplete
      * @return ModelMetadata<Model>
      */
     private static function computeForInstance(
@@ -293,23 +290,19 @@ final class ModelMetadataRegistryBuilder
         array $mutators,
         array $scopes,
         array $relations,
-        array $statuses,
+        array $incomplete,
     ): ModelMetadata {
         $instance = self::computeSection(
             $codebase,
             $modelFqcn,
             ModelMetadataSection::ModelInstance,
-            $statuses,
+            $incomplete,
             static fn(): Model => self::instantiateModel($modelFqcn, $reflection),
             null,
         );
 
         if (!$instance instanceof Model) {
-            $instanceStatus = $statuses[ModelMetadataSection::ModelInstance->value];
-            $statuses[ModelMetadataSection::RuntimeConfiguration->value] = ModelMetadataSectionStatus::unavailableBecause(
-                ModelMetadataSection::ModelInstance,
-                $instanceStatus,
-            );
+            $incomplete[] = ModelMetadataSection::RuntimeConfiguration;
         }
 
         $runtime = $instance instanceof Model
@@ -317,7 +310,7 @@ final class ModelMetadataRegistryBuilder
                 $codebase,
                 $modelFqcn,
                 ModelMetadataSection::RuntimeConfiguration,
-                $statuses,
+                $incomplete,
                 static fn(): array => self::computeRuntimeConfiguration(
                     $modelFqcn,
                     $storage,
@@ -329,26 +322,22 @@ final class ModelMetadataRegistryBuilder
             : self::runtimeFallback($storage);
 
         if (!$instance instanceof Model) {
-            self::markInstanceDependantsUnavailable($statuses);
+            self::markInstanceDependantsUnavailable($incomplete);
             $tableSchema = new TableSchema([]);
             $casts = [];
             $primaryKey = self::defaultPrimaryKey();
         } else {
-            $runtimeStatus = $statuses[ModelMetadataSection::RuntimeConfiguration->value];
-            if ($runtimeStatus->isComplete()) {
+            if (!\in_array(ModelMetadataSection::RuntimeConfiguration, $incomplete, true)) {
                 $tableSchema = self::computeSection(
                     $codebase,
                     $modelFqcn,
                     ModelMetadataSection::Schema,
-                    $statuses,
+                    $incomplete,
                     static fn(): TableSchema => self::computeSchema($instance),
                     new TableSchema([]),
                 );
             } else {
-                $statuses[ModelMetadataSection::Schema->value] = ModelMetadataSectionStatus::unavailableBecause(
-                    ModelMetadataSection::RuntimeConfiguration,
-                    $runtimeStatus,
-                );
+                $incomplete[] = ModelMetadataSection::Schema;
                 $tableSchema = new TableSchema([]);
             }
 
@@ -356,14 +345,14 @@ final class ModelMetadataRegistryBuilder
                 $codebase,
                 $modelFqcn,
                 ModelMetadataSection::Casts,
-                $statuses,
+                $incomplete,
                 static fn(): array => self::computeCasts(
                     $codebase,
                     $modelFqcn,
                     $instance,
                     $runtime['traits'],
                     $tableSchema,
-                    $statuses[ModelMetadataSection::Schema->value]->isComplete(),
+                    !\in_array(ModelMetadataSection::Schema, $incomplete, true),
                 ),
                 [],
             );
@@ -371,7 +360,7 @@ final class ModelMetadataRegistryBuilder
                 $codebase,
                 $modelFqcn,
                 ModelMetadataSection::PrimaryKey,
-                $statuses,
+                $incomplete,
                 static fn(): PrimaryKeyInfo => self::computePrimaryKey($instance, $runtime['traits']),
                 self::defaultPrimaryKey(),
             );
@@ -408,7 +397,7 @@ final class ModelMetadataRegistryBuilder
             scopesData: $scopes,
             relationsData: $relations,
             knownPropertiesData: self::computeKnownProperties($tableSchema, $casts, $accessors, $mutators, $relations, $runtime['appends']),
-            completenessData: ModelMetadataCompleteness::fromStatuses($statuses),
+            completenessData: ModelMetadataCompleteness::withIncomplete($incomplete),
         );
     }
 
@@ -428,7 +417,7 @@ final class ModelMetadataRegistryBuilder
      * @param array<non-empty-lowercase-string, MutatorInfo> $mutators
      * @param array<non-empty-lowercase-string, ScopeInfo> $scopes
      * @param array<non-empty-lowercase-string, RelationInfo> $relations
-     * @param array<non-empty-string, ModelMetadataSectionStatus> $statuses
+     * @param list<ModelMetadataSection> $incomplete
      * @return ModelMetadata<Model>
      */
     private static function computeForAbstract(
@@ -442,37 +431,31 @@ final class ModelMetadataRegistryBuilder
         array $mutators,
         array $scopes,
         array $relations,
-        array $statuses,
+        array $incomplete,
     ): ModelMetadata {
         $runtime = self::computeSection(
             $codebase,
             $modelFqcn,
             ModelMetadataSection::RuntimeConfiguration,
-            $statuses,
+            $incomplete,
             static fn(): array => self::computeAbstractRuntimeConfiguration($modelFqcn, $storage, $reflection),
             self::abstractRuntimeFallback($storage),
         );
         $defaults = $runtime['defaults'];
-        $statuses[ModelMetadataSection::ModelInstance->value] = ModelMetadataSectionStatus::unavailable(
-            'abstract models cannot be instantiated',
-        );
+        $incomplete[] = ModelMetadataSection::ModelInstance;
 
         // Schema and casts are instance-derived — empty for an abstract base (no instance, no table).
         // Hoist the empty schema + the declared $appends so both the fields AND knownProperties()
         // read the same values (knownProperties is still meaningful here: accessors/relations/appends
         // declared on the abstract base populate it).
         $schema = new TableSchema([]);
-        $statuses[ModelMetadataSection::Schema->value] = ModelMetadataSectionStatus::unavailable(
-            'abstract models have no runtime table instance',
-        );
-        $statuses[ModelMetadataSection::Casts->value] = ModelMetadataSectionStatus::unavailable(
-            'abstract models have no runtime cast instance',
-        );
+        $incomplete[] = ModelMetadataSection::Schema;
+        $incomplete[] = ModelMetadataSection::Casts;
         $primaryKey = self::computeSection(
             $codebase,
             $modelFqcn,
             ModelMetadataSection::PrimaryKey,
-            $statuses,
+            $incomplete,
             static fn(): PrimaryKeyInfo => self::computePrimaryKeyFromDefaults($defaults),
             self::defaultPrimaryKey(),
         );
@@ -502,7 +485,7 @@ final class ModelMetadataRegistryBuilder
             scopesData: $scopes,
             relationsData: $relations,
             knownPropertiesData: self::computeKnownProperties($schema, [], $accessors, $mutators, $relations, $runtime['appends']),
-            completenessData: ModelMetadataCompleteness::fromStatuses($statuses),
+            completenessData: ModelMetadataCompleteness::withIncomplete($incomplete),
         );
     }
 
@@ -515,7 +498,7 @@ final class ModelMetadataRegistryBuilder
      * @param array<non-empty-lowercase-string, MutatorInfo> $mutators
      * @param array<non-empty-lowercase-string, ScopeInfo> $scopes
      * @param array<non-empty-lowercase-string, RelationInfo> $relations
-     * @param array<non-empty-string, ModelMetadataSectionStatus> $statuses
+     * @param list<ModelMetadataSection> $incomplete
      * @return ModelMetadata<Model>
      */
     private static function computeWithoutReflection(
@@ -525,22 +508,12 @@ final class ModelMetadataRegistryBuilder
         array $mutators,
         array $scopes,
         array $relations,
-        array $statuses,
+        array $incomplete,
     ): ModelMetadata {
-        $reflectionStatus = $statuses[ModelMetadataSection::Reflection->value];
-        $statuses[ModelMetadataSection::ModelInstance->value] = ModelMetadataSectionStatus::unavailableBecause(
-            ModelMetadataSection::Reflection,
-            $reflectionStatus,
-        );
-        $statuses[ModelMetadataSection::CustomTypes->value] = ModelMetadataSectionStatus::unavailableBecause(
-            ModelMetadataSection::Reflection,
-            $reflectionStatus,
-        );
-        $statuses[ModelMetadataSection::RuntimeConfiguration->value] = ModelMetadataSectionStatus::unavailableBecause(
-            ModelMetadataSection::Reflection,
-            $reflectionStatus,
-        );
-        self::markRuntimeDependantsUnavailable($statuses);
+        $incomplete[] = ModelMetadataSection::ModelInstance;
+        $incomplete[] = ModelMetadataSection::CustomTypes;
+        $incomplete[] = ModelMetadataSection::RuntimeConfiguration;
+        self::markRuntimeDependantsUnavailable($incomplete);
 
         $traits = self::computeTraitFlags($storage, true);
         $schema = new TableSchema([]);
@@ -567,7 +540,7 @@ final class ModelMetadataRegistryBuilder
             scopesData: $scopes,
             relationsData: $relations,
             knownPropertiesData: self::computeKnownProperties($schema, [], $accessors, $mutators, $relations, []),
-            completenessData: ModelMetadataCompleteness::fromStatuses($statuses),
+            completenessData: ModelMetadataCompleteness::withIncomplete($incomplete),
         );
     }
 
@@ -695,27 +668,22 @@ final class ModelMetadataRegistryBuilder
     }
 
     /**
-     * @param array<non-empty-string, ModelMetadataSectionStatus> $statuses
-     * @param-out array<non-empty-string, ModelMetadataSectionStatus> $statuses
+     * @param list<ModelMetadataSection> $incomplete
+     * @param-out list<ModelMetadataSection> $incomplete
      */
-    private static function markRuntimeDependantsUnavailable(array &$statuses): void
+    private static function markRuntimeDependantsUnavailable(array &$incomplete): void
     {
-        $runtimeStatus = $statuses[ModelMetadataSection::RuntimeConfiguration->value];
         foreach ([ModelMetadataSection::Schema, ModelMetadataSection::Casts, ModelMetadataSection::PrimaryKey] as $section) {
-            $statuses[$section->value] = ModelMetadataSectionStatus::unavailableBecause(
-                ModelMetadataSection::RuntimeConfiguration,
-                $runtimeStatus,
-            );
+            $incomplete[] = $section;
         }
     }
 
     /**
-     * @param array<non-empty-string, ModelMetadataSectionStatus> $statuses
-     * @param-out array<non-empty-string, ModelMetadataSectionStatus> $statuses
+     * @param list<ModelMetadataSection> $incomplete
+     * @param-out list<ModelMetadataSection> $incomplete
      */
-    private static function markInstanceDependantsUnavailable(array &$statuses): void
+    private static function markInstanceDependantsUnavailable(array &$incomplete): void
     {
-        $instanceStatus = $statuses[ModelMetadataSection::ModelInstance->value];
         foreach (
             [
                 ModelMetadataSection::Schema,
@@ -723,18 +691,15 @@ final class ModelMetadataRegistryBuilder
                 ModelMetadataSection::PrimaryKey,
             ] as $section
         ) {
-            $statuses[$section->value] = ModelMetadataSectionStatus::unavailableBecause(
-                ModelMetadataSection::ModelInstance,
-                $instanceStatus,
-            );
+            $incomplete[] = $section;
         }
     }
 
     /**
      * @template T
      * @param class-string<Model> $modelFqcn
-     * @param array<non-empty-string, ModelMetadataSectionStatus> $statuses
-     * @param-out array<non-empty-string, ModelMetadataSectionStatus> $statuses
+     * @param list<ModelMetadataSection> $incomplete
+     * @param-out list<ModelMetadataSection> $incomplete
      * @param \Closure(): T $compute
      * @param T $fallback
      * @return T
@@ -743,21 +708,18 @@ final class ModelMetadataRegistryBuilder
         Codebase $codebase,
         string $modelFqcn,
         ModelMetadataSection $section,
-        array &$statuses,
+        array &$incomplete,
         \Closure $compute,
         mixed $fallback,
     ): mixed {
         try {
-            $result = $compute();
-            $statuses[$section->value] = ModelMetadataSectionStatus::complete();
-
-            return $result;
+            return $compute();
         } catch (MetadataSectionUnavailable $unavailable) {
-            $statuses[$section->value] = ModelMetadataSectionStatus::unavailable($unavailable->getMessage());
+            $incomplete[] = $section;
 
             return $fallback;
         } catch (\Throwable $throwable) {
-            $statuses[$section->value] = ModelMetadataSectionStatus::failed($throwable);
+            $incomplete[] = $section;
             self::warnSectionFailure($codebase, $modelFqcn, $section, $throwable);
 
             return $fallback;

@@ -77,14 +77,8 @@ final readonly class ModelMetadata
         ?ModelMetadataCompleteness $completenessData = null,
     ) {
         // Hand-built healthy fixtures stay concise. Production construction always passes the
-        // explicit section map produced by ModelMetadataRegistryBuilder.
+        // explicit incomplete-section set produced by ModelMetadataRegistryBuilder.
         $this->completenessData = $completenessData ?? ModelMetadataCompleteness::allComplete();
-    }
-
-    /** @psalm-mutation-free */
-    public function sectionStatus(ModelMetadataSection $section): ModelMetadataSectionStatus
-    {
-        return $this->completenessData->status($section);
     }
 
     /** @psalm-mutation-free */

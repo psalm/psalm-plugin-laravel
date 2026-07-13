@@ -47,13 +47,11 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyAccessorInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyMutatorInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyScopeInfo;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\MetadataSectionState;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataCompleteness;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataSection;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataSectionStatus;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyType;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PropertyOrigin;
@@ -195,7 +193,7 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function schema_status_distinguishes_complete_empty_unavailable_and_failed(): void
+    public function schema_completeness_distinguishes_complete_empty_from_incomplete(): void
     {
         $codebase = $this->makeCodebase();
         $this->registerStorage(CompleteEmptySchemaModel::class);
@@ -204,10 +202,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, CompleteEmptySchemaModel::class);
         $completeEmpty = $this->metadataFor(CompleteEmptySchemaModel::class);
         $this->assertSame([], $completeEmpty->schema()->all());
-        $this->assertSame(
-            MetadataSectionState::Complete,
-            $completeEmpty->sectionStatus(ModelMetadataSection::Schema)->state,
-        );
+        $this->assertTrue($completeEmpty->isComplete(ModelMetadataSection::Schema));
         $this->assertFalse(
             $completeEmpty->casts()['flag']->psalmType->isNullable(),
             'A parsed complete-empty schema remains authoritative rather than conservatively nullable',
@@ -221,10 +216,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, CompleteEmptySchemaModel::class);
         $unavailable = $this->metadataFor(CompleteEmptySchemaModel::class);
         $this->assertSame([], $unavailable->schema()->all());
-        $this->assertSame(
-            MetadataSectionState::Unavailable,
-            $unavailable->sectionStatus(ModelMetadataSection::Schema)->state,
-        );
+        $this->assertFalse($unavailable->isComplete(ModelMetadataSection::Schema));
         $this->assertArrayHasKey('flag', $unavailable->casts(), 'Cast inventory survives unavailable schema');
         $this->assertTrue(
             $unavailable->casts()['flag']->psalmType->isNullable(),
@@ -243,10 +235,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, ThrowingSchemaModel::class);
         $failed = $this->metadataFor(ThrowingSchemaModel::class);
         $this->assertSame([], $failed->schema()->all());
-        $this->assertSame(
-            MetadataSectionState::Failed,
-            $failed->sectionStatus(ModelMetadataSection::Schema)->state,
-        );
+        $this->assertFalse($failed->isComplete(ModelMetadataSection::Schema));
         $this->assertArrayHasKey('flag', $failed->casts(), 'Cast inventory survives failed schema');
         $this->assertTrue(
             $failed->casts()['flag']->psalmType->isNullable(),
@@ -269,10 +258,10 @@ final class ModelMetadataRegistryTest extends TestCase
         $metadata = $this->metadataFor(ThrowingRuntimeConfigurationModel::class);
 
         $this->assertStaticSignals($metadata);
-        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
-        $this->assertSame(MetadataSectionState::Unavailable, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+        $this->assertFalse($metadata->isComplete(ModelMetadataSection::RuntimeConfiguration));
+        $this->assertFalse($metadata->isComplete(ModelMetadataSection::Schema));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::Casts));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::PrimaryKey));
         $this->assertArrayHasKey('flag', $metadata->casts());
     }
 
@@ -286,10 +275,10 @@ final class ModelMetadataRegistryTest extends TestCase
         $metadata = $this->metadataFor(ThrowingSchemaModel::class);
 
         $this->assertStaticSignals($metadata);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
-        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::RuntimeConfiguration));
+        $this->assertFalse($metadata->isComplete(ModelMetadataSection::Schema));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::Casts));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::PrimaryKey));
     }
 
     #[Test]
@@ -303,10 +292,10 @@ final class ModelMetadataRegistryTest extends TestCase
         $metadata = $this->metadataFor(ThrowingCastsModel::class);
 
         $this->assertStaticSignals($metadata);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
-        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::RuntimeConfiguration));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::Schema));
+        $this->assertFalse($metadata->isComplete(ModelMetadataSection::Casts));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::PrimaryKey));
         $this->assertTrue($metadata->schema()->has('flag'));
     }
 
@@ -321,10 +310,10 @@ final class ModelMetadataRegistryTest extends TestCase
         $metadata = $this->metadataFor(ThrowingPrimaryKeyModel::class);
 
         $this->assertStaticSignals($metadata);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
-        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::RuntimeConfiguration));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::Schema));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::Casts));
+        $this->assertFalse($metadata->isComplete(ModelMetadataSection::PrimaryKey));
     }
 
     #[Test]
@@ -338,11 +327,11 @@ final class ModelMetadataRegistryTest extends TestCase
         $metadata = $this->metadataFor(ThrowingCustomTypesModel::class);
 
         $this->assertStaticSignals($metadata);
-        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::CustomTypes)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Schema)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::PrimaryKey)->state);
+        $this->assertFalse($metadata->isComplete(ModelMetadataSection::CustomTypes));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::RuntimeConfiguration));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::Schema));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::Casts));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::PrimaryKey));
     }
 
     #[Test]
@@ -364,13 +353,13 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, CompleteEmptySchemaModel::class);
         $metadata = $this->metadataFor(CompleteEmptySchemaModel::class);
 
-        $this->assertSame(MetadataSectionState::Failed, $metadata->sectionStatus(ModelMetadataSection::Relations)->state);
+        $this->assertFalse($metadata->isComplete(ModelMetadataSection::Relations));
         $this->assertSame([], $metadata->relations());
         $this->assertArrayHasKey('staticlabel', $metadata->accessors());
         $this->assertArrayHasKey('published', $metadata->scopes());
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::StorageMethods)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::RuntimeConfiguration)->state);
-        $this->assertSame(MetadataSectionState::Complete, $metadata->sectionStatus(ModelMetadataSection::Casts)->state);
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::StorageMethods));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::RuntimeConfiguration));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::Casts));
     }
 
     #[Test]
@@ -380,18 +369,12 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertTrue(UnknownModelAttributeHandler::canEvaluate($healthy));
         $this->assertTrue(UnresolvableAppendedModelAttributeHandler::canEvaluate($healthy));
 
-        $schemaUnavailable = ModelMetadataCompleteness::allComplete()->withStatus(
-            ModelMetadataSection::Schema,
-            ModelMetadataSectionStatus::unavailable('no parsed table'),
-        );
+        $schemaUnavailable = ModelMetadataCompleteness::withIncomplete([ModelMetadataSection::Schema]);
         $schemaIncomplete = $this->makeStubMetadata(WorkOrder::class, completeness: $schemaUnavailable);
         $this->assertFalse(UnknownModelAttributeHandler::canEvaluate($schemaIncomplete));
         $this->assertTrue(UnresolvableAppendedModelAttributeHandler::canEvaluate($schemaIncomplete));
 
-        $relationsUnavailable = ModelMetadataCompleteness::allComplete()->withStatus(
-            ModelMetadataSection::Relations,
-            ModelMetadataSectionStatus::unavailable('AST unavailable'),
-        );
+        $relationsUnavailable = ModelMetadataCompleteness::withIncomplete([ModelMetadataSection::Relations]);
         $relationsIncomplete = $this->makeStubMetadata(WorkOrder::class, completeness: $relationsUnavailable);
         $this->assertFalse(UnknownModelAttributeHandler::canEvaluate($relationsIncomplete));
         $this->assertTrue(UnresolvableAppendedModelAttributeHandler::canEvaluate($relationsIncomplete));
@@ -399,10 +382,7 @@ final class ModelMetadataRegistryTest extends TestCase
         foreach ([ModelMetadataSection::RuntimeConfiguration, ModelMetadataSection::Casts, ModelMetadataSection::StorageMethods] as $section) {
             $incomplete = $this->makeStubMetadata(
                 WorkOrder::class,
-                completeness: ModelMetadataCompleteness::allComplete()->withStatus(
-                    $section,
-                    ModelMetadataSectionStatus::unavailable('injected consumer-gate failure'),
-                ),
+                completeness: ModelMetadataCompleteness::withIncomplete([$section]),
             );
             $this->assertFalse(UnknownModelAttributeHandler::canEvaluate($incomplete));
             $this->assertFalse(UnresolvableAppendedModelAttributeHandler::canEvaluate($incomplete));
@@ -1552,14 +1532,8 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertArrayHasKey('staticlabel', $metadata->accessors());
         $this->assertArrayHasKey('published', $metadata->scopes());
         $this->assertArrayHasKey('orders', $metadata->relations());
-        $this->assertSame(
-            MetadataSectionState::Complete,
-            $metadata->sectionStatus(ModelMetadataSection::StorageMethods)->state,
-        );
-        $this->assertSame(
-            MetadataSectionState::Complete,
-            $metadata->sectionStatus(ModelMetadataSection::Relations)->state,
-        );
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::StorageMethods));
+        $this->assertTrue($metadata->isComplete(ModelMetadataSection::Relations));
     }
 
     /**
