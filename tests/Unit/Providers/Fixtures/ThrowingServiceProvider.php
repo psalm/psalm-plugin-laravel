@@ -13,7 +13,7 @@ use Illuminate\Support\ServiceProvider;
  */
 final class ThrowingServiceProvider extends ServiceProvider
 {
-    public const string FAILURE_MESSAGE = 'Tests\\Psalm\\LaravelPlugin: forced register() failure';
+    public const FAILURE_MESSAGE = 'Tests\\Psalm\\LaravelPlugin: forced register() failure';
 
     #[\Override]
     public function register(): void
