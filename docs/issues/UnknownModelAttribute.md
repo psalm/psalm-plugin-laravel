@@ -10,7 +10,9 @@ Emitted when an array passed to an Eloquent mass-assignment method names a key t
 
 ## Why this is a problem
 
-Mass assignment is key based, so a misspelled key is silently dropped instead of writing the intended attribute. `User::create(['nmae' => $value])` persists a `User` with no name and raises no runtime error, which makes the mistake easy to miss.
+Mass assignment is key-based, so a misspelled key is silently dropped instead of writing the intended attribute.
+`User::create(['nmae' => $value])` persists a `User` with no name and raises no runtime error when the model uses a `$fillable` allowlist, which makes the mistake easy to miss.
+On a `$guarded = []` model, or via `forceFill()` / `forceCreate()`, the key is instead written and `save()` fails with an unknown-column database error.
 
 ## What is flagged
 
