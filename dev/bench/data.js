@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784019788315,
+  "lastUpdate": 1784052784948,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8565,6 +8565,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.35,
             "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9599cf7d6f8a6f8e34d89b743c1f7468f53bbe49",
+          "message": "Merge pull request #1265 from psalm/1251-skip-migration-files-unknown-attr\n\nExclude migration files from `UnknownModelAttribute`",
+          "timestamp": "2026-07-14T20:10:17+02:00",
+          "tree_id": "cc082603fd66d5a13be7e2b8d837fe89c389eb7e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9599cf7d6f8a6f8e34d89b743c1f7468f53bbe49"
+        },
+        "date": 1784052784303,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.37,
+            "range": "± 0.28",
             "unit": "s"
           },
           {
