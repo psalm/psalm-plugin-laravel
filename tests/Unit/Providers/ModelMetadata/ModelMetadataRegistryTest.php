@@ -10,6 +10,7 @@ use App\Models\AbstractDocument;
 use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\CustomPkUuidModel;
+use App\Models\KeylessPermission;
 use App\Models\SpecializationPivot;
 use App\Models\UlidModel;
 use App\Models\UnguardedModel;
@@ -66,6 +67,7 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AbstractKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
@@ -155,6 +157,38 @@ final class ModelMetadataRegistryTest extends TestCase
         // discriminating here — its asBool() fallback is also `true`, so it can't fail this case.
         $this->assertSame(['*'], $metadata->guarded);
         $this->assertTrue($metadata->traits->usesTimestamps);
+    }
+
+    #[Test]
+    public function abstract_model_preserves_explicitly_null_primary_key_defaults(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AbstractKeylessModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AbstractKeylessModel::class);
+
+        $metadata = $this->metadataFor(AbstractKeylessModel::class);
+        $this->assertNull($metadata->primaryKey->name);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+    }
+
+    #[Test]
+    public function keyless_model_preserves_metadata_and_explicit_casts(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(KeylessPermission::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, KeylessPermission::class);
+
+        $metadata = $this->metadataFor(KeylessPermission::class);
+        $this->assertNull($metadata->primaryKey->name);
+        $this->assertSame(PrimaryKeyType::Integer, $metadata->primaryKey->type);
+        $this->assertTrue($metadata->primaryKey->incrementing);
+        $this->assertSame([], $metadata->primaryKey->uuidColumns);
+        $casts = $metadata->casts();
+        $this->assertArrayHasKey('allowed', $casts);
+        $this->assertSame('bool', $casts['allowed']->psalmType->getId());
+        $this->assertArrayNotHasKey('', $casts);
     }
 
     #[Test]
