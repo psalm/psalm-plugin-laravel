@@ -96,6 +96,14 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return null;
         }
 
+        // A migration is point-in-time code: it can mass-assign a column a LATER migration drops, which
+        // the final replayed schema no longer knows about, so the rule would false-positive on code that
+        // was correct when it ran (#1251). Skip a file we recognise as a migration, before the costlier
+        // receiver/registry work.
+        if (self::isMigrationFile($event->getStatementsSource()->getFilePath())) {
+            return null;
+        }
+
         $codebase = $event->getCodebase();
 
         $modelClass = $expr instanceof StaticCall
@@ -163,6 +171,21 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
         }
 
         return null;
+    }
+
+    /**
+     * Best-effort guess: is this file a Laravel migration? Recognised by either universal signal,
+     * without resolving the app's exact migration paths: the migrator's `YYYY_MM_DD_HHMMSS_` filename
+     * prefix (every `php artisan make:migration`), or a `migrations` directory in the path. Either is a
+     * near-certain migration; a stray match only over-suppresses this always-on rule — the safe
+     * direction for a false-positive guard. See {@see UnknownModelAttribute} docs.
+     *
+     * @psalm-pure
+     */
+    public static function isMigrationFile(string $filePath): bool
+    {
+        return \preg_match('#^\d{4}_\d{2}_\d{2}_\d{6}_#', \basename($filePath)) === 1
+            || \str_contains(\str_replace('\\', '/', $filePath), '/migrations/');
     }
 
     /**

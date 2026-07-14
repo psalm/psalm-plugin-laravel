@@ -139,6 +139,52 @@ final class UnknownModelAttributeHandlerTest extends TestCase
         $this->assertNull(UnknownModelAttributeHandler::afterExpressionAnalysis($this->event($call)));
     }
 
+    #[Test]
+    public function skips_a_mass_assignment_inside_a_migration_file(): void
+    {
+        // A create() located in a migration file is left alone: migrations are point-in-time and may
+        // reference since-dropped columns (#1251). The array content is irrelevant — the guard fires
+        // after the literal-array check but before receiver resolution, so the uninitialised Codebase is
+        // never touched (proving the guard is load-bearing, like the sibling early-return tests).
+        $call = $this->positioned(new StaticCall(
+            $this->resolvedModelName(),
+            new Identifier('create'),
+            [new Arg(new Array_([]))],
+        ));
+
+        $this->assertNull(UnknownModelAttributeHandler::afterExpressionAnalysis(
+            $this->event($call, '/project/database/migrations/2024_01_01_000000_create_users_table.php'),
+        ));
+    }
+
+    #[Test]
+    #[DataProvider('migrationFilePaths')]
+    public function is_migration_file_guesses_by_filename_or_directory(string $filePath, bool $expected): void
+    {
+        $this->assertSame($expected, UnknownModelAttributeHandler::isMigrationFile($filePath));
+    }
+
+    /**
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function migrationFilePaths(): iterable
+    {
+        // Both signals present — the common case.
+        yield 'timestamped file in a migrations dir' => ['/app/database/migrations/2024_10_16_120026_move_redis.php', true];
+        // Filename signal alone: a migration in a non-standard directory.
+        yield 'timestamped filename outside a migrations dir' => ['/app/custom/2014_10_12_000000_create_users_table.php', true];
+        // Directory signal alone: a migration whose name lacks the timestamp prefix.
+        yield 'non-timestamped file in a migrations dir' => ['/pkg/database/migrations/create_things.php', true];
+        // Windows separators still match the directory signal after normalization.
+        yield 'windows path in a migrations dir' => ['C:\\proj\\database\\migrations\\2024_01_01_000000_x.php', true];
+        // Neither signal: ordinary application code.
+        yield 'a model' => ['/app/Models/User.php', false];
+        // "Migration" in a filename is not the `migrations` directory, and there is no timestamp prefix.
+        yield 'a class merely named Migration' => ['/app/Support/MigrationHelper.php', false];
+        // A leading-year filename that is not the full YYYY_MM_DD_HHMMSS_ shape.
+        yield 'a partial-timestamp filename' => ['/app/2024_report.php', false];
+    }
+
     /**
      * @param array<non-empty-lowercase-string, true> $allowed
      * @param list<string>                            $rawKeys
@@ -194,7 +240,7 @@ final class UnknownModelAttributeHandlerTest extends TestCase
         return $name;
     }
 
-    private function event(\PhpParser\Node\Expr $expr): AfterExpressionAnalysisEvent
+    private function event(\PhpParser\Node\Expr $expr, string $filePath = '/project/app/Models/User.php'): AfterExpressionAnalysisEvent
     {
         // Default the receiver type to null so an instance call resolves to no model; static-call
         // tests never consult the node type provider.
@@ -202,7 +248,7 @@ final class UnknownModelAttributeHandlerTest extends TestCase
         $nodeTypeProvider->method('getType')->willReturn(null);
 
         $source = $this->createStub(StatementsSource::class);
-        $source->method('getFilePath')->willReturn('/project/app/Models/User.php');
+        $source->method('getFilePath')->willReturn($filePath);
         $source->method('getFileName')->willReturn('User.php');
         $source->method('getSuppressedIssues')->willReturn([]);
         $source->method('getNodeTypeProvider')->willReturn($nodeTypeProvider);

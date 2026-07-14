@@ -52,6 +52,7 @@ Because the rule is registered by default, it errs toward silence whenever it ca
 - **No column schema.** When migrations are disabled, or a model's table is not parsed, the column set is unknown, so the rule skips that model entirely rather than flag valid columns. With the default `columnFallback="migrations"` the columns come from your migration files.
 - **Non-literal arrays.** A variable array, a spread (`[...$attributes]`), or a dynamic key carries no statically known key names, so it is never inspected.
 - **Ambiguous receivers.** A static call on a non-model class, or an instance call whose receiver is not exactly one Eloquent model (for example a `Builder` or `Relation`, which is how a mass `update()` on a query is typed), is skipped.
+- **Migration files.** A mass-assignment call inside a migration file is skipped (a file counts as a migration when its name carries the migrator's `YYYY_MM_DD_HHMMSS_` prefix or it sits in a `migrations` directory). The plugin replays every migration into one final schema, so a column a later migration drops is absent from it, and a migration that legitimately wrote that column when it ran would be wrongly flagged against the final state.
 
 ## Known limitation
 
