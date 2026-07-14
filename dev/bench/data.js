@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783905152366,
+  "lastUpdate": 1784019788315,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8530,6 +8530,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.72,
             "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1202d13d75b89db630ea3f1c91f264ef9149cfab",
+          "message": "Merge pull request #1264 from alies-dev/agent/keyless-model-metadata\n\nHandle keyless models with nullable primary-key metadata",
+          "timestamp": "2026-07-14T11:00:04+02:00",
+          "tree_id": "81d383d2af2ff8c024fe61362ab2c632626709c4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1202d13d75b89db630ea3f1c91f264ef9149cfab"
+        },
+        "date": 1784019787040,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.35,
+            "range": "± 0.14",
             "unit": "s"
           },
           {
