@@ -127,6 +127,23 @@ $post->comments()->where('approved', true)
 
 **Psalm challenge:** Psalm resolves `where()` via `@mixin Builder` on Relation. The resolved method returns `Builder`, not the Relation. The plugin solves this with `MethodForwardingHandler` using `interceptMixin=true`: the handler registers for Builder (the mixin target), detects when the original caller was a Relation, and returns the concrete Relation type with template params instead. For methods declared in Relation stubs, Psalm finds them in `declaring_method_ids` before reaching the mixin.
 
+Custom builders require one more lookup because Relation's `@mixin Builder` cannot expose
+methods declared on `PostBuilder`. `RelatedBuilderMethodResolver` takes the related model from
+the Relation's first template parameter, resolves that model's effective builder, and reads the
+custom method signature from Psalm storage. Its return union is then decorated branch by branch:
+Builder subtypes become the original Relation while scalar/model/collection/null branches remain
+unchanged. The same signature is handed to the params provider for direct `Relation::__call`
+dispatch. This must remain storage-only—booting builders can execute application code, and a
+synthetic method call recursively clones Psalm node data on this hot path.
+
+Method-level templates are inferred only from information safely available at this provider's
+event point: an existing argument node type, a literal/simple expression, or a variable/property
+in the current context. Psalm has not yet analyzed nested calls or unpacked arguments here. Those
+inputs use the template's declared upper bound (normally `mixed`) rather than duplicating Psalm's
+call and unpack analysis inside a relation-specific handler. Inference is all-or-bound for each
+call: if any template-bearing argument is unavailable, no partial method-template bounds are kept,
+because they could over-constrain another argument that Psalm analyzes later.
+
 
 ### 2. Eloquent Builder → Query Builder
 
@@ -776,7 +793,7 @@ but the handler ensures template params propagate correctly.
 
 | Pattern                    | Psalm mechanism                                              | Known limitations                                                    |
 |----------------------------|--------------------------------------------------------------|----------------------------------------------------------------------|
-| Relation → Builder fluent  | Stub declares methods on Relation + `MethodForwardingHandler` | Methods not in stub fall through to `@mixin` and lose Relation type  |
+| Relation → Builder fluent  | Relation stubs + `MethodForwardingHandler` + related custom-builder storage resolution | Instance-local builder macros that have no static metadata remain unresolved |
 | Builder → Query\Builder    | `@mixin Query\Builder` on Eloquent\Builder                   | Same mixin issue, but less impactful                                 |
 | Facade → Service           | Generated alias stubs                                        | Taint annotations lost through `__callStatic`                        |
 | Model → Builder static     | `ModelMethodHandler`                                         | Scopes need `@mixin` or scope handler                                |
