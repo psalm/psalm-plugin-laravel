@@ -109,6 +109,21 @@ final class ForeignIdForPkTypeTest extends AbstractSchemaAggregatorTestCase
     }
 
     #[Test]
+    public function foreign_id_for_keyless_model_uses_int_fallback_and_explicit_name(): void
+    {
+        $schemaAggregator = $this->instantiateSchemaAggregator(
+            __DIR__ . '/migrations/foreign_id_for_pk_type',
+        );
+
+        $table = $schemaAggregator->tables['comments'];
+
+        self::assertTableHasColumn('permission_customer_id', $table);
+        self::assertColumnHasType('int', $table->columns['permission_customer_id']);
+        self::assertColumnNotNullable($table->columns['permission_customer_id']);
+        $this->assertTrue($table->columns['permission_customer_id']->unsigned);
+    }
+
+    #[Test]
     public function foreign_id_for_falls_back_to_int_when_referenced_table_not_yet_parsed(): void
     {
         // The migration references UuidModel::class but the uuid_models table

@@ -888,9 +888,6 @@ final class ModelMetadataRegistryBuilder
      */
     private static function computePrimaryKey(Model $instance, TraitFlags $traits): PrimaryKeyInfo
     {
-        /** @var non-empty-string $keyName */
-        $keyName = $instance->getKeyName();
-
         $keyType = $instance->getKeyType();
         $type = $keyType === 'string' ? PrimaryKeyType::String : PrimaryKeyType::Integer;
 
@@ -900,7 +897,7 @@ final class ModelMetadataRegistryBuilder
         }
 
         return new PrimaryKeyInfo(
-            name: $keyName,
+            name: self::asNonEmptyString($instance->getKeyName()),
             type: $type,
             incrementing: $instance->getIncrementing(),
             uuidColumns: $uuidColumns,
@@ -920,7 +917,9 @@ final class ModelMetadataRegistryBuilder
      */
     private static function computePrimaryKeyFromDefaults(array $defaults): PrimaryKeyInfo
     {
-        $keyName = self::asNonEmptyString($defaults['primaryKey'] ?? null) ?? 'id';
+        $keyName = \array_key_exists('primaryKey', $defaults)
+            ? self::asNonEmptyString($defaults['primaryKey'])
+            : 'id';
         $type = self::asNonEmptyString($defaults['keyType'] ?? null) === 'string'
             ? PrimaryKeyType::String
             : PrimaryKeyType::Integer;
@@ -1031,12 +1030,27 @@ final class ModelMetadataRegistryBuilder
             $merged[self::resolveDeletedAtColumn($instance)] = 'datetime';
         }
 
-        // 2. $instance->getCasts() walks inheritance + merges $this->casts and static::casts().
-        //    The caller already flipped $usesUniqueIds on HasUuids/HasUlids models, so
-        //    getIncrementing() / getKeyType() return the correct UUID/ULID values here
-        //    and getCasts() no longer injects a bogus [keyName => 'int'] entry.
-        /** @var array<string, string> $instanceCasts */
-        $instanceCasts = $instance->getCasts();
+        // 2. Laravel's base getCasts() returns $this->casts, prepending an implicit key cast when
+        //    the model is incrementing. initializeHasAttributes() normally merges casts() during
+        //    construction, but this instance skips the constructor, so step 3 parses casts()
+        //    separately. The caller has already recreated the runtime UUID/ULID trait state.
+        //    For a keyless incrementing model, temporarily disable only the implicit key cast;
+        //    restore the real value before the primary-key snapshot is computed.
+        $incrementing = $instance->getIncrementing();
+        $disableImplicitKeyCast = self::asNonEmptyString($instance->getKeyName()) === null && $incrementing;
+        if ($disableImplicitKeyCast) {
+            $instance->setIncrementing(false);
+        }
+
+        try {
+            /** @var array<string, string> $instanceCasts */
+            $instanceCasts = $instance->getCasts();
+        } finally {
+            if ($disableImplicitKeyCast) {
+                $instance->setIncrementing($incrementing);
+            }
+        }
+
         $merged = \array_merge($merged, $instanceCasts);
 
         // 3. casts() method (AST-parsed) overrides #2 when both declare the same key.
