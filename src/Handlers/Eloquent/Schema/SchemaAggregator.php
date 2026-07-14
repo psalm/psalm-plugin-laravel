@@ -939,7 +939,7 @@ final class SchemaAggregator
         // Resolve type from the referenced model's primary key in the parsed schema.
         // If the PK column is a string (uuid, ulid, etc.), the FK should also be string.
         $referenced_table = $this->tables[$instance->getTable()] ?? null;
-        $key_name = self::asNonEmptyString($instance->getKeyName());
+        $key_name = $this->asNonEmptyString($instance->getKeyName());
         $pk_column = $key_name !== null
             ? $referenced_table?->columns[$key_name] ?? null
             : null;
@@ -961,7 +961,7 @@ final class SchemaAggregator
      * @return non-empty-string|null
      * @psalm-pure
      */
-    private static function asNonEmptyString(mixed $value): ?string
+    private function asNonEmptyString(mixed $value): ?string
     {
         return \is_string($value) && $value !== '' ? $value : null;
     }

@@ -17,7 +17,7 @@ final class KeylessPermission extends Model
 {
     protected $table = 'keyless_permissions';
 
-    protected $primaryKey = null;
+    protected $primaryKey;
 
     /** @var array<string, string> */
     protected $casts = [
