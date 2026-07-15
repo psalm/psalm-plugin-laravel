@@ -109,6 +109,7 @@ final class ModelPropertyHandlerTest extends TestCase
         $schema = new SchemaAggregator();
         $table = new SchemaTable();
         $table->setColumn(new SchemaColumn('id', SchemaColumn::TYPE_INT));
+
         $schema->setTable('skipped_trait_initialization_models', $table);
         SchemaStateProvider::setSchema($schema);
 
