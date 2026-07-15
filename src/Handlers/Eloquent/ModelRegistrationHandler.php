@@ -231,12 +231,9 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
         }
 
-        // Method existence, visibility, and return types for static __callStatic forwarding.
-        // Registered per-model because Psalm's provider lookup uses exact class names —
-        // a handler for Model::class is not consulted for App\Models\User. Storage-based (reads
-        // method/class storage, never instantiates), so it registers for abstract bases too — this
-        // is what lets a scope or forwarded Query\Builder method resolve on an abstract-typed
-        // receiver (issue #901).
+        // Per-model providers for static forwarding and metadata-backed real methods such as getKey().
+        // Psalm's provider lookup uses exact class names, so a handler for Model::class is not enough
+        // for App\Models\User. Storage-based registration also works for abstract bases (issue #901).
         $methods->existence_provider->registerClosure($className, ModelMethodHandler::doesMethodExist(...));
         $methods->visibility_provider->registerClosure($className, ModelMethodHandler::isMethodVisible(...));
         $methods->params_provider->registerClosure($className, ModelMethodHandler::getMethodParams(...));

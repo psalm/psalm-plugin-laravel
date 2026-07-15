@@ -13,6 +13,9 @@ use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyType;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver;
 use Psalm\LaravelPlugin\Internal\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
@@ -26,15 +29,15 @@ use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
- * Handles Eloquent Model calls whose return types depend on the model's query builder.
+ * Handles Eloquent Model calls whose return types depend on model metadata or the query builder.
  *
  * Responsibilities:
  * 1. Method existence — confirms magic methods exist (suppresses UndefinedMagicMethod)
  * 2. Method visibility — confirms magic methods are public
  * 3. Method params — provides parameter definitions for argument checking
- * 4. Return types — proxies forwarded calls to Builder<TModel> for type inference, and
- *    substitutes custom builders for Model::query() plus the real instance methods that
- *    construct builders through newEloquentBuilder()
+ * 4. Return types — narrows metadata-backed methods such as Model::getKey(), proxies
+ *    forwarded calls to Builder<TModel>, and substitutes custom builders for Model::query()
+ *    plus the real instance methods that construct builders through newEloquentBuilder()
  *
  * Existence, visibility, params, and return type providers for concrete Model subclasses are
  * registered dynamically per-model by {@see ModelRegistrationHandler} because Psalm's
@@ -457,6 +460,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         $modelClass = $event->getFqClasslikeName();
         $methodName = $event->getMethodNameLowercase();
 
+        if ($methodName === 'getkey') {
+            return self::getKeyReturnType($codebase, $modelClass);
+        }
+
         // Only handle methods confirmed by doesMethodExist — don't interfere with
         // methods already resolved through the @mixin chain (where, get, first, etc.)
         if (!self::isUnresolvedBuilderMethod($codebase, $modelClass, $methodName)) {
@@ -685,6 +692,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
         $methodName = $event->getMethodNameLowercase();
 
+        if ($methodName === 'getkey') {
+            return self::getKeyReturnType($codebase, $called_fq_classlike_name);
+        }
+
         if ($methodName === self::REGISTER_GLOBAL_SCOPES) {
             return self::registerGlobalScopesReturnType($event, $called_fq_classlike_name, $codebase);
         }
@@ -743,6 +754,36 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         return null;
+    }
+
+    /** Narrow the framework getKey() implementation from authoritative primary-key metadata. */
+    private static function getKeyReturnType(Codebase $codebase, string $modelClass): ?Union
+    {
+        $declaring = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($modelClass, 'getkey'));
+        if (!$declaring instanceof MethodIdentifier
+            || \strcasecmp($declaring->fq_class_name, Model::class) !== 0
+        ) {
+            return null;
+        }
+
+        /** @var class-string<Model> $modelClass */
+        return self::getKeyReturnTypeFromMetadata(ModelMetadataRegistry::for($modelClass));
+    }
+
+    /** Return null to preserve the stub's int|string fallback when key metadata is unavailable. */
+    private static function getKeyReturnTypeFromMetadata(?ModelMetadata $metadata): ?Union
+    {
+        if (!$metadata instanceof ModelMetadata
+            || !$metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY)
+            || $metadata->primaryKey->name === null
+        ) {
+            return null;
+        }
+
+        return match ($metadata->primaryKey->type) {
+            PrimaryKeyType::Integer => Type::getInt(),
+            PrimaryKeyType::String => Type::getString(),
+        };
     }
 
     /**
