@@ -261,6 +261,7 @@ final class ModelMetadataRegistryBuilder
                     $codebase,
                     $modelFqcn,
                     $usedTraits,
+                    $storage->used_traits,
                     $instance,
                     $reflection,
                     $customBuilder,
@@ -296,6 +297,7 @@ final class ModelMetadataRegistryBuilder
      *
      * @param class-string<Model>                   $modelFqcn
      * @param array<lowercase-string, string> $usedTraits
+     * @param array<lowercase-string, string> $directUsedTraits
      * @param \ReflectionClass<Model>               $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null    $customBuilder
      * @param class-string<\Illuminate\Database\Eloquent\Collection>|null $customCollection
@@ -310,6 +312,7 @@ final class ModelMetadataRegistryBuilder
         Codebase $codebase,
         string $modelFqcn,
         array $usedTraits,
+        array $directUsedTraits,
         Model $instance,
         \ReflectionClass $reflection,
         ?string $customBuilder,
@@ -322,25 +325,29 @@ final class ModelMetadataRegistryBuilder
         array &$failures,
     ): ModelMetadata {
         $baseTraits = self::computeTraitFlags($usedTraits, true);
-        $usesUniqueStringIds = isset($usedTraits[self::TRAIT_HAS_UNIQUE_STRING_IDS_LC]);
-        $primaryKeyReady = self::hasAuthoritativeKeyConfiguration($reflection, $usedTraits);
-        if ($primaryKeyReady && $usesUniqueStringIds) {
-            $primaryKeyReady = self::hasFrameworkUniqueIdInitializer($reflection)
-                && self::computeSection(
-                    0,
-                    'unique-id initialization',
-                    $completeSections,
-                    $failures,
-                    static function () use ($instance): bool {
-                        self::flipUsesUniqueIds($instance);
+        $directTraits = self::computeTraitFlags($directUsedTraits, true);
+        $uniqueIdsFlipped = false;
+        $castsReady = true;
+        if ($directTraits->hasUuids || $directTraits->hasUlids) {
+            // Preserve the established cast snapshot: before getKey() narrowing, only direct
+            // HasUuids/HasUlids usage caused this constructorless state to be recreated.
+            $castsReady = self::computeSection(
+                0,
+                'unique-id initialization',
+                $completeSections,
+                $failures,
+                static function () use ($instance, &$uniqueIdsFlipped): bool {
+                    self::flipUsesUniqueIds($instance);
+                    $uniqueIdsFlipped = true;
 
-                        return true;
-                    },
-                    false,
-                );
+                    return true;
+                },
+                false,
+            );
         }
 
-        $castsReady = $primaryKeyReady && self::hasAuthoritativeCastConfiguration($reflection, $usedTraits);
+        $usesUniqueStringIds = isset($usedTraits[self::TRAIT_HAS_UNIQUE_STRING_IDS_LC]);
+        $primaryKeyReady = self::hasAuthoritativeKeyConfiguration($reflection, $usedTraits);
 
         $attributesApplied = self::computeSection(
             0,
@@ -404,6 +411,27 @@ final class ModelMetadataRegistryBuilder
                 [],
             )
             : [];
+
+        // Key inference uses the recursive trait closure. Delay its additional state replay until
+        // after casts so stricter key authority cannot alter the pre-existing cast pipeline.
+        if ($primaryKeyReady && $usesUniqueStringIds) {
+            $primaryKeyReady = self::hasFrameworkUniqueIdInitializer($reflection);
+            if ($primaryKeyReady && !$uniqueIdsFlipped) {
+                $primaryKeyReady = self::computeSection(
+                    0,
+                    'unique-id initialization',
+                    $completeSections,
+                    $failures,
+                    static function () use ($instance): bool {
+                        self::flipUsesUniqueIds($instance);
+
+                        return true;
+                    },
+                    false,
+                );
+            }
+        }
+
         $primaryKey = $primaryKeyReady
             ? self::computeSection(
                 ModelMetadata::SECTION_PRIMARY_KEY,
@@ -1674,12 +1702,16 @@ final class ModelMetadataRegistryBuilder
                 continue;
             }
 
-            if (!self::reflectionMethodsHaveSameSource(
-                $reflection->getMethod($methodName),
-                new \ReflectionMethod(Model::class, $methodName),
-            )) {
-                return false;
+            $actual = $reflection->getMethod($methodName);
+            if (self::reflectionMethodsHaveSameSource($actual, new \ReflectionMethod(Model::class, $methodName))) {
+                continue;
             }
+
+            if ($methodName === 'boot' && self::bootChainDelegatesToModel($actual)) {
+                continue;
+            }
+
+            return false;
         }
 
         $configurationReaders = ['getKeyName', 'getKeyType', 'getIncrementing'];
@@ -1727,43 +1759,6 @@ final class ModelMetadataRegistryBuilder
         } catch (\Throwable) {
             return false;
         }
-    }
-
-    /**
-     * Casts add two requirements to key authority: `getCasts()` itself must be framework-owned,
-     * and Laravel's trait initializer list must be populated. A model may safely extend booting
-     * when its first statement delegates to `parent::boot()`; a non-delegating override can skip
-     * initializeHasAttributes(), which controls whether the model's casts() method is applied.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     * @param array<lowercase-string, string> $usedTraits
-     */
-    private static function hasAuthoritativeCastConfiguration(\ReflectionClass $reflection, array $usedTraits): bool
-    {
-        if (!$reflection->hasMethod('getCasts')
-            || !self::reflectionMethodComesFromIlluminate($reflection->getMethod('getCasts'), $usedTraits)
-        ) {
-            return false;
-        }
-
-        foreach (['boot', 'bootTraits'] as $methodName) {
-            if (!\method_exists(Model::class, $methodName)) {
-                continue;
-            }
-
-            $actual = $reflection->getMethod($methodName);
-            if (self::reflectionMethodsHaveSameSource($actual, new \ReflectionMethod(Model::class, $methodName))) {
-                continue;
-            }
-
-            if ($methodName === 'boot' && self::bootChainDelegatesToModel($actual)) {
-                continue;
-            }
-
-            return false;
-        }
-
-        return true;
     }
 
     /** Prove that every application override delegates until Laravel's Model::boot() is reached. */
@@ -1904,8 +1899,8 @@ final class ModelMetadataRegistryBuilder
      * `#[Connection]`/`#[Table]` fill a null.
      *
      * Key-affecting `#[Table]` options and `#[WithoutIncrementing]` are deliberately not replayed here.
-     * {@see hasAuthoritativeKeyConfiguration()} keeps the casts and primary-key sections incomplete when
-     * they are present, while the table name remains available to schema/serialization metadata.
+     * {@see hasAuthoritativeKeyConfiguration()} keeps primary-key metadata incomplete when they are
+     * present, while the table name remains available to schema/serialization metadata.
      * (Timestamps are moot — the registry stores no such field.)
      *
      * The attribute classes exist from Laravel 13.0; on older lines `getAttributes()` matches nothing and

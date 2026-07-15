@@ -25,7 +25,7 @@ use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Progress\VoidProgress;
 use Psalm\StatementsSource;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
-use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SkippedTraitInitializationModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
 
 /**
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/446
@@ -72,6 +72,7 @@ final class ModelPropertyHandlerTest extends TestCase
     #[\Override]
     protected function tearDown(): void
     {
+        SectionFailureModel::$failures = [];
         ModelMetadataRegistryBuilder::reset();
         $this->classLikeStorageProvider->remove(WorkOrder::class);
     }
@@ -110,23 +111,24 @@ final class ModelPropertyHandlerTest extends TestCase
         $table = new SchemaTable();
         $table->setColumn(new SchemaColumn('id', SchemaColumn::TYPE_INT));
 
-        $schema->setTable('skipped_trait_initialization_models', $table);
+        $schema->setTable('section_failure_models', $table);
         SchemaStateProvider::setSchema($schema);
 
-        $this->classLikeStorageProvider->create(SkippedTraitInitializationModel::class);
+        $this->classLikeStorageProvider->create(SectionFailureModel::class);
+        SectionFailureModel::$failures = ['casts' => true];
         ModelMetadataRegistryBuilder::reset();
-        ModelMetadataRegistryBuilder::warmUp($this->codebase, SkippedTraitInitializationModel::class);
+        ModelMetadataRegistryBuilder::warmUp($this->codebase, SectionFailureModel::class);
 
-        $metadata = ModelMetadataRegistry::for(SkippedTraitInitializationModel::class);
+        $metadata = ModelMetadataRegistry::for(SectionFailureModel::class);
         $this->assertInstanceOf(ModelMetadata::class, $metadata);
         $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
         $this->assertTrue(ModelPropertyHandler::doesPropertyExist(
-            $this->createEvent(SkippedTraitInitializationModel::class, 'id', readMode: true),
+            $this->createEvent(SectionFailureModel::class, 'id', readMode: true),
         ));
 
         $type = ModelPropertyHandler::resolveColumnType(
             $this->codebase,
-            SkippedTraitInitializationModel::class,
+            SectionFailureModel::class,
             'id',
         );
 

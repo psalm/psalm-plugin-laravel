@@ -88,7 +88,6 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ParentBootDelegatingModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ParentBootThroughSuppressingBaseModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
-use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SkippedTraitInitializationModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\StatefulUniqueIdInitializerModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnrelatedBootTraitModel;
@@ -113,7 +112,6 @@ final class ModelMetadataRegistryTest extends TestCase
     protected function tearDown(): void
     {
         BootDependentKeyModel::resetKeyConfiguration();
-        SkippedTraitInitializationModel::clearBootedModels();
         UnrelatedBootTraitModel::clearBootedModels();
         ModelMetadataRegistryBuilder::reset();
     }
@@ -294,7 +292,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, AttributePrimaryKeyModel::class);
 
         $metadata = $this->metadataFor(AttributePrimaryKeyModel::class);
-        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
         $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
     }
 
@@ -314,7 +312,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, AttributeWithoutIncrementingModel::class);
 
         $metadata = $this->metadataFor(AttributeWithoutIncrementingModel::class);
-        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
         $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
     }
 
@@ -552,6 +550,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $expectations = [
             'runtime configuration' => [ModelMetadata::SECTION_RUNTIME_CONFIGURATION],
             'schema' => [ModelMetadata::SECTION_SCHEMA],
+            'casts' => [ModelMetadata::SECTION_CASTS],
         ];
 
         foreach ($expectations as $failure => $incompleteSections) {
@@ -590,6 +589,11 @@ final class ModelMetadataRegistryTest extends TestCase
                 $this->assertTrue($metadata->casts()['code']->psalmType->hasMixed());
             }
 
+            if ($failure === 'casts') {
+                $this->assertTrue($metadata->schema()->has('flag'));
+                $this->assertSame([], $metadata->casts());
+                $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+            }
         }
     }
 
@@ -838,7 +842,6 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertFalse($metadata->primaryKey->incrementing);
         $this->assertSame(['id'], $metadata->primaryKey->uuidColumns);
-        $this->assertArrayNotHasKey('id', $metadata->casts());
         $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
     }
 
@@ -856,7 +859,6 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertFalse($metadata->primaryKey->incrementing);
         $this->assertSame(['id'], $metadata->primaryKey->uuidColumns);
-        $this->assertArrayNotHasKey('id', $metadata->casts());
         $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
     }
 
@@ -870,7 +872,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $metadata = $this->metadataFor(CustomUniqueIdInitializerModel::class);
         $this->assertTrue($metadata->traits->hasUuids);
-        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
         $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
     }
 
@@ -888,7 +890,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $metadata = $this->metadataFor(StatefulUniqueIdInitializerModel::class);
         $this->assertTrue($metadata->traits->hasUuids);
-        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
         $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
     }
 
@@ -903,7 +905,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, BootDependentKeyModel::class);
 
         $metadata = $this->metadataFor(BootDependentKeyModel::class);
-        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
         $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
 
         $runtime = new BootDependentKeyModel();
@@ -936,26 +938,7 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function skipped_trait_initialization_only_invalidates_cast_metadata(): void
-    {
-        SkippedTraitInitializationModel::clearBootedModels();
-        $runtime = new SkippedTraitInitializationModel();
-        $this->assertArrayNotHasKey('flag', $runtime->getCasts());
-
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(SkippedTraitInitializationModel::class);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, SkippedTraitInitializationModel::class);
-
-        $metadata = $this->metadataFor(SkippedTraitInitializationModel::class);
-        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
-        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
-
-        SkippedTraitInitializationModel::clearBootedModels();
-    }
-
-    #[Test]
-    public function parent_boot_delegation_keeps_cast_metadata_authoritative(): void
+    public function parent_boot_delegation_keeps_key_metadata_authoritative(): void
     {
         $codebase = $this->makeCodebase();
         $this->registerStorage(ParentBootDelegatingModel::class);
@@ -963,8 +946,8 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, ParentBootDelegatingModel::class);
 
         $metadata = $this->metadataFor(ParentBootDelegatingModel::class);
-        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
         $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+        $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
     }
 
     #[Test]
@@ -972,7 +955,8 @@ final class ModelMetadataRegistryTest extends TestCase
     {
         ParentBootThroughSuppressingBaseModel::clearBootedModels();
         $runtime = new ParentBootThroughSuppressingBaseModel();
-        $this->assertArrayNotHasKey('flag', $runtime->getCasts());
+        $this->assertSame('int', $runtime->getKeyType());
+        $this->assertTrue($runtime->getIncrementing());
 
         $codebase = $this->makeCodebase();
         $this->registerStorage(ParentBootThroughSuppressingBaseModel::class);
@@ -980,8 +964,7 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, ParentBootThroughSuppressingBaseModel::class);
 
         $metadata = $this->metadataFor(ParentBootThroughSuppressingBaseModel::class);
-        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
-        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
 
         ParentBootThroughSuppressingBaseModel::clearBootedModels();
     }

@@ -38,6 +38,14 @@ final class SectionFailureModel extends Model
         return parent::getTable();
     }
 
+    /** @return array<string, string> */
+    public function getCasts(): array
+    {
+        $this->fail('casts');
+
+        return parent::getCasts();
+    }
+
     private function fail(string $section): void
     {
         if (isset(self::$failures[$section])) {
