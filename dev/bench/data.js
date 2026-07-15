@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784052784948,
+  "lastUpdate": 1784122512641,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8605,6 +8605,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2a259cbe11946616573e045e95c9f73891297d7c",
+          "message": "Merge pull request #1268 from alies-dev/agent/partial-model-metadata-recovery\n\nMake model metadata warm-up section-isolated",
+          "timestamp": "2026-07-15T15:33:17+02:00",
+          "tree_id": "15e6eca6b013575fd39ebe4bd48e45a2c85787c1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2a259cbe11946616573e045e95c9f73891297d7c"
+        },
+        "date": 1784122511272,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 17,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1109,
             "unit": "MB"
           }
         ]
