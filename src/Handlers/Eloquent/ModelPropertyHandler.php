@@ -174,6 +174,11 @@ final class ModelPropertyHandler
             return null;
         }
 
+        // An incomplete cast inventory cannot prove that a schema column is uncast.
+        if (!$metadata->isComplete(ModelMetadata::SECTION_CASTS)) {
+            return null;
+        }
+
         // Exact-case lookup matches Eloquent's case-sensitive attribute semantics.
         $column = $metadata->schema()->column($columnName);
         if (!$column instanceof ColumnInfo) {

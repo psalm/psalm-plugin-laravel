@@ -59,6 +59,14 @@ final class ModelSerializationShapeBuilder
      */
     public static function build(Codebase $codebase, string $modelClass, ModelMetadata $metadata): ?Union
     {
+        if (!$metadata->isComplete(
+            ModelMetadata::SECTION_METHODS
+            | ModelMetadata::SECTION_RUNTIME_CONFIGURATION
+            | ModelMetadata::SECTION_CASTS,
+        )) {
+            return null;
+        }
+
         $columns = $metadata->schema()->all();
         $visible = $metadata->visible;
         $hidden = $metadata->hidden;

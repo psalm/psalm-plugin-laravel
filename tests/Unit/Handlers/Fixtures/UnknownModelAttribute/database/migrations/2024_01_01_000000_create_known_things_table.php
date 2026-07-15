@@ -13,10 +13,16 @@ return new class extends Migration {
             $table->string('email');
             $table->timestamps();
         });
+
+        Schema::create('dynamic_schema_things', function (Blueprint $table): void {
+            $column = 'real_col';
+            $table->string($column);
+        });
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('dynamic_schema_things');
         Schema::dropIfExists('known_things');
     }
 };

@@ -347,6 +347,32 @@ final class ModelSerializationShapeBuilderTest extends TestCase
         $this->assertNull($this->build());
     }
 
+    #[Test]
+    public function incomplete_runtime_or_cast_metadata_defers_to_the_stub(): void
+    {
+        foreach ([ModelMetadata::SECTION_RUNTIME_CONFIGURATION, ModelMetadata::SECTION_CASTS] as $incomplete) {
+            $this->override(
+                columns: ['id' => $this->col('id', SchemaColumn::TYPE_INT)],
+                completeSections: ModelMetadata::ALL_SECTIONS & ~$incomplete,
+            );
+
+            $this->assertNull($this->build());
+        }
+    }
+
+    #[Test]
+    public function incomplete_schema_still_allows_a_safe_append_only_open_shape(): void
+    {
+        $this->override(
+            columns: [],
+            accessors: ['fullname' => new LegacyAccessorInfo('fullname', Type::getString(), new MethodStorage())],
+            appends: ['full_name'],
+            completeSections: ModelMetadata::ALL_SECTIONS & ~ModelMetadata::SECTION_SCHEMA,
+        );
+
+        $this->assertSame('array{full_name?: string, ...<string, mixed>}', (string) $this->build());
+    }
+
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
@@ -398,6 +424,7 @@ final class ModelSerializationShapeBuilderTest extends TestCase
         array $appends = [],
         array $hidden = [],
         array $visible = [],
+        int $completeSections = ModelMetadata::ALL_SECTIONS,
     ): void {
         $metadata = new ModelMetadata(
             fqcn: WorkOrder::class,
@@ -430,6 +457,7 @@ final class ModelSerializationShapeBuilderTest extends TestCase
             scopesData: [],
             relationsData: [],
             knownPropertiesData: [],
+            completeSections: $completeSections,
         );
 
         ModelMetadataRegistryBuilder::overrideForTesting(WorkOrder::class, $metadata);

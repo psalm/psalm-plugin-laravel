@@ -54,10 +54,12 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PropertyOrigin;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TableSchema;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TraitFlags;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
+use Psalm\Progress\Progress;
 use Psalm\Progress\VoidProgress;
 use Psalm\Storage\AttributeStorage;
 use Psalm\Storage\ClassLikeStorage;
@@ -76,6 +78,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
@@ -90,6 +93,7 @@ final class ModelMetadataRegistryTest extends TestCase
     {
         ModelMetadataRegistryBuilder::reset();
         SchemaStateProvider::setSchema(new SchemaAggregator());
+        SectionFailureModel::$failures = [];
         $this->classLikeStorageProvider = new ClassLikeStorageProvider();
     }
 
@@ -187,7 +191,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame([], $metadata->primaryKey->uuidColumns);
         $casts = $metadata->casts();
         $this->assertArrayHasKey('allowed', $casts);
-        $this->assertSame('bool', $casts['allowed']->psalmType->getId());
+        $this->assertSame('bool|null', $casts['allowed']->psalmType->getId());
         $this->assertArrayNotHasKey('', $casts);
     }
 
@@ -453,6 +457,121 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $first);
         $this->assertSame($first, $second);
+    }
+
+    #[Test]
+    public function complete_empty_schema_is_distinct_from_unavailable_schema(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(SectionFailureModel::class, [HasUuids::class]);
+        $this->seedSchema('section_failure_models', []);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
+        $completeEmpty = $this->metadataFor(SectionFailureModel::class);
+
+        $this->assertSame([], $completeEmpty->schema()->all());
+        $this->assertTrue($completeEmpty->isComplete(ModelMetadata::SECTION_SCHEMA));
+        $this->assertFalse($completeEmpty->casts()['flag']->psalmType->isNullable());
+
+        ModelMetadataRegistryBuilder::reset();
+        SchemaStateProvider::setSchema(new SchemaAggregator());
+        ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
+        $unavailable = $this->metadataFor(SectionFailureModel::class);
+
+        $this->assertSame([], $unavailable->schema()->all());
+        $this->assertFalse($unavailable->isComplete(ModelMetadata::SECTION_SCHEMA));
+        $this->assertTrue($unavailable->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($unavailable->casts()['flag']->psalmType->isNullable());
+        $this->assertTrue($unavailable->casts()['code']->psalmType->hasMixed());
+    }
+
+    #[Test]
+    public function a_failed_section_preserves_independent_metadata(): void
+    {
+        $codebase = $this->makeCodebase();
+        $storage = $this->registerStorage(SectionFailureModel::class, [HasUuids::class]);
+        $this->defineAppearingMethod($storage, 'getLabelAttribute', Type::getString());
+
+        $expectations = [
+            'runtime configuration' => [ModelMetadata::SECTION_RUNTIME_CONFIGURATION],
+            'schema' => [ModelMetadata::SECTION_SCHEMA],
+            'casts' => [ModelMetadata::SECTION_CASTS],
+            'primary key' => [ModelMetadata::SECTION_PRIMARY_KEY],
+        ];
+
+        foreach ($expectations as $failure => $incompleteSections) {
+            ModelMetadataRegistryBuilder::reset();
+            $this->seedSchema('section_failure_models', [
+                new SchemaColumn('flag', SchemaColumn::TYPE_BOOL),
+                new SchemaColumn('code', SchemaColumn::TYPE_STRING),
+            ]);
+            SectionFailureModel::$failures = [$failure => true];
+
+            ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
+            $metadata = $this->metadataFor(SectionFailureModel::class);
+
+            $this->assertArrayHasKey('label', $metadata->accessors());
+            $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_METHODS));
+            foreach ($incompleteSections as $section) {
+                $this->assertFalse($metadata->isComplete($section), $failure);
+            }
+
+            if ($failure === 'runtime configuration') {
+                $this->assertTrue($metadata->isComplete(
+                    ModelMetadata::SECTION_SCHEMA
+                    | ModelMetadata::SECTION_CASTS
+                    | ModelMetadata::SECTION_PRIMARY_KEY,
+                ));
+                $this->assertTrue($metadata->schema()->has('flag'));
+                $this->assertSame('bool', $metadata->casts()['flag']->psalmType->getId());
+                $this->assertSame('string', $metadata->casts()['code']->psalmType->getId());
+                $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
+                $this->assertFalse($metadata->primaryKey->incrementing);
+            }
+
+            if ($failure === 'schema') {
+                $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+                $this->assertTrue($metadata->casts()['flag']->psalmType->isNullable());
+                $this->assertTrue($metadata->casts()['code']->psalmType->hasMixed());
+            }
+
+            if ($failure === 'casts') {
+                $this->assertTrue($metadata->schema()->has('flag'));
+                $this->assertNull(ModelPropertyHandler::resolveColumnType(
+                    $codebase,
+                    SectionFailureModel::class,
+                    'flag',
+                ));
+            }
+
+            if ($failure === 'primary key') {
+                $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+                $this->assertSame('bool', $metadata->casts()['flag']->psalmType->getId());
+            }
+        }
+    }
+
+    #[Test]
+    public function failures_warn_once_and_cached_partial_metadata_is_silent(): void
+    {
+        $progress = $this->createMock(Progress::class);
+        $progress->expects($this->once())
+            ->method('warning')
+            ->with($this->stringContains("warm-up failed for '" . SectionFailureModel::class . "'"));
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(SectionFailureModel::class, [HasUuids::class]);
+        SectionFailureModel::$failures = ['schema' => true, 'primary key' => true];
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
+        ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
+
+        $metadata = $this->metadataFor(SectionFailureModel::class);
+        $this->assertFalse($metadata->isComplete(
+            ModelMetadata::SECTION_SCHEMA | ModelMetadata::SECTION_PRIMARY_KEY,
+        ));
+        $this->assertTrue($metadata->isComplete(
+            ModelMetadata::SECTION_METHODS | ModelMetadata::SECTION_CASTS,
+        ));
     }
 
     // ---------------------------------------------------------------------
@@ -1278,14 +1397,14 @@ final class ModelMetadataRegistryTest extends TestCase
     // Helpers
     // ---------------------------------------------------------------------
 
-    private function makeCodebase(): Codebase
+    private function makeCodebase(?Progress $progress = null): Codebase
     {
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
 
         // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
         $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');
-        $progressProperty->setValue($codebase, new VoidProgress());
+        $progressProperty->setValue($codebase, $progress ?? new VoidProgress());
 
         return $codebase;
     }
@@ -1445,6 +1564,7 @@ final class ModelMetadataRegistryTest extends TestCase
             scopesData: [],
             relationsData: $relations,
             knownPropertiesData: [],
+            completeSections: ModelMetadata::ALL_SECTIONS,
         );
     }
 }

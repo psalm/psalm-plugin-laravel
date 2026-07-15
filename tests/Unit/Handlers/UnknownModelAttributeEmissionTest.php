@@ -41,12 +41,14 @@ final class UnknownModelAttributeEmissionTest extends TestCase
 
         // One finding per typo'd key, through each of the three receiver forms exercised by the
         // fixture: static::, self::, and a plain external class reference. The three "clean" call
-        // sites (makeClean, create_clean_from_outside) must stay silent — asserting an exact count
-        // proves both that the rule fires and that it does not over-fire.
+        // sites (makeClean, create_clean_from_outside) and the dynamically declared migration
+        // column must stay silent — asserting an exact count proves both that the rule fires and
+        // that it does not over-fire when a registered table has no statically parsed columns.
         $this->assertCount(3, $findings, "Expected exactly 3 UnknownModelAttribute findings, got:\n{$joined}");
         $this->assertStringContainsString("'nmae'", $joined, 'static::create() with a typo must be flagged.');
         $this->assertStringContainsString("'unknown_col'", $joined, 'self::create() with a typo must be flagged.');
         $this->assertStringContainsString("'bad_key'", $joined, 'A plain external Model::create() with a typo must be flagged.');
+        $this->assertStringNotContainsString("'real_col'", $joined, 'A dynamically declared migration column must not be flagged.');
         $this->assertSame(['info', 'info', 'info'], \array_column($findings, 'severity'));
     }
 
