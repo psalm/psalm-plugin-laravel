@@ -7,9 +7,9 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Metadata;
 /**
  * Boolean feature flags derived from the traits a model uses.
  *
- * Centralized so consumers don't each walk `ClassLikeStorage::$used_traits`
- * independently. {@see $usesTimestamps} reflects the `$timestamps` property
- * (false disables `created_at` / `updated_at` handling).
+ * Centralized so consumers classify the same recursively resolved Laravel trait graph.
+ * {@see $usesTimestamps} reflects the `$timestamps` property (false disables
+ * `created_at` / `updated_at` handling).
  *
  * @psalm-immutable
  * @psalm-api

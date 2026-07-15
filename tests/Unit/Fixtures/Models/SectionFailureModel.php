@@ -11,9 +11,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Casts\InboundOnlyCast;
 /** @internal fixture used by ModelMetadataRegistryTest */
 final class SectionFailureModel extends Model
 {
-    use HasUuids {
-        getKeyType as private getKeyTypeFromTrait;
-    }
+    use HasUuids;
 
     /** @var array<string, true> */
     public static array $failures = [];
@@ -38,21 +36,6 @@ final class SectionFailureModel extends Model
         $this->fail('schema');
 
         return parent::getTable();
-    }
-
-    /** @return array<string, string> */
-    public function getCasts(): array
-    {
-        $this->fail('casts');
-
-        return parent::getCasts();
-    }
-
-    public function getKeyType(): string
-    {
-        $this->fail('primary key');
-
-        return $this->getKeyTypeFromTrait();
     }
 
     private function fail(string $section): void

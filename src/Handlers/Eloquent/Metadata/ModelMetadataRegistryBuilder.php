@@ -9,10 +9,13 @@ use Illuminate\Database\Eloquent\Attributes\Connection;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Initialize;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Attributes\Visible;
+use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Concerns\HasUniqueStringIds;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
@@ -51,9 +54,8 @@ use Psalm\Type\Union;
 final class ModelMetadataRegistryBuilder
 {
     /**
-     * Pre-lowered trait FQCN keys. `ClassLikeStorage::$used_traits` is keyed by lowercased
-     * FQCN; keeping the comparison keys pre-lowered keeps `computeTraitFlags` a straight
-     * `isset()` per model without repeated `strtolower()` calls on the class constants.
+     * Pre-lowered trait FQCN keys. The recursive trait set is normalized once per model;
+     * keeping the comparison keys pre-lowered makes `computeTraitFlags` a straight `isset()`.
      *
      * Sanctum / Passport traits may not be installed — we reference them as strings rather
      * than as `::class` so missing packages don't break plugin loading.
@@ -63,6 +65,8 @@ final class ModelMetadataRegistryBuilder
     private const TRAIT_HAS_UUIDS_LC = 'illuminate\\database\\eloquent\\concerns\\hasuuids';
 
     private const TRAIT_HAS_ULIDS_LC = 'illuminate\\database\\eloquent\\concerns\\hasulids';
+
+    private const TRAIT_HAS_UNIQUE_STRING_IDS_LC = 'illuminate\\database\\eloquent\\concerns\\hasuniquestringids';
 
     private const TRAIT_HAS_FACTORY_LC = 'illuminate\\database\\eloquent\\factories\\hasfactory';
 
@@ -216,6 +220,7 @@ final class ModelMetadataRegistryBuilder
         // ModelMetadata and owns hook registration — no second reflection per model (Gotcha 8).
         $customBuilder = CustomTypeDetector::resolveCustomBuilderClass($codebase, $modelFqcn);
         $customCollection = CustomTypeDetector::resolveCustomCollectionClass($codebase, $modelFqcn);
+        $usedTraits = self::resolveUsedTraits($modelFqcn);
 
         // §6.3 step 2: an abstract base cannot be instantiated (newInstanceWithoutConstructor()
         // throws \Error, not \ReflectionException). Its instance-derived fields (schema, casts,
@@ -223,7 +228,7 @@ final class ModelMetadataRegistryBuilder
         if ($reflection->isAbstract()) {
             $metadata = self::computeForAbstract(
                 $modelFqcn,
-                $storage,
+                $usedTraits,
                 $reflection,
                 $customBuilder,
                 $customCollection,
@@ -255,7 +260,7 @@ final class ModelMetadataRegistryBuilder
                 ? self::computeForInstance(
                     $codebase,
                     $modelFqcn,
-                    $storage,
+                    $usedTraits,
                     $instance,
                     $reflection,
                     $customBuilder,
@@ -269,7 +274,7 @@ final class ModelMetadataRegistryBuilder
                 )
                 : self::computeWithoutInstance(
                     $modelFqcn,
-                    $storage,
+                    $usedTraits,
                     $reflection,
                     $customBuilder,
                     $customCollection,
@@ -290,6 +295,7 @@ final class ModelMetadataRegistryBuilder
      * Concrete path: derive instance-backed fields via Laravel's public getters.
      *
      * @param class-string<Model>                   $modelFqcn
+     * @param array<lowercase-string, string> $usedTraits
      * @param \ReflectionClass<Model>               $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null    $customBuilder
      * @param class-string<\Illuminate\Database\Eloquent\Collection>|null $customCollection
@@ -303,7 +309,7 @@ final class ModelMetadataRegistryBuilder
     private static function computeForInstance(
         Codebase $codebase,
         string $modelFqcn,
-        ClassLikeStorage $storage,
+        array $usedTraits,
         Model $instance,
         \ReflectionClass $reflection,
         ?string $customBuilder,
@@ -315,22 +321,25 @@ final class ModelMetadataRegistryBuilder
         int &$completeSections,
         array &$failures,
     ): ModelMetadata {
-        $baseTraits = self::computeTraitFlags($storage, true);
-        $uniqueIdsReady = true;
-        if ($baseTraits->hasUuids || $baseTraits->hasUlids) {
-            $uniqueIdsReady = self::computeSection(
-                0,
-                'unique-id initialization',
-                $completeSections,
-                $failures,
-                static function () use ($instance): bool {
-                    self::flipUsesUniqueIds($instance);
+        $baseTraits = self::computeTraitFlags($usedTraits, true);
+        $usesUniqueStringIds = isset($usedTraits[self::TRAIT_HAS_UNIQUE_STRING_IDS_LC]);
+        $primaryKeyReady = self::hasAuthoritativeKeyConfiguration($reflection, $usedTraits);
+        if ($primaryKeyReady && $usesUniqueStringIds) {
+            $primaryKeyReady = self::hasFrameworkUniqueIdInitializer($reflection)
+                && self::computeSection(
+                    0,
+                    'unique-id initialization',
+                    $completeSections,
+                    $failures,
+                    static function () use ($instance): bool {
+                        self::flipUsesUniqueIds($instance);
 
-                    return true;
-                },
-                false,
-            );
+                        return true;
+                    },
+                    false,
+                );
         }
+        $castsReady = $primaryKeyReady && self::hasAuthoritativeCastConfiguration($reflection, $usedTraits);
 
         $attributesApplied = self::computeSection(
             0,
@@ -351,8 +360,8 @@ final class ModelMetadataRegistryBuilder
             'runtime configuration',
             $completeSections,
             $failures,
-            static function () use ($modelFqcn, $storage, $instance, &$runtimeRead): array {
-                $runtime = self::readRuntimeConfiguration($modelFqcn, $storage, $instance);
+            static function () use ($modelFqcn, $usedTraits, $instance, &$runtimeRead): array {
+                $runtime = self::readRuntimeConfiguration($modelFqcn, $usedTraits, $instance);
                 $runtimeRead = true;
 
                 return $runtime;
@@ -377,7 +386,7 @@ final class ModelMetadataRegistryBuilder
         }
 
         $schemaComplete = ($completeSections & ModelMetadata::SECTION_SCHEMA) !== 0;
-        $casts = $uniqueIdsReady
+        $casts = $castsReady
             ? self::computeSection(
                 ModelMetadata::SECTION_CASTS,
                 'casts',
@@ -394,13 +403,16 @@ final class ModelMetadataRegistryBuilder
                 [],
             )
             : [];
-        $primaryKey = $uniqueIdsReady
+        $primaryKey = $primaryKeyReady
             ? self::computeSection(
                 ModelMetadata::SECTION_PRIMARY_KEY,
                 'primary key',
                 $completeSections,
                 $failures,
-                static fn(): PrimaryKeyInfo => self::computePrimaryKey($instance, $runtime['traits']),
+                static fn(): PrimaryKeyInfo => self::computePrimaryKey(
+                    $instance,
+                    $usesUniqueStringIds,
+                ),
                 self::defaultPrimaryKey(),
             )
             : self::defaultPrimaryKey();
@@ -440,6 +452,7 @@ final class ModelMetadataRegistryBuilder
      * receivers (issue #901) inherit a populated entry. Mirrors #1058's storage-vs-instance split.
      *
      * @param class-string<Model>                   $modelFqcn
+     * @param array<lowercase-string, string> $usedTraits
      * @param \ReflectionClass<Model>               $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null    $customBuilder
      * @param class-string<\Illuminate\Database\Eloquent\Collection>|null $customCollection
@@ -452,7 +465,7 @@ final class ModelMetadataRegistryBuilder
      */
     private static function computeForAbstract(
         string $modelFqcn,
-        ClassLikeStorage $storage,
+        array $usedTraits,
         \ReflectionClass $reflection,
         ?string $customBuilder,
         ?string $customCollection,
@@ -478,19 +491,15 @@ final class ModelMetadataRegistryBuilder
         // declared on the abstract base populate it).
         $schema = new TableSchema([]);
         $appends = self::stringListDefault($defaults, 'appends');
-        $primaryKey = self::computeSection(
-            ModelMetadata::SECTION_PRIMARY_KEY,
-            'primary key',
-            $completeSections,
-            $failures,
-            static fn(): PrimaryKeyInfo => self::computePrimaryKeyFromDefaults($defaults),
-            self::defaultPrimaryKey(),
-        );
+        // Constructorless defaults cannot reproduce trait initializers or custom key hooks.
+        // Keep the snapshot for diagnostics, but do not mark it authoritative now that getKey()
+        // consumes the primary-key completeness bit for abstract receivers.
+        $primaryKey = self::computePrimaryKeyFromDefaults($defaults);
 
         return new ModelMetadata(
             fqcn: $modelFqcn,
             primaryKey: $primaryKey,
-            traits: self::computeTraitFlags($storage, self::asBool($defaults['timestamps'] ?? null, true)),
+            traits: self::computeTraitFlags($usedTraits, self::asBool($defaults['timestamps'] ?? null, true)),
             fillable: self::stringListDefault($defaults, 'fillable'),
             // Laravel's base Model defaults $guarded to ['*'] (guard-all); the default-property
             // read returns exactly that, so no special-casing is needed here.
@@ -520,6 +529,7 @@ final class ModelMetadataRegistryBuilder
      * Preserve static metadata when a concrete model cannot be instantiated.
      *
      * @param class-string<Model> $modelFqcn
+     * @param array<lowercase-string, string> $usedTraits
      * @param \ReflectionClass<Model> $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null $customBuilder
      * @param class-string<\Illuminate\Database\Eloquent\Collection>|null $customCollection
@@ -531,7 +541,7 @@ final class ModelMetadataRegistryBuilder
      */
     private static function computeWithoutInstance(
         string $modelFqcn,
-        ClassLikeStorage $storage,
+        array $usedTraits,
         \ReflectionClass $reflection,
         ?string $customBuilder,
         ?string $customCollection,
@@ -548,7 +558,7 @@ final class ModelMetadataRegistryBuilder
         return new ModelMetadata(
             fqcn: $modelFqcn,
             primaryKey: self::defaultPrimaryKey(),
-            traits: self::computeTraitFlags($storage, self::asBool($defaults['timestamps'] ?? null, true)),
+            traits: self::computeTraitFlags($usedTraits, self::asBool($defaults['timestamps'] ?? null, true)),
             fillable: self::stringListDefault($defaults, 'fillable'),
             guarded: self::stringListDefault($defaults, 'guarded'),
             appends: $appends,
@@ -585,13 +595,14 @@ final class ModelMetadataRegistryBuilder
      *     morphAlias: string|null
      * }
      * @param class-string<Model> $modelFqcn
+     * @param array<lowercase-string, string> $usedTraits
      */
     private static function readRuntimeConfiguration(
         string $modelFqcn,
-        ClassLikeStorage $storage,
+        array $usedTraits,
         Model $instance,
     ): array {
-        $traits = self::computeTraitFlags($storage, $instance->usesTimestamps());
+        $traits = self::computeTraitFlags($usedTraits, $instance->usesTimestamps());
 
         return [
             'traits' => $traits,
@@ -1169,11 +1180,33 @@ final class ModelMetadataRegistryBuilder
         $known[$key] = ($known[$key] ?? new PropertyOrigins([]))->with($origin);
     }
 
-    /** @psalm-mutation-free */
-    private static function computeTraitFlags(ClassLikeStorage $storage, bool $usesTimestamps): TraitFlags
+    /**
+     * Resolve the same recursive trait closure Laravel uses for model initialization.
+     *
+     * Reading only Psalm's direct `used_traits` entry misses transparent application wrappers
+     * such as `App\Models\Concerns\HasUuids`, leaving constructorless metadata in the base
+     * integer-key state. `class_uses_recursive()` includes nested and inherited traits and is
+     * available on every supported Laravel version.
+     *
+     * @param class-string<Model> $modelFqcn
+     * @return array<lowercase-string, string>
+     */
+    private static function resolveUsedTraits(string $modelFqcn): array
     {
-        $usedTraits = $storage->used_traits;
+        $usedTraits = [];
+        foreach (\class_uses_recursive($modelFqcn) as $trait) {
+            $usedTraits[\strtolower($trait)] = $trait;
+        }
 
+        return $usedTraits;
+    }
+
+    /**
+     * @param array<lowercase-string, string> $usedTraits
+     * @psalm-pure
+     */
+    private static function computeTraitFlags(array $usedTraits, bool $usesTimestamps): TraitFlags
+    {
         return new TraitFlags(
             hasSoftDeletes: isset($usedTraits[self::TRAIT_SOFT_DELETES_LC]),
             hasUuids: isset($usedTraits[self::TRAIT_HAS_UUIDS_LC]),
@@ -1193,18 +1226,22 @@ final class ModelMetadataRegistryBuilder
     /**
      * Compute primary-key info from a model instance.
      *
-     * HasUuids / HasUlids override `getKeyType()` / `getIncrementing()` / `uniqueIds()`
-     * by reading `$this->usesUniqueIds`. The earlier unique-id initialization section has flipped
-     * that flag for UUID/ULID models, so the instance getters return the runtime-correct
-     * values here (including any user override of `uniqueIds()` returning multiple cols).
+     * HasUniqueStringIds (directly or through HasUuids / HasUlids) overrides `getKeyType()` /
+     * `getIncrementing()` / `uniqueIds()` by reading `$this->usesUniqueIds`. The earlier unique-id
+     * initialization section has flipped that flag, so the instance getters return the
+     * runtime-correct values here (including a user override returning multiple columns).
      */
-    private static function computePrimaryKey(Model $instance, TraitFlags $traits): PrimaryKeyInfo
+    private static function computePrimaryKey(Model $instance, bool $usesUniqueStringIds): PrimaryKeyInfo
     {
         $keyType = $instance->getKeyType();
-        $type = $keyType === 'string' ? PrimaryKeyType::String : PrimaryKeyType::Integer;
+        $type = match ($keyType) {
+            'int' => PrimaryKeyType::Integer,
+            'string' => PrimaryKeyType::String,
+            default => throw new \UnexpectedValueException("Unsupported Eloquent key type '{$keyType}'"),
+        };
 
         $uuidColumns = [];
-        if ($traits->hasUuids || $traits->hasUlids) {
+        if ($usesUniqueStringIds) {
             $uuidColumns = self::filterStringList($instance->uniqueIds());
         }
 
@@ -1604,6 +1641,186 @@ final class ModelMetadataRegistryBuilder
     }
 
     /**
+     * Constructorless metadata is authoritative only when Laravel owns the instance-mutating
+     * lifecycle and configuration readers, and no unreplayed class attribute changes the primary
+     * key. Static boot hooks are harmless while those readers remain framework-owned; application
+     * readers, initializers, constructor dispatch points, and Laravel 13 key attributes fall back.
+     *
+     * @param \ReflectionClass<Model> $reflection
+     * @param array<lowercase-string, string> $usedTraits
+     */
+    private static function hasAuthoritativeKeyConfiguration(\ReflectionClass $reflection, array $usedTraits): bool
+    {
+        $usesUniqueStringIds = isset($usedTraits[self::TRAIT_HAS_UNIQUE_STRING_IDS_LC]);
+        $lifecycleMethods = [
+            '__construct',
+            'bootIfNotBooted',
+            'fireModelEvent',
+            'initializeTraits',
+            'initializeModelAttributes',
+            'syncOriginal',
+            'fill',
+        ];
+        if ($usesUniqueStringIds) {
+            // Model::boot() populates the initializer list through bootTraits(). An application
+            // override can suppress initializeHasUniqueStringIds(), making our reflective flip diverge.
+            $lifecycleMethods[] = 'boot';
+            $lifecycleMethods[] = 'bootTraits';
+        }
+
+        foreach ($lifecycleMethods as $methodName) {
+            if (!\method_exists(Model::class, $methodName)) {
+                continue;
+            }
+
+            if (!self::reflectionMethodsHaveSameSource(
+                $reflection->getMethod($methodName),
+                new \ReflectionMethod(Model::class, $methodName),
+            )) {
+                return false;
+            }
+        }
+
+        $configurationReaders = ['getKeyName', 'getKeyType', 'getIncrementing'];
+        if ($usesUniqueStringIds) {
+            $configurationReaders[] = 'uniqueIds';
+            $configurationReaders[] = 'usesUniqueIds';
+        }
+        foreach ($configurationReaders as $methodName) {
+            if (!$reflection->hasMethod($methodName)
+                || !self::reflectionMethodComesFromIlluminate($reflection->getMethod($methodName), $usedTraits)
+            ) {
+                return false;
+            }
+        }
+
+        foreach ($usedTraits as $trait) {
+            $methodName = 'initialize' . \class_basename($trait);
+            if ($reflection->hasMethod($methodName)
+                && !self::reflectionMethodComesFromIlluminate($reflection->getMethod($methodName), $usedTraits)
+            ) {
+                return false;
+            }
+        }
+
+        if (\class_exists(Initialize::class)) {
+            foreach ($reflection->getMethods() as $method) {
+                if ($method->getAttributes(Initialize::class) === []) {
+                    continue;
+                }
+                if (!self::reflectionMethodComesFromIlluminate($method, $usedTraits)) {
+                    return false;
+                }
+            }
+        }
+
+        try {
+            $table = \class_exists(Table::class) ? self::classAttribute($reflection, Table::class) : null;
+
+            return ($table === null
+                    || ($table->key === null && $table->keyType === null && $table->incrementing === null))
+                && (!\class_exists(WithoutIncrementing::class)
+                    || self::classAttribute($reflection, WithoutIncrementing::class) === null);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Casts add two requirements to key authority: `getCasts()` itself must be framework-owned,
+     * and Model::boot() must populate Laravel's trait initializer list. In particular,
+     * initializeHasAttributes() merges the model's casts() method into the cast inventory.
+     *
+     * @param \ReflectionClass<Model> $reflection
+     * @param array<lowercase-string, string> $usedTraits
+     */
+    private static function hasAuthoritativeCastConfiguration(\ReflectionClass $reflection, array $usedTraits): bool
+    {
+        if (!$reflection->hasMethod('getCasts')
+            || !self::reflectionMethodComesFromIlluminate($reflection->getMethod('getCasts'), $usedTraits)
+        ) {
+            return false;
+        }
+
+        foreach (['boot', 'bootTraits'] as $methodName) {
+            if (!\method_exists(Model::class, $methodName)) {
+                continue;
+            }
+            if (!self::reflectionMethodsHaveSameSource(
+                $reflection->getMethod($methodName),
+                new \ReflectionMethod(Model::class, $methodName),
+            )) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Reflection attributes trait-imported methods to the consuming model. Compare source locations
+     * with the recursively used Illuminate traits to distinguish framework hooks from application
+     * methods without relying on a vendor filesystem path.
+     *
+     * @param array<lowercase-string, string> $usedTraits
+     * @psalm-pure
+     */
+    private static function reflectionMethodComesFromIlluminate(
+        \ReflectionMethod $method,
+        array $usedTraits,
+    ): bool {
+        if (\str_starts_with($method->getDeclaringClass()->getName(), 'Illuminate\\')) {
+            return true;
+        }
+
+        foreach ($usedTraits as $trait) {
+            if (!\str_starts_with($trait, 'Illuminate\\')) {
+                continue;
+            }
+            if (!\trait_exists($trait)) {
+                continue;
+            }
+
+            $traitReflection = new \ReflectionClass($trait);
+            if (!$traitReflection->hasMethod($method->getName())) {
+                continue;
+            }
+
+            $traitMethod = $traitReflection->getMethod($method->getName());
+            if (self::reflectionMethodsHaveSameSource($method, $traitMethod)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    /** @psalm-pure */
+    private static function reflectionMethodsHaveSameSource(
+        \ReflectionMethod $actual,
+        \ReflectionMethod $expected,
+    ): bool {
+        return $actual->getFileName() === $expected->getFileName()
+            && $actual->getStartLine() === $expected->getStartLine();
+    }
+
+    /**
+     * Constructorless metadata may replay the framework initializer's single known state change,
+     * but must not guess what an application override does. Reflection reports an imported trait
+     * method as declared on the model, so compare source locations with Laravel's implementation.
+     */
+    private static function hasFrameworkUniqueIdInitializer(\ReflectionClass $reflection): bool
+    {
+        try {
+            $actual = $reflection->getMethod('initializeHasUniqueStringIds');
+            $framework = new \ReflectionMethod(HasUniqueStringIds::class, 'initializeHasUniqueStringIds');
+        } catch (\ReflectionException) {
+            return false;
+        }
+
+        return self::reflectionMethodsHaveSameSource($actual, $framework);
+    }
+
+    /**
      * Apply the class-level PHP-attribute config that {@see Model}::__construct() sets via
      * `initializeTraits()` / `initializeModelAttributes()` — both skipped by
      * `newInstanceWithoutConstructor()`. Mutates `$instance` (like {@see flipUsesUniqueIds()}) so every
@@ -1613,12 +1830,10 @@ final class ModelMetadataRegistryBuilder
      * union-merge into the property list; `#[Guarded]`/`#[Unguarded]` only replace the default `['*']`;
      * `#[Connection]`/`#[Table]` fill a null.
      *
-     * Known gap (NOT applied): `#[Table]`'s `key` / `keyType` / `incrementing` sub-overrides and
-     * `#[WithoutIncrementing]`. Laravel's `initializeModelAttributes()` feeds these into the primary key
-     * (`primaryKey ← $table->key` when still `'id'`, etc.), but {@see computePrimaryKey()} reads only the
-     * raw `getKeyName()`/`getKeyType()`/`getIncrementing()` defaults and never consults `#[Table]`, so an
-     * attribute-declared PK is not picked up. Deferred as a separate PK-path change; the table NAME (the
-     * serialization-relevant part) IS applied. (Timestamps are moot — the registry stores no such field.)
+     * Key-affecting `#[Table]` options and `#[WithoutIncrementing]` are deliberately not replayed here.
+     * {@see hasAuthoritativeKeyConfiguration()} keeps the casts and primary-key sections incomplete when
+     * they are present, while the table name remains available to schema/serialization metadata.
+     * (Timestamps are moot — the registry stores no such field.)
      *
      * The attribute classes exist from Laravel 13.0; on older lines `getAttributes()` matches nothing and
      * every branch no-ops (so the plugin stays correct across the 12.4+ support range).

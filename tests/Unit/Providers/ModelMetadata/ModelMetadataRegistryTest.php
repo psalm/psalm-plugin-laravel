@@ -7,25 +7,29 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Providers\ModelMetadata;
 use App\Builders\WorkOrderBuilder;
 use App\Collections\WorkOrderCollection;
 use App\Models\AbstractDocument;
+use App\Models\AbstractWrappedUuidModel;
 use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\CustomPkUuidModel;
+use App\Models\FactoryModel;
 use App\Models\KeylessPermission;
 use App\Models\SpecializationPivot;
 use App\Models\UlidModel;
 use App\Models\UnguardedModel;
+use App\Models\UniqueStringIdModel;
 use App\Models\UuidModel;
 use App\Models\WorkOrder;
+use App\Models\WrappedUuidModel;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -54,7 +58,6 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PropertyOrigin;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TableSchema;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TraitFlags;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
@@ -73,13 +76,20 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AbstractKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributePrimaryKeyModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeWithoutIncrementingModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\BootDependentKeyModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomUniqueIdInitializerModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SkippedTraitInitializationModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\StatefulUniqueIdInitializerModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnrelatedBootTraitModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
 #[CoversClass(ModelMetadataRegistryBuilder::class)]
@@ -100,6 +110,9 @@ final class ModelMetadataRegistryTest extends TestCase
     #[\Override]
     protected function tearDown(): void
     {
+        BootDependentKeyModel::resetKeyConfiguration();
+        SkippedTraitInitializationModel::clearBootedModels();
+        UnrelatedBootTraitModel::clearBootedModels();
         ModelMetadataRegistryBuilder::reset();
     }
 
@@ -259,6 +272,48 @@ final class ModelMetadataRegistryTest extends TestCase
         // #[Guarded] replaces the default ['*'] denylist; #[Connection] fills the null connection.
         $this->assertSame(['attr_guarded'], $metadata->guarded);
         $this->assertSame('attr_connection', $metadata->connection);
+    }
+
+    #[Test]
+    public function key_attributes_keep_constructorless_key_metadata_incomplete(): void
+    {
+        if (!class_exists(Table::class) || !property_exists(Table::class, 'key')) {
+            self::markTestSkipped('Eloquent primary-key attributes require Laravel >= 13.3.');
+        }
+
+        $runtime = new AttributePrimaryKeyModel();
+        $this->assertSame('external_id', $runtime->getKeyName());
+        $this->assertSame('string', $runtime->getKeyType());
+        $this->assertFalse($runtime->getIncrementing());
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AttributePrimaryKeyModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AttributePrimaryKeyModel::class);
+
+        $metadata = $this->metadataFor(AttributePrimaryKeyModel::class);
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+    }
+
+    #[Test]
+    public function without_incrementing_attribute_keeps_constructorless_key_metadata_incomplete(): void
+    {
+        if (!class_exists(WithoutIncrementing::class)) {
+            self::markTestSkipped('Eloquent primary-key attributes require Laravel >= 13.3.');
+        }
+
+        $runtime = new AttributeWithoutIncrementingModel();
+        $this->assertFalse($runtime->getIncrementing());
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AttributeWithoutIncrementingModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AttributeWithoutIncrementingModel::class);
+
+        $metadata = $this->metadataFor(AttributeWithoutIncrementingModel::class);
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
     }
 
     #[Test]
@@ -495,8 +550,6 @@ final class ModelMetadataRegistryTest extends TestCase
         $expectations = [
             'runtime configuration' => [ModelMetadata::SECTION_RUNTIME_CONFIGURATION],
             'schema' => [ModelMetadata::SECTION_SCHEMA],
-            'casts' => [ModelMetadata::SECTION_CASTS],
-            'primary key' => [ModelMetadata::SECTION_PRIMARY_KEY],
         ];
 
         foreach ($expectations as $failure => $incompleteSections) {
@@ -535,19 +588,6 @@ final class ModelMetadataRegistryTest extends TestCase
                 $this->assertTrue($metadata->casts()['code']->psalmType->hasMixed());
             }
 
-            if ($failure === 'casts') {
-                $this->assertTrue($metadata->schema()->has('flag'));
-                $this->assertNull(ModelPropertyHandler::resolveColumnType(
-                    $codebase,
-                    SectionFailureModel::class,
-                    'flag',
-                ));
-            }
-
-            if ($failure === 'primary key') {
-                $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
-                $this->assertSame('bool', $metadata->casts()['flag']->psalmType->getId());
-            }
         }
     }
 
@@ -560,15 +600,14 @@ final class ModelMetadataRegistryTest extends TestCase
             ->with($this->stringContains("warm-up failed for '" . SectionFailureModel::class . "'"));
         $codebase = $this->makeCodebase($progress);
         $this->registerStorage(SectionFailureModel::class, [HasUuids::class]);
-        SectionFailureModel::$failures = ['schema' => true, 'primary key' => true];
+        SectionFailureModel::$failures = ['schema' => true];
 
         ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
         ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
 
         $metadata = $this->metadataFor(SectionFailureModel::class);
-        $this->assertFalse($metadata->isComplete(
-            ModelMetadata::SECTION_SCHEMA | ModelMetadata::SECTION_PRIMARY_KEY,
-        ));
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_SCHEMA));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
         $this->assertTrue($metadata->isComplete(
             ModelMetadata::SECTION_METHODS | ModelMetadata::SECTION_CASTS,
         ));
@@ -785,6 +824,148 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
+    public function wrapped_has_uuids_trait_yields_string_primary_key(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(WrappedUuidModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, WrappedUuidModel::class);
+
+        $metadata = $this->metadataFor(WrappedUuidModel::class);
+        $this->assertTrue($metadata->traits->hasUuids);
+        $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+        $this->assertSame(['id'], $metadata->primaryKey->uuidColumns);
+        $this->assertArrayNotHasKey('id', $metadata->casts());
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+    }
+
+    #[Test]
+    public function direct_has_unique_string_ids_trait_yields_string_primary_key(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(UniqueStringIdModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, UniqueStringIdModel::class);
+
+        $metadata = $this->metadataFor(UniqueStringIdModel::class);
+        $this->assertFalse($metadata->traits->hasUuids);
+        $this->assertFalse($metadata->traits->hasUlids);
+        $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
+        $this->assertFalse($metadata->primaryKey->incrementing);
+        $this->assertSame(['id'], $metadata->primaryKey->uuidColumns);
+        $this->assertArrayNotHasKey('id', $metadata->casts());
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+    }
+
+    #[Test]
+    public function custom_unique_id_initializer_keeps_key_metadata_incomplete(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(CustomUniqueIdInitializerModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, CustomUniqueIdInitializerModel::class);
+
+        $metadata = $this->metadataFor(CustomUniqueIdInitializerModel::class);
+        $this->assertTrue($metadata->traits->hasUuids);
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+    }
+
+    #[Test]
+    public function additional_trait_initializer_keeps_key_metadata_incomplete(): void
+    {
+        $runtimeModel = new StatefulUniqueIdInitializerModel();
+        $this->assertSame('string', $runtimeModel->getKeyType());
+        $this->assertFalse($runtimeModel->getIncrementing());
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(StatefulUniqueIdInitializerModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, StatefulUniqueIdInitializerModel::class);
+
+        $metadata = $this->metadataFor(StatefulUniqueIdInitializerModel::class);
+        $this->assertTrue($metadata->traits->hasUuids);
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+    }
+
+    #[Test]
+    public function boot_dependent_key_configuration_is_not_authoritative(): void
+    {
+        BootDependentKeyModel::resetKeyConfiguration();
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(BootDependentKeyModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, BootDependentKeyModel::class);
+
+        $metadata = $this->metadataFor(BootDependentKeyModel::class);
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+
+        $runtime = new BootDependentKeyModel();
+        $this->assertSame('string', $runtime->getKeyType());
+        $this->assertFalse($runtime->getIncrementing());
+
+        BootDependentKeyModel::resetKeyConfiguration();
+    }
+
+    #[Test]
+    public function unrelated_trait_boot_hook_does_not_hide_key_or_cast_metadata(): void
+    {
+        UnrelatedBootTraitModel::$bootHookRan = false;
+        UnrelatedBootTraitModel::clearBootedModels();
+
+        $runtime = new UnrelatedBootTraitModel();
+        $this->assertTrue(UnrelatedBootTraitModel::$bootHookRan);
+        $this->assertSame('int', $runtime->getKeyType());
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(UnrelatedBootTraitModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, UnrelatedBootTraitModel::class);
+
+        $metadata = $this->metadataFor(UnrelatedBootTraitModel::class);
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+
+        UnrelatedBootTraitModel::clearBootedModels();
+    }
+
+    #[Test]
+    public function skipped_trait_initialization_only_invalidates_cast_metadata(): void
+    {
+        SkippedTraitInitializationModel::clearBootedModels();
+        $runtime = new SkippedTraitInitializationModel();
+        $this->assertArrayNotHasKey('flag', $runtime->getCasts());
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(SkippedTraitInitializationModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, SkippedTraitInitializationModel::class);
+
+        $metadata = $this->metadataFor(SkippedTraitInitializationModel::class);
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+
+        SkippedTraitInitializationModel::clearBootedModels();
+    }
+
+    #[Test]
+    public function abstract_wrapped_uuid_key_metadata_is_not_authoritative(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AbstractWrappedUuidModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AbstractWrappedUuidModel::class);
+
+        $metadata = $this->metadataFor(AbstractWrappedUuidModel::class);
+        $this->assertTrue($metadata->traits->hasUuids);
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+    }
+
+    #[Test]
     public function has_uuids_does_not_inject_bogus_int_cast_on_primary_key(): void
     {
         // Regression: before the $usesUniqueIds reflective flip, $instance->getCasts()
@@ -927,11 +1108,11 @@ final class ModelMetadataRegistryTest extends TestCase
     public function has_factory_trait_is_flagged(): void
     {
         $codebase = $this->makeCodebase();
-        $this->registerStorage(Customer::class, [HasFactory::class, SoftDeletes::class]);
+        $this->registerStorage(FactoryModel::class);
 
-        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
+        ModelMetadataRegistryBuilder::warmUp($codebase, FactoryModel::class);
 
-        $metadata = ModelMetadataRegistry::for(Customer::class);
+        $metadata = ModelMetadataRegistry::for(FactoryModel::class);
         $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
         $this->assertTrue($metadata->traits->hasFactory);
     }
