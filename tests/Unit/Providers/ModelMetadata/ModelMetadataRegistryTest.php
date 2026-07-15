@@ -84,6 +84,8 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomUniqueIdInitializerModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ParentBootDelegatingModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ParentBootThroughSuppressingBaseModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SkippedTraitInitializationModel;
@@ -950,6 +952,38 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
 
         SkippedTraitInitializationModel::clearBootedModels();
+    }
+
+    #[Test]
+    public function parent_boot_delegation_keeps_cast_metadata_authoritative(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(ParentBootDelegatingModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ParentBootDelegatingModel::class);
+
+        $metadata = $this->metadataFor(ParentBootDelegatingModel::class);
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+    }
+
+    #[Test]
+    public function parent_boot_delegation_must_reach_laravels_model_boot(): void
+    {
+        ParentBootThroughSuppressingBaseModel::clearBootedModels();
+        $runtime = new ParentBootThroughSuppressingBaseModel();
+        $this->assertArrayNotHasKey('flag', $runtime->getCasts());
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(ParentBootThroughSuppressingBaseModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ParentBootThroughSuppressingBaseModel::class);
+
+        $metadata = $this->metadataFor(ParentBootThroughSuppressingBaseModel::class);
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+
+        ParentBootThroughSuppressingBaseModel::clearBootedModels();
     }
 
     #[Test]

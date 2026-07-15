@@ -22,8 +22,9 @@ use Psalm\Type\Union;
  * Resolution priority:
  * 1. User-defined @property PHPDoc (detected via pseudo_property_get_types) → defers (returns null)
  * 2. Accessor method (handled by ModelPropertyAccessorHandler) → defers (returns null)
- * 3. Cast override → CastInfo::$psalmType (pre-resolved at warm-up)
- * 4. Schema column type → mapped Psalm type
+ * 3. Incomplete cast inventory → mixed for migration-known columns
+ * 4. Cast override → CastInfo::$psalmType (pre-resolved at warm-up)
+ * 5. Schema column type → mapped Psalm type
  *
  * Phase 1 of the registry migration: the column/cast DATA now comes from
  * {@see ModelMetadataRegistry::for()} (warmed up during `AfterCodebasePopulated`)
@@ -174,15 +175,18 @@ final class ModelPropertyHandler
             return null;
         }
 
-        // An incomplete cast inventory cannot prove that a schema column is uncast.
-        if (!$metadata->isComplete(ModelMetadata::SECTION_CASTS)) {
-            return null;
-        }
-
         // Exact-case lookup matches Eloquent's case-sensitive attribute semantics.
         $column = $metadata->schema()->column($columnName);
         if (!$column instanceof ColumnInfo) {
             return null;
+        }
+
+        // An incomplete cast inventory cannot prove that a schema column is uncast. Still return a
+        // type after the existence provider has claimed this migration-backed magic property;
+        // returning null makes Psalm fall through to native storage and crash because no such
+        // native property exists.
+        if (!$metadata->isComplete(ModelMetadata::SECTION_CASTS)) {
+            return Type::getMixed();
         }
 
         $casts = $metadata->casts();

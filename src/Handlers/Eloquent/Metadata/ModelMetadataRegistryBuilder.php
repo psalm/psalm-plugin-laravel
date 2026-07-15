@@ -1731,8 +1731,9 @@ final class ModelMetadataRegistryBuilder
 
     /**
      * Casts add two requirements to key authority: `getCasts()` itself must be framework-owned,
-     * and Model::boot() must populate Laravel's trait initializer list. In particular,
-     * initializeHasAttributes() merges the model's casts() method into the cast inventory.
+     * and Laravel's trait initializer list must be populated. A model may safely extend booting
+     * when its first statement delegates to `parent::boot()`; a non-delegating override can skip
+     * initializeHasAttributes(), which controls whether the model's casts() method is applied.
      *
      * @param \ReflectionClass<Model> $reflection
      * @param array<lowercase-string, string> $usedTraits
@@ -1750,15 +1751,81 @@ final class ModelMetadataRegistryBuilder
                 continue;
             }
 
-            if (!self::reflectionMethodsHaveSameSource(
-                $reflection->getMethod($methodName),
-                new \ReflectionMethod(Model::class, $methodName),
-            )) {
-                return false;
+            $actual = $reflection->getMethod($methodName);
+            if (self::reflectionMethodsHaveSameSource($actual, new \ReflectionMethod(Model::class, $methodName))) {
+                continue;
             }
+
+            if ($methodName === 'boot' && self::bootChainDelegatesToModel($actual)) {
+                continue;
+            }
+
+            return false;
         }
 
         return true;
+    }
+
+    /** Prove that every application override delegates until Laravel's Model::boot() is reached. */
+    private static function bootChainDelegatesToModel(\ReflectionMethod $method): bool
+    {
+        $modelBoot = new \ReflectionMethod(Model::class, 'boot');
+        while (!self::reflectionMethodsHaveSameSource($method, $modelBoot)) {
+            if (!self::methodBeginsWithParentBootCall($method)) {
+                return false;
+            }
+
+            $parent = $method->getDeclaringClass()->getParentClass();
+            if (!$parent instanceof \ReflectionClass || !$parent->hasMethod('boot')) {
+                return false;
+            }
+
+            $method = $parent->getMethod('boot');
+        }
+
+        return true;
+    }
+
+    /**
+     * Prove the common safe boot extension shape without executing application code. Requiring
+     * `parent::boot()` to be the first top-level statement excludes conditional or late delegation;
+     * comments and whitespace are ignored by the tokenizer.
+     *
+     * @psalm-suppress MissingPureAnnotation Source inspection is read-only but filesystem-dependent.
+     */
+    private static function methodBeginsWithParentBootCall(\ReflectionMethod $method): bool
+    {
+        $fileName = $method->getFileName();
+        if (!\is_string($fileName)) {
+            return false;
+        }
+
+        $lines = @\file($fileName);
+        if (!\is_array($lines)) {
+            return false;
+        }
+
+        $source = \implode('', \array_slice(
+            $lines,
+            $method->getStartLine() - 1,
+            $method->getEndLine() - $method->getStartLine() + 1,
+        ));
+        $tokens = \token_get_all("<?php\n" . $source);
+        $significant = [];
+        foreach ($tokens as $token) {
+            if (\is_array($token)
+                && \in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT, T_OPEN_TAG], true)
+            ) {
+                continue;
+            }
+
+            $significant[] = \is_array($token) ? $token[1] : $token;
+        }
+
+        $bodyStart = \array_search('{', $significant, true);
+
+        return \is_int($bodyStart)
+            && \array_slice($significant, $bodyStart + 1, 6) === ['parent', '::', 'boot', '(', ')', ';'];
     }
 
     /**

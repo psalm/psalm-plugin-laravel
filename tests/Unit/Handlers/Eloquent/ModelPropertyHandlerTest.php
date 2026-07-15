@@ -12,6 +12,8 @@ use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
@@ -23,6 +25,7 @@ use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Progress\VoidProgress;
 use Psalm\StatementsSource;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SkippedTraitInitializationModel;
 
 /**
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/446
@@ -98,6 +101,36 @@ final class ModelPropertyHandlerTest extends TestCase
         $event = $this->createEvent(WorkOrder::class, 'nonexistent', readMode: true);
 
         $this->assertNull(ModelPropertyHandler::doesPropertyExist($event));
+    }
+
+    #[Test]
+    public function it_returns_mixed_for_known_column_when_cast_metadata_is_incomplete(): void
+    {
+        $schema = new SchemaAggregator();
+        $table = new SchemaTable();
+        $table->setColumn(new SchemaColumn('id', SchemaColumn::TYPE_INT));
+        $schema->setTable('skipped_trait_initialization_models', $table);
+        SchemaStateProvider::setSchema($schema);
+
+        $this->classLikeStorageProvider->create(SkippedTraitInitializationModel::class);
+        ModelMetadataRegistryBuilder::reset();
+        ModelMetadataRegistryBuilder::warmUp($this->codebase, SkippedTraitInitializationModel::class);
+
+        $metadata = ModelMetadataRegistry::for(SkippedTraitInitializationModel::class);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+        $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertTrue(ModelPropertyHandler::doesPropertyExist(
+            $this->createEvent(SkippedTraitInitializationModel::class, 'id', readMode: true),
+        ));
+
+        $type = ModelPropertyHandler::resolveColumnType(
+            $this->codebase,
+            SkippedTraitInitializationModel::class,
+            'id',
+        );
+
+        $this->assertNotNull($type);
+        $this->assertTrue($type->isMixed());
     }
 
     #[Test]
