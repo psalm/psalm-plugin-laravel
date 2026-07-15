@@ -339,6 +339,7 @@ final class ModelMetadataRegistryBuilder
                     false,
                 );
         }
+
         $castsReady = $primaryKeyReady && self::hasAuthoritativeCastConfiguration($reflection, $usedTraits);
 
         $attributesApplied = self::computeSection(
@@ -1686,6 +1687,7 @@ final class ModelMetadataRegistryBuilder
             $configurationReaders[] = 'uniqueIds';
             $configurationReaders[] = 'usesUniqueIds';
         }
+
         foreach ($configurationReaders as $methodName) {
             if (!$reflection->hasMethod($methodName)
                 || !self::reflectionMethodComesFromIlluminate($reflection->getMethod($methodName), $usedTraits)
@@ -1708,6 +1710,7 @@ final class ModelMetadataRegistryBuilder
                 if ($method->getAttributes(Initialize::class) === []) {
                     continue;
                 }
+
                 if (!self::reflectionMethodComesFromIlluminate($method, $usedTraits)) {
                     return false;
                 }
@@ -1746,6 +1749,7 @@ final class ModelMetadataRegistryBuilder
             if (!\method_exists(Model::class, $methodName)) {
                 continue;
             }
+
             if (!self::reflectionMethodsHaveSameSource(
                 $reflection->getMethod($methodName),
                 new \ReflectionMethod(Model::class, $methodName),
@@ -1777,6 +1781,7 @@ final class ModelMetadataRegistryBuilder
             if (!\str_starts_with($trait, 'Illuminate\\')) {
                 continue;
             }
+
             if (!\trait_exists($trait)) {
                 continue;
             }
@@ -1794,6 +1799,7 @@ final class ModelMetadataRegistryBuilder
 
         return false;
     }
+
     /** @psalm-pure */
     private static function reflectionMethodsHaveSameSource(
         \ReflectionMethod $actual,
