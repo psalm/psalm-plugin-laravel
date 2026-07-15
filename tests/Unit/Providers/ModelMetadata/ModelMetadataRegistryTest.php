@@ -1564,6 +1564,7 @@ final class ModelMetadataRegistryTest extends TestCase
             scopesData: [],
             relationsData: $relations,
             knownPropertiesData: [],
+            completeSections: ModelMetadata::ALL_SECTIONS,
         );
     }
 }

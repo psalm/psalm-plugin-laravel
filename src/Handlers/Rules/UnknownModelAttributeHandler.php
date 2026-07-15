@@ -120,13 +120,19 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return null;
         }
 
-        if (!$metadata->isComplete(
-            ModelMetadata::SECTION_METHODS
-            | ModelMetadata::SECTION_RELATIONS
-            | ModelMetadata::SECTION_RUNTIME_CONFIGURATION
-            | ModelMetadata::SECTION_SCHEMA
-            | ModelMetadata::SECTION_CASTS,
-        )) {
+        if (
+            !$metadata->isComplete(
+                ModelMetadata::SECTION_METHODS
+                | ModelMetadata::SECTION_RELATIONS
+                | ModelMetadata::SECTION_RUNTIME_CONFIGURATION
+                | ModelMetadata::SECTION_SCHEMA
+                | ModelMetadata::SECTION_CASTS,
+            )
+            // A registered table can still have no statically parsed columns (for example when a
+            // migration uses dynamic names or Blueprint macros). In that case an unknown-key verdict
+            // would treat every real column as a typo, so preserve the rule's conservative bail-out.
+            || $metadata->schema()->all() === []
+        ) {
             return null;
         }
 

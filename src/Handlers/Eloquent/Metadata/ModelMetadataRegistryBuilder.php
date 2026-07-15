@@ -76,8 +76,8 @@ final class ModelMetadataRegistryBuilder
      * Pre-compute metadata for a single model. Idempotent — re-computation
      * on a cached FQCN is a no-op.
      *
-     * Never throws: on any failure the method logs a warning through the
-     * codebase's progress handle and returns without storing an entry.
+     * Never throws: isolated section failures are reported while the partial entry is stored;
+     * an unexpected outer failure is reported and leaves the model unstored.
      *
      * Accepts any `class-string` (not narrowed to `class-string<Model>`): the
      * runtime guard in `compute()` early-returns for non-Model classes, and
@@ -596,6 +596,9 @@ final class ModelMetadataRegistryBuilder
         return [
             'traits' => $traits,
             'fillable' => self::filterStringList($instance->getFillable()),
+            // asArray() guards Laravel's `$guarded = false` ("guard nothing") idiom — getGuarded()
+            // then returns a bool, not an array, and would TypeError filterStringList()'s array param,
+            // crashing warm-up for the whole model (e.g. laravel/passport's models). #591.
             'guarded' => self::filterStringList(self::asArray($instance->getGuarded())),
             'appends' => self::filterStringList($instance->getAppends()),
             'with' => self::readStringList($instance, 'with'),
@@ -1191,7 +1194,7 @@ final class ModelMetadataRegistryBuilder
      * Compute primary-key info from a model instance.
      *
      * HasUuids / HasUlids override `getKeyType()` / `getIncrementing()` / `uniqueIds()`
-     * by reading `$this->usesUniqueIds`. The caller in `computeForInstance()` has already flipped
+     * by reading `$this->usesUniqueIds`. The earlier unique-id initialization section has flipped
      * that flag for UUID/ULID models, so the instance getters return the runtime-correct
      * values here (including any user override of `uniqueIds()` returning multiple cols).
      */
@@ -1547,8 +1550,8 @@ final class ModelMetadataRegistryBuilder
      * default values are initialized even by `newInstanceWithoutConstructor()`.
      *
      * Only catches ReflectionException (property genuinely missing on a subclass that
-     * shadowed it). Any other Error surfaces via warmUp()'s outer catch as a warning,
-     * which is the right behavior when something unexpected breaks.
+     * shadowed it). Any other throwable is handled by the runtime-configuration section,
+     * which reports the failure and leaves that section incomplete.
      *
      * @return list<string>
      */

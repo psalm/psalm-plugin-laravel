@@ -91,7 +91,7 @@ final readonly class ModelMetadata
         private array $scopesData,
         private array $relationsData,
         private array $knownPropertiesData,
-        private int $completeSections = self::ALL_SECTIONS,
+        private int $completeSections,
     ) {}
 
     /**
@@ -201,8 +201,9 @@ final readonly class ModelMetadata
      * `$fillable` / `$guarded` are deliberately NOT sources — they are a guard-list over columns, not an
      * independent supply of attribute names — and docblock `@property` names are not parsed yet.
      *
-     * The set is not exhaustive in two known ways, so a consumer must not treat a single model's set as
-     * complete: (1) with migrations disabled
+     * The set is not exhaustive when one of its source sections could not be built, so consumers that
+     * need a definitive answer must first check the relevant completeness bits. Two other known gaps
+     * remain: (1) with migrations disabled
      * ({@see \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider::getSchema()} is null) the schema-column
      * origins are absent, so an unknown-key check must not treat the column set as authoritative in that
      * mode (it would flag valid column keys as unknown); (2) the `relations` source is OWN-CLASS only
