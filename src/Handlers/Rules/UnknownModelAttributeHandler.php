@@ -120,10 +120,13 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return null;
         }
 
-        // Completeness gate: the unknown-key verdict is only sound when the model's columns are
-        // known. With migrations disabled (or the table unparsed) schema() is empty, so the known
-        // set lacks its column origins and every real column would look unknown — skip the model.
-        if ($metadata->schema()->all() === []) {
+        if (!$metadata->isComplete(
+            ModelMetadata::SECTION_METHODS
+            | ModelMetadata::SECTION_RELATIONS
+            | ModelMetadata::SECTION_RUNTIME_CONFIGURATION
+            | ModelMetadata::SECTION_SCHEMA
+            | ModelMetadata::SECTION_CASTS,
+        )) {
             return null;
         }
 
