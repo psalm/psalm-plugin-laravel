@@ -6,6 +6,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Providers\ModelMetadata;
 
 use Illuminate\Database\Eloquent\Attributes\Appends;
 use Illuminate\Database\Eloquent\Attributes\Initialize;
+use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Model;
@@ -14,8 +15,11 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelInstancePreparer;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CastsMethodModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\KeyTypeInitializerOrderModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableKeyOnlyModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 
 /**
@@ -86,15 +90,74 @@ final class ModelInstancePreparerTest extends TestCase
     }
 
     #[Test]
-    public function framework_concern_initializer_is_mirrored_not_invoked(): void
+    public function framework_concern_initializer_is_invoked(): void
     {
-        // Real initializeSoftDeletes() writes $casts[getDeletedAtColumn()]; the mirror no-ops and leaves that
-        // cast to computeCasts(). So invoking framework initializers instead of mirroring leaves it behind.
+        // Framework initializers are invoked, not mirrored: whatever the installed Laravel does IS the
+        // behaviour. initializeSoftDeletes() writing $casts[getDeletedAtColumn()] is the observable proof,
+        // and it lands keyed off the DELETED_AT override without the replay knowing that rule.
         $casts = new \ReflectionProperty(Model::class, 'casts');
 
-        // Pin that Laravel still writes the cast; otherwise [] would not distinguish mirroring from invoking.
+        // Pin what Laravel itself writes; [] on both sides would not distinguish invoking from mirroring.
         $this->assertSame(['archived_at' => 'datetime'], $casts->getValue(new CustomDeletedAtModel()));
-        $this->assertSame([], $casts->getValue($this->prepare(CustomDeletedAtModel::class)));
+        $this->assertSame(
+            $casts->getValue(new CustomDeletedAtModel()),
+            $casts->getValue($this->prepare(CustomDeletedAtModel::class)),
+        );
+    }
+
+    #[Test]
+    public function the_has_attributes_initializer_is_mirrored_not_invoked(): void
+    {
+        // The ONE initializer still mirrored, and this is why: invoking it would execute the user's casts(),
+        // whose result the registry already has statically (CastsMethodParser AST-parses it). Not a
+        // no-user-code rule — the walk invokes user trait initializers deliberately. Delete the mirror and
+        // this fixture's cast appears on the replayed instance.
+        $casts = new \ReflectionProperty(Model::class, 'casts');
+
+        // Pin that Laravel itself runs casts(); an absent key on both sides would prove nothing.
+        $this->assertSame(['from_casts_method' => 'array'], $casts->getValue(new CastsMethodModel()));
+        // The key, not the whole map: a future Laravel initializer writing some OTHER cast is not this
+        // test's business, and asserting [] would turn that into a false alarm.
+        $this->assertArrayNotHasKey('from_casts_method', $casts->getValue($this->prepare(CastsMethodModel::class)));
+    }
+
+    #[Test]
+    public function the_model_attributes_phase_runs_after_the_walk(): void
+    {
+        if (!\class_exists(Table::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        // A trait initializer and #[Table(keyType:)] write the same property, and Laravel's `=== 'int'` guard
+        // makes the order decide the answer: phase last (runtime) yields 'string', phase hoisted ahead of the
+        // walk yields 'int'. Runtime as oracle, never a literal.
+        $this->assertSame(
+            (new KeyTypeInitializerOrderModel())->getKeyType(),
+            $this->prepare(KeyTypeInitializerOrderModel::class)->getKeyType(),
+        );
+
+        // Pin the premise: without it both sides agree on the 'int' default and the oracle proves nothing.
+        $this->assertSame('string', (new KeyTypeInitializerOrderModel())->getKeyType());
+    }
+
+    #[Test]
+    public function the_model_attributes_phase_applies_the_table_attribute(): void
+    {
+        if (!\class_exists(Table::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        // #[Table(key:)] with no name, on a class that INHERITS $table. The table half is version-split inside
+        // the supported range (13.3-13.5's `??=` keeps the inherited name; 13.6+ force-nulls it so getTable()
+        // re-derives) — which is the case for invoking the real method rather than reproducing it, and why
+        // this reads a runtime oracle instead of a literal.
+        $this->assertSame(
+            (new TableKeyOnlyModel())->getTable(),
+            $this->prepare(TableKeyOnlyModel::class)->getTable(),
+        );
+
+        // The key half has no such split: it reaches the key on every supported release.
+        $this->assertSame('uuid', $this->prepare(TableKeyOnlyModel::class)->getKeyName());
     }
 
     #[Test]
