@@ -120,6 +120,18 @@ function inherited_accessor_resolves_on_concrete_child(Contract $contract): void
     $_result = $contract->reference_code;
     /** @psalm-check-type-exact $_result = string */
 }
+
+/**
+ * camelCase access to the inherited legacy accessor resolves identically: Laravel's case-insensitive
+ * Str::studly resolution treats $contract->referenceCode and $contract->reference_code as the same
+ * getReferenceCodeAttribute() accessor. The registry keys it snake_case and the handler normalizes
+ * the lookup the same way, so the camelCase spelling is not a false UndefinedMagicPropertyFetch.
+ */
+function inherited_accessor_resolves_via_camelcase(Contract $contract): void
+{
+    $_result = $contract->referenceCode;
+    /** @psalm-check-type-exact $_result = string */
+}
 ?>
 --EXPECTF--
 TooFewArguments on line %d: Too few arguments for method App\Models\Concerns\ComparesRank::outranks saw 1

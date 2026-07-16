@@ -60,6 +60,13 @@ final class DateFacadeHandler implements MethodReturnTypeProviderInterface, Meth
     /** @var array<string, ?Union> retyped return type per method, cached for the run */
     private static array $returnCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$configuredClass = null;
+        self::$returnCache = [];
+    }
+
     /**
      * @inheritDoc
      * @return list<string>

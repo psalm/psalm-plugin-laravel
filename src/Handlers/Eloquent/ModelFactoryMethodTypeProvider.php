@@ -58,6 +58,12 @@ final class ModelFactoryMethodTypeProvider implements MethodReturnTypeProviderIn
      */
     private static array $factoryUnionCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$factoryUnionCache = [];
+    }
+
     /**
      * @return list<string>
      * @psalm-pure

@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastsMethodParser;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
@@ -23,19 +22,22 @@ use Psalm\Type\Union;
  * Resolution priority:
  * 1. User-defined @property PHPDoc (detected via pseudo_property_get_types) → defers (returns null)
  * 2. Accessor method (handled by ModelPropertyAccessorHandler) → defers (returns null)
- * 3. Cast override → CastResolver type
+ * 3. Cast override → CastInfo::$psalmType (pre-resolved at warm-up)
  * 4. Schema column type → mapped Psalm type
+ *
+ * Phase 1 of the registry migration: the column/cast DATA now comes from
+ * {@see ModelMetadataRegistry::for()} (warmed up during `AfterCodebasePopulated`)
+ * instead of the per-handler lazy caches it used before. The SQL-type → Psalm-type
+ * MAPPING stays here, reading {@see ColumnInfo} instead of {@see SchemaColumn}: the
+ * schema-mapping path produces the same types the pre-registry handler did. The cast
+ * path additionally corrects two pre-registry bugs — the SoftDeletes `DELETED_AT`
+ * column-override and the spurious UUID/ULID primary-key `int` cast — baked at warm-up
+ * by {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::computeCasts()}.
  *
  * @internal
  */
 final class ModelPropertyHandler
 {
-    /** @var array<string, string> model class → table name cache */
-    private static array $tableNameCache = [];
-
-    /** @var array<string, array<string, string>> model class → merged casts cache */
-    private static array $castsCache = [];
-
     public static function doesPropertyExist(PropertyExistenceProviderEvent $event): ?bool
     {
         if (!$event->isReadMode()) {
@@ -47,7 +49,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqClasslikeName */
+        /** @var class-string<Model> $fqClasslikeName */
         $fqClasslikeName = $event->getFqClasslikeName();
         $propertyName = $event->getPropertyName();
 
@@ -62,12 +64,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column instanceof SchemaColumn) {
-            return true;
-        }
-
-        return null;
+        return self::schemaHasColumn($fqClasslikeName, $propertyName) ? true : null;
     }
 
     public static function isPropertyVisible(PropertyVisibilityProviderEvent $event): ?bool
@@ -76,7 +73,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqClasslikeName */
+        /** @var class-string<Model> $fqClasslikeName */
         $fqClasslikeName = $event->getFqClasslikeName();
         $propertyName = $event->getPropertyName();
 
@@ -90,12 +87,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if ($column instanceof SchemaColumn) {
-            return true;
-        }
-
-        return null;
+        return self::schemaHasColumn($fqClasslikeName, $propertyName) ? true : null;
     }
 
     public static function getPropertyType(PropertyTypeProviderEvent $event): ?Union
@@ -105,7 +97,7 @@ final class ModelPropertyHandler
             return null;
         }
 
-        /** @var class-string<\Illuminate\Database\Eloquent\Model> $fqClasslikeName */
+        /** @var class-string<Model> $fqClasslikeName */
         $fqClasslikeName = $event->getFqClasslikeName();
         $propertyName = $event->getPropertyName();
 
@@ -122,34 +114,18 @@ final class ModelPropertyHandler
             return null;
         }
 
-        $column = self::resolveColumn($fqClasslikeName, $propertyName);
-        if (!$column instanceof SchemaColumn) {
-            return null;
-        }
-
-        // Check if there's a cast override
-        $casts = self::resolveCasts($codebase, $fqClasslikeName);
-        if (isset($casts[$propertyName])) {
-            return CastResolver::resolve(
-                $codebase,
-                $casts[$propertyName],
-                $column->nullable,
-                self::mapColumnBaseType($column),
-            );
-        }
-
-        // Map schema column type to Psalm type
-        return self::mapColumnType($column);
+        return self::columnTypeFromRegistry($fqClasslikeName, $propertyName);
     }
 
     /**
-     * Public resolver mirroring {@see getPropertyType} (user `@property` → cast →
-     * schema), for handlers that need column types outside `PropertyTypeProviderEvent`
-     * (e.g. {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderAggregateHandler}).
+     * Public resolver mirroring {@see getPropertyType} (user `@property` → cast → schema),
+     * for handlers that need column types outside `PropertyTypeProviderEvent` (e.g.
+     * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderAggregateHandler}).
      *
-     * Slated to migrate behind `ModelMetadataRegistry::for($fqcn)` once the registry
-     * lands (see `.alies/docs/model-metadata-registry.md`); kept as a static here to
-     * minimize change surface for #1004.
+     * Deliberately does NOT replicate {@see getPropertyType}'s `hasNativeProperty()` /
+     * `isReadMode()` filters — callers pass a known column name in a read context, and
+     * the native-property skip would wrongly suppress a column that shadows a framework
+     * property name. Keep this guard set distinct from the property-provider hooks.
      *
      * @param class-string<Model> $fqClasslikeName
      */
@@ -171,19 +147,47 @@ final class ModelPropertyHandler
             return $propertyType;
         }
 
-        $column = self::resolveColumn($fqClasslikeName, $columnName);
-        if (!$column instanceof SchemaColumn) {
+        return self::columnTypeFromRegistry($fqClasslikeName, $columnName);
+    }
+
+    /**
+     * Registry-backed column type: cast override wins over the schema mapping. Shared by
+     * {@see getPropertyType} and {@see resolveColumnType} so the two read paths cannot drift
+     * (pre-registry they shared `resolveColumn()` + `resolveCasts()`). Returns null when the
+     * column name is empty, the model was not warmed up, or the column is not migration-known.
+     *
+     * {@see CastInfo::$psalmType} already incorporates column nullability AND the
+     * CastsInboundAttributes passthrough base type (baked at warm-up), so a cast hit is
+     * returned verbatim — CastResolver is never re-run here.
+     *
+     * @param class-string<Model> $fqClasslikeName
+     */
+    private static function columnTypeFromRegistry(string $fqClasslikeName, string $columnName): ?Union
+    {
+        // Empty names can't match anything — bail before touching the registry.
+        if ($columnName === '') {
             return null;
         }
 
-        $casts = self::resolveCasts($codebase, $fqClasslikeName);
+        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
+        if (!$metadata instanceof ModelMetadata) {
+            return null;
+        }
+
+        // An incomplete cast inventory cannot prove that a schema column is uncast.
+        if (!$metadata->isComplete(ModelMetadata::SECTION_CASTS)) {
+            return null;
+        }
+
+        // Exact-case lookup matches Eloquent's case-sensitive attribute semantics.
+        $column = $metadata->schema()->column($columnName);
+        if (!$column instanceof ColumnInfo) {
+            return null;
+        }
+
+        $casts = $metadata->casts();
         if (isset($casts[$columnName])) {
-            return CastResolver::resolve(
-                $codebase,
-                $casts[$columnName],
-                $column->nullable,
-                self::mapColumnBaseType($column),
-            );
+            return $casts[$columnName]->psalmType;
         }
 
         return self::mapColumnType($column);
@@ -192,112 +196,49 @@ final class ModelPropertyHandler
     /**
      * Resolve all migration-inferred columns for a model.
      *
-     * @return array<string, SchemaColumn>
+     * Reads the warmed registry: the sole caller is
+     * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler::registerWriteTypesForColumns()},
+     * which runs after the model's registry entry has been warmed. Using that snapshot is
+     * important because warm-up applies Laravel's runtime model configuration, including
+     * Laravel 13's `#[Table]` attribute, before resolving the table schema.
+     *
+     * @param class-string<Model> $fqClasslikeName
+     * @return array<non-empty-string, ColumnInfo>
+     * @psalm-external-mutation-free
      */
     public static function resolveAllColumns(string $fqClasslikeName): array
     {
-        $schema = SchemaStateProvider::getSchema();
-        if (!$schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator) {
+        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
+        if (!$metadata instanceof ModelMetadata) {
             return [];
         }
 
-        $tableName = self::resolveTableName($fqClasslikeName);
-        if ($tableName === null || !isset($schema->tables[$tableName])) {
-            return [];
-        }
-
-        return $schema->tables[$tableName]->columns;
-    }
-
-    private static function resolveColumn(string $fqClasslikeName, string $propertyName): ?SchemaColumn
-    {
-        return self::resolveAllColumns($fqClasslikeName)[$propertyName] ?? null;
-    }
-
-    private static function resolveTableName(string $fqClasslikeName): ?string
-    {
-        if (isset(self::$tableNameCache[$fqClasslikeName])) {
-            return self::$tableNameCache[$fqClasslikeName];
-        }
-
-        if (!\is_a($fqClasslikeName, Model::class, true)) {
-            return null;
-        }
-
-        try {
-            $reflection = new \ReflectionClass($fqClasslikeName);
-            if ($reflection->isAbstract()) {
-                return null;
-            }
-
-            $instance = $reflection->newInstanceWithoutConstructor();
-
-            if (!$instance instanceof Model) {
-                return null;
-            }
-
-            $tableName = $instance->getTable();
-        } catch (\ReflectionException) {
-            return null;
-        }
-
-        self::$tableNameCache[$fqClasslikeName] = $tableName;
-
-        return $tableName;
+        return $metadata->schema()->all();
     }
 
     /**
-     * @return array<string, string>
+     * @param class-string<Model> $fqClasslikeName
+     * @psalm-external-mutation-free
      */
-    private static function resolveCasts(\Psalm\Codebase $codebase, string $fqClasslikeName): array
+    private static function schemaHasColumn(string $fqClasslikeName, string $propertyName): bool
     {
-        if (isset(self::$castsCache[$fqClasslikeName])) {
-            return self::$castsCache[$fqClasslikeName];
+        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
+        if (!$metadata instanceof ModelMetadata) {
+            return false;
         }
 
-        $casts = [];
-
-        // 1. SoftDeletes trait → deleted_at: datetime (lowest priority)
-        $classStorage = $codebase->classlike_storage_provider->get($fqClasslikeName);
-        if (isset($classStorage->used_traits[\strtolower(SoftDeletes::class)])) {
-            $casts['deleted_at'] = 'datetime';
-        }
-
-        // 2. $casts property from the model instance
-        if (\is_a($fqClasslikeName, Model::class, true)) {
-            try {
-                $reflection = new \ReflectionClass($fqClasslikeName);
-
-                // Mirror resolveTableName(): an abstract base cannot be instantiated. Guard the
-                // instance read explicitly — newInstanceWithoutConstructor() on an abstract class
-                // throws \Error ("Cannot instantiate abstract class"), which the \ReflectionException
-                // catch below does NOT catch, so a reachable abstract FQCN would surface an uncaught
-                // error without this guard. The migration column/cast handler is not registered for
-                // abstract models (see ModelRegistrationHandler), so this is defense-in-depth.
-                if (!$reflection->isAbstract()) {
-                    $instance = $reflection->newInstanceWithoutConstructor();
-
-                    /** @var array<string, string> $instanceCasts */
-                    $instanceCasts = $instance->getCasts();
-                    $casts = \array_merge($casts, $instanceCasts);
-                }
-            } catch (\ReflectionException) {
-                // Can't instantiate model — skip instance casts
-            }
-        }
-
-        // 3. casts() method (AST-parsed, highest priority)
-        $methodCasts = CastsMethodParser::parse($codebase, $fqClasslikeName);
-        $casts = \array_merge($casts, $methodCasts);
-
-        self::$castsCache[$fqClasslikeName] = $casts;
-
-        return $casts;
+        return $metadata->schema()->has($propertyName);
     }
 
-    private static function mapColumnType(SchemaColumn $column): Union
+    /**
+     * Map a column to its Psalm read type, applying nullability. The non-nullable base mapping
+     * lives on {@see ColumnTypeMapper} so the cast warm-up (which bakes the CastsInboundAttributes
+     * passthrough type) and this schema read path agree on the column's intrinsic type — and so the
+     * builder reads the mapping from the Schema namespace rather than reaching back into this handler.
+     */
+    private static function mapColumnType(ColumnInfo $column): Union
     {
-        $type = self::mapColumnBaseType($column);
+        $type = ColumnTypeMapper::mapBaseType($column);
 
         if ($column->nullable) {
             $type = Type::combineUnionTypes($type, Type::getNull());
@@ -306,64 +247,14 @@ final class ModelPropertyHandler
         return $type;
     }
 
-    /**
-     * Non-nullable base mapping for a schema column. Factored out so that {@see CastResolver}
-     * can receive the column's intrinsic Psalm type for {@see \Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes}
-     * casts (whose read path is a passthrough of the raw DB type) while still letting the cast
-     * resolver decide how to apply nullability on the final union.
-     */
-    private static function mapColumnBaseType(SchemaColumn $column): Union
-    {
-        return match ($column->type) {
-            SchemaColumn::TYPE_INT => $column->unsigned
-                ? new Union([new Type\Atomic\TIntRange(0, null)])
-                : Type::getInt(),
-            SchemaColumn::TYPE_STRING => Type::getString(),
-            SchemaColumn::TYPE_FLOAT => Type::getFloat(),
-            SchemaColumn::TYPE_BOOL => Type::getBool(),
-            // MySQL SET is comma-separated at runtime (e.g. 'draft,published'), so the
-            // literal-union here is an over-narrowing approximation — strictly better than
-            // `mixed` for the common `in_array($model->status, [...])` check. Matches Larastan.
-            SchemaColumn::TYPE_ENUM, SchemaColumn::TYPE_SET => self::mapLiteralUnionFromOptions($column),
-            SchemaColumn::TYPE_ARRAY => new Union([new Type\Atomic\TKeyedArray(
-                [Type::getFloat()],
-                null,
-                [Type::getInt(), Type::getFloat()],
-                true,
-            )]),
-            default => Type::getMixed(),
-        };
-    }
-
-    /**
-     * Build a literal-string union from a column's options list. Shared by ENUM and SET
-     * because both store their option set the same way in {@see SchemaColumn::$options}
-     * and benefit from the same narrowing (with the SET caveat documented at the caller).
-     */
-    private static function mapLiteralUnionFromOptions(SchemaColumn $column): Union
-    {
-        if ($column->options === []) {
-            return Type::getString();
-        }
-
-        try {
-            $literals = [];
-            foreach ($column->options as $option) {
-                $literals[] = Type\Atomic\TLiteralString::make($option);
-            }
-
-            return new Union($literals);
-        } catch (\UnexpectedValueException|\InvalidArgumentException) {
-            // TLiteralString::make() throws InvalidArgumentException when an option
-            // exceeds Config::max_string_length, and UnexpectedValueException when
-            // called outside an initialized Psalm Config (e.g. unit tests). Mirrors
-            // {@see \Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer::inRuleToLiteralUnion}.
-            return Type::getString();
-        }
-    }
-
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
     private static array $nativePropertyCache = [];
+
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$nativePropertyCache = [];
+    }
 
     /**
      * Uses property_exists() instead of Reflection — cheaper and avoids exception overhead

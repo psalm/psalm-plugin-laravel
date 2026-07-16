@@ -58,6 +58,12 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      */
     private static array $modelToCollectionMap = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$modelToCollectionMap = [];
+    }
+
     /**
      * Builder methods that return `Eloquent\Collection<int, TModel>` and should
      * be narrowed to the custom collection type.

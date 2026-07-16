@@ -70,6 +70,22 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     private static ?Union $spreadUnion = null;
 
     /**
+     * Return to the disabled state before each application boot. The narrowed and
+     * spread unions are immutable and independent of the application, so they are
+     * deliberately retained.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function reset(): void
+    {
+        self::$viewPaths = [];
+        self::$extensions = ['blade.php', 'php'];
+        self::$enabled = false;
+        self::$resolvedViews = [];
+        self::$factoryClass = null;
+    }
+
+    /**
      * @param list<string> $viewPaths Absolute paths to view directories (from config('view.paths'))
      * @param list<string> $extensions File extensions without leading dot (from FileViewFinder::getExtensions())
      * @psalm-external-mutation-free

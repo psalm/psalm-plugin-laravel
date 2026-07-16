@@ -28,6 +28,12 @@ Decisions made during development of the plugin. Contributors should follow thes
 
 **Why:** Runtime reflection requires booting a real Laravel app, which adds startup cost, can fail in misconfigured projects, and couples the plugin to the user's environment. Static inference is faster, more predictable, and works in CI without a running app. But some Laravel conventions (dynamic table names, programmatic casts, container bindings) are only knowable at runtime.
 
+## Plugin invocation state
+
+**Decision:** Mutable static state derived from the Laravel application, plugin XML, aliases, filesystem, Psalm Codebase, or files under analysis must have an explicit idempotent `reset()` and be reset by `Plugin::resetInvocationState()` before boot or any optional initialization branch.
+
+**Why:** Psalm can reuse a PHP process (notably in the language server). An `init()` call is not a substitute: an optional feature may be disabled or a service may be absent on the next invocation, leaving a previous application's state live. App-independent immutable values may survive only when the owning class documents why their meaning cannot vary between applications or Codebases. Event-handler scratch state may instead use a reliable file/function lifecycle hook, with that lifecycle documented beside the cache.
+
 ## Eloquent Model
 
 ### `@property` PHPDoc takes priority over plugin inference
@@ -82,15 +88,15 @@ They produce no false positives, and there's no real-world scenario where a user
 
 **Decision:** `Plugin::registerHandlers()` `require_once`s every handler file by absolute path (`__DIR__ . '/Handlers/...'`) immediately before calling `$registration->registerHooksFromClass($handler)`. Do not replace this with `class_exists($fqcn, true)` or rely on PSR-4 autoload alone.
 
-**Why:** Psalm distributes as a `psalm.phar` binary. Psalm's own plugin loader (`vendor/vimeo/psalm/src/Psalm/Config.php::loadPlugin`) sidesteps `spl_autoload_register` and `require_once`s the plugin entry-point file directly via `getComposerFilePathForClassLike()`. The Psalm source comment ("It may seem that the last step will always fail, but it's only true if project uses Composer autoloader") shows the maintainers do not assume the project autoloader is registered at plugin-invocation time. A `class_exists($fqcn, true)`-only approach would silently fail to register handlers if that assumption breaks.
+**Why:** `Psalm\PluginRegistrationSocket::registerHooksFromClass()` calls `class_exists($handler, false)` and throws unless the handler is already loaded. The registration API therefore deliberately refuses to invoke Composer autoloading. The paired `require_once` is the direct, deterministic way to establish that precondition; do not replace it with a bare registration call.
 
-In practice, the plugin also boots a real Laravel app via Testbench, which requires the project autoloader to resolve `Illuminate\…` classes — so an environment in which our own classes are NOT autoloadable is hard to construct. The `require_once` is therefore defensive against a near-zero scenario, but the cost of being wrong (silent hook loss) is much higher than the cost of the verbosity.
+Initialization has a different boundary. `PluginConfig::fromXml()` is called before any init helper, so this plugin already requires its own namespace to be autoloadable at invocation time. Direct static calls in an `init*Handler()` method can then use ordinary Composer autoloading. `loadInitializationHandlers()` is consequently a source-order convention: it makes the explicit loads happen before every optional init path, but it is not an autoloader bootstrap.
 
 **Sister plugins follow the same pattern:** `psalm-plugin-symfony` keeps `require_once` for every handler. `psalm-plugin-phpunit` and `Lctrs/psalm-psr-container-plugin` use `class_exists($fqcn, true)` instead, but each has only one handler — the failure mode is harder to miss.
 
-**How to remove this constraint:** add a CI job that installs `psalm.phar` and runs the plugin against a sample Laravel project ([#895](https://github.com/psalm/psalm-plugin-laravel/issues/895)). Once that job exists and passes consistently, this decision can be revisited and the `require_once` block collapsed.
+**Why PHAR CI does not remove this constraint:** [#895](https://github.com/psalm/psalm-plugin-laravel/issues/895) was closed as not planned. Installing this plugin pulls Psalm into `vendor/`, so running `psalm.phar` creates a dual-Psalm collision in the natural setup. The workaround still registers the project's autoloader, and would not change Psalm's current non-autoloading handler-registration API.
 
-**Until then:** every new handler added to `Plugin::registerHandlers()` MUST keep its paired `require_once` line.
+**Contributor rule:** every new handler added to `Plugin::registerHandlers()` MUST keep its paired `require_once` line. If `Plugin::__invoke()` or an `init*Handler()` method makes a static call before registration, add that file to `loadInitializationHandlers()` as well—before its first static touch, on every configuration branch. The latter maintains source order; the former satisfies Psalm's registration precondition.
 
 ### Event-driven model discovery via `AfterCodebasePopulated`
 

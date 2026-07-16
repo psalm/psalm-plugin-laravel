@@ -124,6 +124,13 @@ final class ValidationRuleAnalyzer
      */
     private static array $classTaintCache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$cache = [];
+        self::$classTaintCache = [];
+    }
+
     /**
      * All input-related taint kinds — delegates to Psalm's own canonical list.
      *

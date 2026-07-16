@@ -15,9 +15,9 @@ use Illuminate\Support\ServiceProvider;
  */
 final class BindingServiceProvider extends ServiceProvider
 {
-    public const string BINDING_KEY = 'psalm-plugin-laravel.tests.fixture.binding';
+    public const BINDING_KEY = 'psalm-plugin-laravel.tests.fixture.binding';
 
-    public const string BOUND_VALUE = 'present';
+    public const BOUND_VALUE = 'present';
 
     #[\Override]
     public function register(): void

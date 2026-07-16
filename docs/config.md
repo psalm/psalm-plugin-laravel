@@ -27,6 +27,7 @@ Full config example:
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
+        <experimental value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
     </pluginClass>
@@ -212,6 +213,37 @@ Environment variable to override the cache location.
 ```bash
 PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
 ```
+
+## `experimental`
+
+**default**: `false`
+
+```xml
+<experimental value="true" />
+```
+
+The plugin registers its handlers and type inference normally in every mode. This option only changes the default reporting level for experimental plugin issues:
+
+- `UnknownModelAttribute`
+- `UndefinedModelRelation`
+
+If an experimental issue has no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry, the plugin defaults it to `info`, or to `error` when enforcement is enabled.
+
+Any explicit `<PluginIssue>` entry takes complete ownership of that issue. The plugin then leaves both its base reporting level and scoped filters unchanged, regardless of `<experimental>`.
+
+When using scoped filters, specify the desired base level explicitly:
+
+```xml
+<PluginIssue name="UndefinedModelRelation" errorLevel="info">
+    <errorLevel type="suppress">
+        <directory name="legacy" />
+    </errorLevel>
+</PluginIssue>
+```
+
+Without the outer `errorLevel="info"`, Psalm uses its normal implicit fallback of `error` outside the scoped filter.
+
+Experimental issue behaviour may change before graduation. Model serialization array-shape inference (`ModelToArrayShapeHandler`) is a stable v4.15 enhancement and is always active; it is not controlled by this setting. `UnresolvableAppendedModelAttribute` is also stable and remains an error by default in both modes.
 
 ## `failOnInternalError`
 

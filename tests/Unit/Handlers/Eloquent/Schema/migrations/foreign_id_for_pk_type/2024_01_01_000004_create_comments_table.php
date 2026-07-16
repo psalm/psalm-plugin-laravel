@@ -28,6 +28,9 @@ return new class extends Migration {
             // FK to a model with custom $primaryKey
             $table->foreignIdFor(\App\Models\CustomPkUuidModel::class);
 
+            // A keyless model has no PK column to inspect and must keep the explicit FK name.
+            $table->foreignIdFor(\App\Models\KeylessPermission::class, 'permission_customer_id');
+
             $table->timestamps();
         });
     }

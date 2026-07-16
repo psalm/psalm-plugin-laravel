@@ -29,6 +29,12 @@ final class NowTodayHandler implements FunctionReturnTypeProviderInterface
      */
     private static array $resolvedClasses = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$resolvedClasses = [];
+    }
+
     /**
      * @inheritDoc
      * @psalm-pure

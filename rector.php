@@ -29,6 +29,7 @@ return RectorConfig::configure()
     // native-return-type assertions and the feature stops being tested.
     ->withSkipPath('tests/Type/macro-fixtures-vendor-style.php')
     ->withPhpVersion(PhpVersion::PHP_82)
+    ->withDowngradeSets(php82: true)
     ->withSets([PHPUnitSetList::PHPUNIT_120])
     ->withPreparedSets(deadCode: true, codingStyle: true, typeDeclarations: true, codeQuality: true, phpunitCodeQuality: true)
     ->withSkip([
