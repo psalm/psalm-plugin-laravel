@@ -239,7 +239,7 @@ final class ModelMetadataRegistryTest extends TestCase
     public function class_attributes_are_merged_at_warm_up(): void
     {
         // newInstanceWithoutConstructor() skips initializeTraits()/initializeModelAttributes(), so the
-        // PHP-attribute config is missed unless replayInitializers() mirrors it. The #[*] classes
+        // PHP-attribute config is missed unless ModelInstancePreparer::prepare() mirrors it. The #[*] classes
         // only exist from Laravel 13.0, below which this fixture is never loaded.
         if (!class_exists(Hidden::class)) {
             self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
@@ -915,7 +915,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertTrue($metadata->traits->hasUlids);
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertFalse($metadata->primaryKey->incrementing);
-        // Same bogus-cast guard as the HasUuids test: flipUsesUniqueIds keeps
+        // Same bogus-cast guard as the HasUuids test: the preparer's uniqueIds flip keeps
         // getCasts() from injecting [id => 'int'] on ULID models too.
         $this->assertArrayNotHasKey('id', $metadata->casts());
     }

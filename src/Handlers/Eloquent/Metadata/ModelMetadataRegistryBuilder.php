@@ -4,15 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Metadata;
 
-use Illuminate\Database\Eloquent\Attributes\Appends;
-use Illuminate\Database\Eloquent\Attributes\Connection;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Guarded;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
-use Illuminate\Database\Eloquent\Attributes\Initialize;
-use Illuminate\Database\Eloquent\Attributes\Table;
-use Illuminate\Database\Eloquent\Attributes\Unguarded;
-use Illuminate\Database\Eloquent\Attributes\Visible;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -318,15 +309,9 @@ final class ModelMetadataRegistryBuilder
     ): ModelMetadata {
         $baseTraits = self::computeTraitFlags($storage, true);
 
-        // Replay the model's initializers in the exact ReflectionClass::getMethods() order Laravel's
-        // bootTraits()/initializeTraits() uses (12.22+), interleaving the framework-concern MIRRORS
-        // (flipUsesUniqueIds + the #[...] appliers) at their real positions among the user initializers —
-        // because getMethods() ranks trait-flattened vs inherited methods DIFFERENTLY across PHP versions
-        // (8.5 puts a concrete class's own trait inits first; 8.4 puts Model's inherited concern inits first),
-        // and Laravel follows whatever the running PHP yields. Executing in that same walk makes the result
-        // match runtime under either order: e.g. a user setAppends() lands before mergeAppends(#[Appends]) on
-        // 8.5 (both survive) and after it on 8.4 (the replace wins), exactly as getAppends() does. The
-        // initializeModelAttributes phase (#[Connection]/#[Table]) runs last, after the walk.
+        // prepare() replays Model::__construct()'s initializer lifecycle on the constructor-less instance;
+        // see its docblock for the getMethods()-order walk. Without it the readers below observe unmerged
+        // casts/appends/fillable/hidden, an unflipped uniqueIds and an unresolved connection/table.
         //
         // One folded section: a mid-walk throw leaves the instance half-prepared, so all four instance-derived
         // sections below degrade together (the degradation test still maps 'trait initializers' → those four).
@@ -338,7 +323,7 @@ final class ModelMetadataRegistryBuilder
             $completeSections,
             $failures,
             static function () use ($reflection, $instance): bool {
-                self::replayInitializers($reflection, $instance);
+                ModelInstancePreparer::prepare($reflection, $instance);
 
                 return true;
             },
@@ -1385,7 +1370,7 @@ final class ModelMetadataRegistryBuilder
         // wins — which is what merging casts() last reproduces on every version. Making it version-aware needs
         // a pre-replay casts snapshot diffed here to re-apply user-merged keys after casts(); deferred as a
         // documented divergence — a rare same-key collision, on older supported releases, costing one cast
-        // type. See replayInitializers() for the getMethods()-order walk that motivates this.
+        // type. See ModelInstancePreparer::prepare() for the getMethods()-order walk that motivates this.
 
         $result = [];
         foreach ($merged as $columnName => $castString) {
@@ -1601,328 +1586,6 @@ final class ModelMetadataRegistryBuilder
         }
 
         return 'deleted_at';
-    }
-
-    /**
-     * Flip `$usesUniqueIds = true` on a HasUuids/HasUlids instance so `getKeyType()` and
-     * `getIncrementing()` return the string/non-incrementing values Laravel would return
-     * at runtime — work that the trait initializer normally handles.
-     */
-    private static function flipUsesUniqueIds(Model $instance): void
-    {
-        $property = new \ReflectionProperty($instance, 'usesUniqueIds');
-        $property->setValue($instance, true);
-    }
-
-    /**
-     * Replay the model's initializers on the constructor-less instance in {@see Model}::initializeTraits()
-     * order, so the section readers observe the runtime state `newInstanceWithoutConstructor()` skipped
-     * (merged casts / appends / fillable / hidden, flipped uniqueIds, resolved connection/table). Without it a
-     * cast a user trait merges is invisible to {@see computeCasts()}, so an `$appends` entry it backs looks
-     * unbacked and false-positives {@see \Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedModelAttributeHandler}.
-     *
-     * ONE walk over `ReflectionClass::getMethods()`, in that exact order — it is the order Laravel runs
-     * initializers (12.22+) AND it is PHP-version-dependent (8.4 ranks Model's inherited concern inits first,
-     * 8.5 the concrete class's own trait inits first), so we must execute in it to match runtime under either
-     * PHP. For each discovered initializer (conventional `initialize`.class_basename of a used trait, OR
-     * `#[Initialize]`-tagged — the attribute branch gated on `class_exists(Initialize::class)`, load-bearing
-     * below 12.22 where the framework ignores it; neither branch filters `isStatic`, matching bootTraits):
-     *  - a user / third-party initializer (source file NOT under the Illuminate\Database root) is invoked;
-     *  - a framework concern initializer runs its registry MIRROR at that position (or no-ops), so its ordering
-     *    against user initializers is automatically correct under either PHP order — a user setAppends() lands
-     *    before mergeAppends(#[Appends]) on 8.5 and after it on 8.4, exactly as getAppends() does.
-     * Concern initializers are discriminated by SOURCE FILE, not declaring class — a directly-`use`d concern
-     * (e.g. `use HasUuids`) flattens its initializer to report the user model as declarer, yet its file stays
-     * under the Illuminate\Database root (derived from Model's own file — install-independent; the trailing '/'
-     * stops a sibling like Illuminate\DatabaseExtra matching). `#[Connection]`/`#[Table]`
-     * (initializeModelAttributes) run last, after the walk, as at runtime.
-     *
-     * We re-derive the list here instead of calling `initializeTraits()` (reads `static::$traitInitializers`,
-     * populated only by `bootTraits()` during boot — booting registers global scopes, a Psalm hang, so it
-     * no-ops unbooted). `boot{Trait}()` hooks are never replayed for the same reason: an initializer that
-     * depends on boot-prepared state throws here even though runtime construction succeeds, degrading the model
-     * to partial metadata — a warned coverage loss that prevents potentially-incorrect diagnostics, the
-     * conservative trade.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function replayInitializers(\ReflectionClass $reflection, Model $instance): void
-    {
-        // Conventional initialize<Basename> names for every used trait, mirroring bootTraits().
-        // filterStringList() also fixes the value type: outside the plugin's own stubs (self-analysis does
-        // not load them) class_uses_recursive() is typed `array`, so its values would be mixed.
-        $conventional = [];
-        foreach (self::filterStringList(\class_uses_recursive($instance)) as $trait) {
-            $conventional['initialize' . \class_basename($trait)] = true;
-        }
-
-        $honorInitializeAttribute = \class_exists(Initialize::class);
-        // Framework concern initializers all live under Illuminate\Database; derive that root from Model's OWN
-        // file so the skip is install-layout-independent (custom vendor dirs, path-repo symlinks, split
-        // illuminate/* packages resolve consistently, unlike a hardcoded `/vendor/…` substring).
-        $eloquentRoot = \str_replace('\\', '/', \dirname((string) (new \ReflectionClass(Model::class))->getFileName(), 2));
-
-        $invoked = [];
-        foreach ($reflection->getMethods() as $method) {
-            $name = $method->getName();
-            // Discover as bootTraits() does — conventional name OR #[Initialize] — deduped by name;
-            // getAttributes() is reached only for non-conventional methods (short-circuit).
-            $isInitializer = isset($conventional[$name])
-                || ($honorInitializeAttribute && $method->getAttributes(Initialize::class) !== []);
-            if (isset($invoked[$name]) || !$isInitializer) {
-                continue;
-            }
-
-            $invoked[$name] = true;
-            if (\str_starts_with(\str_replace('\\', '/', (string) $method->getFileName()), $eloquentRoot . '/')) {
-                // Framework concern initializer: run its hand-written registry mirror at this position (the
-                // real one would double-apply what computeCasts()/the section readers already derive).
-                self::applyConcernMirror($name, $reflection, $instance);
-            } else {
-                // User / third-party initializer: invoke by reflection, NOT $instance->{$name}() — a
-                // protected/private initializer called from outside would route to Model::__call() query-builder
-                // forwarding instead of running (PHP 8.1 reflection invokes non-public methods, no setAccessible).
-                // Mixed return is a bare statement, so the file stays at 100% coverage.
-                $method->invoke($instance);
-            }
-        }
-
-        // initializeModelAttributes phase — always after initializeTraits at runtime.
-        self::applyConnectionAttribute($reflection, $instance);
-        self::applyTableAttribute($reflection, $instance);
-    }
-
-    /**
-     * Run the registry mirror for a framework concern initializer at its position in the
-     * {@see replayInitializers()} walk (verified 1:1 against vendor Eloquent\Concerns): HasAttributes →
-     * `mergeAppends(#[Appends])` (its `casts()` merge is {@see computeCasts()}'s job, `dateFormat` isn't
-     * stored); HidesAttributes → `mergeHidden`/`mergeVisible`; GuardsAttributes → `mergeFillable(#[Fillable])`
-     * + `#[Guarded]`/`#[Unguarded]`; HasUniqueStringIds → `usesUniqueIds = true`. HasTimestamps /
-     * HasRelationships / SoftDeletes have no registry-observable effect (timestamps/touches aren't stored;
-     * SoftDeletes' `deleted_at` cast is added by {@see computeCasts()}), so they no-op here.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyConcernMirror(string $name, \ReflectionClass $reflection, Model $instance): void
-    {
-        if ($name === 'initializeHasUniqueStringIds') {
-            self::flipUsesUniqueIds($instance);
-        } elseif ($name === 'initializeHasAttributes') {
-            self::applyAppendsAttribute($reflection, $instance);
-        } elseif ($name === 'initializeHidesAttributes') {
-            self::applyHiddenVisibleAttributes($reflection, $instance);
-        } elseif ($name === 'initializeGuardsAttributes') {
-            self::applyFillableGuardedAttributes($reflection, $instance);
-        }
-    }
-
-    /**
-     * Mirror of `initializeHasAttributes`' `mergeAppends(#[Appends])` (union-merge). The `#[Appends]` attribute
-     * exists from Laravel 13.0; below it `classAttribute()` matches nothing and this no-ops — so `mergeAppends()`,
-     * unavailable on 12.14–12.24, is never called with an empty fallback and cannot crash warm-up.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyAppendsAttribute(\ReflectionClass $reflection, Model $instance): void
-    {
-        $appends = self::classAttribute($reflection, Appends::class);
-        if ($appends !== null) {
-            $instance->mergeAppends($appends->columns);
-        }
-    }
-
-    /**
-     * Mirror of `initializeHidesAttributes`' `mergeHidden(#[Hidden])` + `mergeVisible(#[Visible])` (union-merge).
-     * Both attributes and helpers are Laravel-13.0; an absent attribute no-ops (see {@see applyAppendsAttribute()}).
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyHiddenVisibleAttributes(\ReflectionClass $reflection, Model $instance): void
-    {
-        $hidden = self::classAttribute($reflection, Hidden::class);
-        if ($hidden !== null) {
-            $instance->mergeHidden($hidden->columns);
-        }
-
-        $visible = self::classAttribute($reflection, Visible::class);
-        if ($visible !== null) {
-            $instance->mergeVisible($visible->columns);
-        }
-    }
-
-    /**
-     * Mirror of `initializeGuardsAttributes`: `mergeFillable(#[Fillable])` then the `#[Guarded]`/`#[Unguarded]`
-     * replace-if-default. `mergeFillable()` exists on 12.14+, but an absent `#[Fillable]` still no-ops
-     * (see {@see applyAppendsAttribute()}).
-     *
-     * Known gap (NOT applied by any mirror): `#[Table]`'s `key` / `keyType` / `incrementing` sub-overrides and
-     * `#[WithoutIncrementing]`, which `initializeModelAttributes()` feeds into the primary key. {@see computePrimaryKey()}
-     * reads only the raw `getKeyName()`/`getKeyType()`/`getIncrementing()` defaults; the table NAME (the
-     * serialization-relevant part) IS applied by {@see applyTableAttribute()}.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyFillableGuardedAttributes(\ReflectionClass $reflection, Model $instance): void
-    {
-        $fillable = self::classAttribute($reflection, Fillable::class);
-        if ($fillable !== null) {
-            $instance->mergeFillable($fillable->columns);
-        }
-
-        self::applyGuardedAttribute($reflection, $instance);
-    }
-
-    /**
-     * `#[Guarded]` / `#[Unguarded]` only replace the default `['*']` denylist, mirroring
-     * {@see \Illuminate\Database\Eloquent\Concerns\GuardsAttributes::initializeGuardsAttributes()}:
-     * `#[Unguarded]` guards nothing; else the `#[Guarded]` columns (`columns ?? ['*']`, so a present-but-
-     * empty `#[Guarded]` also guards nothing); absent → keep `['*']`.
-     *
-     * The `getGuarded() !== ['*']` early-return matches runtime precisely because this mirror runs at
-     * initializeGuardsAttributes' position in the getMethods() walk: a user initializer that ran earlier
-     * (per that PHP's order) and set `$guarded` via `guard()` makes runtime's initializeGuardsAttributes skip
-     * `#[Guarded]` — and so do we.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyGuardedAttribute(\ReflectionClass $reflection, Model $instance): void
-    {
-        if ($instance->getGuarded() !== ['*']) {
-            return;
-        }
-
-        if (self::classAttribute($reflection, Unguarded::class) !== null) {
-            $instance->guard([]);
-
-            return;
-        }
-
-        // Presence (not non-empty) gates the replace: a present `#[Guarded()]` with no columns sets [],
-        // matching Laravel's `columns ?? ['*']` where an empty array is non-null. Absent → keep `['*']`.
-        $guarded = self::classAttribute($reflection, Guarded::class);
-        if ($guarded !== null) {
-            $instance->guard($guarded->columns);
-        }
-    }
-
-    /**
-     * `#[Connection(name:)]` fills a null `$connection`, mirroring `initializeModelAttributes()`'s `??=`.
-     * The name is normalized to a string before storing, matching `Model::getConnectionName()`'s
-     * `enum_value()` (BackedEnum → backing value, UnitEnum → case name). This is deliberately stronger
-     * than storing the raw enum: the registry's `connection` field is `?string`, and an int-backed enum
-     * would make `getConnectionName()` return an `int` that TypeErrors the `?string` parameter under
-     * `strict_types`, dropping the whole model via warmUp()'s catch.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyConnectionAttribute(\ReflectionClass $reflection, Model $instance): void
-    {
-        if ($instance->getConnectionName() !== null) {
-            return;
-        }
-
-        $name = self::classAttribute($reflection, Connection::class)?->name;
-        if ($name === null) {
-            return;
-        }
-
-        $instance->setConnection(match (true) {
-            \is_string($name) => $name,
-            $name instanceof \BackedEnum => (string) $name->value,
-            default => $name->name,
-        });
-    }
-
-    /**
-     * `#[Table(name:)]` sets the table, mirroring the `$declaresTable` branch of
-     * `initializeModelAttributes()`: a `#[Table]` declared DIRECTLY on the concrete class (Laravel's
-     * non-recursive `getAttributes()` check) AND no own `$table` property overwrites the table; otherwise
-     * the resolved (ancestor-walked) name only fills a still-null table (`??=`). Feeds
-     * {@see computeSchema()}'s migration lookup.
-     *
-     * Known-gap: a `key`/`keyType`-only `#[Table]` (null name) does NOT clear an inherited `$table`
-     * default the way Laravel's force-branch does (`$this->table = $table->name ?? null`). That sits
-     * inside the same exotic, deferred scenario as the `key`/`keyType`/`incrementing` PK sub-overrides
-     * (see {@see applyFillableGuardedAttributes()}), so it is left untouched rather than half-applied.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyTableAttribute(\ReflectionClass $reflection, Model $instance): void
-    {
-        $name = self::classAttribute($reflection, Table::class)?->name;
-        if ($name === null) {
-            return;
-        }
-
-        // Force-set only on a DIRECT concrete-class attribute (non-recursive, no own $table property);
-        // otherwise `??=` fills a still-null table with the resolved name.
-        $forceSet = !self::declaresOwnProperty($reflection, 'table') && $reflection->getAttributes(Table::class) !== [];
-        if ($forceSet || self::rawTableIsNull($instance)) {
-            $instance->setTable($name);
-        }
-    }
-
-    /**
-     * True when the concrete class itself declares `$name` (not inherited) — mirrors the `$declaresTable`
-     * check in `initializeModelAttributes()`.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     * @psalm-pure
-     */
-    private static function declaresOwnProperty(\ReflectionClass $reflection, string $name): bool
-    {
-        if (!$reflection->hasProperty($name)) {
-            return false;
-        }
-
-        return $reflection->getProperty($name)->getDeclaringClass()->getName() === $reflection->getName();
-    }
-
-    /**
-     * Whether the raw `$table` property is still null (so a `#[Table]` may fill it). Reads the property,
-     * not `getTable()`, which always derives a non-null name from the class.
-     */
-    private static function rawTableIsNull(Model $instance): bool
-    {
-        try {
-            $property = new \ReflectionProperty($instance, 'table');
-        } catch (\ReflectionException) {
-            return true;
-        }
-
-        // A typed-uninitialized `$table` (non-idiomatic) has no value to read; treat it as null so a
-        // `#[Table]` may fill it, and avoid the \Error that getValue() throws on an uninitialized typed prop.
-        if (!$property->isInitialized($instance)) {
-            return true;
-        }
-
-        // Consume the mixed value inline (=== null) so it never binds to a local — keeps coverage at 100%.
-        return $property->getValue($instance) === null;
-    }
-
-    /**
-     * Resolve a class-level attribute the way {@see Model}::resolveClassAttribute() does: walk the class
-     * up its parents, return the first ancestor's first instance of `$attributeClass` (no cross-ancestor
-     * merge), or null. A throwing `newInstance()` reaches the runtime-configuration boundary, which
-     * preserves independent sections and records the failure once for the model.
-     *
-     * @template T of object
-     * @param \ReflectionClass<object> $reflection
-     * @param class-string<T>          $attributeClass
-     * @return T|null
-     */
-    private static function classAttribute(\ReflectionClass $reflection, string $attributeClass): ?object
-    {
-        for ($current = $reflection; $current !== false; $current = $current->getParentClass()) {
-            $attributes = $current->getAttributes($attributeClass);
-            if ($attributes === []) {
-                continue;
-            }
-
-            return $attributes[0]->newInstance();
-        }
-
-        return null;
     }
 
     /**
