@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784208190339,
+  "lastUpdate": 1784222226544,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8745,6 +8745,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1109,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d1f924af2e5a778f1a1558d7534dd5a02c0617d3",
+          "message": "Merge pull request #1277 from psalm/fix/timestamps-attribute-concern-mirror\n\nMirror `Model::initializeHasTimestamps` at model warm-up",
+          "timestamp": "2026-07-16T19:14:07+02:00",
+          "tree_id": "7714edfba9fe3d0113e33b47092912c9b243d861",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d1f924af2e5a778f1a1558d7534dd5a02c0617d3"
+        },
+        "date": 1784222225323,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.88,
+            "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
             "unit": "MB"
           }
         ]
