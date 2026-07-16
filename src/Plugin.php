@@ -101,8 +101,6 @@ final class Plugin implements PluginEntryPointInterface
      * before this method runs, and normal static calls can use Composer autoloading.
      * The registration-adjacent require_once calls remain necessary because Psalm's
      * registration API deliberately refuses to autoload handler classes.
-     *
-     * @psalm-suppress MissingPureAnnotation require_once changes process-wide load state.
      */
     private function loadInitializationHandlers(): void
     {

@@ -43,10 +43,11 @@ final class ColumnTypeMapper
             // literal-union here is an over-narrowing approximation — strictly better than
             // `mixed` for the common `in_array($model->status, [...])` check. Matches Larastan.
             SchemaColumn::TYPE_ENUM, SchemaColumn::TYPE_SET => self::mapLiteralUnionFromOptions($column),
-            SchemaColumn::TYPE_ARRAY => new Union([Type\Atomic\TKeyedArray::make(
+            SchemaColumn::TYPE_ARRAY => new Union([new Type\Atomic\TKeyedArray(
                 [Type::getFloat()],
-                fallback_params: [Type::getInt(), Type::getFloat()],
-                is_list: true,
+                null,
+                [Type::getInt(), Type::getFloat()],
+                true,
             )]),
             default => Type::getMixed(),
         };

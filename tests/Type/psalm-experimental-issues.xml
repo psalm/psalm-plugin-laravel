@@ -26,7 +26,6 @@
         <file name="./macro-fixtures-class.phpstub" />
     </stubs>
     <issueHandlers>
-        <MissingPureAnnotation errorLevel="info" />
         <PluginIssue name="NoEnvOutsideConfig" errorLevel="info" />
     </issueHandlers>
 </psalm>

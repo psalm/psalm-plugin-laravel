@@ -98,7 +98,7 @@ final class ModelSerializationShapeBuilder
         }
 
         // OPEN: query-dependent keys (aliases, setAttribute, relations) fall through to mixed, not an error.
-        return new Union([TKeyedArray::make($properties, fallback_params: [Type::getString(), Type::getMixed()])]);
+        return new Union([new TKeyedArray($properties, null, [Type::getString(), Type::getMixed()])]);
     }
 
     /**

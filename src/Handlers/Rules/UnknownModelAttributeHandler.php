@@ -378,7 +378,8 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
     /**
      * @psalm-assert-if-true class-string<Model> $className
      *
-     * @psalm-external-mutation-free
+     * Not marked mutation-free: Psalm 6's Codebase::classExists()/classExtends()
+     * are not annotated mutation-free, unlike Psalm 7.
      */
     private static function isModelSubclass(string $className, Codebase $codebase): bool
     {

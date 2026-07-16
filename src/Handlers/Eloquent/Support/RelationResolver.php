@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
@@ -74,7 +75,14 @@ final class RelationResolver
         // a single call answers the existence question for both forms.
         // is_used: false keeps this an existence probe — it must not mark the
         // relation method as used and skew unused-code analysis.
-        $exists = $codebase->methodExists($methodId, is_used: false, with_pseudo: true);
+        // Psalm 6's public Codebase::methodExists() has no with_pseudo param and
+        // always calls through with it false, unlike Psalm 7 — bypass to the
+        // internal Methods::methodExists() to reach the pseudo-inclusive form.
+        $exists = $codebase->methods->methodExists(
+            new MethodIdentifier($modelFqcn, \strtolower($relationName)),
+            is_used: false,
+            with_pseudo: true,
+        );
         self::$methodExistsCache[$methodId] = $exists;
 
         return $exists;
@@ -136,8 +144,6 @@ final class RelationResolver
     /**
      * Extract the related model FQCN from the first generic parameter of a
      * `Relation<TRelated, ...>` return type.
-     *
-     * @psalm-external-mutation-free
      */
     private static function extractRelatedFromReturnType(Codebase $codebase, ?Union $returnType): ?string
     {
@@ -163,8 +169,6 @@ final class RelationResolver
      * dot-notation walking, so it defers rather than guessing one arm. In practice
      * Psalm collapses morphTo's `<..., $this>` generic before this is reached; this
      * keeps the deferral correct even when it does not.
-     *
-     * @psalm-external-mutation-free
      */
     private static function singleModel(Codebase $codebase, ?Union $type): ?string
     {
@@ -198,7 +202,8 @@ final class RelationResolver
      * non-autoloading check. classExtends() is non-reflexive → identity is checked first; every ancestor
      * passed here (Relation, Model) is a class, so classExtends() alone suffices.
      *
-     * @psalm-external-mutation-free
+     * Not marked mutation-free: Psalm 6's Codebase::classExists()/classExtends()
+     * are not annotated mutation-free, unlike Psalm 7.
      */
     private static function isClassOrSubclassOf(Codebase $codebase, string $class, string $ancestor): bool
     {

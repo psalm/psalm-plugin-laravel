@@ -346,7 +346,9 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * the exact resolution the pre-registry code performed via getAppearingMethodId($scopeMethodId).
      *
      * @param class-string<Model> $modelClass
-     * @psalm-mutation-free
+     *
+     * Not marked mutation-free: Psalm 6's Methods::getAppearingMethodId() is not
+     * annotated mutation-free, unlike Psalm 7.
      */
     private static function appearingScopeClass(Codebase $codebase, string $modelClass, ScopeInfo $scopeInfo): string
     {

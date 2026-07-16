@@ -15,8 +15,10 @@ use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
  * experimental. Individual projects can always override these defaults through
  * Psalm's normal issueHandlers configuration.
  *
+ * Not marked mutation-free: Psalm 6's WeakMap::offsetGet()/offsetSet() and
+ * Config::setCustomErrorLevel() are not annotated mutation-free, unlike Psalm 7.
+ *
  * @internal
- * @psalm-external-mutation-free
  */
 final class ExperimentalIssuePolicy
 {
@@ -35,7 +37,6 @@ final class ExperimentalIssuePolicy
      */
     private static ?\WeakMap $installedDefaults = null;
 
-    /** @psalm-external-mutation-free */
     public static function apply(bool $enforced): void
     {
         $level = $enforced ? Config::REPORT_ERROR : Config::REPORT_INFO;

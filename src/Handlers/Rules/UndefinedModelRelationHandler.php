@@ -238,7 +238,6 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
      * skipped.
      *
      * @return ?class-string<Model>
-     * @psalm-external-mutation-free
      */
     private static function resolveModelFromType(Codebase $codebase, Union $type): ?string
     {
@@ -270,7 +269,6 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
      * model as their first generic parameter; a `Model` atomic is the model itself.
      *
      * @return ?class-string<Model>
-     * @psalm-external-mutation-free
      */
     private static function modelFromAtomic(Codebase $codebase, Atomic $atomic): ?string
     {
@@ -303,7 +301,8 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
      * docblock). classExtends() is non-reflexive → identity checked first. All ancestors here
      * (Builder, Relation, Model) are classes, so classExtends() alone suffices, no classImplements().
      *
-     * @psalm-external-mutation-free
+     * Not marked mutation-free: Psalm 6's Codebase::classExists()/classExtends()
+     * are not annotated mutation-free, unlike Psalm 7.
      */
     private static function isClassOrSubclassOf(Codebase $codebase, string $class, string $ancestor): bool
     {
@@ -329,7 +328,9 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
      * them would be a false positive.
      *
      * @return ?class-string<Model>
-     * @psalm-external-mutation-free
+     *
+     * Not marked mutation-free: Psalm 6's Codebase::classExists()/classExtends()
+     * are not annotated mutation-free, unlike Psalm 7.
      */
     private static function concreteModel(Codebase $codebase, string $fqcn): ?string
     {
