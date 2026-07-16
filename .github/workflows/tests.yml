@@ -87,18 +87,6 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      - name: Determine composer cache directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache composer packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-unit-${{ matrix.php }}-${{ matrix.laravel || 'lockfile' }}-${{ hashFiles('composer.json', 'composer.lock') }}
-          restore-keys: |
-            composer-unit-${{ matrix.php }}-
-
       - name: Check Composer configuration
         if: matrix.php == '8.4' && !matrix.laravel
         run: composer validate --strict
@@ -110,8 +98,10 @@ jobs:
       - name: Install with Laravel constraint
         # Floors may have published advisories; this isolated test install is never deployed.
         if: matrix.laravel
+        env:
+          LARAVEL_CONSTRAINT: ${{ matrix.laravel }}
         run: >-
-          composer update --with="laravel/framework:${{ matrix.laravel }}" --with-all-dependencies
+          composer update --with="laravel/framework:$LARAVEL_CONSTRAINT" --with-all-dependencies
           --no-interaction --no-progress --prefer-dist --prefer-stable --no-blocking --no-audit
 
       - name: Verify installed Laravel version
