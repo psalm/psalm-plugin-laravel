@@ -706,7 +706,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         if ($methodName === 'getkey') {
-            return self::getKeyReturnType($called_fq_classlike_name, $codebase);
+            return self::getKeyReturnType($called_fq_classlike_name);
         }
 
         // Model::query()
@@ -757,12 +757,20 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * metadata. Every bail returns null so the stub fallback applies — this only narrows,
      * it never widens or invents a type.
      */
-    private static function getKeyReturnType(string $modelFqcn, Codebase $codebase): ?Union
+    private static function getKeyReturnType(string $modelFqcn): ?Union
     {
         /** @var class-string $modelFqcn */
         $metadata = ModelMetadataRegistry::for($modelFqcn);
 
-        if (!$metadata instanceof ModelMetadata || !$metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY)) {
+        // SECTION_CASTS gates two things at once: the cast guard below reads casts(), and —
+        // load-bearing — an abstract receiver's metadata never sets this bit (its primary key
+        // is read from declared-property defaults, so it misses a trait method override like
+        // HasUuids::getKeyType()). AbstractUuidKeyModel's phpt case is the tripwire if that
+        // coupling is ever broken by a future change to abstract warm-up.
+        if (
+            !$metadata instanceof ModelMetadata
+            || !$metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY | ModelMetadata::SECTION_CASTS)
+        ) {
             return null;
         }
 
@@ -772,17 +780,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // A getKey() override anywhere below Illuminate (the receiver or an ancestor) wins
-        // over the inferred metadata.
-        $declaringMethodId = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($modelFqcn, 'getkey'));
-
-        if (
-            !$declaringMethodId instanceof MethodIdentifier
-            || !\str_starts_with($declaringMethodId->fq_class_name, 'Illuminate\\')
-        ) {
-            return null;
-        }
-
+        // getMethodReturnType is registered only under Model::class, so a user override of
+        // getKey() (anywhere between the receiver and Model) diverts Psalm's dispatch before
+        // this branch runs at all — no override check needed here. Fragile if getKey() is ever
+        // added to ModelRegistrationHandler's per-model registration.
         $mapped = match ($metadata->primaryKey->type) {
             PrimaryKeyType::Integer => Type::getInt(),
             PrimaryKeyType::String => Type::getString(),

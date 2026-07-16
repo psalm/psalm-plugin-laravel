@@ -1,22 +1,25 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Models\AbstractUuidKeyModel;
 use App\Models\ConflictingKeyCastModel;
-use App\Models\Customer;
 use App\Models\GetKeyOverrideModel;
 use App\Models\KeylessPermission;
 use App\Models\StringKeyModel;
 use App\Models\UlidModel;
 use App\Models\UuidModel;
+use App\Models\Vehicle;
 use Illuminate\Database\Eloquent\Model;
 
 /**
  * Standard auto-incrementing int primary key narrows getKey() from the stub's
- * `int|string` to `int`.
+ * `int|string` to `int`. Uses Vehicle, not Customer — Customer declares
+ * `@property string $id` (see PropertyAnnotationPrecedenceTest.phpt), which would assert a
+ * conflicting type for the same runtime value on the property-read path.
  */
-function test_get_key_int(Customer $customer): int
+function test_get_key_int(Vehicle $vehicle): int
 {
-    $key = $customer->getKey();
+    $key = $vehicle->getKey();
     /** @psalm-check-type-exact $key = int */
 
     return $key;
@@ -54,6 +57,21 @@ function test_get_key_string_property(StringKeyModel $model): string
  * `int|string` — there is no column name to look up.
  */
 function test_get_key_keyless(KeylessPermission $model): int|string
+{
+    $key = $model->getKey();
+    /** @psalm-check-type-exact $key = int|string */
+
+    return $key;
+}
+
+/**
+ * An abstract receiver's metadata is derived from declared-property defaults, not an
+ * instance — HasUuids overrides getKeyType() as a METHOD and never declares its own $keyType
+ * property, so the abstract path can't see the override and must not narrow. This is pinned
+ * via the SECTION_CASTS gate (abstract warm-up never sets it), not a dedicated abstract check
+ * — this test is the tripwire if that coupling ever breaks.
+ */
+function test_get_key_abstract_uuid(AbstractUuidKeyModel $model): int|string
 {
     $key = $model->getKey();
     /** @psalm-check-type-exact $key = int|string */
