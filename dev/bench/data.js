@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784228365060,
+  "lastUpdate": 1784230763365,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8815,6 +8815,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1109,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c39a0e6e7063f605ff456c83682014ad19c2936d",
+          "message": "Merge pull request #1283 from psalm/refactor/invoke-framework-initializers\n\nInvoke Laravel's own model initializers at warm-up",
+          "timestamp": "2026-07-16T21:36:42+02:00",
+          "tree_id": "3ff7d36c80cbf262b46fa9778a4d982fecab207d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c39a0e6e7063f605ff456c83682014ad19c2936d"
+        },
+        "date": 1784230762759,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.46,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
             "unit": "MB"
           }
         ]
