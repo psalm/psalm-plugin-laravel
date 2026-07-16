@@ -11,6 +11,4 @@ namespace AutoloadCrashFixture;
 // warm-up, which would crash here first and defeat the isolation of the resolver site under test.
 \trigger_error('deprecated on load', \E_USER_DEPRECATED);
 
-class DeprecatedTierTwoRelated
-{
-}
+class DeprecatedTierTwoRelated {}
