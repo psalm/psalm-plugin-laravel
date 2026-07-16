@@ -19,11 +19,15 @@ use Symfony\Component\Process\Process;
  * subprocess at a self-contained fixture project whose models ARE autoloadable, so the registry warms
  * them and the handler fires for real.
  *
- * The fixture hosts one unbacked append (must be reported) and three controls that must NOT be:
+ * The fixture hosts one unbacked append (must be reported) and four controls that must NOT be:
  * accessor-backed, cast-backed (a first-party Castable the registry shapes as Primitive, the exact
- * false positive the any-cast-backs design fixes), and an unbacked-but-hidden append (dropped before
- * the throwing loop). Asserting exactly one finding proves the rule both fires on the real bug and
- * stays silent on all three — and would fail loudly if a future change silently no-op'd it.
+ * false positive the any-cast-backs design fixes), trait-cast-backed (a class cast a trait initializer
+ * merges at construction — invisible to a constructor-less warm-up until the initializer replay), and an
+ * unbacked-but-hidden append (dropped before the throwing loop). Asserting exactly one finding proves the
+ * rule both fires on the real bug and stays silent on all four — and would fail loudly if a future change
+ * silently no-op'd it. (The `#[Initialize]`-tagged attribute-discovery path is version-gated to Laravel
+ * 12.22+, so a skip-guarded unit test locks it — not this version-agnostic fork, which the 12.14 floor
+ * job also runs, where that append would be genuinely unbacked.)
  *
  * Like {@see SuppressScopeUnusedCodeTest}, this forks a real `vendor/bin/psalm` (it boots Laravel via
  * the plugin, ~6s) because the emission cannot be observed in-process. It lives in tests/Unit for
@@ -43,9 +47,9 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
         );
         $joined = \implode("\n", $messages);
 
-        // Exactly one finding: the unbacked append fires, and the accessor-, cast-, and hidden-backed
-        // controls stay silent. assertCount(1) is the regression guard — a change that broke emission,
-        // or that flagged a backed/hidden entry, fails here.
+        // Exactly one finding: the unbacked append fires, and the accessor-, cast-, trait-cast-, and
+        // hidden-backed controls stay silent. assertCount(1) is the regression guard — a change that broke
+        // emission, or that flagged a backed/hidden entry, fails here.
         $this->assertCount(1, $findings, "Expected exactly one UnresolvableAppendedModelAttribute finding, got:\n{$joined}");
         $this->assertStringContainsString('UnbackedAppendModel', $messages[0]);
         $this->assertStringContainsString("'avatar_url'", $messages[0]);
@@ -53,7 +57,7 @@ final class UnresolvableAppendedModelAttributeEmissionTest extends TestCase
 
         // The controls must never appear (assertCount(1) already implies this; spelled out for a clear
         // failure message if one regresses).
-        foreach (['AccessorBackedAppendModel', 'CastBackedAppendModel', 'HiddenAppendModel'] as $clean) {
+        foreach (['AccessorBackedAppendModel', 'CastBackedAppendModel', 'TraitCastBackedModel', 'HiddenAppendModel'] as $clean) {
             $this->assertStringNotContainsString($clean, $joined, "{$clean} has a backed/hidden append and must not be reported.");
         }
     }

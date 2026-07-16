@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Connection;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Initialize;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Attributes\Visible;
@@ -345,6 +346,26 @@ final class ModelMetadataRegistryBuilder
             false,
         );
 
+        // Replay the model's own trait initializers (→ mergeCasts() / mergeFillable() / ...) the
+        // constructor-less instance skipped, so the readers below see them. No placement is exactly
+        // runtime-faithful — applyClassAttributeConfig() bundles a pre-user-init phase (#[Guarded] via the
+        // concern initializers) and a post one (initializeModelAttributes) — but after it is fine: the
+        // union merges (appends / fillable / hidden / visible) commute as sets; only #[Connection] /
+        // #[Table] fill-null colliding with a user initializer on that same field is order-sensitive (an
+        // exotic case, left as-is). The helper owns the framework-initializer exclusion.
+        $traitsInitialized = self::computeSection(
+            0,
+            'trait initializers',
+            $completeSections,
+            $failures,
+            static function () use ($reflection, $instance): bool {
+                self::replayTraitInitializers($reflection, $instance);
+
+                return true;
+            },
+            false,
+        );
+
         $runtimeRead = false;
         $runtime = self::computeSection(
             0,
@@ -359,12 +380,18 @@ final class ModelMetadataRegistryBuilder
             },
             self::runtimeConfigurationFallback($baseTraits),
         );
-        if ($attributesApplied && $runtimeRead) {
+        // A partial replay ($traitsInitialized false) leaves every instance-derived section below
+        // untrustworthy — a half-run initializer may have mutated some fields and not others — so all
+        // four gate on it (mirroring how $attributesApplied gates them). Here: $appends / $fillable /
+        // $hidden / $visible a trait initializer may have merged.
+        if ($attributesApplied && $runtimeRead && $traitsInitialized) {
             $completeSections |= ModelMetadata::SECTION_RUNTIME_CONFIGURATION;
         }
 
         $tableSchema = new TableSchema([]);
-        if ($attributesApplied) {
+        // Gated on $traitsInitialized too (see above): an initializer can set $table / $connection, and
+        // UnknownModelAttributeHandler trusts SECTION_SCHEMA.
+        if ($attributesApplied && $traitsInitialized) {
             try {
                 $resolvedSchema = self::computeSchema($instance);
                 if ($resolvedSchema instanceof TableSchema) {
@@ -377,7 +404,8 @@ final class ModelMetadataRegistryBuilder
         }
 
         $schemaComplete = ($completeSections & ModelMetadata::SECTION_SCHEMA) !== 0;
-        $casts = $uniqueIdsReady
+        // Gated on $traitsInitialized too (see above): an initializer can mergeCasts().
+        $casts = ($uniqueIdsReady && $traitsInitialized)
             ? self::computeSection(
                 ModelMetadata::SECTION_CASTS,
                 'casts',
@@ -394,7 +422,9 @@ final class ModelMetadataRegistryBuilder
                 [],
             )
             : [];
-        $primaryKey = $uniqueIdsReady
+        // Gated on $traitsInitialized too (see above): an initializer can set $primaryKey / $keyType /
+        // $incrementing.
+        $primaryKey = ($uniqueIdsReady && $traitsInitialized)
             ? self::computeSection(
                 ModelMetadata::SECTION_PRIMARY_KEY,
                 'primary key',
@@ -1604,10 +1634,88 @@ final class ModelMetadataRegistryBuilder
     }
 
     /**
+     * Replay the model's own trait initializers on the constructor-less instance — the runtime work
+     * {@see Model}::initializeTraits() does (each initializer → `mergeCasts()` / `mergeFillable()` /
+     * `mergeAppends()` / ...) that `newInstanceWithoutConstructor()` skips. Without it a cast a user trait
+     * merges is invisible to {@see computeCasts()}, so an `$appends` entry that cast backs looks unbacked
+     * and false-positives {@see \Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedModelAttributeHandler}.
+     *
+     * Discovery mirrors {@see Model}::bootTraits()'s two branches: an initializer is any method whose name
+     * is the conventional `initialize` . class_basename of a used trait (every version), OR that carries
+     * `#[Initialize]` — that attribute and the bootTraits branch reading it land in Laravel 12.22, so the
+     * branch is gated on `class_exists(Initialize::class)`: load-bearing, not just defensive, since below
+     * 12.22 the framework ignores the attribute and the guard keeps us convention-only, at parity. Neither
+     * branch filters `isStatic` — bootTraits' initializer branch, unlike its boot branch, does not. We
+     * re-derive the list here instead of calling `initializeTraits()`, which reads
+     * `static::$traitInitializers` — populated only by `bootTraits()` during boot, and booting registers
+     * global scopes (a known Psalm hang), so it no-ops on this unbooted class.
+     *
+     * Framework (`Illuminate\`) concern initializers are excluded — their effects are already mirrored by
+     * {@see applyClassAttributeConfig()} (`#[...]` config attributes), {@see flipUsesUniqueIds()}
+     * (HasUniqueStringIds), and {@see computeCasts()} (`casts()` + SoftDeletes), so replaying would
+     * double-apply — keyed on the method's SOURCE FILE, not its declaring class: a concern trait `use`d
+     * directly on the model (e.g. `use HasUuids`) flattens its initializer to report the user model as
+     * declarer, yet the method's file stays under `vendor/laravel/framework` (or `vendor/illuminate`).
+     * Only user / third-party run.
+     *
+     * @param \ReflectionClass<Model> $reflection
+     */
+    private static function replayTraitInitializers(\ReflectionClass $reflection, Model $instance): void
+    {
+        // Conventional initialize<Basename> names for every used trait, mirroring bootTraits().
+        // filterStringList() also fixes the value type: outside the plugin's own stubs (self-analysis does
+        // not load them) class_uses_recursive() is typed `array`, so its values would be mixed.
+        $conventional = [];
+        foreach (self::filterStringList(\class_uses_recursive($instance)) as $trait) {
+            $conventional['initialize' . \class_basename($trait)] = true;
+        }
+
+        // Gate the #[Initialize] branch on the attribute class existing — it and the bootTraits branch
+        // reading it arrive in Laravel 12.22, so below that this is a load-bearing no-op that keeps us
+        // convention-only, at parity with the framework (which ignores the attribute there). Computed once.
+        $honorInitializeAttribute = \class_exists(Initialize::class);
+
+        $invoked = [];
+        foreach ($reflection->getMethods() as $method) {
+            $name = $method->getName();
+            // Discover initializers as bootTraits() does — conventional name OR #[Initialize], deduped by
+            // name; getAttributes() is reached only for non-conventional methods (short-circuit).
+            $isInitializer = isset($conventional[$name])
+                || ($honorInitializeAttribute && $method->getAttributes(Initialize::class) !== []);
+            if (isset($invoked[$name]) || !$isInitializer) {
+                continue;
+            }
+
+            // Skip framework concern initializers (some conventionally named, some #[Initialize]-tagged):
+            // hand-mirrored elsewhere, so replaying double-applies. The method's source file is the reliable
+            // discriminator (its declaring class is NOT — a directly-`use`d concern reports the user model).
+            // Anchored to `/vendor/...` so a user repo checked out at e.g. ~/code/laravel/framework/ is not
+            // self-skipped; `/vendor/illuminate/` also covers standalone illuminate/database installs. A
+            // framework symlinked OUTSIDE vendor slips through, but replaying its initializers is idempotent
+            // (they merge exactly what applyClassAttributeConfig()/flipUsesUniqueIds()/computeCasts() apply).
+            $file = \str_replace('\\', '/', (string) $method->getFileName());
+            if (\str_contains($file, '/vendor/laravel/framework/') || \str_contains($file, '/vendor/illuminate/')) {
+                continue;
+            }
+
+            $invoked[$name] = true;
+            // Invoke by reflection, NOT $instance->{$name}(): a protected/private initializer (Laravel's
+            // own initializeHasAttributes() is protected) called from outside the model would route to
+            // Model::__call() query-builder forwarding instead of running. Since PHP 8.1 reflection invokes
+            // non-public methods without setAccessible(). The mixed return is a bare statement — it never
+            // binds to a local, so the file stays at 100% type coverage. Runs user init code, which the
+            // caller wraps in a computeSection() guard so a throw degrades to partial metadata, not a crash.
+            $method->invoke($instance);
+        }
+    }
+
+    /**
      * Apply the class-level PHP-attribute config that {@see Model}::__construct() sets via
      * `initializeTraits()` / `initializeModelAttributes()` — both skipped by
      * `newInstanceWithoutConstructor()`. Mutates `$instance` (like {@see flipUsesUniqueIds()}) so every
-     * downstream getter, and {@see computeSchema()}'s `getTable()`, sees the runtime state.
+     * downstream getter, and {@see computeSchema()}'s `getTable()`, sees the runtime state. Mirrors only
+     * the framework's own config handling; user / third-party trait initializers are replayed separately
+     * by {@see replayTraitInitializers()}.
      *
      * Per-attribute semantics mirror Laravel exactly: `#[Hidden]`/`#[Visible]`/`#[Appends]`/`#[Fillable]`
      * union-merge into the property list; `#[Guarded]`/`#[Unguarded]` only replace the default `['*']`;

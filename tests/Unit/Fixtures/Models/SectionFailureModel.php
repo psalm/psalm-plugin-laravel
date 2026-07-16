@@ -7,10 +7,12 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Casts\InboundOnlyCast;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Concerns\FailsTraitInitializer;
 
 /** @internal fixture used by ModelMetadataRegistryTest */
 final class SectionFailureModel extends Model
 {
+    use FailsTraitInitializer;
     use HasUuids {
         getKeyType as private getKeyTypeFromTrait;
     }

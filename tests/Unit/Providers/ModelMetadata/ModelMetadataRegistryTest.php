@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -79,6 +80,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
@@ -497,6 +499,15 @@ final class ModelMetadataRegistryTest extends TestCase
             'schema' => [ModelMetadata::SECTION_SCHEMA],
             'casts' => [ModelMetadata::SECTION_CASTS],
             'primary key' => [ModelMetadata::SECTION_PRIMARY_KEY],
+            // A trait-initializer replay failure withholds every instance-derived section (a half-run
+            // initializer may have mutated any of $table / $connection / casts / $appends / the key), so
+            // all four gate on it — while the static method metadata (SECTION_METHODS) survives.
+            'trait initializers' => [
+                ModelMetadata::SECTION_RUNTIME_CONFIGURATION,
+                ModelMetadata::SECTION_SCHEMA,
+                ModelMetadata::SECTION_CASTS,
+                ModelMetadata::SECTION_PRIMARY_KEY,
+            ],
         ];
 
         foreach ($expectations as $failure => $incompleteSections) {
@@ -921,6 +932,72 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertTrue($metadata->traits->hasSoftDeletes);
         $this->assertArrayHasKey('deleted_at', $metadata->casts());
         $this->assertSame(CastShape::DateTime, $metadata->casts()['deleted_at']->shape);
+    }
+
+    #[Test]
+    public function trait_initializer_merged_class_cast_appears_in_casts(): void
+    {
+        // classifyCast() checks class_exists(..., autoload: false), so force AsArrayObject into memory
+        // first, as a real app boot would (mirrors as_collection_class_cast_classifies_as_class_castable).
+        \class_exists(AsArrayObject::class);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(TraitInitializedConfigModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TraitInitializedConfigModel::class);
+
+        $metadata = $this->metadataFor(TraitInitializedConfigModel::class);
+
+        // The `meta` cast is merged only by MergesTraitConfig::initializeMergesTraitConfig() — a protected
+        // hook the constructor-less warm-up instance skips unless the trait initializer is replayed. Its
+        // presence as a class cast is exactly what backs the `meta` append and clears the false positive.
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertArrayHasKey('meta', $metadata->casts());
+        $this->assertTrue($metadata->casts()['meta']->shape->isClassCastable());
+    }
+
+    #[Test]
+    public function attribute_tagged_trait_initializer_merged_class_cast_appears_in_casts(): void
+    {
+        // The #[Initialize] attribute and the bootTraits branch reading it arrive in Laravel 12.22; below
+        // that the framework ignores the tag, so the replay stays convention-only and `via_attr` is absent
+        // (the plugin is correct there — the CI 12.14 floor exercises exactly this).
+        if (!\class_exists(\Illuminate\Database\Eloquent\Attributes\Initialize::class)) {
+            self::markTestSkipped('The #[Initialize] attribute discovery branch requires Laravel >= 12.22.');
+        }
+
+        \class_exists(AsCollection::class);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(TraitInitializedConfigModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TraitInitializedConfigModel::class);
+
+        $metadata = $this->metadataFor(TraitInitializedConfigModel::class);
+
+        // `via_attr` is merged only by SeedsCastViaAttribute::seedViaAttribute() — a `#[Initialize]`-tagged,
+        // NON-conventionally-named initializer. It is reachable only through the replay's attribute-discovery
+        // branch (bootTraits' second branch); a convention-only replay would miss it and the false positive
+        // would return for this shape.
+        $this->assertArrayHasKey('via_attr', $metadata->casts());
+        $this->assertTrue($metadata->casts()['via_attr']->shape->isClassCastable());
+    }
+
+    #[Test]
+    public function trait_initializer_merged_fillable_unions_with_class_fillable(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(TraitInitializedConfigModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TraitInitializedConfigModel::class);
+
+        $metadata = $this->metadataFor(TraitInitializedConfigModel::class);
+
+        // Replaying the initializer must MERGE the trait's mergeFillable() onto the class-level $fillable,
+        // never replace or drop it (over-restriction). Order mirrors Laravel's mergeFillable(): the
+        // existing class entry first, then the trait-merged one.
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION));
+        $this->assertSame(['class_fillable', 'trait_fillable'], $metadata->fillable);
     }
 
     #[Test]
