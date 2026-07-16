@@ -13,6 +13,9 @@ use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyType;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver;
 use Psalm\LaravelPlugin\Internal\ProxyMethodReturnTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
@@ -702,6 +705,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return new Union([self::instanceBuilderType($builderClass, $called_fq_classlike_name, $codebase)]);
         }
 
+        if ($methodName === 'getkey') {
+            return self::getKeyReturnType($called_fq_classlike_name, $codebase);
+        }
+
         // Model::query()
         if ($methodName === 'query') {
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
@@ -743,6 +750,60 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         return null;
+    }
+
+    /**
+     * Narrow Model::getKey()'s stub return (`int|string`) using the registry's primary-key
+     * metadata. Every bail returns null so the stub fallback applies — this only narrows,
+     * it never widens or invents a type.
+     */
+    private static function getKeyReturnType(string $modelFqcn, Codebase $codebase): ?Union
+    {
+        /** @var class-string $modelFqcn */
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+
+        if (!$metadata instanceof ModelMetadata || !$metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY)) {
+            return null;
+        }
+
+        $keyName = $metadata->primaryKey->name;
+
+        if ($keyName === null) {
+            return null;
+        }
+
+        // A getKey() override anywhere below Illuminate (the receiver or an ancestor) wins
+        // over the inferred metadata.
+        $declaringMethodId = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($modelFqcn, 'getkey'));
+
+        if (
+            !$declaringMethodId instanceof MethodIdentifier
+            || !\str_starts_with($declaringMethodId->fq_class_name, 'Illuminate\\')
+        ) {
+            return null;
+        }
+
+        $mapped = match ($metadata->primaryKey->type) {
+            PrimaryKeyType::Integer => Type::getInt(),
+            PrimaryKeyType::String => Type::getString(),
+        };
+
+        // getKey() returns getAttribute($keyName) at runtime, so a cast on the key column
+        // applies too. Eloquent's own getCasts() self-merges [$keyName => $keyType] for
+        // incrementing models, wrapped nullable by the registry's schema-driven resolver —
+        // that nullability isn't a real signal (getKey() itself is never null here per the
+        // stub), so only the non-null shape is compared against the mapped type.
+        $castInfo = $metadata->casts()[$keyName] ?? null;
+        if ($castInfo !== null) {
+            $castTypeBuilder = $castInfo->psalmType->getBuilder();
+            $castTypeBuilder->removeType('null');
+
+            if ($castTypeBuilder->freeze()->getId() !== $mapped->getId()) {
+                return null;
+            }
+        }
+
+        return $mapped;
     }
 
     /**
