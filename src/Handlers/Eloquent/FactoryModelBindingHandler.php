@@ -42,11 +42,17 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
 
     private static bool $appNamespaceResolved = false;
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$appNamespaceCache = null;
         self::$appNamespaceResolved = false;
+
+        // Flush Laravel's process-global factory resolver state so a prior app's
+        // guessModelNamesUsing()/useNamespace() registrations cannot leak into
+        // the next invocation's runtime path (repeated plugin initialization).
+        if (\class_exists(Factory::class)) {
+            Factory::flushState();
+        }
     }
 
     #[\Override]
@@ -109,20 +115,13 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
             return false;
         }
 
-        // User already wrote `@extends Factory<X>`. The populator fills TModel
-        // with the bound default (bare `Model`) when it is omitted, so a
-        // TNamedObject other than bare `Model` signals a real user binding.
-        // Same discriminator as ModelFactoryMethodTypeProvider::hasModelTemplateBinding().
-        $tModel = $storage->template_extended_params[Factory::class]['TModel'] ?? null;
-        if ($tModel instanceof Union) {
-            foreach ($tModel->getAtomicTypes() as $atomic) {
-                if ($atomic instanceof TNamedObject && $atomic->value !== Model::class) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        // An explicit `@extends Factory<...>` is a real user contract, whatever
+        // it binds TModel to — including a deliberate `@extends Factory<Model>`
+        // polymorphic base. Psalm's scanner sets template_type_extends_count
+        // only when the docblock is present; an omitted docblock leaves it null
+        // (the populator then fills TModel with the default bare `Model`, which
+        // we DO want to override). Presence => hands off.
+        return ($storage->template_type_extends_count[Factory::class] ?? null) === null;
     }
 
     /**
@@ -132,7 +131,7 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
      */
     private static function resolveModelFqcn(ClassLikeStorage $storage, Codebase $codebase): ?string
     {
-        return self::resolveFromRuntime($storage->name, $codebase)
+        return self::resolveFromRuntime($storage, $codebase)
             ?? self::resolveFromModelProperty($storage, $codebase)
             ?? self::resolveFromShortName($storage->name, $codebase);
     }
@@ -144,9 +143,19 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
      * (`Factory::useNamespace()`, `guessModelNamesUsing()`) that the static
      * fallback cannot see.
      */
-    private static function resolveFromRuntime(string $factoryFqcn, Codebase $codebase): ?string
+    private static function resolveFromRuntime(ClassLikeStorage $storage, Codebase $codebase): ?string
     {
+        $factoryFqcn = $storage->name;
+
         if (!\class_exists($factoryFqcn) || !\is_a($factoryFqcn, Factory::class, true)) {
+            return null;
+        }
+
+        // A factory declaring its OWN `__construct` may assign `$this->model`
+        // there; `newInstanceWithoutConstructor()` skips it, so `modelName()`
+        // would read a null/stale model. Defer to the static tiers, which read
+        // the declared property/shortname from storage, not a live instance.
+        if (isset($storage->methods['__construct'])) {
             return null;
         }
 
@@ -225,16 +234,22 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
             $nestedBase = \substr(\substr($factoryFqcn, $pos + \strlen('Database\\Factories\\')), 0, -\strlen('Factory'));
         }
 
-        $candidates = [];
-        if ($nestedBase !== null && $nestedBase !== '') {
-            $candidates[] = $appNamespace . 'Models\\' . $nestedBase;
-            $candidates[] = $appNamespace . $nestedBase;
-        }
+        // Laravel's default resolver (Factory::modelName()) tries EXACTLY two
+        // candidates, in order:
+        //   1. {AppNs}Models\{nestedBase} — factory sub-namespace under
+        //      Database\Factories\, nested under Models\ (or the flat basename
+        //      when unnested).
+        //   2. {AppNs}{flatBase} — the bare factory basename, no Models\.
+        // No other combination is valid: {AppNs}Models\{flatBase} would wrongly
+        // match a flat model when a nested one was intended.
+        $namespacedBase = $nestedBase !== null && $nestedBase !== '' ? $nestedBase : $flatBase;
 
-        $candidates[] = $appNamespace . 'Models\\' . $flatBase;
-        $candidates[] = $appNamespace . $flatBase;
+        $candidates = [
+            $appNamespace . 'Models\\' . $namespacedBase,
+            $appNamespace . $flatBase,
+        ];
 
-        foreach (\array_unique($candidates) as $candidate) {
+        foreach ($candidates as $candidate) {
             if (self::isModelClass($candidate, $codebase)) {
                 return $candidate;
             }
