@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * `ModelMetadataRegistryBuilder::resolveDeletedAtColumn()` — the registry must
  * key the auto-added datetime cast off `archived_at`, not the default `deleted_at`.
  *
- * @internal fixture used by ModelMetadataRegistryTest
+ * @internal fixture used by ModelMetadataRegistryTest and ModelInstancePreparerTest
  */
 final class CustomDeletedAtModel extends Model
 {

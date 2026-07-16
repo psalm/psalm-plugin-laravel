@@ -15,7 +15,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Concerns\SetsAppendInInitializer;
  *
  * The `#[Appends]` attribute exists from Laravel 13.0, so the consuming test is gated on `class_exists()`.
  *
- * @internal fixture used by ModelMetadataRegistryTest
+ * @internal fixture used by ModelMetadataRegistryTest and ModelInstancePreparerTest
  */
 #[Appends('attribute_append')]
 final class AppendsOrderModel extends Model

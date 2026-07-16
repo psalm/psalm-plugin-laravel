@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Twin of {@see ScalarFieldsModel} that drives the same lists through Laravel 13.0+ PHP class
  * attributes instead of `$properties`, exercising
- * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder}::replayInitializers().
+ * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelInstancePreparer}::prepare().
  *
  * The baseline `$property` declarations on the union lists (`$hidden` / `$visible` / `$appends` /
  * `$fillable`) prove the attribute columns are MERGED in, not replaced; `$guarded` is left at the base
