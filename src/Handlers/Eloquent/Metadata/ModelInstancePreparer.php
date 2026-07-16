@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Attributes\Initialize;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Attributes\Visible;
+use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -93,14 +94,12 @@ final class ModelInstancePreparer
      * Hand-written mirrors of the framework concerns: HasAttributes → `mergeAppends(#[Appends])` (its
      * `casts()` merge is {@see ModelMetadataRegistryBuilder::computeCasts()}'s job, `dateFormat` isn't stored);
      * HidesAttributes → `mergeHidden`/`mergeVisible`; GuardsAttributes → `mergeFillable(#[Fillable])` +
-     * `#[Guarded]`/`#[Unguarded]`; HasUniqueStringIds → `usesUniqueIds = true`. HasRelationships / SoftDeletes
-     * no-op — nothing they set is stored (SoftDeletes' `deleted_at` cast comes from computeCasts()).
+     * `#[Guarded]`/`#[Unguarded]`; HasUniqueStringIds → `usesUniqueIds = true`; HasTimestamps →
+     * `#[WithoutTimestamps]`/`#[Table(timestamps:)]`. HasRelationships / SoftDeletes no-op — nothing they
+     * set is stored (SoftDeletes' `deleted_at` cast comes from computeCasts()).
      *
-     * KNOWN GAP (#1276): HasTimestamps has no mirror, yet `usesTimestamps()` IS stored (via
-     * {@see ModelMetadataRegistryBuilder::computeTraitFlags()}), so a `#[WithoutTimestamps]` or
-     * `#[Table(timestamps:)]` model records `usesTimestamps = true` where runtime says false. The
-     * `$timestamps = false` property idiom is unaffected. Same deferred attribute-config family as the
-     * `#[Table]` PK sub-overrides below.
+     * Audited against every `initialize*` under vendor `Illuminate\Database\` — the walk's skip root, and
+     * wider than `Eloquent\Concerns`, since SoftDeletes and Model itself sit outside it.
      *
      * @param \ReflectionClass<Model> $reflection
      */
@@ -114,6 +113,8 @@ final class ModelInstancePreparer
             self::applyHiddenVisibleAttributes($reflection, $instance);
         } elseif ($name === 'initializeGuardsAttributes') {
             self::applyFillableGuardedAttributes($reflection, $instance);
+        } elseif ($name === 'initializeHasTimestamps') {
+            self::applyTimestampsAttributes($reflection, $instance);
         }
     }
 
@@ -205,6 +206,44 @@ final class ModelInstancePreparer
         $guarded = self::classAttribute($reflection, Guarded::class);
         if ($guarded !== null) {
             $instance->guard($guarded->columns);
+        }
+    }
+
+    /**
+     * Mirror of `initializeHasTimestamps`, precedence included. Feeds `TraitFlags::$usesTimestamps` through
+     * {@see ModelMetadataRegistryBuilder::readRuntimeConfiguration()}'s `usesTimestamps()` read. #1276.
+     *
+     * The `!== true` early-return is Laravel's own `=== true` guard: an attribute only speaks while
+     * `$timestamps` is still `true`. Both ways of closing it are live — a declared `$timestamps = false` is a
+     * property default `newInstanceWithoutConstructor()` applies, and a user initializer that ran earlier in
+     * the walk has already written it (same position-dependence as {@see applyGuardedAttribute()}).
+     *
+     * No `class_exists` gate. `initializeHasTimestamps()` is 13.0+, so the 12.x floor never reaches this.
+     * Above it, `#[WithoutTimestamps]` (13.2) is newer than the initializer that dispatches here, and package
+     * atomicity does NOT close that window — 13.1 ships the initializer without the attribute in one artifact.
+     * Composer's `require` on `illuminate/database: ^12.14 || ^13.3` is what closes it; the
+     * `laravel/framework` entry is dev-only and binds nothing a user installs. Widening that floor is
+     * survivable rather than fatal, but check here first: {@see classAttribute()} name-matches an attribute
+     * whose class is absent and throws on `newInstance()`. Only a model naming a class its own framework
+     * lacks gets there — code Laravel fatals on too, since `Error` escapes its `catch (Exception)`.
+     *
+     * @param \ReflectionClass<Model> $reflection
+     */
+    private static function applyTimestampsAttributes(\ReflectionClass $reflection, Model $instance): void
+    {
+        if ($instance->timestamps !== true) {
+            return;
+        }
+
+        if (self::classAttribute($reflection, WithoutTimestamps::class) !== null) {
+            $instance->timestamps = false;
+
+            return;
+        }
+
+        $table = self::classAttribute($reflection, Table::class);
+        if ($table !== null && $table->timestamps !== null) {
+            $instance->timestamps = $table->timestamps;
         }
     }
 

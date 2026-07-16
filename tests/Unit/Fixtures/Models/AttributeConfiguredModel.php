@@ -25,6 +25,10 @@ use Illuminate\Database\Eloquent\Model;
  * The `#[*]` classes only exist from Laravel 13.0, so the consuming test is gated on
  * `class_exists()`; below that floor this file is never loaded.
  *
+ * Do NOT add a `timestamps:` argument to the `#[Table]` below: its absence is the point of the
+ * timestamps case that reuses this model ({@see TableTimestampsEnabledModel} covers the present-argument
+ * side). Adding one fails that case as a Laravel drift, which would misdiagnose it.
+ *
  * @internal fixture used by ModelMetadataRegistryTest
  */
 #[Hidden('attr_hidden')]
