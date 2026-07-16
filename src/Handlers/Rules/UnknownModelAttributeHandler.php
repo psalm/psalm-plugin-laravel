@@ -120,10 +120,19 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return null;
         }
 
-        // Completeness gate: the unknown-key verdict is only sound when the model's columns are
-        // known. With migrations disabled (or the table unparsed) schema() is empty, so the known
-        // set lacks its column origins and every real column would look unknown — skip the model.
-        if ($metadata->schema()->all() === []) {
+        if (
+            !$metadata->isComplete(
+                ModelMetadata::SECTION_METHODS
+                | ModelMetadata::SECTION_RELATIONS
+                | ModelMetadata::SECTION_RUNTIME_CONFIGURATION
+                | ModelMetadata::SECTION_SCHEMA
+                | ModelMetadata::SECTION_CASTS,
+            )
+            // A registered table can still have no statically parsed columns (for example when a
+            // migration uses dynamic names or Blueprint macros). In that case an unknown-key verdict
+            // would treat every real column as a typo, so preserve the rule's conservative bail-out.
+            || $metadata->schema()->all() === []
+        ) {
             return null;
         }
 

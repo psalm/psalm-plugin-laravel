@@ -56,7 +56,15 @@ final class UnresolvableAppendedModelAttributeHandler implements AfterCodebasePo
         $provider = $event->getCodebase()->classlike_storage_provider;
 
         foreach (ModelMetadataRegistry::all() as $fqcn => $metadata) {
-            if ($metadata->appends === [] || !$provider->has($fqcn)) {
+            if (
+                $metadata->appends === []
+                || !$metadata->isComplete(
+                    ModelMetadata::SECTION_METHODS
+                    | ModelMetadata::SECTION_RUNTIME_CONFIGURATION
+                    | ModelMetadata::SECTION_CASTS,
+                )
+                || !$provider->has($fqcn)
+            ) {
                 continue;
             }
 

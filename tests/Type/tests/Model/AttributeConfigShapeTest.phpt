@@ -17,7 +17,7 @@ use App\Models\AttributeSerializableModel;
  * #[Appends]/#[Hidden] PHP-attribute config feeds the serialized shape end-to-end.
  *
  * newInstanceWithoutConstructor() skips Laravel's initializers, so the registry replays the attribute
- * config at warm-up (applyClassAttributeConfig). The harness runs no migrations, so the shape comes
+ * config at warm-up (ModelInstancePreparer::prepare()). The harness runs no migrations, so the shape comes
  * entirely from #[Appends]: `full_name` (accessor-backed) is present, while `secret_token` is appended
  * but dropped by #[Hidden]. Without the fix getAppends() would miss #[Appends] and the shape would
  * collapse to the loose array<string, mixed> stub.

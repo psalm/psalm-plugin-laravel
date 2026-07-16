@@ -4,14 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Metadata;
 
-use Illuminate\Database\Eloquent\Attributes\Appends;
-use Illuminate\Database\Eloquent\Attributes\Connection;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Guarded;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
-use Illuminate\Database\Eloquent\Attributes\Table;
-use Illuminate\Database\Eloquent\Attributes\Unguarded;
-use Illuminate\Database\Eloquent\Attributes\Visible;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -76,8 +68,8 @@ final class ModelMetadataRegistryBuilder
      * Pre-compute metadata for a single model. Idempotent — re-computation
      * on a cached FQCN is a no-op.
      *
-     * Never throws: on any failure the method logs a warning through the
-     * codebase's progress handle and returns without storing an entry.
+     * Never throws: isolated section failures are reported while the partial entry is stored;
+     * an unexpected outer failure is reported and leaves the model unstored.
      *
      * Accepts any `class-string` (not narrowed to `class-string<Model>`): the
      * runtime guard in `compute()` early-returns for non-Model classes, and
@@ -172,6 +164,32 @@ final class ModelMetadataRegistryBuilder
 
         $storage = $storageProvider->get($modelFqcn);
 
+        /** @var array<string, \Throwable> $failures */
+        $failures = [];
+        $completeSections = 0;
+
+        // Static metadata must survive every instance-backed failure, so build it first.
+        $methodMetadata = self::computeSection(
+            ModelMetadata::SECTION_METHODS,
+            'methods',
+            $completeSections,
+            $failures,
+            static fn(): array => self::computeMethodMetadata($storage, $storageProvider),
+            [[], [], []],
+        );
+        [$accessors, $mutators, $scopes] = $methodMetadata;
+
+        $relations = self::codebaseMethodsInitialized($codebase)
+            ? self::computeSection(
+                ModelMetadata::SECTION_RELATIONS,
+                'relations',
+                $completeSections,
+                $failures,
+                static fn(): array => self::computeRelations($codebase, $modelFqcn, $storage),
+                [],
+            )
+            : [];
+
         try {
             $reflection = new \ReflectionClass($modelFqcn);
         } catch (\ReflectionException $reflectionException) {
@@ -195,40 +213,69 @@ final class ModelMetadataRegistryBuilder
         // throws \Error, not \ReflectionException). Its instance-derived fields (schema, casts,
         // table, connection) stay empty; the rest come from storage + declared property defaults.
         if ($reflection->isAbstract()) {
-            return self::computeForAbstract(
-                $codebase,
+            $metadata = self::computeForAbstract(
                 $modelFqcn,
                 $storage,
                 $reflection,
                 $customBuilder,
                 $customCollection,
-                $storageProvider,
+                $accessors,
+                $mutators,
+                $scopes,
+                $relations,
+                $completeSections,
+                $failures,
             );
-        }
+        } else {
+            $instance = self::computeSection(
+                0,
+                'model instance',
+                $completeSections,
+                $failures,
+                static function () use ($reflection): Model {
+                    $instance = $reflection->newInstanceWithoutConstructor();
+                    if (!$instance instanceof Model) {
+                        throw new \UnexpectedValueException('Reflection did not create an Eloquent model');
+                    }
 
-        try {
-            $instance = $reflection->newInstanceWithoutConstructor();
-        } catch (\ReflectionException $reflectionException) {
-            $codebase->progress->debug(
-                "Laravel plugin: ModelMetadataRegistry could not instantiate '{$modelFqcn}': {$reflectionException->getMessage()}\n",
+                    return $instance;
+                },
+                null,
             );
 
-            return null;
+            $metadata = $instance instanceof Model
+                ? self::computeForInstance(
+                    $codebase,
+                    $modelFqcn,
+                    $storage,
+                    $instance,
+                    $reflection,
+                    $customBuilder,
+                    $customCollection,
+                    $accessors,
+                    $mutators,
+                    $scopes,
+                    $relations,
+                    $completeSections,
+                    $failures,
+                )
+                : self::computeWithoutInstance(
+                    $modelFqcn,
+                    $storage,
+                    $reflection,
+                    $customBuilder,
+                    $customCollection,
+                    $accessors,
+                    $mutators,
+                    $scopes,
+                    $relations,
+                    $completeSections,
+                );
         }
 
-        if (!$instance instanceof Model) {
-            return null;
-        }
+        self::warnFailures($codebase, $modelFqcn, $failures);
 
-        return self::computeForInstance(
-            $codebase,
-            $modelFqcn,
-            $storage,
-            $instance,
-            $reflection,
-            $customBuilder,
-            $customCollection,
-        );
+        return $metadata;
     }
 
     /**
@@ -238,6 +285,11 @@ final class ModelMetadataRegistryBuilder
      * @param \ReflectionClass<Model>               $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null    $customBuilder
      * @param class-string<\Illuminate\Database\Eloquent\Collection>|null $customCollection
+     * @param array<non-empty-lowercase-string, AccessorInfo> $accessors
+     * @param array<non-empty-lowercase-string, MutatorInfo>  $mutators
+     * @param array<non-empty-lowercase-string, ScopeInfo>    $scopes
+     * @param array<non-empty-lowercase-string, RelationInfo> $relations
+     * @param array<string, \Throwable> $failures
      * @return ModelMetadata<Model>
      */
     private static function computeForInstance(
@@ -248,62 +300,112 @@ final class ModelMetadataRegistryBuilder
         \ReflectionClass $reflection,
         ?string $customBuilder,
         ?string $customCollection,
+        array $accessors,
+        array $mutators,
+        array $scopes,
+        array $relations,
+        int &$completeSections,
+        array &$failures,
     ): ModelMetadata {
-        $traits = self::computeTraitFlags($storage, $instance->usesTimestamps());
+        $baseTraits = self::computeTraitFlags($storage, true);
 
-        // HasUuids / HasUlids override getKeyType(), getIncrementing(), and uniqueIds()
-        // by reading `$this->usesUniqueIds`, which the trait initializer flips to true.
-        // `newInstanceWithoutConstructor()` skips that initializer; flip the flag here
-        // so every downstream Laravel getter (primary key, casts, etc.) sees the same
-        // state the runtime would. See #591 review notes.
-        if ($traits->hasUuids || $traits->hasUlids) {
-            self::flipUsesUniqueIds($instance);
+        // prepare() replays Model::__construct()'s initializer lifecycle on the constructor-less instance;
+        // see its docblock for the getMethods()-order walk. Without it the readers below observe unmerged
+        // casts/appends/fillable/hidden, an unflipped uniqueIds and an unresolved connection/table.
+        //
+        // One folded section: a mid-walk throw leaves the instance half-prepared, so all four instance-derived
+        // sections below degrade together (the degradation test still maps 'trait initializers' → those four).
+        // Pre-12.22 (class_uses_recursive parents-first) walk order is immaterial — the config attributes are
+        // all Laravel-13-only; the sole pre-12.22 divergence is casts()-vs-user-mergeCasts() (see computeCasts).
+        $instancePrepared = self::computeSection(
+            0,
+            'trait initializers',
+            $completeSections,
+            $failures,
+            static function () use ($reflection, $instance): bool {
+                ModelInstancePreparer::prepare($reflection, $instance);
+
+                return true;
+            },
+            false,
+        );
+
+        $runtimeRead = false;
+        $runtime = self::computeSection(
+            0,
+            'runtime configuration',
+            $completeSections,
+            $failures,
+            static function () use ($modelFqcn, $storage, $instance, &$runtimeRead): array {
+                $runtime = self::readRuntimeConfiguration($modelFqcn, $storage, $instance);
+                $runtimeRead = true;
+
+                return $runtime;
+            },
+            self::runtimeConfigurationFallback($baseTraits),
+        );
+        // $instancePrepared gates every instance-derived section: a partial walk (some initializers/mirrors
+        // ran, then one threw) leaves the instance's runtime config, schema, casts and key all untrustworthy.
+        if ($instancePrepared && $runtimeRead) {
+            $completeSections |= ModelMetadata::SECTION_RUNTIME_CONFIGURATION;
         }
 
-        // Apply the class-level PHP-attribute config (#[Hidden]/#[Visible]/#[Appends]/#[Fillable]/
-        // #[Guarded]/#[Connection]/#[Table]) that Model::__construct() would set via initializeTraits() /
-        // initializeModelAttributes() — both skipped by newInstanceWithoutConstructor(). Mutating the
-        // instance here (like flipUsesUniqueIds above) lets the getters below AND computeSchema()'s
-        // getTable() see the runtime state.
-        self::applyClassAttributeConfig($codebase, $reflection, $instance);
+        $tableSchema = new TableSchema([]);
+        // UnknownModelAttributeHandler trusts SECTION_SCHEMA, so withhold it on a partial prepare.
+        if ($instancePrepared) {
+            try {
+                $resolvedSchema = self::computeSchema($instance);
+                if ($resolvedSchema instanceof TableSchema) {
+                    $tableSchema = $resolvedSchema;
+                    $completeSections |= ModelMetadata::SECTION_SCHEMA;
+                }
+            } catch (\Throwable $throwable) {
+                $failures['schema'] = $throwable;
+            }
+        }
 
-        $tableSchema = self::computeSchema($instance);
-
-        // Method-derived metadata is STORAGE-based (no instance needed), so it is computed the same
-        // way for concrete and abstract models — see computeForAbstract.
-        [$accessors, $mutators, $scopes] = self::computeMethodMetadata($storage, $codebase->classlike_storage_provider);
-
-        // Relations need the Codebase (the AST parser reads parsed file statements), unlike the
-        // storage-only method metadata above — so they are computed separately, not in the walk.
-        $relations = self::computeRelations($codebase, $modelFqcn, $storage);
-
-        // Casts and appends are each needed twice — as their own field AND as a knownProperties()
-        // source — so compute each once into a local rather than re-deriving for the second use.
-        $casts = self::computeCasts($codebase, $modelFqcn, $instance, $traits, $tableSchema);
-        $appends = self::filterStringList($instance->getAppends());
+        $schemaComplete = ($completeSections & ModelMetadata::SECTION_SCHEMA) !== 0;
+        $casts = $instancePrepared
+            ? self::computeSection(
+                ModelMetadata::SECTION_CASTS,
+                'casts',
+                $completeSections,
+                $failures,
+                static fn(): array => self::computeCasts(
+                    $codebase,
+                    $modelFqcn,
+                    $instance,
+                    $runtime['traits'],
+                    $tableSchema,
+                    $schemaComplete,
+                ),
+                [],
+            )
+            : [];
+        $primaryKey = $instancePrepared
+            ? self::computeSection(
+                ModelMetadata::SECTION_PRIMARY_KEY,
+                'primary key',
+                $completeSections,
+                $failures,
+                static fn(): PrimaryKeyInfo => self::computePrimaryKey($instance, $runtime['traits']),
+                self::defaultPrimaryKey(),
+            )
+            : self::defaultPrimaryKey();
 
         return new ModelMetadata(
             fqcn: $modelFqcn,
-            primaryKey: self::computePrimaryKey($instance, $traits),
-            traits: $traits,
-            // PHP-attribute config (#[Fillable]/#[Guarded]/#[Connection]/#[Table]/#[Appends]/#[Hidden]/
-            // #[Visible]) was merged onto $instance by applyClassAttributeConfig() above, so these getters
-            // now see it. Case is preserved — Laravel's isFillable / isGuarded / getHidden / getVisible do
-            // exact-string comparisons, so lowercasing would diverge from runtime semantics.
-            fillable: self::filterStringList($instance->getFillable()),
-            // asArray() guards Laravel's `$guarded = false` ("guard nothing") idiom — getGuarded()
-            // then returns a bool, not an array, and would TypeError filterStringList()'s array param,
-            // crashing warm-up for the whole model (e.g. laravel/passport's models). #591.
-            guarded: self::filterStringList(self::asArray($instance->getGuarded())),
-            appends: $appends,
-            with: self::readStringList($instance, 'with'),
-            withCount: self::readStringList($instance, 'withCount'),
-            hidden: self::filterStringList($instance->getHidden()),
-            // getVisible() always returns an array (no `$visible = false` idiom, unlike $guarded), so
-            // it needs no asArray() guard. Non-empty $visible is Eloquent's serialization allow-list.
-            visible: self::filterStringList($instance->getVisible()),
-            connection: $instance->getConnectionName(),
-            morphAlias: self::computeMorphAlias($modelFqcn),
+            primaryKey: $primaryKey,
+            traits: $runtime['traits'],
+            fillable: $runtime['fillable'],
+            guarded: $runtime['guarded'],
+            appends: $runtime['appends'],
+            with: $runtime['with'],
+            withCount: $runtime['withCount'],
+            hidden: $runtime['hidden'],
+            visible: $runtime['visible'],
+            connection: $runtime['connection'],
+            morphAlias: $runtime['morphAlias'],
             customBuilder: $customBuilder,
             customCollection: $customCollection,
             schemaData: $tableSchema,
@@ -312,7 +414,8 @@ final class ModelMetadataRegistryBuilder
             mutatorsData: $mutators,
             scopesData: $scopes,
             relationsData: $relations,
-            knownPropertiesData: self::computeKnownProperties($tableSchema, $casts, $accessors, $mutators, $relations, $appends),
+            knownPropertiesData: self::computeKnownProperties($tableSchema, $casts, $accessors, $mutators, $relations, $runtime['appends']),
+            completeSections: $completeSections,
         );
     }
 
@@ -328,28 +431,34 @@ final class ModelMetadataRegistryBuilder
      * @param \ReflectionClass<Model>               $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null    $customBuilder
      * @param class-string<\Illuminate\Database\Eloquent\Collection>|null $customCollection
+     * @param array<non-empty-lowercase-string, AccessorInfo> $accessors
+     * @param array<non-empty-lowercase-string, MutatorInfo>  $mutators
+     * @param array<non-empty-lowercase-string, ScopeInfo>    $scopes
+     * @param array<non-empty-lowercase-string, RelationInfo> $relations
+     * @param array<string, \Throwable> $failures
      * @return ModelMetadata<Model>
      */
     private static function computeForAbstract(
-        Codebase $codebase,
         string $modelFqcn,
         ClassLikeStorage $storage,
         \ReflectionClass $reflection,
         ?string $customBuilder,
         ?string $customCollection,
-        ClassLikeStorageProvider $provider,
+        array $accessors,
+        array $mutators,
+        array $scopes,
+        array $relations,
+        int &$completeSections,
+        array &$failures,
     ): ModelMetadata {
-        /** @var array<string, mixed> $defaults */
-        $defaults = $reflection->getDefaultProperties();
-
-        // Method-derived metadata is storage-based, so an abstract base populates accessors/mutators/
-        // scopes identically to a concrete model (no instantiation). This is what lets the migrated
-        // handlers resolve an inherited accessor/scope on an abstract-typed receiver (#901).
-        [$accessors, $mutators, $scopes] = self::computeMethodMetadata($storage, $provider);
-
-        // Concrete relation methods declared in the abstract base's own body parse the same way as on
-        // a concrete model (AST + storage, no instantiation).
-        $relations = self::computeRelations($codebase, $modelFqcn, $storage);
+        $defaults = self::computeSection(
+            ModelMetadata::SECTION_RUNTIME_CONFIGURATION,
+            'runtime configuration',
+            $completeSections,
+            $failures,
+            static fn(): array => $reflection->getDefaultProperties(),
+            [],
+        );
 
         // Schema and casts are instance-derived — empty for an abstract base (no instance, no table).
         // Hoist the empty schema + the declared $appends so both the fields AND knownProperties()
@@ -357,10 +466,18 @@ final class ModelMetadataRegistryBuilder
         // declared on the abstract base populate it).
         $schema = new TableSchema([]);
         $appends = self::stringListDefault($defaults, 'appends');
+        $primaryKey = self::computeSection(
+            ModelMetadata::SECTION_PRIMARY_KEY,
+            'primary key',
+            $completeSections,
+            $failures,
+            static fn(): PrimaryKeyInfo => self::computePrimaryKeyFromDefaults($defaults),
+            self::defaultPrimaryKey(),
+        );
 
         return new ModelMetadata(
             fqcn: $modelFqcn,
-            primaryKey: self::computePrimaryKeyFromDefaults($defaults),
+            primaryKey: $primaryKey,
             traits: self::computeTraitFlags($storage, self::asBool($defaults['timestamps'] ?? null, true)),
             fillable: self::stringListDefault($defaults, 'fillable'),
             // Laravel's base Model defaults $guarded to ['*'] (guard-all); the default-property
@@ -383,7 +500,190 @@ final class ModelMetadataRegistryBuilder
             scopesData: $scopes,
             relationsData: $relations,
             knownPropertiesData: self::computeKnownProperties($schema, [], $accessors, $mutators, $relations, $appends),
+            completeSections: $completeSections,
         );
+    }
+
+    /**
+     * Preserve static metadata when a concrete model cannot be instantiated.
+     *
+     * @param class-string<Model> $modelFqcn
+     * @param \ReflectionClass<Model> $reflection
+     * @param class-string<\Illuminate\Database\Eloquent\Builder>|null $customBuilder
+     * @param class-string<\Illuminate\Database\Eloquent\Collection>|null $customCollection
+     * @param array<non-empty-lowercase-string, AccessorInfo> $accessors
+     * @param array<non-empty-lowercase-string, MutatorInfo>  $mutators
+     * @param array<non-empty-lowercase-string, ScopeInfo>    $scopes
+     * @param array<non-empty-lowercase-string, RelationInfo> $relations
+     * @return ModelMetadata<Model>
+     */
+    private static function computeWithoutInstance(
+        string $modelFqcn,
+        ClassLikeStorage $storage,
+        \ReflectionClass $reflection,
+        ?string $customBuilder,
+        ?string $customCollection,
+        array $accessors,
+        array $mutators,
+        array $scopes,
+        array $relations,
+        int $completeSections,
+    ): ModelMetadata {
+        $defaults = $reflection->getDefaultProperties();
+        $schema = new TableSchema([]);
+        $appends = self::stringListDefault($defaults, 'appends');
+
+        return new ModelMetadata(
+            fqcn: $modelFqcn,
+            primaryKey: self::defaultPrimaryKey(),
+            traits: self::computeTraitFlags($storage, self::asBool($defaults['timestamps'] ?? null, true)),
+            fillable: self::stringListDefault($defaults, 'fillable'),
+            guarded: self::stringListDefault($defaults, 'guarded'),
+            appends: $appends,
+            with: self::stringListDefault($defaults, 'with'),
+            withCount: self::stringListDefault($defaults, 'withCount'),
+            hidden: self::stringListDefault($defaults, 'hidden'),
+            visible: self::stringListDefault($defaults, 'visible'),
+            connection: null,
+            morphAlias: null,
+            customBuilder: $customBuilder,
+            customCollection: $customCollection,
+            schemaData: $schema,
+            castsData: [],
+            accessorsData: $accessors,
+            mutatorsData: $mutators,
+            scopesData: $scopes,
+            relationsData: $relations,
+            knownPropertiesData: self::computeKnownProperties($schema, [], $accessors, $mutators, $relations, $appends),
+            completeSections: $completeSections,
+        );
+    }
+
+    /**
+     * @return array{
+     *     traits: TraitFlags,
+     *     fillable: list<non-empty-string>,
+     *     guarded: list<non-empty-string>,
+     *     appends: list<non-empty-string>,
+     *     with: list<string>,
+     *     withCount: list<string>,
+     *     hidden: list<non-empty-string>,
+     *     visible: list<non-empty-string>,
+     *     connection: string|null,
+     *     morphAlias: string|null
+     * }
+     * @param class-string<Model> $modelFqcn
+     */
+    private static function readRuntimeConfiguration(
+        string $modelFqcn,
+        ClassLikeStorage $storage,
+        Model $instance,
+    ): array {
+        $traits = self::computeTraitFlags($storage, $instance->usesTimestamps());
+
+        return [
+            'traits' => $traits,
+            'fillable' => self::filterStringList($instance->getFillable()),
+            // asArray() guards Laravel's `$guarded = false` ("guard nothing") idiom — getGuarded()
+            // then returns a bool, not an array, and would TypeError filterStringList()'s array param,
+            // crashing warm-up for the whole model (e.g. laravel/passport's models). #591.
+            'guarded' => self::filterStringList(self::asArray($instance->getGuarded())),
+            'appends' => self::filterStringList($instance->getAppends()),
+            'with' => self::readStringList($instance, 'with'),
+            'withCount' => self::readStringList($instance, 'withCount'),
+            'hidden' => self::filterStringList($instance->getHidden()),
+            'visible' => self::filterStringList($instance->getVisible()),
+            'connection' => $instance->getConnectionName(),
+            'morphAlias' => self::computeMorphAlias($modelFqcn),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     traits: TraitFlags,
+     *     fillable: list<non-empty-string>,
+     *     guarded: list<non-empty-string>,
+     *     appends: list<non-empty-string>,
+     *     with: list<string>,
+     *     withCount: list<string>,
+     *     hidden: list<non-empty-string>,
+     *     visible: list<non-empty-string>,
+     *     connection: null,
+     *     morphAlias: null
+     * }
+     * @psalm-pure
+     */
+    private static function runtimeConfigurationFallback(TraitFlags $traits): array
+    {
+        return [
+            'traits' => $traits,
+            'fillable' => [],
+            'guarded' => [],
+            'appends' => [],
+            'with' => [],
+            'withCount' => [],
+            'hidden' => [],
+            'visible' => [],
+            'connection' => null,
+            'morphAlias' => null,
+        ];
+    }
+
+    /** @psalm-pure */
+    private static function defaultPrimaryKey(): PrimaryKeyInfo
+    {
+        return new PrimaryKeyInfo('id', PrimaryKeyType::Integer, incrementing: true, uuidColumns: []);
+    }
+
+    /**
+     * @template T
+     * @param array<string, \Throwable> $failures
+     * @param \Closure(): T $compute
+     * @param T $fallback
+     * @return T
+     */
+    private static function computeSection(
+        int $section,
+        string $name,
+        int &$completeSections,
+        array &$failures,
+        \Closure $compute,
+        mixed $fallback,
+    ): mixed {
+        try {
+            $value = $compute();
+            $completeSections |= $section;
+
+            return $value;
+        } catch (\Throwable $throwable) {
+            $failures[$name] = $throwable;
+
+            return $fallback;
+        }
+    }
+
+    /**
+     * @param class-string<Model> $modelFqcn
+     * @param array<string, \Throwable> $failures
+     */
+    private static function warnFailures(Codebase $codebase, string $modelFqcn, array $failures): void
+    {
+        if ($failures === []) {
+            return;
+        }
+
+        $details = [];
+        foreach ($failures as $section => $throwable) {
+            $details[] = "{$section}: {$throwable->getMessage()} at {$throwable->getFile()}:{$throwable->getLine()}";
+        }
+
+        $message = "Laravel plugin: ModelMetadataRegistry warm-up failed for '{$modelFqcn}' "
+            . '(partial metadata stored): ' . \implode('; ', $details);
+        $codebase->progress->warning($message);
+
+        if ($codebase->progress instanceof VoidProgress) {
+            \fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
+        }
     }
 
     /**
@@ -882,7 +1182,7 @@ final class ModelMetadataRegistryBuilder
      * Compute primary-key info from a model instance.
      *
      * HasUuids / HasUlids override `getKeyType()` / `getIncrementing()` / `uniqueIds()`
-     * by reading `$this->usesUniqueIds`. The caller in `computeForInstance()` has already flipped
+     * by reading `$this->usesUniqueIds`. The earlier unique-id initialization section has flipped
      * that flag for UUID/ULID models, so the instance getters return the runtime-correct
      * values here (including any user override of `uniqueIds()` returning multiple cols).
      */
@@ -966,16 +1266,16 @@ final class ModelMetadataRegistryBuilder
         return \is_string($value) && $value !== '' ? $value : null;
     }
 
-    private static function computeSchema(Model $instance): TableSchema
+    private static function computeSchema(Model $instance): ?TableSchema
     {
         $schema = SchemaStateProvider::getSchema();
         if (!$schema instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator) {
-            return new TableSchema([]);
+            return null;
         }
 
         $tableName = $instance->getTable();
         if (!isset($schema->tables[$tableName])) {
-            return new TableSchema([]);
+            return null;
         }
 
         $columns = [];
@@ -1019,6 +1319,7 @@ final class ModelMetadataRegistryBuilder
         Model $instance,
         TraitFlags $traits,
         TableSchema $schema,
+        bool $schemaComplete,
     ): array {
         $merged = [];
 
@@ -1063,6 +1364,14 @@ final class ModelMetadataRegistryBuilder
             $merged = \array_merge($merged, CastsMethodParser::parse($codebase, $modelFqcn));
         }
 
+        // KNOWN DIVERGENCE (Laravel 12.14–12.21 only): when a user trait initializer mergeCasts() a key that
+        // casts() ALSO declares, runtime there runs casts() first (bootTraits walks class_uses_recursive
+        // parents-first) then the user init, so the USER value wins; from 12.22+ the order flips and casts()
+        // wins — which is what merging casts() last reproduces on every version. Making it version-aware needs
+        // a pre-replay casts snapshot diffed here to re-apply user-merged keys after casts(); deferred as a
+        // documented divergence — a rare same-key collision, on older supported releases, costing one cast
+        // type. See ModelInstancePreparer::prepare() for the getMethods()-order walk that motivates this.
+
         $result = [];
         foreach ($merged as $columnName => $castString) {
             if ($columnName === '' || $castString === '') {
@@ -1072,12 +1381,14 @@ final class ModelMetadataRegistryBuilder
             // Bake column nullability into CastInfo::$psalmType at build time so consumers
             // can read it directly without re-running CastResolver (see design §5.4).
             $column = $schema->column($columnName);
-            $nullable = $column instanceof ColumnInfo && $column->nullable;
+            // Without authoritative schema, neither absent nullability nor an absent source type
+            // is evidence. Preserve the cast inventory, but keep its inferred type conservative.
+            $nullable = !$schemaComplete || ($column instanceof ColumnInfo && $column->nullable);
             // CastsInboundAttributes casts read back as a passthrough of the column's intrinsic
             // type, so CastResolver needs that base type as `$originalType`. The mapping lives on
             // ColumnTypeMapper (Schema namespace) so the builder reads it directly instead of
             // reaching back into the property handler; null when no migration column backs the cast.
-            $originalType = $column instanceof ColumnInfo
+            $originalType = $schemaComplete && $column instanceof ColumnInfo
                 ? ColumnTypeMapper::mapBaseType($column)
                 : null;
             // Preserve original-case column keys to match Eloquent's case-sensitive
@@ -1235,8 +1546,8 @@ final class ModelMetadataRegistryBuilder
      * default values are initialized even by `newInstanceWithoutConstructor()`.
      *
      * Only catches ReflectionException (property genuinely missing on a subclass that
-     * shadowed it). Any other Error surfaces via warmUp()'s outer catch as a warning,
-     * which is the right behavior when something unexpected breaks.
+     * shadowed it). Any other throwable is handled by the runtime-configuration section,
+     * which reports the failure and leaves that section incomplete.
      *
      * @return list<string>
      */
@@ -1275,234 +1586,6 @@ final class ModelMetadataRegistryBuilder
         }
 
         return 'deleted_at';
-    }
-
-    /**
-     * Flip `$usesUniqueIds = true` on a HasUuids/HasUlids instance so `getKeyType()` and
-     * `getIncrementing()` return the string/non-incrementing values Laravel would return
-     * at runtime — work that the trait initializer normally handles.
-     */
-    private static function flipUsesUniqueIds(Model $instance): void
-    {
-        try {
-            $property = new \ReflectionProperty($instance, 'usesUniqueIds');
-        } catch (\ReflectionException) {
-            return;
-        }
-
-        $property->setValue($instance, true);
-    }
-
-    /**
-     * Apply the class-level PHP-attribute config that {@see Model}::__construct() sets via
-     * `initializeTraits()` / `initializeModelAttributes()` — both skipped by
-     * `newInstanceWithoutConstructor()`. Mutates `$instance` (like {@see flipUsesUniqueIds()}) so every
-     * downstream getter, and {@see computeSchema()}'s `getTable()`, sees the runtime state.
-     *
-     * Per-attribute semantics mirror Laravel exactly: `#[Hidden]`/`#[Visible]`/`#[Appends]`/`#[Fillable]`
-     * union-merge into the property list; `#[Guarded]`/`#[Unguarded]` only replace the default `['*']`;
-     * `#[Connection]`/`#[Table]` fill a null.
-     *
-     * Known gap (NOT applied): `#[Table]`'s `key` / `keyType` / `incrementing` sub-overrides and
-     * `#[WithoutIncrementing]`. Laravel's `initializeModelAttributes()` feeds these into the primary key
-     * (`primaryKey ← $table->key` when still `'id'`, etc.), but {@see computePrimaryKey()} reads only the
-     * raw `getKeyName()`/`getKeyType()`/`getIncrementing()` defaults and never consults `#[Table]`, so an
-     * attribute-declared PK is not picked up. Deferred as a separate PK-path change; the table NAME (the
-     * serialization-relevant part) IS applied. (Timestamps are moot — the registry stores no such field.)
-     *
-     * The attribute classes exist from Laravel 13.0; on older lines `getAttributes()` matches nothing and
-     * every branch no-ops (so the plugin stays correct across the 12.4+ support range).
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyClassAttributeConfig(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
-    {
-        // Union-merge, mirroring mergeHidden() / mergeVisible() / mergeAppends() / mergeFillable().
-        // These four configuration attributes only exist from Laravel 13. On Laravel 12.14–12.24,
-        // mergeHidden() / mergeVisible() / mergeAppends() are unavailable (mergeFillable() exists), so
-        // calling the absent helpers with empty fallbacks crashes warm-up. An absent attribute has nothing to replay.
-        $hidden = self::classAttribute($codebase, $reflection, Hidden::class);
-        if ($hidden !== null) {
-            $instance->mergeHidden($hidden->columns);
-        }
-
-        $visible = self::classAttribute($codebase, $reflection, Visible::class);
-        if ($visible !== null) {
-            $instance->mergeVisible($visible->columns);
-        }
-
-        $appends = self::classAttribute($codebase, $reflection, Appends::class);
-        if ($appends !== null) {
-            $instance->mergeAppends($appends->columns);
-        }
-
-        $fillable = self::classAttribute($codebase, $reflection, Fillable::class);
-        if ($fillable !== null) {
-            $instance->mergeFillable($fillable->columns);
-        }
-
-        self::applyGuardedAttribute($codebase, $reflection, $instance);
-        self::applyConnectionAttribute($codebase, $reflection, $instance);
-        self::applyTableAttribute($codebase, $reflection, $instance);
-    }
-
-    /**
-     * `#[Guarded]` / `#[Unguarded]` only replace the default `['*']` denylist, mirroring
-     * {@see \Illuminate\Database\Eloquent\Concerns\GuardsAttributes::initializeGuardsAttributes()}:
-     * `#[Unguarded]` guards nothing; else the `#[Guarded]` columns (`columns ?? ['*']`, so a present-but-
-     * empty `#[Guarded]` also guards nothing); absent → keep `['*']`.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyGuardedAttribute(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
-    {
-        if ($instance->getGuarded() !== ['*']) {
-            return;
-        }
-
-        if (self::classAttribute($codebase, $reflection, Unguarded::class) !== null) {
-            $instance->guard([]);
-
-            return;
-        }
-
-        // Presence (not non-empty) gates the replace: a present `#[Guarded()]` with no columns sets [],
-        // matching Laravel's `columns ?? ['*']` where an empty array is non-null. Absent → keep `['*']`.
-        $guarded = self::classAttribute($codebase, $reflection, Guarded::class);
-        if ($guarded !== null) {
-            $instance->guard($guarded->columns);
-        }
-    }
-
-    /**
-     * `#[Connection(name:)]` fills a null `$connection`, mirroring `initializeModelAttributes()`'s `??=`.
-     * The name is normalized to a string before storing, matching `Model::getConnectionName()`'s
-     * `enum_value()` (BackedEnum → backing value, UnitEnum → case name). This is deliberately stronger
-     * than storing the raw enum: the registry's `connection` field is `?string`, and an int-backed enum
-     * would make `getConnectionName()` return an `int` that TypeErrors the `?string` parameter under
-     * `strict_types`, dropping the whole model via warmUp()'s catch.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyConnectionAttribute(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
-    {
-        if ($instance->getConnectionName() !== null) {
-            return;
-        }
-
-        $name = self::classAttribute($codebase, $reflection, Connection::class)?->name;
-        if ($name === null) {
-            return;
-        }
-
-        $instance->setConnection(match (true) {
-            \is_string($name) => $name,
-            $name instanceof \BackedEnum => (string) $name->value,
-            default => $name->name,
-        });
-    }
-
-    /**
-     * `#[Table(name:)]` sets the table, mirroring the `$declaresTable` branch of
-     * `initializeModelAttributes()`: a `#[Table]` declared DIRECTLY on the concrete class (Laravel's
-     * non-recursive `getAttributes()` check) AND no own `$table` property overwrites the table; otherwise
-     * the resolved (ancestor-walked) name only fills a still-null table (`??=`). Feeds
-     * {@see computeSchema()}'s migration lookup.
-     *
-     * Known-gap: a `key`/`keyType`-only `#[Table]` (null name) does NOT clear an inherited `$table`
-     * default the way Laravel's force-branch does (`$this->table = $table->name ?? null`). That sits
-     * inside the same exotic, deferred scenario as the `key`/`keyType`/`incrementing` PK sub-overrides
-     * (see {@see applyClassAttributeConfig()}), so it is left untouched rather than half-applied.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     */
-    private static function applyTableAttribute(Codebase $codebase, \ReflectionClass $reflection, Model $instance): void
-    {
-        $name = self::classAttribute($codebase, $reflection, Table::class)?->name;
-        if ($name === null) {
-            return;
-        }
-
-        // Force-set only on a DIRECT concrete-class attribute (non-recursive, no own $table property);
-        // otherwise `??=` fills a still-null table with the resolved name.
-        $forceSet = !self::declaresOwnProperty($reflection, 'table') && $reflection->getAttributes(Table::class) !== [];
-        if ($forceSet || self::rawTableIsNull($instance)) {
-            $instance->setTable($name);
-        }
-    }
-
-    /**
-     * True when the concrete class itself declares `$name` (not inherited) — mirrors the `$declaresTable`
-     * check in `initializeModelAttributes()`.
-     *
-     * @param \ReflectionClass<Model> $reflection
-     * @psalm-pure
-     */
-    private static function declaresOwnProperty(\ReflectionClass $reflection, string $name): bool
-    {
-        if (!$reflection->hasProperty($name)) {
-            return false;
-        }
-
-        return $reflection->getProperty($name)->getDeclaringClass()->getName() === $reflection->getName();
-    }
-
-    /**
-     * Whether the raw `$table` property is still null (so a `#[Table]` may fill it). Reads the property,
-     * not `getTable()`, which always derives a non-null name from the class.
-     */
-    private static function rawTableIsNull(Model $instance): bool
-    {
-        try {
-            $property = new \ReflectionProperty($instance, 'table');
-        } catch (\ReflectionException) {
-            return true;
-        }
-
-        // A typed-uninitialized `$table` (non-idiomatic) has no value to read; treat it as null so a
-        // `#[Table]` may fill it, and avoid the \Error that getValue() throws on an uninitialized typed prop.
-        if (!$property->isInitialized($instance)) {
-            return true;
-        }
-
-        // Consume the mixed value inline (=== null) so it never binds to a local — keeps coverage at 100%.
-        return $property->getValue($instance) === null;
-    }
-
-    /**
-     * Resolve a class-level attribute the way {@see Model}::resolveClassAttribute() does: walk the class
-     * up its parents, return the first ancestor's first instance of `$attributeClass` (no cross-ancestor
-     * merge), or null. A throwing `newInstance()` (malformed attribute args) is swallowed to a null so a
-     * single bad attribute degrades that one field rather than aborting the whole model's warm-up; this
-     * is deliberately broader than Laravel's own `catch (Exception)`, since a static-analysis pass must
-     * never crash where the runtime constructor would. The swallow leaves a debug breadcrumb, like the
-     * file's other reflection catches ({@see compute()}, {@see warmUp()}).
-     *
-     * @template T of object
-     * @param \ReflectionClass<object> $reflection
-     * @param class-string<T>          $attributeClass
-     * @return T|null
-     */
-    private static function classAttribute(Codebase $codebase, \ReflectionClass $reflection, string $attributeClass): ?object
-    {
-        for ($current = $reflection; $current !== false; $current = $current->getParentClass()) {
-            $attributes = $current->getAttributes($attributeClass);
-            if ($attributes === []) {
-                continue;
-            }
-
-            try {
-                return $attributes[0]->newInstance();
-            } catch (\Throwable $throwable) {
-                $codebase->progress->debug(
-                    "Laravel plugin: ModelMetadataRegistry could not instantiate {$attributeClass} on '{$current->getName()}': {$throwable->getMessage()}\n",
-                );
-
-                return null;
-            }
-        }
-
-        return null;
     }
 
     /**

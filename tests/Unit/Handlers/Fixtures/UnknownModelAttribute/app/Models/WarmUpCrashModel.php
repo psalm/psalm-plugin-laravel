@@ -7,10 +7,8 @@ namespace KnownAttributeFixture\Models;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Deliberately crashes {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::compute()}
- * (via `computeSchema()`'s `getTable()` call) to exercise `warmUp()`'s outer safety-net catch, for
- * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\WarmUpFailureVisibilityTest}. Warm-up failing for
- * this model must never affect {@see KnownThing}'s own warm-up in the same run (per-model try/catch).
+ * Deliberately fails the registry's schema section through `getTable()`. The partial warm-up warning
+ * must remain visible, while unrelated static metadata stays cached for this model.
  */
 class WarmUpCrashModel extends Model
 {
