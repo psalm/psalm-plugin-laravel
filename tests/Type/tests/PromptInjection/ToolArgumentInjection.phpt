@@ -9,7 +9,7 @@ function runToolSqlLookup(\Laravel\Ai\Tools\Request $request): void {
     // Stringable it returns carries taint into the SQL sink below.
     $needle = (string) $request->string('q');
 
-    \Illuminate\Support\Facades\DB::statement('DELETE FROM users WHERE name = ' . $needle);
+    \Illuminate\Support\Facades\DB::delete('DELETE FROM users WHERE name = ' . $needle);
 }
 ?>
 --EXPECTF--
