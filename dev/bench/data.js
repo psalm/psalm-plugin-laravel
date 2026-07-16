@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784233336924,
+  "lastUpdate": 1784241879520,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8915,6 +8915,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.82,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6909e6dd6736737eae8979dec36582a7a1800b1a",
+          "message": "Merge pull request #1284 from psalm/ci/benchmark-workflow-hardening\n\nSimplify benchmark.yml: isolate untrusted code, drop redundant PR path",
+          "timestamp": "2026-07-17T00:41:51+02:00",
+          "tree_id": "e1fcdb82f9df571fd2bf06a64fd30be99fc5a8fd",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6909e6dd6736737eae8979dec36582a7a1800b1a"
+        },
+        "date": 1784241878958,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.78,
+            "range": "± 0.03",
             "unit": "s"
           },
           {
