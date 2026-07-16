@@ -136,13 +136,14 @@ unchanged. The same signature is handed to the params provider for direct `Relat
 dispatch. This must remain storage-only—booting builders can execute application code, and a
 synthetic method call recursively clones Psalm node data on this hot path.
 
-Method-level templates are inferred only from information safely available at this provider's
-event point: an existing argument node type, a literal/simple expression, or a variable/property
-in the current context. Psalm has not yet analyzed nested calls or unpacked arguments here. Those
-inputs use the template's declared upper bound (normally `mixed`) rather than duplicating Psalm's
-call and unpack analysis inside a relation-specific handler. Inference is all-or-bound for each
-call: if any template-bearing argument is unavailable, no partial method-template bounds are kept,
-because they could over-constrain another argument that Psalm analyzes later.
+Method-level templates uniformly degrade to their declared upper bound (normally `mixed`) when
+forwarded this way. This provider fires on the missing-method path before Psalm's normal argument
+analyzer runs, so argument types are not reliably available yet (nested calls and unpacked
+arguments have not been analyzed). Inferring a template from only the arguments that happen to
+already have a type would be unsound, since a later-analyzed sibling argument could validly widen
+the same template. Making that inference safe would mean duplicating Psalm's own call and unpack
+analysis inside a relation-specific handler, which is disproportionate for the rarest case and has
+previously caused catastrophic memory use.
 
 
 ### 2. Eloquent Builder → Query Builder

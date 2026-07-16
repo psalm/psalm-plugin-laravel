@@ -113,36 +113,5 @@ class VehicleBuilder extends Builder
         return $first;
     }
 
-    /**
-     * @template TValue
-     * @param TModel $model
-     * @param TValue $value
-     * @return TValue
-     */
-    public function valueForModel(Model $model, mixed $value): mixed
-    {
-        return $value;
-    }
-
-    /**
-     * @template TValue
-     * @param TValue $value
-     * @return TValue
-     */
-    public function labelledPassthrough(string $label, mixed $value): mixed
-    {
-        return $value;
-    }
-
-    /**
-     * @template TValue
-     * @param TValue ...$values
-     * @return TValue
-     */
-    public function lastValue(mixed ...$values): mixed
-    {
-        return $values[\array_key_last($values)];
-    }
-
     public function recordQuery(): void {}
 }

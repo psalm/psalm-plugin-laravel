@@ -7,19 +7,14 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Arg;
-use PhpParser\Node\Expr;
 use Psalm\Codebase;
-use Psalm\Context;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Analyzer\Statements\Expression\Call\ClassTemplateParamCollector;
-use Psalm\Internal\Analyzer\Statements\Expression\ExpressionIdentifier;
-use Psalm\Internal\Analyzer\Statements\Expression\SimpleTypeInferer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TemplateBound;
 use Psalm\Internal\Type\TemplateInferredTypeReplacer;
 use Psalm\Internal\Type\TemplateResult;
-use Psalm\Internal\Type\TemplateStandinTypeReplacer;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\CustomBuilderMethodHandler;
@@ -43,8 +38,8 @@ use Psalm\Type\Union;
 final class RelatedBuilderMethodResolver
 {
     /**
-     * Declared-method lookup cache. Signatures are localized per call because cheap method-level
-     * template inference may use types already available for the current arguments.
+     * Declared-method lookup cache. Signatures no longer depend on per-call argument types;
+     * localization depends only on the effective builder's class templates.
      *
      * @var array<string, array{MethodIdentifier, MethodStorage}|null>
      */
@@ -81,7 +76,6 @@ final class RelatedBuilderMethodResolver
     public static function resolveDeclaredMethod(
         Codebase $codebase,
         StatementsAnalyzer $source,
-        Context $context,
         string $modelClass,
         string $methodName,
         array $arguments,
@@ -123,16 +117,7 @@ final class RelatedBuilderMethodResolver
             $templateResult->template_types += $methodStorage->template_types;
         }
 
-        self::inferMethodTemplates(
-            $codebase,
-            $source,
-            $context,
-            $methodStorage->params,
-            $arguments,
-            $methodStorage->template_types ?? [],
-            $templateResult,
-        );
-        self::fillUnresolvedMethodTemplateBounds($methodStorage, $templateResult);
+        self::boundMethodTemplates($methodStorage, $templateResult);
 
         $methodReturnSelfClass = $declaringMethodId->fq_class_name;
 
@@ -330,175 +315,24 @@ final class RelatedBuilderMethodResolver
     }
 
     /**
-     * Infer method-level template bounds from already-analyzed call arguments.
-     * Psalm will perform the actual argument validation afterwards using the localized
-     * parameters handed to MethodForwardingHandler's params provider.
-     *
-     * @param list<FunctionLikeParameter> $parameters
-     * @param list<Arg> $arguments
-     * @param array<string, non-empty-array<string, Union>> $methodTemplateTypes
+     * This provider fires on the missing-method path before Psalm's normal argument analyzer
+     * runs, so argument types are not reliably available yet (nested calls and unpacked
+     * arguments have not been analyzed). Inferring a template from only the arguments that
+     * happen to already have a type would be unsound, since a later-analyzed sibling argument
+     * could validly widen the same template. Making that inference safe would mean duplicating
+     * Psalm's own call analysis inside a relation-specific handler, which has previously caused
+     * runaway memory use. Every method template therefore degrades unconditionally and
+     * predictably to its declared upper bound (normally `mixed`).
      */
-    private static function inferMethodTemplates(
-        Codebase $codebase,
-        StatementsAnalyzer $source,
-        Context $context,
-        array $parameters,
-        array $arguments,
-        array $methodTemplateTypes,
-        TemplateResult $templateResult,
-    ): void {
-        if ($methodTemplateTypes === []) {
-            return;
-        }
-
-        /** @var list<array{Union, Union, int}> $inferences */
-        $inferences = [];
-
-        foreach ($arguments as $argumentOffset => $argument) {
-            $parameterOffset = self::parameterOffsetForArgument($argument, $argumentOffset, $parameters);
-            $parameter = $parameters[$parameterOffset] ?? null;
-
-            if (
-                !$parameter instanceof FunctionLikeParameter
-                || !$parameter->type instanceof Union
-                || !self::hasMethodTemplate($parameter->type, $methodTemplateTypes)
-            ) {
-                continue;
-            }
-
-            // Do not partially constrain a method template. An unpacked or unavailable sibling
-            // may validly widen the same template once Psalm performs ordinary argument analysis.
-            if ($argument->unpack) {
-                return;
-            }
-
-            $argumentType = self::argumentType($codebase, $source, $context, $argument->value);
-
-            if (!$argumentType instanceof Union) {
-                return;
-            }
-
-            $inferences[] = [$parameter->type, $argumentType, $argumentOffset];
-        }
-
-        foreach ($inferences as [$parameterType, $argumentType, $argumentOffset]) {
-            TemplateStandinTypeReplacer::fillTemplateResult(
-                $parameterType,
-                $templateResult,
-                $codebase,
-                $source,
-                $argumentType,
-                $argumentOffset,
-                $context->self,
-                $context->calling_method_id !== null
-                    ? $context->calling_method_id
-                    : $context->calling_function_id,
-            );
-        }
-    }
-
-    /**
-     * @param array<string, non-empty-array<string, Union>> $methodTemplateTypes
-     * @psalm-mutation-free
-     */
-    private static function hasMethodTemplate(Union $type, array $methodTemplateTypes): bool
-    {
-        foreach ($type->getTemplateTypes() as $templateType) {
-            if (isset($methodTemplateTypes[$templateType->param_name][$templateType->defining_class])) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Return-type providers on the missing-method path run before Psalm's normal argument
-     * analyzer. Use only types already present on the AST/context or Psalm's side-effect-free
-     * simple-expression inferer.
-     * Deliberately do not invoke ExpressionAnalyzer/CallAnalyzer: doing so recursively from
-     * this provider can duplicate analysis and previously caused catastrophic memory use.
-     */
-    private static function argumentType(
-        Codebase $codebase,
-        StatementsAnalyzer $source,
-        Context $context,
-        Expr $expression,
-    ): ?Union {
-        $argumentType = $source->getNodeTypeProvider()->getType($expression);
-        if ($argumentType instanceof Union) {
-            return $argumentType;
-        }
-
-        $argumentType = SimpleTypeInferer::infer(
-            $codebase,
-            $source->node_data,
-            $expression,
-            $source->getAliases(),
-            $source,
-        );
-        if ($argumentType instanceof Union) {
-            return $argumentType;
-        }
-
-        $argumentVarId = ExpressionIdentifier::getExtendedVarId(
-            $expression,
-            $context->self,
-            $source,
-        );
-        if ($argumentVarId !== null && isset($context->vars_in_scope[$argumentVarId])) {
-            return $context->vars_in_scope[$argumentVarId];
-        }
-
-        return null;
-    }
-
-    /**
-     * A missing-method provider cannot safely analyze arbitrary nested calls to infer their
-     * result. Replace any still-unbound method template with its declared upper bound so both
-     * return and parameter types degrade predictably (usually to mixed) instead of exposing an
-     * unresolved template that Psalm's later relation params check cannot bind.
-     */
-    private static function fillUnresolvedMethodTemplateBounds(
+    private static function boundMethodTemplates(
         MethodStorage $methodStorage,
         TemplateResult $templateResult,
     ): void {
         foreach ($methodStorage->template_types ?? [] as $templateName => $definingClasses) {
             foreach ($definingClasses as $definingClass => $bound) {
-                if (isset($templateResult->lower_bounds[$templateName][$definingClass])) {
-                    continue;
-                }
-
                 $templateResult->lower_bounds[$templateName][$definingClass] = [new TemplateBound($bound)];
             }
         }
-    }
-
-    /**
-     * @param list<FunctionLikeParameter> $parameters
-     * @psalm-mutation-free
-     */
-    private static function parameterOffsetForArgument(
-        Arg $argument,
-        int $argumentOffset,
-        array $parameters,
-    ): int {
-        if ($argument->name instanceof \PhpParser\Node\Identifier) {
-            $argumentName = $argument->name->toString();
-            foreach ($parameters as $parameterOffset => $parameter) {
-                if ($parameter->name === $argumentName) {
-                    return $parameterOffset;
-                }
-            }
-        }
-
-        if (isset($parameters[$argumentOffset])) {
-            return $argumentOffset;
-        }
-
-        $lastOffset = \array_key_last($parameters);
-
-        return $lastOffset !== null && $parameters[$lastOffset]->is_variadic ? $lastOffset : $argumentOffset;
     }
 
     private static function specializeParameter(

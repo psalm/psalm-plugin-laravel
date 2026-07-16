@@ -16,20 +16,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-function makeVehicleForRelationTemplate(): Vehicle {
-    return new Vehicle();
-}
-
-function makeCustomerForRelationTemplate(): Customer {
-    return new Customer();
-}
-
-final class RelationVehicleFactory {
-    public function make(): Vehicle {
-        return new Vehicle();
-    }
-}
-
 /**
  * Issue #1262: Relation::__call forwards custom methods to the related model's
  * effective builder and substitutes the Relation only for builder-returning branches.
@@ -103,58 +89,18 @@ function test_declared_custom_builder_parameters(): void {
     /** @psalm-check-type-exact $count = int<0, max> */
 }
 
-function test_method_template_is_inferred_from_available_argument_types(): void {
-    $_result = (new Customer())->vehicles()->passthrough('Toyota');
-    /** @psalm-check-type-exact $_result = 'Toyota' */
+function test_method_templates_degrade_to_declared_bounds(): void {
+    // Method-level templates cannot be inferred on the missing-method provider path
+    // (argument types are not reliably analyzed yet at this provider's event point), so they
+    // resolve to their declared upper bound.
+    $_unbounded = (new Customer())->vehicles()->passthrough('Toyota');
+    /** @psalm-check-type-exact $_unbounded = mixed */
 
-    $vehicle = new Vehicle();
-    $_model = (new Customer())->vehicles()->passthrough($vehicle);
-    /** @psalm-check-type-exact $_model = Vehicle */
-
-    $_named = (new Customer())->vehicles()->labelledPassthrough(
-        value: new Vehicle(),
-        label: 'vehicle',
-    );
-    /** @psalm-check-type-exact $_named = Vehicle */
-
-    $_allKnown = (new Customer())->vehicles()->chooseModel(new Vehicle(), new Vehicle());
-    /** @psalm-check-type-exact $_allKnown = Vehicle */
-
-    // An unavailable argument for the builder's class template must not disable inference
-    // for an independent method template whose argument is fully known.
-    $_independent = (new Customer())->vehicles()->valueForModel(
-        makeVehicleForRelationTemplate(),
-        'known',
-    );
-    /** @psalm-check-type-exact $_independent = 'known' */
-}
-
-function test_unavailable_method_template_inputs_fall_back_safely(RelationVehicleFactory $factory): void {
-    // This missing-method provider runs before nested calls and unpacked arguments have their
-    // normal Psalm argument types. Recreating that analysis here would be disproportionate, so
-    // unresolved method templates use their declared upper bounds (normally `mixed`).
-    $_functionCall = (new Customer())->vehicles()->passthrough(makeVehicleForRelationTemplate());
-    /** @psalm-check-type-exact $_functionCall = mixed */
-
-    $_methodCall = (new Customer())->vehicles()->passthrough($factory->make());
-    /** @psalm-check-type-exact $_methodCall = mixed */
-
-    $_bounded = (new Customer())->vehicles()->modelPassthrough(makeVehicleForRelationTemplate());
+    $_bounded = (new Customer())->vehicles()->modelPassthrough(new Vehicle());
     /** @psalm-check-type-exact $_bounded = Illuminate\Database\Eloquent\Model */
 
-    // The first argument is available, but the direct function call is not. Inferring only
-    // Vehicle would reject the valid Customer sibling after Psalm analyzes it, so the whole
-    // method-template inference step falls back to the declared Model bound.
-    $_partiallyAvailable = (new Customer())->vehicles()->chooseModel(
-        new Vehicle(),
-        makeCustomerForRelationTemplate(),
-    );
-    /** @psalm-check-type-exact $_partiallyAvailable = Illuminate\Database\Eloquent\Model */
-
-    /** @var list<Vehicle> $vehicles */
-    $vehicles = [new Vehicle(), new Vehicle()];
-    $_unpacked = (new Customer())->vehicles()->lastValue(...$vehicles);
-    /** @psalm-check-type-exact $_unpacked = mixed */
+    $_twoArgs = (new Customer())->vehicles()->chooseModel(new Vehicle(), new Vehicle());
+    /** @psalm-check-type-exact $_twoArgs = Illuminate\Database\Eloquent\Model */
 }
 
 function test_custom_method_wins_over_query_builder_magic(): void {

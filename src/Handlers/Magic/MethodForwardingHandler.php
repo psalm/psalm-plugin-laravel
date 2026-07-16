@@ -519,7 +519,6 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         $resolved = RelatedBuilderMethodResolver::resolveDeclaredMethod(
             $codebase,
             $source,
-            $event->getContext(),
             $modelClass,
             $methodName,
             $event->getCallArgs(),
