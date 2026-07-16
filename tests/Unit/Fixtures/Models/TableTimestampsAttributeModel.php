@@ -10,7 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * `#[Table(timestamps: false)]`, the second form `initializeHasTimestamps()` honours. Paired with
  * {@see AttributeConfiguredModel}, whose `#[Table]` carries no `timestamps:` argument and must stay
- * timestamped: together they pin that the mirror reads the argument rather than the attribute's presence.
+ * timestamped: together they pin that the ARGUMENT decides, not the attribute's presence — Laravel's rule,
+ * and the registry must record its outcome.
  *
  * Uses only `#[Table]` (Laravel 13.0+), but its consuming test shares a 13.2 `#[WithoutTimestamps]`
  * gate with the rest of the timestamps cases.

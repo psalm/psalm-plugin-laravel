@@ -288,6 +288,8 @@ final class Plugin implements PluginEntryPointInterface
         // CustomCollectionHandler — the handler returns null for non-Relation callers
         // (fast O(1) check), so downstream handlers fire unaffected.
         require_once __DIR__ . '/Handlers/Eloquent/Support/DynamicWhereResolver.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/ResolvedForwardedMethod.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/RelatedBuilderMethodResolver.php';
         require_once __DIR__ . '/Handlers/Magic/ForwardingRule.php';
         require_once __DIR__ . '/Handlers/Magic/ReturnTypeResolver.php';
         require_once __DIR__ . '/Handlers/Magic/MethodForwardingHandler.php';
