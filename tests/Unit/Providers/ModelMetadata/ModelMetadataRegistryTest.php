@@ -87,6 +87,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsAttributeModel
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsEnabledModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributeInheritedModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributePrecedenceModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsInitializerOrderModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\WithoutTimestampsAttributeModel;
@@ -402,6 +403,32 @@ final class ModelMetadataRegistryTest extends TestCase
         // both sides agree on true and the oracle below would pass while testing nothing.
         $this->assertSame($expected, $runtime, 'fixture premise drifted from Laravel behaviour');
         $this->assertSame($runtime, $metadata->traits->usesTimestamps);
+    }
+
+    #[Test]
+    public function trait_initializer_ordering_decides_the_timestamps_mirror(): void
+    {
+        if (!class_exists(WithoutTimestamps::class)) {
+            self::markTestSkipped('#[WithoutTimestamps] requires Laravel >= 13.2.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(TimestampsInitializerOrderModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TimestampsInitializerOrderModel::class);
+
+        $metadata = $this->metadataFor(TimestampsInitializerOrderModel::class);
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION));
+
+        // Runtime construction is the ONLY oracle — never a literal: getMethods() ranks the user
+        // initializer against Model's inherited initializeHasTimestamps() differently per PHP version, so
+        // the correct answer is true on 8.4 and false on 8.5. The mirror is right only if it runs at the
+        // framework initializer's own position; hoisting it out of the walk diverges under 8.4.
+        $this->assertSame(
+            (new TimestampsInitializerOrderModel())->usesTimestamps(),
+            $metadata->traits->usesTimestamps,
+            'the timestamps mirror must run at initializeHasTimestamps() position in the getMethods() walk',
+        );
     }
 
     #[Test]
