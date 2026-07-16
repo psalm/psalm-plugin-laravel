@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784185146319,
+  "lastUpdate": 1784201044510,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8675,6 +8675,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a6121bb83371cf46640e61afbe453b3c5bf636e5",
+          "message": "Merge pull request #1273 from psalm/fix/appends-trait-init-cast-fp\n\nFix `UnresolvableAppendedModelAttribute` false positive for casts merged in trait initializers",
+          "timestamp": "2026-07-16T13:20:37+02:00",
+          "tree_id": "435dd82abeb931f41f082d809530523a1106c5e9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a6121bb83371cf46640e61afbe453b3c5bf636e5"
+        },
+        "date": 1784201043253,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.45,
+            "range": "± 0.46",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
             "unit": "MB"
           }
         ]
