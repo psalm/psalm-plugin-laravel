@@ -53,4 +53,38 @@ final class InternalErrorReporter
             throw $throwable;
         }
     }
+
+    /**
+     * Surfaces a bootstrap failure that {@see \Psalm\LaravelPlugin\Bootstrap\ApplicationProvider}
+     * swallowed to keep the run alive (crash resistance: one bad `config/*.php` must not
+     * disable the plugin for the whole run). Unlike {@see report()}, the plugin stays
+     * active — handlers still register against the partially-booted app — so the output
+     * is a "degraded" warning trio rather than a "disabled" notice.
+     *
+     * With `failOnInternalError` enabled the swallowed error is escalated instead of
+     * warned about: rethrowing here lands in `Plugin::__invoke()`'s catch, which routes
+     * through {@see report()} for the full treatment (issue URL + final rethrow into
+     * Psalm). A half-booted app is an internal error when the user opted into failing.
+     *
+     * @throws \Throwable when {@see PluginConfig::$failOnInternalError} is on
+     */
+    public static function reportDegradedBoot(\Throwable $throwable, Progress $output, PluginConfig $pluginConfig): void
+    {
+        if ($pluginConfig->failOnInternalError) {
+            throw $throwable;
+        }
+
+        $output->warning("Laravel plugin: application bootstrap failed partway: {$throwable->getMessage()}");
+
+        $hint = InternalErrorClassifier::hint($throwable);
+        if ($hint !== null) {
+            $output->warning("Laravel plugin: {$hint}");
+        }
+
+        $output->warning(
+            'Laravel plugin is running in degraded mode: service providers never booted, so '
+            . 'model, facade and container inference is reduced. '
+            . 'Run `vendor/bin/psalm-laravel diagnose` for details.',
+        );
+    }
 }

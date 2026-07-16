@@ -55,6 +55,12 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      */
     private static array $failedFacades = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$failedFacades = [];
+    }
+
     /**
      * Probe `Facade::getFacadeRoot()` at scan time and queue the resolved root class for
      * scanning. We can't do this in {@see self::afterCodebasePopulated()} because by then

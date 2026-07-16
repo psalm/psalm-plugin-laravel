@@ -13,6 +13,7 @@ use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TFalse;
 use Psalm\Type\Atomic\TFloat;
 use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TIntRange;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TLiteralInt;
 use Psalm\Type\Atomic\TLiteralString;
@@ -121,6 +122,13 @@ final class ValidationRuleAnalyzer
      * @var array<string, int>
      */
     private static array $classTaintCache = [];
+
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$cache = [];
+        self::$classTaintCache = [];
+    }
 
     /**
      * Get resolved rules for a FormRequest subclass by reading its rules() method from AST.
@@ -250,6 +258,22 @@ final class ValidationRuleAnalyzer
         $nullable = false;
         $sometimes = false;
         $required = false;
+        // Numeric-range accumulator; order-independent (min:1|integer == integer|min:1).
+        $hasNumericRule = false;
+        $lower = null;
+        $upper = null;
+        // Explicit 'integer' rule only (narrower than $hasNumericRule above) —
+        // gates integer()'s int-component extraction: 'numeric'/'accepted'/etc.
+        // can produce int-family atoms without forcing the raw value to be
+        // int-formatted, so (int) casting it isn't lossless.
+        $hasIntegerRule = false;
+        // exclude* rule present — see guaranteesPresence()'s docblock.
+        $excluded = false;
+        // Explicit unconditional 'accepted'/'declined' rule only (not the
+        // _if variants) — gates boolean()'s literal-precision narrowing in
+        // ValidatedTypeHandler::resolveSelfBoolean(). #1234 follow-up item 6.
+        $hasAcceptedRule = false;
+        $hasDeclinedRule = false;
 
         foreach ($segments as $segment) {
             $segment = \trim($segment);
@@ -290,6 +314,38 @@ final class ValidationRuleAnalyzer
                 $required = true;
             }
 
+            // Bare 'accepted'/'declined' only — accepted_if/declined_if are
+            // conditional, so the literal they'd otherwise authorize isn't
+            // guaranteed either way.
+            if ($ruleName === 'accepted') {
+                $hasAcceptedRule = true;
+            }
+
+            if ($ruleName === 'declined') {
+                $hasDeclinedRule = true;
+            }
+
+            // exclude/exclude_if/exclude_unless/exclude_with/exclude_without —
+            // simple prefix match (Laravel has no other rule name starting with
+            // "exclude"). Any of these present, unconditionally or not, means
+            // the Validator may skip this field's other rules entirely once it
+            // fires — so presence can no longer be treated as guaranteed.
+            if (\str_starts_with($ruleName, 'exclude')) {
+                $excluded = true;
+            }
+
+            // Gate: min/max/etc. are overloaded (string length, array count,
+            // file size) elsewhere — only narrow when integer/numeric is present.
+            if ($ruleName === 'integer' || $ruleName === 'numeric') {
+                $hasNumericRule = true;
+            }
+
+            if ($ruleName === 'integer') {
+                $hasIntegerRule = true;
+            }
+
+            [$lower, $upper] = self::accumulateRangeBound($ruleName, $ruleParam, $lower, $upper);
+
             // Type-bearing rules (first one wins for type, all accumulate taint)
             $ruleType = self::ruleToType($ruleName, $ruleParam);
 
@@ -303,12 +359,193 @@ final class ValidationRuleAnalyzer
         // Default: if no type rule matched, return mixed (don't narrow)
         $type ??= Type::getMixed();
 
+        if ($hasNumericRule) {
+            $type = self::applyNumericRangeNarrowing($type, $lower, $upper);
+        }
+
         // nullable modifier: add null to type union
         if ($nullable) {
             $type = Type::combineUnionTypes($type, Type::getNull());
         }
 
-        return new ResolvedRule($type, $removedTaints, $nullable, $sometimes, $required);
+        return new ResolvedRule(
+            $type,
+            $removedTaints,
+            $nullable,
+            $sometimes,
+            $required,
+            $hasIntegerRule,
+            $excluded,
+            $hasAcceptedRule,
+            $hasDeclinedRule,
+        );
+    }
+
+    /**
+     * Replaces the bare `int` atomic with the accumulated range; float/
+     * numeric-string untouched. Exact-class match (not `instanceof`) since
+     * TLiteralInt/TIntRange extend TInt — an earlier rule's literal
+     * (accepted/boolean) would otherwise get widened instead of kept.
+     *
+     * @psalm-pure
+     */
+    private static function applyNumericRangeNarrowing(Union $type, ?int $lower, ?int $upper): Union
+    {
+        if ($lower === null && $upper === null) {
+            return $type;
+        }
+
+        // Conflicting bounds (min:5|max:3) — keep the un-ranged type.
+        if ($lower !== null && $upper !== null && $lower > $upper) {
+            return $type;
+        }
+
+        $rangeAtomic = $lower !== null && $lower === $upper
+            ? new TLiteralInt($lower)
+            : new TIntRange($lower, $upper);
+
+        $atomics = [];
+
+        foreach ($type->getAtomicTypes() as $atomic) {
+            $atomics[] = $atomic::class === TInt::class ? $rangeAtomic : $atomic;
+        }
+
+        return new Union($atomics);
+    }
+
+    /**
+     * Folds one range rule into [lower, upper]. A malformed param
+     * ({@see intLiteralParam()}) is skipped, not an abort.
+     *
+     * @return array{0: ?int, 1: ?int}
+     * @psalm-pure
+     */
+    private static function accumulateRangeBound(string $rule, ?string $param, ?int $lower, ?int $upper): array
+    {
+        return match ($rule) {
+            'min', 'gte' => [self::tightenLower($lower, self::intLiteralParam($param)), $upper],
+            'max', 'lte' => [$lower, self::tightenUpper($upper, self::intLiteralParam($param))],
+            // gt/lt are exclusive — shift one step in (PHP_INT_MAX/MIN guarded).
+            'gt' => [self::tightenLower($lower, self::exclusiveLowerBound($param)), $upper],
+            'lt' => [$lower, self::tightenUpper($upper, self::exclusiveUpperBound($param))],
+            'size' => self::accumulateExactBound($param, $lower, $upper),
+            'between' => self::accumulateBetweenBound($param, $lower, $upper),
+            default => [$lower, $upper],
+        };
+    }
+
+    /** @psalm-pure */
+    private static function exclusiveLowerBound(?string $param): ?int
+    {
+        $value = self::intLiteralParam($param);
+
+        return $value === null || $value === \PHP_INT_MAX ? null : $value + 1;
+    }
+
+    /** @psalm-pure */
+    private static function exclusiveUpperBound(?string $param): ?int
+    {
+        $value = self::intLiteralParam($param);
+
+        return $value === null || $value === \PHP_INT_MIN ? null : $value - 1;
+    }
+
+    /**
+     * size:N sets both bounds to N.
+     *
+     * @return array{0: ?int, 1: ?int}
+     * @psalm-pure
+     */
+    private static function accumulateExactBound(?string $param, ?int $lower, ?int $upper): array
+    {
+        $value = self::intLiteralParam($param);
+
+        if ($value === null) {
+            return [$lower, $upper];
+        }
+
+        return [self::tightenLower($lower, $value), self::tightenUpper($upper, $value)];
+    }
+
+    /**
+     * between:A,B — exactly two comma-separated integer literals, else skipped.
+     *
+     * @return array{0: ?int, 1: ?int}
+     * @psalm-pure
+     */
+    private static function accumulateBetweenBound(?string $param, ?int $lower, ?int $upper): array
+    {
+        if ($param === null) {
+            return [$lower, $upper];
+        }
+
+        $parts = \explode(',', $param);
+
+        if (\count($parts) !== 2) {
+            return [$lower, $upper];
+        }
+
+        $min = self::intLiteralParam($parts[0]);
+        $max = self::intLiteralParam($parts[1]);
+
+        if ($min === null || $max === null) {
+            return [$lower, $upper];
+        }
+
+        return [self::tightenLower($lower, $min), self::tightenUpper($upper, $max)];
+    }
+
+    /**
+     * Larger of the two; an absent bound loses to a present one.
+     *
+     * @psalm-pure
+     */
+    private static function tightenLower(?int $current, ?int $candidate): ?int
+    {
+        if ($candidate === null) {
+            return $current;
+        }
+
+        return $current === null ? $candidate : \max($current, $candidate);
+    }
+
+    /**
+     * Smaller of the two; an absent bound loses to a present one.
+     *
+     * @psalm-pure
+     */
+    private static function tightenUpper(?int $current, ?int $candidate): ?int
+    {
+        if ($candidate === null) {
+            return $current;
+        }
+
+        return $current === null ? $candidate : \min($current, $candidate);
+    }
+
+    /**
+     * Integer-literal param, or null (e.g. `1.5`, `gt:other_field`).
+     *
+     * @psalm-pure
+     */
+    private static function intLiteralParam(?string $param): ?int
+    {
+        if ($param === null || \preg_match('/^-?\d+$/', $param) !== 1) {
+            return null;
+        }
+
+        $value = (int) $param;
+
+        // Reject non-round-tripping params: an overflowing digit string
+        // (e.g. lt:9223372036854775808, one past PHP_INT_MAX) silently
+        // saturates via the cast instead of erroring, which would produce a
+        // wrong bound. Also rejects leading-zero forms (min:007) — no bound
+        // contributed is sound, just slightly less precise.
+        if ((string) $value !== $param) {
+            return null;
+        }
+
+        return $value;
     }
 
     /**
@@ -735,6 +972,8 @@ final class ValidationRuleAnalyzer
                 $parentRule?->nullable ?? false,
                 $parentRule?->sometimes ?? false,
                 $parentRule?->required ?? false,
+                false,
+                $parentRule?->excluded ?? false,
             );
         }
 
@@ -752,7 +991,7 @@ final class ValidationRuleAnalyzer
             foreach ($children as $childField => $childRule) {
                 $childType = $childRule->type;
 
-                if ($childRule->sometimes || !$childRule->required) {
+                if (!$childRule->guaranteesPresence()) {
                     $childType = $childType->setPossiblyUndefined(true);
                 }
 
@@ -782,6 +1021,8 @@ final class ValidationRuleAnalyzer
                 $parentRule?->nullable ?? false,
                 $parentRule?->sometimes ?? false,
                 $parentRule?->required ?? false,
+                false,
+                $parentRule?->excluded ?? false,
             );
         }
 

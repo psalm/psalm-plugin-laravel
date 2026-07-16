@@ -38,6 +38,7 @@ final readonly class PluginConfig
          */
         public ?bool $findOctaneIncompatibleBinding,
         public string $cachePath,
+        public bool $experimental,
         public bool $failOnInternalError,
     ) {}
 
@@ -58,6 +59,7 @@ final readonly class PluginConfig
         }
 
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
+        $experimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
@@ -76,6 +78,7 @@ final readonly class PluginConfig
             findMissingViews: $findMissingViews,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),
+            experimental: $experimental,
             failOnInternalError: $failOnInternalError,
         );
     }

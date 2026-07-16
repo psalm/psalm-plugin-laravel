@@ -939,7 +939,10 @@ final class SchemaAggregator
         // Resolve type from the referenced model's primary key in the parsed schema.
         // If the PK column is a string (uuid, ulid, etc.), the FK should also be string.
         $referenced_table = $this->tables[$instance->getTable()] ?? null;
-        $pk_column = $referenced_table?->columns[$instance->getKeyName()] ?? null;
+        $key_name = $this->asNonEmptyString($instance->getKeyName());
+        $pk_column = $key_name !== null
+            ? $referenced_table?->columns[$key_name] ?? null
+            : null;
 
         if ($pk_column !== null && $pk_column->type === 'string') {
             return new SchemaColumn($column_name, 'string', $nullable, default: $default);
@@ -949,5 +952,17 @@ final class SchemaAggregator
         // table hasn't been parsed yet (migration ordering). We can't safely call
         // getKeyType() because newInstanceWithoutConstructor() skips trait initialization.
         return new SchemaColumn($column_name, 'int', $nullable, default: $default, unsigned: true);
+    }
+
+    /**
+     * Laravel documents getKeyName() as string, but its untyped backing property is null/empty
+     * in real keyless models. The mixed boundary normalizes that false contract without suppression.
+     *
+     * @return non-empty-string|null
+     * @psalm-pure
+     */
+    private function asNonEmptyString(mixed $value): ?string
+    {
+        return \is_string($value) && $value !== '' ? $value : null;
     }
 }

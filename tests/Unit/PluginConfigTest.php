@@ -44,6 +44,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+        $this->assertFalse($config->experimental);
         // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
         // explicit true/false in XML overrides the auto-detection.
         $this->assertNull($config->findOctaneIncompatibleBinding);
@@ -247,6 +248,37 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+    }
+
+    #[Test]
+    public function experimental_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->experimental);
+    }
+
+    #[Test]
+    public function experimental_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->experimental);
+    }
+
+    #[Test]
+    public function invalid_experimental_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="maybe" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid experimental value 'maybe'");
+
+        PluginConfig::fromXml($xml);
     }
 
     #[Test]
@@ -456,9 +488,10 @@ final class PluginConfigTest extends TestCase
             . '<modelProperties columnFallback="none" />'
             . '<resolveDynamicWhereClauses value="false" />'
             . '<resolveConfigReturnTypes value="false" />'
-            . '<failOnInternalError value="true" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<experimental value="true" />'
+            . '<failOnInternalError value="true" />'
             . '<configDirectory name="app/Config" />'
             . '<configDirectory name="packages/*/config" />'
             . '</pluginClass>',
@@ -471,6 +504,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->experimental);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);
         $this->assertSame(['app/Config', 'packages/*/config'], $config->configDirectories);

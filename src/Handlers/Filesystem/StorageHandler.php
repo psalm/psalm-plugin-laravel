@@ -102,6 +102,13 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      */
     private static ?array $facade_disk_params = null;
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$adapter_return_type = null;
+        self::$facade_disk_params = null;
+    }
+
     /**
      * Register for every surface that exposes `disk()` / `drive()`:
      * - the `Storage` facade (calls go through `__callStatic` → forwarded by Laravel's `@method`),

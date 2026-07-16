@@ -5,25 +5,40 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent;
 
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Attributes\Table;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\Codebase;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
+use Psalm\Progress\VoidProgress;
 use Psalm\StatementsSource;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 
 /**
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/446
+ *
+ * Property existence now resolves through {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry}
+ * (Phase 1 of the registry migration), so setUp() warms the model before asserting — the handler
+ * no longer reads the schema lazily on its own. The SQL-type → Psalm-type mapper stays in the
+ * handler and is exercised directly against {@see ColumnInfo}.
  */
 #[CoversClass(ModelPropertyHandler::class)]
+#[CoversClass(ModelRegistrationHandler::class)]
 final class ModelPropertyHandlerTest extends TestCase
 {
     private ClassLikeStorageProvider $classLikeStorageProvider;
+
+    private Codebase $codebase;
 
     #[\Override]
     protected function setUp(): void
@@ -43,11 +58,18 @@ final class ModelPropertyHandlerTest extends TestCase
 
         $this->classLikeStorageProvider = new ClassLikeStorageProvider();
         $this->classLikeStorageProvider->create(WorkOrder::class);
+
+        $this->codebase = $this->makeCodebase();
+
+        // Property existence/type now reads the warm registry, so seed it for WorkOrder.
+        ModelMetadataRegistryBuilder::reset();
+        ModelMetadataRegistryBuilder::warmUp($this->codebase, WorkOrder::class);
     }
 
     #[\Override]
     protected function tearDown(): void
     {
+        ModelMetadataRegistryBuilder::reset();
         $this->classLikeStorageProvider->remove(WorkOrder::class);
     }
 
@@ -90,9 +112,37 @@ final class ModelPropertyHandlerTest extends TestCase
         $this->assertCount(4, $columns);
     }
 
+    #[Test]
+    public function table_attribute_columns_are_registered_for_property_writes(): void
+    {
+        if (!\class_exists(Table::class)) {
+            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        }
+
+        $schema = new SchemaAggregator();
+        $table = new SchemaTable();
+        $table->setColumn(new SchemaColumn('flagged', SchemaColumn::TYPE_BOOL));
+
+        $schema->setTable('attr_table', $table);
+        SchemaStateProvider::setSchema($schema);
+
+        $storage = $this->classLikeStorageProvider->create(AttributeConfiguredModel::class);
+        ModelMetadataRegistryBuilder::warmUp($this->codebase, AttributeConfiguredModel::class);
+
+        $method = new \ReflectionMethod(ModelRegistrationHandler::class, 'registerWriteTypesForColumns');
+        $method->invoke(null, $storage, AttributeConfiguredModel::class);
+
+        $this->assertArrayHasKey(
+            '$flagged',
+            $storage->pseudo_property_set_types,
+            'A migration-backed #[Table] column must be recognized as a writable magic property.',
+        );
+        $this->assertTrue($storage->pseudo_property_set_types['$flagged']->isMixed());
+    }
+
     /**
      * Regression test for #924: MySQL SET columns previously fell through to `mixed`
-     * because `mapColumnType()` had no arm for {@see SchemaColumn::TYPE_SET}.
+     * because the column mapper had no arm for {@see SchemaColumn::TYPE_SET}.
      *
      * MySQL returns SET as a comma-separated string at runtime (e.g. `'draft,published'`),
      * so a literal-union is an over-narrowing approximation, but strictly better than
@@ -106,8 +156,7 @@ final class ModelPropertyHandlerTest extends TestCase
     #[Test]
     public function it_narrows_set_column_away_from_mixed(): void
     {
-        $column = ModelPropertyHandler::resolveAllColumns(WorkOrder::class)['status'];
-        $union = $this->invokeMapColumnType($column);
+        $union = $this->mapColumn(SchemaColumn::TYPE_SET, options: ['draft', 'published', 'archived']);
 
         $this->assertFalse($union->isMixed(), 'SET column must not be inferred as `mixed`');
         $this->assertTrue($union->hasString(), 'SET column should map to a string-flavored union');
@@ -117,14 +166,7 @@ final class ModelPropertyHandlerTest extends TestCase
     #[Test]
     public function it_includes_null_for_nullable_set_column(): void
     {
-        $column = new SchemaColumn(
-            'status',
-            SchemaColumn::TYPE_SET,
-            nullable: true,
-            options: ['draft', 'published'],
-        );
-
-        $union = $this->invokeMapColumnType($column);
+        $union = $this->mapColumn(SchemaColumn::TYPE_SET, nullable: true, options: ['draft', 'published']);
 
         $this->assertFalse($union->isMixed());
         $this->assertTrue($union->isNullable(), 'Nullable SET column must include null');
@@ -138,19 +180,10 @@ final class ModelPropertyHandlerTest extends TestCase
     #[Test]
     public function it_falls_back_to_string_for_set_column_without_options(): void
     {
-        $column = new SchemaColumn('status', SchemaColumn::TYPE_SET, options: []);
-
-        $union = $this->invokeMapColumnType($column);
+        $union = $this->mapColumn(SchemaColumn::TYPE_SET, options: []);
 
         $this->assertFalse($union->isMixed());
         $this->assertTrue($union->hasString());
-    }
-
-    private function invokeMapColumnType(SchemaColumn $column): \Psalm\Type\Union
-    {
-        $method = new \ReflectionMethod(ModelPropertyHandler::class, 'mapColumnType');
-
-        return $method->invoke(null, $column);
     }
 
     #[Test]
@@ -159,13 +192,36 @@ final class ModelPropertyHandlerTest extends TestCase
         $this->assertSame([], ModelPropertyHandler::resolveAllColumns('NonExistent\\Model'));
     }
 
-    private function createEvent(string $className, string $propertyName, bool $readMode): PropertyExistenceProviderEvent
+    /**
+     * Invoke the private SQL-type → Psalm-type mapper (which applies nullability) against a
+     * {@see ColumnInfo}, the value object the registry now hands the handler.
+     *
+     * @param list<string> $options
+     */
+    private function mapColumn(string $sqlType, bool $nullable = false, array $options = []): \Psalm\Type\Union
     {
-        $codebase = (new \ReflectionClass(\Psalm\Codebase::class))->newInstanceWithoutConstructor();
+        $column = new ColumnInfo('status', $sqlType, $nullable, hasDefault: false, options: $options);
+        $method = new \ReflectionMethod(ModelPropertyHandler::class, 'mapColumnType');
+
+        return $method->invoke(null, $column);
+    }
+
+    private function makeCodebase(): Codebase
+    {
+        $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
 
+        // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
+        $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');
+        $progressProperty->setValue($codebase, new VoidProgress());
+
+        return $codebase;
+    }
+
+    private function createEvent(string $className, string $propertyName, bool $readMode): PropertyExistenceProviderEvent
+    {
         $source = $this->createStub(StatementsSource::class);
-        $source->method('getCodebase')->willReturn($codebase);
+        $source->method('getCodebase')->willReturn($this->codebase);
 
         return new PropertyExistenceProviderEvent(
             $className,

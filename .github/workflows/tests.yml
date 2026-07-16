@@ -43,7 +43,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -60,7 +60,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -80,6 +80,42 @@ jobs:
       - name: Run Unit tests
         run: composer test:unit
 
+  laravel_12_14_floor:
+    name: Laravel 12.14.0 floor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
+        with:
+          php-version: 8.2
+          coverage: none
+          tools: composer:v2
+
+      - name: Install exact Laravel floor
+        # The supported floor may have published advisories; this isolated test install is never deployed.
+        run: >-
+          composer update --with="laravel/framework:12.14.0" --with-all-dependencies
+          --no-interaction --no-progress --prefer-dist --prefer-stable --no-blocking --no-audit
+
+      - name: Verify installed Laravel version
+        run: >-
+          php -r 'require "vendor/autoload.php";
+          exit(Composer\InstalledVersions::getPrettyVersion("laravel/framework") === "v12.14.0" ? 0 : 1);'
+
+      - name: Run Unit tests
+        # Testbench 10 resolves PHPUnit 11, which does not support --display-phpunit-notices.
+        run: vendor/bin/phpunit --testsuite=unit --display-deprecations --display-notices
+
 
   type_tests:
     runs-on: ubuntu-latest
@@ -87,11 +123,11 @@ jobs:
       fail-fast: true
       matrix:
         php: [ 8.5, 8.4, 8.3, 8.2 ]
-        laravel: [ ^13.0, ^12.4 ]
+        laravel: [ ^13.3, ^12.14 ]
         dependencies: [ highest ]
         exclude:
           - php: 8.2
-            laravel: ^13.0
+            laravel: ^13.3
     name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -100,7 +136,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 

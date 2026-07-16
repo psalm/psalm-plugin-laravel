@@ -50,6 +50,13 @@ final class FormRequestPropertyHandler implements AfterCodebasePopulatedInterfac
      */
     private static array $cache = [];
 
+    /** @psalm-external-mutation-free */
+    public static function reset(): void
+    {
+        self::$formRequestClasses = [];
+        self::$cache = [];
+    }
+
     /**
      * @inheritDoc
      *

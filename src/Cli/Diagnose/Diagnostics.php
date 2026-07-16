@@ -56,7 +56,6 @@ class Diagnostics
             psalmVersion: $this->safePrettyVersion('vimeo/psalm'),
             laravelVersion: \defined(LaravelApplication::class . '::VERSION') ? LaravelApplication::VERSION : null,
             phpRuntimeVersion: \PHP_VERSION,
-            phpRequiredVersion: $projectRoot !== null ? $this->readComposerRequirePhp($projectRoot) : null,
             phpAnalysisVersion: $analysisVersion,
             phpAnalysisSource: $analysisSource,
             bootMode: ApplicationProvider::getBootMode(),
@@ -93,10 +92,7 @@ class Diagnostics
     /**
      * Resolve the PHP version Psalm uses for analysis. Only `psalm.xml`'s
      * `phpVersion=` attribute is a concrete version; otherwise we fall back
-     * to the runtime. We deliberately do NOT consume `composer.json`'s
-     * `require.php` here — that's a constraint (`^8.2`), not a resolved
-     * version, and surfacing it under "Analysis" would mislead. The
-     * constraint is reported separately under `phpRequiredVersion`.
+     * to the runtime.
      *
      * We parse `psalm.xml` directly with SimpleXML instead of
      * `Config::getConfigForPath()` because the latter eagerly validates every
@@ -152,29 +148,6 @@ class Diagnostics
 
         $value = (string) $attr;
         return $value === '' ? null : $value;
-    }
-
-    /**
-     * Return the raw `require.php` constraint string from `composer.json`
-     * (e.g. `^8.2`). We don't resolve to a single minor like Psalm does — the
-     * raw constraint is more informative for diagnose, and resolving it
-     * requires shipping a per-release PHP version table.
-     */
-    private function readComposerRequirePhp(string $projectRoot): ?string
-    {
-        $path = $projectRoot . \DIRECTORY_SEPARATOR . 'composer.json';
-        if (!\is_file($path)) {
-            return null;
-        }
-
-        $contents = \file_get_contents($path);
-        if ($contents === false) {
-            return null;
-        }
-
-        /** @psalm-var array{require?: array{php?: string}} $decoded */
-        $decoded = \json_decode($contents, true);
-        return $decoded['require']['php'] ?? null;
     }
 
     private function safePrettyVersion(string $package): ?string

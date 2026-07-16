@@ -8,6 +8,7 @@ use App\Models\Concerns\ComparesRank;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Abstract parent declaring scopes: instance scope calls on a child's builder
@@ -50,6 +51,22 @@ abstract class AbstractDocument extends Model
     public function getReferenceCodeAttribute(): string
     {
         return 'REF';
+    }
+
+    /**
+     * Plain-typed (non-generic) relation declared on the abstract PARENT. Guards the registry's
+     * `relations()` OWN-CLASS invariant: a child inheriting this relation must NOT find it in its own
+     * `relations()` map (the AST parser is own-class), so its magic-property type falls back to the
+     * imprecise `Collection<int, Model>` bound rather than `Collection<int, Part>`. If `relations()`
+     * were ever changed to an ancestor walk (as scopes()/accessors() do), the child would resolve the
+     * precise model and the guard test (`InheritedRelationOwnClassTest`) would flip — catching the
+     * regression. The return type is the bare, NON-generic `HasMany` (no `@return HasMany<Part, ...>`)
+     * on purpose: the property handler's Tier 1 (generic-return extraction) then cannot resolve the
+     * related model on its own, forcing resolution through the own-class registry tier this guards.
+     */
+    public function documentParts(): HasMany
+    {
+        return $this->hasMany(Part::class);
     }
 
     /**
