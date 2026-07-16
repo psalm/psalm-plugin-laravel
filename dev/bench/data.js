@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784230763365,
+  "lastUpdate": 1784231431236,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8850,6 +8850,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "716c5552f66f5f9a11c1e1b094fec73f78c56c5a",
+          "message": "Merge pull request #1267 from alies-dev/agent/relation-custom-builder-forwarding\n\nFix custom builder method forwarding on relations",
+          "timestamp": "2026-07-16T21:47:35+02:00",
+          "tree_id": "ba8dc7bb2f7d4e9e6a950a07fc0154074519e6ef",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/716c5552f66f5f9a11c1e1b094fec73f78c56c5a"
+        },
+        "date": 1784231430632,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.24,
+            "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
