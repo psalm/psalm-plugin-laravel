@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784122512641,
+  "lastUpdate": 1784185146319,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8640,6 +8640,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1109,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "221509b4d5c2084bbb41852a168aec121d7772cc",
+          "message": "Merge pull request #1272 from psalm/fix/relation-resolver-tier2-autoload-crash\n\nStop `RelationResolver` autoloading related models",
+          "timestamp": "2026-07-16T08:56:02+02:00",
+          "tree_id": "b51612475364cc5c8ef9158d2fb273974095aac2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/221509b4d5c2084bbb41852a168aec121d7772cc"
+        },
+        "date": 1784185145114,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.35,
+            "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
