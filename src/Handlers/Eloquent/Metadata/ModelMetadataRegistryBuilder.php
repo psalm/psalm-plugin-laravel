@@ -317,6 +317,9 @@ final class ModelMetadataRegistryBuilder
         // sections below degrade together (the degradation test still maps 'trait initializers' → those four).
         // Pre-12.22 (class_uses_recursive parents-first) walk order is immaterial — the config attributes are
         // all Laravel-13-only; the sole pre-12.22 divergence is casts()-vs-user-mergeCasts() (see computeCasts).
+        //
+        // prepare() INVOKES Laravel's own initializers rather than mirroring them, so what the readers below
+        // observe is the installed framework's behaviour, not a copy of it that has to be kept in sync.
         $instancePrepared = self::computeSection(
             0,
             'trait initializers',
@@ -375,7 +378,6 @@ final class ModelMetadataRegistryBuilder
                     $codebase,
                     $modelFqcn,
                     $instance,
-                    $runtime['traits'],
                     $tableSchema,
                     $schemaComplete,
                 ),
@@ -593,9 +595,36 @@ final class ModelMetadataRegistryBuilder
             'withCount' => self::readStringList($instance, 'withCount'),
             'hidden' => self::filterStringList($instance->getHidden()),
             'visible' => self::filterStringList($instance->getVisible()),
-            'connection' => $instance->getConnectionName(),
+            'connection' => self::asConnectionName($instance->getConnectionName()),
             'morphAlias' => self::computeMorphAlias($modelFqcn),
         ];
+    }
+
+    /**
+     * `getConnectionName()` is annotated `@return string|null`, but returns `enum_value($this->connection)` —
+     * and `enum_value()` unwraps a BackedEnum to its raw `->value`, an INT for an int-backed enum. That int
+     * would reach {@see ModelMetadata}'s native `?string $connection` and TypeError under strict_types,
+     * OUTSIDE every computeSection() guard, so warmUp()'s catch would drop the whole model rather than
+     * degrade one section. `#[Connection(Enum::X)]` and a plain `protected $connection = Enum::X;` default
+     * both get there.
+     *
+     * Coerce at the READ site, not on the instance: normalizing the property would still miss a model that
+     * overrides `getConnectionName()` itself, and this is the single expression whose value reaches the field.
+     *
+     * No enum handling here — `enum_value()` has already done it (a UnitEnum yields `->name`, a string-backed
+     * enum a string); only its int case is left to stringify. Anything else is outside Laravel's declared
+     * `\UnitEnum|string|null` contract and has no connection name to give, so null beats a whole-model drop.
+     * The `mixed` parameter is also what keeps Psalm from calling the coercion redundant given that docblock.
+     *
+     * @psalm-pure
+     */
+    private static function asConnectionName(mixed $value): ?string
+    {
+        return match (true) {
+            \is_string($value) => $value,
+            \is_int($value) => (string) $value,
+            default => null,
+        };
     }
 
     /**
@@ -1185,6 +1214,10 @@ final class ModelMetadataRegistryBuilder
      * by reading `$this->usesUniqueIds`. The earlier unique-id initialization section has flipped
      * that flag for UUID/ULID models, so the instance getters return the runtime-correct
      * values here (including any user override of `uniqueIds()` returning multiple cols).
+     *
+     * Reading the getters (never the raw property defaults) is also what makes `#[Table(key:, keyType:,
+     * incrementing:)]` and `#[WithoutIncrementing]` land: `initializeModelAttributes()` writes those during
+     * the replay, so they arrive here already applied.
      */
     private static function computePrimaryKey(Model $instance, TraitFlags $traits): PrimaryKeyInfo
     {
@@ -1317,24 +1350,16 @@ final class ModelMetadataRegistryBuilder
         Codebase $codebase,
         string $modelFqcn,
         Model $instance,
-        TraitFlags $traits,
         TableSchema $schema,
         bool $schemaComplete,
     ): array {
-        $merged = [];
-
-        // 1. SoftDeletes adds its deleted-at column as a `datetime` cast via the trait
-        //    initializer, which `newInstanceWithoutConstructor()` skips. Mirror that
-        //    manually (lowest priority). Honor the `DELETED_AT` class-constant override
-        //    (`const DELETED_AT = 'archived_at';` is the Laravel-documented pattern).
-        if ($traits->hasSoftDeletes) {
-            $merged[self::resolveDeletedAtColumn($instance)] = 'datetime';
-        }
-
-        // 2. Laravel's base getCasts() returns $this->casts, prepending an implicit key cast when
+        // 1. Laravel's base getCasts() returns $this->casts, prepending an implicit key cast when
         //    the model is incrementing. initializeHasAttributes() normally merges casts() during
-        //    construction, but this instance skips the constructor, so step 3 parses casts()
-        //    separately. The caller has already recreated the runtime UUID/ULID trait state.
+        //    construction, but this instance skips the constructor, so step 2 parses casts()
+        //    separately. The caller has already replayed the trait initializers, which puts two
+        //    separate things the read below depends on in place: the UUID/ULID flags that decide the
+        //    implicit key cast, and SoftDeletes' deleted-at datetime cast, which its own initializer
+        //    wrote straight into $casts (hence no step of ours re-adds it).
         //    For a keyless incrementing model, temporarily disable only the implicit key cast;
         //    restore the real value before the primary-key snapshot is computed.
         $incrementing = $instance->getIncrementing();
@@ -1352,9 +1377,9 @@ final class ModelMetadataRegistryBuilder
             }
         }
 
-        $merged = \array_merge($merged, $instanceCasts);
+        $merged = $instanceCasts;
 
-        // 3. casts() method (AST-parsed) overrides #2 when both declare the same key.
+        // 2. casts() method (AST-parsed) overrides #1 when both declare the same key.
         //    CastsMethodParser calls Codebase::methodExists(), which dereferences the
         //    non-nullable Codebase::$methods. A Codebase constructed via
         //    newInstanceWithoutConstructor() (unit-test fixtures) leaves it
@@ -1565,27 +1590,6 @@ final class ModelMetadataRegistryBuilder
         }
 
         return self::filterStringList($value);
-    }
-
-    /**
-     * Resolve SoftDeletes' deleted-at column. Laravel reads `static::DELETED_AT` when
-     * defined (see `SoftDeletes::getDeletedAtColumn()`), otherwise defaults to
-     * `'deleted_at'`. We replicate that without invoking the trait method, since calling
-     * a trait method through a `Model` variable fails Psalm's type check.
-     *
-     * @psalm-pure
-     */
-    private static function resolveDeletedAtColumn(Model $instance): string
-    {
-        $constantName = $instance::class . '::DELETED_AT';
-        if (\defined($constantName)) {
-            // Inline \constant() into the mixed-param helper so the mixed value never binds to a
-            // local — keeps the file at 100% type coverage (a `@psalm-var mixed` local would
-            // still count against the mixed-expression tally).
-            return self::asNonEmptyString(\constant($constantName)) ?? 'deleted_at';
-        }
-
-        return 'deleted_at';
     }
 
     /**

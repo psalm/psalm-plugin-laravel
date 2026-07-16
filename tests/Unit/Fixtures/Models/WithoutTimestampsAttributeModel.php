@@ -10,7 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * `#[WithoutTimestamps]` alone — runtime `usesTimestamps()` is false. The archetype of #1276: warm-up
  * used to record true here, because `newInstanceWithoutConstructor()` skips `initializeHasTimestamps()`
- * and no mirror replaced it.
+ * and nothing replayed it. The replay now invokes that initializer, which is why the gap cannot reopen
+ * one Laravel release at a time.
  *
  * `#[WithoutTimestamps]` exists from Laravel 13.2, so the consuming test is gated on `class_exists()`.
  *

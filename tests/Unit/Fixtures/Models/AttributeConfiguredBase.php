@@ -9,9 +9,10 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Abstract base carrying `#[Hidden]`/`#[Appends]` so {@see AttributeConfiguredChild} can prove the
- * `classAttribute()` ancestor walk (mirroring `Model::resolveClassAttribute()`) resolves an inherited
- * attribute. Laravel 13.0+ only.
+ * Abstract base carrying `#[Hidden]`/`#[Appends]` so {@see AttributeConfiguredChild} can prove an inherited
+ * attribute is resolved. The two now travel different roads: `#[Hidden]` through Laravel's own
+ * `resolveClassAttribute()` inside the invoked `initializeHidesAttributes()`, `#[Appends]` through the
+ * plugin's `classAttribute()` — the one remaining mirror, and the only caller left. Laravel 13.0+ only.
  *
  * @internal fixture used by ModelMetadataRegistryTest
  */

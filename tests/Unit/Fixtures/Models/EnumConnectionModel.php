@@ -9,9 +9,13 @@ use Illuminate\Database\Eloquent\Model;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\SerializedIntStatus;
 
 /**
- * `#[Connection]` with an int-backed enum: `getConnectionName()` would return the raw `int`, which the
- * registry's `?string $connection` field rejects under `strict_types` — `applyConnectionAttribute()`
- * must normalize it to a string so the whole model entry is not dropped. Laravel 13.0+ only.
+ * `#[Connection]` with an int-backed enum: `getConnectionName()` applies `enum_value()`, which unwraps a
+ * BackedEnum to its raw `->value` — an `int` here, despite the method's `@return string|null`. The registry's
+ * `?string $connection` rejects that under `strict_types`, and the TypeError lands outside every section
+ * guard, so the whole model entry would be dropped.
+ * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::asConnectionName()}
+ * coerces it at the read site — the single expression whose value reaches that field, and therefore the only
+ * place a model that overrides `getConnectionName()` itself can also be caught. Laravel 13.0+ only.
  *
  * @internal fixture used by ModelMetadataRegistryTest
  */
