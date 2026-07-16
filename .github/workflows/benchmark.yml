@@ -1,27 +1,24 @@
 name: Benchmark
 
-# Three triggers:
-# 1. Comment "/benchmark" on a PR, compares PR vs base.
-# 2. Push to master, stores result for historical trend tracking.
-# 3. Manual dispatch, runs benchmark on the selected branch.
+# Push to master (or manual dispatch): benchmarks Monica with the plugin
+# installed, stores the result for historical trend tracking (GH Pages chart,
+# regression alert at 150%).
 #
-# PR path is split into three jobs (mirrors psalm-delta.yml's prepare/delta/report):
-#   prepare   — resolve PR refs, react to comment. Privileged (pull-requests:write,
-#               issues:write) but never touches PR code.
-#   benchmark — installs and runs the PR's plugin code via composer/hyperfine/Psalm.
-#               contents:read ONLY, no write or comment scope reaches this job, so
-#               even a malicious composer script in the PR has nothing to steal.
-#               Report is written to a FILE and uploaded as an artifact, never
-#               piped through $GITHUB_OUTPUT — no heredoc-delimiter injection sink.
-#   report    — downloads the artifact, posts the PR comment via `--body-file`.
-#               Privileged (pull-requests:write) but never runs PR code.
-# Keeping "runs untrusted code" and "holds a write-scoped token" in separate jobs
-# means a compromised benchmark step can't reach the token that posts comments.
+# There used to be a second, PR-comment-triggered ("/benchmark") path here that
+# compared PR vs base on Monica alone. It was dropped as redundant:
+# psalm-delta.yml's `/psalm-delta` command already reports a per-app wall-time
+# delta (Monica included, among others) in the same comment thread a reviewer
+# already uses for issue-count deltas — having two slash-commands answer
+# overlapping "is this PR slower" questions was more surface area than value.
+# The one thing that path had and psalm-delta doesn't — repeated hyperfine runs
+# and peak-memory capture — is a good candidate for a proper continuous-
+# benchmarking service (e.g. Bencher, which has a native `shell_hyperfine`
+# adapter and free-for-public-OSS bare-metal runners, sidestepping the shared-
+# runner jitter psalm-delta's report has to filter out) rather than rebuilding
+# it here; that's a follow-up, not done in this change.
 
 on:
   workflow_dispatch:
-  issue_comment:
-    types: [created]
   push:
     branches: [master]
     paths:
@@ -32,7 +29,7 @@ on:
       - '.github/workflows/benchmark.yml'
 
 concurrency:
-  group: benchmark-${{ github.event.issue.number || github.ref_name }}
+  group: benchmark-${{ github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -53,228 +50,6 @@ env:
   HYPERFINE_RUNS: 3
 
 jobs:
-
-  # ── Prepare: resolve PR refs, react to comment ────────────────────────
-  # Privileged (pull-requests:write, issues:write) but never touches PR code.
-  prepare:
-    name: Prepare (resolve refs)
-    if: >-
-      github.event_name == 'issue_comment'
-      && github.event.issue.pull_request
-      && startsWith(github.event.comment.body, '/benchmark')
-      && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: write  # needed for posting PR comments
-      issues: write  # needed for comment reactions
-    outputs:
-      head_sha: ${{ steps.pr.outputs.head_sha }}
-      base_sha: ${{ steps.pr.outputs.base_sha }}
-      pr_number: ${{ steps.pr.outputs.pr_number }}
-    steps:
-
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: React to comment
-        env:
-          GH_TOKEN: ${{ github.token }}
-          COMMENT_ID: ${{ github.event.comment.id }}
-        run: |
-          gh api repos/${{ github.repository }}/issues/comments/"$COMMENT_ID"/reactions \
-            -f content=rocket --silent
-
-      - name: Get PR refs
-        id: pr
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            });
-            const expectedRepo = `${context.repo.owner}/${context.repo.repo}`;
-            const headRepo = pr.head.repo ? pr.head.repo.full_name : null;
-            if (headRepo !== expectedRepo) {
-              core.setFailed(`Refusing to benchmark PR from a different repository (head: ${headRepo}, expected: ${expectedRepo})`);
-              return;
-            }
-            core.setOutput('head_sha', pr.head.sha);
-            core.setOutput('base_sha', pr.base.sha);
-            core.setOutput('pr_number', String(pr.number));
-
-  # ── Benchmark: installs and runs the PR's plugin code ─────────────────
-  # Unprivileged: contents:read only, no write or comment scope reaches this
-  # job, so a malicious composer script in the PR has no token to steal.
-  benchmark:
-    name: Benchmark
-    needs: prepare
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout PR branch
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-          ref: ${{ needs.prepare.outputs.head_sha }}
-          path: plugin-pr
-
-      - name: Checkout base branch
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-          ref: ${{ needs.prepare.outputs.base_sha }}
-          path: plugin-base
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
-        with:
-          php-version: ${{ env.PHP_VERSION }}
-          ini-values: opcache.enable_cli=1
-          coverage: none
-          tools: composer:v2
-
-      - name: Install hyperfine
-        # GitHub-hosted runner images ship a recent apt cache, so skip `apt-get update`.
-        # Fall back to update+install only if the cached index is stale.
-        run: sudo apt-get install -yqq hyperfine || (sudo apt-get update -qq && sudo apt-get install -yqq hyperfine)
-
-      - name: Clone Monica
-        run: |
-          git clone --depth 1 --branch "$MONICA_REF" \
-            "https://github.com/$MONICA_REPO" /tmp/monica-source
-
-      # Cache Monica's vendor once on the shared source so both variants inherit it via `cp -a`.
-      # Key is safe to pin to MONICA_REF + PHP_VERSION because the ref points at a tag
-      # with an immutable composer.lock.
-      - name: Cache Monica vendor
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
-        with:
-          path: /tmp/monica-source/vendor
-          key: monica-vendor-${{ env.MONICA_REF }}-php${{ env.PHP_VERSION }}-v2
-
-      - name: Prime Monica vendor
-        run: |
-          cd /tmp/monica-source
-          # Monica's lock pins the dev dependency laravel-lang/http-statuses at a version
-          # Packagist flags as malware, so a plain `composer install` aborts. Bumping just
-          # that one package to a clean release (the constraint is ^3.8) rewrites the lock and
-          # installs the full set. Run unconditionally — not behind a `[ ! -d vendor ]` guard —
-          # because the vendor cache does not include composer.lock, so on a cache hit the lock
-          # is restored from the fresh git clone at the flagged version; the rewrite must run
-          # every time so the corrected lock is what `cp -a` copies into the base/pr projects.
-          COMPOSER_MEMORY_LIMIT=-1 composer update laravel-lang/http-statuses --no-interaction --no-progress
-
-      - name: Setup benchmark projects
-        run: |
-          setup_project() {
-            local dir=$1 plugin_path=$2
-            cp -a /tmp/monica-source "$dir"
-            cd "$dir"
-            composer config repositories.plugin \
-              '{"type": "path", "url": "'"$plugin_path"'", "options": {"symlink": true}}'
-            composer config minimum-stability dev
-            composer require --dev "psalm/plugin-laravel:*" --no-interaction --no-update
-            COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel \
-              --no-interaction --no-progress --with-all-dependencies
-            composer show psalm/plugin-laravel
-            cp "$GITHUB_WORKSPACE/plugin-base/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
-          }
-          setup_project /tmp/monica-base "$GITHUB_WORKSPACE/plugin-base"
-          setup_project /tmp/monica-pr "$GITHUB_WORKSPACE/plugin-pr"
-
-      # Use base checkout's harness for both runs so the PR cannot alter measurement.
-      - name: Benchmark with hyperfine
-        run: |
-          HARNESS="$GITHUB_WORKSPACE/plugin-base/tests/Benchmark/run-psalm.sh"
-          : > /tmp/mem-base.txt && : > /tmp/mem-pr.txt
-          : > /tmp/issues-base.txt && : > /tmp/issues-pr.txt
-          : > /tmp/stats-base.txt && : > /tmp/stats-pr.txt
-          # No warmup: this job measures the diff between base and PR, both pay the same
-          # first-run page-cache tax, so the comparison stays directionally correct.
-          hyperfine \
-            --runs "$HYPERFINE_RUNS" \
-            --command-name base "bash \"$HARNESS\" /tmp/monica-base psalm-benchmark.xml /tmp/mem-base.txt /tmp/issues-base.txt /tmp/stats-base.txt" \
-            --command-name pr   "bash \"$HARNESS\" /tmp/monica-pr   psalm-benchmark.xml /tmp/mem-pr.txt /tmp/issues-pr.txt /tmp/stats-pr.txt" \
-            --export-json /tmp/hyperfine.json \
-            --ignore-failure
-          echo "--- hyperfine results ---"
-          jq '.results[] | {command, mean, stddev, min, max}' /tmp/hyperfine.json
-
-      # Report goes to a FILE, uploaded as an artifact — never a shell var or
-      # $GITHUB_OUTPUT heredoc, so there's no delimiter-collision injection sink
-      # for the report job to consume (matches psalm-delta.yml's file-based report).
-      - name: Compare results
-        run: |
-          set +e
-          php plugin-base/tests/Benchmark/compare.php \
-            /tmp/hyperfine.json /tmp/mem-base.txt /tmp/mem-pr.txt \
-            /tmp/issues-base.txt /tmp/issues-pr.txt \
-            /tmp/stats-base.txt /tmp/stats-pr.txt > report.md
-          EXIT_CODE=$?
-          cat report.md
-          exit $EXIT_CODE
-
-      - name: Upload report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: benchmark-report
-          path: report.md
-          if-no-files-found: warn
-          retention-days: 7
-
-  # ── Report: posts the PR comment ───────────────────────────────────────
-  # Privileged (pull-requests:write) but never runs PR code — only reads the
-  # numeric/markdown artifact the benchmark job produced.
-  report:
-    name: Report (post PR comment)
-    needs: [prepare, benchmark]
-    if: always() && needs.prepare.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: write  # needed for posting PR comments
-    steps:
-
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Download report
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: benchmark-report
-          path: .
-        continue-on-error: true
-
-      - name: Post PR comment
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
-        run: |
-          if [ ! -s report.md ]; then
-            echo "Benchmark failed to produce results. Check the workflow logs." > report.md
-          fi
-          gh pr comment "$PR_NUMBER" \
-            --repo ${{ github.repository }} \
-            --body-file report.md
-
 
   # ── Master benchmark: stores result + historical trend ───────────────
   master-benchmark:
