@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784201044510,
+  "lastUpdate": 1784208190339,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8710,6 +8710,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6321822fb8262533c60eca487d253066dce337bf",
+          "message": "Merge pull request #1275 from psalm/refactor/extract-model-instance-preparer\n\nRefactor: extract `ModelInstancePreparer` from the registry builder",
+          "timestamp": "2026-07-16T15:20:17+02:00",
+          "tree_id": "9482726f1989ba92dbc268befce496625e5aee52",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6321822fb8262533c60eca487d253066dce337bf"
+        },
+        "date": 1784208189687,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.41,
+            "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1109,
             "unit": "MB"
           }
         ]
