@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -70,6 +71,7 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AbstractKeylessModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
@@ -79,6 +81,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
@@ -236,7 +239,7 @@ final class ModelMetadataRegistryTest extends TestCase
     public function class_attributes_are_merged_at_warm_up(): void
     {
         // newInstanceWithoutConstructor() skips initializeTraits()/initializeModelAttributes(), so the
-        // PHP-attribute config is missed unless applyClassAttributeConfig() replays it. The #[*] classes
+        // PHP-attribute config is missed unless replayInitializers() mirrors it. The #[*] classes
         // only exist from Laravel 13.0, below which this fixture is never loaded.
         if (!class_exists(Hidden::class)) {
             self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
@@ -497,6 +500,15 @@ final class ModelMetadataRegistryTest extends TestCase
             'schema' => [ModelMetadata::SECTION_SCHEMA],
             'casts' => [ModelMetadata::SECTION_CASTS],
             'primary key' => [ModelMetadata::SECTION_PRIMARY_KEY],
+            // A trait-initializer replay failure withholds every instance-derived section (a half-run
+            // initializer may have mutated any of $table / $connection / casts / $appends / the key), so
+            // all four gate on it — while the static method metadata (SECTION_METHODS) survives.
+            'trait initializers' => [
+                ModelMetadata::SECTION_RUNTIME_CONFIGURATION,
+                ModelMetadata::SECTION_SCHEMA,
+                ModelMetadata::SECTION_CASTS,
+                ModelMetadata::SECTION_PRIMARY_KEY,
+            ],
         ];
 
         foreach ($expectations as $failure => $incompleteSections) {
@@ -921,6 +933,95 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertTrue($metadata->traits->hasSoftDeletes);
         $this->assertArrayHasKey('deleted_at', $metadata->casts());
         $this->assertSame(CastShape::DateTime, $metadata->casts()['deleted_at']->shape);
+    }
+
+    #[Test]
+    public function trait_initializer_merged_class_cast_appears_in_casts(): void
+    {
+        // classifyCast() checks class_exists(..., autoload: false), so force AsArrayObject into memory
+        // first, as a real app boot would (mirrors as_collection_class_cast_classifies_as_class_castable).
+        \class_exists(AsArrayObject::class);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(TraitInitializedConfigModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TraitInitializedConfigModel::class);
+
+        $metadata = $this->metadataFor(TraitInitializedConfigModel::class);
+
+        // The `meta` cast is merged only by MergesTraitConfig::initializeMergesTraitConfig() — a protected
+        // hook the constructor-less warm-up instance skips unless the trait initializer is replayed. Its
+        // presence as a class cast is exactly what backs the `meta` append and clears the false positive.
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertArrayHasKey('meta', $metadata->casts());
+        $this->assertTrue($metadata->casts()['meta']->shape->isClassCastable());
+    }
+
+    #[Test]
+    public function attribute_tagged_trait_initializer_merged_class_cast_appears_in_casts(): void
+    {
+        // The #[Initialize] attribute and the bootTraits branch reading it arrive in Laravel 12.22; below
+        // that the framework ignores the tag, so the replay stays convention-only and `via_attr` is absent
+        // (the plugin is correct there — the CI 12.14 floor exercises exactly this).
+        if (!\class_exists(\Illuminate\Database\Eloquent\Attributes\Initialize::class)) {
+            self::markTestSkipped('The #[Initialize] attribute discovery branch requires Laravel >= 12.22.');
+        }
+
+        \class_exists(AsCollection::class);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(TraitInitializedConfigModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TraitInitializedConfigModel::class);
+
+        $metadata = $this->metadataFor(TraitInitializedConfigModel::class);
+
+        // `via_attr` is merged only by SeedsCastViaAttribute::seedViaAttribute() — a `#[Initialize]`-tagged,
+        // NON-conventionally-named initializer. It is reachable only through the replay's attribute-discovery
+        // branch (bootTraits' second branch); a convention-only replay would miss it and the false positive
+        // would return for this shape.
+        $this->assertArrayHasKey('via_attr', $metadata->casts());
+        $this->assertTrue($metadata->casts()['via_attr']->shape->isClassCastable());
+    }
+
+    #[Test]
+    public function trait_initializer_merged_fillable_unions_with_class_fillable(): void
+    {
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(TraitInitializedConfigModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TraitInitializedConfigModel::class);
+
+        $metadata = $this->metadataFor(TraitInitializedConfigModel::class);
+
+        // Replaying the initializer must MERGE the trait's mergeFillable() onto the class-level $fillable,
+        // never replace or drop it (over-restriction). Order mirrors Laravel's mergeFillable(): the
+        // existing class entry first, then the trait-merged one.
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION));
+        $this->assertSame(['class_fillable', 'trait_fillable'], $metadata->fillable);
+    }
+
+    #[Test]
+    public function trait_initializer_setAppends_precedes_attribute_merge(): void
+    {
+        // #[Appends] exists from Laravel 13.0; below that the attribute is inert and there is nothing to
+        // order against.
+        if (!\class_exists(\Illuminate\Database\Eloquent\Attributes\Appends::class)) {
+            self::markTestSkipped('The #[Appends] attribute requires Laravel >= 13.0.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AppendsOrderModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AppendsOrderModel::class);
+
+        $metadata = $this->metadataFor(AppendsOrderModel::class);
+
+        // Runtime construction is the ONLY oracle — never a hardcoded literal: getMethods() ranks the user
+        // setAppends(['trait_only']) vs the framework mergeAppends(#[Appends]) differently across PHP versions
+        // (both survive on 8.5, the replace wins on 8.4), so runtime getAppends() differs by PHP. The registry
+        // must reproduce whatever the running PHP yields, which the getMethods()-order interleave guarantees.
+        $this->assertSame((new AppendsOrderModel())->getAppends(), $metadata->appends);
     }
 
     #[Test]
