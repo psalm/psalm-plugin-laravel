@@ -717,6 +717,31 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     }
 
     /**
+     * Get a trait-declared fluent builder method's parameters for one concrete model.
+     *
+     * The parameter registry is shared because a trait method has one signature, but the
+     * existence check must stay model-aware: registering SoftDeletes for one model must not
+     * make onlyTrashed() appear on every unrelated model's relation.
+     *
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodName
+     * @return list<FunctionLikeParameter>|null
+     * @internal Used by relation forwarding for base-Builder related models
+     * @psalm-external-mutation-free
+     */
+    public static function getTraitMethodParamsForModel(
+        Codebase $codebase,
+        string $modelClass,
+        string $methodName,
+    ): ?array {
+        if (!self::isTraitBuilderMethod($codebase, $modelClass, $methodName)) {
+            return null;
+        }
+
+        return self::$baseBuilderTraitMethods[$methodName] ?? null;
+    }
+
+    /**
      * Check if the model has a trait-declared builder method for the given name.
      *
      * Looks for @method static annotations on the model (inherited from traits like
