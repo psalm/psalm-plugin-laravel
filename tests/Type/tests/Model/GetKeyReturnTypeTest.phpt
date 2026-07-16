@@ -4,6 +4,8 @@
 use App\Models\ConflictingKeyCastModel;
 use App\Models\Customer;
 use App\Models\GetKeyOverrideModel;
+use App\Models\KeylessPermission;
+use App\Models\StringKeyModel;
 use App\Models\UlidModel;
 use App\Models\UuidModel;
 use Illuminate\Database\Eloquent\Model;
@@ -34,6 +36,27 @@ function test_get_key_ulid(UlidModel $model): string
 {
     $key = $model->getKey();
     /** @psalm-check-type-exact $key = string */
+
+    return $key;
+}
+
+/** A plain $keyType='string' property override narrows the same as the trait-driven forms. */
+function test_get_key_string_property(StringKeyModel $model): string
+{
+    $key = $model->getKey();
+    /** @psalm-check-type-exact $key = string */
+
+    return $key;
+}
+
+/**
+ * A keyless model (no single Eloquent primary key) must fall back to the stub's
+ * `int|string` — there is no column name to look up.
+ */
+function test_get_key_keyless(KeylessPermission $model): int|string
+{
+    $key = $model->getKey();
+    /** @psalm-check-type-exact $key = int|string */
 
     return $key;
 }
