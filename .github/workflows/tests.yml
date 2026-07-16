@@ -51,8 +51,24 @@ jobs:
         run: bash bin/ci/check-phpt-conventions.sh
 
   unit_tests:
-    name: Unit tests
+    name: Unit test P${{ matrix.php }} | L${{ matrix.laravel || 'lockfile' }}
     runs-on: ubuntu-latest
+    strategy:
+      # Version-split fixtures fail per-cell by design; keep every cell's verdict visible.
+      fail-fast: false
+      matrix:
+        include:
+          # Lockfile cells cover both sides of the PHP 8.4/8.5 getMethods() initializer-order split.
+          - php: '8.5'
+          - php: '8.4'
+          # Declared framework floors.
+          - php: '8.4'
+            laravel: '13.3.0'
+          - php: '8.2'
+            laravel: '12.14.0'
+          # Highest 12.x: the enum $connection path is live since 12.28.
+          - php: '8.2'
+            laravel: '^12.14'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -67,53 +83,52 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
         with:
-          php-version: 8.4
+          php-version: ${{ matrix.php }}
           coverage: none
           tools: composer:v2
+
+      - name: Determine composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache composer packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-unit-${{ matrix.php }}-${{ matrix.laravel || 'lockfile' }}-${{ hashFiles('composer.json', 'composer.lock') }}
+          restore-keys: |
+            composer-unit-${{ matrix.php }}-
 
       - name: Check Composer configuration
+        if: matrix.php == '8.4' && !matrix.laravel
         run: composer validate --strict
 
-      - name: Install composer dependencies
+      - name: Install composer dependencies (lockfile)
+        if: ${{ !matrix.laravel }}
         run: composer install
 
-      - name: Run Unit tests
-        run: composer test:unit
-
-  laravel_12_14_floor:
-    name: Laravel 12.14.0 floor
-    runs-on: ubuntu-latest
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
-        with:
-          php-version: 8.2
-          coverage: none
-          tools: composer:v2
-
-      - name: Install exact Laravel floor
-        # The supported floor may have published advisories; this isolated test install is never deployed.
+      - name: Install with Laravel constraint
+        # Floors may have published advisories; this isolated test install is never deployed.
+        if: matrix.laravel
         run: >-
-          composer update --with="laravel/framework:12.14.0" --with-all-dependencies
+          composer update --with="laravel/framework:${{ matrix.laravel }}" --with-all-dependencies
           --no-interaction --no-progress --prefer-dist --prefer-stable --no-blocking --no-audit
 
       - name: Verify installed Laravel version
+        if: matrix.laravel && !startsWith(matrix.laravel, '^')
+        env:
+          EXPECTED_LARAVEL: v${{ matrix.laravel }}
         run: >-
           php -r 'require "vendor/autoload.php";
-          exit(Composer\InstalledVersions::getPrettyVersion("laravel/framework") === "v12.14.0" ? 0 : 1);'
+          exit(Composer\InstalledVersions::getPrettyVersion("laravel/framework") === getenv("EXPECTED_LARAVEL") ? 0 : 1);'
+
+      - name: Run Unit tests (lockfile)
+        if: ${{ !matrix.laravel }}
+        run: composer test:unit
 
       - name: Run Unit tests
-        # Testbench 10 resolves PHPUnit 11, which does not support --display-phpunit-notices.
+        # Constraint installs may resolve PHPUnit 11 (Testbench 10), which lacks --display-phpunit-notices.
+        if: matrix.laravel
         run: vendor/bin/phpunit --testsuite=unit --display-deprecations --display-notices
 
 
