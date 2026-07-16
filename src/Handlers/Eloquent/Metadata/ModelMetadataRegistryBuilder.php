@@ -317,6 +317,36 @@ final class ModelMetadataRegistryBuilder
         array &$failures,
     ): ModelMetadata {
         $baseTraits = self::computeTraitFlags($storage, true);
+
+        // Replay the model's own trait initializers FIRST — before the framework-mirror steps below
+        // (flipUsesUniqueIds + applyClassAttributeConfig) — matching Laravel 12.22+/13, whose bootTraits()
+        // iterates ReflectionClass::getMethods() and ranks a concrete class's own (flattened) initializers
+        // AHEAD of Model's inherited concern initializers (verified from the tag sources + empirically), with
+        // initializeModelAttributes last. So a user setAppends() lands BEFORE the framework
+        // mergeAppends(#[Appends]); the old order (mirrors first) let it REPLACE the merge, dropping the
+        // #[Appends] entries runtime keeps.
+        //
+        // Laravel 12.14–12.21 bootTraits() instead walks class_uses_recursive() PARENTS-FIRST, so framework
+        // concern inits run BEFORE user ones — replay-first is NOT runtime-faithful there. But every
+        // config-attribute merge (#[Appends]/#[Fillable]/#[Hidden]/#[Visible]/#[Guarded]) is Laravel-13-only,
+        // so nothing collides pre-13; the sole pre-12.22 divergence is casts()-vs-user-mergeCasts() of the
+        // SAME key (documented at computeCasts — pre-existing, since computeCasts always lets casts() win
+        // regardless of this reorder). The other residual is exotic: a user init that READS state a
+        // same-concrete-class framework init writes (a directly-`use`d HasUuids's usesUniqueIds). The helper
+        // owns the framework-initializer exclusion.
+        $traitsInitialized = self::computeSection(
+            0,
+            'trait initializers',
+            $completeSections,
+            $failures,
+            static function () use ($reflection, $instance): bool {
+                self::replayTraitInitializers($reflection, $instance);
+
+                return true;
+            },
+            false,
+        );
+
         $uniqueIdsReady = true;
         if ($baseTraits->hasUuids || $baseTraits->hasUlids) {
             $uniqueIdsReady = self::computeSection(
@@ -340,26 +370,6 @@ final class ModelMetadataRegistryBuilder
             $failures,
             static function () use ($reflection, $instance): bool {
                 self::applyClassAttributeConfig($reflection, $instance);
-
-                return true;
-            },
-            false,
-        );
-
-        // Replay the model's own trait initializers (→ mergeCasts() / mergeFillable() / ...) the
-        // constructor-less instance skipped, so the readers below see them. No placement is exactly
-        // runtime-faithful — applyClassAttributeConfig() bundles a pre-user-init phase (#[Guarded] via the
-        // concern initializers) and a post one (initializeModelAttributes) — but after it is fine: the
-        // union merges (appends / fillable / hidden / visible) commute as sets; only #[Connection] /
-        // #[Table] fill-null colliding with a user initializer on that same field is order-sensitive (an
-        // exotic case, left as-is). The helper owns the framework-initializer exclusion.
-        $traitsInitialized = self::computeSection(
-            0,
-            'trait initializers',
-            $completeSections,
-            $failures,
-            static function () use ($reflection, $instance): bool {
-                self::replayTraitInitializers($reflection, $instance);
 
                 return true;
             },
@@ -1406,6 +1416,14 @@ final class ModelMetadataRegistryBuilder
             $merged = \array_merge($merged, CastsMethodParser::parse($codebase, $modelFqcn));
         }
 
+        // KNOWN DIVERGENCE (Laravel 12.14–12.21 only): when a user trait initializer mergeCasts() a key that
+        // casts() ALSO declares, runtime there runs casts() first (bootTraits walks class_uses_recursive
+        // parents-first) then the user init, so the USER value wins; from 12.22+ the order flips and casts()
+        // wins — which is what merging casts() last reproduces on every version. Making it version-aware needs
+        // a pre-replay casts snapshot diffed here to re-apply user-merged keys after casts(); deferred as a
+        // documented divergence — a rare same-key collision, on a superseded patch range, costing one cast
+        // type. See replayTraitInitializers() for the reorder that motivates this.
+
         $result = [];
         foreach ($merged as $columnName => $castString) {
             if ($columnName === '' || $castString === '') {
@@ -1655,8 +1673,13 @@ final class ModelMetadataRegistryBuilder
      * (HasUniqueStringIds), and {@see computeCasts()} (`casts()` + SoftDeletes), so replaying would
      * double-apply — keyed on the method's SOURCE FILE, not its declaring class: a concern trait `use`d
      * directly on the model (e.g. `use HasUuids`) flattens its initializer to report the user model as
-     * declarer, yet the method's file stays under `vendor/laravel/framework` (or `vendor/illuminate`).
-     * Only user / third-party run.
+     * declarer, yet the method's file stays under the `Illuminate\Database` root (derived from Model's own
+     * file — install-layout-independent). Only user / third-party run.
+     *
+     * Only the initialize hooks run — never `boot{Trait}()`: booting registers global scopes (the Psalm
+     * hang). An initializer that depends on boot-prepared state therefore throws here even though runtime
+     * construction succeeds, and the model degrades to four incomplete sections — a warned coverage loss
+     * that prevents potentially-incorrect diagnostics, accepted as the conservative trade.
      *
      * @param \ReflectionClass<Model> $reflection
      */
@@ -1675,6 +1698,13 @@ final class ModelMetadataRegistryBuilder
         // convention-only, at parity with the framework (which ignores the attribute there). Computed once.
         $honorInitializeAttribute = \class_exists(Initialize::class);
 
+        // Framework concern initializers (HasAttributes / GuardsAttributes / HidesAttributes / HasTimestamps
+        // / HasRelationships / HasUniqueStringIds / SoftDeletes) all live under Illuminate\Database. Derive
+        // that root from Model's OWN file (dirname .../Illuminate/Database/Eloquent/Model.php, 2) so the skip
+        // is install-layout-independent — custom vendor dirs, composer path-repo symlinks, and split
+        // illuminate/* packages resolve consistently, unlike a hardcoded `/vendor/…` substring.
+        $eloquentRoot = \str_replace('\\', '/', \dirname((string) (new \ReflectionClass(Model::class))->getFileName(), 2));
+
         $invoked = [];
         foreach ($reflection->getMethods() as $method) {
             $name = $method->getName();
@@ -1687,14 +1717,11 @@ final class ModelMetadataRegistryBuilder
             }
 
             // Skip framework concern initializers (some conventionally named, some #[Initialize]-tagged):
-            // hand-mirrored elsewhere, so replaying double-applies. The method's source file is the reliable
-            // discriminator (its declaring class is NOT — a directly-`use`d concern reports the user model).
-            // Anchored to `/vendor/...` so a user repo checked out at e.g. ~/code/laravel/framework/ is not
-            // self-skipped; `/vendor/illuminate/` also covers standalone illuminate/database installs. A
-            // framework symlinked OUTSIDE vendor slips through, but replaying its initializers is idempotent
-            // (they merge exactly what applyClassAttributeConfig()/flipUsesUniqueIds()/computeCasts() apply).
-            $file = \str_replace('\\', '/', (string) $method->getFileName());
-            if (\str_contains($file, '/vendor/laravel/framework/') || \str_contains($file, '/vendor/illuminate/')) {
+            // hand-mirrored by applyClassAttributeConfig()/flipUsesUniqueIds()/computeCasts(), so replaying
+            // double-applies. The method's source file under the Illuminate\Database root is the reliable
+            // discriminator — its declaring class is NOT (a directly-`use`d concern reports the user model).
+            // The trailing '/' on the root stops a sibling dir like Illuminate/DatabaseExtra from matching.
+            if (\str_starts_with(\str_replace('\\', '/', (string) $method->getFileName()), $eloquentRoot . '/')) {
                 continue;
             }
 
@@ -1769,6 +1796,10 @@ final class ModelMetadataRegistryBuilder
      * {@see \Illuminate\Database\Eloquent\Concerns\GuardsAttributes::initializeGuardsAttributes()}:
      * `#[Unguarded]` guards nothing; else the `#[Guarded]` columns (`columns ?? ['*']`, so a present-but-
      * empty `#[Guarded]` also guards nothing); absent → keep `['*']`.
+     *
+     * The `getGuarded() !== ['*']` early-return matches runtime precisely because the trait-initializer
+     * replay runs BEFORE this: a user initializer that already set `$guarded` (via `guard()`) makes runtime's
+     * initializeGuardsAttributes skip `#[Guarded]` — and so do we.
      *
      * @param \ReflectionClass<Model> $reflection
      */

@@ -71,6 +71,7 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AbstractKeylessModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
@@ -998,6 +999,31 @@ final class ModelMetadataRegistryTest extends TestCase
         // existing class entry first, then the trait-merged one.
         $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION));
         $this->assertSame(['class_fillable', 'trait_fillable'], $metadata->fillable);
+    }
+
+    #[Test]
+    public function trait_initializer_setAppends_precedes_attribute_merge(): void
+    {
+        // #[Appends] exists from Laravel 13.0; below that the attribute is inert and there is nothing to
+        // order against.
+        if (!\class_exists(\Illuminate\Database\Eloquent\Attributes\Appends::class)) {
+            self::markTestSkipped('The #[Appends] attribute requires Laravel >= 13.0.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(AppendsOrderModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, AppendsOrderModel::class);
+
+        $metadata = $this->metadataFor(AppendsOrderModel::class);
+
+        // Runtime construction is the oracle: the user setAppends(['trait_only']) runs before
+        // initializeHasAttributes' mergeAppends(#[Appends]) (bootTraits ranks the concrete trait initializer
+        // first), so BOTH survive. The registry must reproduce that byte-for-byte — which only holds if the
+        // replay runs BEFORE applyClassAttributeConfig (the old order let the replace drop 'attribute_append').
+        $runtimeAppends = (new AppendsOrderModel())->getAppends();
+        $this->assertSame(['trait_only', 'attribute_append'], $runtimeAppends);
+        $this->assertSame($runtimeAppends, $metadata->appends);
     }
 
     #[Test]
