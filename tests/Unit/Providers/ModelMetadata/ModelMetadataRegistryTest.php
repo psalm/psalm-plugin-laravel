@@ -16,10 +16,12 @@ use App\Models\UlidModel;
 use App\Models\UnguardedModel;
 use App\Models\UuidModel;
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Attributes\Connection;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
@@ -81,8 +83,10 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\PlainEnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableKeyAttributeModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsAttributeModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsEnabledModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributeInheritedModel;
@@ -90,6 +94,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributePrecedence
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsInitializerOrderModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\WithoutIncrementingAttributeModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\WithoutTimestampsAttributeModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
@@ -247,8 +252,8 @@ final class ModelMetadataRegistryTest extends TestCase
     public function class_attributes_are_merged_at_warm_up(): void
     {
         // newInstanceWithoutConstructor() skips initializeTraits()/initializeModelAttributes(), so the
-        // PHP-attribute config is missed unless ModelInstancePreparer::prepare() mirrors it. The #[*] classes
-        // only exist from Laravel 13.0, below which this fixture is never loaded.
+        // PHP-attribute config is missed unless ModelInstancePreparer::prepare() replays them. The #[*]
+        // classes only exist from Laravel 13.0, below which this fixture is never loaded.
         if (!class_exists(Hidden::class)) {
             self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
         }
@@ -375,9 +380,8 @@ final class ModelMetadataRegistryTest extends TestCase
     public function timestamps_attributes_reach_the_registry(string $modelFqcn, bool $expected): void
     {
         // #[WithoutTimestamps] is Laravel 13.2 (#[Table] 13.0). Below that these fixtures' attributes are
-        // either inert (12.x has no initializeHasTimestamps() to mirror, so the premise assertion fails)
-        // or unresolvable (the #[Table] carriers name-match a class absent on 12.x, and applyTableAttribute()
-        // — which runs regardless of the walk — then throws inside classAttribute()'s newInstance()).
+        // inert: 12.x has neither an initializeHasTimestamps() for the walk to invoke nor an
+        // initializeModelAttributes() phase, so the premise assertion fails.
         if (!class_exists(WithoutTimestamps::class)) {
             self::markTestSkipped('#[WithoutTimestamps] requires Laravel >= 13.2.');
         }
@@ -405,8 +409,66 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame($runtime, $metadata->traits->usesTimestamps);
     }
 
+    /**
+     * @return iterable<string, array{class-string<Model>, string, string, bool}>
+     */
+    public static function primaryKeyAttributeCases(): iterable
+    {
+        yield '#[Table] key/keyType/incrementing sub-overrides' => [TableKeyAttributeModel::class, 'uuid', 'string', false];
+        yield '#[WithoutIncrementing]' => [WithoutIncrementingAttributeModel::class, 'id', 'int', false];
+    }
+
+    /**
+     * @param class-string<Model> $modelFqcn
+     */
     #[Test]
-    public function trait_initializer_ordering_decides_the_timestamps_mirror(): void
+    #[DataProvider('primaryKeyAttributeCases')]
+    public function primary_key_attributes_reach_the_registry(
+        string $modelFqcn,
+        string $expectedKeyName,
+        string $expectedKeyType,
+        bool $expectedIncrementing,
+    ): void {
+        // Gated on the LATER of the two attributes: `#[Table]` is 13.0 but `#[WithoutIncrementing]` is 13.2,
+        // and 12.x has no initializeModelAttributes() phase to apply either — the premise assertions would
+        // fail there. Below 13.2 the `#[WithoutIncrementing]` row would also name-match a class that is not
+        // installed, which resolveClassAttribute()'s newInstance() throws on.
+        if (!class_exists(WithoutIncrementing::class)) {
+            self::markTestSkipped('#[WithoutIncrementing] requires Laravel >= 13.2.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage($modelFqcn);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, $modelFqcn);
+
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+
+        // Warm-up must have COMPLETED, not degraded: the fallback key is ('id', Integer, incrementing: true),
+        // which the expectations below could not tell from a correct read of a default-keyed model.
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+
+        // A constructed model is the oracle: it runs the real initializeModelAttributes() that
+        // newInstanceWithoutConstructor() skips, so this stays honest if Laravel changes the rules.
+        $runtime = new $modelFqcn();
+
+        // Pin the premise first. Without it, a Laravel that stopped applying these attributes would leave the
+        // oracle and the registry agreeing on the defaults and the comparison below would test nothing.
+        $this->assertSame($expectedKeyName, $runtime->getKeyName(), 'fixture premise drifted from Laravel behaviour');
+        $this->assertSame($expectedKeyType, $runtime->getKeyType(), 'fixture premise drifted from Laravel behaviour');
+        $this->assertSame($expectedIncrementing, $runtime->getIncrementing(), 'fixture premise drifted from Laravel behaviour');
+
+        $this->assertSame($runtime->getKeyName(), $metadata->primaryKey->name);
+        $this->assertSame(
+            $expectedKeyType === 'string' ? PrimaryKeyType::String : PrimaryKeyType::Integer,
+            $metadata->primaryKey->type,
+        );
+        $this->assertSame($runtime->getIncrementing(), $metadata->primaryKey->incrementing);
+    }
+
+    #[Test]
+    public function trait_initializer_ordering_decides_the_timestamps_outcome(): void
     {
         if (!class_exists(WithoutTimestamps::class)) {
             self::markTestSkipped('#[WithoutTimestamps] requires Laravel >= 13.2.');
@@ -422,12 +484,13 @@ final class ModelMetadataRegistryTest extends TestCase
 
         // Runtime construction is the ONLY oracle — never a literal: getMethods() ranks the user
         // initializer against Model's inherited initializeHasTimestamps() differently per PHP version, so
-        // the correct answer is true on 8.4 and false on 8.5. The mirror is right only if it runs at the
-        // framework initializer's own position; hoisting it out of the walk diverges under 8.4.
+        // the correct answer is true on 8.4 and false on 8.5. The replay is right only because it invokes
+        // each initializer at its own rank; sorting the walk, or splitting it user-first/framework-last,
+        // diverges under 8.4.
         $this->assertSame(
             (new TimestampsInitializerOrderModel())->usesTimestamps(),
             $metadata->traits->usesTimestamps,
-            'the timestamps mirror must run at initializeHasTimestamps() position in the getMethods() walk',
+            'initializeHasTimestamps() must be invoked at its own position in the getMethods() walk',
         );
     }
 
@@ -445,27 +508,54 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $metadata = ModelMetadataRegistry::for(AttributeConfiguredChild::class);
         $this->assertInstanceOf(ModelMetadata::class, $metadata);
-        // #[Hidden]/#[Appends] declared on the abstract base resolve on the concrete child via the
-        // classAttribute() parent walk (mirroring Model::resolveClassAttribute()).
+        // #[Hidden]/#[Appends] declared on the abstract base resolve on the concrete child. Two different
+        // ancestor walks now: Laravel's own resolveClassAttribute() inside the invoked
+        // initializeHidesAttributes() for #[Hidden], the plugin's classAttribute() for #[Appends].
         $this->assertSame(['base_hidden'], $metadata->hidden);
         $this->assertSame(['base_append'], $metadata->appends);
     }
 
     #[Test]
-    public function an_int_backed_enum_connection_is_normalized_to_a_string(): void
+    public function an_int_backed_enum_connection_attribute_is_normalized_to_a_string(): void
     {
-        if (!class_exists(Hidden::class)) {
-            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        // `#[Connection]` is 13.0 — gated on the attribute this row actually carries, not on the enum
+        // support it relies on, which is older (see the property-default twin below).
+        if (!class_exists(Connection::class)) {
+            self::markTestSkipped('#[Connection] requires Laravel >= 13.0.');
         }
 
+        $this->assertNormalizedEnumConnection(EnumConnectionModel::class);
+    }
+
+    #[Test]
+    public function an_int_backed_enum_connection_property_is_normalized_to_a_string(): void
+    {
+        // No attribute here, so no attribute to gate on: the real boundary is Laravel 12.28, where
+        // `$connection` widened to `\UnitEnum|string|null` and getConnectionName() started applying
+        // enum_value(). Below it the getter hands back the enum object and null is the honest answer, so the
+        // assertion would rightly fail. Gate on the CAPABILITY rather than re-encode that version number —
+        // an int here means enum_value() ran.
+        if (!\is_int((new PlainEnumConnectionModel())->getConnectionName())) {
+            self::markTestSkipped('enum_value() on $connection requires Laravel >= 12.28.');
+        }
+
+        $this->assertNormalizedEnumConnection(PlainEnumConnectionModel::class);
+    }
+
+    /**
+     * @param class-string<Model> $modelFqcn
+     */
+    private function assertNormalizedEnumConnection(string $modelFqcn): void
+    {
         $codebase = $this->makeCodebase();
-        $this->registerStorage(EnumConnectionModel::class);
+        $this->registerStorage($modelFqcn);
 
-        ModelMetadataRegistryBuilder::warmUp($codebase, EnumConnectionModel::class);
+        ModelMetadataRegistryBuilder::warmUp($codebase, $modelFqcn);
 
-        $metadata = ModelMetadataRegistry::for(EnumConnectionModel::class);
-        // The model must survive warm-up: an un-normalized int connection would TypeError the ?string
-        // field and drop the whole entry. The connection resolves to the enum's stringified backing value.
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+        // The model must survive warm-up: getConnectionName()'s enum_value() yields the enum's raw int
+        // backing value, and that TypeErrors the ?string field OUTSIDE every section guard — so a regression
+        // drops the whole entry rather than degrading one section, and this assertInstanceOf goes red.
         $this->assertInstanceOf(ModelMetadata::class, $metadata);
         $this->assertSame('1', $metadata->connection);
     }
