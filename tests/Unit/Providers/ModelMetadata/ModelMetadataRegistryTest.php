@@ -239,7 +239,7 @@ final class ModelMetadataRegistryTest extends TestCase
     public function class_attributes_are_merged_at_warm_up(): void
     {
         // newInstanceWithoutConstructor() skips initializeTraits()/initializeModelAttributes(), so the
-        // PHP-attribute config is missed unless applyClassAttributeConfig() replays it. The #[*] classes
+        // PHP-attribute config is missed unless replayInitializers() mirrors it. The #[*] classes
         // only exist from Laravel 13.0, below which this fixture is never loaded.
         if (!class_exists(Hidden::class)) {
             self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
@@ -1017,13 +1017,11 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $metadata = $this->metadataFor(AppendsOrderModel::class);
 
-        // Runtime construction is the oracle: the user setAppends(['trait_only']) runs before
-        // initializeHasAttributes' mergeAppends(#[Appends]) (bootTraits ranks the concrete trait initializer
-        // first), so BOTH survive. The registry must reproduce that byte-for-byte — which only holds if the
-        // replay runs BEFORE applyClassAttributeConfig (the old order let the replace drop 'attribute_append').
-        $runtimeAppends = (new AppendsOrderModel())->getAppends();
-        $this->assertSame(['trait_only', 'attribute_append'], $runtimeAppends);
-        $this->assertSame($runtimeAppends, $metadata->appends);
+        // Runtime construction is the ONLY oracle — never a hardcoded literal: getMethods() ranks the user
+        // setAppends(['trait_only']) vs the framework mergeAppends(#[Appends]) differently across PHP versions
+        // (both survive on 8.5, the replace wins on 8.4), so runtime getAppends() differs by PHP. The registry
+        // must reproduce whatever the running PHP yields, which the getMethods()-order interleave guarantees.
+        $this->assertSame((new AppendsOrderModel())->getAppends(), $metadata->appends);
     }
 
     #[Test]
