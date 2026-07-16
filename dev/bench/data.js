@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784231431236,
+  "lastUpdate": 1784233336924,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8880,6 +8880,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.24,
             "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "86a83a76285b6651d385792efadb14eba373dc74",
+          "message": "Merge pull request #1280 from psalm/780-factory-tmodel-binding\n\nAuto-bind `Factory<TModel>` on bare factory subclasses",
+          "timestamp": "2026-07-16T22:19:23+02:00",
+          "tree_id": "56e0ac8971d4f123bbe34b9734721056d0b38988",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/86a83a76285b6651d385792efadb14eba373dc74"
+        },
+        "date": 1784233336318,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.82,
+            "range": "± 0.17",
             "unit": "s"
           },
           {
