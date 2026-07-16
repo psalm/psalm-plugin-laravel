@@ -10,8 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Both forms, disagreeing: `#[WithoutTimestamps]` wins over `#[Table(timestamps: true)]` because
- * `initializeHasTimestamps()` checks it first and returns. Pins the mirror's branch ORDER — swap the two
- * and this model records true while runtime says false.
+ * `initializeHasTimestamps()` checks it first and returns. The branch order is Laravel's, and the replay
+ * invokes it — so what this pins is the registry's read of a precedence it no longer reproduces itself.
  *
  * Laravel 13.2+ (`#[WithoutTimestamps]`); the consuming test is gated on `class_exists()`.
  *
