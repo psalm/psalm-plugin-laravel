@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784222226544,
+  "lastUpdate": 1784228365060,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8780,6 +8780,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa8166125edd50b2455f7eccd3b05eea80c210e8",
+          "message": "Merge pull request #1279 from psalm/feat/getkey-narrow-1270\n\nNarrow `Model::getKey()` to the model's known primary-key type",
+          "timestamp": "2026-07-16T20:56:55+02:00",
+          "tree_id": "6ffa656e62f383a2b60602b14dc6608b52f5306d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fa8166125edd50b2455f7eccd3b05eea80c210e8"
+        },
+        "date": 1784228364073,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 24.11,
+            "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1109,
             "unit": "MB"
           }
         ]
