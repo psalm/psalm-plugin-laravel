@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
@@ -32,6 +33,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
@@ -81,8 +83,13 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsAttributeModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsEnabledModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributeInheritedModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributePrecedenceModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\WithoutTimestampsAttributeModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
 #[CoversClass(ModelMetadataRegistryBuilder::class)]
@@ -336,6 +343,65 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertSame(['own_guard'], $metadata->guarded);
         // Own $table wins over #[Table], so the schema resolves under 'own_table'.
         $this->assertTrue($metadata->schema()->has('own_col'), 'own $table must win over #[Table]');
+    }
+
+    /**
+     * Each case pairs a fixture with the `usesTimestamps()` its attributes must produce. #1276.
+     *
+     * @return iterable<string, array{class-string<Model>, bool}>
+     */
+    public static function timestampsAttributeCases(): iterable
+    {
+        yield '#[WithoutTimestamps]' => [WithoutTimestampsAttributeModel::class, false];
+        yield '#[Table(timestamps: false)]' => [TableTimestampsAttributeModel::class, false];
+        yield '#[WithoutTimestamps] outranks #[Table(timestamps: true)]' => [TimestampsAttributePrecedenceModel::class, false];
+        // Inherited #[WithoutTimestamps] outranks the CHILD's own #[Table] — precedence is decided across
+        // the hierarchy, and only the ancestor walk finds the parent's attribute.
+        yield 'inherited #[WithoutTimestamps] outranks the child #[Table]' => [TimestampsAttributeInheritedModel::class, false];
+        yield 'declared $timestamps = false closes the guard' => [AttributeOverriddenByPropertyModel::class, false];
+        // The only case that assigns `true` FROM the attribute rather than leaving the default.
+        yield '#[Table(timestamps: true)]' => [TableTimestampsEnabledModel::class, true];
+        // #[Table] carrying no timestamps: argument must leave them alone — pins that the mirror reads
+        // the argument, not the attribute's presence.
+        yield '#[Table] without a timestamps: argument' => [AttributeConfiguredModel::class, true];
+    }
+
+    /**
+     * @param class-string<Model> $modelFqcn
+     */
+    #[Test]
+    #[DataProvider('timestampsAttributeCases')]
+    public function timestamps_attributes_reach_the_registry(string $modelFqcn, bool $expected): void
+    {
+        // #[WithoutTimestamps] is Laravel 13.2 (#[Table] 13.0). Below that these fixtures' attributes are
+        // either inert (12.x has no initializeHasTimestamps() to mirror, so the premise assertion fails)
+        // or unresolvable (the #[Table] carriers name-match a class absent on 12.x, and applyTableAttribute()
+        // — which runs regardless of the walk — then throws inside classAttribute()'s newInstance()).
+        if (!class_exists(WithoutTimestamps::class)) {
+            self::markTestSkipped('#[WithoutTimestamps] requires Laravel >= 13.2.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage($modelFqcn);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, $modelFqcn);
+
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+
+        // Warm-up must have COMPLETED, not degraded: every failure path falls back to usesTimestamps=true,
+        // which the true-expecting cases below cannot tell from a correct read. Only this section — the
+        // fixtures seed no migrations, so SECTION_SCHEMA is legitimately incomplete.
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION));
+
+        // A constructed model is the oracle: it runs the real initializeHasTimestamps() that
+        // newInstanceWithoutConstructor() skips, so this stays honest if Laravel changes the rules.
+        $runtime = (new $modelFqcn())->usesTimestamps();
+
+        // Pin the premise first. Without it, a Laravel that stopped applying these attributes would make
+        // both sides agree on true and the oracle below would pass while testing nothing.
+        $this->assertSame($expected, $runtime, 'fixture premise drifted from Laravel behaviour');
+        $this->assertSame($runtime, $metadata->traits->usesTimestamps);
     }
 
     #[Test]
