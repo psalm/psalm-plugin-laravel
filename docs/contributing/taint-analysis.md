@@ -27,7 +27,7 @@ Taint analysis is opt-in (`runTaintAnalysis="true"` in `psalm.xml`, or `--taint-
 Stubs for packages that ship outside `laravel/framework` (currently: `laravel/ai`) live under `stubs/integrations/<package>/` and are loaded only when the host application has the package installed. The plugin probes Composer's runtime metadata in `Plugin::optionalIntegrationStubs()`:
 
 ```php
-if (self::isInstalledAndSatisfies('laravel/ai', '^0.6')) {
+if (self::isInstalledAndSatisfies('laravel/ai', '>=0.9.0 <1.0.0')) {
     \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
 }
 ```

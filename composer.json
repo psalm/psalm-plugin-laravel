@@ -46,7 +46,6 @@
     "require-dev": {
         "alies-dev/psalm-tester": "dev-feature/parallel-batch",
         "friendsofphp/php-cs-fixer": "^3.94",
-        "laravel/ai": "^0.6",
         "laravel/framework": "^12.14 || ^13.3",
         "phpunit/phpunit": "^11.5 || ^12.5 || ^13.0",
         "ramsey/collection": "^1.3",

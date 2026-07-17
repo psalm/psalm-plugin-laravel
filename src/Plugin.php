@@ -217,7 +217,7 @@ final class Plugin implements PluginEntryPointInterface
      * Composer's runtime metadata so absent packages contribute zero stubs and
      * we avoid triggering the project autoloader for a class lookup. The
      * version constraint additionally protects against a future major bump
-     * (e.g. laravel/ai 0.7) silently loading stubs that reference removed or
+     * (e.g. laravel/ai 1.0) silently loading stubs that reference removed or
      * renamed classes.
      *
      * @return list<string>
@@ -226,7 +226,7 @@ final class Plugin implements PluginEntryPointInterface
     {
         $stubs = [];
 
-        if ($this->isInstalledAndSatisfies('laravel/ai', '^0.6')) {
+        if ($this->isInstalledAndSatisfies('laravel/ai', '>=0.9.0 <1.0.0')) {
             \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
         }
 
@@ -505,7 +505,7 @@ final class Plugin implements PluginEntryPointInterface
         // sinks declaratively; this handler covers the property-level `$response->text`
         // source because Psalm doesn't honor `@psalm-taint-source` on properties.
         // Guarded the same way as the matching stubs in optionalIntegrationStubs().
-        if ($this->isInstalledAndSatisfies('laravel/ai', '^0.6')) {
+        if ($this->isInstalledAndSatisfies('laravel/ai', '>=0.9.0 <1.0.0')) {
             require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
         }
