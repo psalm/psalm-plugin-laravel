@@ -153,3 +153,37 @@ jobs:
 
       - name: Run Psalm/Type tests
         run: composer test:type
+
+  type_tests_laravel_ai:
+    name: Type test (laravel/ai)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
+        with:
+          php-version: 8.4
+          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M
+          coverage: none
+          tools: composer
+
+      - name: Install dependencies from composer.json
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      # laravel/ai is optional (not a root composer.json dependency, see #937) and requires PHP
+      # ^8.3, so it is installed here rather than in composer.json to keep it off the PHP 8.2
+      # lanes. This is the only leg where the PromptInjection PHPT suite actually runs.
+      - name: Install optional laravel/ai integration
+        run: composer require --dev "laravel/ai:>=0.9.0 <1.0.0" --no-interaction --no-progress
+
+      - name: Run Psalm/Type tests
+        run: composer test:type
