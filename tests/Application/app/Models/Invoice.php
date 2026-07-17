@@ -32,6 +32,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  *
  * @property string $invoice_number Human-readable invoice identifier (e.g. "INV-2024-001")
  * @property string $status         Lifecycle status: draft, sent, paid, void
+ * @property float $total_amount    Invoice total, in the connection's base currency unit
  */
 #[UseEloquentBuilder(InvoiceBuilder::class)]
 #[CollectedBy(InvoiceCollection::class)]

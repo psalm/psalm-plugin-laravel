@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Psalm\Codebase;
+use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 // UnionTypeComparator is in Psalm\Internal\* but is the established convention for
 // type-containment checks in plugins (Psalm's own bundled providers use it directly,
 // and several other handlers in this codebase already depend on Psalm\Internal\*).
 // Re-verify when bumping Psalm to a new minor/major version.
-use Psalm\Internal\Type\Comparator\UnionTypeComparator;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\NodeTypeProvider;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
@@ -50,23 +53,6 @@ final class ModelPropertyResolver
     }
 
     /**
-     * Look up the type of a model property from @property / @property-read PHPDoc annotations.
-     *
-     * @param class-string<Model> $modelClass
-     * @psalm-mutation-free
-     */
-    public static function resolvePropertyType(Codebase $codebase, string $modelClass, string $propertyName): ?Union
-    {
-        try {
-            $classStorage = $codebase->classlike_storage_provider->get($modelClass);
-        } catch (\InvalidArgumentException) {
-            return null;
-        }
-
-        return $classStorage->pseudo_property_get_types['$' . $propertyName] ?? null;
-    }
-
-    /**
      * Build a typed Collection return type for pluck().
      *
      * Resolves the model property type from @property annotations and determines
@@ -94,7 +80,11 @@ final class ModelPropertyResolver
             return null;
         }
 
-        // Extract column name from the first argument as a string literal
+        // Extract column name from the first argument as a string literal. $args[0]/
+        // $args[1] below are positional (the $value, $key parameter order) — a call
+        // using PHP named arguments to reorder them (pluck(key: 'k', value: 'v'))
+        // would misindex here. Deliberate scope cut: no known real-world caller does
+        // this for pluck()'s two-parameter signature.
         $argType = $nodeTypeProvider->getType($args[0]->value);
         if (!$argType instanceof \Psalm\Type\Union || !$argType->isSingleStringLiteral()) {
             return null;
@@ -110,34 +100,86 @@ final class ModelPropertyResolver
         // concrete model. Fall back to inspecting the call's LHS expression, whose
         // type carries the concrete generic arguments.
         if ($modelClass === null && $lhsExpr instanceof \PhpParser\Node\Expr) {
-            $modelClass = self::extractModelFromLhsType($nodeTypeProvider->getType($lhsExpr), $modelTemplateIndex);
+            $lhsType = $nodeTypeProvider->getType($lhsExpr);
+            $modelClass = self::extractModelFromLhsType($lhsType, $modelTemplateIndex);
+
+            // Custom Builder subclasses declared as `/** @extends Builder<Task> */
+            // final class TaskBuilder extends Builder {}` are not themselves generic,
+            // so the LHS type above is a plain TNamedObject (no type_params for the
+            // fallback just above to read) and the event's template parameters are
+            // empty. Resolve TModel from the classlike storage's
+            // template_extended_params[Builder::class]['TModel'], which Psalm
+            // populates from the @extends docblock — the same mechanism
+            // ModelFactoryMethodTypeProvider/FactoryCountTypeProvider use for
+            // Factory<TModel>. Naturally scoped to Builder subclasses regardless of
+            // caller: Psalm's Populator only ever creates a
+            // template_extended_params[Builder::class] entry when Builder is a
+            // generic ancestor somewhere in the class's hierarchy, so a Collection
+            // subclass's storage (reached when this runs from CollectionPluckHandler,
+            // $modelTemplateIndex 1) simply has no such key and this fallback yields
+            // null there — no explicit index check is needed or performed.
+            if ($modelClass === null) {
+                $modelClass = self::extractModelFromLhsBuilderExtends($lhsType, $codebase);
+            }
+
+            // Mirror-image gap on the Collection side (issue #1295): a non-generic
+            // custom Collection subclass (`final class TaskCollection extends
+            // Collection<int, Task> {}`, no own @template) is likewise neither
+            // generic itself nor a TGenericObject LHS. Naturally scoped to Collection
+            // subclasses the same way the Builder fallback above is scoped to Builder
+            // subclasses: a Builder LHS's storage never has a
+            // template_extended_params[...Collection::class] entry, so this yields
+            // null for Builder callers regardless of $modelTemplateIndex.
+            if ($modelClass === null) {
+                $modelClass = self::extractModelFromLhsCollectionExtends($lhsType, $codebase);
+            }
         }
 
         if ($modelClass === null) {
             return null;
         }
 
-        $propertyType = self::resolvePropertyType($codebase, $modelClass, $columnName);
-        if (!$propertyType instanceof \Psalm\Type\Union) {
-            return null;
-        }
+        // The value column is often not a @property: raw select aliases and computed
+        // columns (`selectRaw('COUNT(*) AS cnt')`) have no model annotation to resolve.
+        // Don't bail on that alone — fall back to mixed for the value and still attempt
+        // to narrow the key below, since the two axes are independent.
+        //
+        // resolveColumnType() so a column with no @property still narrows from
+        // migration schema / casts, mirroring ordinary `$model->column` reads and
+        // BuilderAggregateHandler's column resolution.
+        $resolvedPropertyType = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $columnName);
+        $valueResolved = $resolvedPropertyType instanceof \Psalm\Type\Union;
+        $propertyType = $resolvedPropertyType ?? Type::getMixed();
 
         // Determine key type:
-        //   - no $key argument        → int (positional Laravel key)
+        //   - no $key argument        → int, always (Laravel's positional pluck() yields
+        //                                sequential int keys regardless of the value column)
         //   - $key arg with @property → @property type if subset of array-key, else array-key
         //   - $key arg without @property → array-key
         //
         // We only adopt the @property type when it is a subset of int|string, because
         // Collection<TKey, TValue> requires TKey to be array-key. A property declared as
         // CarbonInterface|null (cast type) would produce an invalid TKey, so we fall back.
+        // $args[1] is positional too (see the $args[0] note above) — "has a $key
+        // argument" here means "has a second positional argument", not "named the
+        // $key parameter".
+        $keyResolved = \count($args) < 2;
         $keyType = Type::getInt();
         if (\count($args) >= 2) {
-            $keyType = self::resolveKeyType(
+            $resolvedKeyType = self::resolveKeyType(
                 keyArg: $args[1],
                 modelClass: $modelClass,
                 nodeTypeProvider: $nodeTypeProvider,
                 codebase: $codebase,
             );
+            $keyResolved = $resolvedKeyType instanceof Union;
+            $keyType = $resolvedKeyType ?? Type::getArrayKey();
+        }
+
+        // Neither axis narrowed past the stub's default `Collection<array-key, mixed>` —
+        // defer to it instead of constructing an identical type via this handler.
+        if (!$valueResolved && !$keyResolved) {
+            return null;
         }
 
         return new Union([
@@ -161,6 +203,16 @@ final class ModelPropertyResolver
             return null;
         }
 
+        // First resolved model wins. A union LHS spanning builders/collections over
+        // DIFFERENT models (e.g. `FooBuilder<Foo>|BarBuilder<Bar>`) resolves to
+        // whichever atomic happens to match first, not a validated agreement across
+        // the whole union — a real type error in the caller's code could silently
+        // narrow pluck() against the wrong model instead of surfacing. Deliberate:
+        // this shape is vanishingly rare in practice (same pattern in
+        // extractModelFromLhsBuilderExtends() and extractModelFromLhsCollectionExtends()
+        // below). If ever tightened, the correct semantics are "every atomic that
+        // resolves to a model must resolve to the SAME model, else null" rather than
+        // first-match.
         foreach ($lhsType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TGenericObject) {
                 continue;
@@ -177,11 +229,125 @@ final class ModelPropertyResolver
     }
 
     /**
+     * Resolve TModel for a custom, non-generic Builder subclass from its classlike
+     * storage's `@extends Builder<TModel>` binding.
+     *
+     * `ClassLikeStorageProvider::get()` lowercases internally, so the FQCN is passed
+     * through untouched. `template_extended_params` is keyed on the canonical class
+     * name (`$parent_storage->name`), which matches `Builder::class` for any
+     * vendor-stable Laravel install, and flattens through intermediate,
+     * non-generic ancestors (e.g. `TaskBuilder extends BaseTaskBuilder extends
+     * Builder`), so deeper inheritance chains resolve the same way.
+     *
+     * A generic custom builder (`@template T of Model` / `@extends Builder<T>`),
+     * used as `TaskBuilder<Task>`, is a TGenericObject and already handled by
+     * {@see self::extractModelFromLhsType()}; when reached from here instead, its
+     * own TModel binding resolves to the unsubstituted template `T`, which
+     * {@see self::extractModelFromUnion()} does not recognize as a Model, so this
+     * method correctly yields null for that case rather than a wrong binding.
+     *
+     * Public: shared with {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderAggregateHandler},
+     * which has the identical non-generic-custom-builder gap for sum()/avg()/min()/max()
+     * (issue #1294), the same way {@see self::extractModelFromUnion()} already is.
+     *
+     * @return class-string<Model>|null
+     * @psalm-mutation-free
+     */
+    public static function extractModelFromLhsBuilderExtends(?Union $lhsType, Codebase $codebase): ?string
+    {
+        if (!$lhsType instanceof Union) {
+            return null;
+        }
+
+        // First resolved model wins — same deliberate first-match limitation as
+        // extractModelFromLhsType() above.
+        foreach ($lhsType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                continue;
+            }
+
+            try {
+                $classStorage = $codebase->classlike_storage_provider->get($atomic->value);
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            $modelClass = self::extractModelFromUnion(
+                $classStorage->template_extended_params[Builder::class]['TModel'] ?? null,
+            );
+            if ($modelClass !== null) {
+                return $modelClass;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve TModel for a custom, non-generic Collection subclass from its classlike
+     * storage's `@extends Collection<TKey, TModel>` binding — the Collection-side
+     * analogue of {@see self::extractModelFromLhsBuilderExtends()} (issue #1295).
+     *
+     * Checks two ancestor keys, in order, because Psalm's Populator flattens the
+     * *entire* generic ancestry into `template_extended_params`, not just the direct
+     * parent, and a custom collection can be declared against either level:
+     *
+     * 1. `Illuminate\Database\Eloquent\Collection::class`, template `TModel` — matches
+     *    how users actually write `@extends Collection<int, Task>` in the standard
+     *    pattern (`Collection` there resolves to the Eloquent subclass), verified
+     *    empirically against a fixture shaped exactly like that (`InvoiceCollection`):
+     *    `template_extended_params['Illuminate\Database\Eloquent\Collection'] =
+     *    ['TKey' => int, 'TModel' => Invoice]`.
+     * 2. `Illuminate\Support\Collection::class`, template `TValue` — covers a custom
+     *    collection extending the base Support collection directly, without going
+     *    through the Eloquent subclass. The same fixture also carries this entry
+     *    (`Eloquent\Collection<TKey, TModel> extends Support\Collection<TKey,
+     *    TModel>`, so it flattens through): `template_extended_params
+     *    ['Illuminate\Support\Collection'] = ['TKey' => int, 'TValue' => Invoice]`.
+     *
+     * @return class-string<Model>|null
+     * @psalm-mutation-free
+     */
+    private static function extractModelFromLhsCollectionExtends(?Union $lhsType, Codebase $codebase): ?string
+    {
+        if (!$lhsType instanceof Union) {
+            return null;
+        }
+
+        // First resolved model wins — same deliberate first-match limitation as
+        // extractModelFromLhsType() above.
+        foreach ($lhsType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                continue;
+            }
+
+            try {
+                $classStorage = $codebase->classlike_storage_provider->get($atomic->value);
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            $modelClass = self::extractModelFromUnion(
+                $classStorage->template_extended_params[EloquentCollection::class]['TModel'] ?? null,
+            ) ?? self::extractModelFromUnion(
+                $classStorage->template_extended_params[Collection::class]['TValue'] ?? null,
+            );
+            if ($modelClass !== null) {
+                return $modelClass;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Resolve the TKey type for pluck($value, $key) when a key argument is provided.
      *
      * Returns the @property type of the key column when it is a subset of array-key
-     * (int|string); otherwise returns array-key. Returns array-key for dynamic/unknown
-     * key columns.
+     * (int|string); otherwise returns null — the caller falls back to array-key, but
+     * needs to know whether narrowing actually happened (a raw-alias value column
+     * combined with an equally-unresolved key column means neither axis narrowed, so
+     * the caller defers to the stub entirely instead of restating its default).
      *
      * @param class-string<Model> $modelClass
      */
@@ -190,13 +356,13 @@ final class ModelPropertyResolver
         string $modelClass,
         NodeTypeProvider $nodeTypeProvider,
         Codebase $codebase,
-    ): Union {
+    ): ?Union {
         // Cheap AST pre-check: avoid a NodeTypeProvider lookup for non-literal key columns,
         // which is the common case (variables, expressions).
         if (!$keyArg->value instanceof \PhpParser\Node\Scalar\String_) {
             $keyArgType = $nodeTypeProvider->getType($keyArg->value);
             if (!$keyArgType instanceof Union || !$keyArgType->isSingleStringLiteral()) {
-                return Type::getArrayKey();
+                return null;
             }
 
             $keyColumn = $keyArgType->getSingleStringLiteral()->value;
@@ -204,13 +370,15 @@ final class ModelPropertyResolver
             $keyColumn = $keyArg->value->value;
         }
 
-        $keyPropertyType = self::resolvePropertyType($codebase, $modelClass, $keyColumn);
+        // Registry-aware resolution (see resolvePluckReturnType() above): a key column
+        // with no @property still narrows from migration schema / casts.
+        $keyPropertyType = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $keyColumn);
         if (!$keyPropertyType instanceof Union) {
-            return Type::getArrayKey();
+            return null;
         }
 
         if (!UnionTypeComparator::isContainedBy($codebase, $keyPropertyType, Type::getArrayKey())) {
-            return Type::getArrayKey();
+            return null;
         }
 
         return $keyPropertyType;
