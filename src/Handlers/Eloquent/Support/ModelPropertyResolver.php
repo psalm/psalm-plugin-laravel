@@ -134,27 +134,40 @@ final class ModelPropertyResolver
             return null;
         }
 
-        $propertyType = self::resolvePropertyType($codebase, $modelClass, $columnName);
-        if (!$propertyType instanceof \Psalm\Type\Union) {
-            return null;
-        }
+        // The value column is often not a @property: raw select aliases and computed
+        // columns (`selectRaw('COUNT(*) AS cnt')`) have no model annotation to resolve.
+        // Don't bail on that alone — fall back to mixed for the value and still attempt
+        // to narrow the key below, since the two axes are independent.
+        $resolvedPropertyType = self::resolvePropertyType($codebase, $modelClass, $columnName);
+        $valueResolved = $resolvedPropertyType instanceof \Psalm\Type\Union;
+        $propertyType = $resolvedPropertyType ?? Type::getMixed();
 
         // Determine key type:
-        //   - no $key argument        → int (positional Laravel key)
+        //   - no $key argument        → int, always (Laravel's positional pluck() yields
+        //                                sequential int keys regardless of the value column)
         //   - $key arg with @property → @property type if subset of array-key, else array-key
         //   - $key arg without @property → array-key
         //
         // We only adopt the @property type when it is a subset of int|string, because
         // Collection<TKey, TValue> requires TKey to be array-key. A property declared as
         // CarbonInterface|null (cast type) would produce an invalid TKey, so we fall back.
+        $keyResolved = \count($args) < 2;
         $keyType = Type::getInt();
         if (\count($args) >= 2) {
-            $keyType = self::resolveKeyType(
+            $resolvedKeyType = self::resolveKeyType(
                 keyArg: $args[1],
                 modelClass: $modelClass,
                 nodeTypeProvider: $nodeTypeProvider,
                 codebase: $codebase,
             );
+            $keyResolved = $resolvedKeyType instanceof Union;
+            $keyType = $resolvedKeyType ?? Type::getArrayKey();
+        }
+
+        // Neither axis narrowed past the stub's default `Collection<array-key, mixed>` —
+        // defer to it instead of constructing an identical type via this handler.
+        if (!$valueResolved && !$keyResolved) {
+            return null;
         }
 
         return new Union([
@@ -246,8 +259,10 @@ final class ModelPropertyResolver
      * Resolve the TKey type for pluck($value, $key) when a key argument is provided.
      *
      * Returns the @property type of the key column when it is a subset of array-key
-     * (int|string); otherwise returns array-key. Returns array-key for dynamic/unknown
-     * key columns.
+     * (int|string); otherwise returns null — the caller falls back to array-key, but
+     * needs to know whether narrowing actually happened (a raw-alias value column
+     * combined with an equally-unresolved key column means neither axis narrowed, so
+     * the caller defers to the stub entirely instead of restating its default).
      *
      * @param class-string<Model> $modelClass
      */
@@ -256,13 +271,13 @@ final class ModelPropertyResolver
         string $modelClass,
         NodeTypeProvider $nodeTypeProvider,
         Codebase $codebase,
-    ): Union {
+    ): ?Union {
         // Cheap AST pre-check: avoid a NodeTypeProvider lookup for non-literal key columns,
         // which is the common case (variables, expressions).
         if (!$keyArg->value instanceof \PhpParser\Node\Scalar\String_) {
             $keyArgType = $nodeTypeProvider->getType($keyArg->value);
             if (!$keyArgType instanceof Union || !$keyArgType->isSingleStringLiteral()) {
-                return Type::getArrayKey();
+                return null;
             }
 
             $keyColumn = $keyArgType->getSingleStringLiteral()->value;
@@ -272,11 +287,11 @@ final class ModelPropertyResolver
 
         $keyPropertyType = self::resolvePropertyType($codebase, $modelClass, $keyColumn);
         if (!$keyPropertyType instanceof Union) {
-            return Type::getArrayKey();
+            return null;
         }
 
         if (!UnionTypeComparator::isContainedBy($codebase, $keyPropertyType, Type::getArrayKey())) {
-            return Type::getArrayKey();
+            return null;
         }
 
         return $keyPropertyType;

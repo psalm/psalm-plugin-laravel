@@ -40,11 +40,14 @@ function test_pluck_value_only_on_direct_custom_builder(): void
     /** @psalm-check-type-exact $_result = Collection<int, string> */
 }
 
-/** Unknown column on a non-generic custom builder falls back to the stub type, no crash. */
+/**
+ * Unknown column on a non-generic custom builder: value falls back to mixed, key
+ * stays int (no $key argument) — see issue #1286. No crash either way.
+ */
 function test_pluck_unknown_column_on_direct_custom_builder(): void
 {
     $_result = Invoice::query()->pluck('unknown_column');
-    /** @psalm-check-type-exact $_result = Collection<array-key, mixed> */
+    /** @psalm-check-type-exact $_result = Collection<int, mixed> */
 }
 
 // --- Deeper inheritance chain ---
