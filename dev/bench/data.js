@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784298254118,
+  "lastUpdate": 1784299512148,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9020,6 +9020,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.71,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5fa342d177058acbbe14675f2e60d0979f6d2935",
+          "message": "Merge pull request #1288 from psalm/fix/1287-pluck-custom-builder\n\nFix: pluck() and aggregate narrowing on custom subclasses, raw aliases, and schema-typed columns",
+          "timestamp": "2026-07-17T16:42:21+02:00",
+          "tree_id": "7c7c1ea2ef3dd39879527fa46a1c5edbe8e26a8a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5fa342d177058acbbe14675f2e60d0979f6d2935"
+        },
+        "date": 1784299511517,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.44,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
