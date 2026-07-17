@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Psalm\Codebase;
@@ -133,6 +134,18 @@ final class ModelPropertyResolver
             if ($modelClass === null) {
                 $modelClass = self::extractModelFromLhsBuilderExtends($lhsType, $codebase);
             }
+
+            // Mirror-image gap on the Collection side (issue #1295): a non-generic
+            // custom Collection subclass (`final class TaskCollection extends
+            // Collection<int, Task> {}`, no own @template) is likewise neither
+            // generic itself nor a TGenericObject LHS. Naturally scoped to Collection
+            // subclasses the same way the Builder fallback above is scoped to Builder
+            // subclasses: a Builder LHS's storage never has a
+            // template_extended_params[...Collection::class] entry, so this yields
+            // null for Builder callers regardless of $modelTemplateIndex.
+            if ($modelClass === null) {
+                $modelClass = self::extractModelFromLhsCollectionExtends($lhsType, $codebase);
+            }
         }
 
         if ($modelClass === null) {
@@ -259,6 +272,61 @@ final class ModelPropertyResolver
 
             $modelClass = self::extractModelFromUnion(
                 $classStorage->template_extended_params[Builder::class]['TModel'] ?? null,
+            );
+            if ($modelClass !== null) {
+                return $modelClass;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve TModel for a custom, non-generic Collection subclass from its classlike
+     * storage's `@extends Collection<TKey, TModel>` binding — the Collection-side
+     * analogue of {@see self::extractModelFromLhsBuilderExtends()} (issue #1295).
+     *
+     * Checks two ancestor keys, in order, because Psalm's Populator flattens the
+     * *entire* generic ancestry into `template_extended_params`, not just the direct
+     * parent, and a custom collection can be declared against either level:
+     *
+     * 1. `Illuminate\Database\Eloquent\Collection::class`, template `TModel` — matches
+     *    how users actually write `@extends Collection<int, Task>` in the standard
+     *    pattern (`Collection` there resolves to the Eloquent subclass), verified
+     *    empirically against a fixture shaped exactly like that (`InvoiceCollection`):
+     *    `template_extended_params['Illuminate\Database\Eloquent\Collection'] =
+     *    ['TKey' => int, 'TModel' => Invoice]`.
+     * 2. `Illuminate\Support\Collection::class`, template `TValue` — covers a custom
+     *    collection extending the base Support collection directly, without going
+     *    through the Eloquent subclass. The same fixture also carries this entry
+     *    (`Eloquent\Collection<TKey, TModel> extends Support\Collection<TKey,
+     *    TModel>`, so it flattens through): `template_extended_params
+     *    ['Illuminate\Support\Collection'] = ['TKey' => int, 'TValue' => Invoice]`.
+     *
+     * @return class-string<Model>|null
+     * @psalm-mutation-free
+     */
+    private static function extractModelFromLhsCollectionExtends(?Union $lhsType, Codebase $codebase): ?string
+    {
+        if (!$lhsType instanceof Union) {
+            return null;
+        }
+
+        foreach ($lhsType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                continue;
+            }
+
+            try {
+                $classStorage = $codebase->classlike_storage_provider->get($atomic->value);
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            $modelClass = self::extractModelFromUnion(
+                $classStorage->template_extended_params[EloquentCollection::class]['TModel'] ?? null,
+            ) ?? self::extractModelFromUnion(
+                $classStorage->template_extended_params[Collection::class]['TValue'] ?? null,
             );
             if ($modelClass !== null) {
                 return $modelClass;

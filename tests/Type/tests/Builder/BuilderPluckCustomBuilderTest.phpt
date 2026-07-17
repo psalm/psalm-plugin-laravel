@@ -80,19 +80,29 @@ function test_pluck_on_generic_custom_builder_instance_unaffected(VehicleBuilder
     /** @psalm-check-type-exact $_result = Collection<string, string> */
 }
 
-// --- Non-Builder custom subclass (must not be affected by the new fallback) ---
+// --- Non-Builder custom subclass ---
 
 /**
  * InvoiceCollection is a non-generic custom Collection subclass — the Collection
  * analogue of InvoiceBuilder's shape (`@extends Collection<int, Invoice>`, no own
- * @template). Collection does not extend Builder, so the new
- * template_extended_params[Builder::class] fallback must never fire for it; narrowing
- * such Collection subclasses is a separate, out-of-scope gap this fix does not touch.
+ * @template). Collection does not extend Builder, so the Builder-scoped
+ * template_extended_params[Builder::class] fallback added by this fix never fires
+ * for it — narrowing custom Collection subclasses was a separate, out-of-scope gap
+ * when this file was first written.
+ *
+ * That gap has since been closed by #1295 (a mirror-image
+ * template_extended_params[...Collection::class] fallback), so this now narrows the
+ * same way InvoiceBuilder does — this test intentionally stayed in the #1287 file
+ * rather than moving to the #1295 one, since its point is exactly that the two
+ * fallbacks are independent and this is the boundary between them.
+ *
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1295
  */
-function test_pluck_on_non_builder_custom_collection_unaffected(InvoiceCollection $collection): void
-{
+function test_pluck_on_non_builder_custom_collection_narrows_via_the_collection_side_fallback(
+    InvoiceCollection $collection,
+): void {
     $_result = $collection->pluck('invoice_number');
-    /** @psalm-check-type-exact $_result = Collection<array-key, mixed> */
+    /** @psalm-check-type-exact $_result = Collection<int, string> */
 }
 
 // --- Union LHS over the same model (lock-in) ---
