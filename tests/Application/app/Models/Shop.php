@@ -61,6 +61,12 @@ final class Shop extends Model
         return $this->hasMany(WorkOrder::class);
     }
 
+    /** HasMany whose related model uses a method inherited from an abstract custom builder. */
+    public function artists(): HasMany
+    {
+        return $this->hasMany(Artist::class);
+    }
+
     /** BelongsToMany without generics — Part has PartCollection via newCollection() */
     public function parts(): BelongsToMany
     {

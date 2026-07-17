@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Casts\InboundOnlyCast;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Concerns\FailsTraitInitializer;
 
-/** @internal fixture used by ModelMetadataRegistryTest */
+/** @internal fixture used by ModelMetadataRegistryTest and ModelInstancePreparerTest */
 final class SectionFailureModel extends Model
 {
     use FailsTraitInitializer;

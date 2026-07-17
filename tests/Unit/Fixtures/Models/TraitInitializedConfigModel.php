@@ -9,13 +9,13 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Concerns\MergesTraitConfig;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Concerns\SeedsCastViaAttribute;
 
 /**
- * Drives {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder}'s
+ * Drives {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelInstancePreparer}'s
  * trait-initializer replay across BOTH discovery branches: MergesTraitConfig merges the `meta` class cast
  * and `trait_fillable` via a conventionally-named initializer, while SeedsCastViaAttribute merges the
  * `via_attr` class cast via a `#[Initialize]`-tagged, non-conventionally-named one. A constructor-less
  * warm-up skips both unless replayed. The class-level `$fillable` proves the trait merge unions, not clobbers.
  *
- * @internal fixture used by ModelMetadataRegistryTest
+ * @internal fixture used by ModelMetadataRegistryTest and ModelInstancePreparerTest
  */
 final class TraitInitializedConfigModel extends Model
 {

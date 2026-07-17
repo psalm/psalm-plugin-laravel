@@ -7,6 +7,7 @@ use Rector\CodingStyle\Rector\If_\NullableCompareToNullRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPrivateMethodRector;
 use Rector\Php55\Rector\String_\StringClassNameToClassConstantRector;
+use Rector\PHPUnit\CodeQuality\Rector\FuncCall\AssertFuncCallToPHPUnitAssertRector;
 use Rector\PHPUnit\CodeQuality\Rector\MethodCall\AssertEmptyNullableObjectToAssertInstanceofRector;
 use Rector\PHPUnit\Set\PHPUnitSetList;
 use Rector\ValueObject\PhpVersion;
@@ -43,4 +44,10 @@ return RectorConfig::configure()
         // Too permissive for unit tests: `assertNotInstanceOf` passes for null, scalars, arrays,
         // and unrelated objects — losing the precise null-only intent.
         AssertEmptyNullableObjectToAssertInstanceofRector::class,
+        // Rewrites `assert($x instanceof Foo)` inside test classes to `Assert::assertInstanceOf(...)`.
+        // The two are not equivalent: `assert()` is a zero-cost type-narrowing hint for the analyzer
+        // (and for the reader) about a precondition of the surrounding test setup code, while an
+        // `assertX()` call is part of the test's observable expectations — it counts towards the
+        // assertion tally and turns a broken fixture into a plain test failure instead of an error.
+        AssertFuncCallToPHPUnitAssertRector::class,
     ]);

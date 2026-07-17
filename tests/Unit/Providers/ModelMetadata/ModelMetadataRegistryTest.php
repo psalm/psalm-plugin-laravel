@@ -16,10 +16,13 @@ use App\Models\UlidModel;
 use App\Models\UnguardedModel;
 use App\Models\UuidModel;
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Attributes\Connection;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
+use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
@@ -31,7 +34,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
@@ -72,6 +77,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AbstractKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ArrayFormCastsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
@@ -79,10 +85,21 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\NonStringDeclaredCastsModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\PlainEnumConnectionModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\RawCastInitializerModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableKeyAttributeModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsAttributeModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsEnabledModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributeInheritedModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributePrecedenceModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsInitializerOrderModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\WithoutIncrementingAttributeModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\WithoutTimestampsAttributeModel;
 
 #[CoversClass(ModelMetadataRegistry::class)]
 #[CoversClass(ModelMetadataRegistryBuilder::class)]
@@ -239,8 +256,8 @@ final class ModelMetadataRegistryTest extends TestCase
     public function class_attributes_are_merged_at_warm_up(): void
     {
         // newInstanceWithoutConstructor() skips initializeTraits()/initializeModelAttributes(), so the
-        // PHP-attribute config is missed unless replayInitializers() mirrors it. The #[*] classes
-        // only exist from Laravel 13.0, below which this fixture is never loaded.
+        // PHP-attribute config is missed unless ModelInstancePreparer::prepare() replays them. The #[*]
+        // classes only exist from Laravel 13.0, below which this fixture is never loaded.
         if (!class_exists(Hidden::class)) {
             self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
         }
@@ -338,6 +355,149 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertTrue($metadata->schema()->has('own_col'), 'own $table must win over #[Table]');
     }
 
+    /**
+     * Each case pairs a fixture with the `usesTimestamps()` its attributes must produce. #1276.
+     *
+     * @return iterable<string, array{class-string<Model>, bool}>
+     */
+    public static function timestampsAttributeCases(): iterable
+    {
+        yield '#[WithoutTimestamps]' => [WithoutTimestampsAttributeModel::class, false];
+        yield '#[Table(timestamps: false)]' => [TableTimestampsAttributeModel::class, false];
+        yield '#[WithoutTimestamps] outranks #[Table(timestamps: true)]' => [TimestampsAttributePrecedenceModel::class, false];
+        // Inherited #[WithoutTimestamps] outranks the CHILD's own #[Table] — precedence is decided across
+        // the hierarchy, and only the ancestor walk finds the parent's attribute.
+        yield 'inherited #[WithoutTimestamps] outranks the child #[Table]' => [TimestampsAttributeInheritedModel::class, false];
+        yield 'declared $timestamps = false closes the guard' => [AttributeOverriddenByPropertyModel::class, false];
+        // The only case that assigns `true` FROM the attribute rather than leaving the default.
+        yield '#[Table(timestamps: true)]' => [TableTimestampsEnabledModel::class, true];
+        // #[Table] carrying no timestamps: argument must leave them alone — pins that the mirror reads
+        // the argument, not the attribute's presence.
+        yield '#[Table] without a timestamps: argument' => [AttributeConfiguredModel::class, true];
+    }
+
+    /**
+     * @param class-string<Model> $modelFqcn
+     */
+    #[Test]
+    #[DataProvider('timestampsAttributeCases')]
+    public function timestamps_attributes_reach_the_registry(string $modelFqcn, bool $expected): void
+    {
+        // #[WithoutTimestamps] is Laravel 13.2 (#[Table] 13.0). Below that these fixtures' attributes are
+        // inert: 12.x has neither an initializeHasTimestamps() for the walk to invoke nor an
+        // initializeModelAttributes() phase, so the premise assertion fails.
+        if (!class_exists(WithoutTimestamps::class)) {
+            self::markTestSkipped('#[WithoutTimestamps] requires Laravel >= 13.2.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage($modelFqcn);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, $modelFqcn);
+
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+
+        // Warm-up must have COMPLETED, not degraded: every failure path falls back to usesTimestamps=true,
+        // which the true-expecting cases below cannot tell from a correct read. Only this section — the
+        // fixtures seed no migrations, so SECTION_SCHEMA is legitimately incomplete.
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION));
+
+        // A constructed model is the oracle: it runs the real initializeHasTimestamps() that
+        // newInstanceWithoutConstructor() skips, so this stays honest if Laravel changes the rules.
+        $runtime = (new $modelFqcn())->usesTimestamps();
+
+        // Pin the premise first. Without it, a Laravel that stopped applying these attributes would make
+        // both sides agree on true and the oracle below would pass while testing nothing.
+        $this->assertSame($expected, $runtime, 'fixture premise drifted from Laravel behaviour');
+        $this->assertSame($runtime, $metadata->traits->usesTimestamps);
+    }
+
+    /**
+     * @return iterable<string, array{class-string<Model>, string, string, bool}>
+     */
+    public static function primaryKeyAttributeCases(): iterable
+    {
+        yield '#[Table] key/keyType/incrementing sub-overrides' => [TableKeyAttributeModel::class, 'uuid', 'string', false];
+        yield '#[WithoutIncrementing]' => [WithoutIncrementingAttributeModel::class, 'id', 'int', false];
+    }
+
+    /**
+     * @param class-string<Model> $modelFqcn
+     */
+    #[Test]
+    #[DataProvider('primaryKeyAttributeCases')]
+    public function primary_key_attributes_reach_the_registry(
+        string $modelFqcn,
+        string $expectedKeyName,
+        string $expectedKeyType,
+        bool $expectedIncrementing,
+    ): void {
+        // Gated on the LATER of the two attributes: `#[Table]` is 13.0 but `#[WithoutIncrementing]` is 13.2,
+        // and 12.x has no initializeModelAttributes() phase to apply either — the premise assertions would
+        // fail there. Below 13.2 the `#[WithoutIncrementing]` row would also name-match a class that is not
+        // installed, which resolveClassAttribute()'s newInstance() throws on.
+        if (!class_exists(WithoutIncrementing::class)) {
+            self::markTestSkipped('#[WithoutIncrementing] requires Laravel >= 13.2.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage($modelFqcn);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, $modelFqcn);
+
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+        $this->assertInstanceOf(ModelMetadata::class, $metadata);
+
+        // Warm-up must have COMPLETED, not degraded: the fallback key is ('id', Integer, incrementing: true),
+        // which the expectations below could not tell from a correct read of a default-keyed model.
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
+
+        // A constructed model is the oracle: it runs the real initializeModelAttributes() that
+        // newInstanceWithoutConstructor() skips, so this stays honest if Laravel changes the rules.
+        $runtime = new $modelFqcn();
+
+        // Pin the premise first. Without it, a Laravel that stopped applying these attributes would leave the
+        // oracle and the registry agreeing on the defaults and the comparison below would test nothing.
+        $this->assertSame($expectedKeyName, $runtime->getKeyName(), 'fixture premise drifted from Laravel behaviour');
+        $this->assertSame($expectedKeyType, $runtime->getKeyType(), 'fixture premise drifted from Laravel behaviour');
+        $this->assertSame($expectedIncrementing, $runtime->getIncrementing(), 'fixture premise drifted from Laravel behaviour');
+
+        $this->assertSame($runtime->getKeyName(), $metadata->primaryKey->name);
+        $this->assertSame(
+            $expectedKeyType === 'string' ? PrimaryKeyType::String : PrimaryKeyType::Integer,
+            $metadata->primaryKey->type,
+        );
+        $this->assertSame($runtime->getIncrementing(), $metadata->primaryKey->incrementing);
+    }
+
+    #[Test]
+    public function trait_initializer_ordering_decides_the_timestamps_outcome(): void
+    {
+        if (!class_exists(WithoutTimestamps::class)) {
+            self::markTestSkipped('#[WithoutTimestamps] requires Laravel >= 13.2.');
+        }
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(TimestampsInitializerOrderModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, TimestampsInitializerOrderModel::class);
+
+        $metadata = $this->metadataFor(TimestampsInitializerOrderModel::class);
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION));
+
+        // Runtime construction is the ONLY oracle — never a literal: getMethods() ranks the user
+        // initializer against Model's inherited initializeHasTimestamps() differently per PHP version, so
+        // the correct answer is true on 8.4 and false on 8.5. The replay is right only because it invokes
+        // each initializer at its own rank; sorting the walk, or splitting it user-first/framework-last,
+        // diverges under 8.4.
+        $this->assertSame(
+            (new TimestampsInitializerOrderModel())->usesTimestamps(),
+            $metadata->traits->usesTimestamps,
+            'initializeHasTimestamps() must be invoked at its own position in the getMethods() walk',
+        );
+    }
+
     #[Test]
     public function inherited_attributes_resolve_through_the_ancestor_walk(): void
     {
@@ -352,27 +512,54 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $metadata = ModelMetadataRegistry::for(AttributeConfiguredChild::class);
         $this->assertInstanceOf(ModelMetadata::class, $metadata);
-        // #[Hidden]/#[Appends] declared on the abstract base resolve on the concrete child via the
-        // classAttribute() parent walk (mirroring Model::resolveClassAttribute()).
+        // #[Hidden]/#[Appends] declared on the abstract base resolve on the concrete child. Two different
+        // ancestor walks now: Laravel's own resolveClassAttribute() inside the invoked
+        // initializeHidesAttributes() for #[Hidden], the plugin's classAttribute() for #[Appends].
         $this->assertSame(['base_hidden'], $metadata->hidden);
         $this->assertSame(['base_append'], $metadata->appends);
     }
 
     #[Test]
-    public function an_int_backed_enum_connection_is_normalized_to_a_string(): void
+    public function an_int_backed_enum_connection_attribute_is_normalized_to_a_string(): void
     {
-        if (!class_exists(Hidden::class)) {
-            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
+        // `#[Connection]` is 13.0 — gated on the attribute this row actually carries, not on the enum
+        // support it relies on, which is older (see the property-default twin below).
+        if (!class_exists(Connection::class)) {
+            self::markTestSkipped('#[Connection] requires Laravel >= 13.0.');
         }
 
+        $this->assertNormalizedEnumConnection(EnumConnectionModel::class);
+    }
+
+    #[Test]
+    public function an_int_backed_enum_connection_property_is_normalized_to_a_string(): void
+    {
+        // No attribute here, so no attribute to gate on: the real boundary is Laravel 12.28, where
+        // `$connection` widened to `\UnitEnum|string|null` and getConnectionName() started applying
+        // enum_value(). Below it the getter hands back the enum object and null is the honest answer, so the
+        // assertion would rightly fail. Gate on the CAPABILITY rather than re-encode that version number —
+        // an int here means enum_value() ran.
+        if (!\is_int((new PlainEnumConnectionModel())->getConnectionName())) {
+            self::markTestSkipped('enum_value() on $connection requires Laravel >= 12.28.');
+        }
+
+        $this->assertNormalizedEnumConnection(PlainEnumConnectionModel::class);
+    }
+
+    /**
+     * @param class-string<Model> $modelFqcn
+     */
+    private function assertNormalizedEnumConnection(string $modelFqcn): void
+    {
         $codebase = $this->makeCodebase();
-        $this->registerStorage(EnumConnectionModel::class);
+        $this->registerStorage($modelFqcn);
 
-        ModelMetadataRegistryBuilder::warmUp($codebase, EnumConnectionModel::class);
+        ModelMetadataRegistryBuilder::warmUp($codebase, $modelFqcn);
 
-        $metadata = ModelMetadataRegistry::for(EnumConnectionModel::class);
-        // The model must survive warm-up: an un-normalized int connection would TypeError the ?string
-        // field and drop the whole entry. The connection resolves to the enum's stringified backing value.
+        $metadata = ModelMetadataRegistry::for($modelFqcn);
+        // The model must survive warm-up: getConnectionName()'s enum_value() yields the enum's raw int
+        // backing value, and that TypeErrors the ?string field OUTSIDE every section guard — so a regression
+        // drops the whole entry rather than degrading one section, and this assertInstanceOf goes red.
         $this->assertInstanceOf(ModelMetadata::class, $metadata);
         $this->assertSame('1', $metadata->connection);
     }
@@ -584,6 +771,36 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertTrue($metadata->isComplete(
             ModelMetadata::SECTION_METHODS | ModelMetadata::SECTION_CASTS,
         ));
+    }
+
+    #[Test]
+    public function warning_names_every_withheld_section_not_only_the_thrown_one(): void
+    {
+        // A trait-initializer replay failure withholds runtime configuration, schema, casts and
+        // primary key (see a_failed_section_preserves_independent_metadata above) — only ONE
+        // ('trait initializers') is a recorded failure, so the other three would otherwise be
+        // invisible to a reader of the warning. 'relations' also withholds here: the unit-test
+        // Codebase (built via newInstanceWithoutConstructor()) never initializes Codebase::$methods,
+        // so codebaseMethodsInitialized() is false and SECTION_RELATIONS is never attempted —
+        // registry consumers are blind to relations for every model in this test class.
+        $captured = null;
+        $progress = $this->createMock(Progress::class);
+        $progress->expects($this->once())
+            ->method('warning')
+            ->willReturnCallback(function (string $message) use (&$captured): void {
+                $captured = $message;
+            });
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(SectionFailureModel::class, [HasUuids::class]);
+        SectionFailureModel::$failures = ['trait initializers' => true];
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
+
+        $this->assertNotNull($captured);
+        $this->assertStringEndsWith(
+            'withheld sections: relations, runtime configuration, schema, casts, primary key',
+            $captured,
+        );
     }
 
     // ---------------------------------------------------------------------
@@ -903,6 +1120,86 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
+    public function array_form_declared_cast_normalizes_and_keeps_the_casts_section(): void
+    {
+        // #1281: warm-up left `options` as the raw array Laravel would have collapsed to a string, which
+        // TypeErrored inside computeCasts() against buildCastInfo()'s `string $castString` — taking the
+        // model's ENTIRE casts section with it. `plain_tags` shares nothing with the array form and
+        // disappeared anyway; the section bit below is the regression net, the per-key asserts show the cost.
+        \class_exists(AsCollection::class);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(ArrayFormCastsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ArrayFormCastsModel::class);
+
+        $metadata = $this->metadataFor(ArrayFormCastsModel::class);
+
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        // Resolved, not merely retained. The `parameter` assert is what makes this bite: both keys reach the
+        // same shape, so shape alone would still pass if the collapse dropped the argument — which is the
+        // whole point of the two-element form.
+        $this->assertSame(CastShape::CustomCastsAttributes, $metadata->casts()['options']->shape);
+        $this->assertSame(Collection::class, $metadata->casts()['options']->parameter);
+        // Single-element form collapses to a bare class, carrying no argument.
+        $this->assertSame(CastShape::CustomCastsAttributes, $metadata->casts()['single']->shape);
+        $this->assertNull($metadata->casts()['single']->parameter);
+        // The collateral damage: an unrelated string cast on the same model, back only because the section is.
+        $this->assertSame(CastShape::Primitive, $metadata->casts()['plain_tags']->shape);
+    }
+
+    #[Test]
+    public function non_string_declared_cast_values_are_coerced_to_mixed_and_keep_the_casts_section(): void
+    {
+        // #1290: ensureCastsAreStringValues()'s `default => $cast` arm passes non-object/array shapes
+        // through untouched, so `null_col`/`int_col`/`bool_col`/`float_col`/`nested_col` all reach
+        // computeCasts() non-string. Left uncoerced, the first one TypeErrors buildCastInfo()'s
+        // `string $castString` and withholds the model's WHOLE casts section — `good_col` included,
+        // which is the regression this test's section-completeness assert guards against.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(NonStringDeclaredCastsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, NonStringDeclaredCastsModel::class);
+
+        $metadata = $this->metadataFor(NonStringDeclaredCastsModel::class);
+
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        // A genuinely string-valued cast on the same model survives the coercion map untouched.
+        $this->assertSame('int|null', $metadata->casts()['good_col']->psalmType->getId());
+        // Each non-string value is coerced to 'mixed' rather than dropped: the key stays present
+        // (so the section keeps reporting the column at all) and the resolved type stays honest
+        // about not knowing the real one.
+        $this->assertArrayHasKey('null_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['null_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('int_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['int_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('bool_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['bool_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('float_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['float_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('nested_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['nested_col']->psalmType->hasMixed());
+    }
+
+    #[Test]
+    public function trait_initializer_writing_raw_cast_value_is_coerced_and_keeps_the_casts_section(): void
+    {
+        // #1290: a trait initializer writing $this->casts[...] directly (the idiom
+        // SoftDeletes::initializeSoftDeletes() itself uses) bypasses mergeCasts()'s normalization
+        // entirely, so its value reaches computeCasts() exactly as written by user code.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(RawCastInitializerModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, RawCastInitializerModel::class);
+
+        $metadata = $this->metadataFor(RawCastInitializerModel::class);
+
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertArrayHasKey('raw_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['raw_col']->psalmType->hasMixed());
+    }
+
+    #[Test]
     public function has_ulids_trait_yields_string_primary_key(): void
     {
         $codebase = $this->makeCodebase();
@@ -915,7 +1212,7 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertTrue($metadata->traits->hasUlids);
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertFalse($metadata->primaryKey->incrementing);
-        // Same bogus-cast guard as the HasUuids test: flipUsesUniqueIds keeps
+        // Same bogus-cast guard as the HasUuids test: the preparer's uniqueIds flip keeps
         // getCasts() from injecting [id => 'int'] on ULID models too.
         $this->assertArrayNotHasKey('id', $metadata->casts());
     }
