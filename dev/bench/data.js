@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784296879950,
+  "lastUpdate": 1784298254118,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8985,6 +8985,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.71,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c913c102a86e8ee5521fe5a9af7a70b52ec084ff",
+          "message": "Merge pull request #1297 from psalm/fix/1291-warn-withheld-sections\n\nName withheld metadata sections in warm-up degradation warnings",
+          "timestamp": "2026-07-17T16:21:02+02:00",
+          "tree_id": "c3f4a5c6475828c0c7d9827ea05423138e5c0ac6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c913c102a86e8ee5521fe5a9af7a70b52ec084ff"
+        },
+        "date": 1784298253090,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.71,
+            "range": "± 0.17",
             "unit": "s"
           },
           {
