@@ -85,7 +85,9 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\NonStringDeclaredCastsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\PlainEnumConnectionModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\RawCastInitializerModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableKeyAttributeModel;
@@ -1114,6 +1116,57 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertNull($metadata->casts()['single']->parameter);
         // The collateral damage: an unrelated string cast on the same model, back only because the section is.
         $this->assertSame(CastShape::Primitive, $metadata->casts()['plain_tags']->shape);
+    }
+
+    #[Test]
+    public function non_string_declared_cast_values_are_coerced_to_mixed_and_keep_the_casts_section(): void
+    {
+        // #1290: ensureCastsAreStringValues()'s `default => $cast` arm passes non-object/array shapes
+        // through untouched, so `null_col`/`int_col`/`bool_col`/`float_col`/`nested_col` all reach
+        // computeCasts() non-string. Left uncoerced, the first one TypeErrors buildCastInfo()'s
+        // `string $castString` and withholds the model's WHOLE casts section — `good_col` included,
+        // which is the regression this test's section-completeness assert guards against.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(NonStringDeclaredCastsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, NonStringDeclaredCastsModel::class);
+
+        $metadata = $this->metadataFor(NonStringDeclaredCastsModel::class);
+
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        // A genuinely string-valued cast on the same model survives the coercion map untouched.
+        $this->assertSame('int|null', $metadata->casts()['good_col']->psalmType->getId());
+        // Each non-string value is coerced to 'mixed' rather than dropped: the key stays present
+        // (so the section keeps reporting the column at all) and the resolved type stays honest
+        // about not knowing the real one.
+        $this->assertArrayHasKey('null_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['null_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('int_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['int_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('bool_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['bool_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('float_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['float_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('nested_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['nested_col']->psalmType->hasMixed());
+    }
+
+    #[Test]
+    public function trait_initializer_writing_raw_cast_value_is_coerced_and_keeps_the_casts_section(): void
+    {
+        // #1290: a trait initializer writing $this->casts[...] directly (the idiom
+        // SoftDeletes::initializeSoftDeletes() itself uses) bypasses mergeCasts()'s normalization
+        // entirely, so its value reaches computeCasts() exactly as written by user code.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(RawCastInitializerModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, RawCastInitializerModel::class);
+
+        $metadata = $this->metadataFor(RawCastInitializerModel::class);
+
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertArrayHasKey('raw_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['raw_col']->psalmType->hasMixed());
     }
 
     #[Test]
