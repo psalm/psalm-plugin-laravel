@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Magic;
 
+use Illuminate\Database\Eloquent\Builder;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
@@ -11,6 +12,8 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelatedBuilderMethodResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ResolvedForwardedMethod;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -75,6 +78,15 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
     private static array $scopeParamsCache = [];
 
     /**
+     * Direct Relation::__call signature hand-off. The return-type provider resolves a
+     * custom-builder or trait method immediately before Psalm asks this params provider
+     * to validate the same call. Entries are consumed once to prevent cross-call leakage.
+     *
+     * @var array<string, list<FunctionLikeParameter>>
+     */
+    private static array $pendingBuilderMethodParams = [];
+
+    /**
      * Reset all static state. Called once per Plugin::__construct in production, plus
      * by test fixtures that re-bootstrap the handler. Every cache MUST be cleared so
      * leftover entries from a previous run can't leak across boundaries — in particular
@@ -93,6 +105,8 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         self::$sourceClassIndex = [];
         self::$searchClassIndex = [];
         self::$scopeParamsCache = [];
+        self::$pendingBuilderMethodParams = [];
+        RelatedBuilderMethodResolver::reset();
         DynamicWhereResolver::reset();
 
         foreach ($rule->allSourceClasses() as $class) {
@@ -174,10 +188,46 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             $fqClassName,
         );
 
+        $relationAtomic = $templateParams !== null
+            ? new TGenericObject($fqClassName, $templateParams)
+            : null;
+
+        // A real method introduced by the related model's custom builder wins over
+        // Builder::__call and Query Builder forwarding, matching PHP dispatch.
+        if ($relationAtomic instanceof TGenericObject) {
+            $customBuilderResult = self::resolveDeclaredBuilderMethodOnRelation(
+                $source,
+                $event,
+                $codebase,
+                $methodName,
+                $relationAtomic,
+                true,
+            );
+
+            if ($customBuilderResult instanceof Union) {
+                return $customBuilderResult;
+            }
+        }
+
         $resolved = ReturnTypeResolver::resolve($fqClassName, $templateParams, $codebase, $methodName);
 
         if ($resolved instanceof \Psalm\Type\Union) {
             return $resolved;
+        }
+
+        // Trait-provided fluent methods are runtime builder macros. Real Builder methods
+        // above retain precedence; scopes remain the next fallback below.
+        if ($relationAtomic instanceof TGenericObject) {
+            $traitBuilderResult = self::resolveTraitBuilderMethodOnRelation(
+                $codebase,
+                $methodName,
+                $relationAtomic,
+                true,
+            );
+
+            if ($traitBuilderResult instanceof Union) {
+                return $traitBuilderResult;
+            }
         }
 
         // Scope method fallback for Path 2: check if the method is a scope on the related model.
@@ -244,6 +294,17 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         // Don't override params for methods declared on the source class (stubs)
         if (self::isInDeclaringMethodIds($codebase, $fqClassName, $methodName)) {
             return null;
+        }
+
+        // A direct custom-builder/trait signature resolved by the return provider takes
+        // precedence over base Builder params (important for a custom override of a magic
+        // Query Builder method). Consume once so another call cannot inherit this signature.
+        $builderMethodKey = \strtolower($fqClassName) . '::' . $methodName;
+        if (\array_key_exists($builderMethodKey, self::$pendingBuilderMethodParams)) {
+            $parameters = self::$pendingBuilderMethodParams[$builderMethodKey];
+            unset(self::$pendingBuilderMethodParams[$builderMethodKey]);
+
+            return $parameters;
         }
 
         // Find method on search classes, return its params
@@ -313,6 +374,8 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * where() via @mixin Builder<Phone> and fires the provider for Builder.
      * This method detects the original caller (HasOne) from the node type provider
      * and returns the Relation's generic type instead of Builder's.
+     *
+     * @param lowercase-string $methodName
      */
     private static function handleMixinInterception(
         StatementsAnalyzer $source,
@@ -360,6 +423,22 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
                 continue;
             }
 
+            // The Relation's @mixin only exposes the base Builder surface. Look through
+            // the related model first so a declared custom-builder override follows PHP's
+            // real method dispatch and so custom-only methods do not collapse to mixed.
+            $customBuilderResult = self::resolveDeclaredBuilderMethodOnRelation(
+                $source,
+                $event,
+                $codebase,
+                $methodName,
+                $atomicType,
+                false,
+            );
+
+            if ($customBuilderResult instanceof Union) {
+                return $customBuilderResult;
+            }
+
             // Try declared fluent-method resolution first (e.g. where(), orderBy()).
             $resolved = ReturnTypeResolver::resolve(
                 $atomicType->value,
@@ -370,6 +449,17 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
 
             if ($resolved instanceof \Psalm\Type\Union) {
                 return $resolved;
+            }
+
+            $traitBuilderResult = self::resolveTraitBuilderMethodOnRelation(
+                $codebase,
+                $methodName,
+                $atomicType,
+                false,
+            );
+
+            if ($traitBuilderResult instanceof Union) {
+                return $traitBuilderResult;
             }
 
             // Scope method fallback: check if the method is a scope on the related model.
@@ -405,6 +495,128 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         }
 
         return null;
+    }
+
+    /**
+     * Resolve a real custom-builder method and apply Relation::forwardDecoratedCallTo
+     * semantics to its localized return type.
+     *
+     * @param lowercase-string $methodName
+     */
+    private static function resolveDeclaredBuilderMethodOnRelation(
+        StatementsAnalyzer $source,
+        MethodReturnTypeProviderEvent $event,
+        Codebase $codebase,
+        string $methodName,
+        TGenericObject $relationAtomic,
+        bool $storeParameters,
+    ): ?Union {
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($relationAtomic->type_params[0] ?? null);
+        if ($modelClass === null) {
+            return null;
+        }
+
+        $resolved = RelatedBuilderMethodResolver::resolveDeclaredMethod(
+            $codebase,
+            $source,
+            $modelClass,
+            $methodName,
+            $event->getCallArgs(),
+        );
+
+        if (!$resolved instanceof ResolvedForwardedMethod) {
+            return null;
+        }
+
+        if ($storeParameters) {
+            self::storePendingBuilderMethodParams($relationAtomic->value, $methodName, $resolved->parameters);
+        }
+
+        return self::decorateBuilderReturn($codebase, $resolved->returnType, $relationAtomic);
+    }
+
+    /**
+     * Resolve a model-trait fluent builder pseudo-method on a relation.
+     *
+     * @param lowercase-string $methodName
+     * @psalm-external-mutation-free
+     */
+    private static function resolveTraitBuilderMethodOnRelation(
+        Codebase $codebase,
+        string $methodName,
+        TGenericObject $relationAtomic,
+        bool $storeParameters,
+    ): ?Union {
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($relationAtomic->type_params[0] ?? null);
+        if ($modelClass === null) {
+            return null;
+        }
+
+        $resolved = RelatedBuilderMethodResolver::resolveTraitMethod($codebase, $modelClass, $methodName);
+        if (!$resolved instanceof ResolvedForwardedMethod) {
+            return null;
+        }
+
+        if ($storeParameters) {
+            self::storePendingBuilderMethodParams($relationAtomic->value, $methodName, $resolved->parameters);
+        }
+
+        return self::decorateBuilderReturn($codebase, $resolved->returnType, $relationAtomic);
+    }
+
+    /**
+     * Laravel substitutes the Relation only when the forwarded result is the wrapped
+     * builder instance. Static analysis cannot express object identity, so a Builder
+     * subtype is the established fluent approximation; every non-builder union branch
+     * remains untouched.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function decorateBuilderReturn(
+        Codebase $codebase,
+        Union $returnType,
+        TGenericObject $relationAtomic,
+    ): Union {
+        $builder = $returnType->getBuilder();
+        $changed = false;
+
+        foreach ($returnType->getAtomicTypes() as $key => $atomicType) {
+            if (!$atomicType instanceof \Psalm\Type\Atomic\TNamedObject) {
+                continue;
+            }
+
+            $isBuilder = \strtolower($atomicType->value) === \strtolower(Builder::class);
+
+            if (!$isBuilder) {
+                try {
+                    $isBuilder = $codebase->classExtendsOrImplements($atomicType->value, Builder::class);
+                } catch (\InvalidArgumentException) {
+                    $isBuilder = false;
+                }
+            }
+
+            if (!$isBuilder) {
+                continue;
+            }
+
+            $builder->removeType($key);
+            $builder->addType($relationAtomic);
+            $changed = true;
+        }
+
+        return $changed ? $builder->freeze() : $returnType;
+    }
+
+    /**
+     * @param list<FunctionLikeParameter> $parameters
+     * @psalm-external-mutation-free
+     */
+    private static function storePendingBuilderMethodParams(
+        string $relationClass,
+        string $methodName,
+        array $parameters,
+    ): void {
+        self::$pendingBuilderMethodParams[\strtolower($relationClass) . '::' . $methodName] = $parameters;
     }
 
     /**

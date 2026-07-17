@@ -117,6 +117,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/Metadata/ModelMetadataRegistryBuilder.php';
         require_once __DIR__ . '/Handlers/Eloquent/CustomBuilderMethodHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/CustomCollectionHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/FactoryModelBindingHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAggregatePropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
@@ -150,7 +151,8 @@ final class Plugin implements PluginEntryPointInterface
      * `init()` may be skipped, so it cannot be responsible for overwriting a
      * previous invocation's state.
      *
-     * @psalm-external-mutation-free
+     * Not `@psalm-external-mutation-free`: FactoryModelBindingHandler::reset()
+     * flushes Laravel's process-global factory resolver state (Factory::flushState()).
      */
     private function resetInvocationState(): void
     {
@@ -163,6 +165,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Console\CommandDefinitionAnalyzer::reset();
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();
         Handlers\Eloquent\CustomCollectionHandler::reset();
+        Handlers\Eloquent\FactoryModelBindingHandler::reset();
         Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::reset();
         Handlers\Eloquent\ModelAggregatePropertyHandler::reset();
         Handlers\Eloquent\ModelFactoryMethodTypeProvider::reset();
@@ -291,6 +294,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/FactoryModelBindingHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelToArrayShapeHandler.php';
@@ -316,12 +320,18 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\WhereColumnTaintHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelFactoryMethodTypeProvider::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryCountTypeProvider::class);
+        // Injects `@extends Factory<TModel>` on bare factory subclasses that follow Laravel's
+        // naming convention but omit the docblock — binds TModel so create()/make() resolve the
+        // concrete model (and silences `MissingTemplateParam` on Psalm 6). See #780.
+        $registration->registerHooksFromClass(Handlers\Eloquent\FactoryModelBindingHandler::class);
 
         // Magic method forwarding: Relation -> Builder (decorated forwarding).
         // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and
         // CustomCollectionHandler — the handler returns null for non-Relation callers
         // (fast O(1) check), so downstream handlers fire unaffected.
         require_once __DIR__ . '/Handlers/Eloquent/Support/DynamicWhereResolver.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/ResolvedForwardedMethod.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/RelatedBuilderMethodResolver.php';
         require_once __DIR__ . '/Handlers/Magic/ForwardingRule.php';
         require_once __DIR__ . '/Handlers/Magic/ReturnTypeResolver.php';
         require_once __DIR__ . '/Handlers/Magic/MethodForwardingHandler.php';
@@ -392,8 +402,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Collections\CollectionMakeHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionPluckHandler::class);
-        require_once __DIR__ . '/Handlers/Collections/CollectionValuesAllHandler.php';
-        $registration->registerHooksFromClass(Handlers\Collections\CollectionValuesAllHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/CollectionReindexAllHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\CollectionReindexAllHandler::class);
         require_once __DIR__ . '/Handlers/Collections/HigherOrderCollectionProxyHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\HigherOrderCollectionProxyHandler::class);
 

@@ -65,6 +65,22 @@ final class ModelMetadataRegistryBuilder
     private const TRAIT_HAS_API_TOKENS_PASSPORT_LC = 'laravel\\passport\\hasapitokens';
 
     /**
+     * Section bit → the same human label used as its {@see self::computeSection()} `$failures` key,
+     * so {@see self::warnFailures()} can name every section a consumer's `isComplete()` will report
+     * incomplete, not only the one that actually threw.
+     *
+     * @var array<int, non-empty-string>
+     */
+    private const SECTION_NAMES = [
+        ModelMetadata::SECTION_METHODS => 'methods',
+        ModelMetadata::SECTION_RELATIONS => 'relations',
+        ModelMetadata::SECTION_RUNTIME_CONFIGURATION => 'runtime configuration',
+        ModelMetadata::SECTION_SCHEMA => 'schema',
+        ModelMetadata::SECTION_CASTS => 'casts',
+        ModelMetadata::SECTION_PRIMARY_KEY => 'primary key',
+    ];
+
+    /**
      * Pre-compute metadata for a single model. Idempotent — re-computation
      * on a cached FQCN is a no-op.
      *
@@ -273,7 +289,7 @@ final class ModelMetadataRegistryBuilder
                 );
         }
 
-        self::warnFailures($codebase, $modelFqcn, $failures);
+        self::warnFailures($codebase, $modelFqcn, $failures, $completeSections);
 
         return $metadata;
     }
@@ -429,6 +445,17 @@ final class ModelMetadataRegistryBuilder
      * an abstract base and so future phases that resolve scopes/forwarded methods on abstract
      * receivers (issue #901) inherit a populated entry. Mirrors #1058's storage-vs-instance split.
      *
+     * DELIBERATE LIMIT (#1278, won't-implement): declared defaults are stored verbatim — PHP class
+     * attributes (`#[Guarded]`, `#[Hidden]`, `#[Table]`, `#[WithoutTimestamps]`, …) are honoured on
+     * NONE of these fields, yet SECTION_RUNTIME_CONFIGURATION is still marked complete below. No
+     * instance means no initializer replay, so attribute fidelity would require a hand-written
+     * per-attribute mirror with per-symbol Laravel version gates — exactly the drift surface
+     * {@see ModelInstancePreparer::prepare()} exists to avoid — and there is no runtime oracle to
+     * verify it against (an abstract base cannot be constructed). Concrete children are unaffected:
+     * they resolve inherited attributes through classAttribute()'s ancestor walk. Any future phase
+     * that consumes abstract-base runtime configuration (#901) must revisit this before trusting
+     * the section bit on an attribute-configured base.
+     *
      * @param class-string<Model>                   $modelFqcn
      * @param \ReflectionClass<Model>               $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null    $customBuilder
@@ -509,6 +536,10 @@ final class ModelMetadataRegistryBuilder
     /**
      * Preserve static metadata when a concrete model cannot be instantiated.
      *
+     * Shares computeForAbstract()'s attribute blindness (#1278): declared property defaults only,
+     * no PHP class attribute is honoured. Less of a trap here — this path sets no section bits,
+     * so consumers gating on isComplete() already treat every value below as fallback.
+     *
      * @param class-string<Model> $modelFqcn
      * @param \ReflectionClass<Model> $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null $customBuilder
@@ -529,6 +560,9 @@ final class ModelMetadataRegistryBuilder
         array $mutators,
         array $scopes,
         array $relations,
+        // By value, unlike its siblings: this path sets no section bits. If a future edit adds one,
+        // switch this to by-ref too, or warnFailures()'s withheld list will diverge from the bits
+        // actually stored on ModelMetadata.
         int $completeSections,
     ): ModelMetadata {
         $defaults = $reflection->getDefaultProperties();
@@ -695,7 +729,7 @@ final class ModelMetadataRegistryBuilder
      * @param class-string<Model> $modelFqcn
      * @param array<string, \Throwable> $failures
      */
-    private static function warnFailures(Codebase $codebase, string $modelFqcn, array $failures): void
+    private static function warnFailures(Codebase $codebase, string $modelFqcn, array $failures, int $completeSections): void
     {
         if ($failures === []) {
             return;
@@ -708,6 +742,23 @@ final class ModelMetadataRegistryBuilder
 
         $message = "Laravel plugin: ModelMetadataRegistry warm-up failed for '{$modelFqcn}' "
             . '(partial metadata stored): ' . \implode('; ', $details);
+
+        // Naming the blast radius, not the cause: this lists every section a consumer's
+        // isComplete() will now report incomplete, which is broader than "sections that threw" —
+        // e.g. schema/casts are structurally skipped (never attempted) on a failed instance
+        // prepare, and relations are gated off entirely in a Codebase-less unit harness. Those
+        // still belong here because registry-backed consumers are blind to them for this model.
+        $withheld = [];
+        foreach (self::SECTION_NAMES as $bit => $name) {
+            if (($completeSections & $bit) === 0) {
+                $withheld[] = $name;
+            }
+        }
+
+        if ($withheld !== []) {
+            $message .= '; withheld sections: ' . \implode(', ', $withheld);
+        }
+
         $codebase->progress->warning($message);
 
         if ($codebase->progress instanceof VoidProgress) {
@@ -1369,7 +1420,7 @@ final class ModelMetadataRegistryBuilder
         }
 
         try {
-            /** @var array<string, string> $instanceCasts */
+            /** @var array<string, mixed> $instanceCasts */
             $instanceCasts = $instance->getCasts();
         } finally {
             if ($disableImplicitKeyCast) {
@@ -1389,6 +1440,16 @@ final class ModelMetadataRegistryBuilder
             $merged = \array_merge($merged, CastsMethodParser::parse($codebase, $modelFqcn));
         }
 
+        // ensureCastsAreStringValues() only rewrites the object/array match arms; every other
+        // shape (int, bool, float, null, a single-element array) falls through its `default =>
+        // $cast` identity arm untouched, and a trait initializer can also write $this->casts[...]
+        // directly, bypassing normalization on some PHP versions. A non-string here would hit
+        // buildCastInfo()'s `string $castString` under strict_types and TypeError the whole
+        // section into the empty-array fallback, silently dropping every valid cast on the model
+        // alongside it. Coerce instead of dropping the key so the map — and SECTION_CASTS — stay
+        // honest; 'mixed' matches CastsMethodParser's own `$value ?? 'mixed'` convention.
+        $merged = \array_map(self::asCastString(...), $merged);
+
         // KNOWN DIVERGENCE (Laravel 12.14–12.21 only): when a user trait initializer mergeCasts() a key that
         // casts() ALSO declares, runtime there runs casts() first (bootTraits walks class_uses_recursive
         // parents-first) then the user init, so the USER value wins; from 12.22+ the order flips and casts()
@@ -1399,7 +1460,7 @@ final class ModelMetadataRegistryBuilder
 
         $result = [];
         foreach ($merged as $columnName => $castString) {
-            if ($columnName === '' || $castString === '') {
+            if ($columnName === '') {
                 continue;
             }
 
@@ -1422,6 +1483,18 @@ final class ModelMetadataRegistryBuilder
         }
 
         return $result;
+    }
+
+    // Takes `mixed` (not `string`) so the is_string() check below is analysable: getCasts()'s own
+    // stub promises array<string, string>, which would make an inline check at the call site look
+    // redundant to Psalm.
+    /**
+     * @return non-empty-string
+     * @psalm-pure
+     */
+    private static function asCastString(mixed $cast): string
+    {
+        return \is_string($cast) && $cast !== '' ? $cast : 'mixed';
     }
 
     /**

@@ -30,11 +30,16 @@ function test_pluck_with_nullable_property(): void
     /** @psalm-check-type-exact $_result = Collection<int, \Carbon\CarbonInterface|null> */
 }
 
-/** When the column name is not a known @property, fall back to default behavior */
+/**
+ * When the column name is not a known @property, the value falls back to mixed. No
+ * $key argument means Laravel's positional pluck() still yields sequential int keys.
+ *
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1286
+ */
 function test_pluck_with_unknown_column(): void
 {
     $_result = Customer::query()->pluck('unknown_column');
-    /** @psalm-check-type-exact $_result = Collection<array-key, mixed> */
+    /** @psalm-check-type-exact $_result = Collection<int, mixed> */
 }
 
 /** When the column is a variable (not a string literal), fall back to default */
@@ -123,12 +128,15 @@ function test_pluck_on_collection_with_key(): void
     /** @psalm-check-type-exact $_result = Collection<string, \Carbon\CarbonInterface|null> */
 }
 
-/** pluck on Collection with unknown column falls back to default */
+/**
+ * pluck on Collection with an unknown column: value falls back to mixed, key stays
+ * int (no $key argument). Mirrors the Builder-side behavior — see issue #1286.
+ */
 function test_pluck_on_collection_unknown_column(): void
 {
     $customers = Customer::all();
     $_result = $customers->pluck('unknown_column');
-    /** @psalm-check-type-exact $_result = Collection<array-key, mixed> */
+    /** @psalm-check-type-exact $_result = Collection<int, mixed> */
 }
 
 /** Full query pipeline: query()->get()->pluck() preserves template types */

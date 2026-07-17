@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  *
  * That execution is the whole reason the warm-up replay stands in for that one initializer instead of
  * invoking it (see
- * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelInstancePreparer::applyAppendsAttribute()}) —
+ * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelInstancePreparer::mirrorHasAttributesInitializer()}) —
  * not because `casts()` is user code, but because it is the one initializer input the registry ALREADY has
  * statically: {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastsMethodParser} AST-parses it and the
  * builder merges that result last. The cast is therefore absent from the replayed instance and present on a

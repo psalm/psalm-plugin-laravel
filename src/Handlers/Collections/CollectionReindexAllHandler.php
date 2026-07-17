@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
+use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Identifier;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -16,12 +17,15 @@ use Psalm\Type\Union;
 
 /**
  * Narrows Collection::all() to list<TValue> when the call is chained
- * immediately after values() (i.e. `$c->values()->all()`).
+ * immediately after a receiver that is guaranteed to reindex sequentially:
+ * values() (i.e. `$c->values()->all()`) or single-argument pluck() (i.e.
+ * `$c->pluck('col')->all()`).
  *
  * The chain is the only call shape where the result is guaranteed to be a
- * list — values() calls array_values() (or a generator yielding without
- * keys for LazyCollection), so the inner array always has consecutive
- * 0-based integer keys.
+ * list. values() calls array_values() (or a generator yielding without
+ * keys for LazyCollection); a one-argument pluck() has no $key column to
+ * key by, so Arr::pluck() falls through to sequential int keys too. Either
+ * way the inner array always has consecutive 0-based integer keys.
  *
  * A purely stub-based conditional return on all() (e.g. keyed on
  * `TKey is int<0, max>`) would mislabel any int-keyed collection whose
@@ -31,15 +35,15 @@ use Psalm\Type\Union;
  * Known limitations (both purely syntactic — Psalm's stubbed return type
  * applies instead of list<TValue>):
  *  - Variable-bound form: `$v = $c->values(); $v->all();`. The receiver
- *    of all() is a Variable, not an immediate values() MethodCall.
+ *    of all() is a Variable, not an immediate values()/pluck() MethodCall.
  *  - Nullsafe operators: `$c?->values()?->all()`. Psalm's NullsafeAnalyzer
  *    desugars `?->all()` into a VirtualMethodCall (subclass of MethodCall)
  *    whose receiver is a synthesized temp variable, not the inner values()
- *    call, so the receiver-shape check in isImmediateChainFromValues fails.
+ *    call, so the receiver-shape check in isImmediateChainFromReindex fails.
  * Users who need the list shape should keep the chain inline and avoid
  * nullsafe on the inner call.
  */
-final class CollectionValuesAllHandler implements MethodReturnTypeProviderInterface
+final class CollectionReindexAllHandler implements MethodReturnTypeProviderInterface
 {
     /**
      * @return list<string>
@@ -64,7 +68,7 @@ final class CollectionValuesAllHandler implements MethodReturnTypeProviderInterf
             return null;
         }
 
-        if (!self::isImmediateChainFromValues($stmt)) {
+        if (!self::isImmediateChainFromReindex($stmt)) {
             return null;
         }
 
@@ -79,13 +83,17 @@ final class CollectionValuesAllHandler implements MethodReturnTypeProviderInterf
     }
 
     /**
-     * True when $stmt is `<expr>->values()->all()` — the receiver of all()
-     * is itself an immediate values() call. This excludes any intermediate
-     * method (e.g. ->values()->filter()->all()) and variable-bound chains.
+     * True when $stmt is `<expr>->values()->all()` or `<expr>->pluck($col)->all()`
+     * — the receiver of all() is itself an immediate values() call (any arity) or
+     * a single-argument pluck() call. This excludes any intermediate method (e.g.
+     * ->values()->filter()->all()) and variable-bound chains.
+     *
+     * Two-argument pluck() (a $key column is given) is excluded: Arr::pluck() then
+     * keys the result by that column, so the output is not list-shaped.
      *
      * @psalm-mutation-free
      */
-    private static function isImmediateChainFromValues(MethodCall $stmt): bool
+    private static function isImmediateChainFromReindex(MethodCall $stmt): bool
     {
         $receiver = $stmt->var;
         if (!$receiver instanceof MethodCall) {
@@ -96,6 +104,24 @@ final class CollectionValuesAllHandler implements MethodReturnTypeProviderInterf
             return false;
         }
 
-        return \strtolower($receiver->name->name) === 'values';
+        $receiverName = \strtolower($receiver->name->name);
+
+        if ($receiverName === 'values') {
+            return true;
+        }
+
+        if ($receiverName !== 'pluck') {
+            return false;
+        }
+
+        if ($receiver->args === []) {
+            return true;
+        }
+
+        // pluck(...$cols) is a single Arg with unpack=true — $cols may carry a
+        // $key column at runtime, so it can't be trusted to be list-shaped.
+        return \count($receiver->args) === 1
+            && $receiver->args[0] instanceof Arg
+            && !$receiver->args[0]->unpack;
     }
 }

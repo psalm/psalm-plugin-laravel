@@ -34,6 +34,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -76,6 +77,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AbstractKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ArrayFormCastsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
@@ -83,7 +85,9 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\NonStringDeclaredCastsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\PlainEnumConnectionModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\RawCastInitializerModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ScalarFieldsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableKeyAttributeModel;
@@ -769,6 +773,36 @@ final class ModelMetadataRegistryTest extends TestCase
         ));
     }
 
+    #[Test]
+    public function warning_names_every_withheld_section_not_only_the_thrown_one(): void
+    {
+        // A trait-initializer replay failure withholds runtime configuration, schema, casts and
+        // primary key (see a_failed_section_preserves_independent_metadata above) — only ONE
+        // ('trait initializers') is a recorded failure, so the other three would otherwise be
+        // invisible to a reader of the warning. 'relations' also withholds here: the unit-test
+        // Codebase (built via newInstanceWithoutConstructor()) never initializes Codebase::$methods,
+        // so codebaseMethodsInitialized() is false and SECTION_RELATIONS is never attempted —
+        // registry consumers are blind to relations for every model in this test class.
+        $captured = null;
+        $progress = $this->createMock(Progress::class);
+        $progress->expects($this->once())
+            ->method('warning')
+            ->willReturnCallback(function (string $message) use (&$captured): void {
+                $captured = $message;
+            });
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(SectionFailureModel::class, [HasUuids::class]);
+        SectionFailureModel::$failures = ['trait initializers' => true];
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
+
+        $this->assertNotNull($captured);
+        $this->assertStringEndsWith(
+            'withheld sections: relations, runtime configuration, schema, casts, primary key',
+            $captured,
+        );
+    }
+
     // ---------------------------------------------------------------------
     // Accessors / mutators (storage-derived, full-callable)
     // ---------------------------------------------------------------------
@@ -1083,6 +1117,86 @@ final class ModelMetadataRegistryTest extends TestCase
         $shape = $metadata->casts()['modern_tags']->shape;
         $this->assertSame(CastShape::CustomCastsAttributes, $shape);
         $this->assertTrue($shape->isClassCastable());
+    }
+
+    #[Test]
+    public function array_form_declared_cast_normalizes_and_keeps_the_casts_section(): void
+    {
+        // #1281: warm-up left `options` as the raw array Laravel would have collapsed to a string, which
+        // TypeErrored inside computeCasts() against buildCastInfo()'s `string $castString` — taking the
+        // model's ENTIRE casts section with it. `plain_tags` shares nothing with the array form and
+        // disappeared anyway; the section bit below is the regression net, the per-key asserts show the cost.
+        \class_exists(AsCollection::class);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(ArrayFormCastsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ArrayFormCastsModel::class);
+
+        $metadata = $this->metadataFor(ArrayFormCastsModel::class);
+
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        // Resolved, not merely retained. The `parameter` assert is what makes this bite: both keys reach the
+        // same shape, so shape alone would still pass if the collapse dropped the argument — which is the
+        // whole point of the two-element form.
+        $this->assertSame(CastShape::CustomCastsAttributes, $metadata->casts()['options']->shape);
+        $this->assertSame(Collection::class, $metadata->casts()['options']->parameter);
+        // Single-element form collapses to a bare class, carrying no argument.
+        $this->assertSame(CastShape::CustomCastsAttributes, $metadata->casts()['single']->shape);
+        $this->assertNull($metadata->casts()['single']->parameter);
+        // The collateral damage: an unrelated string cast on the same model, back only because the section is.
+        $this->assertSame(CastShape::Primitive, $metadata->casts()['plain_tags']->shape);
+    }
+
+    #[Test]
+    public function non_string_declared_cast_values_are_coerced_to_mixed_and_keep_the_casts_section(): void
+    {
+        // #1290: ensureCastsAreStringValues()'s `default => $cast` arm passes non-object/array shapes
+        // through untouched, so `null_col`/`int_col`/`bool_col`/`float_col`/`nested_col` all reach
+        // computeCasts() non-string. Left uncoerced, the first one TypeErrors buildCastInfo()'s
+        // `string $castString` and withholds the model's WHOLE casts section — `good_col` included,
+        // which is the regression this test's section-completeness assert guards against.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(NonStringDeclaredCastsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, NonStringDeclaredCastsModel::class);
+
+        $metadata = $this->metadataFor(NonStringDeclaredCastsModel::class);
+
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        // A genuinely string-valued cast on the same model survives the coercion map untouched.
+        $this->assertSame('int|null', $metadata->casts()['good_col']->psalmType->getId());
+        // Each non-string value is coerced to 'mixed' rather than dropped: the key stays present
+        // (so the section keeps reporting the column at all) and the resolved type stays honest
+        // about not knowing the real one.
+        $this->assertArrayHasKey('null_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['null_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('int_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['int_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('bool_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['bool_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('float_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['float_col']->psalmType->hasMixed());
+        $this->assertArrayHasKey('nested_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['nested_col']->psalmType->hasMixed());
+    }
+
+    #[Test]
+    public function trait_initializer_writing_raw_cast_value_is_coerced_and_keeps_the_casts_section(): void
+    {
+        // #1290: a trait initializer writing $this->casts[...] directly (the idiom
+        // SoftDeletes::initializeSoftDeletes() itself uses) bypasses mergeCasts()'s normalization
+        // entirely, so its value reaches computeCasts() exactly as written by user code.
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(RawCastInitializerModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, RawCastInitializerModel::class);
+
+        $metadata = $this->metadataFor(RawCastInitializerModel::class);
+
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        $this->assertArrayHasKey('raw_col', $metadata->casts());
+        $this->assertTrue($metadata->casts()['raw_col']->psalmType->hasMixed());
     }
 
     #[Test]

@@ -144,6 +144,13 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
      * LHS fallback handles @mixin chains where event template params arrive
      * unsubstituted (mirrors {@see ModelPropertyResolver::resolvePluckReturnType}).
      *
+     * A non-generic custom Builder subclass (`final class TaskBuilder extends
+     * Builder<Task> {}`, wired via `#[UseEloquentBuilder]`) is neither generic itself
+     * (so the template-params loop above finds nothing) nor a TGenericObject LHS (so
+     * the loop just below finds nothing either) — the same gap issue #1287 fixed for
+     * `pluck()`. Falls back to the identical `template_extended_params[Builder::class]`
+     * lookup {@see ModelPropertyResolver::extractModelFromLhsBuilderExtends()} (issue #1294).
+     *
      * @return class-string<Model>|null
      */
     private static function resolveModelClass(MethodReturnTypeProviderEvent $event): ?string
@@ -178,7 +185,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
             }
         }
 
-        return null;
+        return ModelPropertyResolver::extractModelFromLhsBuilderExtends($lhsType, $event->getSource()->getCodebase());
     }
 
     /**
