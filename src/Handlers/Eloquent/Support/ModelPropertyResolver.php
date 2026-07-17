@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Psalm\Codebase;
@@ -110,7 +111,23 @@ final class ModelPropertyResolver
         // concrete model. Fall back to inspecting the call's LHS expression, whose
         // type carries the concrete generic arguments.
         if ($modelClass === null && $lhsExpr instanceof \PhpParser\Node\Expr) {
-            $modelClass = self::extractModelFromLhsType($nodeTypeProvider->getType($lhsExpr), $modelTemplateIndex);
+            $lhsType = $nodeTypeProvider->getType($lhsExpr);
+            $modelClass = self::extractModelFromLhsType($lhsType, $modelTemplateIndex);
+
+            // Custom Builder subclasses declared as `/** @extends Builder<Task> */
+            // final class TaskBuilder extends Builder {}` are not themselves generic,
+            // so the LHS type above is a plain TNamedObject (no type_params for the
+            // fallback just above to read) and the event's template parameters are
+            // empty. Resolve TModel from the classlike storage's
+            // template_extended_params[Builder::class]['TModel'], which Psalm
+            // populates from the @extends docblock — the same mechanism
+            // ModelFactoryMethodTypeProvider/FactoryCountTypeProvider use for
+            // Factory<TModel>. Scoped to Builder: this only ever contributes a result
+            // when $modelTemplateIndex is Builder's own (0), since a Collection
+            // subclass's storage has no Builder entry in template_extended_params.
+            if ($modelClass === null) {
+                $modelClass = self::extractModelFromLhsBuilderExtends($lhsType, $codebase);
+            }
         }
 
         if ($modelClass === null) {
@@ -168,6 +185,55 @@ final class ModelPropertyResolver
 
             $modelType = $atomic->type_params[$modelTemplateIndex] ?? null;
             $modelClass = self::extractModelFromUnion($modelType);
+            if ($modelClass !== null) {
+                return $modelClass;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve TModel for a custom, non-generic Builder subclass from its classlike
+     * storage's `@extends Builder<TModel>` binding.
+     *
+     * `ClassLikeStorageProvider::get()` lowercases internally, so the FQCN is passed
+     * through untouched. `template_extended_params` is keyed on the canonical class
+     * name (`$parent_storage->name`), which matches `Builder::class` for any
+     * vendor-stable Laravel install, and flattens through intermediate,
+     * non-generic ancestors (e.g. `TaskBuilder extends BaseTaskBuilder extends
+     * Builder`), so deeper inheritance chains resolve the same way.
+     *
+     * A generic custom builder (`@template T of Model` / `@extends Builder<T>`),
+     * used as `TaskBuilder<Task>`, is a TGenericObject and already handled by
+     * {@see self::extractModelFromLhsType()}; when reached from here instead, its
+     * own TModel binding resolves to the unsubstituted template `T`, which
+     * {@see self::extractModelFromUnion()} does not recognize as a Model, so this
+     * method correctly yields null for that case rather than a wrong binding.
+     *
+     * @return class-string<Model>|null
+     * @psalm-mutation-free
+     */
+    private static function extractModelFromLhsBuilderExtends(?Union $lhsType, Codebase $codebase): ?string
+    {
+        if (!$lhsType instanceof Union) {
+            return null;
+        }
+
+        foreach ($lhsType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                continue;
+            }
+
+            try {
+                $classStorage = $codebase->classlike_storage_provider->get($atomic->value);
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            $modelClass = self::extractModelFromUnion(
+                $classStorage->template_extended_params[Builder::class]['TModel'] ?? null,
+            );
             if ($modelClass !== null) {
                 return $modelClass;
             }
