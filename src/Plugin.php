@@ -362,8 +362,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Collections\CollectionMakeHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionPluckHandler::class);
-        require_once __DIR__ . '/Handlers/Collections/CollectionValuesAllHandler.php';
-        $registration->registerHooksFromClass(Handlers\Collections\CollectionValuesAllHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/CollectionReindexAllHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\CollectionReindexAllHandler::class);
         require_once __DIR__ . '/Handlers/Collections/HigherOrderCollectionProxyHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\HigherOrderCollectionProxyHandler::class);
 
