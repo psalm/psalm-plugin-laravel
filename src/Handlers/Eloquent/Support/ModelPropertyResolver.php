@@ -97,7 +97,11 @@ final class ModelPropertyResolver
             return null;
         }
 
-        // Extract column name from the first argument as a string literal
+        // Extract column name from the first argument as a string literal. $args[0]/
+        // $args[1] below are positional (the $value, $key parameter order) — a call
+        // using PHP named arguments to reorder them (pluck(key: 'k', value: 'v'))
+        // would misindex here. Deliberate scope cut: no known real-world caller does
+        // this for pluck()'s two-parameter signature.
         $argType = $nodeTypeProvider->getType($args[0]->value);
         if (!$argType instanceof \Psalm\Type\Union || !$argType->isSingleStringLiteral()) {
             return null;
@@ -173,6 +177,9 @@ final class ModelPropertyResolver
         // We only adopt the @property type when it is a subset of int|string, because
         // Collection<TKey, TValue> requires TKey to be array-key. A property declared as
         // CarbonInterface|null (cast type) would produce an invalid TKey, so we fall back.
+        // $args[1] is positional too (see the $args[0] note above) — "has a $key
+        // argument" here means "has a second positional argument", not "named the
+        // $key parameter".
         $keyResolved = \count($args) < 2;
         $keyType = Type::getInt();
         if (\count($args) >= 2) {
@@ -213,6 +220,16 @@ final class ModelPropertyResolver
             return null;
         }
 
+        // First resolved model wins. A union LHS spanning builders/collections over
+        // DIFFERENT models (e.g. `FooBuilder<Foo>|BarBuilder<Bar>`) resolves to
+        // whichever atomic happens to match first, not a validated agreement across
+        // the whole union — a real type error in the caller's code could silently
+        // narrow pluck() against the wrong model instead of surfacing. Deliberate:
+        // this shape is vanishingly rare in practice (same pattern in
+        // extractModelFromLhsBuilderExtends() and extractModelFromLhsCollectionExtends()
+        // below). If ever tightened, the correct semantics are "every atomic that
+        // resolves to a model must resolve to the SAME model, else null" rather than
+        // first-match.
         foreach ($lhsType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TGenericObject) {
                 continue;
@@ -259,6 +276,8 @@ final class ModelPropertyResolver
             return null;
         }
 
+        // First resolved model wins — same deliberate first-match limitation as
+        // extractModelFromLhsType() above.
         foreach ($lhsType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TNamedObject) {
                 continue;
@@ -312,6 +331,8 @@ final class ModelPropertyResolver
             return null;
         }
 
+        // First resolved model wins — same deliberate first-match limitation as
+        // extractModelFromLhsType() above.
         foreach ($lhsType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TNamedObject) {
                 continue;
