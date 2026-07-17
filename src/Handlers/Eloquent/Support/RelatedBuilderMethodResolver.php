@@ -122,8 +122,9 @@ final class RelatedBuilderMethodResolver
         $methodReturnSelfClass = $declaringMethodId->fq_class_name;
 
         try {
+            // Psalm 6's getMethodReturnType() has no leading Codebase param and takes
+            // $self_class by reference (Psalm 7 added the Codebase param and made it a value param).
             $returnType = $codebase->methods->getMethodReturnType(
-                $codebase,
                 $methodId,
                 $methodReturnSelfClass,
                 $source,

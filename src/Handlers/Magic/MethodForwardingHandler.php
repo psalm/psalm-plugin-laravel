@@ -570,7 +570,9 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * subtype is the established fluent approximation; every non-builder union branch
      * remains untouched.
      *
-     * @psalm-external-mutation-free
+     * Not marked mutation-free: Psalm 6 does not treat the fresh MutableUnion returned by
+     * Union::getBuilder() as exempt from ImpureMethodCall when removeType()/addType() run
+     * inside a mutation-free caller, unlike Psalm 7.
      */
     private static function decorateBuilderReturn(
         Codebase $codebase,
