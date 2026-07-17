@@ -1369,7 +1369,7 @@ final class ModelMetadataRegistryBuilder
         }
 
         try {
-            /** @var array<string, string> $instanceCasts */
+            /** @var array<string, mixed> $instanceCasts */
             $instanceCasts = $instance->getCasts();
         } finally {
             if ($disableImplicitKeyCast) {
@@ -1389,6 +1389,16 @@ final class ModelMetadataRegistryBuilder
             $merged = \array_merge($merged, CastsMethodParser::parse($codebase, $modelFqcn));
         }
 
+        // ensureCastsAreStringValues() only rewrites the object/array match arms; every other
+        // shape (int, bool, float, null, a single-element array) falls through its `default =>
+        // $cast` identity arm untouched, and a trait initializer can also write $this->casts[...]
+        // directly, bypassing normalization on some PHP versions. A non-string here would hit
+        // buildCastInfo()'s `string $castString` under strict_types and TypeError the whole
+        // section into the empty-array fallback, silently dropping every valid cast on the model
+        // alongside it. Coerce instead of dropping the key so the map — and SECTION_CASTS — stay
+        // honest; 'mixed' matches CastsMethodParser's own `$value ?? 'mixed'` convention.
+        $merged = \array_map(self::asCastString(...), $merged);
+
         // KNOWN DIVERGENCE (Laravel 12.14–12.21 only): when a user trait initializer mergeCasts() a key that
         // casts() ALSO declares, runtime there runs casts() first (bootTraits walks class_uses_recursive
         // parents-first) then the user init, so the USER value wins; from 12.22+ the order flips and casts()
@@ -1399,7 +1409,7 @@ final class ModelMetadataRegistryBuilder
 
         $result = [];
         foreach ($merged as $columnName => $castString) {
-            if ($columnName === '' || $castString === '') {
+            if ($columnName === '') {
                 continue;
             }
 
@@ -1422,6 +1432,18 @@ final class ModelMetadataRegistryBuilder
         }
 
         return $result;
+    }
+
+    // Takes `mixed` (not `string`) so the is_string() check below is analysable: getCasts()'s own
+    // stub promises array<string, string>, which would make an inline check at the call site look
+    // redundant to Psalm.
+    /**
+     * @return non-empty-string
+     * @psalm-pure
+     */
+    private static function asCastString(mixed $cast): string
+    {
+        return \is_string($cast) && $cast !== '' ? $cast : 'mixed';
     }
 
     /**
