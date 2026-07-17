@@ -15,9 +15,12 @@ use Illuminate\Support\Traits\Macroable;
  * into calling tools with arbitrary arguments (see CVE-2025-54795, Claude
  * Code argument injection; GHSA-534m-3w6r-8pqr, Cursor).
  *
- * Every accessor is tainted with the `input` kind — the same one used for
- * Request::input() — so existing sinks (sql, shell, file, header, html, ssrf)
- * catch tool-call hijack chains automatically.
+ * String/array-returning accessors are tainted with the `input` kind — the
+ * same one used for Request::input() — so existing sinks (sql, shell, file,
+ * header, html, ssrf) catch tool-call hijack chains automatically. Numeric
+ * and boolean coercers (integer(), float(), boolean()) are left untainted:
+ * the cast cannot carry an injection payload, mirroring the convention on
+ * Illuminate\Support\Traits\InteractsWithData.
  *
  * Parameter signatures intentionally match Laravel's InteractsWithData trait
  * (untyped, with original defaults) so docblock-only @param annotations
@@ -25,8 +28,10 @@ use Illuminate\Support\Traits\Macroable;
  *
  * Re-declaration copies the real `implements`/`use` clauses verbatim so Psalm
  * does not strip the trait methods (`input()`, `query()`, `has()`, `filled()`,
- * `when()`, etc.) when merging this stub with the reflected class. See
- * CLAUDE.local.md "Class declarations wipe reflected metadata".
+ * `when()`, etc.) when merging this stub with the reflected class. Psalm's
+ * class-like scanner resets a class's implemented interfaces and re-derives
+ * them only from the stub's own `implements`/`extends` clause when a stub
+ * re-declares a class, so the full declaration must be copied verbatim.
  *
  * @template-implements ArrayAccess<string, mixed>
  */
@@ -78,26 +83,28 @@ class Request implements Arrayable, ArrayAccess
     public function string($key, $default = null): \Illuminate\Support\Stringable {}
 
     /**
+     * Not a taint source: (int) cast cannot produce an injection payload.
+     * e.g. (int) "1; DROP TABLE users" → 1
+     *
      * @param  string  $key
      * @param  int     $default
-     *
-     * @psalm-taint-source input
      */
     public function integer($key, $default = 0): int {}
 
     /**
+     * Not a taint source: (float) cast cannot produce an injection payload.
+     * e.g. (float) "<script>alert(1)</script>" → 0.0
+     *
      * @param  string  $key
      * @param  float   $default
-     *
-     * @psalm-taint-source input
      */
     public function float($key, $default = 0.0): float {}
 
     /**
+     * Not a taint source: a boolean cannot carry injectable content.
+     *
      * @param  string|null  $key
      * @param  bool         $default
-     *
-     * @psalm-taint-source input
      */
     public function boolean($key = null, $default = false): bool {}
 
