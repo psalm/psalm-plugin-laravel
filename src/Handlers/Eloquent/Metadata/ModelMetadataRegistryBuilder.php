@@ -445,6 +445,17 @@ final class ModelMetadataRegistryBuilder
      * an abstract base and so future phases that resolve scopes/forwarded methods on abstract
      * receivers (issue #901) inherit a populated entry. Mirrors #1058's storage-vs-instance split.
      *
+     * DELIBERATE LIMIT (#1278, won't-implement): declared defaults are stored verbatim — PHP class
+     * attributes (`#[Guarded]`, `#[Hidden]`, `#[Table]`, `#[WithoutTimestamps]`, …) are honoured on
+     * NONE of these fields, yet SECTION_RUNTIME_CONFIGURATION is still marked complete below. No
+     * instance means no initializer replay, so attribute fidelity would require a hand-written
+     * per-attribute mirror with per-symbol Laravel version gates — exactly the drift surface
+     * {@see ModelInstancePreparer::prepare()} exists to avoid — and there is no runtime oracle to
+     * verify it against (an abstract base cannot be constructed). Concrete children are unaffected:
+     * they resolve inherited attributes through classAttribute()'s ancestor walk. Any future phase
+     * that consumes abstract-base runtime configuration (#901) must revisit this before trusting
+     * the section bit on an attribute-configured base.
+     *
      * @param class-string<Model>                   $modelFqcn
      * @param \ReflectionClass<Model>               $reflection
      * @param class-string<\Illuminate\Database\Eloquent\Builder>|null    $customBuilder
@@ -524,6 +535,10 @@ final class ModelMetadataRegistryBuilder
 
     /**
      * Preserve static metadata when a concrete model cannot be instantiated.
+     *
+     * Shares computeForAbstract()'s attribute blindness (#1278): declared property defaults only,
+     * no PHP class attribute is honoured. Less of a trap here — this path sets no section bits,
+     * so consumers gating on isComplete() already treat every value below as fallback.
      *
      * @param class-string<Model> $modelFqcn
      * @param \ReflectionClass<Model> $reflection
