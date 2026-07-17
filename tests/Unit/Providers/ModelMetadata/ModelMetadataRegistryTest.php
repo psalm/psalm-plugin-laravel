@@ -34,6 +34,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -76,6 +77,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AbstractKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ArrayFormCastsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredChild;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
@@ -1083,6 +1085,35 @@ final class ModelMetadataRegistryTest extends TestCase
         $shape = $metadata->casts()['modern_tags']->shape;
         $this->assertSame(CastShape::CustomCastsAttributes, $shape);
         $this->assertTrue($shape->isClassCastable());
+    }
+
+    #[Test]
+    public function array_form_declared_cast_normalizes_and_keeps_the_casts_section(): void
+    {
+        // #1281: warm-up left `options` as the raw array Laravel would have collapsed to a string, which
+        // TypeErrored inside computeCasts() against buildCastInfo()'s `string $castString` — taking the
+        // model's ENTIRE casts section with it. `plain_tags` shares nothing with the array form and
+        // disappeared anyway; the section bit below is the regression net, the per-key asserts show the cost.
+        \class_exists(AsCollection::class);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(ArrayFormCastsModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ArrayFormCastsModel::class);
+
+        $metadata = $this->metadataFor(ArrayFormCastsModel::class);
+
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
+        // Resolved, not merely retained. The `parameter` assert is what makes this bite: both keys reach the
+        // same shape, so shape alone would still pass if the collapse dropped the argument — which is the
+        // whole point of the two-element form.
+        $this->assertSame(CastShape::CustomCastsAttributes, $metadata->casts()['options']->shape);
+        $this->assertSame(Collection::class, $metadata->casts()['options']->parameter);
+        // Single-element form collapses to a bare class, carrying no argument.
+        $this->assertSame(CastShape::CustomCastsAttributes, $metadata->casts()['single']->shape);
+        $this->assertNull($metadata->casts()['single']->parameter);
+        // The collateral damage: an unrelated string cast on the same model, back only because the section is.
+        $this->assertSame(CastShape::Primitive, $metadata->casts()['plain_tags']->shape);
     }
 
     #[Test]

@@ -10,14 +10,18 @@ use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelInstancePreparer;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\CastFlavour;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ArrayFormCastsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CastsMethodModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\KeyTypeInitializerOrderModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ObjectCastOverriddenByCastsMethodModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableKeyOnlyModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
@@ -119,6 +123,48 @@ final class ModelInstancePreparerTest extends TestCase
         // The key, not the whole map: a future Laravel initializer writing some OTHER cast is not this
         // test's business, and asserting [] would turn that into a false alarm.
         $this->assertArrayNotHasKey('from_casts_method', $casts->getValue($this->prepare(CastsMethodModel::class)));
+    }
+
+    #[Test]
+    public function the_has_attributes_mirror_normalizes_the_declared_casts(): void
+    {
+        // initializeHasAttributes()'s first statement does TWO things, and only one is excused: it runs
+        // casts() (skipped — the registry already has it statically) and it normalizes the DECLARED $casts,
+        // which involves no casts() at all. Skipping the second dropped the model's whole casts section
+        // downstream (#1281).
+        $casts = new \ReflectionProperty(Model::class, 'casts');
+
+        // Pin the premise: Laravel collapses both array forms and leaves the string one alone. Without it,
+        // the oracle below cannot tell "normalized" from "both sides equally raw".
+        $this->assertSame([
+            'options' => AsCollection::class . ':' . Collection::class,
+            'single' => AsCollection::class,
+            'plain_tags' => 'collection',
+        ], $casts->getValue(new ArrayFormCastsModel()));
+
+        // Runtime as oracle: the mirror calls Laravel's own normalizer, so whatever the installed release
+        // does IS the answer.
+        $this->assertSame($casts->getValue(new ArrayFormCastsModel()), $casts->getValue($this->prepare(ArrayFormCastsModel::class)));
+    }
+
+    #[Test]
+    public function an_object_cast_the_casts_method_overrides_does_not_break_the_replay(): void
+    {
+        // Laravel normalizes array_merge($casts, casts()) and casts() WINS on collisions, so this model
+        // constructs fine — the enum never reaches the is_object arm. The mirror sees the declared half alone
+        // and would throw (12.26+), taking all four instance-derived sections with it. Master gets this right
+        // by never normalizing, so the throw would be a REGRESSION, not merely an escalation.
+        $casts = new \ReflectionProperty(Model::class, 'casts');
+
+        // Pin the premise: the model really is constructable, and casts() really does win.
+        $this->assertSame(['flavour' => 'string'], $casts->getValue(new ObjectCastOverriddenByCastsMethodModel()));
+
+        // Left raw rather than normalized or thrown on: computeCasts() holds the AST-parsed casts() and
+        // merges it over this, reaching the same answer the constructor did.
+        $this->assertSame(
+            ['flavour' => CastFlavour::Vanilla],
+            $casts->getValue($this->prepare(ObjectCastOverriddenByCastsMethodModel::class)),
+        );
     }
 
     #[Test]
