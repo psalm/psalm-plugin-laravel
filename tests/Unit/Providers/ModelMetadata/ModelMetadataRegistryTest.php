@@ -773,6 +773,36 @@ final class ModelMetadataRegistryTest extends TestCase
         ));
     }
 
+    #[Test]
+    public function warning_names_every_withheld_section_not_only_the_thrown_one(): void
+    {
+        // A trait-initializer replay failure withholds runtime configuration, schema, casts and
+        // primary key (see a_failed_section_preserves_independent_metadata above) — only ONE
+        // ('trait initializers') is a recorded failure, so the other three would otherwise be
+        // invisible to a reader of the warning. 'relations' also withholds here: the unit-test
+        // Codebase (built via newInstanceWithoutConstructor()) never initializes Codebase::$methods,
+        // so codebaseMethodsInitialized() is false and SECTION_RELATIONS is never attempted —
+        // registry consumers are blind to relations for every model in this test class.
+        $captured = null;
+        $progress = $this->createMock(Progress::class);
+        $progress->expects($this->once())
+            ->method('warning')
+            ->willReturnCallback(function (string $message) use (&$captured): void {
+                $captured = $message;
+            });
+        $codebase = $this->makeCodebase($progress);
+        $this->registerStorage(SectionFailureModel::class, [HasUuids::class]);
+        SectionFailureModel::$failures = ['trait initializers' => true];
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
+
+        $this->assertNotNull($captured);
+        $this->assertStringEndsWith(
+            'withheld sections: relations, runtime configuration, schema, casts, primary key',
+            $captured,
+        );
+    }
+
     // ---------------------------------------------------------------------
     // Accessors / mutators (storage-derived, full-callable)
     // ---------------------------------------------------------------------
