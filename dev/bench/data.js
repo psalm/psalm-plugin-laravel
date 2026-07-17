@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784299512148,
+  "lastUpdate": 1784302207960,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9055,6 +9055,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.44,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "f73ebd43d3e91da0013f46ea85803079d31ed7a1",
+          "message": "docs(eloquent): document attribute blindness of abstract registry path #1278\n\ncomputeForAbstract()/computeWithoutInstance() read declared property\ndefaults and honour no PHP class attribute. Won't-implement: no runtime\noracle exists for an abstract base, and a hand-written per-attribute\nmirror is the drift surface ModelInstancePreparer::prepare() avoids.\nConcrete children stay correct via the classAttribute() ancestor walk.\n\nCloses #1278",
+          "timestamp": "2026-07-17T17:26:37+02:00",
+          "tree_id": "8a31183d40bbc0e7529cbe9e526fd31966f54e21",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f73ebd43d3e91da0013f46ea85803079d31ed7a1"
+        },
+        "date": 1784302207313,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.65,
+            "range": "± 0.37",
             "unit": "s"
           },
           {
