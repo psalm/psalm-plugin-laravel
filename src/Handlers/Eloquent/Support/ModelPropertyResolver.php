@@ -122,9 +122,13 @@ final class ModelPropertyResolver
             // template_extended_params[Builder::class]['TModel'], which Psalm
             // populates from the @extends docblock — the same mechanism
             // ModelFactoryMethodTypeProvider/FactoryCountTypeProvider use for
-            // Factory<TModel>. Scoped to Builder: this only ever contributes a result
-            // when $modelTemplateIndex is Builder's own (0), since a Collection
-            // subclass's storage has no Builder entry in template_extended_params.
+            // Factory<TModel>. Naturally scoped to Builder subclasses regardless of
+            // caller: Psalm's Populator only ever creates a
+            // template_extended_params[Builder::class] entry when Builder is a
+            // generic ancestor somewhere in the class's hierarchy, so a Collection
+            // subclass's storage (reached when this runs from CollectionPluckHandler,
+            // $modelTemplateIndex 1) simply has no such key and this fallback yields
+            // null there — no explicit index check is needed or performed.
             if ($modelClass === null) {
                 $modelClass = self::extractModelFromLhsBuilderExtends($lhsType, $codebase);
             }
