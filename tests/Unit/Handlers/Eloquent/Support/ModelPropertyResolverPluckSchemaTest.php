@@ -32,8 +32,8 @@ use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingl
 /**
  * Unit coverage for issue #1293: pluck()'s value/key column resolution now goes through
  * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler::resolveColumnType()}
- * instead of the `@property`-only {@see ModelPropertyResolver::resolvePropertyType()}, so a
- * column known only from migration schema / casts should narrow too.
+ * instead of a `@property`-only lookup, so a column known only from migration schema /
+ * casts should narrow too.
  *
  * This can't be a `.phpt`: the type-test harness runs no migrations, so `App\Models\*`
  * fixtures always have empty schemas there (see the identical rationale on

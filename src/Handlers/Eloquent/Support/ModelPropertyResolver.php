@@ -53,23 +53,6 @@ final class ModelPropertyResolver
     }
 
     /**
-     * Look up the type of a model property from @property / @property-read PHPDoc annotations.
-     *
-     * @param class-string<Model> $modelClass
-     * @psalm-mutation-free
-     */
-    public static function resolvePropertyType(Codebase $codebase, string $modelClass, string $propertyName): ?Union
-    {
-        try {
-            $classStorage = $codebase->classlike_storage_provider->get($modelClass);
-        } catch (\InvalidArgumentException) {
-            return null;
-        }
-
-        return $classStorage->pseudo_property_get_types['$' . $propertyName] ?? null;
-    }
-
-    /**
      * Build a typed Collection return type for pluck().
      *
      * Resolves the model property type from @property annotations and determines
@@ -161,9 +144,9 @@ final class ModelPropertyResolver
         // Don't bail on that alone — fall back to mixed for the value and still attempt
         // to narrow the key below, since the two axes are independent.
         //
-        // resolveColumnType() (not the lower-level resolvePropertyType() below) so a
-        // column with no @property still narrows from migration schema / casts, mirroring
-        // ordinary `$model->column` reads and BuilderAggregateHandler's column resolution.
+        // resolveColumnType() so a column with no @property still narrows from
+        // migration schema / casts, mirroring ordinary `$model->column` reads and
+        // BuilderAggregateHandler's column resolution.
         $resolvedPropertyType = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $columnName);
         $valueResolved = $resolvedPropertyType instanceof \Psalm\Type\Union;
         $propertyType = $resolvedPropertyType ?? Type::getMixed();
