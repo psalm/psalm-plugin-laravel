@@ -190,7 +190,7 @@ final class ModelPropertyResolverPluckSchemaTest extends TestCase
         };
 
         foreach ($args as $arg) {
-            \PHPUnit\Framework\Assert::assertInstanceOf(\PhpParser\Node\Scalar\String_::class, $arg->value);
+            \assert($arg->value instanceof \PhpParser\Node\Scalar\String_);
             $provider->setType($arg->value, new Union([TLiteralString::make($arg->value->value)]));
         }
 
