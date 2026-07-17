@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784241879520,
+  "lastUpdate": 1784296879950,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -8950,6 +8950,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.78,
             "range": "± 0.03",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3f78e15e092c06f51b92deb40970582876a04f21",
+          "message": "Merge pull request #1292 from psalm/1281-ensure-casts-string-values\n\nNormalize array-form $casts at model warm-up",
+          "timestamp": "2026-07-17T15:58:37+02:00",
+          "tree_id": "f8e0bf39b52674be255e29f9a3b3841505791d89",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3f78e15e092c06f51b92deb40970582876a04f21"
+        },
+        "date": 1784296879329,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.71,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
