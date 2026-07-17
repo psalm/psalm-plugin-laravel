@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784302207960,
+  "lastUpdate": 1784302589729,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9090,6 +9090,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.65,
             "range": "± 0.37",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6f0f450f982a7fe51812726e1327ac42eb073899",
+          "message": "Merge pull request #1299 from psalm/fix/1298-pluck-all-list\n\nNarrow single-argument `pluck()->all()` to `list<TValue>`",
+          "timestamp": "2026-07-17T17:32:48+02:00",
+          "tree_id": "e93a5209637c828d945d52b1399a1de4d283fb54",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6f0f450f982a7fe51812726e1327ac42eb073899"
+        },
+        "date": 1784302588463,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.89,
+            "range": "± 0.58",
             "unit": "s"
           },
           {
