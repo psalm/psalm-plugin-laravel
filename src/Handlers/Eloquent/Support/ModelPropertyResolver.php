@@ -8,11 +8,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Psalm\Codebase;
+use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 // UnionTypeComparator is in Psalm\Internal\* but is the established convention for
 // type-containment checks in plugins (Psalm's own bundled providers use it directly,
 // and several other handlers in this codebase already depend on Psalm\Internal\*).
 // Re-verify when bumping Psalm to a new minor/major version.
-use Psalm\Internal\Type\Comparator\UnionTypeComparator;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\NodeTypeProvider;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
@@ -142,7 +143,11 @@ final class ModelPropertyResolver
         // columns (`selectRaw('COUNT(*) AS cnt')`) have no model annotation to resolve.
         // Don't bail on that alone — fall back to mixed for the value and still attempt
         // to narrow the key below, since the two axes are independent.
-        $resolvedPropertyType = self::resolvePropertyType($codebase, $modelClass, $columnName);
+        //
+        // resolveColumnType() (not the lower-level resolvePropertyType() below) so a
+        // column with no @property still narrows from migration schema / casts, mirroring
+        // ordinary `$model->column` reads and BuilderAggregateHandler's column resolution.
+        $resolvedPropertyType = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $columnName);
         $valueResolved = $resolvedPropertyType instanceof \Psalm\Type\Union;
         $propertyType = $resolvedPropertyType ?? Type::getMixed();
 
@@ -289,7 +294,9 @@ final class ModelPropertyResolver
             $keyColumn = $keyArg->value->value;
         }
 
-        $keyPropertyType = self::resolvePropertyType($codebase, $modelClass, $keyColumn);
+        // Registry-aware resolution (see resolvePluckReturnType() above): a key column
+        // with no @property still narrows from migration schema / casts.
+        $keyPropertyType = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $keyColumn);
         if (!$keyPropertyType instanceof Union) {
             return null;
         }
