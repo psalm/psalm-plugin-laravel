@@ -233,10 +233,14 @@ final class ModelPropertyResolver
      * {@see self::extractModelFromUnion()} does not recognize as a Model, so this
      * method correctly yields null for that case rather than a wrong binding.
      *
+     * Public: shared with {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderAggregateHandler},
+     * which has the identical non-generic-custom-builder gap for sum()/avg()/min()/max()
+     * (issue #1294), the same way {@see self::extractModelFromUnion()} already is.
+     *
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
-    private static function extractModelFromLhsBuilderExtends(?Union $lhsType, Codebase $codebase): ?string
+    public static function extractModelFromLhsBuilderExtends(?Union $lhsType, Codebase $codebase): ?string
     {
         if (!$lhsType instanceof Union) {
             return null;
