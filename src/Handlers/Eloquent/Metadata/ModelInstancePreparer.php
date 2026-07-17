@@ -33,7 +33,7 @@ final class ModelInstancePreparer
      *
      * Framework and user initializers are INVOKED alike, so each does whatever the INSTALLED Laravel does —
      * version-correct by construction, with no hand-written mirror to drift when a release moves one. Exactly
-     * one is not invoked: the framework's `initializeHasAttributes` ({@see applyAppendsAttribute()}).
+     * one is not invoked: the framework's `initializeHasAttributes` ({@see mirrorHasAttributesInitializer()}).
      *
      * Not `initializeTraits()`: it reads `static::$traitInitializers`, populated only by `bootTraits()` — and
      * booting registers global scopes, a Psalm hang. `boot{Trait}()` is skipped for the same reason, so an
@@ -77,7 +77,7 @@ final class ModelInstancePreparer
                 && \str_starts_with(\str_replace('\\', '/', (string) $method->getFileName()), $eloquentRoot . '/');
 
             if ($isFrameworkHasAttributes) {
-                self::applyAppendsAttribute($reflection, $instance);
+                self::mirrorHasAttributesInitializer($reflection, $instance);
             } else {
                 // Reflection, NOT $instance->{$name}(): a protected initializer called from outside routes to
                 // Model::__call() query-builder forwarding instead of running. Bare statement keeps the mixed
@@ -100,30 +100,55 @@ final class ModelInstancePreparer
      * The framework's `initializeHasAttributes` is the one initializer stood in for rather than invoked.
      *
      * NOT because it runs user code: the walk above invokes user trait initializers deliberately, and doing so
-     * is the only way to observe them at all. Because `casts()` is the one initializer input already available
+     * is the only way to observe them at all. Because `casts()` is the one initializer input available
      * STATICALLY — {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastsMethodParser} AST-parses it and
-     * {@see ModelMetadataRegistryBuilder::computeCasts()} merges that result last. Executing it would buy no
-     * information the registry does not already have, at the cost of evaluating arbitrary user expressions
-     * inside warm-up. A user trait initializer has no such static equivalent, which is what makes the two
-     * different — not who wrote them.
+     * {@see ModelMetadataRegistryBuilder::computeCasts()} merges that result last. Executing it would buy
+     * little the registry lacks (the parser degrades what it cannot resolve to `'mixed'`), at the cost of
+     * evaluating arbitrary user expressions inside warm-up.
      *
-     * Standing in for it costs three effects, of which only the third is reproduced:
-     *  - `ensureCastsAreStringValues()`, which also normalizes the DECLARED `$casts`. No `casts()` call is
-     *    involved, so the rule above does NOT excuse skipping it: a `protected $casts = ['x' => [Foo::class,
-     *    'arg']]` stays an array here where a constructed model holds `'Foo:arg'`, and computeCasts() then
-     *    drops that model's whole casts section on the resulting TypeError. Pre-existing, not this rework's
-     *    doing, tracked as #1281 — do not read this mirror as evidence the gap is intended.
+     * `casts()` is the only skipped PART, not the statement wrapping it. The initializer's three effects:
+     *  - `ensureCastsAreStringValues()`, called below over the DECLARED `$casts` alone. It runs no `casts()`,
+     *    so the rule above does not excuse skipping it: unnormalized, `protected $casts = ['x' =>
+     *    [Foo::class, 'arg']]` stays an array where a constructed model holds `'Foo:arg'`, and computeCasts()
+     *    drops that model's WHOLE casts section on the resulting TypeError (#1281).
      *  - `$dateFormat`, which nothing stores.
-     *  - `mergeAppends()`, mirrored below.
+     *  - `mergeAppends()`, called below.
      *
-     * `#[Appends]` is Laravel 13.0+; below it classAttribute() matches nothing and this no-ops — so
-     * `mergeAppends()`, absent on 12.14–12.24, is never called and cannot crash warm-up. Identical across the
-     * whole `illuminate/database: ^12.14 || ^13.3` range.
+     * The normalizer is CALLED, never copied: it is version-split inside the supported range — 12.14–12.25
+     * has no `is_object` branch, 12.26+ adds one throwing `InvalidArgumentException` on a non-Stringable
+     * object cast — so a copy would carry a gate that calling tracks for free. The `is_array` branch this
+     * exists for is byte-identical across `illuminate/database: ^12.14 || ^13.3`, so it needs no gate.
+     *
+     * Built from `$instance`, never `Model::class`: `ReflectionMethod::invoke()` dispatches NON-virtually and
+     * does not complain about a foreign receiver, so a `Model::class` handle would silently run the
+     * framework's body on a model that overrides the normalizer. Not the public `mergeCasts()`, which
+     * normalizes too: it merges from OUTSIDE over `$this->casts`, so the only raw-casts reader it could be
+     * paired with — `getCasts()` — would bake the implicit key cast permanently into the property and defeat
+     * computeCasts()'s setIncrementing() suppression.
+     *
+     * `#[Appends]` is Laravel 13.0+; below it classAttribute() matches nothing and that half no-ops — so
+     * `mergeAppends()`, absent on 12.14–12.24, is never called and cannot crash warm-up.
      *
      * @param \ReflectionClass<Model> $reflection
      */
-    private static function applyAppendsAttribute(\ReflectionClass $reflection, Model $instance): void
+    private static function mirrorHasAttributesInitializer(\ReflectionClass $reflection, Model $instance): void
     {
+        $declaredCasts = new \ReflectionProperty(Model::class, 'casts');
+        $normalize = new \ReflectionMethod($instance, 'ensureCastsAreStringValues');
+
+        try {
+            // Read-normalize-write as ONE statement: getValue() and invoke() both return mixed, and binding
+            // either to a local would count against the plugin's 100% type-coverage target.
+            $declaredCasts->setValue($instance, $normalize->invoke($instance, $declaredCasts->getValue($instance)));
+        } catch (\InvalidArgumentException) {
+            // 12.26+ raises this for a non-Stringable object cast. Runtime normalizes the MERGED map and
+            // `casts()` wins on collisions, so a declared object cast that `casts()` overrides never reaches
+            // the throw at construction. Seeing the declared half alone, this cannot tell that model from an
+            // unconstructable one — so leave `$casts` raw and defer to computeCasts(), which holds the
+            // AST-parsed `casts()`, merges it last, and widens whatever survives. Nothing is written when
+            // invoke() throws, so the raw value stands.
+        }
+
         $appends = self::classAttribute($reflection, Appends::class);
         if ($appends !== null) {
             $instance->mergeAppends($appends->columns);
