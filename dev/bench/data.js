@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784302589729,
+  "lastUpdate": 1784817401296,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9125,6 +9125,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.89,
             "range": "± 0.58",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9168f19bed3e2043c0e8248410202e8cde579dc",
+          "message": "Taint Analysis: element-wise sql-taint strip for `where()` array forms (#1302)\n\n* feat(taint): add sql column sink to whereLike family #1300\n\nwhereLike/orWhereLike/whereNotLike/orWhereNotLike (Laravel >= 11.17)\nwere unstubbed, so their $column parameter carried no sink at all and\nwhereLike($userInput, 'x') was a silent identifier injection.\n\n$value is PDO-bound via addBinding(), so the sink goes on $column only.\nNo @psalm-taint-specialize, which would break the non-SQL @psalm-flow\nthrough $value the way it does on the where() siblings.\n\n* fix(taint): strip sql taint per element of where() arrays #1300\n\naddArrayOfWheres() re-dispatches every element of a where-family array\nargument, so only two positions still reach SQL as a raw identifier:\nthe array key on the `else` branch, and — on the nested branch —\narray_values() ordinal 0 ($column). Ordinal 2 is PDO-bound and ordinal\n1 is an operator neutralised by invalidOperator()'s whitelist.\n\nWhereColumnTaintHandler now walks an array LITERAL argument and records\nexactly the bound positions, replacing the all-or-nothing map check\n(which kept the sink on every numeric key). where([['name', 'LIKE',\n\"%{$term}%\"]]) and where([$term]) stop reporting; where([[$col, ...]])\nand where([$col => 1]) keep reporting.\n\n- a dynamic key records nothing: ArrayAnalyzer dispatches the key edge\n  and the value edge with the same ArrayItem node, so sparing the value\n  would also strip the genuine identifier sink\n- a numeric-key strip is gated on a scalar-or-null element type, since\n  `is_numeric($key) && is_array($value)` dispatches on the runtime\n  value: $row = [$col]; where([$row]) is the nested form\n- an explicit key anywhere inside a nested condition records nothing: a\n  key collision replaces an element in place and leaves the literal one\n  element shorter, so [['name', 0.5 => $col]] is really [$col] and the\n  source-ordinal-1 element becomes the raw column\n- a spread anywhere in the literal bails out entirely; positions shift\n- a non-literal argument keeps the previous type-level map check\n\nOrdinals 3 and beyond keep the sink too. That position maps to\n$boolean, which the grammar concatenates verbatim, though the shape is\nunreachable today: addArrayOfWheres passes `boolean:` by name, so a\nfourth positional element is a PHP Error on every supported Laravel.\n\nTwo tests asserted the false positive as expected behaviour and are\ninverted: a flat list and a numeric-string key both take the binding\nbranch when their value is not an array.\n\n* fix(taint): keep the sink unless the receiver is a builder #1300\n\nFour false-negative paths found by an external review of the\nelement-wise strip. All four fixes are subtractive — the handler now\nrecords fewer positions, so nothing that previously reported stops\nreporting.\n\n- The method NAME alone does not mean Laravel. A project's own\n  `ReportQuery::where(array $parts)` interpolating `$parts[0]` into\n  `DB::unprepared()` had its list element stripped, silencing a report\n  master still makes. The receiver node is now recorded and its type\n  checked at strip time; it must resolve to a query builder, Eloquent\n  builder, or relation. A StaticCall records nothing element-wise —\n  `Model::where([...])` resolves through the pseudo-method path, which\n  never applies the stub sink, so no false positive exists there.\n- A by-reference element can be rewritten between the taint dispatch\n  and the call, turning a scalar into an array and moving it onto the\n  nested branch as the raw column. Bail like a spread.\n- Nested value ordinals are now scalar-gated too: `addBinding()` is\n  skipped for an `ExpressionContract`, whose `getValue()` the grammar\n  emits verbatim. Laravel's own `Expression` cannot carry a tainted\n  string, but a project's contract implementation can.\n- Nested ordinal 1 keeps the sink from three elements on, where it is\n  `$operator` rather than `$value`. `Builder::$operators` is a public\n  array a project can append to, so `invalidOperator()`'s whitelist is\n  not a guarantee. The two-element form still strips it, and #1300's\n  reported shape has a literal operator, so nothing regresses.",
+          "timestamp": "2026-07-23T16:33:30+02:00",
+          "tree_id": "6aef4b7b824db7362feba91f52ed804e75f9580e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b9168f19bed3e2043c0e8248410202e8cde579dc"
+        },
+        "date": 1784817400006,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.22,
+            "range": "± 0.26",
             "unit": "s"
           },
           {
