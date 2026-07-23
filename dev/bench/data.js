@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784821697515,
+  "lastUpdate": 1784822406221,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9200,6 +9200,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "96b8165191aecbaf0ff4a7eca9f94e665f3a3606",
+          "message": "feat(taint): add __get taint source on Request stub #1301 (#1305)\n\n- Undeclared property reads on a plain Request (or request()) route\n  through __get, which had no stub declaration, so Psalm never saw a\n  source there, unlike header(), route(), and ~20 sibling accessors.\n- Scope is deliberately narrow: Psalm 7 seals userland Request\n  subclasses by default, so the source doesn't reach them there. An\n  undeclared FormRequest property whose rule guarantees presence is\n  claimed by FormRequestPropertyHandler's doesPropertyExist() (and\n  isPropertyVisible()) before Psalm ever reaches __get, so\n  ValidationTaintHandler's existing re-sourcing stays the only path\n  for those, no double-sourcing.\n- Refreshes now-inaccurate claims about that bypass in\n  ValidationTaintHandler's docblocks and the stub docblock: __get had\n  no source to bypass before this commit; the mechanism is the\n  existence/visibility provider, not the type one; and the claimed\n  property must be undeclared with a presence-guaranteeing rule, not\n  merely rule-covered — a `sometimes` field or one with a real/\n  `@property` declaration is not claimed and falls through to __get,\n  where sealing drops it.\n- Adds an interaction guard against #1302's element-wise where()\n  array strip: #1300's exact third snippet used a magic-property\n  read into the same PDO-bound array position #1302 already covers\n  for method-call sources, and it must stay silent for the\n  magic-property source too.",
+          "timestamp": "2026-07-23T17:57:18+02:00",
+          "tree_id": "e6feca205dda19630c1caccb16b0f7a904a0cbf3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/96b8165191aecbaf0ff4a7eca9f94e665f3a3606"
+        },
+        "date": 1784822405401,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29,
+            "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
