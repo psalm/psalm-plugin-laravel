@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784825888884,
+  "lastUpdate": 1784828257738,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9265,6 +9265,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.76,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dd169d97a25cd2362e4b26a6175fda740f48901b",
+          "message": "Merge pull request #1312 from psalm/fix/wherelike-value-param-mixed\n\nfix(stubs): widen whereLike-family $value param to mixed",
+          "timestamp": "2026-07-23T19:34:00+02:00",
+          "tree_id": "0b3b74de83e397892cd3901e54190115c53f29bf",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/dd169d97a25cd2362e4b26a6175fda740f48901b"
+        },
+        "date": 1784828256491,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.74,
+            "range": "± 0.62",
             "unit": "s"
           },
           {
