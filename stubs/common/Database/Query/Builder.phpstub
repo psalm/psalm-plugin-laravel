@@ -215,6 +215,43 @@ class Builder implements BuilderContract
     public function orWhereNotLike($column, $value, $caseSensitive = false) {}
 
     /**
+     * Add a "where" clause comparing two columns to the query.
+     *
+     * Nothing here is PDO-bound: the grammar wraps both `$first` and `$second` as raw identifiers,
+     * and a `$operator` that fails Laravel's whitelist is demoted into `$second` by
+     * `invalidOperator()` (Query/Builder.php:1184) rather than discarded, so every position reaches
+     * SQL raw. Unlike `where()`, there is no bound-value corridor to preserve with
+     * `@psalm-flow`/`@psalm-taint-escape` — mirrors the raw-method pattern below (`whereRaw()` et al.):
+     * nothing is sanitized, so nothing is escaped.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|array  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @param  string|null  $boolean
+     * @return $this
+     *
+     * @psalm-taint-sink sql $first
+     * @psalm-taint-sink sql $operator
+     * @psalm-taint-sink sql $second
+     */
+    public function whereColumn($first, $operator = null, $second = null, $boolean = 'and') {}
+
+    /**
+     * Add an "or where" clause comparing two columns to the query. See {@see whereColumn()} for why
+     * every position is a sink and none is escaped.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string|array  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @return $this
+     *
+     * @psalm-taint-sink sql $first
+     * @psalm-taint-sink sql $operator
+     * @psalm-taint-sink sql $second
+     */
+    public function orWhereColumn($first, $operator = null, $second = null) {}
+
+    /**
      * Add a "having" clause to the query.
      *
      * @param  \Illuminate\Contracts\Database\Query\Expression|\Closure|string  $column
