@@ -1,0 +1,36 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\Conversational;
+use Laravel\Ai\Contracts\HasTools;
+
+/**
+ * Concrete agent used when callers want to build one inline rather than
+ * extending Promptable. Re-declaration here keeps the full `implements` list
+ * and the `use Promptable` clause from the real source — without them, Psalm
+ * strips the contract relationships and trait methods (see CLAUDE.local.md
+ * "Class declarations wipe reflected metadata"). The constructor's
+ * $instructions argument is a sink for the same reason as the agent() helper.
+ */
+class AnonymousAgent implements Agent, Conversational, HasTools
+{
+    use Promptable;
+
+    /**
+     * @psalm-taint-sink llm_prompt $instructions
+     * @psalm-taint-sink llm_prompt $messages
+     */
+    public function __construct(
+        public string $instructions,
+        public iterable $messages,
+        public iterable $tools,
+    ) {}
+
+    public function instructions(): string {}
+
+    public function messages(): iterable {}
+
+    public function tools(): iterable {}
+}

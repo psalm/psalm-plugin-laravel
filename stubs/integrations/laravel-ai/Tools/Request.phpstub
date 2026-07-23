@@ -1,0 +1,142 @@
+<?php
+
+namespace Laravel\Ai\Tools;
+
+use ArrayAccess;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\InteractsWithData;
+use Illuminate\Support\Traits\Macroable;
+
+/**
+ * Arguments the LLM chose to pass to a tool. From the application's
+ * perspective, these are attacker-controllable: the LLM is downstream of any
+ * untrusted input that reached its context, and adversarial prompts steer it
+ * into calling tools with arbitrary arguments (see CVE-2025-54795, Claude
+ * Code argument injection; GHSA-534m-3w6r-8pqr, Cursor).
+ *
+ * String/array-returning accessors are tainted with the `input` kind — the
+ * same one used for Request::input() — so existing sinks (sql, shell, file,
+ * header, html, ssrf) catch tool-call hijack chains automatically. Numeric
+ * and boolean coercers (integer(), float(), boolean()) are left untainted:
+ * the cast cannot carry an injection payload, mirroring the convention on
+ * Illuminate\Support\Traits\InteractsWithData.
+ *
+ * Parameter signatures intentionally match Laravel's InteractsWithData trait
+ * (untyped, with original defaults) so docblock-only @param annotations
+ * stay accurate against the real class.
+ *
+ * Re-declaration copies the real `implements`/`use` clauses verbatim so Psalm
+ * does not strip the trait methods (`input()`, `query()`, `has()`, `filled()`,
+ * `when()`, etc.) when merging this stub with the reflected class. Psalm's
+ * class-like scanner resets a class's implemented interfaces and re-derives
+ * them only from the stub's own `implements`/`extends` clause when a stub
+ * re-declares a class, so the full declaration must be copied verbatim.
+ *
+ * @template-implements ArrayAccess<string, mixed>
+ */
+class Request implements Arrayable, ArrayAccess
+{
+    use Conditionable, InteractsWithData, Macroable;
+
+    public function __construct(protected array $arguments = []) {}
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function all(mixed $keys = null): array {}
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function toArray(): array {}
+
+    public function offsetExists(mixed $offset): bool {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function offsetGet(mixed $offset): mixed {}
+
+    public function offsetSet(mixed $offset, mixed $value): void {}
+
+    public function offsetUnset(mixed $offset): void {}
+
+    /**
+     * @param  string  $key
+     * @param  mixed   $default
+     *
+     * @psalm-taint-source input
+     */
+    public function str($key, $default = null): \Illuminate\Support\Stringable {}
+
+    /**
+     * @param  string  $key
+     * @param  mixed   $default
+     *
+     * @psalm-taint-source input
+     */
+    public function string($key, $default = null): \Illuminate\Support\Stringable {}
+
+    /**
+     * Not a taint source: (int) cast cannot produce an injection payload.
+     * e.g. (int) "1; DROP TABLE users" → 1
+     *
+     * @param  string  $key
+     * @param  int     $default
+     */
+    public function integer($key, $default = 0): int {}
+
+    /**
+     * Not a taint source: (float) cast cannot produce an injection payload.
+     * e.g. (float) "<script>alert(1)</script>" → 0.0
+     *
+     * @param  string  $key
+     * @param  float   $default
+     */
+    public function float($key, $default = 0.0): float {}
+
+    /**
+     * Not a taint source: a boolean cannot carry injectable content.
+     *
+     * @param  string|null  $key
+     * @param  bool         $default
+     */
+    public function boolean($key = null, $default = false): bool {}
+
+    /**
+     * @param  array|string|null  $key
+     * @return array<array-key, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function array($key = null): array {}
+
+    /**
+     * @param  array<array-key, string>|string  $keys
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function only($keys): array {}
+
+    /**
+     * @param  array<array-key, string>|string  $keys
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function except($keys): array {}
+
+    /**
+     * @param  array|string|null  $key
+     * @return \Illuminate\Support\Collection<array-key, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function collect($key = null): \Illuminate\Support\Collection {}
+}

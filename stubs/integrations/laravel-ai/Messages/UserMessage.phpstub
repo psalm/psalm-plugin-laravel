@@ -1,0 +1,21 @@
+<?php
+
+namespace Laravel\Ai\Messages;
+
+use Illuminate\Support\Collection;
+
+/**
+ * Re-declared with the same parent class to preserve `extends Message` so
+ * Psalm doesn't strip the parent relationship while we layer the taint sink
+ * on the constructor. See CLAUDE.md "Class declarations wipe reflected
+ * metadata".
+ */
+class UserMessage extends Message
+{
+    public Collection $attachments;
+
+    /**
+     * @psalm-taint-sink llm_prompt $content
+     */
+    public function __construct(string $content, Collection|array $attachments = []) {}
+}

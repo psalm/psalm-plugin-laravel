@@ -1,0 +1,16 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Laravel\Ai\PendingResponses\PendingAudioGeneration;
+
+class Audio
+{
+    /**
+     * TTS input. The text is read by the model that does the synthesis;
+     * adversarial inputs can steer voice, language, or emit unintended speech.
+     *
+     * @psalm-taint-sink llm_prompt $text
+     */
+    public static function of(string $text): PendingAudioGeneration {}
+}

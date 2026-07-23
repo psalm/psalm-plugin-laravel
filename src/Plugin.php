@@ -203,6 +203,7 @@ final class Plugin implements PluginEntryPointInterface
         $stubs = \array_merge(
             StubFileFinder::commonStubs($stubsRoot, $output),
             StubFileFinder::stubsForLaravelVersion($stubsRoot, Application::VERSION, $output),
+            $this->optionalIntegrationStubs($stubsRoot, $output),
         );
 
         foreach ($stubs as $stubFilePath) {
@@ -212,6 +213,45 @@ final class Plugin implements PluginEntryPointInterface
         AliasStubProvider::register($registration, self::getAliasStubLocation($pluginConfig));
 
         CarbonStubProvider::register($registration, $output);
+    }
+
+    /**
+     * Stubs for optional first/third-party AI packages. Each entry guards on
+     * Composer's runtime metadata so absent packages contribute zero stubs and
+     * we avoid triggering the project autoloader for a class lookup. The
+     * version constraint additionally protects against a future major bump
+     * (e.g. laravel/ai 1.0) silently loading stubs that reference removed or
+     * renamed classes.
+     *
+     * @return list<string>
+     */
+    private function optionalIntegrationStubs(string $stubsRoot, \Psalm\Progress\Progress $output): array
+    {
+        $stubs = [];
+
+        if ($this->isInstalledAndSatisfies('laravel/ai', '>=0.9.0 <1.0.0')) {
+            \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
+        }
+
+        return $stubs;
+    }
+
+    /**
+     * Composer's {@see \Composer\InstalledVersions::satisfies()} throws when the
+     * package is missing entirely. Pair it with the cheap presence check first
+     * so callers can express "installed AND in this range" as a single boolean.
+     */
+    private function isInstalledAndSatisfies(string $package, string $constraint): bool
+    {
+        if (!\Composer\InstalledVersions::isInstalled($package)) {
+            return false;
+        }
+
+        return \Composer\InstalledVersions::satisfies(
+            new \Composer\Semver\VersionParser(),
+            $package,
+            $constraint,
+        );
     }
 
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
@@ -470,6 +510,15 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+
+        // laravel/ai integration: LLM output as taint source. Stubs cover the prompt
+        // sinks declaratively; this handler covers the property-level `$response->text`
+        // source because Psalm doesn't honor `@psalm-taint-source` on properties.
+        // Guarded the same way as the matching stubs in optionalIntegrationStubs().
+        if ($this->isInstalledAndSatisfies('laravel/ai', '>=0.9.0 <1.0.0')) {
+            require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
+            $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
+        }
 
         // Flags unknown attribute keys passed to mass-assignment methods (create/forceCreate/fill/
         // forceFill/update) — the #699 typo case. It is always registered and self-silences on any

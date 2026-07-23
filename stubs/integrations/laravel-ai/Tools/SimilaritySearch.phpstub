@@ -1,0 +1,48 @@
+<?php
+
+namespace Laravel\Ai\Tools;
+
+use Closure;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+
+/**
+ * Full member set copied from `vendor/laravel/ai/src/Tools/SimilaritySearch.php`
+ * because re-declaring `class SimilaritySearch implements Tool` here wipes the
+ * reflected method list — without these three Tool members, every user-defined
+ * SimilaritySearch usage would fire `UnimplementedInterfaceMethod`. See
+ * `CLAUDE.local.md` "Class declarations wipe reflected metadata".
+ *
+ * The only behavior we layer on top of the real signatures is the
+ * `@psalm-taint-sink llm_prompt $description` annotation: a SimilaritySearch
+ * with a user-controllable description string is the static signature of
+ * MCP-style tool poisoning (CVE-2025-54136).
+ */
+class SimilaritySearch implements Tool
+{
+    public function __construct(public Closure $using) {}
+
+    public static function usingModel(
+        string $model,
+        string $column,
+        float $minSimilarity = 0.6,
+        int $limit = 15,
+        ?Closure $query = null,
+    ): self {}
+
+    public function description(): string {}
+
+    public function handle(Request $request): string {}
+
+    public function schema(JsonSchema $schema): array {}
+
+    /**
+     * Description visible to the LLM — same tool-poisoning concern as
+     * Contracts\Tool::description() and CanActAsTool::description().
+     *
+     * @psalm-taint-sink llm_prompt $description
+     */
+    public function withDescription(string $description): self {}
+
+    public function rerank(Closure|array|string $by, ?int $limit = null): self {}
+}

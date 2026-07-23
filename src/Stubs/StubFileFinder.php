@@ -83,6 +83,20 @@ final class StubFileFinder
     }
 
     /**
+     * Collect stubs for an optional third-party integration (e.g. `laravel-ai`).
+     *
+     * Lives under `stubs/integrations/<package>/`. Loaded only when the caller
+     * has verified that the integration's package is installed in the analyzed
+     * project, so absent packages never contribute stale class shapes.
+     *
+     * @return list<string>
+     */
+    public static function integrationStubs(string $stubsRoot, string $integration, Progress $output): array
+    {
+        return self::findIn($stubsRoot . '/integrations/' . $integration, $output);
+    }
+
+    /**
      * Collect stubs from all version directories that are <= the installed Laravel version.
      *
      * Supports both major-only directories (e.g. "12/", "13/") and patch-level directories

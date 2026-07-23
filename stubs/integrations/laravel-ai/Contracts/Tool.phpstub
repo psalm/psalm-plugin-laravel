@@ -1,0 +1,35 @@
+<?php
+
+namespace Laravel\Ai\Contracts;
+
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Tools\Request;
+use Stringable;
+
+interface Tool
+{
+    /**
+     * The description is read by the LLM to decide whether to call the tool;
+     * a non-constant value here is the static signature of MCP-style tool
+     * poisoning (CVE-2025-54136, arXiv:2603.22489). Psalm currently has no
+     * way to express a return-value sink in a docblock (`@psalm-taint-sink`
+     * only matches parameters by name), so this is left without a sink
+     * annotation until a dedicated handler is implemented (#938).
+     */
+    public function description(): Stringable|string;
+
+    /**
+     * Tool output flows back into the next LLM turn unfiltered. Mark the
+     * return as a taint source for the `input` kind: if the tool reads HTTP
+     * bodies, file contents, or DB rows whose taint the plugin tracks, that
+     * taint should propagate into subsequent prompt sinks.
+     *
+     * @psalm-taint-source input
+     */
+    public function handle(Request $request): Stringable|string;
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function schema(JsonSchema $schema): array;
+}
