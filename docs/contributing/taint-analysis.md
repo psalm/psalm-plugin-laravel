@@ -315,7 +315,19 @@ Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argumen
 
 The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, and `orHaving()`. `whereLike()`, `orWhereLike()`, `whereNotLike()`, and `orWhereNotLike()` follow it too, minus the `$operator` arm.
 
-The keyed-**map** array form `where(['col' => $value])` is a false positive under the plain sink: `Builder::addArrayOfWheres()` binds each value and uses only the (literal) key as the column, so a tainted value is never interpolated (#734/#733). `Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler` removes the `sql` taint for exactly that shape (a sealed `TKeyedArray` with all-string keys), CALL-SITE-SCOPED: a `BeforeExpressionAnalysis` hook records the first-argument nodes of where-family calls, and only those exact nodes are stripped (so a map that merely happens to have that shape elsewhere, in an assignment, a return, or an element read, keeps its taint). The strip covers `where`, `orWhere`, `whereNot`, `orWhereNot`, and `firstWhere` (exactly the methods whose array form routes through `addArrayOfWheres()`). It does **not** cover `having`/`orHaving`: despite sharing the flow pattern above, their array form never reaches `addArrayOfWheres()` (there is no `is_array($column)` branch), so an array column compiles raw and the sink must stand (issue #734 wrongly proposed including them). See the handler docblock. Do **not** "fix" it by dropping the sink (the string form is a real vector) or by adding `@psalm-taint-specialize` to these stubs, which silently breaks the non-SQL `@psalm-flow` on the value positions (see the specialize note below).
+Most of the **array** form is a false positive under the plain sink, because `Builder::addArrayOfWheres()` re-dispatches each element:
+
+```php
+if (is_numeric($key) && is_array($value)) {
+    $query->{$method}(...array_values($value), boolean: $boolean);  // nested condition
+} else {
+    $query->{$method}($key, '=', $value, $boolean);                 // the key is the column
+}
+```
+
+So only two positions still reach SQL as a raw identifier: the array KEY on the `else` branch, and — on the nested branch — `array_values()` ordinal 0 (`$column`). `Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler` removes the `sql` taint from ordinals 1 and 2 and from the `else`-branch value (#734/#733, #1300), CALL-SITE-SCOPED: a `BeforeExpressionAnalysis` hook records the nodes of where-family first arguments, and only those exact nodes are stripped (so an array that merely happens to have that shape elsewhere, in an assignment, a return, or an element read, keeps its taint). An array LITERAL is walked element-wise; any other argument falls back to a coarse type check that accepts only a sealed `TKeyedArray` with all-string keys.
+
+The strip covers `where`, `orWhere`, `whereNot`, `orWhereNot`, and `firstWhere` (exactly the methods whose array form routes through `addArrayOfWheres()`). It does **not** cover `having`/`orHaving`: despite sharing the flow pattern above, their array form never reaches `addArrayOfWheres()` (there is no `is_array($column)` branch), so an array column compiles raw and the sink must stand (issue #734 wrongly proposed including them). See the handler docblock. Do **not** "fix" it by dropping the sink (the string form is a real vector) or by adding `@psalm-taint-specialize` to these stubs, which silently breaks the non-SQL `@psalm-flow` on the value positions (see the specialize note below).
 
 ### Pattern for find-family methods
 
