@@ -4,10 +4,16 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use PhpParser\Node\ArrayItem;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\NullsafeMethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Scalar\Float_;
+use PhpParser\Node\Scalar\Int_;
+use PhpParser\Node\Scalar\String_;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\BeforeFileAnalysisInterface;
@@ -15,19 +21,37 @@ use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\BeforeFileAnalysisEvent;
 use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
+use Psalm\Type\Atomic\Scalar;
 use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
- * Removes the `sql` taint from a where-family `$column` argument that is a keyed-MAP —
- * `where(['status_id' => $userValue])` — the false positive #734 / #733.
+ * Removes the `sql` taint from the PDO-bound positions of a where-family `$column` ARRAY argument —
+ * `where(['status_id' => $userValue])` (#734 / #733) and `where([['name', 'LIKE', $userValue]])`
+ * (#1300).
  *
  * The stubs keep `@psalm-taint-sink sql $column` on the where family: correct for the string form
- * `where($column)` (interpolated as a raw identifier), wrong for the map form, which routes through
- * `Illuminate\Database\Query\Builder::addArrayOfWheres()` → `where($key, '=', $value)` — the KEY is
- * the column, each VALUE is PDO-bound and never interpolated. Only the map form is stripped; the
- * shapes {@see isBoundValueMap} rejects (list literals, `array<string, mixed>`) keep the sink.
+ * `where($column)` (interpolated as a raw identifier), wrong for most of the array form, which routes
+ * through `Illuminate\Database\Query\Builder::addArrayOfWheres()`:
+ *
+ * ```php
+ * foreach ($column as $key => $value) {
+ *     if (is_numeric($key) && is_array($value)) {
+ *         $query->{$method}(...array_values($value), boolean: $boolean);
+ *     } else {
+ *         $query->{$method}($key, '=', $value, $boolean);
+ *     }
+ * }
+ * ```
+ *
+ * So only two positions reach SQL as a raw identifier: the array KEY on the `else` branch, and — on
+ * the nested branch — `array_values()` ordinal 0 (`$column`). Ordinals 1 and 2 are safe: `$value` is
+ * PDO-bound via `addBinding()`, and `$operator` is either matched against Laravel's operator
+ * whitelist or demoted to a bound value by `invalidOperator()`. Everything else keeps the sink,
+ * including ordinal 3 and beyond — see {@see recordNestedConditionPositions}.
  *
  * ## Why call-site scoped
  *
@@ -38,9 +62,32 @@ use Psalm\Type\Union;
  * fetches, …). An UNSCOPED strip of every sealed string-key map (superseded PR #1218) therefore caused
  * false NEGATIVES — a map whose value flowed out via `$map['k']` or a return lost its taint.
  *
- * So {@see beforeExpressionAnalysis} records the first-argument node of each where-family call, and
- * {@see removeTaints} strips only those exact nodes — covering the literal `where(['a' => $v])` and
- * the variable `$conds = [...]; where($conds)` forms, while the same value used elsewhere keeps taint.
+ * So {@see beforeExpressionAnalysis} records the nodes of each where-family first argument, and
+ * {@see removeTaints} strips only those exact nodes, while the same value used elsewhere keeps taint.
+ *
+ * ## Two recording modes
+ *
+ * - **Element-wise** ({@see recordBoundValuePositions}) for an array LITERAL argument: each
+ *   `ArrayItem` that {@see addArrayOfWheres} maps onto a bound position is recorded, so a tainted
+ *   value dies at its own `arrayvalue-assignment` edge and never reaches the argument node, while a
+ *   tainted column position still flows through. This is what makes #1300's nested form precise.
+ * - **Whole-argument** ({@see isBoundValueMap}) for everything else (a variable, a call result): a
+ *   type-level check that only accepts the sealed all-string-key map, where every element is a value.
+ *
+ * ### Why a dynamic key records nothing
+ *
+ * `ArrayAnalyzer` dispatches BOTH the key edge and the value edge of an element with the same
+ * `ArrayItem` node, and {@see AddRemoveTaintsEvent} cannot tell them apart. For `[$key => $value]`
+ * the key IS the column, so stripping the item to spare its bound value would also strip the genuine
+ * identifier sink — `where([$userInput => 1])` must keep flagging. Such items are left alone: their
+ * value keeps a false positive it already had, and no true positive is lost.
+ *
+ * ### Why a numeric-key strip is gated on a scalar value type
+ *
+ * `is_numeric($key) && is_array($value)` dispatches on the RUNTIME value, so `$row = [$userInput];
+ * where([$row])` is the nested form with a raw column at ordinal 0 even though the literal's element
+ * is not an array literal. The AST cannot see that, so {@see isScalarValued} requires the element's
+ * inferred type to be scalar-or-null before a numeric-key element is stripped.
  *
  * ## Why the flush is per-FILE, not per-function-like
  *
@@ -57,8 +104,8 @@ use Psalm\Type\Union;
  * Retirement: the method id and argument offset already exist at `ArgumentAnalyzer::processTaintedness()`
  * where the event is built; if an upstream PR adds them to {@see AddRemoveTaintsEvent}, the
  * Before-hook shim retires and {@see removeTaints} gates on the event field. Same auto-retiring
- * pattern as {@see \Psalm\LaravelPlugin\Handlers\Support\ConditionableWhenHandler}. Refs #734, #733,
- * PR #1218.
+ * pattern as {@see \Psalm\LaravelPlugin\Handlers\Support\ConditionableWhenHandler}. Refs #1300, #734,
+ * #733, PR #1218.
  */
 final class WhereColumnTaintHandler implements
     BeforeExpressionAnalysisInterface,
@@ -76,11 +123,18 @@ final class WhereColumnTaintHandler implements
      * or-variants `orWhereAll`/`orWhereAny`/`orWhereNone` (all carry `sql $columns` over arrays that
      * are lists of column NAMES, so `whereAll(['col' => $tainted])` correctly keeps flagging);
      * `orderBy` (no keyed-map form).
-     *
-     * A numeric-string key (e.g. `'1.5'`, which PHP keeps as a string while `is_numeric` is true) is
-     * rejected by `isBoundValueMap` like an int key, mirroring `addArrayOfWheres`' own `is_numeric($key)`
-     * dispatch, so such maps are never treated as bound-value maps.
      */
+    /**
+     * Receiver classes whose `where()` really is `addArrayOfWheres()`. Lowercase, matched by exact
+     * name or inheritance, so custom builders and relations qualify while a project's own class that
+     * merely exposes a `where()` method does not.
+     */
+    private const BUILDER_CLASSES = [
+        'illuminate\database\query\builder',
+        'illuminate\database\eloquent\builder',
+        'illuminate\database\eloquent\relations\relation',
+    ];
+
     private const WHERE_MAP_METHODS = [
         'where' => true,
         'orwhere' => true,
@@ -98,6 +152,17 @@ final class WhereColumnTaintHandler implements
      * @var array<int, true>
      */
     private static array $whereColumnArgumentIds = [];
+
+    /**
+     * `spl_object_id` of each `ArrayItem` of a where-family array LITERAL that `addArrayOfWheres`
+     * maps onto a PDO-bound position, against the two things {@see removeTaints} still has to check
+     * once types exist: `scalar_gated` demands the element cannot hold an array (or an
+     * `ExpressionContract`) at runtime, and `receiver` is the call's receiver node, whose type must
+     * resolve to a Laravel builder. Flushed with {@see $whereColumnArgumentIds}.
+     *
+     * @var array<int, array{scalar_gated: bool, receiver: Expr}>
+     */
+    private static array $boundValuePositionIds = [];
 
     /**
      * Record the first-argument node id of a where-family call before its arguments are descended
@@ -151,27 +216,42 @@ final class WhereColumnTaintHandler implements
             return null;
         }
 
-        self::$whereColumnArgumentIds[\spl_object_id($args[0]->value)] = true;
+        $argument = $args[0]->value;
+
+        self::$whereColumnArgumentIds[\spl_object_id($argument)] = true;
+
+        // Element-wise recording additionally needs the receiver, because the method NAME alone does
+        // not mean Laravel: a project's own `ReportQuery::where(array $parts)` that interpolates
+        // `$parts[0]` into raw SQL would otherwise have its list element stripped. The receiver's type
+        // is not resolved yet here (this hook fires before MethodCallAnalyzer descends `$stmt->var`),
+        // so it is stored and checked at strip time by {@see isLaravelBuilder}. A StaticCall records
+        // nothing element-wise: `Model::where([...])` resolves through the pseudo-method path, which
+        // never applies the stub sink, so there is no false positive there to suppress.
+        if ($argument instanceof Array_ && !$expr instanceof StaticCall) {
+            self::recordBoundValuePositions($argument, $expr->var);
+        }
 
         return null;
     }
 
     /**
-     * Remove the `sql` taint when the analysed expression is a where-family first argument (recorded
-     * by {@see beforeExpressionAnalysis}) AND its type is the value-binding keyed-map shape.
+     * Remove the `sql` taint when the analysed expression is a bound position of a where-family array
+     * literal, or a where-family first argument whose type is the value-binding keyed-map shape (both
+     * recorded by {@see beforeExpressionAnalysis}).
      */
     #[\Override]
     public static function removeTaints(AddRemoveTaintsEvent $event): int
     {
         $expr = $event->getExpr();
 
-        // Nested `ArrayItem` dispatches (from ArrayAnalyzer) carry an element, not the argument node.
-        if ($expr instanceof \PhpParser\Node\ArrayItem) {
-            return 0;
+        // `ArrayAnalyzer` dispatches per element with the `ArrayItem`, every other analyzer with the
+        // expression itself, so the node class picks the recording mode. Both checks come before the
+        // analyzer instanceof so the empty-set common path stays near-free.
+        if ($expr instanceof ArrayItem) {
+            return self::removeElementTaints($expr, $event);
         }
 
-        // The load-bearing scoping check #1218 lacked — before the analyzer instanceof so the empty-set
-        // common path is near-free.
+        // The load-bearing scoping check #1218 lacked.
         if (!isset(self::$whereColumnArgumentIds[\spl_object_id($expr)])) {
             return 0;
         }
@@ -192,6 +272,213 @@ final class WhereColumnTaintHandler implements
     }
 
     /**
+     * `sql` removal for one recorded element of a where-family array literal.
+     */
+    private static function removeElementTaints(ArrayItem $item, AddRemoveTaintsEvent $event): int
+    {
+        $position = self::$boundValuePositionIds[\spl_object_id($item)] ?? null;
+
+        if ($position === null) {
+            return 0;
+        }
+
+        $statements_source = $event->getStatementsSource();
+
+        if (!$statements_source instanceof StatementsAnalyzer) {
+            return 0;
+        }
+
+        if (!self::isLaravelBuilder($position['receiver'], $statements_source, $event)) {
+            return 0;
+        }
+
+        if (!$position['scalar_gated']) {
+            return TaintKind::INPUT_SQL;
+        }
+
+        return self::isScalarValued($item, $statements_source) ? TaintKind::INPUT_SQL : 0;
+    }
+
+    /**
+     * True when the call's receiver is one of Laravel's query builders, which is what makes
+     * `addArrayOfWheres()` the runtime dispatch. Anything else — a project's own class that happens
+     * to expose a `where()` method — keeps the sink, as does an unresolved or widened receiver type.
+     */
+    private static function isLaravelBuilder(
+        Expr $receiver,
+        StatementsAnalyzer $statements_source,
+        AddRemoveTaintsEvent $event,
+    ): bool {
+        $type = $statements_source->node_data->getType($receiver);
+
+        if (!$type instanceof Union) {
+            return false;
+        }
+
+        $codebase = $event->getCodebase();
+
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                return false;
+            }
+
+            $matches = false;
+
+            foreach (self::BUILDER_CLASSES as $builder) {
+                if (\strtolower($atomic->value) === $builder
+                    || $codebase->classExtendsOrImplements($atomic->value, $builder)
+                ) {
+                    $matches = true;
+                    break;
+                }
+            }
+
+            if (!$matches) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Record the elements of a where-family array literal that `addArrayOfWheres` binds. Everything
+     * not recorded keeps the sink, so every uncertain shape simply falls through.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function recordBoundValuePositions(Array_ $literal, Expr $receiver): void
+    {
+        foreach (self::positionalItems($literal) ?? [] as $item) {
+            $key = $item->key;
+
+            // A dynamic key is the column identifier and shares its `ArrayItem` with the value edge;
+            // see the class docblock for why the whole element is then left alone.
+            if ($key !== null && !$key instanceof String_ && !$key instanceof Int_ && !$key instanceof Float_) {
+                continue;
+            }
+
+            // An absent key is the auto-incrementing int one. PHP casts an integer-like string key to
+            // int, and `addArrayOfWheres` dispatches on `is_numeric($key)`, which additionally covers
+            // '1.5' — a string key PHP keeps as-is.
+            $numeric_key = !$key instanceof String_ || \is_numeric($key->value);
+
+            if ($item->value instanceof Array_) {
+                if ($numeric_key) {
+                    self::recordNestedConditionPositions($item->value, $receiver);
+                }
+
+                // A string key stays on the `where($key, '=', $value)` branch, which binds the array
+                // through `flattenValue()`. Degenerate enough to keep the sink rather than model it.
+                continue;
+            }
+
+            self::$boundValuePositionIds[\spl_object_id($item)] = [
+                'scalar_gated' => $numeric_key,
+                'receiver' => $receiver,
+            ];
+        }
+    }
+
+    /**
+     * Record the bound positions of a nested condition `[[$column, $operator, $value]]`, which
+     * `addArrayOfWheres` forwards as `where(...array_values($value), boolean: $boolean)`.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function recordNestedConditionPositions(Array_ $condition, Expr $receiver): void
+    {
+        $items = self::positionalItems($condition) ?? [];
+
+        foreach ($items as $item) {
+            // An explicit key can collide with another element's key, which replaces that element in
+            // place and leaves the literal one element shorter — `[['name', 0.5 => $x]]` is really
+            // `[$x]`, putting a source-ordinal-1 element at `array_values()` ordinal 0, the raw
+            // column. Source order is only a reliable parameter position while every key is implicit.
+            if ($item->key !== null) {
+                return;
+            }
+        }
+
+        // Ordinal 1 is `$value` only in the two-element form; from three elements on it is
+        // `$operator`, which reaches the grammar verbatim whenever `invalidOperator()` accepts it —
+        // and `Builder::$operators` is a PUBLIC array a project can append to, so the whitelist is not
+        // a guarantee we can rely on. Keep the sink there.
+        $value_ordinals = \count($items) === 2 ? [1 => true] : [2 => true];
+
+        foreach ($items as $ordinal => $item) {
+            // `array_values()` drops the keys, so the ordinal alone decides the parameter, and ordinal
+            // 0 is the raw `$column`. Ordinal 3 would be `$boolean`, which the grammar concatenates
+            // verbatim — but it is unreachable: `addArrayOfWheres` passes `boolean:` by name, so a
+            // fourth positional element throws "Named parameter $boolean overwrites previous
+            // argument" (verified against laravel/framework v12.14.0, the composer floor, through
+            // v13.x). Not stripping it costs nothing and is right if that named argument ever goes.
+            if (!isset($value_ordinals[$ordinal])) {
+                continue;
+            }
+
+            // Scalar-gated like the flat form, for a different reason: `addBinding()` is skipped for an
+            // `ExpressionContract`, whose `getValue()` the grammar emits verbatim. Laravel's own
+            // `Expression` cannot carry a tainted string (its stubbed constructor takes
+            // `float|int|literal-string`), but a project's own contract implementation can.
+            self::$boundValuePositionIds[\spl_object_id($item)] = [
+                'scalar_gated' => true,
+                'receiver' => $receiver,
+            ];
+        }
+    }
+
+    /**
+     * The literal's elements when every position is knowable, `null` otherwise. A spread contributes
+     * an unknown number of elements under unknown keys, and a null element is the hole the parser
+     * reports for a destructuring pattern — either way every following position shifts, so the
+     * literal carries no reliable positions at all.
+     *
+     * @return list<ArrayItem>|null
+     *
+     * @psalm-mutation-free
+     */
+    private static function positionalItems(Array_ $literal): ?array
+    {
+        $items = [];
+
+        foreach ($literal->items as $item) {
+            // A by-reference element can be rewritten between this dispatch and the call — a later
+            // element's argument may turn it into an array through the reference, moving it onto
+            // `addArrayOfWheres`' nested branch where it becomes the raw column.
+            if ($item === null || $item->unpack || $item->byRef) {
+                return null;
+            }
+
+            $items[] = $item;
+        }
+
+        return $items;
+    }
+
+    /**
+     * True when the element cannot hold an array at runtime, which is what keeps it on
+     * `addArrayOfWheres`' binding branch. Anything wider (`mixed`, a template, an object) keeps the
+     * sink.
+     */
+    private static function isScalarValued(ArrayItem $item, StatementsAnalyzer $statements_source): bool
+    {
+        $type = $statements_source->node_data->getType($item->value);
+
+        if (!$type instanceof Union) {
+            return false;
+        }
+
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof Scalar && !$atomic instanceof TNull) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Flush the recorded argument ids at file START. This bounds the footprint, prevents cross-file
      * `spl_object_id` reuse (ASTs are GC'd per file) from colliding a stale record with a fresh node,
      * and — unlike an end-of-file flush — survives a mid-file analysis throw. See the class docblock
@@ -203,6 +490,7 @@ final class WhereColumnTaintHandler implements
     public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void
     {
         self::$whereColumnArgumentIds = [];
+        self::$boundValuePositionIds = [];
     }
 
     /**
@@ -210,6 +498,11 @@ final class WhereColumnTaintHandler implements
      * string keys. Any numeric key (int or numeric-string, a list / nested-condition literal) makes an
      * element a column, and an unsealed shape can carry dynamic user-controlled keys — either way the
      * sink must stand.
+     *
+     * A literal argument is already covered element-wise by then, so this check only ever decides a
+     * non-literal one (`$conds = [...]; where($conds)`), where no per-element node exists to record.
+     * Hence the coarse numeric-key rejection stays: without the elements it cannot tell the bound
+     * `[1 => $value]` from the raw-column `[1 => [$value]]`.
      *
      * @psalm-mutation-free
      */
@@ -228,12 +521,9 @@ final class WhereColumnTaintHandler implements
         }
 
         foreach (\array_keys($atomic->properties) as $key) {
-            // Reject int AND numeric-string keys (e.g. '1.5', '01', which PHP keeps as strings). This
-            // mirrors addArrayOfWheres' own `is_numeric($key) && is_array($value)` dispatch: a numeric
-            // key routes to the nested-column branch where element 0 is a raw column identifier. So the
-            // strip does not rely on Psalm's current inability to track depth-2 nested taint; rejecting a
-            // numeric-string key with a scalar value is conservative (keeps the sink, the FP-safe
-            // direction, and is an absurd shape anyway).
+            // Reject int AND numeric-string keys (e.g. '1.5', '01', which PHP keeps as strings),
+            // mirroring addArrayOfWheres' own `is_numeric($key)` dispatch. Keeping the sink is the
+            // FP-safe direction for the shapes this coarse check cannot separate.
             if (\is_numeric($key)) {
                 return false;
             }
