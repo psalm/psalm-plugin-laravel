@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784822406221,
+  "lastUpdate": 1784825888884,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9229,6 +9229,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Wall time",
             "value": 29,
+            "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9f046f25e4b760e44fb5a2ca725deec2b3c26b3",
+          "message": "fix(taint): gate whole-argument sql-taint strip on Laravel builder receiver #1306 (#1311)\n\nThe whole-argument strip (isBoundValueMap) removed sql taint from any\nwhere-family argument shaped like a sealed string-key map, regardless\nof the receiver. A project's own where(array $parts) that happens to\nreceive such a map, interpolating a value from it into raw SQL, had\nits taint incorrectly stripped. The element-wise strip already guards\nagainst this via isLaravelBuilder, but the whole-argument one did not.\n\nWhereColumnTaintHandler now records the call's receiver alongside the\nargument node id (the receiver Expr for MethodCall/NullsafeMethodCall,\nnull for StaticCall) and checks it in removeTaints() before stripping,\nmirroring removeElementTaints(). StaticCall stays unguarded: its\nreceiver always resolves to a Model class through the pseudo-method\npath, which never applies the stub sink, so gating it would only cost\ncoverage on SafeSqlEloquentWhereArrayValues.phpt's static form.\n\nAdded TaintedSqlWhereWholeArgNonBuilderReceiver.phpt as the\nwhole-argument counterpart to TaintedSqlWhereNonBuilderReceiver.phpt.",
+          "timestamp": "2026-07-23T18:54:31+02:00",
+          "tree_id": "b79b45ec5577aa3dd7bd258b9b6e64f83c4b34f1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b9f046f25e4b760e44fb5a2ca725deec2b3c26b3"
+        },
+        "date": 1784825888235,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.76,
             "range": "± 0.16",
             "unit": "s"
           },
