@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784817401296,
+  "lastUpdate": 1784821697515,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9165,6 +9165,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b10ee7932a99a5c627892bdbb23d2c7f76123b98",
+          "message": "fix(taint): add sql sinks to whereColumn/orWhereColumn #1303 (#1308)\n\nwhereColumn()/orWhereColumn() were unstubbed, so a tainted first,\noperator, or second column argument reached SQL unflagged.\n\nLaravel's grammar binds nothing for either method: both first and\nsecond wrap as raw identifiers, and invalidOperator() demotes a\nnon-whitelisted operator into the second position instead of\ndiscarding it. All three positions are therefore sinks with no\nescape or flow, mirroring the whereRaw() pattern (verified empirically:\na sink-only stub does not propagate taint of any kind to the return\nvalue by default, so there is nothing to launder and no double-report\nrisk).\n\nWhereColumnTaintHandler's WHERE_MAP_METHODS already excludes\nwhereColumn (its array form has no bound position to strip); a\nregression test pins both array shapes.",
+          "timestamp": "2026-07-23T17:45:13+02:00",
+          "tree_id": "3e47a51edbb116569a4a85798e66ed2f9ff1848b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b10ee7932a99a5c627892bdbb23d2c7f76123b98"
+        },
+        "date": 1784821696284,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.77,
+            "range": "± 0.36",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
             "unit": "MB"
           }
         ]
