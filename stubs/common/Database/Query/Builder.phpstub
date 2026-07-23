@@ -153,13 +153,15 @@ class Builder implements BuilderContract
     /**
      * Add a "where like" clause to the query.
      *
-     * Laravel >= 11.17. Stubbed for the taint annotations only: `$column` is wrapped as a raw
-     * identifier while `$value` goes through `addBinding()`, so the sink belongs on `$column` alone.
+     * Laravel >= 11.17. Stubbed both for the taint annotations below and to widen `$value` to `mixed`:
+     * Laravel's docblock types it `string`, but the runtime binds any value via `addBinding()` (parity
+     * with the `where()` sibling). `$column` is wrapped as a raw identifier while `$value` is bound, so
+     * the sink belongs on `$column` alone.
      * No `@psalm-taint-specialize` — it would break the `@psalm-flow` of non-SQL taint through
      * `$value` (see TaintedShellWhereValueFlowPreserved.phpt).
      *
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
-     * @param  string  $value
+     * @param  mixed  $value
      * @param  bool  $caseSensitive
      * @param  string  $boolean
      * @param  bool  $not
@@ -175,7 +177,7 @@ class Builder implements BuilderContract
      * Add an "or where like" clause to the query.
      *
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
-     * @param  string  $value
+     * @param  mixed  $value
      * @param  bool  $caseSensitive
      * @return $this
      *
@@ -189,7 +191,7 @@ class Builder implements BuilderContract
      * Add a "where not like" clause to the query.
      *
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
-     * @param  string  $value
+     * @param  mixed  $value
      * @param  bool  $caseSensitive
      * @param  string  $boolean
      * @return $this
@@ -204,7 +206,7 @@ class Builder implements BuilderContract
      * Add an "or where not like" clause to the query.
      *
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
-     * @param  string  $value
+     * @param  mixed  $value
      * @param  bool  $caseSensitive
      * @return $this
      *
