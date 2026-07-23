@@ -252,4 +252,24 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * @psalm-taint-source input
      */
     public function getPassword() {}
+
+    /**
+     * Get an input element from the request (magic property access, e.g. `$request->term`).
+     *
+     * Fires via Psalm's synthesized __get call for undeclared property fetches on a plain
+     * Illuminate\Http\Request or request(). Userland subclasses are sealed (Psalm 7 defaults
+     * sealAllProperties to true), so this source is dropped there.
+     *
+     * An undeclared FormRequest property whose rule guarantees presence is
+     * claimed by FormRequestPropertyHandler's doesPropertyExist() (paired with
+     * isPropertyVisible()) before Psalm ever reaches __get; ValidationTaintHandler
+     * re-sources that read separately. The two paths are disjoint by
+     * construction, so this stub never double-sources a validated field.
+     *
+     * @param string $key
+     * @return mixed
+     *
+     * @psalm-taint-source input
+     */
+    public function __get($key) {}
 }
