@@ -40,6 +40,26 @@ function unsafeOrWhereColumnFirst(\Illuminate\Http\Request $request): void {
 }
 
 /**
+ * @psalm-suppress TooFewArguments
+ */
+function unsafeOrWhereColumnOperator(\Illuminate\Http\Request $request): void {
+    $builder = new \Illuminate\Database\Query\Builder();
+    $tainted = (string) $request->input('op');
+
+    $builder->orWhereColumn('a', $tainted, 'b');
+}
+
+/**
+ * @psalm-suppress TooFewArguments
+ */
+function unsafeOrWhereColumnSecond(\Illuminate\Http\Request $request): void {
+    $builder = new \Illuminate\Database\Query\Builder();
+    $tainted = (string) $request->input('col');
+
+    $builder->orWhereColumn('a', '=', $tainted);
+}
+
+/**
  * The operator itself is a sink: an operator that does not match Laravel's whitelist is swapped into
  * `$second` by `invalidOperator()` (Query/Builder.php:1184) and compiled raw either way.
  *
@@ -53,6 +73,8 @@ function unsafeWhereColumnOperator(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
+%ATaintedSql on line %d: Detected tainted SQL
+%ATaintedSql on line %d: Detected tainted SQL
 %ATaintedSql on line %d: Detected tainted SQL
 %ATaintedSql on line %d: Detected tainted SQL
 %ATaintedSql on line %d: Detected tainted SQL
