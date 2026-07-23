@@ -24,8 +24,10 @@ use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
  *
  *   1. addTaints re-introduces the source dropped by a type override
  *      ({@see ValidatedTypeHandler} / {@see FormRequestPropertyHandler}). For
- *      `$req->email` no `Request::__get` stub source exists and a provider type
- *      bypasses `__get`, so the re-source is the only thing tainting the read.
+ *      `$req->email` (undeclared, rule guarantees presence),
+ *      FormRequestPropertyHandler's `doesPropertyExist()` claims it before
+ *      Psalm ever reaches `Request::__get`, so that stub's own source can't
+ *      apply; the re-source is the only thing tainting the read.
  *   2. removeTaints applies the rule's per-field escape (e.g. `email` → safe
  *      for header/cookie).
  *
@@ -62,7 +64,10 @@ final class ValidationTaintHandler implements
 
     /**
      * Re-source the taint a validated read carries, when the stub source was
-     * dropped by a type override (or never existed, as on `Request::__get`).
+     * dropped by a type override, or never reached at all because
+     * FormRequestPropertyHandler's `doesPropertyExist()` claims an undeclared,
+     * presence-guaranteed property before Psalm gets to `Request::__get`
+     * (e.g. `$req->email`).
      */
     #[\Override]
     public static function addTaints(AddRemoveTaintsEvent $event): array
