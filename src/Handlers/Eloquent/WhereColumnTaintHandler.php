@@ -72,7 +72,9 @@ use Psalm\Type\Union;
  *   value dies at its own `arrayvalue-assignment` edge and never reaches the argument node, while a
  *   tainted column position still flows through. This is what makes #1300's nested form precise.
  * - **Whole-argument** ({@see isBoundValueMap}) for everything else (a variable, a call result): a
- *   type-level check that only accepts the sealed all-string-key map, where every element is a value.
+ *   type-level check that only accepts the sealed all-string-key map, where every element is a value,
+ *   gated on the receiver via {@see isLaravelBuilder} same as the element-wise path — except a
+ *   StaticCall receiver, always a Model class, which stays unguarded (#1306).
  *
  * ### Why a dynamic key records nothing
  *
@@ -145,11 +147,15 @@ final class WhereColumnTaintHandler implements
 
     /**
      * `spl_object_id` of each recorded where-family first-argument node, consumed by
-     * {@see removeTaints}. Flushed per file at {@see beforeAnalyzeFile} (NOT per function-like — the
-     * record→read gap spans a closure-bearing call's whole analysis; see the class docblock). A stale
-     * cross-file id would wrongly STRIP taint, so the file flush is load-bearing.
+     * {@see removeTaints}. The value is the call's receiver node for a `MethodCall`/
+     * `NullsafeMethodCall` — checked against {@see isLaravelBuilder} at strip time, once its type
+     * exists, since it is unresolved at record time (see {@see beforeExpressionAnalysis}) — or `null`
+     * for a `StaticCall`, whose receiver is always a Model class and so stays unguarded (#1306).
+     * Flushed per file at {@see beforeAnalyzeFile} (NOT per function-like — the record→read gap spans
+     * a closure-bearing call's whole analysis; see the class docblock). A stale cross-file id would
+     * wrongly STRIP taint, so the file flush is load-bearing.
      *
-     * @var array<int, true>
+     * @var array<int, Expr|null>
      */
     private static array $whereColumnArgumentIds = [];
 
@@ -218,7 +224,11 @@ final class WhereColumnTaintHandler implements
 
         $argument = $args[0]->value;
 
-        self::$whereColumnArgumentIds[\spl_object_id($argument)] = true;
+        // The whole-argument strip ({@see isBoundValueMap} in removeTaints) needs the same receiver
+        // gate as the element-wise one below, for the same reason: a project's own `where(array
+        // $parts)` that happens to receive a sealed string-key map is not `addArrayOfWheres()`. A
+        // StaticCall stores null and stays unguarded — see the property docblock. #1306
+        self::$whereColumnArgumentIds[\spl_object_id($argument)] = $expr instanceof StaticCall ? null : $expr->var;
 
         // Element-wise recording additionally needs the receiver, because the method NAME alone does
         // not mean Laravel: a project's own `ReportQuery::where(array $parts)` that interpolates
@@ -251,8 +261,9 @@ final class WhereColumnTaintHandler implements
             return self::removeElementTaints($expr, $event);
         }
 
-        // The load-bearing scoping check #1218 lacked.
-        if (!isset(self::$whereColumnArgumentIds[\spl_object_id($expr)])) {
+        // The load-bearing scoping check #1218 lacked. array_key_exists, not isset: a recorded
+        // StaticCall argument stores `null`, which isset() would treat as absent.
+        if (!\array_key_exists(\spl_object_id($expr), self::$whereColumnArgumentIds)) {
             return 0;
         }
 
@@ -265,6 +276,14 @@ final class WhereColumnTaintHandler implements
         $type = $statements_source->node_data->getType($expr);
 
         if (!$type instanceof Union || !self::isBoundValueMap($type)) {
+            return 0;
+        }
+
+        $receiver = self::$whereColumnArgumentIds[\spl_object_id($expr)];
+
+        // #1306: gate the strip on the receiver, same as removeElementTaints. `null` (StaticCall)
+        // stays unguarded — see the property docblock.
+        if ($receiver instanceof \PhpParser\Node\Expr && !self::isLaravelBuilder($receiver, $statements_source, $event)) {
             return 0;
         }
 
