@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
  * the raw reference target. The fix evicts on `AssignRef` in
  * `InlineValidateRulesCollector::beforeExpressionAnalysis`.
  *
- * Both TaintedHeader and TaintedSSRF must fire for the redirect — that
+ * TaintedHeader must fire for the redirect — that
  * proves the rebound slot was evicted before the read-side dispatch.
  *
  * --threads=1: see SafeInlineValidateCustomRuleEscapesHeaderViaVariable
@@ -42,4 +42,3 @@ function assignRefReassignProbe(Request $request): RedirectResponse {
 ?>
 --EXPECTF--
 TaintedHeader on line %d: Detected tainted header
-TaintedSSRF on line %d: Detected tainted network request

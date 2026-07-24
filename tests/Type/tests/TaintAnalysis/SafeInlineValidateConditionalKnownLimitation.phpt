@@ -30,6 +30,7 @@ function conditionalProbe(Request $request, bool $trusted): RedirectResponse {
     // The escape applies here even when $trusted === false and no
     // validation ran. Analyzer reports only TaintedSSRF (which the email
     // rule does not escape); TaintedHeader is silently suppressed.
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('contact_email'));
     return redirect()->to($request->input('contact_email'));
 }
 ?>

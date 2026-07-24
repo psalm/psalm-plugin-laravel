@@ -41,6 +41,7 @@ function reassignProbeViaVariable(Request $request): RedirectResponse {
     // 'email' escape is still applied to the bound value.
     $boundReassigned = $request->input('contact_email');
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($boundReassigned);
     return redirect()->to($boundReassigned);
 }
 ?>

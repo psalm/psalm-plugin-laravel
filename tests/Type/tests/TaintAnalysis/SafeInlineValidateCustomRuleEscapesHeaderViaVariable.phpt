@@ -44,6 +44,7 @@ function storeViaVariable(Request $request): RedirectResponse {
 
     $boundEmail834 = $request->input('contact_email');
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($boundEmail834);
     return redirect()->to($boundEmail834);
 }
 ?>

@@ -13,7 +13,8 @@ use Illuminate\Http\Request;
  * Inline `$request->validate([...])` with a custom Rule class carrying a
  * class-level @psalm-taint-escape. The subsequent $request->input('field')
  * must honour the same escape as the equivalent FormRequest::rules() form,
- * so redirect()->to() only reports TaintedSSRF — TaintedHeader is removed.
+ * so redirect()->to() stays silent (TaintedHeader is removed) while the
+ * http-client sink's TaintedSSRF proves the value is still tainted.
  *
  * @psalm-taint-escape header
  * @psalm-taint-escape cookie
@@ -30,6 +31,7 @@ function store(Request $request): RedirectResponse {
         'contact_email' => ['required', 'string', new InlineDnsRule()],
     ]);
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('contact_email'));
     return redirect()->to($request->input('contact_email'));
 }
 ?>

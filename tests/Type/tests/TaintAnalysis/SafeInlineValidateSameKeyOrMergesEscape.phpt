@@ -25,8 +25,9 @@ use Illuminate\Support\Facades\DB;
  * Both rules must pass for control to reach the input() reads, so the
  * value satisfies both rule sets — OR is the sound merge.
  *
- *   redirect()->to($v) sinks header+ssrf -> only TaintedSSRF fires (A gave us header)
- *   DB::select($v)     sinks sql          -> clean                 (B gave us sql)
+ *   redirect()->to($v)      sinks header -> clean       (A gave us header)
+ *   PendingRequest->get($v) sinks ssrf   -> TaintedSSRF (taint still live)
+ *   DB::select($v)          sinks sql    -> clean       (B gave us sql)
  *
  * A mutation replacing | with & at the merge site would drop one bit and
  * surface a TaintedHeader or TaintedSql; an overwrite-last-wins merge
@@ -56,6 +57,7 @@ function storeMergeSameKey(Request $request): RedirectResponse {
 
     DB::select($request->input('field'));
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('field'));
     return redirect()->to($request->input('field'));
 }
 ?>

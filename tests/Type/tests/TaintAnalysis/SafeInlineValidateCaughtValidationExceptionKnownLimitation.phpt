@@ -18,7 +18,7 @@ use Illuminate\Validation\ValidationException;
  * collector's cache was already populated, so the rule's escape still
  * applies.
  *
- * Reproduces as: redirect()->to() only reports TaintedSSRF; TaintedHeader
+ * Reproduces as: only the http-client sink's TaintedSSRF fires; TaintedHeader
  * (which the `email` rule's escape clears) is silently dropped on the
  * thrown path.
  *
@@ -38,6 +38,7 @@ function defensiveValidate(Request $request): RedirectResponse {
         // defensive no-op — validation may have failed, but we proceed
     }
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('contact_email'));
     return redirect()->to($request->input('contact_email'));
 }
 ?>

@@ -19,7 +19,7 @@ use Illuminate\Http\Request;
  * pair above) would silently strip header/cookie taint from the raw
  * `$_GET` element on the destructured edge.
  *
- * Both TaintedHeader and TaintedSSRF must fire for the redirect, proving
+ * TaintedHeader must fire for the redirect, proving
  * the destructured slot was evicted before the LHS taint event ran.
  *
  * --threads=1: see SafeInlineValidateCustomRuleEscapesHeaderViaVariable
@@ -43,4 +43,3 @@ function destructureReassignProbe(Request $request): RedirectResponse {
 ?>
 --EXPECTF--
 TaintedHeader on line %d: Detected tainted header
-TaintedSSRF on line %d: Detected tainted network request
