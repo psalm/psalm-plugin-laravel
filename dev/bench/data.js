@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784886898237,
+  "lastUpdate": 1784919197922,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9340,6 +9340,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "81290e8287c3c1813ee7a7b3a578379294f3ff09",
+          "message": "Merge pull request #1314 from psalm/1300-static-where-nested-fp\n\nFix `TaintedSql` false positives on `where()` nested-condition arrays (static receivers + mixed values)",
+          "timestamp": "2026-07-24T20:50:17+02:00",
+          "tree_id": "c3c602515d482c43362a4f42f692723d29798f43",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/81290e8287c3c1813ee7a7b3a578379294f3ff09"
+        },
+        "date": 1784919196628,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.13,
+            "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
