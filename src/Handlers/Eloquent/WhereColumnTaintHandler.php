@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
@@ -11,9 +12,11 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\NullsafeMethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\Float_;
 use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\BeforeFileAnalysisInterface;
@@ -70,11 +73,22 @@ use Psalm\Type\Union;
  * - **Element-wise** ({@see recordBoundValuePositions}) for an array LITERAL argument: each
  *   `ArrayItem` that {@see addArrayOfWheres} maps onto a bound position is recorded, so a tainted
  *   value dies at its own `arrayvalue-assignment` edge and never reaches the argument node, while a
- *   tainted column position still flows through. This is what makes #1300's nested form precise.
+ *   tainted column position still flows through. This is what makes #1300's nested form precise —
+ *   for BOTH a `MethodCall`/`NullsafeMethodCall` receiver and a `StaticCall` one (`Model::where(...)`),
+ *   which the pseudo-method path does route through the same stub sink, contrary to an earlier
+ *   assumption (#1300).
  * - **Whole-argument** ({@see isBoundValueMap}) for everything else (a variable, a call result): a
- *   type-level check that only accepts the sealed all-string-key map, where every element is a value,
- *   gated on the receiver via {@see isLaravelBuilder} same as the element-wise path — except a
- *   StaticCall receiver, always a Model class, which stays unguarded (#1306).
+ *   type-level check that only accepts the sealed all-string-key map, where every element is a value.
+ *
+ * Both modes gate on the receiver: {@see isLaravelBuilder} (checked once the receiver's type exists,
+ * at strip time) for `MethodCall`/`NullsafeMethodCall`, or {@see isStaticReceiverLaravelBound}
+ * (checked eagerly at record time, since a `StaticCall`'s receiver is a class NAME, not a typed
+ * expression) for `StaticCall`. A project's own class exposing a `where()` static method is not
+ * `addArrayOfWheres()` and keeps the sink either way (#1306, #1300). Ancestry alone is not enough
+ * for `StaticCall`, though: a Model subclass can declare its OWN concrete static `where()`, which
+ * PHP dispatches to directly, never reaching `__callStatic`/`addArrayOfWheres` — so
+ * {@see isStaticReceiverLaravelBound} additionally requires the called method to have no real
+ * (non-pseudo) declaration outside `Illuminate\` itself (#1300).
  *
  * ### Why a dynamic key records nothing
  *
@@ -90,6 +104,15 @@ use Psalm\Type\Union;
  * where([$row])` is the nested form with a raw column at ordinal 0 even though the literal's element
  * is not an array literal. The AST cannot see that, so {@see isScalarValued} requires the element's
  * inferred type to be scalar-or-null before a numeric-key element is stripped.
+ *
+ * ### Why a failed `StaticCall` gate actively clears, not just skips
+ *
+ * A trait method's `static::where([...])` is reanalysed once per class using the trait, reusing
+ * the SAME AST nodes each time (traits are parsed once). If an earlier pass recorded ids under a
+ * Model `$context->self` and a later pass's receiver then fails {@see isStaticReceiverLaravelBound}
+ * (a non-Model, non-builder using class), the ids from the earlier pass would otherwise survive and
+ * wrongly strip taint under the later pass — {@see clearRecordedPositions} unsets them right where
+ * the gate fails, so the corridor heals regardless of which pass runs first (#1300).
  *
  * ## Why the flush is per-FILE, not per-function-like
  *
@@ -150,10 +173,11 @@ final class WhereColumnTaintHandler implements
      * {@see removeTaints}. The value is the call's receiver node for a `MethodCall`/
      * `NullsafeMethodCall` — checked against {@see isLaravelBuilder} at strip time, once its type
      * exists, since it is unresolved at record time (see {@see beforeExpressionAnalysis}) — or `null`
-     * for a `StaticCall`, whose receiver is always a Model class and so stays unguarded (#1306).
-     * Flushed per file at {@see beforeAnalyzeFile} (NOT per function-like — the record→read gap spans
-     * a closure-bearing call's whole analysis; see the class docblock). A stale cross-file id would
-     * wrongly STRIP taint, so the file flush is load-bearing.
+     * for a `StaticCall` already verified Model/builder-bound at record time by
+     * {@see isStaticReceiverLaravelBound} (#1306, #1300). Flushed per file at {@see beforeAnalyzeFile}
+     * (NOT per function-like — the record→read gap spans a closure-bearing call's whole analysis; see
+     * the class docblock). A stale cross-file id would wrongly STRIP taint, so the file flush is
+     * load-bearing.
      *
      * @var array<int, Expr|null>
      */
@@ -162,11 +186,18 @@ final class WhereColumnTaintHandler implements
     /**
      * `spl_object_id` of each `ArrayItem` of a where-family array LITERAL that `addArrayOfWheres`
      * maps onto a PDO-bound position, against the two things {@see removeTaints} still has to check
-     * once types exist: `scalar_gated` demands the element cannot hold an array (or an
-     * `ExpressionContract`) at runtime, and `receiver` is the call's receiver node, whose type must
-     * resolve to a Laravel builder. Flushed with {@see $whereColumnArgumentIds}.
+     * once types exist: `scalar_gated` demands the element cannot hold an array at runtime — only the
+     * OUTER numeric-key element ({@see recordBoundValuePositions}) sets this true, since only there
+     * does a runtime array re-dispatch onto the raw-column nested branch; the INNER nested-condition
+     * value ordinal ({@see recordNestedConditionPositions}) sets it false and always strips, since
+     * `addBinding()` runs on it unconditionally (the one runtime exception, an `ExpressionContract`
+     * from `DB::raw()`, is already flagged at its own construction sink, not here — see that method's
+     * docblock) — and `receiver` is the call's receiver node, whose type must resolve to a Laravel
+     * builder, or `null` for a `StaticCall` already verified Model/builder-bound at record time by
+     * {@see isStaticReceiverLaravelBound}, which skips that check. Flushed with
+     * {@see $whereColumnArgumentIds}.
      *
-     * @var array<int, array{scalar_gated: bool, receiver: Expr}>
+     * @var array<int, array{scalar_gated: bool, receiver: Expr|null}>
      */
     private static array $boundValuePositionIds = [];
 
@@ -224,24 +255,181 @@ final class WhereColumnTaintHandler implements
 
         $argument = $args[0]->value;
 
-        // The whole-argument strip ({@see isBoundValueMap} in removeTaints) needs the same receiver
-        // gate as the element-wise one below, for the same reason: a project's own `where(array
-        // $parts)` that happens to receive a sealed string-key map is not `addArrayOfWheres()`. A
-        // StaticCall stores null and stays unguarded — see the property docblock. #1306
-        self::$whereColumnArgumentIds[\spl_object_id($argument)] = $expr instanceof StaticCall ? null : $expr->var;
+        // A StaticCall's receiver is a class NAME, not an expression with an inferable type, so both
+        // the whole-argument strip ({@see isBoundValueMap} in removeTaints) and the element-wise one
+        // ({@see recordBoundValuePositions}) need the SAME gate resolved here, at record time — the
+        // method name alone does not mean Laravel: a project's own `ReportQuery::where(array $parts)`
+        // is not `addArrayOfWheres()`. An unresolved class (`$class::where(...)`) or a non-Model,
+        // non-builder one records NOTHING at all, keeping the sink on both paths. #1300
+        if ($expr instanceof StaticCall) {
+            if (!self::isStaticReceiverLaravelBound($expr, $event)) {
+                // A trait method's `static::where([...])` is reanalysed once per class using the
+                // trait, reusing the SAME AST nodes each time (traits are parsed once). If an
+                // earlier pass recorded ids here under a Model `$context->self`, they must not
+                // survive into this pass, whose receiver just failed the gate — see
+                // {@see clearRecordedPositions}.
+                self::clearRecordedPositions($argument);
 
-        // Element-wise recording additionally needs the receiver, because the method NAME alone does
-        // not mean Laravel: a project's own `ReportQuery::where(array $parts)` that interpolates
-        // `$parts[0]` into raw SQL would otherwise have its list element stripped. The receiver's type
-        // is not resolved yet here (this hook fires before MethodCallAnalyzer descends `$stmt->var`),
-        // so it is stored and checked at strip time by {@see isLaravelBuilder}. A StaticCall records
-        // nothing element-wise: `Model::where([...])` resolves through the pseudo-method path, which
-        // never applies the stub sink, so there is no false positive there to suppress.
-        if ($argument instanceof Array_ && !$expr instanceof StaticCall) {
+                return null;
+            }
+
+            self::$whereColumnArgumentIds[\spl_object_id($argument)] = null;
+
+            if ($argument instanceof Array_) {
+                self::recordBoundValuePositions($argument, null);
+            }
+
+            return null;
+        }
+
+        // The whole-argument strip needs the same receiver gate as the element-wise one below, for
+        // the same reason: a project's own `where(array $parts)` that happens to receive a sealed
+        // string-key map is not `addArrayOfWheres()`. The receiver's type is not resolved yet here
+        // (this hook fires before MethodCallAnalyzer descends `$stmt->var`), so it is stored and
+        // checked at strip time by {@see isLaravelBuilder}.
+        self::$whereColumnArgumentIds[\spl_object_id($argument)] = $expr->var;
+
+        if ($argument instanceof Array_) {
             self::recordBoundValuePositions($argument, $expr->var);
         }
 
         return null;
+    }
+
+    /**
+     * True when a `StaticCall`'s class resolves to Eloquent's `Model` — the pseudo-method path
+     * `Model::where(...)` takes — or one of {@see BUILDER_CLASSES}, AND the called method has no
+     * CONCRETE userland declaration overriding that path. Anything else, including an unresolved
+     * dynamic class (`$class::where(...)`), `parent` outside a class scope, or a Model subclass that
+     * declares its own `where()`, keeps the sink: a project's own class (or a Model subclass with a
+     * genuine override) can name a `where()` static method without going through
+     * `addArrayOfWheres()`. #1300
+     */
+    private static function isStaticReceiverLaravelBound(StaticCall $expr, BeforeExpressionAnalysisEvent $event): bool
+    {
+        $className = self::resolveStaticClassName($expr, $event);
+
+        if ($className === null || !$expr->name instanceof Identifier) {
+            return false;
+        }
+
+        $codebase = $event->getCodebase();
+        $className_lower = \strtolower($className);
+
+        if ($className_lower !== \strtolower(Model::class) && !$codebase->classExists($className)) {
+            return false;
+        }
+
+        // classExtendsOrImplements/getDeclaringMethodId throw on unpopulated storage — treat as
+        // unresolved and keep the sink, mirroring ImplicitQueryBuilderCallHandler::isModelSubclass.
+        try {
+            if (!self::isModelOrBuilderClass($className, $className_lower, $codebase)) {
+                return false;
+            }
+
+            // A CONCRETE userland declaration of the called method (a Model subclass overriding
+            // `where()` itself, or a project's own class already excluded above) never reaches
+            // `addArrayOfWheres()`, so its own sink — if any — must survive. `getDeclaringMethodId`
+            // defaults to `with_pseudo: false`, so the plugin's own `@mixin`-injected pseudo-method
+            // (Model's forwarding path) is invisible to it and returns null here — only a REAL AST
+            // method declaration counts. A method genuinely declared inside `Illuminate\` itself (a
+            // real, non-magic method on one of the builder classes) is exempt: that IS
+            // `addArrayOfWheres()`.
+            $declaringId = $codebase->getDeclaringMethodId($className . '::' . \strtolower($expr->name->name));
+
+            if ($declaringId !== null
+                && !\str_starts_with(\strtolower(\explode('::', $declaringId, 2)[0]), 'illuminate\\')
+            ) {
+                return false;
+            }
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * True when `$className` is Eloquent's `Model` (or a subclass) or one of {@see BUILDER_CLASSES}
+     * (or a subclass/implementor). Assumes the caller has already verified `$className` exists.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isModelOrBuilderClass(string $className, string $className_lower, \Psalm\Codebase $codebase): bool
+    {
+        if ($className_lower === \strtolower(Model::class) || $codebase->classExtendsOrImplements($className, Model::class)) {
+            return true;
+        }
+
+        foreach (self::BUILDER_CLASSES as $builder) {
+            if ($className_lower === $builder || $codebase->classExtendsOrImplements($className, $builder)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Resolve a `StaticCall`'s class `Name` to an FQCN, or `null` for a dynamic class expression.
+     * `self`/`static` resolve against the enclosing class, `parent` against its parent. Mirrors
+     * {@see \Psalm\LaravelPlugin\Handlers\Rules\ImplicitQueryBuilderCallHandler::resolveClassName}.
+     */
+    private static function resolveStaticClassName(StaticCall $expr, BeforeExpressionAnalysisEvent $event): ?string
+    {
+        if (!$expr->class instanceof Name) {
+            return null;
+        }
+
+        if ($expr->class->isSpecialClassName()) {
+            return match (\strtolower($expr->class->toString())) {
+                'self', 'static' => $event->getContext()->self,
+                'parent' => $event->getContext()->parent,
+                default => null,
+            };
+        }
+
+        /** @psalm-var ?string $resolved */
+        $resolved = $expr->class->getAttribute('resolvedName');
+
+        return \is_string($resolved) ? $resolved : $expr->class->toString();
+    }
+
+    /**
+     * Unset any ids previously recorded under `$argument`'s node and — if it is an array literal —
+     * its items and one level of nested-condition items, walked structurally rather than by
+     * mirroring {@see recordBoundValuePositions}' bound-position logic: over-clearing a position
+     * that was never recorded is a safe no-op, so a plain structural walk is enough. Called only
+     * when a `StaticCall`'s receiver just failed {@see isStaticReceiverLaravelBound}, to heal the
+     * trait-reanalysis corridor documented there.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function clearRecordedPositions(Expr $argument): void
+    {
+        unset(self::$whereColumnArgumentIds[\spl_object_id($argument)]);
+
+        if (!$argument instanceof Array_) {
+            return;
+        }
+
+        foreach ($argument->items as $item) {
+            if ($item === null) {
+                continue;
+            }
+
+            unset(self::$boundValuePositionIds[\spl_object_id($item)]);
+
+            if (!$item->value instanceof Array_) {
+                continue;
+            }
+
+            foreach ($item->value->items as $nested_item) {
+                if ($nested_item !== null) {
+                    unset(self::$boundValuePositionIds[\spl_object_id($nested_item)]);
+                }
+            }
+        }
     }
 
     /**
@@ -282,7 +470,7 @@ final class WhereColumnTaintHandler implements
         $receiver = self::$whereColumnArgumentIds[\spl_object_id($expr)];
 
         // #1306: gate the strip on the receiver, same as removeElementTaints. `null` (StaticCall)
-        // stays unguarded — see the property docblock.
+        // was already verified Model/builder-bound at record time — see the property docblock.
         if ($receiver instanceof \PhpParser\Node\Expr && !self::isLaravelBuilder($receiver, $statements_source, $event)) {
             return 0;
         }
@@ -307,7 +495,9 @@ final class WhereColumnTaintHandler implements
             return 0;
         }
 
-        if (!self::isLaravelBuilder($position['receiver'], $statements_source, $event)) {
+        // `null` means a StaticCall already verified Model/builder-bound at record time — see
+        // {@see isStaticReceiverLaravelBound}; nothing left to check here.
+        if ($position['receiver'] !== null && !self::isLaravelBuilder($position['receiver'], $statements_source, $event)) {
             return 0;
         }
 
@@ -366,7 +556,7 @@ final class WhereColumnTaintHandler implements
      *
      * @psalm-external-mutation-free
      */
-    private static function recordBoundValuePositions(Array_ $literal, Expr $receiver): void
+    private static function recordBoundValuePositions(Array_ $literal, ?Expr $receiver): void
     {
         foreach (self::positionalItems($literal) ?? [] as $item) {
             $key = $item->key;
@@ -405,7 +595,7 @@ final class WhereColumnTaintHandler implements
      *
      * @psalm-external-mutation-free
      */
-    private static function recordNestedConditionPositions(Array_ $condition, Expr $receiver): void
+    private static function recordNestedConditionPositions(Array_ $condition, ?Expr $receiver): void
     {
         $items = self::positionalItems($condition) ?? [];
 
@@ -436,12 +626,16 @@ final class WhereColumnTaintHandler implements
                 continue;
             }
 
-            // Scalar-gated like the flat form, for a different reason: `addBinding()` is skipped for an
-            // `ExpressionContract`, whose `getValue()` the grammar emits verbatim. Laravel's own
-            // `Expression` cannot carry a tainted string (its stubbed constructor takes
-            // `float|int|literal-string`), but a project's own contract implementation can.
+            // Unlike the OUTER numeric-key element, this ordinal is unconditionally `addBinding()`-
+            // bound — there is no further `is_array()`/`is_numeric()` re-dispatch waiting for it, so
+            // it always strips regardless of the value's type (including bare `mixed`, the shape a
+            // `Request::__get`/`request()` source (#1301) actually carries — no cast narrows it to a
+            // scalar, which used to leave a false positive here). The one runtime exception,
+            // `DB::raw()`'s `ExpressionContract` (its `getValue()` the grammar emits verbatim), is
+            // already `@psalm-taint-sink sql`-flagged at its OWN construction call, so it does not
+            // need a check here too. #1300
             self::$boundValuePositionIds[\spl_object_id($item)] = [
-                'scalar_gated' => true,
+                'scalar_gated' => false,
                 'receiver' => $receiver,
             ];
         }
