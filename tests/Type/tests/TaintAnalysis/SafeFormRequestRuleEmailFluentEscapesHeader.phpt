@@ -11,8 +11,8 @@ use Illuminate\Validation\Rule;
 /**
  * Fluent `Rule::email()` resolves to `Rules\Email` via the Rule facade
  * method map. The resulting class carries the same header/cookie escape
- * as `'email'` and `new Rules\Email()`. redirect()->to() still reports
- * TaintedSSRF because email validation does not constrain resolution.
+ * as `'email'` and `new Rules\Email()`. The http-client sink still
+ * reports TaintedSSRF because email validation does not constrain resolution.
  */
 final class FluentEmailRequest extends FormRequest
 {
@@ -23,6 +23,7 @@ final class FluentEmailRequest extends FormRequest
 }
 
 function direct(FluentEmailRequest $request): \Illuminate\Http\RedirectResponse {
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->safe()->input('team_email'));
     return redirect()->to($request->safe()->input('team_email'));
 }
 ?>

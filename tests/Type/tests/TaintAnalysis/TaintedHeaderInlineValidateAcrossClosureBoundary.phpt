@@ -43,4 +43,3 @@ function store(Request $request): RedirectResponse {
 ?>
 --EXPECTF--
 TaintedHeader on line %d: Detected tainted header
-TaintedSSRF on line %d: Detected tainted network request

@@ -37,4 +37,3 @@ function storeChained(RequestFactory $factory, Request $request): RedirectRespon
 ?>
 --EXPECTF--
 TaintedHeader on line %d: Detected tainted header
-TaintedSSRF on line %d: Detected tainted network request

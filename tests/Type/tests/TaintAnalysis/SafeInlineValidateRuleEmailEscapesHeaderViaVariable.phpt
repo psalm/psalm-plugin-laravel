@@ -29,6 +29,7 @@ function storeRuleEmailViaVariable(Request $request): RedirectResponse {
 
     $boundReplyTo = $request->input('reply_to');
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($boundReplyTo);
     return redirect()->to($boundReplyTo);
 }
 ?>

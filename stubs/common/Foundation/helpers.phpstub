@@ -256,7 +256,6 @@ function precognitive($callable = null) {}
  * @param  bool|null  $secure
  * @return ($to is null ? \Illuminate\Routing\Redirector : \Illuminate\Http\RedirectResponse)
  *
- * @psalm-taint-sink ssrf $to
  * @psalm-taint-sink header $to
  */
 function redirect($to = null, $status = 302, $headers = [], $secure = null) {}
