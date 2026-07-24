@@ -84,7 +84,11 @@ use Psalm\Type\Union;
  * at strip time) for `MethodCall`/`NullsafeMethodCall`, or {@see isStaticReceiverLaravelBound}
  * (checked eagerly at record time, since a `StaticCall`'s receiver is a class NAME, not a typed
  * expression) for `StaticCall`. A project's own class exposing a `where()` static method is not
- * `addArrayOfWheres()` and keeps the sink either way (#1306, #1300).
+ * `addArrayOfWheres()` and keeps the sink either way (#1306, #1300). Ancestry alone is not enough
+ * for `StaticCall`, though: a Model subclass can declare its OWN concrete static `where()`, which
+ * PHP dispatches to directly, never reaching `__callStatic`/`addArrayOfWheres` — so
+ * {@see isStaticReceiverLaravelBound} additionally requires the called method to have no real
+ * (non-pseudo) declaration outside `Illuminate\` itself (#1300).
  *
  * ### Why a dynamic key records nothing
  *
@@ -100,6 +104,15 @@ use Psalm\Type\Union;
  * where([$row])` is the nested form with a raw column at ordinal 0 even though the literal's element
  * is not an array literal. The AST cannot see that, so {@see isScalarValued} requires the element's
  * inferred type to be scalar-or-null before a numeric-key element is stripped.
+ *
+ * ### Why a failed `StaticCall` gate actively clears, not just skips
+ *
+ * A trait method's `static::where([...])` is reanalysed once per class using the trait, reusing
+ * the SAME AST nodes each time (traits are parsed once). If an earlier pass recorded ids under a
+ * Model `$context->self` and a later pass's receiver then fails {@see isStaticReceiverLaravelBound}
+ * (a non-Model, non-builder using class), the ids from the earlier pass would otherwise survive and
+ * wrongly strip taint under the later pass — {@see clearRecordedPositions} unsets them right where
+ * the gate fails, so the corridor heals regardless of which pass runs first (#1300).
  *
  * ## Why the flush is per-FILE, not per-function-like
  *
@@ -245,6 +258,13 @@ final class WhereColumnTaintHandler implements
         // non-builder one records NOTHING at all, keeping the sink on both paths. #1300
         if ($expr instanceof StaticCall) {
             if (!self::isStaticReceiverLaravelBound($expr, $event)) {
+                // A trait method's `static::where([...])` is reanalysed once per class using the
+                // trait, reusing the SAME AST nodes each time (traits are parsed once). If an
+                // earlier pass recorded ids here under a Model `$context->self`, they must not
+                // survive into this pass, whose receiver just failed the gate — see
+                // {@see clearRecordedPositions}.
+                self::clearRecordedPositions($argument);
+
                 return null;
             }
 
@@ -273,45 +293,73 @@ final class WhereColumnTaintHandler implements
 
     /**
      * True when a `StaticCall`'s class resolves to Eloquent's `Model` — the pseudo-method path
-     * `Model::where(...)` takes — or one of {@see BUILDER_CLASSES}. Anything else, including an
-     * unresolved dynamic class (`$class::where(...)`) or `parent` outside a class scope, keeps the
-     * sink: a project's own class can name a `where()` static method without going through
+     * `Model::where(...)` takes — or one of {@see BUILDER_CLASSES}, AND the called method has no
+     * CONCRETE userland declaration overriding that path. Anything else, including an unresolved
+     * dynamic class (`$class::where(...)`), `parent` outside a class scope, or a Model subclass that
+     * declares its own `where()`, keeps the sink: a project's own class (or a Model subclass with a
+     * genuine override) can name a `where()` static method without going through
      * `addArrayOfWheres()`. #1300
      */
     private static function isStaticReceiverLaravelBound(StaticCall $expr, BeforeExpressionAnalysisEvent $event): bool
     {
         $className = self::resolveStaticClassName($expr, $event);
 
-        if ($className === null) {
+        if ($className === null || !$expr->name instanceof Identifier) {
             return false;
-        }
-
-        $className_lower = \strtolower($className);
-
-        if ($className_lower === \strtolower(Model::class)) {
-            return true;
         }
 
         $codebase = $event->getCodebase();
+        $className_lower = \strtolower($className);
 
-        if (!$codebase->classExists($className)) {
+        if ($className_lower !== \strtolower(Model::class) && !$codebase->classExists($className)) {
             return false;
         }
 
-        // classExtendsOrImplements throws on unpopulated storage — treat as unresolved and keep the
-        // sink, mirroring ImplicitQueryBuilderCallHandler::isModelSubclass.
+        // classExtendsOrImplements/getDeclaringMethodId throw on unpopulated storage — treat as
+        // unresolved and keep the sink, mirroring ImplicitQueryBuilderCallHandler::isModelSubclass.
         try {
-            if ($codebase->classExtendsOrImplements($className, Model::class)) {
-                return true;
+            if (!self::isModelOrBuilderClass($className, $className_lower, $codebase)) {
+                return false;
             }
 
-            foreach (self::BUILDER_CLASSES as $builder) {
-                if ($className_lower === $builder || $codebase->classExtendsOrImplements($className, $builder)) {
-                    return true;
-                }
+            // A CONCRETE userland declaration of the called method (a Model subclass overriding
+            // `where()` itself, or a project's own class already excluded above) never reaches
+            // `addArrayOfWheres()`, so its own sink — if any — must survive. `getDeclaringMethodId`
+            // defaults to `with_pseudo: false`, so the plugin's own `@mixin`-injected pseudo-method
+            // (Model's forwarding path) is invisible to it and returns null here — only a REAL AST
+            // method declaration counts. A method genuinely declared inside `Illuminate\` itself (a
+            // real, non-magic method on one of the builder classes) is exempt: that IS
+            // `addArrayOfWheres()`.
+            $declaringId = $codebase->getDeclaringMethodId($className . '::' . \strtolower($expr->name->name));
+
+            if ($declaringId !== null
+                && !\str_starts_with(\strtolower(\explode('::', $declaringId, 2)[0]), 'illuminate\\')
+            ) {
+                return false;
             }
         } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
             return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * True when `$className` is Eloquent's `Model` (or a subclass) or one of {@see BUILDER_CLASSES}
+     * (or a subclass/implementor). Assumes the caller has already verified `$className` exists.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isModelOrBuilderClass(string $className, string $className_lower, \Psalm\Codebase $codebase): bool
+    {
+        if ($className_lower === \strtolower(Model::class) || $codebase->classExtendsOrImplements($className, Model::class)) {
+            return true;
+        }
+
+        foreach (self::BUILDER_CLASSES as $builder) {
+            if ($className_lower === $builder || $codebase->classExtendsOrImplements($className, $builder)) {
+                return true;
+            }
         }
 
         return false;
@@ -340,6 +388,43 @@ final class WhereColumnTaintHandler implements
         $resolved = $expr->class->getAttribute('resolvedName');
 
         return \is_string($resolved) ? $resolved : $expr->class->toString();
+    }
+
+    /**
+     * Unset any ids previously recorded under `$argument`'s node and — if it is an array literal —
+     * its items and one level of nested-condition items, walked structurally rather than by
+     * mirroring {@see recordBoundValuePositions}' bound-position logic: over-clearing a position
+     * that was never recorded is a safe no-op, so a plain structural walk is enough. Called only
+     * when a `StaticCall`'s receiver just failed {@see isStaticReceiverLaravelBound}, to heal the
+     * trait-reanalysis corridor documented there.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function clearRecordedPositions(Expr $argument): void
+    {
+        unset(self::$whereColumnArgumentIds[\spl_object_id($argument)]);
+
+        if (!$argument instanceof Array_) {
+            return;
+        }
+
+        foreach ($argument->items as $item) {
+            if ($item === null) {
+                continue;
+            }
+
+            unset(self::$boundValuePositionIds[\spl_object_id($item)]);
+
+            if (!$item->value instanceof Array_) {
+                continue;
+            }
+
+            foreach ($item->value->items as $nested_item) {
+                if ($nested_item !== null) {
+                    unset(self::$boundValuePositionIds[\spl_object_id($nested_item)]);
+                }
+            }
+        }
     }
 
     /**
