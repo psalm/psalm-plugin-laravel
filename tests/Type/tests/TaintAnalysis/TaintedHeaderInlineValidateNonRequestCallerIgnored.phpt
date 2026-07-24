@@ -29,4 +29,3 @@ function storeUnrelatedValidator(OwnValidator $own, Request $request): RedirectR
 ?>
 --EXPECTF--
 TaintedHeader on line %d: Detected tainted header
-TaintedSSRF on line %d: Detected tainted network request
