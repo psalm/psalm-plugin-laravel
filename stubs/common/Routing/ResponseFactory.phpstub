@@ -92,7 +92,6 @@ class ResponseFactory implements FactoryContract
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink ssrf $path
      * @psalm-taint-sink header $path
      */
     public function redirectTo($path, $status = 302, $headers = [], $secure = null) {}
@@ -106,7 +105,6 @@ class ResponseFactory implements FactoryContract
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink ssrf $path
      * @psalm-taint-sink header $path
      */
     public function redirectGuest($path, $status = 302, $headers = [], $secure = null) {}
@@ -120,7 +118,6 @@ class ResponseFactory implements FactoryContract
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink ssrf $default
      * @psalm-taint-sink header $default
      */
     public function redirectToIntended($default = '/', $status = 302, $headers = [], $secure = null) {}

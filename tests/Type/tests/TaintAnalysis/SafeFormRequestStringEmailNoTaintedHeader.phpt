@@ -10,7 +10,7 @@ use Illuminate\Foundation\Http\FormRequest;
 /**
  * Rule-based escape extends beyond validated() to safe()->input().
  * The 'email' rule escapes header/cookie taint kinds, so redirect()->to()
- * only fires TaintedSSRF — TaintedHeader is suppressed.
+ * stays silent and only the http-client sink fires TaintedSSRF.
  */
 final class EmailContactRequest extends FormRequest
 {
@@ -21,6 +21,7 @@ final class EmailContactRequest extends FormRequest
 }
 
 function direct(EmailContactRequest $request): \Illuminate\Http\RedirectResponse {
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->safe()->input('team_email'));
     return redirect()->to($request->safe()->input('team_email'));
 }
 ?>

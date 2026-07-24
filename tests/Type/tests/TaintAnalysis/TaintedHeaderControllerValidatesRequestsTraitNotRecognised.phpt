@@ -17,7 +17,7 @@ use Illuminate\Http\Request;
  * so a future widening of the caller-type check can't silently extend the
  * escape to Controllers.
  *
- * TaintedHeader and TaintedSSRF must still fire even though the `email`
+ * TaintedHeader must still fire even though the `email`
  * rule would have escaped header/cookie if the call had been on $request.
  */
 final class ContactController
@@ -35,4 +35,3 @@ final class ContactController
 ?>
 --EXPECTF--
 TaintedHeader on line %d: Detected tainted header
-TaintedSSRF on line %d: Detected tainted network request

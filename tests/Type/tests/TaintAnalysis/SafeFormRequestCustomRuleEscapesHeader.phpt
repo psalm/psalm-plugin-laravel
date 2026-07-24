@@ -11,8 +11,9 @@ use Illuminate\Foundation\Http\FormRequest;
 /**
  * Custom Rule class with a class-level @psalm-taint-escape. When used via
  * `new DnsEmailRule()` in a rules() array, the class-level escape is
- * OR-ed into the field's removedTaints, so redirect()->to() only fires
- * TaintedSSRF — TaintedHeader is suppressed.
+ * OR-ed into the field's removedTaints, so the header-sinking
+ * redirect()->to() stays silent; the http-client ssrf sink still fires
+ * TaintedSSRF, proving the value itself is still tainted.
  *
  * The 'string' rule pins the type (so Redirector::to() doesn't see `mixed`)
  * but removes no taint, isolating the escape to the class-level annotation.
@@ -35,6 +36,7 @@ final class ContactRequestNew extends FormRequest
 }
 
 function direct(ContactRequestNew $request): \Illuminate\Http\RedirectResponse {
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->safe()->input('team_email'));
     return redirect()->to($request->safe()->input('team_email'));
 }
 ?>

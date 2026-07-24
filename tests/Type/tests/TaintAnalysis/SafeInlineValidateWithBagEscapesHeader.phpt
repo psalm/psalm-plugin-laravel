@@ -19,6 +19,7 @@ function storeWithBag(Request $request): RedirectResponse {
         'contact_email' => ['required', 'email'],
     ]);
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('contact_email'));
     return redirect()->to($request->input('contact_email'));
 }
 ?>

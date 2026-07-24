@@ -37,6 +37,7 @@ function storeWildcardIndexedViaVariable(Request $request): RedirectResponse {
 
     $boundWildcardEmail = $request->input('email.0');
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($boundWildcardEmail);
     return redirect()->to($boundWildcardEmail);
 }
 ?>

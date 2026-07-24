@@ -36,6 +36,7 @@ function laundered(Request $request, string $rawAttackerHeader): RedirectRespons
     // the cache still applies the 'email' rule's header escape.
     $request->merge(['contact_email' => $rawAttackerHeader]);
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('contact_email'));
     return redirect()->to($request->input('contact_email'));
 }
 ?>
