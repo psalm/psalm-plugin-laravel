@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784828257738,
+  "lastUpdate": 1784886898237,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9305,6 +9305,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dab0f23fb76cbb650d32764c1299c3388f119c7e",
+          "message": "Merge pull request #1315 from psalm/1313-redirect-not-ssrf-master\n\nFix: redirect responses are not SSRF sinks",
+          "timestamp": "2026-07-24T11:52:21+02:00",
+          "tree_id": "a35d8e88e0d2daab8bfeba7cde00ac02414d3ad8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/dab0f23fb76cbb650d32764c1299c3388f119c7e"
+        },
+        "date": 1784886896855,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.48,
+            "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
             "unit": "MB"
           }
         ]
