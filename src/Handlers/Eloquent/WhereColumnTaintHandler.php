@@ -186,10 +186,15 @@ final class WhereColumnTaintHandler implements
     /**
      * `spl_object_id` of each `ArrayItem` of a where-family array LITERAL that `addArrayOfWheres`
      * maps onto a PDO-bound position, against the two things {@see removeTaints} still has to check
-     * once types exist: `scalar_gated` demands the element cannot hold an array (or an
-     * `ExpressionContract`) at runtime, and `receiver` is the call's receiver node, whose type must
-     * resolve to a Laravel builder — or `null` for a `StaticCall` already verified Model/builder-bound
-     * at record time by {@see isStaticReceiverLaravelBound}, which skips that check. Flushed with
+     * once types exist: `scalar_gated` demands the element cannot hold an array at runtime — only the
+     * OUTER numeric-key element ({@see recordBoundValuePositions}) sets this true, since only there
+     * does a runtime array re-dispatch onto the raw-column nested branch; the INNER nested-condition
+     * value ordinal ({@see recordNestedConditionPositions}) sets it false and always strips, since
+     * `addBinding()` runs on it unconditionally (the one runtime exception, an `ExpressionContract`
+     * from `DB::raw()`, is already flagged at its own construction sink, not here — see that method's
+     * docblock) — and `receiver` is the call's receiver node, whose type must resolve to a Laravel
+     * builder, or `null` for a `StaticCall` already verified Model/builder-bound at record time by
+     * {@see isStaticReceiverLaravelBound}, which skips that check. Flushed with
      * {@see $whereColumnArgumentIds}.
      *
      * @var array<int, array{scalar_gated: bool, receiver: Expr|null}>
@@ -621,12 +626,16 @@ final class WhereColumnTaintHandler implements
                 continue;
             }
 
-            // Scalar-gated like the flat form, for a different reason: `addBinding()` is skipped for an
-            // `ExpressionContract`, whose `getValue()` the grammar emits verbatim. Laravel's own
-            // `Expression` cannot carry a tainted string (its stubbed constructor takes
-            // `float|int|literal-string`), but a project's own contract implementation can.
+            // Unlike the OUTER numeric-key element, this ordinal is unconditionally `addBinding()`-
+            // bound — there is no further `is_array()`/`is_numeric()` re-dispatch waiting for it, so
+            // it always strips regardless of the value's type (including bare `mixed`, the shape a
+            // `Request::__get`/`request()` source (#1301) actually carries — no cast narrows it to a
+            // scalar, which used to leave a false positive here). The one runtime exception,
+            // `DB::raw()`'s `ExpressionContract` (its `getValue()` the grammar emits verbatim), is
+            // already `@psalm-taint-sink sql`-flagged at its OWN construction call, so it does not
+            // need a check here too. #1300
             self::$boundValuePositionIds[\spl_object_id($item)] = [
-                'scalar_gated' => true,
+                'scalar_gated' => false,
                 'receiver' => $receiver,
             ];
         }
