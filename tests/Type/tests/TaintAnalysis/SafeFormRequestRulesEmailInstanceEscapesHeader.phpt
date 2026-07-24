@@ -10,7 +10,7 @@ use Illuminate\Validation\Rules\Email;
 
 /**
  * `new Rules\Email()` carries the same header/cookie escape as the 'email'
- * string rule. redirect()->to() still reports TaintedSSRF because the email
+ * string rule. The http-client sink still reports TaintedSSRF because the email
  * validator does not prevent SSRF (a valid email domain can resolve to an
  * internal host).
  */
@@ -23,6 +23,7 @@ final class ObjectEmailRequest extends FormRequest
 }
 
 function direct(ObjectEmailRequest $request): \Illuminate\Http\RedirectResponse {
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->safe()->input('team_email'));
     return redirect()->to($request->safe()->input('team_email'));
 }
 ?>

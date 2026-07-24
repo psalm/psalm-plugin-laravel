@@ -35,6 +35,7 @@ function storeArrayAccessorWildcard(Request $request): RedirectResponse {
     $request->validate(['email.*' => 'email']);
 
     foreach ($request->array('email') as $email) {
+        (new \Illuminate\Http\Client\PendingRequest())->get($email);
         return redirect()->to($email);
     }
 

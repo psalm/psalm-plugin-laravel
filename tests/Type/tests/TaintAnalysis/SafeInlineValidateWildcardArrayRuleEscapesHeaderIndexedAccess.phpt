@@ -24,6 +24,7 @@ function storeWildcardIndexed(Request $request): RedirectResponse {
         'email.*' => ['required', Rule::email()],
     ]);
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('email.0'));
     return redirect()->to($request->input('email.0'));
 }
 ?>

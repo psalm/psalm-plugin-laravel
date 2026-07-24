@@ -24,8 +24,5 @@ function responseRedirectToIntended(\Illuminate\Http\Request $request, \Illumina
 ?>
 --EXPECTF--
 %ATaintedHeader on line %d: Detected tainted header
-%ATaintedSSRF on line %d: Detected tainted network request
 %ATaintedHeader on line %d: Detected tainted header
-%ATaintedSSRF on line %d: Detected tainted network request
 %ATaintedHeader on line %d: Detected tainted header
-%ATaintedSSRF on line %d: Detected tainted network request

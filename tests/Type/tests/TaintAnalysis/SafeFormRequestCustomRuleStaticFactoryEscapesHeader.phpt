@@ -37,6 +37,7 @@ final class ContactRequestFactory extends FormRequest
 }
 
 function direct(ContactRequestFactory $request): \Illuminate\Http\RedirectResponse {
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->safe()->input('team_email'));
     return redirect()->to($request->safe()->input('team_email'));
 }
 ?>

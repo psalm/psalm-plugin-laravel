@@ -13,7 +13,7 @@ use Illuminate\Http\Request;
  * `$request->input(self::KEY)` is not resolved — `beforeExpressionAnalysis`
  * runs before the RHS type inference that the sibling MethodCall path
  * uses to unwrap constants. Fail-safe: the binding keeps the original
- * taint, so both TaintedHeader and TaintedSSRF fire.
+ * taint, so TaintedHeader fires on the redirect sink.
  *
  * The inline form (`$request->input(self::KEY)` used directly in a sink
  * call) still benefits from the rule's escape via the existing
@@ -45,4 +45,3 @@ function constantKeyProbe(Request $request): RedirectResponse {
 ?>
 --EXPECTF--
 TaintedHeader on line %d: Detected tainted header
-TaintedSSRF on line %d: Detected tainted network request
