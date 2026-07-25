@@ -7,10 +7,9 @@ namespace RelationDefaultsFixture\Models;
 use Illuminate\Database\Eloquent\Model;
 use RelationDefaultsFixture\Concerns\HasTraitRelation;
 
-/** @method static pseudoRelation() */
-final class TraitAndPseudoModel extends Model
+final class TraitRelationModel extends Model
 {
     use HasTraitRelation;
 
-    protected $with = ['traitRelation', 'pseudoRelation'];
+    protected $with = ['traitRelation'];
 }
