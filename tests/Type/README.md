@@ -10,6 +10,10 @@ To go deeper with PHPT syntax, please check [PHPT](https://qa.php.net/phpt_detai
 
 - When asserting error output, use `--EXPECTF--` (not `--EXPECT--`) with `%d` for line numbers (e.g., `ErrorType on line %d: message`).
   This prevents tests from breaking when lines shift due to unrelated edits.
+- A test that needs taint analysis or a non-default config declares an `--ARGS--` section before `--FILE--`,
+  e.g. `--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis`, or one of the alternate
+  `tests/Type/psalm-*.xml` configs. Without it the test runs under plain defaults, where a negative
+  (empty-`--EXPECTF--`) taint or opt-in-rule test passes vacuously.
 
 ### `--EXPECTF--` format specifiers
 

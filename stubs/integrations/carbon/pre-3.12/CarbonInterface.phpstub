@@ -19,7 +19,7 @@ use JsonSerializable;
  * down to trait method definitions, so the conditional return must be repeated
  * at both layers.
  *
- * Class redeclaration wipes `class_implements` / `parent_interfaces` (CLAUDE.md),
+ * Class redeclaration wipes `class_implements` / `parent_interfaces` (see "Stub merging" in docs/contributing/README.md),
  * so the full `extends` clause is copied verbatim from
  * vendor/nesbot/carbon/src/Carbon/CarbonInterface.php:858. Methods not
  * redeclared here continue to come from reflection of the real interface.

@@ -17,7 +17,7 @@ namespace Illuminate\Database\Eloquent;
  * (`__call`'s return), so when the receiver is `Builder<Model&static>` on a non-final
  * model, the inferred `Builder<Model&static>` must satisfy a call-site `Builder<self>` —
  * covariance accepts it, invariance would reject. Mirrors Builder's own variance and the
- * relation-stub rule in CLAUDE.md.
+ * covariance rationale in Relations/Relation.phpstub.
  *
  * Do NOT drop the `@template` and type the property as `@property-read static`/`$this`
  * (Larastan's form): Psalm 7 collapses both to `Builder&static` in a property-read and

@@ -395,10 +395,15 @@ function validator(array $data = [], array $rules = [], array $messages = [], ar
  * argument-supplied form to `\Illuminate\View\View`, the latter only when that
  * resolved factory is the stock `\Illuminate\View\Factory`.
  *
+ * A user-controlled view name resolves to an arbitrary blade path, same as `Factory::file()`.
+ *
  * @param  string|null  $view
  * @param  \Illuminate\Contracts\Support\Arrayable<string, mixed>|array<string, mixed>  $data
  * @param  array<string, mixed>  $mergeData
  * @return (func_num_args() is 0 ? \Illuminate\Contracts\View\Factory : \Illuminate\Contracts\View\View)
+ *
+ * @psalm-taint-sink file $view
+ * @psalm-taint-sink include $view
  */
 function view($view = null, $data = [], $mergeData = []) {}
 

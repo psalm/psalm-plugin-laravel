@@ -34,7 +34,7 @@ use JsonSerializable;
  * and silently rejects the template binding with `InvalidDocblock` if the
  * interface is not already listed.
  *
- * Class declaration redeclaration wipes `class_implements` (CLAUDE.md), so
+ * Class redeclaration wipes `class_implements` (see "Stub merging" in docs/contributing/README.md), so
  * the `extends` / `implements` / `use` clauses are copied verbatim from
  * Carbon source. Methods not redeclared here continue to come from
  * reflection of the real class.
