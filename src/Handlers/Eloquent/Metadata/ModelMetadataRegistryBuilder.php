@@ -1647,6 +1647,10 @@ final class ModelMetadataRegistryBuilder
      * shadowed it). Any other throwable is handled by the runtime-configuration section,
      * which reports the failure and leaves that section incomplete.
      *
+     * Keyed eager-load maps carry callbacks or nested constraints rather than a relation-name list.
+     * They are deliberately excluded: ModelMetadata stores only values, so retaining them would lose the
+     * relation key and make a later consumer validate the wrong string.
+     *
      * @return list<string>
      */
     private static function readStringList(Model $instance, string $propertyName): array
@@ -1658,7 +1662,7 @@ final class ModelMetadataRegistryBuilder
             return [];
         }
 
-        if (!\is_array($value)) {
+        if (!\is_array($value) || !\array_is_list($value)) {
             return [];
         }
 

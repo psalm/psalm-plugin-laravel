@@ -6,11 +6,21 @@ nav_order: 11
 
 # UndefinedModelRelation
 
-A relation name passed to an eager-loading or relationship-query method does not resolve to a method on the model. See [Reporting level](#reporting-level).
+A relation name passed to an eager-loading or relationship-query method, or configured in a model's `$with` / `$withCount` defaults, does not resolve to a method on the model. See [Reporting level](#reporting-level).
 
 ## Why it matters
 
 Passing a non-existent relation name is one of the most common sources of runtime errors in Laravel apps. A typo such as `User::with('pots')` (for `posts`) is silently accepted by Psalm, then throws `RelationNotFoundException` at runtime. This rule reports it during analysis.
+
+The same typo in a model default is evaluated when Laravel builds or hydrates a query:
+
+```php
+final class Post extends Model
+{
+    protected $with = ['authr'];
+    protected $withCount = ['coments'];
+}
+```
 
 ## What is checked
 
@@ -21,6 +31,8 @@ The relation name in the first argument of these methods is validated against th
 * Lazy eager loading: `load()`, `loadMissing()`, `loadCount()`, `loadSum()`, `loadAvg()`, `loadMax()`, `loadMin()`, `loadExists()`.
 
 The model is resolved from the receiver: a `Builder<TModel>` or `Relation<TModel, ...>` generic parameter, a `Model` instance, or the class of a static call (`User::with(...)`).
+
+Effective string entries from concrete, user-owned models' `$with` and `$withCount` defaults are also checked. `$with` supports dot notation and `:columns`; `$withCount` accepts a direct relation name and a case-insensitive ` as alias` suffix. Keyed configuration maps are not checked.
 
 Supported name syntaxes:
 
@@ -60,7 +72,7 @@ To keep false positives near zero, the rule reports only when no method (real or
 * Relations registered at runtime via `Model::resolveRelationUsing()` or package macros, which static analysis cannot see.
 * Deeper dot-notation segments after a polymorphic `morphTo`, whose related model is not statically known.
 
-The `withCount()` / `withSum()` aggregate family is not covered by this first pass.
+Keyed `$with` / `$withCount` configuration maps are not checked.
 
 ## Reporting level
 
