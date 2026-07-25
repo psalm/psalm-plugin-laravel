@@ -20,10 +20,10 @@ use Psalm\Storage\MethodStorage;
  * A facade declares its forwarded surface as class-level `@method` tags, resolved
  * through `__callStatic`. Psalm models those as *pseudo* methods and
  * `AtomicStaticCallAnalyzer::checkPseudoMethod()` hands their `MethodStorage->params`
- * to `ArgumentsAnalyzer`. A sink is a per-parameter bitmask
+ * to `ArgumentsAnalyzer`. A sink is a per-parameter list of taint kinds
  * ({@see \Psalm\Storage\FunctionLikeParameter::$sinks}) populated only from a real
  * `@psalm-taint-sink` docblock, and a `@method` tag has no per-parameter docblock to
- * carry one — so pseudo params always arrive with `sinks === 0` and the sink-apply
+ * carry one — so pseudo params always arrive with `sinks === null` and the sink-apply
  * branch in `ArgumentsAnalyzer` never fires. The annotated methods live on the class
  * the facade forwards to, which that code path never consults.
  *
@@ -50,7 +50,7 @@ use Psalm\Storage\MethodStorage;
  * pseudo-method and declaring-method storage, both finalised by the populator before the
  * event fires, and no other handler writes `$sinks`. The handler holds no static state,
  * so it needs no `reset()` in {@see \Psalm\LaravelPlugin\Plugin}: the map is a constant
- * and `|=` is idempotent, so a repeated invocation over the same Codebase is a no-op.
+ * and the merge is de-duplicated, so a repeated invocation over the same Codebase is a no-op.
  */
 final class FacadeTaintForwardingHandler implements AfterCodebasePopulatedInterface
 {
@@ -116,7 +116,9 @@ final class FacadeTaintForwardingHandler implements AfterCodebasePopulatedInterf
             }
 
             foreach ($realMethod->params as $offset => $realParam) {
-                if ($realParam->sinks === 0) {
+                $realSinks = $realParam->sinks ?? [];
+
+                if ($realSinks === []) {
                     continue;
                 }
 
@@ -130,7 +132,7 @@ final class FacadeTaintForwardingHandler implements AfterCodebasePopulatedInterf
                     continue;
                 }
 
-                $pseudoParam->sinks |= $realParam->sinks;
+                $pseudoParam->sinks = array_values(array_unique(array_merge($pseudoParam->sinks ?? [], $realSinks)));
             }
         }
     }
