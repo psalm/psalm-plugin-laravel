@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785014514046,
+  "lastUpdate": 1785020411121,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9440,6 +9440,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 25.23,
             "range": "± 0.02",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b0844c70fadafc1f36e9ab2847bd14bc2fa7fcca",
+          "message": "Detect undefined relations in model eager-load defaults (`$with`, `$withCount`) (#1321)\n\n* feat(eloquent): validate default eager-load relations\n\n* fix(eloquent): honor default relation edge cases\n\n* docs: reuse allowlisted relation typo\n\n* test: remove redundant pseudo-relation control",
+          "timestamp": "2026-07-26T00:57:04+02:00",
+          "tree_id": "19fda753619c972875bd2acd4238b7623c1abcc8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b0844c70fadafc1f36e9ab2847bd14bc2fa7fcca"
+        },
+        "date": 1785020409874,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.49,
+            "range": "± 0.23",
             "unit": "s"
           },
           {
