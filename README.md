@@ -100,7 +100,7 @@ Writes a ready-to-commit `.github/workflows/psalm.yml` that runs the plugin on e
 You can customize Psalm configuration using [XML config](https://psalm.dev/docs/running_psalm/configuration/)
 and/or [cli parameters](https://psalm.dev/docs/running_psalm/command_line_usage/).
 
-See [docs/config.md](docs/config.md) for all configuration options.
+See [docs/config.md](docs/config.md) for plugin configuration options.
 
 ## Custom checks
 
